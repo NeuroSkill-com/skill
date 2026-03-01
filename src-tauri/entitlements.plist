@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <!-- ── Networking ─────────────────────────────────────────────────────── -->
+
+  <!-- Accept incoming TCP connections (WebSocket server on the dynamic port) -->
+  <key>com.apple.security.network.server</key>
+  <true/>
+
+  <!-- Make outgoing connections (BLE stack callbacks, future update checks) -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+
+  <!-- ── Bluetooth ───────────────────────────────────────────────────────── -->
+
+  <!-- Core Bluetooth — required for BLE communication with the Muse headset -->
+  <key>com.apple.security.device.bluetooth</key>
+  <true/>
+
+  <!-- ── Hardened runtime ────────────────────────────────────────────────── -->
+
+  <!-- Allow JIT compilation — required by wgpu/Metal shader compilation -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- Allow unsigned executable memory — required by some GPU drivers -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+
+</dict>
+</plist>

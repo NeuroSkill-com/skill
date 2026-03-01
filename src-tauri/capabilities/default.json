@@ -1,0 +1,27 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for all Skill windows",
+  "windows": ["main", "settings", "calibration", "api", "onboarding",
+              "search", "help", "labels", "label", "focus-timer", "about", "session-*"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "core:event:allow-listen",
+    "opener:default",
+    "updater:default",
+    "process:default",
+    "notification:default",
+    "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
+    "notification:allow-show",
+    "notification:allow-register-action-types",
+    "notification:allow-get-pending",
+    "notification:allow-cancel",
+    "notification:allow-get-active",
+    "notification:allow-remove-active",
+    "notification:allow-check-permissions",
+    "notification:allow-permission-state"
+  ]
+}

@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Rust backend ─────────────────────────────────────────────────────────────
+  rust-check:
+    name: Rust — cargo check + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: linux-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: linux-cargo-
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          # Bust the cache when the package list changes (workflow file edit).
+          key: apt-${{ runner.os }}-tauri-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-${{ runner.os }}-tauri-
+
+      - name: Install Tauri system deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libssl-dev \
+            libudev-dev libdbus-1-dev pkg-config \
+            libespeak-ng-dev libasound2-dev \
+            cmake binutils
+
+      - name: Cache espeak-ng static lib
+        id: cache-espeak
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/espeak-static
+            src-tauri/resources/espeak-ng-data
+          key: linux-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
+
+      - name: Build espeak-ng static lib
+        if: steps.cache-espeak.outputs.cache-hit != 'true'
+        run: bash scripts/build-espeak-static.sh
+
+      - name: cargo check
+        working-directory: src-tauri
+        run: cargo check --locked
+
+      - name: cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy --locked -- -D warnings
+
+  # ── Frontend ─────────────────────────────────────────────────────────────────
+  frontend-check:
+    name: Frontend — check + i18n + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: i18n sync check
+        run: npm run sync:i18n:check
+
+      - name: svelte-check
+        run: npm run check
+
+      - name: Unit tests
+        run: npm test
+
+  # ── Security audit ────────────────────────────────────────────────────────────
+  audit:
+    name: Security audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: npm audit
+        run: npm audit --omit=dev --audit-level=high
+        continue-on-error: true
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo (audit)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-audit
+          # cargo-audit's own deps change with Cargo.lock; bin is also covered.
+          key: linux-cargo-audit-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: linux-cargo-audit-
+
+      - name: cargo audit
+        working-directory: src-tauri
+        run: |
+          cargo install cargo-audit --locked 2>/dev/null || true
+          cargo audit
+        continue-on-error: true

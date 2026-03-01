@@ -1,0 +1,510 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 NeuroSkill.com
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, version 3 only.
+//! Device, filter, EEG model, app-settings, autostart, and update-interval Tauri commands.
+
+use std::sync::Mutex;
+use crate::MutexExt;
+use tauri::{AppHandle, Emitter, Manager};
+
+use crate::{
+    AppState, MuseStatus, DiscoveredDevice, EegPacket, PpgPacket, ImuPacket,
+    emit_status, emit_devices, save_settings,
+    start_session, cancel_session,
+    constants::{EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS, LOG_CONFIG_FILE},
+};
+use crate::tray::refresh_tray;
+use crate::eeg_filter::{FilterConfig, PowerlineFreq};
+use crate::settings::OpenBciConfig;
+use crate::eeg_bands::BandSnapshot;
+use crate::eeg_model_config::{EegModelConfig, EegModelStatus, save_model_config};
+use crate::eeg_embeddings::download_hf_weights;
+use crate::settings::{UmapUserConfig, save_umap_config};
+use crate::autostart;
+
+// ── EEG / PPG / IMU subscriptions ────────────────────────────────────────────
+
+#[tauri::command]
+pub fn subscribe_eeg(on_event: tauri::ipc::Channel<EegPacket>, state: tauri::State<'_, Mutex<AppState>>) {
+    state.lock_or_recover().eeg_channel = Some(on_event);
+}
+
+#[tauri::command]
+pub fn subscribe_ppg(on_event: tauri::ipc::Channel<PpgPacket>, state: tauri::State<'_, Mutex<AppState>>) {
+    state.lock_or_recover().ppg_channel = Some(on_event);
+}
+
+#[tauri::command]
+pub fn subscribe_imu(on_event: tauri::ipc::Channel<ImuPacket>, state: tauri::State<'_, Mutex<AppState>>) {
+    state.lock_or_recover().imu_channel = Some(on_event);
+}
+
+// ── Device commands ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_status(state: tauri::State<'_, Mutex<AppState>>) -> MuseStatus {
+    state.lock_or_recover().status.clone()
+}
+
+#[tauri::command]
+pub fn get_devices(state: tauri::State<'_, Mutex<AppState>>) -> Vec<DiscoveredDevice> {
+    state.lock_or_recover().discovered.clone()
+}
+
+#[tauri::command]
+pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
+    {
+        let r = app.state::<Mutex<AppState>>();
+        let mut s = r.lock_or_recover();
+        s.preferred_id = if id.is_empty() { None } else { Some(id.clone()) };
+        let pref = s.preferred_id.clone();
+        for d in s.discovered.iter_mut() { d.is_preferred = pref.as_deref() == Some(&d.id); }
+    }
+    save_settings(&app);
+    emit_devices(&app);
+    app.state::<Mutex<AppState>>().lock_or_recover().discovered.clone()
+}
+
+#[tauri::command]
+pub fn forget_device(id: String, app: AppHandle) -> MuseStatus {
+    {
+        let r = app.state::<Mutex<AppState>>();
+        let mut s = r.lock_or_recover();
+        s.status.paired_devices.retain(|d| d.id != id);
+        for d in s.discovered.iter_mut() { if d.id == id { d.is_paired = false; } }
+        drop(s);
+        save_settings(&app);
+    }
+    refresh_tray(&app); emit_status(&app); emit_devices(&app);
+    app.state::<Mutex<AppState>>().lock_or_recover().status.clone()
+}
+
+#[tauri::command]
+pub fn cancel_retry(app: AppHandle) {
+    let r = app.state::<Mutex<AppState>>();
+    let mut s = r.lock_or_recover();
+    s.pending_reconnect           = false;
+    s.retry_attempt               = 0;
+    s.status.retry_attempt        = 0;
+    s.status.retry_countdown_secs = 0;
+    s.status.state                = "disconnected".into();
+    s.status.bt_error             = None;
+    drop(s);
+    cancel_session(&app);
+    emit_status(&app);
+}
+
+#[tauri::command]
+pub fn retry_connect(app: AppHandle) {
+    let preferred = {
+        let r = app.state::<Mutex<AppState>>();
+        let mut s = r.lock_or_recover();
+        s.pending_reconnect = true;
+        s.retry_attempt     = 0;
+        s.status.retry_attempt        = 0;
+        s.status.retry_countdown_secs = 0;
+        s.preferred_id.clone()
+            .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
+    };
+    start_session(&app, preferred);
+}
+
+// ── EEG filter commands ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_filter_config(state: tauri::State<'_, Mutex<AppState>>) -> FilterConfig {
+    state.lock_or_recover().status.filter_config
+}
+
+#[tauri::command]
+pub fn set_filter_config(config: FilterConfig, app: AppHandle) {
+    {
+        let r = app.state::<Mutex<AppState>>();
+        let mut s = r.lock_or_recover();
+        s.status.filter_config = config;
+        s.filter.set_config(config);
+    }
+    save_settings(&app);
+    emit_status(&app);
+}
+
+#[tauri::command]
+pub fn set_notch_preset(preset: Option<PowerlineFreq>, app: AppHandle) {
+    {
+        let r = app.state::<Mutex<AppState>>();
+        let mut s = r.lock_or_recover();
+        s.status.filter_config.notch = preset;
+        let new_cfg = s.status.filter_config;
+        s.filter.set_config(new_cfg);
+    }
+    save_settings(&app);
+    emit_status(&app);
+}
+
+// ── Band power ─────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_latest_bands(state: tauri::State<'_, Mutex<AppState>>) -> Option<BandSnapshot> {
+    state.lock_or_recover().band_analyzer.latest.clone()
+}
+
+// ── Embedding overlap ─────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_embedding_overlap(state: tauri::State<'_, Mutex<AppState>>) -> f32 {
+    state.lock_or_recover().status.embedding_overlap_secs
+}
+
+#[tauri::command]
+pub fn set_embedding_overlap(overlap_secs: f32, app: AppHandle) {
+    let clamped = overlap_secs.clamp(EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS);
+    {
+        let r = app.state::<Mutex<AppState>>();
+        let mut s = r.lock_or_recover();
+        s.status.embedding_overlap_secs = clamped;
+        s.accumulator.set_overlap_secs(clamped);
+    }
+    save_settings(&app);
+    emit_status(&app);
+}
+
+// ── GPU stats ──────────────────────────────────────────────────────────────────
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn get_gpu_stats() -> Option<crate::gpu_stats::GpuStats> { crate::gpu_stats::read() }
+
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn get_gpu_stats() -> Option<()> { None }
+
+// ── Logging config ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_log_config(state: tauri::State<'_, Mutex<AppState>>) -> crate::skill_log::LogConfig {
+    state.lock_or_recover().logger.get_config()
+}
+
+#[tauri::command]
+pub fn set_log_config(config: crate::skill_log::LogConfig, state: tauri::State<'_, Mutex<AppState>>) {
+    let s = state.lock_or_recover();
+    let config_path = s.skill_dir.join(LOG_CONFIG_FILE);
+    // Propagate TTS logging flag to the TTS module's runtime atomic.
+    crate::tts::set_logging(config.tts);
+    s.logger.set_config(config, &config_path);
+}
+
+// ── EEG model config ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_eeg_model_config(state: tauri::State<'_, Mutex<AppState>>) -> EegModelConfig {
+    state.lock_or_recover().model_config.clone()
+}
+
+#[tauri::command]
+pub fn set_eeg_model_config(config: EegModelConfig, state: tauri::State<'_, Mutex<AppState>>) {
+    let mut s = state.lock_or_recover();
+    save_model_config(&s.skill_dir, &config);
+    s.model_config = config;
+}
+
+#[tauri::command]
+pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<AppState>>) -> EegModelStatus {
+    state.lock_or_recover().model_status.lock_or_recover().clone()
+}
+
+/// Spawn a background thread that downloads ZUNA weights from HuggingFace Hub.
+///
+/// Resets the cancel flag before starting so a previous cancellation does not
+/// immediately abort the new attempt.  Progress and errors are reflected in
+/// [`EegModelStatus`] which the UI polls every 2 s.
+///
+/// After a successful download [`EegModelStatus::download_needs_restart`] is
+/// set to `true` — the user must restart the app for the encoder to load.
+#[tauri::command]
+pub fn trigger_weights_download(state: tauri::State<'_, Mutex<AppState>>) {
+    use std::sync::atomic::Ordering;
+
+    let s = state.lock_or_recover();
+    let hf_repo      = s.model_config.hf_repo.clone();
+    let model_status = s.model_status.clone();
+    let cancel       = s.download_cancel.clone();
+    let logger       = s.logger.clone();
+    drop(s); // release AppState lock before spawning
+
+    // Clear any previous cancellation so the new attempt actually runs.
+    cancel.store(false, Ordering::Relaxed);
+
+    std::thread::Builder::new()
+        .name("hf-download".into())
+        .spawn(move || {
+            download_hf_weights(&hf_repo, &model_status, &cancel, true, &logger);
+        })
+        .expect("[hf-download] failed to spawn download thread");
+}
+
+/// Set the download-cancel flag.
+///
+/// The background download thread checks this flag between the two file
+/// downloads (config.json and the large safetensors file) and aborts if it
+/// is `true`.
+#[tauri::command]
+pub fn cancel_weights_download(state: tauri::State<'_, Mutex<AppState>>) {
+    use std::sync::atomic::Ordering;
+    let s = state.lock_or_recover();
+    s.download_cancel.store(true, Ordering::Relaxed);
+    // Immediately reflect cancellation in the status so the UI updates before
+    // the download thread has a chance to notice the flag.
+    let mut st = s.model_status.lock_or_recover();
+    if st.downloading_weights {
+        st.download_status_msg = Some("Cancelling…".to_string());
+    }
+}
+
+// ── UMAP config ───────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_umap_config(state: tauri::State<'_, Mutex<AppState>>) -> UmapUserConfig {
+    state.lock_or_recover().umap_config.clone()
+}
+
+#[tauri::command]
+pub fn set_umap_config(config: UmapUserConfig, state: tauri::State<'_, Mutex<AppState>>) {
+    let mut s = state.lock_or_recover();
+    save_umap_config(&s.skill_dir, &config);
+    let cache_dir = s.skill_dir.join("umap_cache");
+    if cache_dir.exists() {
+        let _ = std::fs::remove_dir_all(&cache_dir);
+        eprintln!("[umap] cleared cache after config change");
+    }
+    s.umap_config = config;
+}
+
+// ── Theme & language ──────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_theme_and_language(state: tauri::State<'_, Mutex<AppState>>) -> (String, String) {
+    let s = state.lock_or_recover();
+    (s.theme.clone(), s.language.clone())
+}
+
+#[tauri::command]
+pub fn set_theme(theme: String, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+    state.lock_or_recover().theme = theme;
+    save_settings(&app);
+}
+
+#[tauri::command]
+pub fn set_language(language: String, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+    state.lock_or_recover().language = language;
+    save_settings(&app);
+}
+
+// ── Daily goal ────────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_daily_goal(state: tauri::State<'_, Mutex<AppState>>) -> u32 {
+    state.lock_or_recover().daily_goal_min
+}
+
+#[tauri::command]
+pub fn set_daily_goal(minutes: u32, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+    let clamped = minutes.min(480);
+    state.lock_or_recover().daily_goal_min = clamped;
+    save_settings(&app);
+    let _ = app.emit("daily-goal-changed", clamped);
+}
+
+#[tauri::command]
+pub fn get_goal_notified_date(state: tauri::State<'_, Mutex<AppState>>) -> String {
+    state.lock_or_recover().goal_notified_date.clone()
+}
+
+#[tauri::command]
+pub fn set_goal_notified_date(date: String, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+    state.lock_or_recover().goal_notified_date = date;
+    save_settings(&app);
+}
+
+#[tauri::command]
+pub fn get_daily_recording_mins(
+    days:  Option<u32>,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Vec<(String, u32)> {
+    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let n = days.unwrap_or(30).min(365) as i64;
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+
+    let mut results: Vec<(String, u32)> = (0..n)
+        .map(|i| {
+            let day_secs = now_secs - i * 86400;
+            let (y, mo, d) = unix_to_ymd(day_secs as u64);
+            (format!("{y:04}{mo:02}{d:02}"), 0u32)
+        })
+        .collect();
+
+    for (dir_date, total) in results.iter_mut() {
+        let dir = skill_dir.join(dir_date.as_str());
+        if !dir.is_dir() { continue; }
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.filter_map(|e| e.ok()) {
+            let p = entry.path();
+            let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if !fname.starts_with("muse_") || !fname.ends_with(".json") { continue; }
+            let Ok(text) = std::fs::read_to_string(&p) else { continue };
+            let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
+            let start = meta["session_start_utc"].as_u64().unwrap_or(0);
+            let end   = meta["session_end_utc"].as_u64().unwrap_or(start);
+            *total += (end.saturating_sub(start) / 60) as u32;
+        }
+    }
+
+    results.reverse();
+    results.into_iter()
+        .map(|(d, m)| (format!("{}-{}-{}", &d[0..4], &d[4..6], &d[6..8]), m))
+        .collect()
+}
+
+pub(crate) fn unix_to_ymd(ts: u64) -> (u32, u32, u32) {
+    let days = ts / 86400;
+    let z    = days + 719468;
+    let era  = z / 146097;
+    let doe  = z - era * 146097;
+    let yoe  = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y    = yoe + era * 400;
+    let doy  = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp   = (5 * doy + 2) / 153;
+    let d    = doy - (153 * mp + 2) / 5 + 1;
+    let m    = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y    = if m <= 2 { y + 1 } else { y };
+    (y as u32, m as u32, d as u32)
+}
+
+// ── WebSocket server configuration ────────────────────────────────────────────
+
+/// Return `(host, port)` — the persisted WebSocket bind config.
+#[tauri::command]
+pub fn get_ws_config(state: tauri::State<'_, Mutex<AppState>>) -> (String, u16) {
+    let s = state.lock_or_recover();
+    (s.ws_host.clone(), s.ws_port)
+}
+
+/// Persist a new WebSocket host/port.
+///
+/// `host` must be `"127.0.0.1"` or `"0.0.0.0"`.  Changes take effect after
+/// the next app restart (the server binds once at startup).
+#[tauri::command]
+pub fn set_ws_config(
+    host:  String,
+    port:  u16,
+    app:   AppHandle,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
+    if host != "127.0.0.1" && host != "0.0.0.0" {
+        return Err(format!("invalid host '{host}': must be '127.0.0.1' or '0.0.0.0'"));
+    }
+    if port < 1024 {
+        return Err(format!("port {port} is reserved; use 1024–65535"));
+    }
+    {
+        let mut s = state.lock_or_recover();
+        s.ws_host = host;
+        s.ws_port = port;
+    }
+    crate::save_settings(&app);
+    Ok(())
+}
+
+// ── Autostart (launch at login) ────────────────────────────────────────────────
+
+/// Returns `true` if the app is registered to launch at login.
+///
+/// Reads the OS-level registration directly (plist / .desktop / registry).
+#[tauri::command]
+pub fn get_autostart_enabled(app: AppHandle) -> bool {
+    let name = app.config()
+        .product_name
+        .as_deref()
+        .unwrap_or("skill")
+        .to_lowercase();
+    autostart::is_enabled(&name)
+}
+
+/// Enable or disable launch-at-login.
+///
+/// On macOS this writes / removes a LaunchAgent plist.
+/// On Linux this writes / removes an XDG `.desktop` file.
+/// On Windows this writes / deletes the `HKCU\...\Run` registry value.
+#[tauri::command]
+pub fn set_autostart_enabled(
+    app:     AppHandle,
+    enabled: bool,
+) -> Result<(), String> {
+    let name = app.config()
+        .product_name
+        .as_deref()
+        .unwrap_or("skill")
+        .to_lowercase();
+    autostart::set_enabled(&name, enabled)
+}
+
+// ── Update-check interval ──────────────────────────────────────────────────────
+
+/// Return the background update-check interval in seconds (0 = disabled).
+#[tauri::command]
+pub fn get_update_check_interval(state: tauri::State<'_, Mutex<AppState>>) -> u64 {
+    state.lock_or_recover().update_check_interval_secs
+}
+
+/// Persist a new update-check interval.
+///
+/// `secs` = 0 disables automatic checking.
+/// The background task re-reads this value each cycle, so the change takes
+/// effect without a restart.
+#[tauri::command]
+pub fn set_update_check_interval(
+    secs:  u64,
+    app:   AppHandle,
+    state: tauri::State<'_, Mutex<AppState>>,
+) {
+    state.lock_or_recover().update_check_interval_secs = secs;
+    crate::save_settings(&app);
+}
+
+// ── OpenBCI configuration ──────────────────────────────────────────────────────
+
+/// Return the current OpenBCI configuration.
+#[tauri::command]
+pub fn get_openbci_config(state: tauri::State<'_, Mutex<AppState>>) -> OpenBciConfig {
+    state.lock_or_recover().openbci_config.clone()
+}
+
+/// Persist new OpenBCI configuration.
+///
+/// Changes take effect on the next connection attempt — any active session
+/// is not interrupted.
+#[tauri::command]
+pub fn set_openbci_config(
+    config: OpenBciConfig,
+    app:    AppHandle,
+    state:  tauri::State<'_, Mutex<AppState>>,
+) {
+    state.lock_or_recover().openbci_config = config;
+    crate::save_settings(&app);
+}
+
+/// List available serial ports on the host (for Cyton board selection).
+#[tauri::command]
+pub fn list_serial_ports() -> Vec<String> {
+    serialport::available_ports()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| p.port_name)
+        .collect()
+}

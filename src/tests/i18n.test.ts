@@ -1,0 +1,109 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 NeuroSkill.com
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, version 3 only.
+/**
+ * i18n consistency tests.
+ *
+ * Verifies that every key in en.ts (the reference locale) is present in all
+ * translated locales, and that no locale has keys that don't exist in en.ts
+ * (which would indicate a typo or a leftover from a rename).
+ *
+ * These tests run fast (pure file-system reads) and act as a CI gate.
+ */
+import { readFileSync } from "fs";
+import { resolve }      from "path";
+import { describe, it, expect } from "vitest";
+
+const LOCALES_DIR = resolve(__dirname, "../lib/i18n");
+const LOCALES     = ["de", "fr", "he", "uk"] as const;
+
+/** Extract quoted keys followed by `:` from a TypeScript locale file. */
+function extractKeys(filePath: string): Set<string> {
+  const content = readFileSync(filePath, "utf8");
+  const keys    = new Set<string>();
+  const re      = /"([a-zA-Z][^"]*)"\s*:/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) keys.add(m[1]);
+  return keys;
+}
+
+const enKeys = extractKeys(resolve(LOCALES_DIR, "en.ts"));
+
+describe("i18n locale sync", () => {
+  it("en.ts has at least 1400 keys (sanity check)", () => {
+    expect(enKeys.size).toBeGreaterThanOrEqual(1400);
+  });
+
+  for (const locale of LOCALES) {
+    const localeKeys = extractKeys(resolve(LOCALES_DIR, `${locale}.ts`));
+
+    it(`${locale}.ts has no missing keys vs en.ts`, () => {
+      const missing = [...enKeys].filter(k => !localeKeys.has(k));
+      expect(
+        missing,
+        `${locale}.ts is missing ${missing.length} key(s): ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""}`
+      ).toHaveLength(0);
+    });
+
+    it(`${locale}.ts has no extra keys vs en.ts`, () => {
+      const extra = [...localeKeys].filter(k => !enKeys.has(k));
+      expect(
+        extra,
+        `${locale}.ts has ${extra.length} extra key(s): ${extra.slice(0, 5).join(", ")}${extra.length > 5 ? "…" : ""}`
+      ).toHaveLength(0);
+    });
+
+    it(`${locale}.ts key count matches en.ts`, () => {
+      expect(localeKeys.size).toBe(enKeys.size);
+    });
+  }
+});
+
+describe("i18n placeholder consistency", () => {
+  /**
+   * Extract simple data-interpolation placeholders from a translation string.
+   * We only flag short alphanumeric names (e.g. {n}, {shown}, {total}, {page})
+   * that carry real runtime data and must be preserved exactly.
+   *
+   * We intentionally skip:
+   *   • {app}   — app name; translators may legitimately paraphrase without it
+   *   • Long / JSON-like patterns (> 20 chars) — code examples, not template vars
+   */
+  function dataPlaceholders(s: string): string[] {
+    const matches = s.match(/\{[^}]+\}/g) ?? [];
+    return matches
+      .map(m => m.slice(1, -1))
+      .filter(p => p.length <= 20 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(p) && p !== "app");
+  }
+
+  it("all locales preserve data-interpolation placeholders from en.ts", () => {
+    const enContent  = readFileSync(resolve(LOCALES_DIR, "en.ts"), "utf8");
+    const enValueRe  = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
+    const enValues   = new Map<string, string>();
+    let m: RegExpExecArray | null;
+    while ((m = enValueRe.exec(enContent)) !== null) enValues.set(m[1], m[2]);
+
+    const failures: string[] = [];
+
+    for (const locale of LOCALES) {
+      const content  = readFileSync(resolve(LOCALES_DIR, `${locale}.ts`), "utf8");
+      const valueRe  = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
+      while ((m = valueRe.exec(content)) !== null) {
+        const key    = m[1];
+        const locVal = m[2];
+        const enVal  = enValues.get(key);
+        if (!enVal) continue;
+        const enPh  = new Set(dataPlaceholders(enVal));
+        const locPh = new Set(dataPlaceholders(locVal));
+        for (const p of enPh) {
+          if (!locPh.has(p)) failures.push(`${locale}.ts["${key}"]: missing {${p}}`);
+        }
+      }
+    }
+
+    expect(failures, failures.slice(0, 10).join("\n")).toHaveLength(0);
+  });
+});

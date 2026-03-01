@@ -1,0 +1,56 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NeuroSkill™",
+  "version": "0.0.1",
+  "identifier": "com.neuroskill.skill",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "NeuroSkill™",
+        "width": 480,
+        "height": 800,
+        "resizable": false,
+        "center": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "entitlements": "./entitlements.plist",
+      "infoPlist": "./Info.plist"
+    },
+    "resources": {
+      "resources/espeak-ng-data": "espeak-ng-data"
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEEzQUVEMjRERUVDRDUzNEUKUldST1U4M3VUZEt1b3pGL0J2TUdlRmR5d1FBOExLZkZPcm9EODRyakxVTnFsY3JuY3BZaHB0ZmEK",
+      "endpoints": [
+        "https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json"  
+      ]
+    }
+  }
+}
