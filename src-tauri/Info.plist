@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+
+  <!-- ── Bonjour / local network ────────────────────────────────────────── -->
+
+  <!--
+    Declare every Bonjour service type this app advertises or browses.
+    macOS 12+ silently drops mDNS traffic for undeclared types.
+    Must match the service type registered at runtime:
+      ws_server.rs  →  format!("_{}{}", app_name, MDNS_SERVICE_SUFFIX)
+      runtime value →  _skill._tcp.local.
+      plist form    →  _skill._tcp   (no .local. — macOS convention)
+    If the app is renamed, update this array to match.
+  -->
+  <key>NSBonjourServices</key>
+  <array>
+    <string>_skill._tcp</string>
+  </array>
+
+  <!--
+    Shown in the one-time "wants to find devices on your local network"
+    permission dialog (macOS 12+).  Required; blank string causes rejection
+    on App Store review and silent denial in hardened builds.
+  -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Skill streams live EEG data to apps on your local network over WebSocket, and announces itself via Bonjour so clients can discover it automatically.</string>
+
+  <!-- ── Bluetooth ───────────────────────────────────────────────────────── -->
+
+  <!--
+    macOS 12+ requires a usage string for any app that uses Core Bluetooth.
+    Without it the BLE stack silently fails to scan on Monterey and later.
+  -->
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>Skill connects to your Muse EEG headset over Bluetooth Low Energy to stream brainwave data.</string>
+
+  <!-- ── Notifications ──────────────────────────────────────────────────── -->
+
+  <!--
+    macOS requires NSUserNotificationsUsageDescription for apps that post
+    UNUserNotificationCenter alerts (macOS 13+).  Without it the permission
+    dialog is never shown and notifications silently fail.
+  -->
+  <key>NSUserNotificationsUsageDescription</key>
+  <string>Skill sends notifications for important events such as device connection changes, low battery warnings, and calibration completion.</string>
+
+</dict>
+</plist>

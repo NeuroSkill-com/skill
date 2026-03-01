@@ -1,0 +1,588 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- Copyright (C) 2026 NeuroSkill.com
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3 only. -->
+<!-- Onboarding / first-run wizard -->
+<script lang="ts">
+  import { onMount, onDestroy } from "svelte";
+  import { invoke }             from "@tauri-apps/api/core";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { fly, fade }          from "svelte/transition";
+  import { Button }             from "$lib/components/ui/button";
+  import { Card, CardContent }  from "$lib/components/ui/card";
+  import { Progress }           from "$lib/components/ui/progress";
+  import { t }                  from "$lib/i18n/index.svelte";
+  import { useWindowTitle } from "$lib/window-title.svelte";
+  import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+  import ThemeToggle            from "$lib/ThemeToggle.svelte";
+  import LanguagePicker         from "$lib/LanguagePicker.svelte";
+  import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
+
+  // ── Types ──────────────────────────────────────────────────────────────────
+  interface MuseStatus {
+    state:            string;
+    device_name:      string | null;
+    battery:          number;
+    channel_quality:  string[];
+    [k: string]:      unknown;
+  }
+  interface CalibrationAction { label: string; duration_secs: number; }
+  interface CalibrationProfile {
+    id: string; name: string;
+    actions: CalibrationAction[];
+    break_duration_secs: number;
+    loop_count: number;
+    auto_start: boolean;
+    last_calibration_utc: number | null;
+  }
+  type CalPhase = "idle" | "action" | "break" | "done";
+  interface Phase { kind: CalPhase; actionIndex: number; loop: number; }
+
+  // ── Steps ──────────────────────────────────────────────────────────────────
+  type Step = "welcome" | "bluetooth" | "fit" | "calibration" | "done";
+  const STEPS: Step[] = ["welcome", "bluetooth", "fit", "calibration", "done"];
+
+  let step    = $state<Step>("welcome");
+  let stepIdx = $derived(STEPS.indexOf(step));
+
+  // ── Reactive status ────────────────────────────────────────────────────────
+  let status = $state<MuseStatus>({
+    state: "disconnected", device_name: null, battery: 0,
+    channel_quality: ["no_signal","no_signal","no_signal","no_signal"],
+  });
+
+  const EEG_CH = ["TP9", "AF7", "AF8", "TP10"];
+  const QC: Record<string, string> = {
+    good: "#22c55e", fair: "#eab308", poor: "#f97316", no_signal: "#94a3b8",
+  };
+
+  let isConnected   = $derived(status.state === "connected");
+  let isScanning    = $derived(status.state === "scanning");
+  let allGoodOrFair = $derived(
+    status.channel_quality.every((q: string) => q === "good" || q === "fair")
+  );
+
+  // ── Inline calibration state ───────────────────────────────────────────────
+  let calProfile   = $state<CalibrationProfile | null>(null);
+  let calPhase     = $state<Phase>({ kind: "idle", actionIndex: 0, loop: 1 });
+  let calCountdown = $state(0);
+  let calTotal     = $state(0);
+  let calRunning   = $state(false);
+  let ttsReady     = $state(false);
+  let ttsDlLabel   = $state("");
+  let unlistenTts: UnlistenFn | null = null;
+
+  const calProgressPct = $derived(
+    calTotal > 0 ? ((calTotal - calCountdown) / calTotal) * 100 : 0
+  );
+
+  const CAL_COLORS = [
+    "text-blue-600 dark:text-blue-400",
+    "text-violet-600 dark:text-violet-400",
+    "text-emerald-600 dark:text-emerald-400",
+    "text-amber-600 dark:text-amber-400",
+    "text-rose-600 dark:text-rose-400",
+    "text-cyan-600 dark:text-cyan-400",
+  ];
+  const CAL_BG = [
+    "bg-blue-500","bg-violet-500","bg-emerald-500",
+    "bg-amber-500","bg-rose-500","bg-cyan-500",
+  ];
+
+  const calPhaseLabel = $derived.by(() => {
+    if (calPhase.kind === "action" && calProfile)
+      return calProfile.actions[calPhase.actionIndex]?.label ?? "";
+    if (calPhase.kind === "break")  return t("calibration.break");
+    if (calPhase.kind === "done")   return t("calibration.complete");
+    return t("calibration.ready");
+  });
+  const calPhaseColor = $derived.by(() => {
+    if (calPhase.kind === "action") return CAL_COLORS[calPhase.actionIndex % CAL_COLORS.length];
+    if (calPhase.kind === "break")  return "text-amber-600 dark:text-amber-400";
+    if (calPhase.kind === "done")   return "text-emerald-600 dark:text-emerald-400";
+    return "text-muted-foreground";
+  });
+  const calPhaseBg = $derived.by(() => {
+    if (calPhase.kind === "action") return CAL_BG[calPhase.actionIndex % CAL_BG.length];
+    if (calPhase.kind === "break")  return "bg-amber-500";
+    return "bg-emerald-500";
+  });
+
+  // ── TTS helpers ────────────────────────────────────────────────────────────
+  async function ttsSpeakWait(text: string): Promise<void> {
+    try { await invoke("tts_speak", { text }); } catch {}
+  }
+  function ttsSpeak(text: string): void {
+    invoke("tts_speak", { text }).catch(() => {});
+  }
+
+  // ── Calibration helpers ────────────────────────────────────────────────────
+  function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
+
+  async function emitCalEvent(event: string, payload: Record<string, unknown> = {}) {
+    await invoke("emit_calibration_event", { event, payload });
+  }
+
+  async function runCountdown(secs: number): Promise<boolean> {
+    calTotal = secs; calCountdown = secs;
+    while (calCountdown > 0) {
+      await sleep(1000);
+      if (!calRunning) return false;
+      calCountdown--;
+    }
+    return true;
+  }
+
+  async function startCalibration() {
+    if (!calProfile || !isConnected) return;
+    calRunning = true;
+    const p = calProfile;
+
+    await ttsSpeakWait(`Calibration starting. ${p.actions.length} actions, ${p.loop_count} loops.`);
+    if (!calRunning) return;
+
+    await emitCalEvent("calibration-started", {
+      profile_id: p.id, profile_name: p.name,
+      actions: p.actions.map(a => a.label), loop_count: p.loop_count,
+    });
+
+    for (let loop = 1; loop <= p.loop_count; loop++) {
+      if (!calRunning) break;
+      for (let ai = 0; ai < p.actions.length; ai++) {
+        if (!calRunning) break;
+        const action = p.actions[ai];
+
+        calPhase = { kind: "action", actionIndex: ai, loop };
+        await ttsSpeakWait(action.label);
+        if (!calRunning) break;
+
+        await emitCalEvent("calibration-action", {
+          action: action.label, action_index: ai, loop, phase: `action_${ai}`,
+        });
+        const actionStart = Math.floor(Date.now() / 1000);
+        if (!(await runCountdown(action.duration_secs))) break;
+        try { await invoke("submit_label", { labelStartUtc: actionStart, text: action.label }); } catch {}
+
+        const isLast = loop === p.loop_count && ai === p.actions.length - 1;
+        if (!isLast && calRunning) {
+          const nextAction = p.actions[(ai + 1) % p.actions.length];
+          calPhase = { kind: "break", actionIndex: ai, loop };
+
+          await ttsSpeakWait("Break.");
+          if (!calRunning) break;
+          await sleep(300);
+          ttsSpeak(`Next: ${nextAction.label}.`);
+
+          await emitCalEvent("calibration-break", { after_action: action.label, loop });
+          if (!(await runCountdown(p.break_duration_secs))) break;
+        }
+      }
+    }
+
+    if (calRunning) {
+      calPhase   = { kind: "done", actionIndex: 0, loop: calProfile.loop_count };
+      calRunning = false;
+      ttsSpeak(`Calibration complete. ${p.loop_count} loops recorded.`);
+      await emitCalEvent("calibration-completed", { loop_count: p.loop_count });
+      await invoke("record_calibration_completed", { profileId: p.id });
+    } else if (calPhase.kind !== "idle") {
+      calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
+    }
+  }
+
+  async function cancelCalibration() {
+    if (!calRunning) return;
+    calRunning = false;
+    ttsSpeak("Calibration cancelled.");
+    await emitCalEvent("calibration-cancelled", { loop: calPhase.loop });
+    calPhase = { kind: "idle", actionIndex: 0, loop: 1 };
+  }
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  const unsubs: UnlistenFn[] = [];
+  onMount(async () => {
+    status = await invoke<MuseStatus>("get_status");
+    unsubs.push(await listen<MuseStatus>("muse-status", (ev) => { status = ev.payload; }));
+
+    // Load default calibration profile for inline calibration
+    try {
+      calProfile = await invoke<CalibrationProfile | null>("get_active_calibration");
+      if (!calProfile) {
+        const profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
+        calProfile = profiles[0] ?? null;
+      }
+    } catch {}
+
+    // Pre-warm TTS engine
+    unlistenTts = await listen<{ phase: string; label: string }>(
+      "tts-progress", (ev) => {
+        if (ev.payload.phase === "ready") { ttsReady = true; ttsDlLabel = ""; }
+        else { ttsReady = false; ttsDlLabel = ev.payload.label ?? ""; }
+      }
+    );
+    invoke("tts_init").catch(() => {});
+  });
+  onDestroy(async () => {
+    unsubs.forEach((u) => u());
+    unlistenTts?.();
+    if (calRunning) {
+      calRunning = false;
+      await emitCalEvent("calibration-cancelled", { loop: calPhase.loop });
+    }
+  });
+
+  // ── Navigation ─────────────────────────────────────────────────────────────
+  function next() { const i = stepIdx; if (i < STEPS.length - 1) step = STEPS[i + 1]; }
+  function prev() { const i = stepIdx; if (i > 0) step = STEPS[i - 1]; }
+  async function startScan() { await invoke("retry_connect"); }
+  async function finish()    { await invoke("complete_onboarding"); }
+
+  useWindowTitle("window.title.onboarding");
+</script>
+
+<main class="h-screen flex flex-col overflow-hidden select-none bg-background text-foreground"
+      aria-label={t("onboarding.title")}>
+
+  <!-- ── Top bar ───────────────────────────────────────────────────────────── -->
+  <div class="flex items-center gap-2 px-4 pt-3 pb-1.5 shrink-0" data-tauri-drag-region>
+    <span class="text-[0.78rem] font-bold tracking-tight flex-1">{t("onboarding.title")}</span>
+    <!-- TTS readiness indicator (shown on calibration step) -->
+    {#if step === "calibration" && !ttsReady}
+      <span class="flex items-center gap-1 text-[0.52rem] text-amber-600 dark:text-amber-400
+                   font-medium animate-pulse" title={ttsDlLabel || "Preparing voice engine…"}>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             class="w-3 h-3 shrink-0">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+        </svg>
+        {ttsDlLabel || "Voice loading…"}
+      </span>
+    {/if}
+    <ThemeToggle />
+    <LanguagePicker />
+  </div>
+
+  <!-- ── Progress ──────────────────────────────────────────────────────────── -->
+  <div class="px-4 pb-2 shrink-0">
+    <Progress value={((stepIdx) / (STEPS.length - 1)) * 100} class="h-1"
+              aria-label="Setup progress" />
+    <div class="flex justify-between mt-1">
+      {#each STEPS as s, i}
+        <button
+          onclick={() => { if (i <= stepIdx && !calRunning) step = s; }}
+          class="text-[0.48rem] font-medium transition-colors
+                 {i <= stepIdx ? 'text-foreground cursor-pointer' : 'text-muted-foreground/40 cursor-default'}">
+          {t(`onboarding.step.${s}`)}
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  <!-- ── Step content ──────────────────────────────────────────────────────── -->
+  <div class="flex-1 min-h-0 overflow-y-auto px-4 pb-3">
+
+    <!-- ════ WELCOME ══════════════════════════════════════════════════════════ -->
+    {#if step === "welcome"}
+      <div class="flex flex-col items-center gap-3 pt-4 text-center" in:fly={{ x: 30, duration: 200 }}>
+        <span class="text-4xl">🧠</span>
+        <h2 class="text-[1.05rem] font-bold">{t("onboarding.welcomeTitle")}</h2>
+        <p class="text-[0.72rem] text-muted-foreground leading-relaxed max-w-[320px]">
+          {t("onboarding.welcomeBody")}
+        </p>
+        <div class="flex flex-col gap-1.5 w-full max-w-[300px] mt-1">
+          {#each ["bluetooth", "fit", "calibration"] as s}
+            <div class="flex items-center gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
+                        bg-muted dark:bg-[#1a1a28] px-3 py-2">
+              <span class="text-base">{s === "bluetooth" ? "📡" : s === "fit" ? "🎧" : "🎯"}</span>
+              <div class="flex flex-col text-left">
+                <span class="text-[0.68rem] font-semibold">{t(`onboarding.step.${s}`)}</span>
+                <span class="text-[0.55rem] text-muted-foreground">{t(`onboarding.${s}Hint`)}</span>
+              </div>
+            </div>
+          {/each}
+        </div>
+      </div>
+
+    <!-- ════ BLUETOOTH ════════════════════════════════════════════════════════ -->
+    {:else if step === "bluetooth"}
+      <div class="flex flex-col items-center gap-3 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
+        <span class="text-3xl">{isConnected ? "✅" : "📡"}</span>
+        <h2 class="text-[0.95rem] font-bold">{t("onboarding.bluetoothTitle")}</h2>
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[320px]">
+          {t("onboarding.bluetoothBody")}
+        </p>
+
+        <Card class="w-full max-w-[320px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+          <CardContent class="px-3 py-2.5">
+            <div class="flex items-center gap-2.5">
+              <div class="w-2.5 h-2.5 rounded-full shrink-0
+                          {isConnected ? 'bg-green-500' : isScanning ? 'bg-yellow-500 animate-pulse' : 'bg-slate-400'}"></div>
+              <div class="flex flex-col gap-0 flex-1 min-w-0">
+                <span class="text-[0.68rem] font-semibold">
+                  {isConnected
+                    ? t("onboarding.btConnected", { name: status.device_name ?? "Muse" })
+                    : isScanning ? t("onboarding.btScanning") : t("onboarding.btReady")}
+                </span>
+                {#if isConnected && status.battery > 0}
+                  <span class="text-[0.55rem] text-muted-foreground">{t("dashboard.battery")}: {status.battery.toFixed(0)}%</span>
+                {/if}
+              </div>
+              {#if !isConnected}
+                <Button size="sm" class="text-[0.6rem] h-6 px-2.5 shrink-0" onclick={startScan} disabled={isScanning}>
+                  {isScanning ? t("onboarding.btScanning") : t("onboarding.btScan")}
+                </Button>
+              {/if}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div class="w-full max-w-[320px] flex flex-col gap-1.5 text-left">
+          <p class="text-[0.5rem] font-semibold tracking-widest uppercase text-muted-foreground">
+            {t("onboarding.btInstructions")}
+          </p>
+          {#each [1,2,3] as n}
+            <div class="flex items-start gap-2">
+              <span class="w-4 h-4 rounded-full bg-muted dark:bg-white/[0.06] flex items-center justify-center
+                           text-[0.5rem] font-bold text-muted-foreground shrink-0 mt-0.5">{n}</span>
+              <p class="text-[0.62rem] text-muted-foreground leading-relaxed">{t(`onboarding.btStep${n}`)}</p>
+            </div>
+          {/each}
+        </div>
+
+        {#if isConnected}
+          <div class="flex items-center gap-1.5 text-green-600 dark:text-green-400" in:fade={{ duration: 200 }}>
+            <span>✓</span>
+            <span class="text-[0.68rem] font-semibold">{t("onboarding.btSuccess")}</span>
+          </div>
+        {/if}
+      </div>
+
+    <!-- ════ FIT CHECK ════════════════════════════════════════════════════════ -->
+    {:else if step === "fit"}
+      <div class="flex flex-col items-center gap-2 pt-2 text-center" in:fly={{ x: 30, duration: 200 }}>
+        <h2 class="text-[0.95rem] font-bold">{t("onboarding.fitTitle")}</h2>
+        <p class="text-[0.65rem] text-muted-foreground leading-relaxed max-w-[320px]">
+          {t("onboarding.fitBody")}
+        </p>
+
+        <ElectrodeGuide qualityLabels={status.channel_quality} />
+
+        {#if !isConnected}
+          <p class="text-[0.62rem] text-amber-600 dark:text-amber-400">⚠ {t("onboarding.fitNeedsBt")}</p>
+        {/if}
+
+        {#if allGoodOrFair && isConnected}
+          <div class="flex items-center gap-1.5 text-green-600 dark:text-green-400" in:fade={{ duration: 200 }}>
+            <span>✓</span>
+            <span class="text-[0.68rem] font-semibold">{t("onboarding.fitGood")}</span>
+          </div>
+        {/if}
+      </div>
+
+    <!-- ════ CALIBRATION ══════════════════════════════════════════════════════ -->
+    {:else if step === "calibration"}
+      <div class="flex flex-col items-center gap-4 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
+
+        {#if calPhase.kind === "idle"}
+          <!-- ── Idle / start screen ─────────────────────────────────────── -->
+          <span class="text-3xl">🎯</span>
+          <h2 class="text-[0.95rem] font-bold">{t("onboarding.calibrationTitle")}</h2>
+          <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[320px]">
+            {t("onboarding.calibrationBody")}
+          </p>
+
+          {#if calProfile}
+            <!-- Action chips -->
+            <div class="flex flex-wrap gap-1.5 justify-center max-w-[380px]">
+              {#each calProfile.actions as action, i}
+                {@const colors = [
+                  "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                  "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400",
+                  "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                  "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                  "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+                  "border-cyan-500/30 bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
+                ]}
+                <span class="rounded-full border px-2.5 py-0.5 text-[0.62rem] font-medium {colors[i % colors.length]}">
+                  {action.label} · {action.duration_secs}s
+                </span>
+              {/each}
+              <span class="rounded-full border border-amber-500/30 bg-amber-500/10
+                           text-amber-600 dark:text-amber-400 px-2.5 py-0.5 text-[0.62rem] font-medium">
+                {t("calibration.break")} · {calProfile.break_duration_secs}s
+              </span>
+            </div>
+
+            <Button class="px-6 h-9 mt-1" onclick={startCalibration} disabled={!isConnected}>
+              {t("calibration.startCalibration")}
+            </Button>
+          {:else}
+            <Button class="px-6 h-9" onclick={startCalibration} disabled={!isConnected}>
+              {t("calibration.startCalibration")}
+            </Button>
+          {/if}
+
+          {#if !isConnected}
+            <p class="text-[0.6rem] text-amber-600 dark:text-amber-400">⚠ {t("onboarding.calibrationNeedsBt")}</p>
+          {/if}
+
+          <p class="text-[0.6rem] text-muted-foreground/50 max-w-[280px] leading-relaxed">
+            {t("onboarding.calibrationSkip")}
+          </p>
+
+        {:else if calPhase.kind === "done"}
+          <!-- ── Done screen ──────────────────────────────────────────────── -->
+          <div class="flex flex-col items-center gap-3">
+            <div class="w-14 h-14 rounded-full bg-emerald-500/10 flex items-center justify-center text-2xl">✅</div>
+            <h2 class="text-[0.95rem] font-bold text-emerald-600 dark:text-emerald-400">{t("calibration.complete")}</h2>
+            <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[300px]">
+              {t("calibration.completeDesc", { n: String(calProfile?.loop_count ?? 1) })}
+            </p>
+            <div class="flex gap-2.5 mt-1">
+              <Button variant="outline" size="sm"
+                      onclick={() => { calPhase = { kind: "idle", actionIndex: 0, loop: 1 }; }}>
+                {t("calibration.runAgain")}
+              </Button>
+              <Button size="sm" onclick={next}>
+                {t("onboarding.next")} →
+              </Button>
+            </div>
+          </div>
+
+        {:else}
+          <!-- ── Active calibration phase ────────────────────────────────── -->
+          <div class="flex flex-col items-center gap-4 w-full max-w-[380px]">
+
+            <!-- Profile name + loop dots -->
+            {#if calProfile}
+              <div class="flex flex-col items-center gap-1.5">
+                <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                  {calProfile.name}
+                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-[0.58rem] font-semibold tracking-widest uppercase text-muted-foreground">
+                    {t("calibration.iteration")}
+                  </span>
+                  <div class="flex gap-1">
+                    {#each Array(calProfile.loop_count) as _, i}
+                      <div class="w-2.5 h-2.5 rounded-full transition-colors
+                                  {i < calPhase.loop - 1 ? 'bg-emerald-500' :
+                                   i === calPhase.loop - 1 ? calPhaseBg :
+                                   'bg-muted dark:bg-white/[0.08]'}"></div>
+                    {/each}
+                  </div>
+                  <span class="text-[0.62rem] text-muted-foreground tabular-nums">
+                    {calPhase.loop}/{calProfile.loop_count}
+                  </span>
+                </div>
+              </div>
+
+              <!-- Action progress dots -->
+              {#if calPhase.kind === "action" && calProfile.actions.length > 1}
+                <div class="flex items-center gap-2">
+                  {#each calProfile.actions as _, i}
+                    <div class="flex items-center gap-1">
+                      <div class="w-2 h-2 rounded-full transition-colors
+                                  {i < calPhase.actionIndex ? 'bg-emerald-500' :
+                                   i === calPhase.actionIndex ? 'bg-blue-500' :
+                                   'bg-muted dark:bg-white/[0.08]'}"></div>
+                      {#if i < calProfile.actions.length - 1}
+                        <div class="w-3 h-px bg-muted dark:bg-white/[0.08]"></div>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            {/if}
+
+            <!-- Phase label -->
+            <div class="flex flex-col items-center gap-1">
+              <span class="text-[1.8rem] font-bold tracking-tight {calPhaseColor}">{calPhaseLabel}</span>
+              {#if calPhase.kind === "break" && calProfile}
+                {@const nextIdx = (calPhase.actionIndex + 1) % calProfile.actions.length}
+                <span class="text-[0.68rem] text-muted-foreground">
+                  {t("calibration.nextAction", { action: calProfile.actions[nextIdx]?.label ?? "" })}
+                </span>
+              {/if}
+            </div>
+
+            <!-- Countdown -->
+            <div class="flex flex-col items-center gap-2 w-full">
+              <span class="text-[2.8rem] font-bold tabular-nums leading-none">{calCountdown}</span>
+              <span class="text-[0.58rem] text-muted-foreground/50">{t("calibration.secondsRemaining")}</span>
+              <div class="w-full"><Progress value={calProgressPct} class="h-2" /></div>
+            </div>
+
+            <Button variant="outline" size="sm" onclick={cancelCalibration}>
+              {t("common.cancel")}
+            </Button>
+          </div>
+        {/if}
+      </div>
+
+    <!-- ════ DONE ═════════════════════════════════════════════════════════════ -->
+    {:else if step === "done"}
+      <div class="flex flex-col items-center gap-3 pt-4 text-center" in:fly={{ x: 30, duration: 200 }}>
+        <span class="text-4xl">🎉</span>
+        <h2 class="text-[1.05rem] font-bold">{t("onboarding.doneTitle")}</h2>
+        <p class="text-[0.72rem] text-muted-foreground leading-relaxed max-w-[320px]">
+          {t("onboarding.doneBody")}
+        </p>
+
+        <div class="flex flex-col gap-1.5 w-full max-w-[300px] mt-1">
+          {#each ["tray", "shortcuts", "help"] as tip}
+            <div class="flex items-start gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
+                        bg-muted dark:bg-[#1a1a28] px-3 py-2 text-left">
+              <span class="text-base shrink-0">{tip === "tray" ? "🖥" : tip === "shortcuts" ? "⌨" : "❓"}</span>
+              <p class="text-[0.6rem] text-muted-foreground leading-relaxed">{t(`onboarding.doneTip.${tip}`)}</p>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+  </div>
+
+  <!-- ── Bottom navigation ─────────────────────────────────────────────────── -->
+  <div class="flex items-center justify-between px-4 py-2.5
+              border-t border-border dark:border-white/[0.07] shrink-0">
+    {#if step === "welcome" || calRunning}
+      <span></span>
+    {:else}
+      <Button variant="ghost" size="sm" class="text-[0.65rem] h-7 px-2.5" onclick={prev}>
+        ← {t("onboarding.back")}
+      </Button>
+    {/if}
+
+    <div class="flex gap-1.5">
+      {#each STEPS as _, i}
+        <div class="w-1.5 h-1.5 rounded-full transition-colors
+                    {i === stepIdx ? 'bg-foreground' : i < stepIdx ? 'bg-foreground/30' : 'bg-muted-foreground/20'}"></div>
+      {/each}
+    </div>
+
+    {#if step === "done"}
+      <Button size="sm" class="text-[0.65rem] h-7 px-4" onclick={finish}>
+        {t("onboarding.finish")} →
+      </Button>
+    {:else if calRunning}
+      <!-- Back/Next locked while calibration is in progress -->
+      <span></span>
+    {:else if step === "calibration" && calPhase.kind === "done"}
+      <!-- "Next" shown inline in the done screen — hide duplicate here -->
+      <span></span>
+    {:else}
+      <Button size="sm" class="text-[0.65rem] h-7 px-3" onclick={next}>
+        {step === "welcome" ? t("onboarding.getStarted") : t("onboarding.next")} →
+      </Button>
+    {/if}
+  </div>
+
+  <DisclaimerFooter />
+</main>
+
+<style>
+  :global(body) { overflow: hidden; }
+</style>

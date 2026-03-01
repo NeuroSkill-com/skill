@@ -1,0 +1,150 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 NeuroSkill.com
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, version 3 only.
+//! Global keyboard shortcuts — registration and Tauri command get/set pairs.
+
+use std::sync::Mutex;
+use crate::MutexExt;
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+
+use crate::{AppState, save_settings};
+use crate::tray::refresh_tray;
+use crate::window_cmds::{
+    open_label_window, open_search_window, open_settings_window,
+    open_calibration_window_inner, open_help_window,
+    open_api_window, open_focus_timer_window,
+};
+
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+fn register_one<F>(app: &AppHandle, accel: &str, action: F) -> Result<(), String>
+where
+    F: Fn(AppHandle) + Send + Sync + 'static,
+{
+    if accel.is_empty() { return Ok(()); }
+    let shortcut: tauri_plugin_global_shortcut::Shortcut = accel
+        .parse()
+        .map_err(|e| format!("invalid shortcut '{accel}': {e}"))?;
+    let handle = app.clone();
+    app.global_shortcut()
+        .on_shortcut(shortcut, move |_, _, event| {
+            if event.state() == ShortcutState::Pressed { action(handle.clone()); }
+        })
+        .map_err(|e| e.to_string())
+}
+
+/// Unregister every global shortcut and re-register all configured ones.
+pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
+    app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
+
+    let (label, search, settings, calibration, help, history, api, theme, focus_timer) = {
+        let r = app.state::<Mutex<AppState>>();
+        let g = r.lock_or_recover();
+        (
+            g.label_shortcut.clone(),
+            g.search_shortcut.clone(),
+            g.settings_shortcut.clone(),
+            g.calibration_shortcut.clone(),
+            g.help_shortcut.clone(),
+            g.history_shortcut.clone(),
+            g.api_shortcut.clone(),
+            g.theme_shortcut.clone(),
+            g.focus_timer_shortcut.clone(),
+        )
+    };
+
+    if let Err(e) = register_one(app, &label, |a| {
+        tauri::async_runtime::spawn(async move { let _ = open_label_window(a).await; });
+    }) { eprintln!("[shortcut] label: {e}"); }
+
+    if let Err(e) = register_one(app, &search, |a| {
+        tauri::async_runtime::spawn(async move { let _ = open_search_window(a).await; });
+    }) { eprintln!("[shortcut] search: {e}"); }
+
+    if let Err(e) = register_one(app, &settings, |a| {
+        tauri::async_runtime::spawn(async move { let _ = open_settings_window(a).await; });
+    }) { eprintln!("[shortcut] settings: {e}"); }
+
+    if let Err(e) = register_one(app, &calibration, |a| {
+        tauri::async_runtime::spawn(async move { let _ = open_calibration_window_inner(&a, None, false).await; });
+    }) { eprintln!("[shortcut] calibration: {e}"); }
+
+    if let Err(e) = register_one(app, &help, |a| {
+        tauri::async_runtime::spawn(async move { let _ = open_help_window(a).await; });
+    }) { eprintln!("[shortcut] help: {e}"); }
+
+    if let Err(e) = register_one(app, &history, |a| {
+        tauri::async_runtime::spawn(async move {
+            if let Some(w) = a.get_webview_window("history") { let _ = w.show(); let _ = w.set_focus(); }
+            else { let _ = tauri::WebviewWindowBuilder::new(&a, "history",
+                tauri::WebviewUrl::App("history".into()))
+                .title("NeuroSkill™ – History").inner_size(920.0, 780.0)
+                .min_inner_size(700.0, 560.0).resizable(true).center().build(); }
+        });
+    }) { eprintln!("[shortcut] history: {e}"); }
+
+    if let Err(e) = register_one(app, &api, |a| {
+        tauri::async_runtime::spawn(async move { let _ = open_api_window(a).await; });
+    }) { eprintln!("[shortcut] api: {e}"); }
+
+    if let Err(e) = register_one(app, &theme, |a| {
+        let _ = a.emit("toggle-theme", ());
+    }) { eprintln!("[shortcut] theme: {e}"); }
+
+    if let Err(e) = register_one(app, &focus_timer, |a| {
+        tauri::async_runtime::spawn(async move { let _ = open_focus_timer_window(a).await; });
+    }) { eprintln!("[shortcut] focus_timer: {e}"); }
+
+    // "Open NeuroSkill™" — always CmdOrCtrl+Shift+O (not user-configurable)
+    if let Err(e) = register_one(app, "CmdOrCtrl+Shift+O", |a| {
+        if let Some(win) = a.get_webview_window("main") {
+            let _ = win.show();
+            let _ = win.set_focus();
+        }
+    }) { eprintln!("[shortcut] open_skill: {e}"); }
+
+    // Cmd+, — macOS standard "Preferences/Settings" shortcut (not user-configurable).
+    // Registered unconditionally alongside whatever the user has set for settings_shortcut.
+    // Errors are soft-logged: if the user's configurable shortcut is already Cmd+, this
+    // registration will fail with a duplicate-hotkey error, which is harmless.
+    #[cfg(target_os = "macos")]
+    if let Err(e) = register_one(app, "Command+Comma", |a| {
+        tauri::async_runtime::spawn(async move { let _ = open_settings_window(a).await; });
+    }) { eprintln!("[shortcut] settings (Cmd+,): {e}"); }
+
+    Ok(())
+}
+
+// ── Tauri commands ─────────────────────────────────────────────────────────────
+
+macro_rules! shortcut_pair {
+    ($get:ident, $set:ident, $field:ident, $name:literal) => {
+        #[tauri::command]
+        pub fn $get(state: tauri::State<'_, Mutex<AppState>>) -> String {
+            state.lock_or_recover().$field.clone()
+        }
+        #[tauri::command]
+        pub fn $set(shortcut: String, app: AppHandle) -> Result<(), String> {
+            app.state::<Mutex<AppState>>().lock_or_recover().$field = shortcut;
+            apply_all_shortcuts(&app)?;
+            save_settings(&app);
+            refresh_tray(&app);
+            Ok(())
+        }
+    };
+}
+
+shortcut_pair!(get_label_shortcut,       set_label_shortcut,       label_shortcut,       "label");
+shortcut_pair!(get_search_shortcut,      set_search_shortcut,      search_shortcut,      "search");
+shortcut_pair!(get_settings_shortcut,    set_settings_shortcut,    settings_shortcut,    "settings");
+shortcut_pair!(get_calibration_shortcut, set_calibration_shortcut, calibration_shortcut, "calibration");
+shortcut_pair!(get_help_shortcut,        set_help_shortcut,        help_shortcut,        "help");
+shortcut_pair!(get_history_shortcut,     set_history_shortcut,     history_shortcut,     "history");
+shortcut_pair!(get_api_shortcut,         set_api_shortcut,         api_shortcut,         "api");
+shortcut_pair!(get_theme_shortcut,       set_theme_shortcut,       theme_shortcut,       "theme");
+shortcut_pair!(get_focus_timer_shortcut, set_focus_timer_shortcut, focus_timer_shortcut, "focus_timer");

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NeuroSkill™</title>
+    <!-- Apply theme + font size synchronously before first paint → no flash. -->
+    <script>
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.add('dark');
+      try {
+        var fs = localStorage.getItem('skill-font-size');
+        if (fs) document.documentElement.style.fontSize = fs + '%';
+      } catch(e) {}
+      try {
+        var cs = localStorage.getItem('skill-chart-scheme');
+        if (cs) document.documentElement.dataset.chartScheme = cs;
+      } catch(e) {}
+    </script>
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>

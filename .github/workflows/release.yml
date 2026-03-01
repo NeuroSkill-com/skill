@@ -1,0 +1,351 @@
+name: Release
+
+# Triggered by pushing a semver tag: git tag v1.2.3 && git push origin v1.2.3
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+# Write permission is required to create GitHub Releases and upload assets.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release — aarch64-apple-darwin
+    runs-on: macos-26
+    environment: Release
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so git tag --format can read the annotation
+
+      # ── Verify tag matches tauri.conf.json version ────────────────────────────
+      # Catches "forgot to bump the version" before wasting 20 min on a build.
+      - name: Verify version matches tag
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"   # strip leading 'v'  →  1.2.3
+          CONF_VERSION=$(
+            grep '"version"' src-tauri/tauri.conf.json \
+            | head -1 \
+            | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
+          )
+          if [ "$VERSION" != "$CONF_VERSION" ]; then
+            echo "::error::Tag version ($VERSION) does not match" \
+                 "tauri.conf.json version ($CONF_VERSION)."
+            echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
+                 "src-tauri/Cargo.toml, then re-tag."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG"         >> "$GITHUB_ENV"
+          echo "✓ Version verified: $VERSION"
+
+      # ── Rust toolchain ────────────────────────────────────────────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      # ── Cargo cache ───────────────────────────────────────────────────────────
+      # Swatinem/rust-cache is purpose-built for Rust: it strips test artifacts,
+      # stale deps, and other bloat before saving, keeping the cache lean.
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # ── Node.js ───────────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # ── Pre-flight: verify every secret is set ───────────────────────────────
+      # Catches missing / renamed secrets in seconds instead of after a 15-minute
+      # build.  Each variable is checked for non-empty; none of the values are
+      # printed.
+      - name: Verify signing and notarization secrets are present
+        env:
+          APPLE_CERTIFICATE:             ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD:    ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:        ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                      ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:                ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:                 ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY:     ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          ok=true
+          for var in \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID \
+            TAURI_SIGNING_PRIVATE_KEY
+          do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret '$var' is empty or not set."
+              ok=false
+            fi
+          done
+          $ok || exit 1
+          echo "✓ All signing and notarization secrets are present."
+
+      # ── Pre-flight: validate Apple notarization credentials ───────────────────
+      # xcrun notarytool history authenticates against Apple's API using the same
+      # credentials the build will use, but without submitting anything.
+      # A 401 here means the app-specific password is wrong or expired.
+      # Generate a fresh one at https://appleid.apple.com → App-Specific Passwords,
+      # then update the APPLE_PASSWORD secret in the repository environment.
+      - name: Validate Apple notarization credentials
+        env:
+          APPLE_ID:       ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:  ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          echo "Checking notarization credentials …"
+          if ! xcrun notarytool history \
+                --apple-id  "$APPLE_ID"       \
+                --password  "$APPLE_PASSWORD"  \
+                --team-id   "$APPLE_TEAM_ID"   \
+                --output-format json 2>&1 | grep -q '"history"'; then
+            echo "::error::Apple notarization credentials are invalid."
+            echo "::error::Generate a new app-specific password at"
+            echo "::error::  https://appleid.apple.com → Sign-In and Security"
+            echo "::error::  → App-Specific Passwords → Generate"
+            echo "::error::Then update the APPLE_PASSWORD secret in:"
+            echo "::error::  GitHub → Settings → Environments → Release → Secrets"
+            exit 1
+          fi
+          echo "✓ Notarization credentials are valid."
+
+      # ── espeak-ng static library ──────────────────────────────────────────────
+      # Cache keyed on the build script itself; a script change busts the cache.
+      - name: Cache espeak-ng static lib
+        id: cache-espeak
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/espeak-static
+          key: macos-arm64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
+
+      - name: Build espeak-ng static lib
+        if: steps.cache-espeak.outputs.cache-hit != 'true'
+        run: ESPEAK_ARCHS=arm64 bash scripts/build-espeak-static.sh
+
+      # ── Apple Developer certificate → temporary keychain ─────────────────────
+      #
+      # Secrets required:
+      #   APPLE_CERTIFICATE          — base64-encoded .p12 (Developer ID Application cert)
+      #   APPLE_CERTIFICATE_PASSWORD — password protecting the .p12
+      #
+      # How to export the .p12:
+      #   Keychain Access → right-click cert → Export → Personal Information Exchange
+      #   Then: base64 -i cert.p12 | pbcopy   (paste into the GitHub secret)
+      - name: Import Apple Developer certificate
+        env:
+          APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          # Persist to env so the cleanup step can always find the path.
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"         >> "$GITHUB_ENV"
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          # Keep the keychain unlocked for the duration of the job (6 h max).
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Decode and import the certificate.
+          echo -n "$APPLE_CERTIFICATE" \
+            | base64 --decode -o "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" \
+            -k "$KEYCHAIN_PATH"                    \
+            -P "$APPLE_CERTIFICATE_PASSWORD"        \
+            -T /usr/bin/codesign                    \
+            -T /usr/bin/security
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+          # Allow codesign to use the key without a password prompt.
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Make this keychain searchable by codesign / Tauri.
+          security list-keychains -d user \
+            -s "$KEYCHAIN_PATH" login.keychain
+
+      # ── Tauri build — sign + notarize + create updater artifacts ─────────────
+      #
+      # Secrets required:
+      #   APPLE_SIGNING_IDENTITY              — e.g. "Developer ID Application: Jane (A1B2C3D4E5)"
+      #   APPLE_ID                            — Apple ID email used with notarytool
+      #   APPLE_PASSWORD                      — app-specific password (appleid.apple.com)
+      #   APPLE_TEAM_ID                       — 10-character Team ID
+      #   TAURI_SIGNING_PRIVATE_KEY           — base64 Ed25519 private key (from generate-keys.py)
+      #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  — key password (empty string if none)
+      #
+      # What Tauri does automatically when these vars are set:
+      #   1. codesign --deep --options runtime --entitlements ./entitlements.plist
+      #   2. xcrun notarytool submit … --wait
+      #   3. xcrun stapler staple
+      #   4. Creates <app>.tar.gz + <app>.tar.gz.sig  (updater artifacts)
+      #   5. Packages the signed + notarized .dmg
+      - name: Build Tauri app (sign + notarize)
+        env:
+          APPLE_SIGNING_IDENTITY:             ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                           ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:                     ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:                      ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+        run: |
+          npx tauri build \
+            --target aarch64-apple-darwin \
+            --bundles app,dmg
+
+      # ── Always delete the temporary keychain ──────────────────────────────────
+      - name: Delete temporary keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+
+      # ── Locate build artifacts ────────────────────────────────────────────────
+      - name: Collect artifact paths
+        id: artifacts
+        run: |
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+
+          APP_TAR="$(find "$BUNDLE_DIR/macos" \
+                       -name "*.app.tar.gz" ! -name "*.sig" \
+                       -maxdepth 1 | head -1)"
+          APP_SIG="$(find "$BUNDLE_DIR/macos" \
+                       -name "*.app.tar.gz.sig" \
+                       -maxdepth 1 | head -1)"
+          DMG="$(find "$BUNDLE_DIR/dmg" \
+                   -name "*.dmg" \
+                   -maxdepth 1 | head -1)"
+
+          if [ -z "$APP_TAR" ] || [ -z "$APP_SIG" ] || [ -z "$DMG" ]; then
+            echo "::error::One or more expected artifacts are missing."
+            echo "  APP_TAR : $APP_TAR"
+            echo "  APP_SIG : $APP_SIG"
+            echo "  DMG     : $DMG"
+            exit 1
+          fi
+
+          echo "app_tar=$APP_TAR"                  >> "$GITHUB_OUTPUT"
+          echo "app_sig=$APP_SIG"                  >> "$GITHUB_OUTPUT"
+          echo "dmg=$DMG"                          >> "$GITHUB_OUTPUT"
+          echo "app_tar_name=$(basename "$APP_TAR")" >> "$GITHUB_OUTPUT"
+          echo "dmg_name=$(basename "$DMG")"         >> "$GITHUB_OUTPUT"
+
+          echo "Artifacts found:"
+          echo "  TAR : $APP_TAR  ($(du -sh "$APP_TAR" | cut -f1))"
+          echo "  SIG : $APP_SIG"
+          echo "  DMG : $DMG  ($(du -sh "$DMG" | cut -f1))"
+
+      # ── Generate latest.json ──────────────────────────────────────────────────
+      #
+      # latest.json is uploaded as a release asset so it is reachable at:
+      #   https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json
+      #
+      # Point tauri.conf.json → plugins.updater.endpoints at that URL so the
+      # built-in updater can find new versions without any server-side logic:
+      #
+      #   "endpoints": [
+      #     "https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json"
+      #   ]
+      #
+      # The Tauri v2 updater JSON schema:
+      #   https://tauri.app/plugin/updater/#update-server-json-format
+      - name: Generate latest.json
+        env:
+          GH_REPO:      ${{ github.repository }}
+          TAG:          ${{ env.TAG }}
+          VERSION:      ${{ env.VERSION }}
+          APP_TAR_NAME: ${{ steps.artifacts.outputs.app_tar_name }}
+          APP_SIG_PATH: ${{ steps.artifacts.outputs.app_sig }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, subprocess, datetime, sys
+
+          version      = os.environ["VERSION"]
+          tag          = os.environ["TAG"]
+          repo         = os.environ["GH_REPO"]
+          app_tar_name = os.environ["APP_TAR_NAME"]
+          sig_path     = os.environ["APP_SIG_PATH"]
+
+          with open(sig_path) as fh:
+              signature = fh.read().strip()
+
+          pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+          # Use the git tag annotation as release notes; fall back gracefully.
+          try:
+              notes = subprocess.check_output(
+                  ["git", "tag", "-l", "--format=%(contents)", tag],
+                  text=True
+              ).strip()
+          except Exception:
+              notes = ""
+          if not notes:
+              notes = f"NeuroSkill™ v{version}"
+
+          download_url = (
+              f"https://github.com/{repo}/releases/download/{tag}/{app_tar_name}"
+          )
+
+          manifest = {
+              "version": version,
+              "notes":   notes,
+              "pub_date": pub_date,
+              "platforms": {
+                  "darwin-aarch64": {
+                      "url":       download_url,
+                      "signature": signature,
+                  }
+              },
+          }
+
+          with open("latest.json", "w") as fh:
+              json.dump(manifest, fh, indent=2)
+              fh.write("\n")
+
+          print("Generated latest.json:")
+          print(json.dumps(manifest, indent=2))
+          PYEOF
+
+      # ── Create GitHub Release + upload all assets ─────────────────────────────
+      #
+      # Uploaded assets for this release:
+      #   skill_<ver>_aarch64.dmg          — installer (distribute to users)
+      #   skill_<ver>_aarch64.app.tar.gz   — updater bundle (consumed by Tauri updater)
+      #   skill_<ver>_aarch64.app.tar.gz.sig — Ed25519 signature for the updater bundle
+      #   latest.json                      — updater manifest (static endpoint for the updater)
+      #
+      # The `latest.json` asset is accessible at the stable URL:
+      #   https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:               ${{ env.TAG }}
+          name:                   Skill v${{ env.VERSION }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            ${{ steps.artifacts.outputs.dmg }}
+            ${{ steps.artifacts.outputs.app_tar }}
+            ${{ steps.artifacts.outputs.app_sig }}
+            latest.json

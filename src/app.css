@@ -1,0 +1,219 @@
+@import "tailwindcss";
+
+@font-face {
+  font-family: "Absans";
+  src: url("/fonts/Absans-Regular.woff2") format("woff2"),
+       url("/fonts/Absans-Regular.woff")  format("woff"),
+       url("/fonts/Absans-Regular.otf")   format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background:           var(--background);
+  --color-foreground:           var(--foreground);
+  --color-card:                 var(--card);
+  --color-card-foreground:      var(--card-foreground);
+  --color-popover:              var(--popover);
+  --color-popover-foreground:   var(--popover-foreground);
+  --color-primary:              var(--primary);
+  --color-primary-foreground:   var(--primary-foreground);
+  --color-secondary:            var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted:                var(--muted);
+  --color-muted-foreground:     var(--muted-foreground);
+  --color-accent:               var(--accent);
+  --color-accent-foreground:    var(--accent-foreground);
+  --color-destructive:          var(--destructive);
+  --color-border:               var(--border);
+  --color-input:                var(--input);
+  --color-ring:                 var(--ring);
+}
+
+/* ── Light theme (day) ─────────────────────────────────────────────────────── */
+:root {
+  --radius: 0.625rem;
+
+  --background:           oklch(1 0 0);
+  --foreground:           oklch(0.145 0 0);
+  --card:                 oklch(1 0 0);
+  --card-foreground:      oklch(0.145 0 0);
+  --popover:              oklch(1 0 0);
+  --popover-foreground:   oklch(0.145 0 0);
+  --primary:              oklch(0.205 0 0);
+  --primary-foreground:   oklch(0.985 0 0);
+  --secondary:            oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted:                oklch(0.97 0 0);
+  --muted-foreground:     oklch(0.50 0 0);
+  --accent:               oklch(0.97 0 0);
+  --accent-foreground:    oklch(0.205 0 0);
+  --destructive:          oklch(0.577 0.245 27.325);
+  --border:               oklch(0.90 0 0);
+  --input:                oklch(0.922 0 0);
+  --ring:                 oklch(0.708 0 0);
+
+  /* ── Canvas chart tokens (read by EegChart via getComputedStyle) ── */
+  --chart-bg:       #f8fafc;
+  --chart-bg-strip: #f1f5f9;
+  --chart-grid:     rgba(0, 0, 0, 0.07);
+  --chart-baseline: rgba(0, 0, 0, 0.12);
+  --chart-label:    rgba(0, 0, 0, 0.38);
+}
+
+/* ── Dark theme (night) ────────────────────────────────────────────────────── */
+.dark {
+  --background:           oklch(0.145 0 0);
+  --foreground:           oklch(0.985 0 0);
+  --card:                 oklch(0.205 0 0);
+  --card-foreground:      oklch(0.985 0 0);
+  --popover:              oklch(0.269 0 0);
+  --popover-foreground:   oklch(0.985 0 0);
+  --primary:              oklch(0.922 0 0);
+  --primary-foreground:   oklch(0.205 0 0);
+  --secondary:            oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted:                oklch(0.269 0 0);
+  --muted-foreground:     oklch(0.708 0 0);
+  --accent:               oklch(0.371 0 0);
+  --accent-foreground:    oklch(0.985 0 0);
+  --destructive:          oklch(0.704 0.191 22.216);
+  --border:               oklch(1 0 0 / 10%);
+  --input:                oklch(1 0 0 / 15%);
+  --ring:                 oklch(0.556 0 0);
+
+  /* ── Canvas chart tokens ── */
+  --chart-bg:       #09090b;
+  --chart-bg-strip: #050507;
+  --chart-grid:     rgba(255, 255, 255, 0.07);
+  --chart-baseline: rgba(255, 255, 255, 0.10);
+  --chart-label:    rgba(255, 255, 255, 0.25);
+}
+
+/* ── High-contrast theme ────────────────────────────────────────────────────── */
+.high-contrast {
+  --background:           oklch(1 0 0);
+  --foreground:           oklch(0 0 0);
+  --card:                 oklch(1 0 0);
+  --card-foreground:      oklch(0 0 0);
+  --popover:              oklch(1 0 0);
+  --popover-foreground:   oklch(0 0 0);
+  --primary:              oklch(0 0 0);
+  --primary-foreground:   oklch(1 0 0);
+  --secondary:            oklch(0.95 0 0);
+  --secondary-foreground: oklch(0 0 0);
+  --muted:                oklch(0.95 0 0);
+  --muted-foreground:     oklch(0.25 0 0);
+  --accent:               oklch(0.90 0 0);
+  --accent-foreground:    oklch(0 0 0);
+  --destructive:          oklch(0.50 0.30 25);
+  --border:               oklch(0 0 0);
+  --input:                oklch(0 0 0);
+  --ring:                 oklch(0.40 0.25 265);
+
+  --chart-bg:       #ffffff;
+  --chart-bg-strip: #f0f0f0;
+  --chart-grid:     rgba(0, 0, 0, 0.25);
+  --chart-baseline: rgba(0, 0, 0, 0.40);
+  --chart-label:    rgba(0, 0, 0, 0.70);
+}
+
+.high-contrast.dark {
+  --background:           oklch(0 0 0);
+  --foreground:           oklch(1 0 0);
+  --card:                 oklch(0.08 0 0);
+  --card-foreground:      oklch(1 0 0);
+  --popover:              oklch(0.08 0 0);
+  --popover-foreground:   oklch(1 0 0);
+  --primary:              oklch(1 0 0);
+  --primary-foreground:   oklch(0 0 0);
+  --secondary:            oklch(0.15 0 0);
+  --secondary-foreground: oklch(1 0 0);
+  --muted:                oklch(0.15 0 0);
+  --muted-foreground:     oklch(0.80 0 0);
+  --accent:               oklch(0.20 0 0);
+  --accent-foreground:    oklch(1 0 0);
+  --destructive:          oklch(0.70 0.30 25);
+  --border:               oklch(1 0 0);
+  --input:                oklch(1 0 0);
+  --ring:                 oklch(0.70 0.25 265);
+
+  --chart-bg:       #000000;
+  --chart-bg-strip: #0a0a0a;
+  --chart-grid:     rgba(255, 255, 255, 0.30);
+  --chart-baseline: rgba(255, 255, 255, 0.45);
+  --chart-label:    rgba(255, 255, 255, 0.75);
+}
+
+/* ── Indeterminate progress bar animation ───────────────────────────────────── */
+@keyframes progress-indeterminate {
+  0%   { transform: translateX(-100%); width: 40%; }
+  50%  { transform: translateX(160%);  width: 40%; }
+  100% { transform: translateX(160%);  width: 40%; }
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Absans", sans-serif;
+    height: 100vh;
+    overflow: hidden;   /* the <main> scroll container handles scrolling */
+    user-select: none;
+  }
+
+  /* ── Focus-visible ring for keyboard navigation ──────────────────────────── */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  /* Suppress focus ring for mouse clicks */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* ── Skip-to-content link (screen readers + keyboard) ────────────────────── */
+  .skip-link {
+    position: fixed;
+    top: -100px;
+    left: 8px;
+    z-index: 2147483647;
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    border-radius: 0 0 8px 8px;
+    transition: top 0.15s;
+  }
+  .skip-link:focus {
+    top: 0;
+  }
+
+  /* ── Screen reader only ────────────────────────────────────────────────── */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ── High-contrast border boost ──────────────────────────────────────────── */
+  .high-contrast [class*="border-border"],
+  .high-contrast [class*="divide-border"] {
+    border-color: var(--border) !important;
+  }
+}

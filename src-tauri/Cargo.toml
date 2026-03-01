@@ -1,0 +1,139 @@
+[package]
+name = "skill"
+version = "0.0.1"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+license = "GPL-3.0-only"
+
+[lib]
+name = "skill_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+dirs = "6"
+tauri                        = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-opener          = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-updater         = "2"
+tauri-plugin-process         = "2"
+tauri-plugin-notification    = "2"
+libc                         = "0.2"
+
+# Muse EEG – library only, no TUI feature
+muse-rs   = { version = "0.1.0", default-features = false }
+
+# BLE adapter — same version as muse-rs; already compiled, zero extra cost
+btleplug = "0.11"
+
+# OpenBCI board drivers (Ganglion BLE, Cyton serial, …)
+openbci = { version = "0.0.1", features = ["ble"] }
+
+# Serial port enumeration (for Cyton board selection in settings)
+serialport = "4"
+
+# Async runtime (Tauri re-exports tokio but we need 'full' for select! etc.)
+tokio = { version = "1", features = ["full"] }
+
+# CSV writing
+csv = "1"
+
+# TTS — lightweight ONNX-based speech synthesis (English only for calibration)
+# espeak-ng must be installed on the system (brew / apt / apk install espeak-ng).
+# Model weights (~30 MB) are downloaded from HuggingFace Hub on first use.
+# Uses the local checkout to pin deflate-only zip (avoids lzma-sys conflict
+# with tracel-llvm-bundler which also links the native lzma library).
+kittentts = { version = "0.2.1", features = ["espeak"] }
+
+# Audio playback for TTS samples (pure-Rust, uses platform audio APIs)
+rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"] }
+
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# PNG encoding for the About-window icon data URL
+png    = "0.17"
+base64 = "0.22"
+
+# Native confirmation dialogs (quit, etc.)
+# xdg-portal is the Linux backend (D-Bus, no GTK3 headers needed); it is
+# compiled away on macOS / Windows by rfd's own cfg gates, so listing it here
+# is safe for all platforms.
+rfd = { version = "0.17", default-features = false, features = ["file-handle-inner", "xdg-portal"] }
+
+# GPU-accelerated FFT for real-time EEG filtering (overlap-save, wgpu backend)
+gpu-fft = { version = "1.1.1", features = ["wgpu"] }
+
+# WebSocket broadcast server
+axum              = { version = "0.8", features = ["ws"] }
+tower-http        = { version = "0.6", features = ["cors"] }
+futures-util      = { version = "0.3", default-features = false, features = ["sink", "std"] }
+
+# mDNS / Bonjour service discovery
+mdns-sd = "0.18"
+
+# ── EEG Embedding ─────────────────────────────────────────────────────────────
+
+# ZUNA EEG foundation model — encoder-only, wgpu GPU backend.
+# default-features = false drops the ndarray CPU backend; wgpu pulls
+# burn-wgpu → cubecl-wgpu → wgpu 26.0.1, the same version gpu-fft uses.
+zuna-rs   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
+
+# Pure-Rust HNSW approximate nearest-neighbour index with binary persistence.
+fast-hnsw = { version = "1.0.0" }
+
+# SQLite — bundled so no system lib required; stores daily embedding records.
+rusqlite  = { version = "0.37", features = ["bundled"] }
+
+# HuggingFace Hub client — used to auto-download ZUNA weights on first run.
+# The sync API (default feature) is used; no async/tokio dependency required.
+# 0.4+ fixes "relative URL without a base" when the CDN returns a relative
+# Location header during the metadata redirect dance (hf-hub#issue/relative-url).
+hf-hub    = "0.5"
+
+# ndarray Array2<f32> is required by zuna_rs::load_from_named_tensor.
+ndarray   = "0.17"
+
+# GPU-accelerated parametric UMAP (burn + CubeCL / wgpu backend).
+# Uses the fast-map repo's local checkout to avoid burn-optim 0.20.1 ABI mismatch
+# on crates.io.  Repository: https://github.com/eugenehp/fast-map
+fast-umap = { version = "1.2.2", default-features = false }
+
+# Direct access to burn::backend::{Wgpu, wgpu::WgpuDevice} in eeg_embeddings.rs.
+burn      = { version = "0.20.1", default-features = false, features = ["wgpu"] }
+
+# Raw CubeBackend + WgpuRuntime needed for fast-umap's AutodiffBackend bound
+# (the Fusion<CubeBackend> wrapper from burn::backend::Wgpu is not supported).
+burn-cubecl    = "0.20.1"
+cubecl         = { version = "0.9.0", features = ["wgpu"] }
+cubecl-runtime = "0.9.0"
+crossbeam-channel = "0.5.15"
+
+# ── Patch: Apple-Silicon Metal fix for cubek-matmul ───────────────────────────
+#
+# cubek-matmul 0.1.1 panics on Apple Silicon when the SimpleCyclicCmma tile
+# (40 KB) exceeds Metal's 32 KB shared-memory limit.  The patched fork extends
+# the 'auto' fallback chain:  SimpleCyclicCmma → SimpleUnit → Naive.
+#
+# ── fastembed: candle-Metal on macOS, ort-CPU everywhere else ─────────────────
+#
+# The `metal` feature activates candle-core/metal + candle-nn/metal so
+# embeddings run on the Apple GPU via Metal Performance Shaders.
+# On Linux / Windows the default ort backend is used instead.
+[target.'cfg(target_os = "macos")'.dependencies]
+fastembed = { version = "5.11.0", features = ["metal"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+fastembed = { version = "5.11.0" }
+
+[dev-dependencies]
+tempfile = "3"
+
+# zuna-rs carries this patch in its own Cargo.toml, but [patch] sections are
+# NOT inherited by parent workspaces, so we must mirror it here.
+[patch.crates-io]
+cubek-matmul = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
+btleplug     = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }

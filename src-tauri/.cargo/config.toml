@@ -1,0 +1,11 @@
+# ── espeak-ng static library ──────────────────────────────────────────────────
+#
+# These two env vars are injected into every build script in this workspace so
+# that both skill/build.rs and kittentts/build.rs find the static archive and,
+# if it is absent, know where to find the script that builds it.
+#
+# `relative = true` resolves paths relative to this file (src-tauri/).
+
+[env]
+ESPEAK_LIB_DIR    = { value = "espeak-static/lib",                    relative = true }
+ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static.sh",  relative = true }
