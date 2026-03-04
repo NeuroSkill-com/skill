@@ -140,6 +140,12 @@ the Free Software Foundation, version 3 only. -->
   // TAU_MS (EWMA smoothing, ≈ 350 ms) imported from constants.ts as BAND_TAU_MS.
 
   // ── Rendering ──────────────────────────────────────────────────────────────
+
+  /** Restart the render loop if it was stopped (e.g. after wake-from-sleep). */
+  export function restartRender(): void {
+    if (!rendering) startRender();
+  }
+
   function startRender() {
     if (rendering) return;
     rendering = true;
@@ -147,8 +153,12 @@ the Free Software Foundation, version 3 only. -->
 
     function frame(now: DOMHighResTimeStamp) {
       if (!rendering) return;
+      // Schedule next frame first so exceptions can never permanently kill the loop.
+      animFrame = requestAnimationFrame(frame);
+
+      try {
       const ctx = canvasEl.getContext("2d");
-      if (!ctx) { animFrame = requestAnimationFrame(frame); return; }
+      if (!ctx) return;
 
       const dpr = devicePixelRatio || 1;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -270,7 +280,9 @@ the Free Software Foundation, version 3 only. -->
         ctx.globalAlpha = 1;
       }
 
-      animFrame = requestAnimationFrame(frame);
+      } catch (err) {
+        console.error("[BandChart] render error (recovered):", err);
+      }
     }
 
     animFrame = requestAnimationFrame(frame);

@@ -236,6 +236,11 @@ the Free Software Foundation, version 3 only. -->
   let rendering = false;
   let ro: ResizeObserver | undefined;
 
+  /** Restart the render loop if it was stopped (e.g. after wake-from-sleep). */
+  export function restartRender(): void {
+    if (!rendering) startRender();
+  }
+
   function startRender() {
     if (rendering) return;
     rendering = true;
@@ -245,9 +250,12 @@ the Free Software Foundation, version 3 only. -->
 
     function frame(now: DOMHighResTimeStamp) {
       if (!rendering) return;
+      // Schedule the next frame FIRST so a drawing exception can never kill the loop.
+      animFrame = requestAnimationFrame(frame);
 
+      try {
       const ctx = canvasEl.getContext("2d");
-      if (!ctx) { animFrame = requestAnimationFrame(frame); return; }
+      if (!ctx) return;
 
       // Scale context so all coordinates are in CSS pixels (DPR-transparent).
       const dpr = devicePixelRatio || 1;
@@ -586,7 +594,9 @@ the Free Software Foundation, version 3 only. -->
         markerHitBoxes = frameHits;
       }
 
-      animFrame = requestAnimationFrame(frame);
+      } catch (err) {
+        console.error("[EegChart] render error (recovered):", err);
+      }
     }
 
     animFrame = requestAnimationFrame(frame);

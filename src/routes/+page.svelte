@@ -124,8 +124,9 @@ the Free Software Foundation, version 3 only. -->
     pushSamples(ch: number, samples: number[]): void;
     pushSpecColumn(col: SpectrogramColumn): void;
     pushMarker(m: EventMarker): void;
+    restartRender(): void;
   } | undefined;
-  let bandChartEl: { update(snap: BandSnapshot): void } | undefined;
+  let bandChartEl: { update(snap: BandSnapshot): void; restartRender(): void } | undefined;
   let ppgChartEl = $state<{
     pushSamples(ch: number, samples: number[]): void;
     pushMarker(m: { timestamp_ms: number; label: string; color: string }): void;
@@ -676,7 +677,15 @@ the Free Software Foundation, version 3 only. -->
       }
     ));
 
-    const onVisible = () => { if (!document.hidden) refreshStatus(); };
+    const onVisible = () => {
+      if (!document.hidden) {
+        refreshStatus();
+        // Restart canvas render loops in case they died while the window was hidden
+        // (e.g. after wake-from-sleep or an unhandled exception during a frame).
+        chartEl?.restartRender();
+        bandChartEl?.restartRender();
+      }
+    };
     document.addEventListener("visibilitychange", onVisible);
     unlisteners.push(() => document.removeEventListener("visibilitychange", onVisible));
 

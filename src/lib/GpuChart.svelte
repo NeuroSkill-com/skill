@@ -178,8 +178,13 @@ the Free Software Foundation, version 3 only. -->
 
   // ── rAF loop ───────────────────────────────────────────────────────────────
   function tick() {
-    draw();
+    // Schedule next frame first so a draw exception can never kill the loop.
     animFrame = requestAnimationFrame(tick);
+    try {
+      draw();
+    } catch (err) {
+      console.error("[GpuChart] render error (recovered):", err);
+    }
   }
 
   // ── Resize ─────────────────────────────────────────────────────────────────
@@ -204,9 +209,11 @@ the Free Software Foundation, version 3 only. -->
   });
 
   // ── Polling ─────────────────────────────────────────────────────────────────
+  let gpuErrCount = 0;
   async function pollGpu() {
     try {
       const gpu = await invoke<GpuStats | null>("get_gpu_stats");
+      gpuErrCount = 0;
       gpuStats = gpu;
       if (gpu !== null && modelActive) {
         const ts = Date.now();
@@ -214,9 +221,14 @@ the Free Software Foundation, version 3 only. -->
         history = [...history.filter(p => p.ts >= ts - WIN_MS - 2_000),
                    { overall: gpu.overall, tiler: gpu.tiler, ts }];
       }
-    } catch {
-      gpuStats = null;
-      clearInterval(gpuTimer);
+    } catch (err) {
+      gpuErrCount++;
+      // Stop polling only after 5 consecutive failures (GPU monitor unavailable).
+      if (gpuErrCount >= 5) {
+        gpuStats = null;
+        clearInterval(gpuTimer);
+        gpuTimer = undefined;
+      }
     }
   }
 
