@@ -5499,26 +5499,41 @@ pub fn run() {
                     tokio::time::sleep(Duration::from_secs(interval_secs)).await;
                     eprintln!("[updater] running background update check");
                     match app_upd.updater() {
-                        Ok(updater) => match updater.check().await {
-                            Ok(Some(update)) => {
-                                eprintln!("[updater] update available: {}", update.version);
-                                let payload = serde_json::json!({
-                                    "version": update.version,
-                                    "date":    update.date,
-                                    "body":    update.body,
-                                });
-                                let _ = app_upd.emit("update-available", payload);
-                            }
-                            Ok(None) => {
-                                eprintln!("[updater] up to date");
-                                let _ = app_upd.emit("update-checked", ());
-                            }
-                            Err(e) => {
-                                eprintln!("[updater] check failed: {e}");
-                            }
-                        },
                         Err(e) => {
                             eprintln!("[updater] cannot get updater: {e}");
+                        }
+                        Ok(updater) => {
+                            // Enforce a 30-second deadline so a hung or
+                            // unreachable endpoint (malformed JSON, 404,
+                            // DNS stall, etc.) never blocks the task forever.
+                            let result = tokio::time::timeout(
+                                Duration::from_secs(30),
+                                updater.check(),
+                            ).await;
+                            match result {
+                                Err(_elapsed) => {
+                                    eprintln!("[updater] check timed out after 30 s");
+                                }
+                                Ok(Ok(Some(update))) => {
+                                    eprintln!("[updater] update available: {}", update.version);
+                                    let payload = serde_json::json!({
+                                        "version": update.version,
+                                        "date":    update.date,
+                                        "body":    update.body,
+                                    });
+                                    let _ = app_upd.emit("update-available", payload);
+                                }
+                                Ok(Ok(None)) => {
+                                    eprintln!("[updater] up to date");
+                                    let _ = app_upd.emit("update-checked", ());
+                                }
+                                Ok(Err(e)) => {
+                                    // Non-fatal: endpoint unreachable, JSON missing/
+                                    // malformed, signature mismatch, etc. The loop
+                                    // will retry after the next interval sleep.
+                                    eprintln!("[updater] check failed: {e}");
+                                }
+                            }
                         }
                     }
                 }
