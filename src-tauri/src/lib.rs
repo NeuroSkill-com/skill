@@ -69,7 +69,7 @@ mod autostart;
 mod tts;
 pub mod device;
 use tts::{tts_init, tts_speak, tts_unload, tts_list_voices, tts_list_neutts_voices, tts_get_voice, tts_set_voice};
-pub(crate) use tts::{neutts_apply_config, init_tts_dirs, init_neutts_samples_dir};
+pub(crate) use tts::{neutts_apply_config, init_tts_dirs, init_neutts_samples_dir, tts_shutdown};
 
 mod settings;
 pub(crate) use settings::{
@@ -5640,14 +5640,26 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, event| {
-            // Closing the last window fires ExitRequested with code == None.
-            // Suppress it so the app keeps running in the tray.
-            // An explicit quit (tray → Quit → app.exit(0)) sets code = Some(0)
-            // and is allowed through unchanged.
-            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-                if code.is_none() {
-                    api.prevent_exit();
+            match event {
+                // Closing the last window fires ExitRequested with code == None.
+                // Suppress it so the app keeps running in the tray.
+                // An explicit quit (tray → Quit → app.exit(0)) sets code = Some(0)
+                // and is allowed through unchanged.
+                tauri::RunEvent::ExitRequested { api, code, .. } => {
+                    if code.is_none() {
+                        api.prevent_exit();
+                    }
                 }
+
+                // Explicitly release TTS backends (especially the NeuTTS llama.cpp/Metal
+                // context) before the process calls exit().  Without this, `exit()` fires
+                // C++ static destructors while Metal resource sets are still live, which
+                // hits the `ggml_metal_device_free` assertion and crashes on shutdown.
+                tauri::RunEvent::Exit => {
+                    tts_shutdown();
+                }
+
+                _ => {}
             }
         });
 }

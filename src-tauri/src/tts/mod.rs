@@ -149,6 +149,26 @@ fn use_neutts() -> bool { false }
 
 // ─── Public config entry-point ────────────────────────────────────────────────
 
+/// Synchronously drop all TTS backends before process exit.
+///
+/// Must be called from Tauri's `RunEvent::Exit` handler (non-async context).
+/// Waits up to 8 s for each backend to release its resources; this prevents
+/// the llama.cpp/Metal `ggml_metal_device_free` assertion from firing during
+/// C++ static destructors after `exit()`.
+pub(crate) fn tts_shutdown() {
+    let timeout = std::time::Duration::from_secs(8);
+
+    #[cfg(feature = "tts-neutts")]
+    {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
+        if neutts::try_shutdown(tx) {
+            if rx.recv_timeout(timeout).is_err() {
+                eprintln!("[neutts] shutdown timed out — forcing drop");
+            }
+        }
+    }
+}
+
 /// Apply new NeuTTS configuration (called from `settings_cmds`).
 pub fn neutts_apply_config(cfg: &crate::settings::NeuttsConfig) {
     #[cfg(feature = "tts-neutts")]

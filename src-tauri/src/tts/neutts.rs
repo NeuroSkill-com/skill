@@ -129,9 +129,20 @@ pub(super) enum Cmd {
         done:           oneshot::Sender<()>,
     },
     Unload { done: oneshot::Sender<()> },
+    /// Blocking shutdown: drops the model synchronously so the Metal/llama.cpp
+    /// context is released **before** `exit()` fires C++ static destructors.
+    /// Uses a plain `std::sync::mpsc` channel so it can be called from a
+    /// non-async context (e.g. Tauri's `RunEvent::Exit` callback).
+    Shutdown { done: std::sync::mpsc::SyncSender<()> },
 }
 
 static TX: OnceLock<std::sync::mpsc::SyncSender<Cmd>> = OnceLock::new();
+
+/// Send a `Shutdown` command to the worker if it has been started.
+/// Returns `true` if the channel send succeeded (worker is running).
+pub(super) fn try_shutdown(done: std::sync::mpsc::SyncSender<()>) -> bool {
+    TX.get().map(|ch| ch.send(Cmd::Shutdown { done }).is_ok()).unwrap_or(false)
+}
 
 pub(super) fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
     TX.get_or_init(|| {
@@ -258,6 +269,23 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 LOADING.store(false, Ordering::Relaxed);
                 eprintln!("[neutts] model unloaded");
                 done.send(()).ok();
+            }
+
+            // ── Shutdown (blocking, called from RunEvent::Exit) ───────────────
+            Cmd::Shutdown { done } => {
+                // Explicitly drop all resources in the correct order so the
+                // llama.cpp Metal context is fully released before `exit()`
+                // fires C++ static destructors (`ggml_metal_device_free`).
+                drop(stream.take());
+                ref_codes.clear();
+                ref_text_cached.clear();
+                loaded_backbone.clear();
+                READY.store(false, Ordering::Relaxed);
+                LOADING.store(false, Ordering::Relaxed);
+                eprintln!("[neutts] shutdown complete — Metal context released");
+                done.send(()).ok();
+                // Exit the worker loop so the thread ends cleanly.
+                return;
             }
         }
     }
