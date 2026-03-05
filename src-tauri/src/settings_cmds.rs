@@ -518,6 +518,23 @@ pub fn get_neutts_config(state: tauri::State<'_, Mutex<AppState>>) -> NeuttsConf
     state.lock_or_recover().neutts_config.clone()
 }
 
+/// Return whether TTS engine pre-warming at startup is enabled.
+#[tauri::command]
+pub fn get_tts_preload(state: tauri::State<'_, Mutex<AppState>>) -> bool {
+    state.lock_or_recover().tts_preload
+}
+
+/// Enable or disable TTS engine pre-warming at startup, and persist the change.
+#[tauri::command]
+pub fn set_tts_preload(
+    preload: bool,
+    app:     AppHandle,
+    state:   tauri::State<'_, Mutex<AppState>>,
+) {
+    state.lock_or_recover().tts_preload = preload;
+    crate::save_settings(&app);
+}
+
 /// Persist new NeuTTS configuration.
 ///
 /// If NeuTTS is enabled the backend is marked dirty so the next

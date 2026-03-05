@@ -101,6 +101,7 @@ the Free Software Foundation, version 3 only. -->
   });
   let kittenVoices  = $state<string[]>(["Jasper"]);
   let kittenVoice   = $state("Jasper");
+  let ttsPreload    = $state(true);
   let logConfig     = $state<LogConfig>({
     embedder: true, bluetooth: true, websocket: false,
     csv: false, filter: false, bands: false, tts: false, history: false,
@@ -126,6 +127,7 @@ the Free Software Foundation, version 3 only. -->
   onMount(async () => {
     try { logConfig    = await invoke<LogConfig>("get_log_config"); }    catch {}
     try { neuttsConfig = await invoke<NeuttsConfig>("get_neutts_config"); } catch {}
+    try { ttsPreload   = await invoke<boolean>("get_tts_preload"); } catch {}
     try {
       const voices = await invoke<string[]>("tts_list_voices");
       if (voices.length) kittenVoices = voices;
@@ -342,6 +344,25 @@ the Free Software Foundation, version 3 only. -->
             </div>
           </div>
         {/if}
+
+        <!-- Auto-preload on startup toggle -->
+        <button
+          onclick={() => {
+            ttsPreload = !ttsPreload;
+            invoke("set_tts_preload", { preload: ttsPreload }).catch(() => {});
+          }}
+          class="w-full flex items-center gap-3 text-left rounded-lg px-0 py-0.5 transition-colors
+                 hover:text-foreground text-muted-foreground group">
+          <div class="relative shrink-0 w-7 h-3.5 rounded-full transition-colors duration-200
+                      {ttsPreload ? 'bg-indigo-500' : 'bg-muted-foreground/30'}">
+            <div class="absolute top-0.5 h-2.5 w-2.5 rounded-full bg-white shadow transition-transform duration-200
+                        {ttsPreload ? 'translate-x-3.5' : 'translate-x-0.5'}"></div>
+          </div>
+          <div class="flex flex-col">
+            <span class="text-[0.69rem] font-medium leading-tight">{t("ttsTab.preloadOnStartup")}</span>
+            <span class="text-[0.58rem] text-muted-foreground/60 leading-tight">{t("ttsTab.preloadOnStartupDesc")}</span>
+          </div>
+        </button>
 
         <!-- espeak-ng note -->
         <p class="text-[0.58rem] text-muted-foreground/50 leading-relaxed">

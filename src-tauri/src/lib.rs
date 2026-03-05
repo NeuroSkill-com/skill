@@ -146,6 +146,7 @@ use settings_cmds::{
     get_update_check_interval, set_update_check_interval,
     get_openbci_config, set_openbci_config, list_serial_ports,
     get_neutts_config, set_neutts_config, pick_ref_wav_file,
+    get_tts_preload, set_tts_preload,
 };
 
 use std::{
@@ -477,6 +478,9 @@ pub struct AppState {
 
     /// NeuTTS voice-cloning TTS configuration.
     pub neutts_config: NeuttsConfig,
+
+    /// Whether to pre-warm the active TTS engine at startup.
+    pub tts_preload: bool,
 }
 
 impl Default for AppState {
@@ -566,6 +570,7 @@ impl Default for AppState {
             update_check_interval_secs: default_update_check_interval(),
             openbci_config: crate::settings::OpenBciConfig::default(),
             neutts_config: NeuttsConfig::default(),
+            tts_preload:   true,
             skill_dir,
             model_config,
             model_status,
@@ -618,6 +623,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         update_check_interval_secs: s.update_check_interval_secs,
         openbci:                s.openbci_config.clone(),
         neutts:                 s.neutts_config.clone(),
+        tts_preload:            s.tts_preload,
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
@@ -5253,6 +5259,7 @@ pub fn run() {
                 s.openbci_config = data.openbci;
                 // Restore NeuTTS config and sync the TTS module's statics.
                 s.neutts_config = data.neutts.clone();
+                s.tts_preload   = data.tts_preload;
                 neutts_apply_config(&data.neutts);
                 // Seed discovered list from paired
 
@@ -5264,6 +5271,14 @@ pub fn run() {
                         is_preferred: data.preferred_id.as_deref() == Some(&pd.id),
                     });
                 }
+            }
+
+            // Pre-warm the active TTS engine in the background if enabled.
+            if data.tts_preload {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    crate::tts::tts_init(app_handle).await.ok();
+                });
             }
 
             // Initialise the fastembed text embedder on a background thread
@@ -5618,6 +5633,7 @@ pub fn run() {
             get_update_check_interval, set_update_check_interval,
             get_openbci_config, set_openbci_config, list_serial_ports,
             get_neutts_config, set_neutts_config, pick_ref_wav_file,
+            get_tts_preload, set_tts_preload,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,

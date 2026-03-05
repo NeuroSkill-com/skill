@@ -443,7 +443,14 @@ pub(crate) struct UserSettings {
     /// NeuTTS voice-cloning TTS configuration.
     #[serde(default)]
     pub neutts: NeuttsConfig,
+
+    /// Pre-warm the active TTS engine at startup even when no TTS UI is open.
+    /// Default: `true`.  Disable to defer model loading until first use.
+    #[serde(default = "default_tts_preload")]
+    pub tts_preload: bool,
 }
+
+fn default_tts_preload() -> bool { true }
 
 impl Default for UserSettings {
     fn default() -> Self {
@@ -476,6 +483,7 @@ impl Default for UserSettings {
             update_check_interval_secs: default_update_check_interval(),
             openbci:                OpenBciConfig::default(),
             neutts:                 NeuttsConfig::default(),
+            tts_preload:            default_tts_preload(),
         }
     }
 }

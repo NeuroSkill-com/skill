@@ -1921,6 +1921,8 @@ const uk: Record<string, string> = {
   "ttsTab.statusIdle":            "Idle",
   "ttsTab.statusUnloaded":        "Unloaded",
   "ttsTab.preloadButton":         "Preload",
+  "ttsTab.preloadOnStartup":      "Preload engine on startup",
+  "ttsTab.preloadOnStartupDesc":  "Warms up the active engine in the background when the app launches",
   "ttsTab.unloadButton":          "Unload",
   "ttsTab.requirements":          "Requires espeak-ng on PATH",
   "ttsTab.requirementsDesc":      "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng",

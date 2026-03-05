@@ -81,7 +81,7 @@ the Free Software Foundation, version 3 only. -->
         const v = await invoke<string[]>("tts_list_voices");
         if (v.length) kittenVoices = v;
         const active = await invoke<string>("tts_get_voice");
-        selectedVoice = active || kittenVoices[0] ?? "Jasper";
+        selectedVoice = active || (kittenVoices[0] ?? "Jasper");
       }
     } catch {}
   }
