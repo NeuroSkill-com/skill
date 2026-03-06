@@ -80,6 +80,18 @@ the Free Software Foundation, version 3 only. -->
     { tab: "settings", titleKey: "helpSettings.openbciWifi",     bodyKey: "helpSettings.openbciWifiBody" },
     { tab: "settings", titleKey: "helpSettings.openbciGalea",    bodyKey: "helpSettings.openbciGaleaBody" },
     { tab: "settings", titleKey: "helpSettings.openbciChannels", bodyKey: "helpSettings.openbciChannelsBody" },
+    // ── Activity Tracking ──────────────────────────────────────────────────
+    { tab: "settings", titleKey: "helpSettings.activeWindowHelp",       bodyKey: "helpSettings.activeWindowHelpBody" },
+    { tab: "settings", titleKey: "helpSettings.inputActivityHelp",      bodyKey: "helpSettings.inputActivityHelpBody" },
+    { tab: "settings", titleKey: "helpSettings.activityStorageHelp",    bodyKey: "helpSettings.activityStorageHelpBody" },
+    { tab: "settings", titleKey: "helpSettings.activityPermissionsHelp",bodyKey: "helpSettings.activityPermissionsHelpBody" },
+    { tab: "settings", titleKey: "helpSettings.activityDisablingHelp",  bodyKey: "helpSettings.activityDisablingHelpBody" },
+    // ── Permissions tab ────────────────────────────────────────────────────
+    { tab: "faq", titleKey: "helpFaq.q51", bodyKey: "helpFaq.a51" },
+    { tab: "faq", titleKey: "helpFaq.q52", bodyKey: "helpFaq.a52" },
+    { tab: "faq", titleKey: "helpFaq.q53", bodyKey: "helpFaq.a53" },
+    { tab: "faq", titleKey: "helpFaq.q54", bodyKey: "helpFaq.a54" },
+    { tab: "faq", titleKey: "helpFaq.q55", bodyKey: "helpFaq.a55" },
     // ── Windows ────────────────────────────────────────────────────────────
     { tab: "windows", titleKey: "helpWindows.labelTitle",              bodyKey: "helpWindows.labelBody" },
     { tab: "windows", titleKey: "helpWindows.searchTitle",             bodyKey: "helpWindows.searchBody" },
@@ -130,12 +142,14 @@ the Free Software Foundation, version 3 only. -->
     { tab: "privacy", titleKey: "helpPrivacy.gpuLocal",       bodyKey: "helpPrivacy.gpuLocalBody" },
     { tab: "privacy", titleKey: "helpPrivacy.filtering",      bodyKey: "helpPrivacy.filteringBody" },
     { tab: "privacy", titleKey: "helpPrivacy.nnSearch",       bodyKey: "helpPrivacy.nnSearchBody" },
-    { tab: "privacy", titleKey: "helpPrivacy.access",         bodyKey: "helpPrivacy.accessBody" },
-    { tab: "privacy", titleKey: "helpPrivacy.delete",         bodyKey: "helpPrivacy.deleteBody" },
-    { tab: "privacy", titleKey: "helpPrivacy.export",         bodyKey: "helpPrivacy.exportBody" },
-    { tab: "privacy", titleKey: "helpPrivacy.encrypt",        bodyKey: "helpPrivacy.encryptBody" },
+    { tab: "privacy", titleKey: "helpPrivacy.access",              bodyKey: "helpPrivacy.accessBody" },
+    { tab: "privacy", titleKey: "helpPrivacy.delete",              bodyKey: "helpPrivacy.deleteBody" },
+    { tab: "privacy", titleKey: "helpPrivacy.export",              bodyKey: "helpPrivacy.exportBody" },
+    { tab: "privacy", titleKey: "helpPrivacy.encrypt",             bodyKey: "helpPrivacy.encryptBody" },
+    { tab: "privacy", titleKey: "helpPrivacy.activityTracking",    bodyKey: "helpPrivacy.activityTrackingBody" },
+    { tab: "privacy", titleKey: "helpPrivacy.activityPermission",  bodyKey: "helpPrivacy.activityPermissionBody" },
     // ── FAQ ────────────────────────────────────────────────────────────────
-    ...Array.from({ length: 47 }, (_, i) => ({
+    ...Array.from({ length: 50 }, (_, i) => ({
       tab: "faq" as Tab,
       titleKey: `helpFaq.q${i + 1}`,
       bodyKey:  `helpFaq.a${i + 1}`,

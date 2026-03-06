@@ -236,6 +236,9 @@ pub const HNSW_INDEX_FILE: &str = "eeg_embeddings.hnsw";
 /// ```
 pub const SQLITE_FILE: &str = "eeg.sqlite";
 
+/// Activity tracking database — active windows + input-activity samples.
+pub const ACTIVITY_FILE: &str = "activity.sqlite";
+
 // ── WebSocket server ──────────────────────────────────────────────────────────
 
 /// Capacity of the `tokio::sync::broadcast` channel used to fan messages out

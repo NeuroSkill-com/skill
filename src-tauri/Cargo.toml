@@ -29,6 +29,9 @@ tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
 dirs = "6"
+
+# Cross-platform global keyboard / mouse event listener (input activity tracking).
+# macOS: CGEventTap (requires Accessibility permission — degrades gracefully if absent).
 tauri                        = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-opener          = "2"
 tauri-plugin-global-shortcut = "2"
@@ -62,11 +65,16 @@ csv = "1"
 # with tracel-llvm-bundler which also links the native lzma library).
 kittentts = { version = "0.2.2", features = ["espeak"], optional = true }
 
-# NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder (local path).
+# NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder.
 # backbone: GGUF LLM via llama-cpp-2 (requires cmake + C++ at build time).
 # espeak:   raw text → IPA → model (requires espeak-ng at runtime).
 # wgpu:     GPU-accelerated NeuCodec decoder via Burn/wgpu backend.
 # fast:     polynomial-approximation RoPE caching (6-12× fewer cycles).
+# metal:    macOS Metal GPU for the backbone (llama-cpp-2/metal).
+#           Without it the backbone runs on CPU, making inference 30–120 s per
+#           sentence on Apple Silicon — effectively broken from a UX standpoint.
+#           Declared here for non-macOS; the macOS entry is in
+#           [target.'cfg(target_os = "macos")'.dependencies] below with `metal`.
 neutts = { version = "0.0.4", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
 
 # Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
@@ -152,6 +160,17 @@ crossbeam-channel = "0.5.15"
 # On Linux / Windows the default ort backend is used instead.
 [target.'cfg(target_os = "macos")'.dependencies]
 fastembed = { version = "5.11.0", features = ["metal"] }
+# objc2 stack — pinned to the same versions rfd already pulls in so no extra
+# compilation is needed.  Used to build the quit dialog with the app icon.
+objc2            = "0.6.4"
+objc2-app-kit    = { version = "0.3.2", features = ["NSAlert", "NSApplication", "NSButton", "NSImage", "NSRunningApplication"] }
+objc2-foundation = "0.3.2"
+dispatch2        = "0.3.1"
+# NeuTTS backbone with Metal GPU — makes GGUF inference fast on Apple Silicon.
+# `metal` passes llama-cpp-2/metal which enables the Metal compute backend.
+# Without this the backbone falls back to CPU and a single utterance can take
+# 30–120 s, making TTS appear broken.
+neutts = { version = "0.0.4", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 fastembed = { version = "5.11.0" }

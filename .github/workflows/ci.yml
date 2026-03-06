@@ -4,7 +4,9 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
+  # Allow manual re-runs from the Actions tab on any branch.
+  workflow_dispatch:
 
 jobs:
   # ── Rust backend ─────────────────────────────────────────────────────────────
@@ -82,6 +84,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Run i18n sync first — it's cheap and catches missing translation keys
+      # before the slower svelte-check.
       - name: i18n sync check
         run: npm run sync:i18n:check
 

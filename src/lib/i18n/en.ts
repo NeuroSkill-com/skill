@@ -347,6 +347,9 @@ const en: Record<string, string> = {
   "updates.readyToRestart":            "Ready to restart",
   "updates.restartToApply":            "Restart the app to apply the update.",
   "updates.restartNow":                "Restart Now",
+  "updates.restartingIn":              "Restarting in {secs}s…",
+  "updates.downloadFailed":            "Download failed — click Retry to try again.",
+  "updates.retry":                     "Retry",
   "updates.downloading":               "Downloading v{version}…",
   "updates.autoCheck":                 "Check automatically",
   "updates.autoCheckDesc":             "Check for updates once a day when the app starts.",
@@ -867,6 +870,20 @@ const en: Record<string, string> = {
   "helpSettings.embeddingsTabBody":    "Select the sentence-transformer model used to embed your label text for semantic search. Smaller models (≤384-dim, e.g. all-MiniLM-L6-v2) are fast and sufficient for personal search. Larger models produce richer representations at the cost of download size and inference time. Weights are downloaded once from HuggingFace and cached locally. After switching models, run Re-embed All Labels to reindex.",
   "helpSettings.shortcutsTab":         "Shortcuts",
   "helpSettings.shortcutsTabBody":     "Configure global keyboard shortcuts (system-wide hotkeys) for opening the Label, Search, Settings, and Calibration windows. Also shows all in-app shortcuts (⌘K for command palette, ? for shortcuts overlay, ⌘↵ to submit a label). Shortcuts use the standard accelerator format — e.g. CmdOrCtrl+Shift+L.",
+  // ── Activity Tracking — Settings help ────────────────────────────────────
+  "helpSettings.activitySection":           "Activity Tracking",
+  "helpSettings.activitySectionDesc":       "NeuroSkill can optionally record which app is in the foreground and when the keyboard and mouse were last used. Both features are off-by-default opt-ins, fully local, and independently configurable in Settings → Activity Tracking.",
+  "helpSettings.activeWindowHelp":          "Active Window Tracking",
+  "helpSettings.activeWindowHelpBody":      "A background thread wakes every second and asks the OS which application is currently in the foreground. When the app name or window title changes, one row is inserted into activity.sqlite: the application display name (e.g. \"Safari\"), the full path to the application bundle or executable, the frontmost window title (e.g. the document name or current webpage), and a Unix-second timestamp recording when that window became active. If you stay in the same window, no new row is written — idle time in a single app produces no database activity. On macOS the tracker calls osascript; no Accessibility permission is needed for the app name and path, but the window title may be empty for sandboxed apps. On Linux it uses xdotool and xprop (requires an X11 session). On Windows it uses a PowerShell GetForegroundWindow call.",
+  "helpSettings.inputActivityHelp":         "Keyboard & Mouse Activity Tracking",
+  "helpSettings.inputActivityHelpBody":     "A global input hook (rdev) listens for every key press and mouse or trackpad event system-wide. It does not record what you typed, which keys you pressed, or where the cursor moved — it only updates two Unix-second timestamps in memory: one for the most recent keyboard event and one for the most recent mouse/trackpad event. These are flushed to activity.sqlite every 60 seconds, but only when at least one value has changed since the last flush, so idle periods leave no trace. The Settings panel receives a live update event (throttled to at most once per second) so the \"Last keyboard\" and \"Last mouse\" fields reflect activity in near-real-time.",
+  "helpSettings.activityStorageHelp":       "Where Data Is Stored",
+  "helpSettings.activityStorageHelpBody":   "All activity data lives in a single SQLite file: ~/.skill/activity.sqlite. It is never transmitted, synced, or included in any analytics. Two tables are maintained: active_windows (one row per window-focus change, with app name, path, title, and timestamp) and input_activity (one row per 60-second flush when activity was detected, with last-keyboard and last-mouse timestamps). Both tables have a descending index on the timestamp column. WAL journal mode is enabled so background writes never block reads. You can open, inspect, export, or delete the file at any time with any SQLite browser.",
+  "helpSettings.activityPermissionsHelp":   "Required OS Permissions",
+  "helpSettings.activityPermissionsHelpBody": "macOS — Active-window tracking (app name and path) requires no special permissions. Keyboard and mouse tracking uses a CGEventTap which requires Accessibility access: open System Settings → Privacy & Security → Accessibility, find NeuroSkill in the list, and toggle it on. Without this permission the input hook fails silently — timestamps stay at zero and the rest of the app is completely unaffected. You can disable the toggle in Settings → Activity Tracking to prevent the permission prompt entirely. Linux — Both features require an X11 session. Active-window tracking uses xdotool and xprop, which are pre-installed on most desktop distributions. Input tracking uses the XRecord extension from libxtst. If either tool is missing, that feature logs a warning and disables itself. Windows — No special permissions are required. Active-window tracking uses GetForegroundWindow via PowerShell; input tracking uses SetWindowsHookEx.",
+  "helpSettings.activityDisablingHelp":     "Disabling & Clearing Data",
+  "helpSettings.activityDisablingHelpBody": "Both toggles in Settings → Activity Tracking take effect immediately — no restart is required. Disabling active-window tracking stops new rows from being inserted into active_windows and clears the in-memory current-window state. Disabling input tracking stops the rdev callback from updating timestamps and prevents future flushes to input_activity; existing rows are not removed automatically. To delete all collected history: quit the app, delete ~/.skill/activity.sqlite, then relaunch. An empty database will be created automatically on the next start.",
+
   "helpSettings.umapTab":              "UMAP",
   "helpSettings.umapTabBody":          "Control parameters for the 3D UMAP projection used in Session Compare: number of neighbours (controls local vs. global structure), minimum distance (how tightly points cluster), and the metric (cosine or euclidean). Higher neighbour counts preserve more global topology; lower counts reveal fine-grained local clusters. Projections run in a background job and results are cached.",
   "helpSettings.eegModelTab":          "EEG Model Tab",
@@ -1017,12 +1034,19 @@ const en: Record<string, string> = {
   "helpPrivacy.exportBody":         "CSV recordings and SQLite databases are portable standard formats. Copy them to any machine or import into Python, R, MATLAB, or any analysis tool.",
   "helpPrivacy.encrypt":            "Encrypt",
   "helpPrivacy.encryptBody":        "{app} does not encrypt data at rest. If you need disk-level encryption, use your operating system's full-disk encryption (FileVault on macOS, LUKS on Linux).",
+  // ── Activity Tracking — Privacy help ─────────────────────────────────────
+  "helpPrivacy.activityTracking":       "Activity Tracking",
+  "helpPrivacy.activityTrackingBody":   "When enabled, NeuroSkill records which application is in the foreground and the last time the keyboard and mouse were used. This data stays entirely on your device in ~/.skill/activity.sqlite — it is never sent to any server, logged remotely, or included in any form of analytics. Active-window tracking captures: application name, executable path, window title, and the Unix timestamp at which that window became active. Keyboard and mouse tracking captures only two timestamps (last keyboard event, last mouse event) — never keystrokes, typed text, cursor coordinates, or click targets. Both features can be independently disabled in Settings → Activity Tracking; disabling a feature immediately stops collection. Existing rows are not deleted automatically, but you can remove them at any time by deleting activity.sqlite.",
+  "helpPrivacy.activityPermission":     "Accessibility Permission (macOS)",
+  "helpPrivacy.activityPermissionBody": "On macOS, keyboard and mouse tracking requires the Accessibility permission because it installs a CGEventTap — a system-level hook that intercepts input events. Apple mandates this permission for any app that reads global input. The permission is requested only when the feature is enabled. If you decline or revoke it, the hook fails silently: the rest of the app continues normally and only the input-activity timestamps stay at zero. Active-window tracking (app name/path) does not require Accessibility — it uses AppleScript/osascript which operates within normal app entitlements.",
+
   "helpPrivacy.summaryTitle":       "Summary",
   "helpPrivacy.summaryNoCloud":     "No cloud. All EEG data, embeddings, labels, and settings are stored locally in {dataDir}/.",
   "helpPrivacy.summaryNoTelemetry": "No telemetry. No analytics, crash reports, or usage tracking of any kind.",
   "helpPrivacy.summaryNoAccounts":  "No accounts. No sign-up, login, or user identifiers.",
   "helpPrivacy.summaryOneReq":      "One optional network request. Update checks, only when you explicitly trigger them.",
   "helpPrivacy.summaryOnDevice":    "Fully on-device. GPU inference, signal processing, and search all run locally.",
+  "helpPrivacy.summaryActivityLocal": "Activity tracking is local-only. Window focus and input timestamps are written to activity.sqlite on your device and never leave it.",
 
   // ── Disclaimer ──────────────────────────────────────────────────────────────
   "disclaimer.title":              "Research Use Only",
@@ -1885,6 +1909,8 @@ const en: Record<string, string> = {
   "dashboard.setupGoal":       "Set a daily goal",
 
   // ── Disconnect / quit confirmation ───────────────────────────────────────
+  "quitDialog.title":                "Quit NeuroSkill™",
+  "quitDialog.description":          "Are you sure you want to quit NeuroSkill™?",
   "dashboard.recordingActive":       "Recording in Progress",
   "dashboard.recordingActiveBody":   "You are currently recording EEG data. Quitting now will end the session and close the CSV file cleanly.",
   "dashboard.quitAnyway":            "Quit Anyway",
@@ -2120,6 +2146,34 @@ const en: Record<string, string> = {
   "helpFaq.q47":  "My OpenBCI connection drops repeatedly — how do I stabilise it?",
   "helpFaq.a47":  "Ganglion BLE: Keep the board within 2 m; plug the host computer's BLE adapter into a USB 2.0 port (USB 3.0 emits 2.4 GHz noise that can jam BLE). Cyton USB: Use a short, high-quality USB cable and connect directly to the computer rather than through a hub. WiFi Shield: Ensure the shield's 2.4 GHz channel does not overlap with your router; move the board closer. All boards: avoid running other wireless-intensive apps (video calls, file sync) during recordings.",
 
+  // ── Activity Tracking FAQ ─────────────────────────────────────────────────
+  "helpFaq.q48":  "What exactly does Activity Tracking record?",
+  "helpFaq.a48":  "Active-window tracking writes one row to activity.sqlite each time the frontmost app or window title changes. Each row contains: application display name (e.g. \"Safari\", \"VS Code\"), the full path to the binary or app bundle, the window title (e.g. document name or webpage title — may be empty for sandboxed apps), and a Unix-second timestamp of when it became active. Keyboard & mouse tracking writes a periodic sample every 60 seconds, but only when there has been activity since the last flush. Each sample stores two Unix-second timestamps — the last keyboard event and the last mouse/trackpad event. It does not record what keys you pressed, what text you typed, where the cursor was, or which buttons you clicked. Both features are enabled by default and can be turned off independently in Settings → Activity Tracking.",
+  "helpFaq.q49":  "Why does macOS ask for Accessibility access for input tracking?",
+  "helpFaq.a49":  "Keyboard and mouse tracking uses a CGEventTap — a macOS API that intercepts system-wide input events before they reach individual apps. Apple requires the Accessibility permission for any application that reads global input, regardless of what that app does with it. Without Accessibility access the tap fails silently: NeuroSkill continues to work normally, but last-keyboard and last-mouse timestamps stay at zero. To grant access: System Settings → Privacy & Security → Accessibility → find NeuroSkill → toggle on. If you prefer not to grant it, disable the \"Track Keyboard & Mouse Activity\" toggle in Settings — this prevents the hook from being installed in the first place. Active-window tracking (app name and path) uses AppleScript/osascript and does not require Accessibility permission.",
+  "helpFaq.q50":  "How do I clear or delete Activity Tracking data?",
+  "helpFaq.a50":  "All activity tracking data lives in a single file: ~/.skill/activity.sqlite. To delete everything: quit NeuroSkill, delete that file, then relaunch — an empty database is created automatically on the next start. To stop future collection without touching existing data, turn off both toggles in Settings → Activity Tracking; changes take effect immediately with no restart needed. To selectively remove rows you can open the file in any SQLite browser (e.g. DB Browser for SQLite) and DELETE from active_windows or input_activity.",
+
+  // ── Activity tracking ────────────────────────────────────────────────────
+  "settings.activityTracking":          "Activity Tracking",
+  "settings.activeWindowToggle":        "Track Active Window",
+  "settings.activeWindowToggleDesc":    "Record which app and window is in focus. Stored locally in activity.sqlite, never uploaded.",
+  "settings.activeWindowCurrent":       "Current Window",
+  "settings.activeWindowApp":           "App",
+  "settings.activeWindowPath":          "Path",
+  "settings.activeWindowTitle":         "Window Title",
+  "settings.activeWindowSince":         "Active since",
+  "settings.activeWindowNone":          "No active window detected",
+  "settings.inputActivityToggle":       "Track Keyboard & Mouse Activity",
+  "settings.inputActivityToggleDesc":   "Record when keyboard and mouse are used, by second. No special OS permissions required. Stored locally in activity.sqlite.",
+  "settings.inputActivityKeyboard":     "Last keyboard",
+  "settings.inputActivityMouse":        "Last mouse",
+  "settings.inputActivityNever":        "never",
+  "settings.inputActivityActive":       "Tracking active",
+  "settings.inputActivityNoData":       "Move mouse or press a key to verify tracking is working.",
+  "settings.inputActivityPermNote":     "No special permissions required — uses a built-in OS idle-time API that works without Accessibility access.",
+  "settings.activityDb":                "Stored in activity.sqlite",
+
   // ── UMAP settings tab ───────────────────────────────────────────────────
   "umapSettings.repulsion":           "Repulsion",
   "umapSettings.repulsionStrength":   "Repulsion Strength",
@@ -2141,6 +2195,76 @@ const en: Record<string, string> = {
   "umapSettings.pipeline":            "Pipeline",
   "umapSettings.resetDefaults":       "Reset to Defaults",
   "umapSettings.apply":               "Apply & Clear Cache",
+
+  // ── Permissions tab ───────────────────────────────────────────────────────
+  "settingsTabs.permissions":         "Permissions",
+
+  "perm.intro":                       "{app} uses a small number of optional OS permissions to enable features like keyboard/mouse activity timestamps and notifications. All data stays on your device.",
+
+  // Status badges
+  "perm.granted":                     "Granted",
+  "perm.denied":                      "Not Granted",
+  "perm.unknown":                     "Unknown",
+  "perm.notRequired":                 "Not Required",
+  "perm.systemManaged":               "Managed by OS",
+
+  // Accessibility
+  "perm.accessibility":               "Accessibility",
+  "perm.accessibilityDesc":           "Keyboard and mouse activity tracking uses a CGEventTap (macOS) to record timestamps of the last key press and mouse event. No keystrokes or cursor positions are stored — only Unix-second timestamps. This requires Accessibility permission on macOS.",
+  "perm.accessibilityOk":             "Permission granted. Keyboard and mouse activity timestamps are being recorded.",
+  "perm.accessibilityPending":        "Checking permission status…",
+  "perm.howToGrant":                  "How to grant this permission:",
+  "perm.accessStep1":                 "Click \"Open Accessibility Settings\" below.",
+  "perm.accessStep2":                 "Find {app} in the list (or click the + button to add it).",
+  "perm.accessStep3":                 "Toggle it on.",
+  "perm.accessStep4":                 "Return here — the status will update automatically.",
+  "perm.openAccessibilitySettings":   "Open Accessibility Settings",
+
+  // Bluetooth
+  "perm.bluetooth":                   "Bluetooth",
+  "perm.bluetoothDesc":               "Bluetooth is used to connect to your BCI headset (Muse, OpenBCI Ganglion, etc.). On macOS, the system will prompt for Bluetooth access the first time the app scans. On Linux and Windows no separate permission is needed.",
+  "perm.openBluetoothSettings":       "Open Bluetooth Settings",
+
+  // Notifications
+  "perm.notifications":               "Notifications",
+  "perm.notificationsDesc":           "Notifications are used to alert you when you reach your daily recording goal, and when a software update is available. On macOS and Windows, the OS will prompt for permission the first time a notification is sent.",
+  "perm.openNotificationsSettings":   "Open Notification Settings",
+
+  // Matrix
+  "perm.matrix":                      "Permission Summary",
+  "perm.feature":                     "Feature",
+  "perm.matrixBluetooth":             "Bluetooth (BCI device)",
+  "perm.matrixKeyboardMouse":         "Keyboard & mouse timestamps",
+  "perm.matrixActiveWindow":          "Active window tracking",
+  "perm.matrixNotifications":         "Notifications",
+  "perm.matrixNone":                  "No permission needed",
+  "perm.matrixAccessibility":         "Accessibility required",
+  "perm.matrixOsPrompt":              "OS prompts on first use",
+  "perm.legendNone":                  "No permission needed",
+  "perm.legendRequired":              "OS permission required — degrades silently if absent",
+  "perm.legendPrompt":                "OS prompts on first use",
+
+  // Why section
+  "perm.why":                         "Why does {app} need these?",
+  "perm.whyBluetooth":                "Bluetooth",
+  "perm.whyBluetoothDesc":            "To discover and stream data from your BCI headset over BLE.",
+  "perm.whyAccessibility":            "Accessibility",
+  "perm.whyAccessibilityDesc":        "To timestamp keyboard and mouse events for activity context. Only the time of the event is stored — never what was typed or where the cursor was.",
+  "perm.whyNotifications":            "Notifications",
+  "perm.whyNotificationsDesc":        "To notify you when you hit your daily recording goal and when updates are ready.",
+  "perm.privacyNote":                 "All data is stored locally on your device and is never transmitted to any server. You can disable any feature in Settings → Activity Tracking.",
+
+  // ── Help: Permissions FAQ entries ─────────────────────────────────────────
+  "helpFaq.q51":  "Why does {app} ask for Accessibility permission on macOS?",
+  "helpFaq.a51":  "{app} uses the macOS CGEventTap API to record the last time a key was pressed or the mouse moved. This is used to compute keyboard and mouse activity timestamps shown in the Activity Tracking panel. Only the timestamp is stored — no keystrokes, no cursor positions. The feature degrades silently if permission is not granted.",
+  "helpFaq.q52":  "Does {app} need Bluetooth permission?",
+  "helpFaq.a52":  "Yes. {app} uses Bluetooth Low Energy (BLE) to connect to your BCI headset. On macOS the system will show a one-time Bluetooth permission prompt when the app first tries to scan. On Linux and Windows no explicit Bluetooth permission is required.",
+  "helpFaq.q53":  "How do I grant Accessibility permission on macOS?",
+  "helpFaq.a53":  "Open System Settings → Privacy & Security → Accessibility. Find {app} in the list and toggle it on. You can also click \"Open Accessibility Settings\" in the Permissions tab inside the app.",
+  "helpFaq.q54":  "What happens if I deny Accessibility permission?",
+  "helpFaq.a54":  "Keyboard and mouse activity timestamps will not be recorded and will remain at zero. All other features — EEG streaming, band powers, calibration, TTS, search — continue to work normally. You can disable the feature entirely in Settings → Activity Tracking.",
+  "helpFaq.q55":  "Can I revoke permissions after granting them?",
+  "helpFaq.a55":  "Yes. Open System Settings → Privacy & Security → Accessibility (or Notifications) and toggle off {app}. The relevant feature will stop working immediately without requiring a restart.",
 };
 
 export default en;

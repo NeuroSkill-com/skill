@@ -82,7 +82,7 @@ pub(crate) use settings::{
     default_api_shortcut, default_theme_shortcut, default_focus_timer_shortcut,
     default_theme, default_daily_goal_min, default_embedding_model,
     default_ws_host, default_ws_port, default_update_check_interval, UserSettings,
-    NeuttsConfig,
+    NeuttsConfig, default_track_active_window, default_track_input_activity,
 };
 
 mod tray;
@@ -102,6 +102,12 @@ use shortcut_cmds::{
     get_focus_timer_shortcut, set_focus_timer_shortcut,
 };
 
+mod active_window;
+pub(crate) use active_window::ActiveWindowInfo;
+
+mod activity_store;
+pub(crate) use activity_store::ActivityStore;
+
 mod about;
 use about::{get_about_info, open_about_window};
 
@@ -112,6 +118,7 @@ use window_cmds::{
     open_search_window, open_session_window, open_label_window, open_labels_window,
     open_focus_timer_window, open_api_window, open_onboarding_window,
     complete_onboarding, get_onboarding_complete, close_label_window,
+    check_accessibility_permission, open_accessibility_settings, open_notifications_settings,
     open_calibration_window, open_and_start_calibration, close_calibration_window,
     list_calibration_profiles, get_calibration_profile, get_active_calibration,
     set_active_calibration, create_calibration_profile, update_calibration_profile,
@@ -148,6 +155,11 @@ use settings_cmds::{
     get_openbci_config, set_openbci_config, list_serial_ports,
     get_neutts_config, set_neutts_config, pick_ref_wav_file,
     get_tts_preload, set_tts_preload,
+    get_active_window_tracking, set_active_window_tracking, get_active_window,
+    get_input_activity_tracking, set_input_activity_tracking,
+    get_last_input_activity,
+    get_recent_active_windows, get_recent_input_activity,
+    get_input_buckets,
 };
 
 use std::{
@@ -482,6 +494,37 @@ pub struct AppState {
 
     /// Whether to pre-warm the active TTS engine at startup.
     pub tts_preload: bool,
+
+    /// Whether active-window tracking is enabled (persisted in settings.json).
+    /// Default: `true`.
+    pub track_active_window: bool,
+
+    /// The most recently observed active window.  `None` when tracking is
+    /// disabled or no window has been detected yet.
+    pub current_active_window: Option<ActiveWindowInfo>,
+
+    /// Whether global keyboard/mouse input tracking is enabled.
+    pub track_input_activity: bool,
+
+    /// Shared flag read by the input-monitor polling loop every second.
+    /// Flipping it takes effect within one second with no restart required.
+    pub input_activity_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+
+    /// Unix-second timestamp of the last keyboard event (0 = never seen).
+    pub last_keyboard_ts: std::sync::Arc<std::sync::atomic::AtomicU64>,
+
+    /// Unix-second timestamp of the last mouse event (0 = never seen).
+    pub last_mouse_ts: std::sync::Arc<std::sync::atomic::AtomicU64>,
+
+    /// Monotonically increasing count of keyboard events seen since startup.
+    /// Never reset — the flush thread computes deltas to produce per-minute buckets.
+    pub kbd_event_count: std::sync::Arc<std::sync::atomic::AtomicU64>,
+
+    /// Monotonically increasing count of mouse / scroll / click events since startup.
+    pub mouse_event_count: std::sync::Arc<std::sync::atomic::AtomicU64>,
+
+    /// Persistent activity store (`~/.skill/activity.sqlite`).
+    pub activity_store: Option<std::sync::Arc<ActivityStore>>,
 }
 
 impl Default for AppState {
@@ -572,6 +615,17 @@ impl Default for AppState {
             openbci_config: crate::settings::OpenBciConfig::default(),
             neutts_config: NeuttsConfig::default(),
             tts_preload:   true,
+            track_active_window:    default_track_active_window(),
+            current_active_window:  None,
+            track_input_activity:   default_track_input_activity(),
+            input_activity_enabled: std::sync::Arc::new(
+                std::sync::atomic::AtomicBool::new(default_track_input_activity())
+            ),
+            last_keyboard_ts:  std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            last_mouse_ts:     std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            kbd_event_count:   std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            mouse_event_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            activity_store:    ActivityStore::open(&skill_dir).map(std::sync::Arc::new),
             skill_dir,
             model_config,
             model_status,
@@ -625,6 +679,8 @@ pub(crate) fn save_settings(app: &AppHandle) {
         openbci:                s.openbci_config.clone(),
         neutts:                 s.neutts_config.clone(),
         tts_preload:            s.tts_preload,
+        track_active_window:    s.track_active_window,
+        track_input_activity:   s.track_input_activity,
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
@@ -5143,16 +5199,59 @@ async fn open_compare_window_with_sessions(
 /// (event handler, tray closure, etc.) — spawning its own thread means it
 /// never blocks the UI event loop.
 fn confirm_and_quit(app: AppHandle) {
+    let lang = {
+        let s = app.state::<Mutex<AppState>>();
+        let g = s.lock_or_recover();
+        g.language.clone()
+    };
     std::thread::spawn(move || {
-        let yes = rfd::MessageDialog::new()
-            .set_title("Quit NeuroSkill™")
-            .set_description("Are you sure you want to quit NeuroSkill™?")
-            .set_buttons(rfd::MessageButtons::YesNo)
-            .show() == rfd::MessageDialogResult::Yes;
-        if yes {
+        if quit_confirmed(&lang) {
             app.exit(0);
         }
     });
+}
+
+/// Returns `true` when the user confirms they want to quit.
+///
+/// Uses `rfd::MessageDialog` on all platforms.  rfd handles all threading
+/// and AppKit concerns internally and is safe to call from any background
+/// thread (which is how `confirm_and_quit` uses it).
+fn quit_confirmed(lang: &str) -> bool {
+    let (title, description) = quit_dialog_strings(lang);
+    rfd::MessageDialog::new()
+        .set_title(title)
+        .set_description(description)
+        .set_buttons(rfd::MessageButtons::YesNo)
+        .show()
+        == rfd::MessageDialogResult::Yes
+}
+
+/// Returns the (title, description) strings for the quit confirmation dialog
+/// in the active UI language.  Falls back to English for unknown codes.
+fn quit_dialog_strings(lang: &str) -> (&'static str, &'static str) {
+    match lang {
+        "de" => (
+            "NeuroSkill™ beenden",
+            "Möchten Sie NeuroSkill™ wirklich beenden?",
+        ),
+        "fr" => (
+            "Quitter NeuroSkill™",
+            "Voulez-vous vraiment quitter NeuroSkill™ ?",
+        ),
+        "he" => (
+            "לצאת מ-NeuroSkill™",
+            "האם אתה בטוח שברצונך לצאת מ-NeuroSkill™?",
+        ),
+        "uk" => (
+            "Вийти з NeuroSkill™",
+            "Ви впевнені, що хочете вийти з NeuroSkill™?",
+        ),
+        // "en" and any unknown/empty code
+        _ => (
+            "Quit NeuroSkill™",
+            "Are you sure you want to quit NeuroSkill™?",
+        ),
+    }
 }
 
 pub fn run() {
@@ -5272,6 +5371,11 @@ pub fn run() {
                 // Restore NeuTTS config and sync the TTS module's statics.
                 s.neutts_config = data.neutts.clone();
                 s.tts_preload   = data.tts_preload;
+                // Restore activity tracking preferences.
+                s.track_active_window = data.track_active_window;
+                s.track_input_activity = data.track_input_activity;
+                s.input_activity_enabled
+                    .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
                 neutts_apply_config(&data.neutts);
                 // Seed discovered list from paired
 
@@ -5528,6 +5632,45 @@ pub fn run() {
                 }
             });
 
+            // ── Active-window tracking + input monitor ─────────────────────
+            {
+                let (act_store, kbd_ts, mouse_ts, input_flag, kbd_cnt, mouse_cnt) = {
+                    let state_ref = app.state::<Mutex<AppState>>();
+                    let s = state_ref.lock_or_recover();
+                    (
+                        s.activity_store.clone(),
+                        s.last_keyboard_ts.clone(),
+                        s.last_mouse_ts.clone(),
+                        s.input_activity_enabled.clone(),
+                        s.kbd_event_count.clone(),
+                        s.mouse_event_count.clone(),
+                    )
+                };
+
+                // Window poller — wakes every second, writes DB on change.
+                if let Some(store) = act_store.clone() {
+                    let app_win = app.handle().clone();
+                    std::thread::Builder::new()
+                        .name("active-window-poll".into())
+                        .spawn(move || active_window::run_poller(app_win, store))
+                        .expect("[active-window] failed to spawn poll thread");
+                }
+
+                // Input monitor — 1 Hz poll loop + 60-s DB flush.
+                if let Some(store) = act_store {
+                    let app_inp = app.handle().clone();
+                    std::thread::Builder::new()
+                        .name("input-monitor".into())
+                        .spawn(move || {
+                            active_window::run_input_monitor(
+                                app_inp, input_flag, kbd_ts, mouse_ts,
+                                kbd_cnt, mouse_cnt, store,
+                            );
+                        })
+                        .expect("[input-monitor] failed to spawn thread");
+                }
+            }
+
             // ── Background update-check task ──────────────────────────────
             // Wakes up every `update_check_interval_secs` (re-read each loop
             // iteration so a settings change takes effect without a restart).
@@ -5600,6 +5743,7 @@ pub fn run() {
             get_status, get_devices,
             set_preferred_device, forget_device, retry_connect, cancel_retry,
             open_bt_settings, open_settings_window, open_updates_window, open_model_tab, open_help_window,
+            check_accessibility_permission, open_accessibility_settings, open_notifications_settings,
             get_filter_config, set_filter_config, set_notch_preset,
             get_latest_bands,
             get_embedding_overlap, set_embedding_overlap,
@@ -5646,6 +5790,11 @@ pub fn run() {
             get_openbci_config, set_openbci_config, list_serial_ports,
             get_neutts_config, set_neutts_config, pick_ref_wav_file,
             get_tts_preload, set_tts_preload,
+            get_active_window_tracking, set_active_window_tracking, get_active_window,
+            get_input_activity_tracking, set_input_activity_tracking,
+            get_last_input_activity,
+            get_recent_active_windows, get_recent_input_activity,
+            get_input_buckets,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,

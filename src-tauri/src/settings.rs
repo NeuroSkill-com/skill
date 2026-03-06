@@ -448,9 +448,22 @@ pub(crate) struct UserSettings {
     /// Default: `true`.  Disable to defer model loading until first use.
     #[serde(default = "default_tts_preload")]
     pub tts_preload: bool,
+
+    /// Track the active window (app name, path, title, timestamp) while a
+    /// session is running.  Data is stored locally only.  Default: `true`.
+    #[serde(default = "default_track_active_window")]
+    pub track_active_window: bool,
+
+    /// Track the last keyboard and mouse input timestamps.  Uses a global
+    /// input hook (requires Accessibility on macOS).  Data is stored locally
+    /// only.  Default: `true`.
+    #[serde(default = "default_track_input_activity")]
+    pub track_input_activity: bool,
 }
 
 fn default_tts_preload() -> bool { true }
+pub(crate) fn default_track_active_window() -> bool { true }
+pub(crate) fn default_track_input_activity() -> bool { true }
 
 impl Default for UserSettings {
     fn default() -> Self {
@@ -484,6 +497,8 @@ impl Default for UserSettings {
             openbci:                OpenBciConfig::default(),
             neutts:                 NeuttsConfig::default(),
             tts_preload:            default_tts_preload(),
+            track_active_window:    default_track_active_window(),
+            track_input_activity:   default_track_input_activity(),
         }
     }
 }

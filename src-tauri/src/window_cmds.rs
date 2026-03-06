@@ -17,6 +17,51 @@ use crate::{
 };
 use crate::ws_server::WsBroadcaster;
 
+// ── Permissions ───────────────────────────────────────────────────────────────
+
+/// Return whether the app currently holds macOS Accessibility (AX) permission.
+/// Always returns `true` on non-macOS platforms (no permission required there).
+#[tauri::command]
+pub fn check_accessibility_permission() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        // SAFETY: AXIsProcessTrusted is a plain C function that reads a process
+        // flag; it is safe to call from any thread.
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" { fn AXIsProcessTrusted() -> bool; }
+        unsafe { AXIsProcessTrusted() }
+    }
+    #[cfg(not(target_os = "macos"))]
+    { true }
+}
+
+/// Open the OS panel where the user can grant Accessibility permission.
+#[tauri::command]
+pub fn open_accessibility_settings() {
+    #[cfg(target_os = "macos")]
+    { let _ = std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        .spawn(); }
+    #[cfg(target_os = "linux")]
+    { /* no-op */ }
+    #[cfg(target_os = "windows")]
+    { /* no-op — SetWindowsHookEx requires no special OS permission */ }
+}
+
+/// Open the OS notification settings panel.
+#[tauri::command]
+pub fn open_notifications_settings() {
+    #[cfg(target_os = "macos")]
+    { let _ = std::process::Command::new("open")
+        .arg("x-apple.systempreferences:com.apple.preference.notifications")
+        .spawn(); }
+    #[cfg(target_os = "linux")]
+    { let _ = std::process::Command::new("sh").arg("-c")
+        .arg("gnome-control-center notifications 2>/dev/null || true").spawn(); }
+    #[cfg(target_os = "windows")]
+    { let _ = std::process::Command::new("ms-settings:notifications").spawn(); }
+}
+
 // ── Bluetooth & utility windows ───────────────────────────────────────────────
 
 #[tauri::command]

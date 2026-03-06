@@ -59,6 +59,16 @@ the Free Software Foundation, version 3 only. -->
     ["helpFaq.q45", "helpFaq.a45"],
     ["helpFaq.q46", "helpFaq.a46"],
     ["helpFaq.q47", "helpFaq.a47"],
+    // ── Activity Tracking ─────────────────────────────────────────────────
+    ["helpFaq.q48", "helpFaq.a48"],
+    ["helpFaq.q49", "helpFaq.a49"],
+    ["helpFaq.q50", "helpFaq.a50"],
+    // ── Permissions ───────────────────────────────────────────────────────
+    ["helpFaq.q51", "helpFaq.a51"],
+    ["helpFaq.q52", "helpFaq.a52"],
+    ["helpFaq.q53", "helpFaq.a53"],
+    ["helpFaq.q54", "helpFaq.a54"],
+    ["helpFaq.q55", "helpFaq.a55"],
   ] as const;
 </script>
 

@@ -4,32 +4,33 @@
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
-<!-- Updates tab — check for updates, auto-update toggle, download + install. -->
+<!-- Updates tab — check for updates, auto-download, install, restart. -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { invoke }             from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { check }              from "@tauri-apps/plugin-updater";
+  import { check, type Update } from "@tauri-apps/plugin-updater";
   import { relaunch }           from "@tauri-apps/plugin-process";
   import { Button }             from "$lib/components/ui/button";
   import { Card, CardContent }  from "$lib/components/ui/card";
   import { t }                  from "$lib/i18n/index.svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface BackgroundUpdate {
-    version: string;
-    date?:   string;
-    body?:   string;
-  }
+  // ── Phase ─────────────────────────────────────────────────────────────────
+  // Single state enum — avoids the boolean-soup that caused the previous bugs.
+  type Phase =
+    | "idle"        // nothing happening
+    | "checking"    // calling check() / waiting for result
+    | "downloading" // downloadAndInstall() in progress
+    | "ready"       // installed, counting down to restart
+    | "error";      // something went wrong (error string is always shown)
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let appVersion     = $state("…");
-  let checking       = $state(false);
-  let available      = $state<{ version: string; date?: string; body?: string } | null>(null);
-  let downloading    = $state(false);
-  let progress       = $state(0);       // 0–100
-  let ready          = $state(false);
-  let error          = $state("");
+  // ── State ─────────────────────────────────────────────────────────────────
+  let appVersion  = $state("…");
+  let phase       = $state<Phase>("idle");
+  let progress    = $state(0);        // 0–100 during download
+  let error       = $state("");       // non-empty only on error phase
+  let countdown   = $state(0);        // seconds until auto-relaunch
+  let available   = $state<{ version: string; date?: string; body?: string } | null>(null);
   let lastCheckedUtc = $state(0);
 
   // Autostart
@@ -38,10 +39,10 @@ the Free Software Foundation, version 3 only. -->
   let autostartError    = $state("");
 
   // Update-check interval (backend-persisted)
-  let checkIntervalSecs  = $state(3600);
-  let intervalSaving     = $state(false);
+  let checkIntervalSecs = $state(3600);
+  let intervalSaving    = $state(false);
 
-  // ── Interval options ───────────────────────────────────────────────────────
+  // ── Interval options ──────────────────────────────────────────────────────
   const INTERVAL_OPTIONS: [number, string][] = [
     [900,   "updates.interval15m"],
     [1800,  "updates.interval30m"],
@@ -51,13 +52,32 @@ the Free Software Foundation, version 3 only. -->
     [0,     "updates.intervalOff"],
   ];
 
-  // ── Last-checked persistence (localStorage) ───────────────────────────────
+  // ── Countdown timer ───────────────────────────────────────────────────────
+  let countdownTimer: ReturnType<typeof setInterval> | null = null;
+
+  function startCountdown(secs = 5) {
+    countdown = secs;
+    countdownTimer = setInterval(() => {
+      countdown -= 1;
+      if (countdown <= 0) {
+        stopCountdown();
+        relaunch();
+      }
+    }, 1000);
+  }
+
+  function stopCountdown() {
+    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
+    countdown = 0;
+  }
+
+  // ── Last-checked persistence ──────────────────────────────────────────────
   const LAST_KEY = "lastUpdateCheckUtc";
 
   function loadLastChecked() {
     try {
-      const l = localStorage.getItem(LAST_KEY);
-      if (l) lastCheckedUtc = Number(l) || 0;
+      const v = localStorage.getItem(LAST_KEY);
+      if (v) lastCheckedUtc = Number(v) || 0;
     } catch {}
   }
 
@@ -66,50 +86,76 @@ the Free Software Foundation, version 3 only. -->
     try { localStorage.setItem(LAST_KEY, String(lastCheckedUtc)); } catch {}
   }
 
-  // ── Check for updates ─────────────────────────────────────────────────────
-  async function checkForUpdate() {
-    error     = "";
+  // ── Core update logic ─────────────────────────────────────────────────────
+
+  /** Download + install a known Update object.
+   *  Sets phase to "downloading" → "ready" on success, "error" on failure.  */
+  async function doInstall(update: Update) {
+    phase    = "downloading";
+    progress = 0;
+    error    = "";
+
+    let downloaded   = 0;
+    let totalLength  = 0;
+
+    try {
+      await update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case "Started":
+            totalLength = event.data.contentLength ?? 0;
+            break;
+          case "Progress":
+            downloaded += event.data.chunkLength;
+            progress = totalLength > 0
+              ? Math.min(99, Math.round((downloaded / totalLength) * 100))
+              : 0;
+            break;
+          case "Finished":
+            progress = 100;
+            break;
+        }
+      });
+
+      // Install complete — begin countdown to auto-relaunch.
+      phase = "ready";
+      startCountdown(5);
+
+    } catch (e) {
+      phase = "error";
+      error = String(e);
+    }
+  }
+
+  /** Check the update endpoint, store the result, and immediately download
+   *  if an update is found.  Safe to call when phase is "idle" or "error".  */
+  async function checkAndDownload() {
+    if (phase === "checking" || phase === "downloading" || phase === "ready") return;
+
+    stopCountdown();
+    phase    = "checking";
+    error    = "";
     available = null;
-    checking  = true;
+
     try {
       const update = await check();
       saveLastChecked();
+
       if (update) {
         available = {
           version: update.version,
-          date:    update.date ?? undefined,
-          body:    update.body ?? undefined,
+          date:    update.date    ?? undefined,
+          body:    update.body    ?? undefined,
         };
-        downloading = true;
-        progress    = 0;
-        let downloaded = 0;
-        let contentLength = 0;
-        await update.downloadAndInstall((event) => {
-          switch (event.event) {
-            case "Started":
-              contentLength = (event.data as any)?.contentLength ?? 0;
-              break;
-            case "Progress":
-              downloaded += (event.data as any)?.chunkLength ?? 0;
-              progress = contentLength > 0
-                ? Math.min(100, Math.round((downloaded / contentLength) * 100))
-                : 0;
-              break;
-            case "Finished":
-              progress = 100;
-              break;
-          }
-        });
-        downloading = false;
-        ready = true;
+        // Immediately start downloading — no "Download Now" click needed.
+        await doInstall(update);
       } else {
         available = null;
+        phase = "idle";
       }
+
     } catch (e) {
+      phase = "error";
       error = String(e);
-    } finally {
-      checking    = false;
-      downloading = false;
     }
   }
 
@@ -136,7 +182,7 @@ the Free Software Foundation, version 3 only. -->
   }
 
   // ── Update-check interval ─────────────────────────────────────────────────
-  async function setInterval(secs: number) {
+  async function setCheckInterval(secs: number) {
     intervalSaving    = true;
     checkIntervalSecs = secs;
     try {
@@ -153,7 +199,6 @@ the Free Software Foundation, version 3 only. -->
     loadLastChecked();
     appVersion = await invoke<string>("get_app_version");
 
-    // Read persisted settings from backend
     const [autoEnabled, intervalSecs] = await Promise.all([
       invoke<boolean>("get_autostart_enabled").catch(() => false),
       invoke<number>("get_update_check_interval").catch(() => 3600),
@@ -161,26 +206,35 @@ the Free Software Foundation, version 3 only. -->
     autostartEnabled  = autoEnabled;
     checkIntervalSecs = intervalSecs;
 
-    // Listen for background update-available events emitted by the Rust task
     unlisteners.push(
-      await listen<BackgroundUpdate>("update-available", (ev) => {
-        if (!available && !downloading && !ready) {
-          available = ev.payload;
+      // Background Rust task found an update — kick off download automatically.
+      await listen<{ version: string; date?: string; body?: string }>(
+        "update-available",
+        (ev) => {
+          if (phase === "checking" || phase === "downloading" || phase === "ready") return;
           saveLastChecked();
-        }
-      }),
+          // Store display info immediately so the UI updates, then download.
+          available = ev.payload;
+          // checkAndDownload() will overwrite available with fresh data and
+          // call doInstall() — the whole chain runs in the background.
+          checkAndDownload();
+        },
+      ),
       await listen("update-checked", () => {
         saveLastChecked();
       }),
     );
   });
 
-  onDestroy(() => unlisteners.forEach(u => u()));
+  onDestroy(() => {
+    unlisteners.forEach(u => u());
+    stopCountdown();
+  });
 </script>
 
 <section class="flex flex-col gap-4">
 
-  <!-- ── Version hero ───────────────────────────────────────────────────────── -->
+  <!-- ── Version hero ──────────────────────────────────────────────────────── -->
   <div class="rounded-2xl border border-border dark:border-white/[0.06]
               bg-gradient-to-r from-sky-500/10 via-blue-500/10 to-indigo-500/10
               dark:from-sky-500/15 dark:via-blue-500/15 dark:to-indigo-500/15
@@ -197,24 +251,28 @@ the Free Software Foundation, version 3 only. -->
       </span>
     </div>
     <span class="flex-1"></span>
-    {#if ready}
-      <span class="text-emerald-500 font-bold text-[0.72rem]">✅ {t("updates.readyToRestart")}</span>
-    {:else if downloading}
+    {#if phase === "ready"}
+      <span class="text-emerald-500 font-bold text-[0.72rem]">
+        ✅ {t("updates.readyToRestart")}
+      </span>
+    {:else if phase === "downloading"}
       <span class="text-blue-500 font-semibold text-[0.65rem] tabular-nums">{progress}%</span>
-    {:else if checking}
-      <svg class="w-4 h-4 text-muted-foreground animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    {:else if phase === "checking"}
+      <svg class="w-4 h-4 text-muted-foreground animate-spin" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2">
         <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
       </svg>
     {/if}
   </div>
 
-  <!-- ── Update status card ─────────────────────────────────────────────────── -->
+  <!-- ── Update status card ────────────────────────────────────────────────── -->
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
 
       <div class="flex flex-col gap-3 px-4 py-4">
-        {#if ready}
-          <!-- Update installed, ready to relaunch -->
+
+        {#if phase === "ready"}
+          <!-- ── Installed, counting down to restart ── -->
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-xl shrink-0">
               ✅
@@ -224,16 +282,30 @@ the Free Software Foundation, version 3 only. -->
                 {t("updates.installed", { version: available?.version ?? "" })}
               </span>
               <span class="text-[0.65rem] text-muted-foreground">
-                {t("updates.restartToApply")}
+                {t("updates.restartingIn", { secs: countdown })}
               </span>
             </div>
-            <Button size="sm" class="text-[0.72rem] h-8 px-4" onclick={() => relaunch()}>
-              {t("updates.restartNow")}
-            </Button>
+            <div class="flex items-center gap-2 shrink-0">
+              <Button size="sm" variant="outline"
+                      class="text-[0.72rem] h-8 px-3"
+                      onclick={() => { stopCountdown(); phase = "idle"; available = null; }}>
+                {t("common.cancel")}
+              </Button>
+              <Button size="sm" class="text-[0.72rem] h-8 px-4"
+                      onclick={() => { stopCountdown(); relaunch(); }}>
+                {t("updates.restartNow")}
+              </Button>
+            </div>
           </div>
 
-        {:else if downloading}
-          <!-- Downloading -->
+          <!-- Countdown progress bar -->
+          <div class="h-1.5 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden">
+            <div class="h-full rounded-full bg-emerald-500 transition-all duration-1000"
+                 style="width:{Math.round(((5 - countdown) / 5) * 100)}%"></div>
+          </div>
+
+        {:else if phase === "downloading"}
+          <!-- ── Downloading ── -->
           <div class="flex flex-col gap-2.5">
             <div class="flex items-center gap-2">
               <span class="text-[0.78rem] font-semibold text-foreground">
@@ -252,45 +324,50 @@ the Free Software Foundation, version 3 only. -->
             {/if}
           </div>
 
-        {:else if available && !checking}
-          <!-- Update available (download starts immediately on click) -->
-          <div class="flex items-center gap-3">
-            <div class="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-xl shrink-0">
-              ⬆
-            </div>
-            <div class="flex flex-col gap-0.5 flex-1">
-              <span class="text-[0.78rem] font-semibold text-blue-600 dark:text-blue-400">
-                v{available.version} {t("updates.available")}
-              </span>
-              {#if available.body}
-                <span class="text-[0.65rem] text-muted-foreground line-clamp-2">{available.body}</span>
-              {/if}
-            </div>
-            <Button size="sm" class="text-[0.72rem] h-8 px-4" onclick={checkForUpdate}>
-              {t("updates.downloadNow")}
-            </Button>
-          </div>
-
         {:else}
-          <!-- Idle — check button -->
+          <!-- ── Idle / checking / error ── -->
           <div class="flex items-center gap-3">
-            <div class="flex flex-col gap-0.5 flex-1">
-              <span class="text-[0.78rem] font-semibold text-foreground">
-                {checking ? t("updates.checking") : t("updates.upToDate")}
-              </span>
-              <span class="text-[0.6rem] text-muted-foreground/60">
-                {t("updates.lastChecked")}: {fmtLastChecked()}
-              </span>
-            </div>
+            {#if phase === "error" && available}
+              <!-- Update was found but download/install failed -->
+              <div class="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center text-xl shrink-0">
+                ⚠
+              </div>
+              <div class="flex flex-col gap-0.5 flex-1">
+                <span class="text-[0.78rem] font-semibold text-foreground">
+                  v{available.version} {t("updates.available")}
+                </span>
+                <span class="text-[0.65rem] text-red-600 dark:text-red-400">
+                  {t("updates.downloadFailed")}
+                </span>
+              </div>
+            {:else}
+              <div class="flex flex-col gap-0.5 flex-1">
+                <span class="text-[0.78rem] font-semibold text-foreground">
+                  {phase === "checking" ? t("updates.checking") : t("updates.upToDate")}
+                </span>
+                <span class="text-[0.6rem] text-muted-foreground/60">
+                  {t("updates.lastChecked")}: {fmtLastChecked()}
+                </span>
+              </div>
+            {/if}
+
+            <!-- Check / Retry button -->
             <Button size="sm" variant="outline"
-                    class="text-[0.72rem] h-8 px-4 gap-1.5"
-                    disabled={checking}
-                    onclick={checkForUpdate}>
-              {#if checking}
-                <svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    class="text-[0.72rem] h-8 px-4 gap-1.5 shrink-0"
+                    disabled={phase === "checking" || phase === "downloading"}
+                    onclick={checkAndDownload}>
+              {#if phase === "checking"}
+                <svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2">
                   <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
                 </svg>
                 {t("updates.checking")}
+              {:else if phase === "error"}
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+                {t("updates.retry")}
               {:else}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5">
                   <polyline points="23 4 23 10 17 10"/>
@@ -301,21 +378,21 @@ the Free Software Foundation, version 3 only. -->
             </Button>
           </div>
 
-          {#if error}
+          <!-- Error detail — always visible when phase === "error" -->
+          {#if phase === "error" && error}
             <div class="rounded-lg border border-red-400/30 bg-red-50 dark:bg-[#1a0a0a] px-3 py-2">
               <span class="text-[0.65rem] text-red-600 dark:text-red-400 break-all">{error}</span>
             </div>
           {/if}
         {/if}
-      </div>
 
+      </div>
     </CardContent>
   </Card>
 
-  <!-- ── Auto-check interval ────────────────────────────────────────────────── -->
+  <!-- ── Auto-check interval ───────────────────────────────────────────────── -->
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
-
       <div class="flex flex-col gap-3 px-4 py-4">
         <div class="flex items-center gap-2">
           <div class="flex flex-col gap-0.5 flex-1">
@@ -337,7 +414,7 @@ the Free Software Foundation, version 3 only. -->
         <div class="flex items-center gap-1.5 flex-wrap">
           {#each INTERVAL_OPTIONS as [secs, labelKey]}
             <button
-              onclick={() => setInterval(secs)}
+              onclick={() => setCheckInterval(secs)}
               class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
                      transition-all cursor-pointer select-none
                      {checkIntervalSecs === secs
@@ -354,11 +431,10 @@ the Free Software Foundation, version 3 only. -->
           </p>
         {/if}
       </div>
-
     </CardContent>
   </Card>
 
-  <!-- ── Launch at Login ────────────────────────────────────────────────────── -->
+  <!-- ── Launch at Login ───────────────────────────────────────────────────── -->
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="py-0 px-0">
       <button
@@ -366,7 +442,6 @@ the Free Software Foundation, version 3 only. -->
         disabled={autostartSaving}
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                hover:bg-slate-50 dark:hover:bg-white/[0.02] disabled:opacity-50">
-        <!-- Toggle pill -->
         <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
                     {autostartEnabled ? 'bg-emerald-500' : 'bg-muted dark:bg-white/[0.08]'}">
           {#if autostartSaving}
@@ -389,15 +464,10 @@ the Free Software Foundation, version 3 only. -->
             {t("updates.autostartDesc")}
           </span>
         </div>
-        {#if autostartEnabled}
-          <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase text-emerald-500 shrink-0">
-            {t("common.on")}
-          </span>
-        {:else}
-          <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase text-muted-foreground/40 shrink-0">
-            {t("common.off")}
-          </span>
-        {/if}
+        <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
+                     {autostartEnabled ? 'text-emerald-500' : 'text-muted-foreground/40'}">
+          {autostartEnabled ? t("common.on") : t("common.off")}
+        </span>
       </button>
 
       {#if autostartError}
@@ -408,7 +478,7 @@ the Free Software Foundation, version 3 only. -->
     </CardContent>
   </Card>
 
-  <!-- ── Release notes link ─────────────────────────────────────────────────── -->
+  <!-- ── Release notes link ────────────────────────────────────────────────── -->
   <div class="text-center">
     <span class="text-[0.52rem] text-muted-foreground/40">
       {t("updates.footer")}

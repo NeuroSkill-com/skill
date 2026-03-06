@@ -159,8 +159,10 @@ pub(super) fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
 fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
     init_espeak_data_path();
 
-    let mut stream:           Option<MixerDeviceSink> = DeviceSinkBuilder::open_default_sink()
-        .map_err(|e| eprintln!("[neutts] warning: could not open audio: {e}")).ok();
+    // Audio device is NOT pre-opened here — we open fresh on every Speak
+    // command so that device changes (e.g. Bluetooth reconnect) are always
+    // picked up.  See the Speak arm for the open-per-utterance logic.
+    let mut stream:           Option<MixerDeviceSink> = None;
     let mut model:            Option<neutts::NeuTTS>  = None;
     let mut loaded_backbone:  String                  = String::new();
     let mut ref_codes:        Vec<i32>                = Vec::new();
@@ -224,10 +226,21 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         }
                     }
                 }
-                if stream.is_none() {
-                    stream = DeviceSinkBuilder::open_default_sink()
-                        .map_err(|e| eprintln!("[neutts] could not open audio: {e}")).ok();
-                }
+                // Re-open the audio device on every utterance.
+                //
+                // Motivation: the system default output device can change at any time
+                // — Bluetooth headphones reconnect, the user switches output in System
+                // Settings, a USB DAC is plugged in, etc.  A stale `MixerDeviceSink`
+                // from a previous utterance would silently route audio to the wrong
+                // device (e.g. internal speakers while the user expects BT headphones).
+                //
+                // Re-opening is cheap relative to the synthesis time: it takes ~1 ms
+                // on macOS, whereas inference takes hundreds of milliseconds to seconds.
+                // The old sink is dropped (which is fine — it is idle between utterances)
+                // and a fresh one pointing at the *current* default device is created.
+                stream = DeviceSinkBuilder::open_default_sink()
+                    .map_err(|e| eprintln!("[neutts] could not open audio device: {e}"))
+                    .ok();
 
                 // Per-utterance voice override (loads inline without touching stored state).
                 let (eff_codes, eff_text, eff_vkey): (
@@ -439,7 +452,7 @@ fn load_ref_codes(
             Ok(codes) => {
                 let text = std::fs::read_to_string(&txt)
                     .map(|s| s.trim().to_string()).unwrap_or_default();
-                tts_log(&format!("preset voice '{preset}' loaded ({} tokens)", codes.len()));
+                eprintln!("[neutts] preset voice '{preset}' loaded ({} tokens)", codes.len());
                 return (codes, text, preset.to_string());
             }
             Err(e) => eprintln!("[neutts] preset '{preset}' not found at {}: {e}", npy.display()),
@@ -480,7 +493,7 @@ fn load_ref_codes(
     }
 
     // ── Backbone built-in voice ───────────────────────────────────────────────
-    tts_log("using backbone built-in voice (no reference)");
+    eprintln!("[neutts] no voice reference loaded — using backbone built-in voice");
     (Vec::new(), String::new(), "default".to_string())
 }
 
@@ -495,11 +508,11 @@ fn synthesize(
     if audio.is_empty() {
         return Err(format!("synthesis returned no samples for {text:?}"));
     }
-    tts_log(&format!(
-        "synthesised {} samples ({:.2} s) in {} ms — text={text:?}",
+    eprintln!(
+        "[neutts] synthesised {} samples ({:.2} s) in {} ms — text={text:?}",
         audio.len(), audio.len() as f32 / SAMPLE_RATE as f32,
         t0.elapsed().as_millis(),
-    ));
+    );
     Ok(audio)
 }
 
@@ -534,7 +547,7 @@ fn speak_cached(
     let cache_path = wav_cache_path(backbone, voice_key, text);
 
     if cache_path.exists() {
-        tts_log(&format!("WAV cache hit: {}", cache_path.display()));
+        eprintln!("[neutts] WAV cache hit — playing {}", cache_path.display());
         play_wav(stream, &cache_path);
         return;
     }
@@ -544,7 +557,7 @@ fn speak_cached(
             if let Err(e) = model.write_wav(&audio, &cache_path) {
                 eprintln!("[neutts] WAV cache write failed: {e}");
             } else {
-                tts_log(&format!("WAV cached: {}", cache_path.display()));
+                eprintln!("[neutts] WAV cached: {}", cache_path.display());
             }
             play_f32_audio(stream, audio, SAMPLE_RATE);
         }
@@ -573,10 +586,10 @@ fn play_wav(stream: &MixerDeviceSink, path: &Path) {
         eprintln!("[neutts] WAV cache file is empty: {}", path.display());
         return;
     }
-    tts_log(&format!(
-        "WAV cache playback: {} samples @ {} Hz ({})",
-        samples.len(), sample_rate, path.display()
-    ));
+    eprintln!(
+        "[neutts] playing {} samples @ {} Hz from cache",
+        samples.len(), sample_rate
+    );
     play_f32_audio(stream, samples, sample_rate);
 }
 

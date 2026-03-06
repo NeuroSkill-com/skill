@@ -216,6 +216,19 @@ the Free Software Foundation, version 3 only. -->
     openbciChanged = true;
   }
 
+  // ── Activity tracking ────────────────────────────────────────────────────────
+  interface ActiveWindowInfo {
+    app_name:     string;
+    app_path:     string;
+    window_title: string;
+    activated_at: number;
+  }
+  let trackActiveWindow   = $state(true);
+  let currentActiveWindow = $state<ActiveWindowInfo | null>(null);
+  let trackInputActivity  = $state(true);
+  // [kbd_ts, mouse_ts] in unix seconds; 0 = never
+  let lastInputActivity   = $state<[number, number]>([0, 0]);
+
   // ── WS server config ────────────────────────────────────────────────────────
   let wsHost        = $state("127.0.0.1");
   let wsPort        = $state(8375);
@@ -343,6 +356,10 @@ the Free Software Foundation, version 3 only. -->
       openbci = await invoke<OpenBciConfig>("get_openbci_config");
       await loadSerialPorts();
     }
+    trackActiveWindow   = await invoke<boolean>("get_active_window_tracking");
+    currentActiveWindow = await invoke<ActiveWindowInfo | null>("get_active_window");
+    trackInputActivity  = await invoke<boolean>("get_input_activity_tracking");
+    lastInputActivity   = await invoke<[number, number]>("get_last_input_activity");
     nowTimer    = setInterval(() => now = Math.floor(Date.now() / 1000), 1000);
 
     unlisteners.push(
@@ -353,6 +370,12 @@ the Free Software Foundation, version 3 only. -->
           serial_number: ev.payload.serial_number ?? null,
           mac_address:   ev.payload.mac_address   ?? null,
         };
+      }),
+      await listen<ActiveWindowInfo | null>("active-window-changed", ev => {
+        currentActiveWindow = ev.payload;
+      }),
+      await listen<[number, number]>("input-activity", ev => {
+        lastInputActivity = ev.payload;
       }),
     );
   });
@@ -900,6 +923,149 @@ the Free Software Foundation, version 3 only. -->
   </Card>
 </section>
 
+
+<!-- ── Activity Tracking ────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      {t("settings.activityTracking")}
+    </span>
+    <span class="ml-auto text-[0.52rem] text-muted-foreground/50">{t("settings.activityDb")}</span>
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="py-0 px-0">
+
+      <!-- ── Active-window toggle ─────────────────────────────────────────── -->
+      <button
+        onclick={async () => {
+          trackActiveWindow = !trackActiveWindow;
+          await invoke("set_active_window_tracking", { enabled: trackActiveWindow });
+          if (!trackActiveWindow) currentActiveWindow = null;
+        }}
+        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
+               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
+                    {trackActiveWindow ? 'bg-emerald-500' : 'bg-muted dark:bg-white/[0.08]'}">
+          <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
+                      {trackActiveWindow ? 'translate-x-4' : 'translate-x-0.5'}"></div>
+        </div>
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
+            {t("settings.activeWindowToggle")}
+          </span>
+          <span class="text-[0.58rem] text-muted-foreground leading-tight">
+            {t("settings.activeWindowToggleDesc")}
+          </span>
+        </div>
+        <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
+                     {trackActiveWindow ? 'text-emerald-500' : 'text-muted-foreground/50'}">
+          {trackActiveWindow ? t("common.on") : t("common.off")}
+        </span>
+      </button>
+
+      <!-- Current window preview -->
+      {#if trackActiveWindow}
+        <div class="border-t border-border dark:border-white/[0.05] px-4 py-3 flex flex-col gap-2 bg-muted/20 dark:bg-white/[0.01]">
+          <span class="text-[0.54rem] font-semibold tracking-widest uppercase text-muted-foreground/70">
+            {t("settings.activeWindowCurrent")}
+          </span>
+          {#if currentActiveWindow}
+            <div class="flex flex-col gap-1.5">
+              {#each ([
+                [t("settings.activeWindowApp"),   currentActiveWindow.app_name,     "font-semibold text-foreground"],
+                [t("settings.activeWindowTitle"),  currentActiveWindow.window_title, "text-foreground/80"],
+                [t("settings.activeWindowPath"),   currentActiveWindow.app_path,     "font-mono text-muted-foreground"],
+                [t("settings.activeWindowSince"),  fmtLastSeen(currentActiveWindow.activated_at), "text-muted-foreground"],
+              ] as [string, string, string][]).filter(([, v]) => v) as [label, value, cls]}
+                <div class="flex items-baseline gap-2">
+                  <span class="text-[0.56rem] text-muted-foreground/55 shrink-0 w-[4.5rem] text-right">{label}</span>
+                  <span class="text-[0.68rem] {cls} truncate">{value}</span>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <p class="text-[0.62rem] text-muted-foreground/50 italic">{t("settings.activeWindowNone")}</p>
+          {/if}
+        </div>
+      {/if}
+
+      <Separator class="bg-border dark:bg-white/[0.05]" />
+
+      <!-- ── Input-activity toggle ────────────────────────────────────────── -->
+      <button
+        onclick={async () => {
+          trackInputActivity = !trackInputActivity;
+          await invoke("set_input_activity_tracking", { enabled: trackInputActivity });
+          if (!trackInputActivity) lastInputActivity = [0, 0];
+        }}
+        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
+               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
+                    {trackInputActivity ? 'bg-emerald-500' : 'bg-muted dark:bg-white/[0.08]'}">
+          <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
+                      {trackInputActivity ? 'translate-x-4' : 'translate-x-0.5'}"></div>
+        </div>
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
+            {t("settings.inputActivityToggle")}
+          </span>
+          <span class="text-[0.58rem] text-muted-foreground leading-tight">
+            {t("settings.inputActivityToggleDesc")}
+          </span>
+        </div>
+        <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
+                     {trackInputActivity ? 'text-emerald-500' : 'text-muted-foreground/50'}">
+          {trackInputActivity ? t("common.on") : t("common.off")}
+        </span>
+      </button>
+
+      <!-- Last keyboard / mouse timestamps + live status -->
+      {#if trackInputActivity}
+        {@const hasData = lastInputActivity[0] > 0 || lastInputActivity[1] > 0}
+        <div class="border-t border-border dark:border-white/[0.05] px-4 py-3 flex flex-col gap-2.5 bg-muted/20 dark:bg-white/[0.01]">
+
+          <!-- Live status badge -->
+          <div class="flex items-center gap-2">
+            <span class="relative flex h-2 w-2 shrink-0">
+              {#if hasData}
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              {:else}
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-muted-foreground/30"></span>
+              {/if}
+            </span>
+            <span class="text-[0.62rem] font-semibold
+                         {hasData ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/60'}">
+              {hasData ? t("settings.inputActivityActive") : t("settings.inputActivityNoData")}
+            </span>
+          </div>
+
+          <!-- Keyboard / mouse last-seen rows -->
+          <div class="flex flex-col gap-1.5">
+            {#each ([
+              [t("settings.inputActivityKeyboard"), lastInputActivity[0]],
+              [t("settings.inputActivityMouse"),    lastInputActivity[1]],
+            ] as [string, number][]) as [label, ts]}
+              <div class="flex items-baseline gap-2">
+                <span class="text-[0.56rem] text-muted-foreground/55 shrink-0 w-[4.5rem] text-right">{label}</span>
+                <span class="text-[0.68rem] {ts > 0 ? 'text-foreground/80' : 'text-muted-foreground/40 italic'}">
+                  {ts > 0 ? fmtLastSeen(ts) : t("settings.inputActivityNever")}
+                </span>
+              </div>
+            {/each}
+          </div>
+
+          <!-- No-permission note (static info, always shown) -->
+          <p class="text-[0.54rem] text-muted-foreground/50 leading-relaxed">
+            {t("settings.inputActivityPermNote")}
+          </p>
+        </div>
+      {/if}
+
+    </CardContent>
+  </Card>
+</section>
 
 <!-- ── Logging ───────────────────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">

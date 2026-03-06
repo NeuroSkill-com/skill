@@ -50,6 +50,14 @@ the Free Software Foundation, version 3 only. -->
 
   <Separator class="bg-border dark:bg-white/[0.06]" />
 
+  <!-- ── Activity Tracking ───────────────────────────────────────────────── -->
+  <HelpSection title={t("helpPrivacy.activityTracking")}>
+    <HelpItem id="helpPrivacy.activityTracking" title={t("helpPrivacy.activityTracking")} body={t("helpPrivacy.activityTrackingBody")} />
+    <HelpItem id="helpPrivacy.activityPermission" title={t("helpPrivacy.activityPermission")} body={t("helpPrivacy.activityPermissionBody")} />
+  </HelpSection>
+
+  <Separator class="bg-border dark:bg-white/[0.06]" />
+
   <!-- ── On-device processing ─────────────────────────────────────────────── -->
   <HelpSection title={t("helpPrivacy.onDevice")}>
     <HelpItem id="helpPrivacy.gpuLocal" title={t("helpPrivacy.gpuLocal")} body={t("helpPrivacy.gpuLocalBody")} />
@@ -93,6 +101,7 @@ the Free Software Foundation, version 3 only. -->
       <p><strong class="text-foreground">{t("helpPrivacy.summaryNoAccounts")}</strong></p>
       <p><strong class="text-foreground">{t("helpPrivacy.summaryOneReq")}</strong></p>
       <p><strong class="text-foreground">{t("helpPrivacy.summaryOnDevice")}</strong></p>
+      <p><strong class="text-foreground">{t("helpPrivacy.summaryActivityLocal")}</strong></p>
     </div>
   </HelpSection>
 

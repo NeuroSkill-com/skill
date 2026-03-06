@@ -18,6 +18,7 @@ the Free Software Foundation, version 3 only. -->
   import EmbeddingsTab    from "$lib/EmbeddingsTab.svelte";
   import UpdatesTab       from "$lib/UpdatesTab.svelte";
   import TtsTab           from "$lib/TtsTab.svelte";
+  import PermissionsTab   from "$lib/PermissionsTab.svelte";
   import { Button }       from "$lib/components/ui/button";
   import { t }            from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
@@ -25,11 +26,11 @@ the Free Software Foundation, version 3 only. -->
   import LanguagePicker   from "$lib/LanguagePicker.svelte";
   import ThemeToggle      from "$lib/ThemeToggle.svelte";
 
-  type Tab = "goals" | "calibration" | "embeddings" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts";
+  type Tab = "goals" | "calibration" | "embeddings" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions";
   let tab = $state<Tab>("goals");
   let appVersion = $state("…");
 
-  const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "model", "embeddings", "appearance", "settings", "shortcuts", "umap", "updates"];
+  const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "model", "embeddings", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
   const TAB_LABELS: Record<Tab, () => string> = {
     goals:       () => t("settingsTabs.goals"),
     calibration: () => t("settingsTabs.calibration"),
@@ -41,6 +42,7 @@ the Free Software Foundation, version 3 only. -->
     model:       () => t("settingsTabs.eegModel"),
     umap:        () => t("settingsTabs.umap"),
     updates:     () => t("settingsTabs.updates"),
+    permissions: () => t("settingsTabs.permissions"),
   };
   const tabLabel = (id: Tab) => TAB_LABELS[id]();
 
@@ -177,6 +179,8 @@ the Free Software Foundation, version 3 only. -->
       <UmapTab />
     {:else if tab === "updates"}
       <UpdatesTab />
+    {:else if tab === "permissions"}
+      <PermissionsTab />
     {:else}
       <EegModelTab />
     {/if}
