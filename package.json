@@ -18,7 +18,8 @@
     "sync:i18n": "npx tsx scripts/sync-i18n.ts",
     "sync:i18n:fix": "npx tsx scripts/sync-i18n.ts --fix",
     "sync:i18n:check": "npx tsx scripts/sync-i18n.ts --check",
-    "bump": "node scripts/bump.js"
+    "bump": "node scripts/bump.js",
+    "tag": "node scripts/tag.js"
   },
   "license": "GPL-3.0-only",
   "dependencies": {
