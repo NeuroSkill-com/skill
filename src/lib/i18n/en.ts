@@ -1690,6 +1690,7 @@ const en: Record<string, string> = {
   "onboarding.step.bluetooth":    "Bluetooth",
   "onboarding.step.fit":          "Fit Check",
   "onboarding.step.calibration":  "Calibration",
+  "onboarding.step.tray":         "Tray",
   "onboarding.step.done":         "Done",
 
   "onboarding.welcomeTitle":      "Welcome to {app}",
@@ -1729,6 +1730,16 @@ const en: Record<string, string> = {
   "onboarding.openCalibration":   "Open Calibration",
   "onboarding.calibrationNeedsBt": "Connect your headset first to run calibration.",
   "onboarding.calibrationSkip":   "You can skip this and calibrate later from the tray menu or settings.",
+
+  "onboarding.trayTitle":         "Find the App in Your Tray",
+  "onboarding.trayBody":          "{app} runs quietly in the background. After setup, the icon in your menu bar (macOS) or system tray (Windows/Linux) is your entry point back into the app.",
+  "onboarding.tray.states":       "The icon changes colour to show status:",
+  "onboarding.tray.grey":         "Grey — disconnected",
+  "onboarding.tray.amber":        "Amber — scanning or connecting",
+  "onboarding.tray.green":        "Green — connected and recording",
+  "onboarding.tray.red":          "Red — Bluetooth is off",
+  "onboarding.tray.open":         "Click the tray icon anytime to show or hide the main dashboard.",
+  "onboarding.tray.menu":         "Right-click the icon (or left-click on Windows/Linux) for quick actions — connect, label, calibrate, and more.",
 
   "onboarding.doneTitle":         "You're All Set!",
   "onboarding.doneBody":          "{app} is running in your menu bar. Here are a few things to know:",

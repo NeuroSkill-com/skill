@@ -1291,6 +1291,7 @@ const fr: Record<string, string> = {
   "onboarding.step.bluetooth":    "Bluetooth",
   "onboarding.step.fit":          "Ajustement",
   "onboarding.step.calibration":  "Calibration",
+  "onboarding.step.tray":         "Icône",
   "onboarding.step.done":         "Terminé",
 
   "onboarding.welcomeTitle":      "Bienvenue dans {app}",
@@ -1330,6 +1331,16 @@ const fr: Record<string, string> = {
   "onboarding.openCalibration":   "Ouvrir la calibration",
   "onboarding.calibrationNeedsBt": "Connectez d'abord votre casque pour lancer la calibration.",
   "onboarding.calibrationSkip":   "Vous pouvez sauter cette étape et calibrer plus tard depuis le menu ou les paramètres.",
+
+  "onboarding.trayTitle":         "Retrouver l'app dans la barre",
+  "onboarding.trayBody":          "{app} fonctionne en arrière-plan. Après l'installation, l'icône dans la barre de menu (macOS) ou la zone de notification (Windows/Linux) est votre point d'accès.",
+  "onboarding.tray.states":       "L'icône change de couleur selon l'état :",
+  "onboarding.tray.grey":         "Gris — déconnecté",
+  "onboarding.tray.amber":        "Ambre — recherche ou connexion",
+  "onboarding.tray.green":        "Vert — connecté et enregistrement",
+  "onboarding.tray.red":          "Rouge — Bluetooth désactivé",
+  "onboarding.tray.open":         "Cliquez sur l'icône à tout moment pour afficher ou masquer le tableau de bord.",
+  "onboarding.tray.menu":         "Clic droit (ou clic gauche sous Windows/Linux) pour les actions rapides — connecter, étiqueter, calibrer, et plus.",
 
   "onboarding.doneTitle":         "Tout est prêt !",
   "onboarding.doneBody":          "{app} fonctionne dans votre barre de menus. Voici quelques informations utiles :",

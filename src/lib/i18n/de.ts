@@ -1296,6 +1296,7 @@ const de: Record<string, string> = {
   "onboarding.step.bluetooth":    "Bluetooth",
   "onboarding.step.fit":          "Sitz prüfen",
   "onboarding.step.calibration":  "Kalibrierung",
+  "onboarding.step.tray":         "Tray",
   "onboarding.step.done":         "Fertig",
 
   "onboarding.welcomeTitle":      "Willkommen bei {app}",
@@ -1335,6 +1336,16 @@ const de: Record<string, string> = {
   "onboarding.openCalibration":   "Kalibrierung öffnen",
   "onboarding.calibrationNeedsBt": "Verbinde zuerst dein Headset, um die Kalibrierung zu starten.",
   "onboarding.calibrationSkip":   "Du kannst dies überspringen und später über das Tray-Menü oder die Einstellungen kalibrieren.",
+
+  "onboarding.trayTitle":         "Die App im Tray finden",
+  "onboarding.trayBody":          "{app} läuft im Hintergrund. Nach dem Setup ist das Symbol in deiner Menüleiste (macOS) bzw. im Infobereich (Windows/Linux) dein Einstiegspunkt.",
+  "onboarding.tray.states":       "Das Symbol ändert die Farbe je nach Status:",
+  "onboarding.tray.grey":         "Grau — getrennt",
+  "onboarding.tray.amber":        "Gelb — sucht oder verbindet",
+  "onboarding.tray.green":        "Grün — verbunden und zeichnet auf",
+  "onboarding.tray.red":          "Rot — Bluetooth ist ausgeschaltet",
+  "onboarding.tray.open":         "Klicke jederzeit auf das Tray-Symbol, um das Dashboard ein- oder auszublenden.",
+  "onboarding.tray.menu":         "Rechtsklick (oder Linksklick unter Windows/Linux) öffnet das Schnellmenü — verbinden, beschriften, kalibrieren und mehr.",
 
   "onboarding.doneTitle":         "Alles bereit!",
   "onboarding.doneBody":          "{app} läuft in deiner Menüleiste. Hier sind ein paar Hinweise:",

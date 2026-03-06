@@ -1290,6 +1290,7 @@ const uk: Record<string, string> = {
   "onboarding.step.bluetooth":    "Bluetooth",
   "onboarding.step.fit":          "Перевірка посадки",
   "onboarding.step.calibration":  "Калібрування",
+  "onboarding.step.tray":         "Трей",
   "onboarding.step.done":         "Готово",
 
   "onboarding.welcomeTitle":      "Ласкаво просимо до {app}",
@@ -1329,6 +1330,16 @@ const uk: Record<string, string> = {
   "onboarding.openCalibration":   "Відкрити калібрування",
   "onboarding.calibrationNeedsBt": "Спочатку підключіть пристрій для запуску калібрування.",
   "onboarding.calibrationSkip":   "Можна пропустити і калібрувати пізніше з меню трею або налаштувань.",
+
+  "onboarding.trayTitle":         "Знайдіть застосунок у треї",
+  "onboarding.trayBody":          "{app} працює у фоновому режимі. Після налаштування значок у рядку меню (macOS) або в треї системи (Windows/Linux) — ваша точка доступу до застосунку.",
+  "onboarding.tray.states":       "Значок змінює колір залежно від стану:",
+  "onboarding.tray.grey":         "Сірий — відключено",
+  "onboarding.tray.amber":        "Бурштиновий — пошук або підключення",
+  "onboarding.tray.green":        "Зелений — підключено та запис",
+  "onboarding.tray.red":          "Червоний — Bluetooth вимкнено",
+  "onboarding.tray.open":         "Натисніть на значок у треї будь-коли, щоб показати або приховати панель.",
+  "onboarding.tray.menu":         "Клік правою кнопкою (або лівою на Windows/Linux) відкриває швидке меню — підключити, позначити, калібрувати тощо.",
 
   "onboarding.doneTitle":         "Все готово!",
   "onboarding.doneBody":          "{app} працює у вашому меню. Ось кілька корисних порад:",

@@ -41,8 +41,8 @@ the Free Software Foundation, version 3 only. -->
   interface Phase { kind: CalPhase; actionIndex: number; loop: number; }
 
   // ── Steps ──────────────────────────────────────────────────────────────────
-  type Step = "welcome" | "bluetooth" | "fit" | "calibration" | "done";
-  const STEPS: Step[] = ["welcome", "bluetooth", "fit", "calibration", "done"];
+  type Step = "welcome" | "bluetooth" | "fit" | "calibration" | "tray" | "done";
+  const STEPS: Step[] = ["welcome", "bluetooth", "fit", "calibration", "tray", "done"];
 
   let step    = $state<Step>("welcome");
   let stepIdx = $derived(STEPS.indexOf(step));
@@ -521,6 +521,57 @@ the Free Software Foundation, version 3 only. -->
             </Button>
           </div>
         {/if}
+      </div>
+
+    <!-- ════ TRAY ════════════════════════════════════════════════════════════ -->
+    {:else if step === "tray"}
+      <div class="flex flex-col items-center gap-4 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
+        <!-- Icon with a subtle glow ring -->
+        <div class="relative flex items-center justify-center">
+          <div class="absolute w-14 h-14 rounded-full bg-slate-400/10 dark:bg-white/[0.04] blur-sm"></div>
+          <span class="relative text-3xl">🖥</span>
+        </div>
+
+        <h2 class="text-[0.95rem] font-bold">{t("onboarding.trayTitle")}</h2>
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[320px]">
+          {t("onboarding.trayBody")}
+        </p>
+
+        <!-- Icon-state reference card -->
+        <Card class="w-full max-w-[320px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+          <CardContent class="px-3 py-3">
+            <p class="text-[0.5rem] font-semibold tracking-widest uppercase text-muted-foreground mb-2.5">
+              {t("onboarding.tray.states")}
+            </p>
+            <div class="flex flex-col gap-2">
+              {#each [
+                { dot: "bg-slate-400",                     label: t("onboarding.tray.grey")  },
+                { dot: "bg-yellow-400 animate-pulse",      label: t("onboarding.tray.amber") },
+                { dot: "bg-green-500",                     label: t("onboarding.tray.green") },
+                { dot: "bg-red-500",                       label: t("onboarding.tray.red")   },
+              ] as row}
+                <div class="flex items-center gap-2.5">
+                  <div class="w-3 h-3 rounded-full shrink-0 {row.dot}"></div>
+                  <span class="text-[0.65rem] text-left">{row.label}</span>
+                </div>
+              {/each}
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- How-to tips -->
+        <div class="w-full max-w-[320px] flex flex-col gap-1.5 text-left">
+          <div class="flex items-start gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
+                      bg-muted dark:bg-[#1a1a28] px-3 py-2">
+            <span class="text-base shrink-0">👆</span>
+            <p class="text-[0.62rem] text-muted-foreground leading-relaxed">{t("onboarding.tray.open")}</p>
+          </div>
+          <div class="flex items-start gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
+                      bg-muted dark:bg-[#1a1a28] px-3 py-2">
+            <span class="text-base shrink-0">🖱</span>
+            <p class="text-[0.62rem] text-muted-foreground leading-relaxed">{t("onboarding.tray.menu")}</p>
+          </div>
+        </div>
       </div>
 
     <!-- ════ DONE ═════════════════════════════════════════════════════════════ -->

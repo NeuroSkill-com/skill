@@ -1291,6 +1291,7 @@ const he: Record<string, string> = {
   "onboarding.step.bluetooth":    "בלוטות'",
   "onboarding.step.fit":          "בדיקת התאמה",
   "onboarding.step.calibration":  "כיול",
+  "onboarding.step.tray":         "מגש",
   "onboarding.step.done":         "סיום",
 
   "onboarding.welcomeTitle":      "ברוכים הבאים ל-{app}",
@@ -1330,6 +1331,16 @@ const he: Record<string, string> = {
   "onboarding.openCalibration":   "פתח כיול",
   "onboarding.calibrationNeedsBt": "חבר את המכשיר קודם כדי להפעיל כיול.",
   "onboarding.calibrationSkip":   "אפשר לדלג ולכייל מאוחר יותר מתפריט המגש או ההגדרות.",
+
+  "onboarding.trayTitle":         "מצא את האפליקציה במגש",
+  "onboarding.trayBody":          "{app} פועלת ברקע. לאחר ההגדרה, הסמל בשורת התפריטים (macOS) או במגש המערכת (Windows/Linux) הוא הדרך לחזור לאפליקציה.",
+  "onboarding.tray.states":       "הסמל משנה צבע בהתאם למצב:",
+  "onboarding.tray.grey":         "אפור — מנותק",
+  "onboarding.tray.amber":        "ענבר — סורק או מתחבר",
+  "onboarding.tray.green":        "ירוק — מחובר ומקליט",
+  "onboarding.tray.red":          "אדום — Bluetooth כבוי",
+  "onboarding.tray.open":         "לחץ על סמל המגש בכל עת להצגה או הסתרה של הלוח.",
+  "onboarding.tray.menu":         "לחיצה ימנית (או שמאלית ב-Windows/Linux) פותחת תפריט מהיר — חיבור, תיוג, כיול ועוד.",
 
   "onboarding.doneTitle":         "הכל מוכן!",
   "onboarding.doneBody":          "{app} פועל בשורת התפריט שלך. הנה כמה דברים שכדאי לדעת:",
