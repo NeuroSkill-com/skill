@@ -16,6 +16,62 @@ use tauri::{
 
 use crate::{AppState, MuseStatus};
 
+// ── Tray-update deduplication ─────────────────────────────────────────────────
+//
+// `tray.set_menu()` replaces the live native menu object. On macOS and Windows
+// this dismisses the menu if the user currently has it open, which produces the
+// "menu disappears on hover" symptom. The same applies to `set_icon` — an
+// unnecessary icon swap can cause a brief flicker on some platforms.
+//
+// We avoid both problems by caching a fingerprint of the last value we actually
+// pushed to the OS. `refresh_tray` is a no-op for the fields that haven't
+// changed since the previous call.
+
+/// Fingerprint of the last icon state pushed to the OS tray.
+static LAST_ICON_STATE: Mutex<&'static str> = Mutex::new("");
+
+/// Fingerprint of the last menu content pushed to the OS tray.
+/// Encodes every piece of data that `build_menu` uses so a rebuild is
+/// triggered if and only if the visible menu would differ.
+static LAST_MENU_KEY: Mutex<String> = Mutex::new(String::new());
+
+/// Compute a compact string key from all state that `build_menu` renders.
+/// Two identical keys guarantee identical menus; a different key means the
+/// menu must be rebuilt.
+fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
+    let (ls, ss, sets, cs, hs, hist, api, ts, ft) = {
+        let r = app.state::<Mutex<AppState>>();
+        let g = r.lock_or_recover();
+        (
+            g.label_shortcut.clone(),
+            g.search_shortcut.clone(),
+            g.settings_shortcut.clone(),
+            g.calibration_shortcut.clone(),
+            g.help_shortcut.clone(),
+            g.history_shortcut.clone(),
+            g.api_shortcut.clone(),
+            g.theme_shortcut.clone(),
+            g.focus_timer_shortcut.clone(),
+        )
+    };
+
+    let pairs = st.paired_devices
+        .iter()
+        .map(|d| format!("{}:{}", d.id, d.name))
+        .collect::<Vec<_>>()
+        .join(",");
+
+    // Battery is displayed as a rounded integer; avoid rebuilds for sub-1%
+    // noise by including only the integer part.
+    let batt  = st.battery as u32;
+    let state = st.state.as_str();
+    let name  = st.device_name.as_deref().unwrap_or("");
+    let tgt   = st.target_name.as_deref().unwrap_or("");
+
+    // Use all-captured-identifier form (Rust 1.58+) to keep this readable.
+    format!("{state}|{name}|{batt}|{tgt}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}")
+}
+
 // ── Embedded icons ────────────────────────────────────────────────────────────
 
 const ICON_CONNECTED:    &[u8] = include_bytes!("../icons/tray-connected.png");
@@ -146,15 +202,46 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
 pub(crate) fn refresh_tray(app: &AppHandle) {
     let s_ref = app.state::<Mutex<AppState>>();
     let st = { let g = s_ref.lock_or_recover(); g.status.clone() };
-    if let Some(tray) = app.tray_by_id("main") {
-        let (icon, tip) = match st.state.as_str() {
-            "connected" => (icon_connected(),    "NeuroSkill™ – Connected"),
-            "scanning"  => (icon_scanning(),     "NeuroSkill™ – Scanning…"),
-            "bt_off"    => (icon_bt_off(),       "NeuroSkill™ – Bluetooth Off"),
-            _           => (icon_disconnected(), "NeuroSkill™ – Disconnected"),
-        };
-        let _ = tray.set_icon(Some(icon));
-        let _ = tray.set_tooltip(Some(tip));
-        if let Ok(m) = build_menu(app, &st) { let _ = tray.set_menu(Some(m)); }
+
+    let Some(tray) = app.tray_by_id("main") else { return };
+
+    // ── Icon + tooltip (only update when the state bucket changes) ────────────
+    let icon_state: &'static str = match st.state.as_str() {
+        "connected" => "connected",
+        "scanning"  => "scanning",
+        "bt_off"    => "bt_off",
+        _           => "disconnected",
+    };
+    {
+        let mut last = LAST_ICON_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        if *last != icon_state {
+            let (icon, tip) = match icon_state {
+                "connected"    => (icon_connected(),    "NeuroSkill™ – Connected"),
+                "scanning"     => (icon_scanning(),     "NeuroSkill™ – Scanning…"),
+                "bt_off"       => (icon_bt_off(),       "NeuroSkill™ – Bluetooth Off"),
+                _              => (icon_disconnected(), "NeuroSkill™ – Disconnected"),
+            };
+            let _ = tray.set_icon(Some(icon));
+            let _ = tray.set_tooltip(Some(tip));
+            *last = icon_state;
+        }
+    }
+
+    // ── Menu (only rebuild when content would actually differ) ────────────────
+    //
+    // `tray.set_menu()` replaces the native menu object, which on macOS/Windows
+    // dismisses the menu if the user currently has it open. Skipping the call
+    // when the fingerprint is unchanged prevents the "menu disappears on hover"
+    // symptom that occurs when status events arrive while the user is reading
+    // the open menu.
+    let key = menu_key(&st, app);
+    {
+        let mut last = LAST_MENU_KEY.lock().unwrap_or_else(|p| p.into_inner());
+        if *last != key {
+            if let Ok(m) = build_menu(app, &st) {
+                let _ = tray.set_menu(Some(m));
+            }
+            *last = key;
+        }
     }
 }
