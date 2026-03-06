@@ -2320,6 +2320,7 @@ async fn run_muse_session(
     let mut csv = match CsvState::open(&csv_path) {
         Ok(c)  => c,
         Err(e) => {
+            let _ = handle.disconnect().await;
             write_session_meta(&app, &csv_path);
             go_disconnected(&app, Some(format!("CSV error: {e}")), false);
             return;
@@ -2353,17 +2354,38 @@ async fn run_muse_session(
                         handle_event(e, &app, &mut csv, &csv_path).await;
                         if is_disconnect {
                             app_log!(app, "bluetooth", "[muse] event loop: received MuseEvent::Disconnected, breaking");
+                            // Explicitly unsubscribe GATT notifications before we drop
+                            // the client.  On macOS / CoreBluetooth, btleplug dispatches
+                            // delegate callbacks asynchronously on the main thread.  If we
+                            // just drop the MuseClient without disconnecting first, those
+                            // queued blocks can fire after the Rust objects they close over
+                            // have been freed, corrupting Vec internals and triggering the
+                            // "slice::from_raw_parts requires the pointer to be non-null"
+                            // abort that manifests after many consecutive reconnect cycles.
+                            let _ = handle.disconnect().await;
                             break;
                         }
                     }
                     None => {
                         app_log!(app, "bluetooth", "[muse] event loop: channel closed");
+                        // Same cleanup: drain GATT subscriptions so the main-thread
+                        // CoreBluetooth delegate queue is empty before client drops.
+                        let _ = handle.disconnect().await;
                         break;
                     }
                 }
             }
         }
     }
+
+    // Yield briefly so any CoreBluetooth delegate callbacks that were already
+    // dispatched to the main thread can run to completion before MuseClient (and
+    // its internal btleplug Manager / CBCentralManager) is dropped at the end of
+    // this function.  Without this pause the main thread's run-loop queue can
+    // accumulate stale blocks across multiple reconnect cycles; one eventually
+    // fires against freed Rust memory, causing an unrecoverable
+    // "non-unwinding panic. aborting." in Vec::from_raw_parts.
+    tokio::time::sleep(Duration::from_millis(250)).await;
 
     // 8. Finalise: flush CSV, overwrite JSON sidecar with final stats.
     csv.flush();
