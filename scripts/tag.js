@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync, execSync } from "fs";
+import { readFileSync } from "fs";
+import { execSync } from "child_process";
 
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
 const tag = `v${pkg.version}`;
