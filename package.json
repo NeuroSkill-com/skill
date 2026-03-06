@@ -17,7 +17,8 @@
     "skill": "npx tsx cli.ts",
     "sync:i18n": "npx tsx scripts/sync-i18n.ts",
     "sync:i18n:fix": "npx tsx scripts/sync-i18n.ts --fix",
-    "sync:i18n:check": "npx tsx scripts/sync-i18n.ts --check"
+    "sync:i18n:check": "npx tsx scripts/sync-i18n.ts --check",
+    "bump": "node scripts/bump.js"
   },
   "license": "GPL-3.0-only",
   "dependencies": {

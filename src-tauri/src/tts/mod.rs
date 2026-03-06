@@ -111,15 +111,41 @@ impl TtsProgressEvent {
 // ─── espeak-ng data path ──────────────────────────────────────────────────────
 
 pub(super) fn init_espeak_data_path() {
-    let data_dir = std::env::var("ESPEAK_DATA_PATH").unwrap_or_else(|_| {
-        concat!(env!("CARGO_MANIFEST_DIR"), "/../../../neutts-rs/espeak-ng-data").to_string()
-    });
-    let data_path = std::path::Path::new(&data_dir);
-    #[cfg(feature = "tts-kitten")]
-    kittentts::phonemize::set_data_path(data_path);
-    // Use `::neutts::` (crate root) to avoid ambiguity with the `neutts` submodule.
-    #[cfg(feature = "tts-neutts")]
-    ::neutts::phonemize::set_data_path(data_path);
+    // Resolve the espeak-ng data directory in priority order:
+    //
+    //   1. ESPEAK_DATA_PATH env var (explicit runtime override)
+    //   2. Compile-time dev-tree fallback  ({CARGO_MANIFEST_DIR}/../../../neutts-rs/…)
+    //
+    // We only call `set_data_path()` when the resolved path **actually exists**.
+    // If neither candidate exists we leave DATA_PATH unset so that the neutts
+    // crate falls through to:
+    //   a. NEUTTS_ESPEAK_DATA_DIR baked in at build time by the neutts build.rs
+    //      (present when espeak-ng was built from source during `cargo build`), or
+    //   b. NULL → espeak-ng uses its own compiled-in system path
+    //      (e.g. /opt/homebrew/share/espeak-ng-data on macOS Homebrew installs).
+    //
+    // Previously we always set the path to the dev-tree fallback, even on user
+    // machines where that compile-time path does not exist, causing
+    // espeak_ng_Initialize to fail and every phonemisation call to return
+    // "Phonemisation of ref_text failed".
+    let explicit = std::env::var("ESPEAK_DATA_PATH").ok();
+    let dev_fallback = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../neutts-rs/espeak-ng-data");
+
+    let resolved = explicit
+        .as_deref()
+        .into_iter()
+        .chain(std::iter::once(dev_fallback))
+        .find(|p| std::path::Path::new(p).exists());
+
+    if let Some(dir) = resolved {
+        let data_path = std::path::Path::new(dir);
+        #[cfg(feature = "tts-kitten")]
+        kittentts::phonemize::set_data_path(data_path);
+        // Use `::neutts::` (crate root) to avoid ambiguity with the `neutts` submodule.
+        #[cfg(feature = "tts-neutts")]
+        ::neutts::phonemize::set_data_path(data_path);
+    }
+    // else: leave DATA_PATH unset; espeak-ng will find its own data directory.
 }
 
 // ─── Shared audio output ──────────────────────────────────────────────────────
