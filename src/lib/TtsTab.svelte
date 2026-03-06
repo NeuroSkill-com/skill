@@ -30,7 +30,7 @@ the Free Software Foundation, version 3 only. -->
     csv: boolean; filter: boolean; bands: boolean; tts: boolean; history: boolean;
   }
 
-  type TtsProgress = { phase: "step" | "ready" | "unloaded"; step: number; total: number; label: string };
+  type TtsProgress = { phase: "step" | "ready" | "unloaded" | "error"; step: number; total: number; label: string };
 
   // ── Backbone model registry ────────────────────────────────────────────────
 
