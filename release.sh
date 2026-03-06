@@ -486,6 +486,28 @@ else
     rm -rf "$DMG_TMP"
 fi
 
+# ── Step 4b: Stamp version badge onto the DMG's Finder icon ──────────────────
+#
+# This composites the version string over the app icon and attaches the result
+# as the DMG file's custom Finder icon via NSWorkspace. The icon is visible
+# in Finder's icon/gallery views, making it trivial to compare builds visually
+# without reading filenames.
+#
+# Requirements: ImageMagick + iconutil (Xcode CLI) + Python/AppKit (macOS).
+# The stamp script is a no-op in dry-run mode.
+
+if [ "$DRY_RUN" = "1" ]; then
+    dry "bash $REPO_ROOT/scripts/stamp-dmg-icon.sh $DMG_OUT $VERSION $TAURI_DIR/icons/icon.png"
+else
+    log "Stamping version badge onto DMG icon…"
+    if bash "$REPO_ROOT/scripts/stamp-dmg-icon.sh" "$DMG_OUT" "$VERSION" "$TAURI_DIR/icons/icon.png"; then
+        ok "DMG icon stamped with v$VERSION"
+    else
+        # Non-fatal: a missing tool (e.g. ImageMagick) shouldn't abort the release.
+        printf "\033[1;33m⚠ DMG icon stamp skipped (non-fatal — check script output above)\033[0m\n"
+    fi
+fi
+
 # Sign the DMG
 run codesign \
     --force \

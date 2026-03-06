@@ -69,6 +69,13 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      # ── ImageMagick (needed by scripts/stamp-dmg-icon.sh) ────────────────────
+      # sips, iconutil, and Python/AppKit ship with the macOS runner image;
+      # only ImageMagick needs to be installed explicitly.
+      # brew's binary bottle makes this fast (~20 s).
+      - name: Install ImageMagick
+        run: brew install imagemagick
+
       # ── Pre-flight: verify every secret is set ───────────────────────────────
       # Catches missing / renamed secrets in seconds instead of after a 15-minute
       # build.  Each variable is checked for non-empty; none of the values are
@@ -255,6 +262,17 @@ jobs:
           echo "  TAR : $APP_TAR  ($(du -sh "$APP_TAR" | cut -f1))"
           echo "  SIG : $APP_SIG"
           echo "  DMG : $DMG  ($(du -sh "$DMG" | cut -f1))"
+
+      # ── Stamp version badge onto the DMG icon ────────────────────────────────
+      # Composites "v<version>" over the app icon and attaches the result as the
+      # DMG file's custom Finder icon via NSWorkspace so every build is instantly
+      # distinguishable in Finder's icon / gallery view without reading filenames.
+      - name: Stamp version badge onto DMG icon
+        run: |
+          bash scripts/stamp-dmg-icon.sh \
+            "${{ steps.artifacts.outputs.dmg }}" \
+            "${{ env.VERSION }}" \
+            "src-tauri/icons/icon.png"
 
       # ── Generate latest.json ──────────────────────────────────────────────────
       #

@@ -141,6 +141,10 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      # ── ImageMagick (needed by scripts/stamp-dmg-icon.sh) ────────────────────
+      - name: Install ImageMagick
+        run: brew install imagemagick
+
       # ── espeak-ng static library ─────────────────────────────────────────────
       - name: Cache espeak-ng static lib
         id: cache-espeak
@@ -291,6 +295,17 @@ jobs:
           echo "  DMG : $DMG  ($(du -sh "$DMG" | cut -f1))"
           echo "  TAR : $APP_TAR  ($(du -sh "$APP_TAR" | cut -f1))"
           echo "  SIG : $APP_SIG"
+
+      # ── Stamp version badge onto the DMG icon ────────────────────────────────
+      # Same stamp used in the official release — makes preview DMGs visually
+      # distinguishable in Finder (icon shows "v<version>") so you can compare
+      # builds at a glance without reading filenames.
+      - name: Stamp version badge onto DMG icon
+        run: |
+          bash scripts/stamp-dmg-icon.sh \
+            "${{ steps.artifacts.outputs.dmg }}" \
+            "${{ env.VERSION }}" \
+            "src-tauri/icons/icon.png"
 
       # ── Upload to GitHub Actions artifacts (14-day retention) ────────────────
       #
