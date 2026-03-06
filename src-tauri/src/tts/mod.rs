@@ -140,12 +140,12 @@ pub(crate) fn init_espeak_bundled_data_path(resource_dir: &std::path::Path) {
 /// Priority:
 ///   1. `ESPEAK_DATA_PATH` env var           — explicit runtime override
 ///   2. `ESPEAK_DATA_PATH_DEV`               — absolute path baked in by
-///                                             `build.rs` pointing at the
-///                                             `espeak-static/share/espeak-ng-data`
-///                                             directory on the *build* machine.
-///                                             Used for plain `cargo run` builds.
+///      `build.rs` pointing at the
+///      `espeak-static/share/espeak-ng-data`
+///      directory on the *build* machine.
+///      Used for plain `cargo run` builds.
 ///   3. espeak-ng compiled-in path           — NULL → espeak-ng uses its own
-///                                             system path as a last resort.
+///      system path as a last resort.
 ///
 /// We only call `set_data_path()` when the path actually exists on disk so we
 /// never hand a non-existent path to espeak, which would permanently poison the

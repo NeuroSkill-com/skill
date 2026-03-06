@@ -56,7 +56,6 @@ pub struct ActiveWindowInfo {
 
 /// Query the OS for the currently focused window.
 /// Returns `None` when the query fails or the tool is absent.
-
 #[cfg(target_os = "macos")]
 pub fn poll_active_window() -> Option<ActiveWindowInfo> {
     let script = r#"
