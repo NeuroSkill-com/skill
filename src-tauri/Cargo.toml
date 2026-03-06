@@ -167,8 +167,6 @@ btleplug     = { git = "https://github.com/eugenehp/btleplug.git", branch = "imr
 # Use local kittentts-rs so that ort is linked statically (no copy-dylibs).
 # The Pyke CDN tarball ships libonnxruntime.a; without copy-dylibs the provider
 # dylibs are not copied next to the binary, which is correct for a Tauri .app bundle.
-kittentts    = { path = "../../../kittentts-rs" }
-neutts       = { path = "../../../neutts-rs" }
 
 # ── Build profiles ────────────────────────────────────────────────────────────
 #
