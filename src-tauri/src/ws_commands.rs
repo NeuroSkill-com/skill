@@ -1452,10 +1452,15 @@ pub fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, String>
 /// ```json
 /// { "command": "say", "text": "Eyes closed. Relax." }
 /// { "command": "say", "text": "Eyes closed. Relax.", "voice": "Jasper" }
+/// { "command": "say", "text": "Eyes closed. Relax.", "voice": "dave" }
 /// ```
 ///
-/// `voice` is optional — omitting it (or passing `null`) uses whichever voice
-/// was last set via `tts_set_voice` (default: `"Jasper"`).
+/// `voice` is **engine-specific** and optional:
+/// - **KittenTTS**: voice name (e.g. `"Jasper"`).  Falls back to the globally
+///   active voice (set via `tts_set_voice`; default `"Jasper"`).
+/// - **NeuTTS**: preset name (`"jo"`, `"dave"`, `"greta"`, `"juliette"`,
+///   `"mateo"`).  Overrides the configured reference voice for this single
+///   utterance only.  Ignored if not a known preset name.
 pub async fn say(_app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let text = msg["text"]
         .as_str()

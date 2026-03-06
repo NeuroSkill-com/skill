@@ -4,6 +4,7 @@
   "description": "",
   "type": "module",
   "scripts": {
+    "copy:neutts-samples": "bash scripts/copy-neutts-samples.sh",
     "dev": "vite dev",
     "build": "svelte-kit sync && vite build",
     "test": "vitest run",

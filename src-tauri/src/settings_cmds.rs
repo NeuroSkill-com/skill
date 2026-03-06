@@ -9,6 +9,7 @@
 use std::sync::Mutex;
 use crate::MutexExt;
 use tauri::{AppHandle, Emitter, Manager};
+use rfd;
 
 use crate::{
     AppState, MuseStatus, DiscoveredDevice, EegPacket, PpgPacket, ImuPacket,
@@ -18,7 +19,7 @@ use crate::{
 };
 use crate::tray::refresh_tray;
 use crate::eeg_filter::{FilterConfig, PowerlineFreq};
-use crate::settings::OpenBciConfig;
+use crate::settings::{OpenBciConfig, NeuttsConfig};
 use crate::eeg_bands::BandSnapshot;
 use crate::eeg_model_config::{EegModelConfig, EegModelStatus, save_model_config};
 use crate::eeg_embeddings::download_hf_weights;
@@ -507,4 +508,62 @@ pub fn list_serial_ports() -> Vec<String> {
         .into_iter()
         .map(|p| p.port_name)
         .collect()
+}
+
+// ── NeuTTS configuration ───────────────────────────────────────────────────────
+
+/// Return the current NeuTTS configuration.
+#[tauri::command]
+pub fn get_neutts_config(state: tauri::State<'_, Mutex<AppState>>) -> NeuttsConfig {
+    state.lock_or_recover().neutts_config.clone()
+}
+
+/// Return whether TTS engine pre-warming at startup is enabled.
+#[tauri::command]
+pub fn get_tts_preload(state: tauri::State<'_, Mutex<AppState>>) -> bool {
+    state.lock_or_recover().tts_preload
+}
+
+/// Enable or disable TTS engine pre-warming at startup, and persist the change.
+#[tauri::command]
+pub fn set_tts_preload(
+    preload: bool,
+    app:     AppHandle,
+    state:   tauri::State<'_, Mutex<AppState>>,
+) {
+    state.lock_or_recover().tts_preload = preload;
+    crate::save_settings(&app);
+}
+
+/// Persist new NeuTTS configuration.
+///
+/// If NeuTTS is enabled the backend is marked dirty so the next
+/// `tts_init` call re-initialises with the updated backbone / ref-WAV.
+#[tauri::command]
+pub fn set_neutts_config(
+    config: NeuttsConfig,
+    app:    AppHandle,
+    state:  tauri::State<'_, Mutex<AppState>>,
+) {
+    crate::tts::neutts_apply_config(&config);
+    state.lock_or_recover().neutts_config = config;
+    crate::save_settings(&app);
+}
+
+/// Open a native file-picker dialog and return the selected WAV file path.
+///
+/// Returns `None` if the user cancels.  The dialog is opened on a blocking
+/// thread so it does not hold the Tauri async executor.
+#[tauri::command]
+pub async fn pick_ref_wav_file() -> Option<String> {
+    tokio::task::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .add_filter("WAV audio", &["wav"])
+            .set_title("Select reference WAV for voice cloning")
+            .pick_file()
+            .map(|p| p.to_string_lossy().into_owned())
+    })
+    .await
+    .ok()
+    .flatten()
 }

@@ -6,12 +6,26 @@ authors = ["you"]
 edition = "2021"
 license = "GPL-3.0-only"
 
+# ── TTS backend feature flags ─────────────────────────────────────────────────
+#
+#  tts-kitten  — enable KittenTTS (ONNX, English, ~30 MB, espeak-ng required)
+#  tts-neutts  — enable NeuTTS   (GGUF backbone + NeuCodec, voice-cloning,
+#                                  multi-language, espeak-ng + cmake required)
+#
+#  Both are on by default.  Either can be disabled at build time:
+#    cargo build --no-default-features --features tts-neutts
+#
+[features]
+default    = ["tts-kitten", "tts-neutts"]
+tts-kitten = ["dep:kittentts", "dep:rodio"]
+tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound"]
+
 [lib]
 name = "skill_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
 dirs = "6"
@@ -46,10 +60,23 @@ csv = "1"
 # Model weights (~30 MB) are downloaded from HuggingFace Hub on first use.
 # Uses the local checkout to pin deflate-only zip (avoids lzma-sys conflict
 # with tracel-llvm-bundler which also links the native lzma library).
-kittentts = { version = "0.2.1", features = ["espeak"] }
+kittentts = { version = "0.2.1", features = ["espeak"], optional = true }
 
-# Audio playback for TTS samples (pure-Rust, uses platform audio APIs)
-rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"] }
+# NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder (local path).
+# backbone: GGUF LLM via llama-cpp-2 (requires cmake + C++ at build time).
+# espeak:   raw text → IPA → model (requires espeak-ng at runtime).
+# wgpu:     GPU-accelerated NeuCodec decoder via Burn/wgpu backend.
+# fast:     polynomial-approximation RoPE caching (6-12× fewer cycles).
+neutts = { version = "0.0.4", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
+
+# Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
+rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
+
+# SHA-256 for NeuTTS WAV cache keys — already compiled transitively via neutts.
+sha2 = { version = "0.10", optional = true }
+
+# WAV read-back for NeuTTS cache playback — already compiled transitively via neutts.
+hound = { version = "3", optional = true }
 
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"

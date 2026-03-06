@@ -13,3 +13,7 @@ vite.config.ts.timestamp-*
 src-tauri/keys/updater.key
 src-tauri/keys/updater.pub
 src-tauri/keys/.env.keys
+
+# do not include weights
+**/*.gguf
+**/*.safetensors

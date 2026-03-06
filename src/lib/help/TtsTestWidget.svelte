@@ -5,44 +5,51 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!--
-  TTS test widget — lets users type any English text and hear it spoken
-  via the kittentts engine directly from the help window.
+  TTS test widget — lets users type text and hear it via whichever engine is
+  currently active (KittenTTS or NeuTTS).  Voice chips adapt accordingly.
 -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { invoke }             from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-  // ── Progress event shape (matches tts.rs TtsProgressEvent) ────────────────
+  // ── Types ──────────────────────────────────────────────────────────────────
+
   type TtsProgress = {
-    phase: "step" | "ready";
-    step:  number;  // 1-based; 0 when ready
-    total: number;  // 0 when ready
-    label: string;  // "" when ready
+    phase: "step" | "ready" | "unloaded";
+    step:  number;
+    total: number;
+    label: string;
   };
 
+  interface NeuttsVoice { id: string; lang: string; flag: string; gender: string; }
+  interface NeuttsConfig { enabled: boolean; voice_preset: string; }
+
   // ── State ──────────────────────────────────────────────────────────────────
-  let inputText     = $state("Calibration starting. Eyes open.");
-  let speaking      = $state(false);
-  let ready         = $state(false);      // true once the engine is initialised
-  let initCalled    = $state(false);      // true once we've kicked off tts_init
-  let errorMsg      = $state("");
-  let voices        = $state<string[]>(["Jasper"]);   // updated after engine ready
-  let selectedVoice = $state("Jasper");
 
-  // Download-step progress (only meaningful while !ready && initCalled)
-  let dlStep  = $state(0);   // current step (1-based, 0 = not started)
-  let dlTotal = $state(4);   // always 4
-  let dlLabel = $state("");  // file name or "Loading ONNX session"
+  let inputText = $state("Calibration starting. Eyes open.");
+  let speaking  = $state(false);
+  let ready     = $state(false);
+  let errorMsg  = $state("");
 
-  // pct: 0 → 100 shown on the progress bar
+  let dlStep  = $state(0);
+  let dlTotal = $state(3);
+  let dlLabel = $state("");
+
   const dlPct = $derived(
-    ready ? 100 :
-    dlStep === 0 ? 0 :
-    Math.round((dlStep - 1) / dlTotal * 100)
+    ready   ? 100 :
+    dlStep  ? Math.max(4, Math.round((dlStep / Math.max(dlTotal, 1)) * 100)) :
+    0
   );
 
-  // Quick-pick phrases that mirror the real calibration announcements
+  // ── Engine & voices ────────────────────────────────────────────────────────
+
+  let isNeutts        = $state(false);
+  let neuttsVoices    = $state<NeuttsVoice[]>([]);   // from tts_list_neutts_voices
+  let kittenVoices    = $state<string[]>(["Jasper"]);
+  let selectedVoice   = $state("");                  // "" = use saved default
+
+  // Quick-pick phrases mirroring the real calibration announcements
   const SAMPLES: string[] = [
     "Calibration starting. 2 actions, 3 loops.",
     "Eyes Open",
@@ -55,18 +62,53 @@ the Free Software Foundation, version 3 only. -->
   ];
 
   // ── Event listener ─────────────────────────────────────────────────────────
-  let unlistenTts: UnlistenFn | null = null;
+
+  let unlistenTts:       UnlistenFn | null = null;
+  let unlistenEngine:    UnlistenFn | null = null;
+
+  /** Re-detect the active engine and refresh voice lists + ready state. */
+  async function refreshEngine() {
+    ready     = false;
+    dlStep    = 0;
+    dlLabel   = "";
+    try {
+      const cfg = await invoke<NeuttsConfig>("get_neutts_config");
+      isNeutts = cfg.enabled;
+      if (isNeutts) {
+        selectedVoice = cfg.voice_preset || "";
+        neuttsVoices  = await invoke<NeuttsVoice[]>("tts_list_neutts_voices");
+      } else {
+        const v = await invoke<string[]>("tts_list_voices");
+        if (v.length) kittenVoices = v;
+        const active = await invoke<string>("tts_get_voice");
+        selectedVoice = active || (kittenVoices[0] ?? "Jasper");
+      }
+    } catch {}
+  }
 
   onMount(async () => {
+    await refreshEngine();
+
+    unlistenEngine = await listen("tts-engine-changed", async () => {
+      await refreshEngine();
+    });
+
     unlistenTts = await listen<TtsProgress>("tts-progress", (ev) => {
       const p = ev.payload;
       if (p.phase === "ready") {
         ready  = true;
-        dlStep = dlTotal;   // fill bar to 100 %
-        // Fetch actual voice list now that the engine is loaded
-        invoke<string[]>("tts_list_voices")
-          .then(v => { if (v.length > 0) voices = v; })
-          .catch(() => {});
+        dlStep = dlTotal;
+        dlLabel = "";
+        // Refresh KittenTTS voice list now that model is loaded
+        if (!isNeutts) {
+          invoke<string[]>("tts_list_voices")
+            .then(v => { if (v.length) kittenVoices = v; })
+            .catch(() => {});
+        }
+      } else if (p.phase === "unloaded") {
+        ready   = false;
+        dlStep  = 0;
+        dlLabel = "";
       } else {
         dlStep  = p.step;
         dlTotal = p.total;
@@ -75,21 +117,20 @@ the Free Software Foundation, version 3 only. -->
     });
   });
 
-  onDestroy(() => { unlistenTts?.(); });
+  onDestroy(() => { unlistenTts?.(); unlistenEngine?.(); });
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  async function ensureInit(): Promise<boolean> {
-    if (ready) return true;
-    if (initCalled) return false;   // already in flight
-    initCalled = true;
-    try {
-      await invoke("tts_init");     // events arrive via the listener above
-      return ready;                  // ready may have been set by the listener
-    } catch (e) {
-      errorMsg = String(e);
-      return false;
+  // ── Voice helpers ──────────────────────────────────────────────────────────
+
+  function pickVoice(v: string) {
+    selectedVoice = v;
+    if (!isNeutts) {
+      // Persist active voice for KittenTTS globally
+      invoke("tts_set_voice", { voice: v }).catch(() => {});
     }
+    // For NeuTTS the voice is sent per-utterance in tts_speak; no global setter.
   }
+
+  // ── Speak ──────────────────────────────────────────────────────────────────
 
   async function speak() {
     const text = inputText.trim();
@@ -97,19 +138,16 @@ the Free Software Foundation, version 3 only. -->
     speaking = true;
     errorMsg = "";
     try {
-      const ok = await ensureInit();
-      if (!ok) return;
-      await invoke("tts_speak", { text, voice: selectedVoice });
+      // Kick off init if idle
+      if (!ready) invoke("tts_init").catch(() => {});
+      // Pass current voice selection; engine interprets it appropriately
+      const voiceArg = selectedVoice || undefined;
+      await invoke("tts_speak", { text, voice: voiceArg });
     } catch (e) {
       errorMsg = String(e);
     } finally {
       speaking = false;
     }
-  }
-
-  function pickVoice(v: string) {
-    selectedVoice = v;
-    invoke("tts_set_voice", { voice: v }).catch(() => {});
   }
 
   function onKeydown(e: KeyboardEvent) {
@@ -124,7 +162,6 @@ the Free Software Foundation, version 3 only. -->
 
   <!-- ── Header ───────────────────────────────────────────────────────────── -->
   <div class="flex items-center gap-2">
-    <!-- Speaker icon -->
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
          stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
          class="w-4 h-4 shrink-0 text-indigo-500">
@@ -136,37 +173,46 @@ the Free Software Foundation, version 3 only. -->
       TTS Test
     </span>
 
-    <!-- Status badge (right-aligned) -->
+    <!-- Engine badge -->
+    <span class="rounded-full border px-2 py-0.5 text-[0.52rem] font-semibold uppercase tracking-wider
+                 {isNeutts
+                   ? 'border-violet-400/40 bg-violet-100/40 dark:bg-violet-900/20 text-violet-600 dark:text-violet-300'
+                   : 'border-indigo-400/40 bg-indigo-100/40 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300'}">
+      {isNeutts ? "NeuTTS" : "KittenTTS"}
+    </span>
+
+    <!-- Status badge -->
     {#if ready}
       <span class="ml-auto flex items-center gap-1 text-[0.58rem] font-semibold
                    text-emerald-600 dark:text-emerald-400">
         <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-        Engine ready
+        Ready
       </span>
-    {:else if initCalled}
+    {:else if dlStep > 0}
       <span class="ml-auto text-[0.58rem] font-semibold uppercase tracking-wider
                    text-amber-600 dark:text-amber-400 animate-pulse">
-        Preparing…
+        Loading…
       </span>
     {:else}
       <span class="ml-auto text-[0.56rem] text-muted-foreground/50">
-        English only · espeak-ng required
+        Speak to auto-load
       </span>
     {/if}
   </div>
 
-  <!-- ── Download progress bar (visible only while initialising) ───────────── -->
-  {#if initCalled && !ready}
+  <!-- ── Progress bar ─────────────────────────────────────────────────────── -->
+  {#if dlStep > 0 && !ready}
     <div class="flex flex-col gap-1">
       <div class="flex items-center justify-between">
         <span class="text-[0.58rem] text-muted-foreground truncate max-w-[80%]" title={dlLabel}>
           {dlLabel || "Connecting…"}
         </span>
-        <span class="text-[0.56rem] tabular-nums text-muted-foreground/60 shrink-0 ml-2">
-          {dlStep}/{dlTotal}
-        </span>
+        {#if dlTotal > 0}
+          <span class="text-[0.56rem] tabular-nums text-muted-foreground/60 shrink-0 ml-2">
+            {dlStep}/{dlTotal}
+          </span>
+        {/if}
       </div>
-      <!-- Bar track -->
       <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
         <div class="h-full rounded-full bg-indigo-500 transition-all duration-700 ease-out"
              style="width: {dlPct}%"></div>
@@ -174,14 +220,37 @@ the Free Software Foundation, version 3 only. -->
     </div>
   {/if}
 
-  <!-- ── Voice picker (shown once engine is ready and >1 voice available) ── -->
-  {#if ready && voices.length > 1}
+  <!-- ── Voice chips ───────────────────────────────────────────────────────── -->
+  {#if isNeutts && neuttsVoices.length > 0}
+    <!-- NeuTTS: preset voice cards -->
     <div class="flex flex-wrap items-center gap-1.5">
       <span class="text-[0.54rem] font-semibold uppercase tracking-wider
                    text-muted-foreground/60 self-center shrink-0 mr-0.5">
         Voice:
       </span>
-      {#each voices as v}
+      {#each neuttsVoices as pv}
+        <button
+          onclick={() => pickVoice(pv.id)}
+          class="flex items-center gap-1 rounded-full border px-2.5 py-0.5
+                 text-[0.6rem] font-semibold transition-colors
+                 {selectedVoice === pv.id
+                   ? 'border-violet-500 bg-violet-500 text-white'
+                   : 'border-border dark:border-white/[0.07] bg-white dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:border-violet-500/40'}">
+          <span class="text-[0.7rem] leading-none">{pv.flag}</span>
+          {pv.id}
+          <span class="text-[0.52rem] opacity-60">{pv.gender}</span>
+        </button>
+      {/each}
+    </div>
+
+  {:else if !isNeutts && kittenVoices.length > 1}
+    <!-- KittenTTS: voice name chips -->
+    <div class="flex flex-wrap items-center gap-1.5">
+      <span class="text-[0.54rem] font-semibold uppercase tracking-wider
+                   text-muted-foreground/60 self-center shrink-0 mr-0.5">
+        Voice:
+      </span>
+      {#each kittenVoices as v}
         <button
           onclick={() => pickVoice(v)}
           class="rounded-full border px-2.5 py-0.5 text-[0.6rem] font-semibold transition-colors
@@ -237,7 +306,7 @@ the Free Software Foundation, version 3 only. -->
     </button>
   </div>
 
-  <!-- ── Quick-sample chips ─────────────────────────────────────────────── -->
+  <!-- ── Quick-sample chips ────────────────────────────────────────────────── -->
   <div class="flex flex-wrap gap-1.5">
     <span class="text-[0.54rem] font-semibold uppercase tracking-wider
                  text-muted-foreground/60 self-center shrink-0 mr-0.5">
@@ -258,16 +327,18 @@ the Free Software Foundation, version 3 only. -->
     {/each}
   </div>
 
-  <!-- ── Error / idle hint ──────────────────────────────────────────────── -->
+  <!-- ── Error / hint ──────────────────────────────────────────────────────── -->
   {#if errorMsg}
-    <p class="text-[0.62rem] text-red-500 dark:text-red-400 leading-relaxed">
-      ⚠ {errorMsg}
-    </p>
-  {:else if !initCalled}
+    <p class="text-[0.62rem] text-red-500 dark:text-red-400 leading-relaxed">⚠ {errorMsg}</p>
+  {:else if dlStep === 0 && !ready}
     <p class="text-[0.6rem] text-muted-foreground/50 leading-relaxed">
-      Requires <code class="font-mono bg-muted px-1 rounded">espeak-ng</code> on
-      PATH. First run downloads the KittenTTS model (~30 MB) and caches it locally.
-      Press Enter or click Speak.
+      {#if isNeutts}
+        First run downloads the NeuTTS backbone model and caches it locally.
+        Requires <code class="font-mono bg-muted px-1 rounded">espeak-ng</code> on PATH.
+      {:else}
+        First run downloads the KittenTTS model (~30 MB) and caches it locally.
+        Requires <code class="font-mono bg-muted px-1 rounded">espeak-ng</code> on PATH.
+      {/if}
     </p>
   {/if}
 

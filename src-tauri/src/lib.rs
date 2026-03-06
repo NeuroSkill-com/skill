@@ -68,7 +68,8 @@ mod autostart;
 
 mod tts;
 pub mod device;
-use tts::{tts_init, tts_speak, tts_list_voices, tts_set_voice};
+use tts::{tts_init, tts_speak, tts_unload, tts_list_voices, tts_list_neutts_voices, tts_get_voice, tts_set_voice};
+pub(crate) use tts::{neutts_apply_config, init_tts_dirs, init_neutts_samples_dir, tts_shutdown};
 
 mod settings;
 pub(crate) use settings::{
@@ -80,6 +81,7 @@ pub(crate) use settings::{
     default_api_shortcut, default_theme_shortcut, default_focus_timer_shortcut,
     default_theme, default_daily_goal_min, default_embedding_model,
     default_ws_host, default_ws_port, default_update_check_interval, UserSettings,
+    NeuttsConfig,
 };
 
 mod tray;
@@ -143,6 +145,8 @@ use settings_cmds::{
     get_autostart_enabled, set_autostart_enabled,
     get_update_check_interval, set_update_check_interval,
     get_openbci_config, set_openbci_config, list_serial_ports,
+    get_neutts_config, set_neutts_config, pick_ref_wav_file,
+    get_tts_preload, set_tts_preload,
 };
 
 use std::{
@@ -471,6 +475,12 @@ pub struct AppState {
     pub update_check_interval_secs: u64,
     /// OpenBCI board configuration (board type, serial port, channel labels).
     pub openbci_config: crate::settings::OpenBciConfig,
+
+    /// NeuTTS voice-cloning TTS configuration.
+    pub neutts_config: NeuttsConfig,
+
+    /// Whether to pre-warm the active TTS engine at startup.
+    pub tts_preload: bool,
 }
 
 impl Default for AppState {
@@ -491,6 +501,10 @@ impl Default for AppState {
             _ => default_dir,
         };
         let _ = std::fs::create_dir_all(&skill_dir);
+
+        // Register skill_dir with the TTS module before any worker thread starts.
+        init_tts_dirs(&skill_dir);
+        // init_neutts_samples_dir is called later in setup() once app_handle is available.
 
         let model_config    = load_model_config(&skill_dir);
         let model_status    = std::sync::Arc::new(
@@ -555,6 +569,8 @@ impl Default for AppState {
             ws_port: default_ws_port(),
             update_check_interval_secs: default_update_check_interval(),
             openbci_config: crate::settings::OpenBciConfig::default(),
+            neutts_config: NeuttsConfig::default(),
+            tts_preload:   true,
             skill_dir,
             model_config,
             model_status,
@@ -606,6 +622,8 @@ pub(crate) fn save_settings(app: &AppHandle) {
         ws_port:                s.ws_port,
         update_check_interval_secs: s.update_check_interval_secs,
         openbci:                s.openbci_config.clone(),
+        neutts:                 s.neutts_config.clone(),
+        tts_preload:            s.tts_preload,
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
@@ -5148,6 +5166,16 @@ pub fn run() {
         .manage(std::sync::Arc::new(EmbedderState(std::sync::Mutex::new(None))))
         .manage(std::sync::Arc::new(label_index::LabelIndexState::new()))
         .setup(|app| {
+            // Resolve bundled NeuTTS preset sample files from the Tauri resource dir.
+            // Must happen before any tts_init call, but after the app is set up.
+            {
+                use tauri::Manager;
+                let samples_dir = app.path().resource_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("resources"))
+                    .join("neutts-samples");
+                init_neutts_samples_dir(samples_dir);
+            }
+
             // hides dock icon
             // app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             
@@ -5229,6 +5257,10 @@ pub fn run() {
                 s.update_check_interval_secs = data.update_check_interval_secs;
                 // Restore OpenBCI config.
                 s.openbci_config = data.openbci;
+                // Restore NeuTTS config and sync the TTS module's statics.
+                s.neutts_config = data.neutts.clone();
+                s.tts_preload   = data.tts_preload;
+                neutts_apply_config(&data.neutts);
                 // Seed discovered list from paired
 
                 for pd in &data.paired {
@@ -5239,6 +5271,14 @@ pub fn run() {
                         is_preferred: data.preferred_id.as_deref() == Some(&pd.id),
                     });
                 }
+            }
+
+            // Pre-warm the active TTS engine in the background if enabled.
+            if data.tts_preload {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    crate::tts::tts_init(app_handle).await.ok();
+                });
             }
 
             // Initialise the fastembed text embedder on a background thread
@@ -5592,6 +5632,9 @@ pub fn run() {
             get_autostart_enabled, set_autostart_enabled,
             get_update_check_interval, set_update_check_interval,
             get_openbci_config, set_openbci_config, list_serial_ports,
+            get_neutts_config, set_neutts_config, pick_ref_wav_file,
+            get_tts_preload, set_tts_preload,
+            tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,
             open_onboarding_window, complete_onboarding, get_onboarding_complete,
@@ -5613,14 +5656,26 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app, event| {
-            // Closing the last window fires ExitRequested with code == None.
-            // Suppress it so the app keeps running in the tray.
-            // An explicit quit (tray → Quit → app.exit(0)) sets code = Some(0)
-            // and is allowed through unchanged.
-            if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
-                if code.is_none() {
-                    api.prevent_exit();
+            match event {
+                // Closing the last window fires ExitRequested with code == None.
+                // Suppress it so the app keeps running in the tray.
+                // An explicit quit (tray → Quit → app.exit(0)) sets code = Some(0)
+                // and is allowed through unchanged.
+                tauri::RunEvent::ExitRequested { api, code, .. } => {
+                    if code.is_none() {
+                        api.prevent_exit();
+                    }
                 }
+
+                // Explicitly release TTS backends (especially the NeuTTS llama.cpp/Metal
+                // context) before the process calls exit().  Without this, `exit()` fires
+                // C++ static destructors while Metal resource sets are still live, which
+                // hits the `ggml_metal_device_free` assertion and crashes on shutdown.
+                tauri::RunEvent::Exit => {
+                    tts_shutdown();
+                }
+
+                _ => {}
             }
         });
 }

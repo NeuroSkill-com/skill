@@ -300,6 +300,60 @@ pub(crate) fn expand_tilde(p: &str) -> String {
     p.to_string()
 }
 
+// ── NeuTTS configuration ──────────────────────────────────────────────────────
+
+/// NeuTTS voice-cloning TTS configuration, persisted in `settings.json`.
+///
+/// When `enabled` is `true`, all speech synthesis (calibration prompts,
+/// WebSocket `say` commands) uses the NeuTTS GGUF backbone + NeuCodec decoder
+/// pipeline located at `/agent/neutts-rs` instead of KittenTTS.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NeuttsConfig {
+    /// Use NeuTTS instead of KittenTTS for all speech synthesis.
+    pub enabled: bool,
+
+    /// HuggingFace backbone repo, e.g. `"neuphonic/neutts-nano-q4-gguf"`.
+    /// Must be one of the repos listed in `neutts_rs::download::BACKBONE_MODELS`.
+    #[serde(default = "default_neutts_backbone_repo")]
+    pub backbone_repo: String,
+
+    /// Specific GGUF filename within the repo.
+    /// Empty string means "auto-select the first `.gguf` file found".
+    pub gguf_file: String,
+
+    /// Absolute path to a reference WAV file used for voice cloning.
+    /// Empty means no reference has been selected — NeuTTS will use the
+    /// backbone's built-in voice.
+    pub ref_wav_path: String,
+
+    /// Verbatim transcript of the speech in `ref_wav_path`.
+    /// Used by espeak-ng to phonemise the reference segment.
+    pub ref_text: String,
+
+    /// Name of a bundled preset voice from `neutts-rs/samples/`.
+    /// One of: `"jo"`, `"dave"`, `"greta"`, `"juliette"`, `"mateo"`.
+    /// Empty string means use the custom `ref_wav_path` instead.
+    pub voice_preset: String,
+}
+
+pub(crate) fn default_neutts_backbone_repo() -> String {
+    "neuphonic/neutts-nano-q4-gguf".into()
+}
+
+impl Default for NeuttsConfig {
+    fn default() -> Self {
+        Self {
+            enabled:       false,
+            backbone_repo: default_neutts_backbone_repo(),
+            gguf_file:     String::new(),
+            voice_preset:  "jo".into(),
+            ref_wav_path:  String::new(),
+            ref_text:      String::new(),
+        }
+    }
+}
+
 // ── Default values (pub(crate) so AppState::default() can use them) ───────────
 
 pub(crate) fn default_ws_host() -> String { crate::constants::WS_HOST.into() }
@@ -385,7 +439,18 @@ pub(crate) struct UserSettings {
     /// OpenBCI board configuration (board variant, serial port, channel labels).
     #[serde(default)]
     pub openbci: OpenBciConfig,
+
+    /// NeuTTS voice-cloning TTS configuration.
+    #[serde(default)]
+    pub neutts: NeuttsConfig,
+
+    /// Pre-warm the active TTS engine at startup even when no TTS UI is open.
+    /// Default: `true`.  Disable to defer model loading until first use.
+    #[serde(default = "default_tts_preload")]
+    pub tts_preload: bool,
 }
+
+fn default_tts_preload() -> bool { true }
 
 impl Default for UserSettings {
     fn default() -> Self {
@@ -417,6 +482,8 @@ impl Default for UserSettings {
             ws_port:                default_ws_port(),
             update_check_interval_secs: default_update_check_interval(),
             openbci:                OpenBciConfig::default(),
+            neutts:                 NeuttsConfig::default(),
+            tts_preload:            default_tts_preload(),
         }
     }
 }
