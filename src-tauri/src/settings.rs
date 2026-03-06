@@ -459,11 +459,70 @@ pub(crate) struct UserSettings {
     /// only.  Default: `true`.
     #[serde(default = "default_track_input_activity")]
     pub track_input_activity: bool,
+
+    /// Automatic Do Not Disturb when focus is sustained.  macOS only.
+    #[serde(default)]
+    pub do_not_disturb: DoNotDisturbConfig,
 }
 
 fn default_tts_preload() -> bool { true }
 pub(crate) fn default_track_active_window() -> bool { true }
 pub(crate) fn default_track_input_activity() -> bool { true }
+
+// ── Do Not Disturb automation ─────────────────────────────────────────────────
+
+pub(crate) fn default_dnd_threshold() -> f32 { 60.0 }
+pub(crate) fn default_dnd_duration_secs() -> u32 { 60 }
+pub(crate) fn default_dnd_mode_identifier() -> String {
+    "com.apple.donotdisturb.mode.default".to_owned()
+}
+
+/// Configuration for the "auto Do Not Disturb when focus is sustained" feature.
+///
+/// When `enabled`, the app monitors the real-time cognitive-load / focus score
+/// and activates macOS Do Not Disturb after the score has stayed above
+/// `focus_threshold` (0–100) for at least `duration_secs` seconds.
+/// DND is deactivated as soon as the score drops below the threshold.
+///
+/// **macOS 12+ only.**  On earlier versions the legacy `defaults` approach is
+/// attempted; on non-macOS platforms the feature is a no-op.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DoNotDisturbConfig {
+    /// Whether the feature is enabled.  Default: `false`.
+    pub enabled: bool,
+
+    /// Focus score (0–100) that must be sustained to activate DND.
+    /// Default: 60.
+    #[serde(default = "default_dnd_threshold")]
+    pub focus_threshold: f32,
+
+    /// Seconds focus must remain above the threshold before DND activates.
+    /// Default: 60 (one minute).
+    #[serde(default = "default_dnd_duration_secs")]
+    pub duration_secs: u32,
+
+    /// The macOS Focus mode to activate, stored as a `modeIdentifier` string.
+    ///
+    /// Defaults to `"com.apple.donotdisturb.mode.default"` (Do Not Disturb).
+    /// Any mode returned by `list_focus_modes` can be used here, including
+    /// user-created custom modes (e.g. `"com.apple.focus.work"`).
+    ///
+    /// The value is ignored on non-macOS platforms.
+    #[serde(default = "default_dnd_mode_identifier")]
+    pub focus_mode_identifier: String,
+}
+
+impl Default for DoNotDisturbConfig {
+    fn default() -> Self {
+        Self {
+            enabled:              false,
+            focus_threshold:      default_dnd_threshold(),
+            duration_secs:        default_dnd_duration_secs(),
+            focus_mode_identifier: default_dnd_mode_identifier(),
+        }
+    }
+}
 
 impl Default for UserSettings {
     fn default() -> Self {
@@ -499,6 +558,7 @@ impl Default for UserSettings {
             tts_preload:            default_tts_preload(),
             track_active_window:    default_track_active_window(),
             track_input_activity:   default_track_input_activity(),
+            do_not_disturb:         DoNotDisturbConfig::default(),
         }
     }
 }

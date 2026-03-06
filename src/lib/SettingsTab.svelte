@@ -63,6 +63,18 @@ the Free Software Foundation, version 3 only. -->
   let filterSaving = $state(false);
   let overlapSecs  = $state(EMBEDDING_OVERLAP_SECS);
   let overlapSaving = $state(false);
+
+  // ── GPU / memory stats ────────────────────────────────────────────────────
+  interface GpuStats {
+    render:            number;
+    tiler:             number;
+    overall:           number;
+    isUnifiedMemory:   boolean;
+    totalMemoryBytes:  number | null;
+    freeMemoryBytes:   number | null;
+  }
+  let gpuStats = $state<GpuStats | null>(null);
+
   let logConfig      = $state<LogConfig>({ embedder: true, bluetooth: true, websocket: false, csv: false, filter: false, bands: false, history: false });
   let dataDirCurrent = $state("");
   let dataDirDefault = $state("");
@@ -320,6 +332,18 @@ the Free Software Foundation, version 3 only. -->
   };
 
   // ── Devices ────────────────────────────────────────────────────────────────
+  // IDs of unpaired devices we have already notified the user about (so the
+  // banner only appears once per session, not on every devices-updated tick).
+  let notifiedUnpairedIds = $state<Set<string>>(new Set());
+
+  /** Unpaired devices that are currently visible in the scanner and haven't
+   *  been notified yet. Drives the "new device found" banner. */
+  const newUnpairedDevices = $derived(
+    devices.filter(d => !d.is_paired && d.last_rssi !== 0)
+  );
+
+  const hasNewUnpaired = $derived(newUnpairedDevices.length > 0);
+
   async function setPreferred(id: string) {
     const cur = devices.find(d => d.id === id);
     devices = await invoke<DiscoveredDevice[]>("set_preferred_device", { id: cur?.is_preferred ? "" : id });
@@ -327,6 +351,9 @@ the Free Software Foundation, version 3 only. -->
   async function forget(id: string) {
     await invoke("forget_device", { id });
     devices = devices.map(d => d.id === id ? { ...d, is_paired: false } : d);
+  }
+  async function pairDevice(id: string) {
+    devices = await invoke<DiscoveredDevice[]>("pair_device", { id });
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -337,6 +364,7 @@ the Free Software Foundation, version 3 only. -->
     devices     = await invoke<DiscoveredDevice[]>("get_devices");
     filter      = await invoke<FilterConfig>("get_filter_config");
     overlapSecs = await invoke<number>("get_embedding_overlap");
+    gpuStats    = await invoke<GpuStats | null>("get_gpu_stats").catch(() => null);
     logConfig   = await invoke<LogConfig>("get_log_config");
 
     appVersion           = await invoke<string>("get_app_version");
@@ -391,6 +419,24 @@ the Free Software Foundation, version 3 only. -->
     {t("settings.museDevices")}
   </span>
 
+  <!-- New unpaired device banner — shown when at least one unrecognised device
+       is visible in the scanner. Prompts the user to pair it explicitly. -->
+  {#if hasNewUnpaired}
+    <div class="flex items-start gap-2.5 rounded-xl
+                border border-amber-400/40 bg-amber-50/80 dark:bg-amber-950/25
+                px-3 py-2.5">
+      <span class="text-[1rem] shrink-0 mt-0.5">📡</span>
+      <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+        <span class="text-[0.72rem] font-semibold text-amber-800 dark:text-amber-300 leading-tight">
+          {t("settings.newDeviceNotice")}
+        </span>
+        <span class="text-[0.64rem] text-amber-700/70 dark:text-amber-400/70 leading-relaxed">
+          {t("settings.newDeviceNoticeHint")}
+        </span>
+      </div>
+    </div>
+  {/if}
+
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     {#if devices.length === 0}
       <CardContent class="flex flex-col items-center gap-2 py-8 text-center">
@@ -406,16 +452,19 @@ the Free Software Foundation, version 3 only. -->
 
         <div class="flex items-center gap-3 px-4 py-3
                     transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.02]
-                    {dev.is_preferred ? 'bg-blue-50 dark:bg-blue-950/20' : ''}">
+                    {dev.is_preferred ? 'bg-blue-50 dark:bg-blue-950/20' : ''}
+                    {!dev.is_paired ? 'opacity-80' : ''}">
 
           <!-- Device photo -->
           {#if museImage(dev.name, dev.hardware_version)}
             <img src={museImage(dev.name, dev.hardware_version)!} alt={dev.name}
                  class="w-12 h-12 object-contain rounded-lg shrink-0
-                        bg-muted/40 dark:bg-white/[0.04] p-1" />
+                        bg-muted/40 dark:bg-white/[0.04] p-1
+                        {!dev.is_paired ? 'grayscale opacity-60' : ''}" />
           {:else}
             <div class="w-12 h-12 rounded-lg shrink-0 bg-muted/40 dark:bg-white/[0.04]
-                        flex items-center justify-center text-2xl">🧠</div>
+                        flex items-center justify-center text-2xl
+                        {!dev.is_paired ? 'opacity-50' : ''}">🧠</div>
           {/if}
 
           <div class="flex flex-col gap-0.5 min-w-0 flex-1">
@@ -433,7 +482,7 @@ the Free Software Foundation, version 3 only. -->
               {:else if dev.last_rssi !== 0}
                 <Badge variant="outline"
                   class="text-[0.54rem] tracking-wide uppercase py-0 px-1 shrink-0
-                         bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                         bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
                   {t("settings.new")}
                 </Badge>
               {/if}
@@ -450,6 +499,13 @@ the Free Software Foundation, version 3 only. -->
                 {fmtLastSeen(dev.last_seen)}
               </span>
             </div>
+
+            <!-- Hint row for unpaired devices -->
+            {#if !dev.is_paired}
+              <span class="text-[0.58rem] text-amber-600/80 dark:text-amber-400/70 leading-tight mt-0.5">
+                {t("settings.pairToConnect")}
+              </span>
+            {/if}
 
             {#if dev.id === connected.device_id && (connected.serial_number || connected.mac_address)}
               <div class="flex items-center gap-3 flex-wrap">
@@ -480,20 +536,32 @@ the Free Software Foundation, version 3 only. -->
           </div>
 
           <div class="flex items-center gap-1.5 shrink-0">
-            <Button
-              size="sm"
-              variant={dev.is_preferred ? "secondary" : "outline"}
-              class={dev.is_preferred
-                ? "text-[0.66rem] h-7 px-2.5 bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/25"
-                : "text-[0.66rem] h-7 px-2.5 border-border dark:border-white/10 text-muted-foreground hover:text-foreground"}
-              onclick={() => setPreferred(dev.id)}>
-              {dev.is_preferred ? t("settings.defaultDevice") : t("settings.setDefault")}
-            </Button>
             {#if dev.is_paired}
+              <!-- Paired device: show Set Default + Forget -->
+              <Button
+                size="sm"
+                variant={dev.is_preferred ? "secondary" : "outline"}
+                class={dev.is_preferred
+                  ? "text-[0.66rem] h-7 px-2.5 bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/25"
+                  : "text-[0.66rem] h-7 px-2.5 border-border dark:border-white/10 text-muted-foreground hover:text-foreground"}
+                onclick={() => setPreferred(dev.id)}>
+                {dev.is_preferred ? t("settings.defaultDevice") : t("settings.setDefault")}
+              </Button>
               <Button size="sm" variant="ghost"
                 class="text-[0.66rem] h-7 px-2 text-muted-foreground hover:text-red-500"
                 onclick={() => forget(dev.id)}>
                 {t("settings.forget")}
+              </Button>
+            {:else}
+              <!-- Unpaired device: show Pair button -->
+              <Button
+                size="sm"
+                variant="outline"
+                class="text-[0.66rem] h-7 px-2.5
+                       border-amber-500/40 text-amber-700 dark:text-amber-400
+                       hover:bg-amber-500/10 hover:border-amber-500/60"
+                onclick={() => pairDevice(dev.id)}>
+                {t("settings.pair")}
               </Button>
             {/if}
           </div>
@@ -923,6 +991,103 @@ the Free Software Foundation, version 3 only. -->
   </Card>
 </section>
 
+
+<!-- ── GPU / Memory ─────────────────────────────────────────────────────────── -->
+{#if gpuStats}
+  {@const fmtBytes = (b: number | null) => {
+    if (b === null || b <= 0) return null;
+    const gb = b / (1024 ** 3);
+    return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(b / (1024 ** 2)).toFixed(0)} MB`;
+  }}
+  {@const usedBytes  = (gpuStats.totalMemoryBytes !== null && gpuStats.freeMemoryBytes !== null)
+    ? gpuStats.totalMemoryBytes - gpuStats.freeMemoryBytes : null}
+  {@const usedPct    = (usedBytes !== null && gpuStats.totalMemoryBytes)
+    ? Math.round(usedBytes / gpuStats.totalMemoryBytes * 100) : null}
+  {@const memLabel   = gpuStats.isUnifiedMemory ? "Unified Memory (RAM)" : "VRAM"}
+
+  <section class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      GPU · {memLabel}
+    </span>
+
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+
+        <!-- Memory bar -->
+        {#if gpuStats.totalMemoryBytes}
+          <div class="flex flex-col gap-2 px-4 py-3.5">
+            <div class="flex items-baseline justify-between">
+              <span class="text-[0.72rem] font-semibold text-foreground">{memLabel}</span>
+              {#if fmtBytes(gpuStats.totalMemoryBytes)}
+                <span class="text-[0.68rem] text-muted-foreground tabular-nums">
+                  {fmtBytes(gpuStats.totalMemoryBytes)}
+                  {#if gpuStats.isUnifiedMemory}<span class="text-[0.56rem] ml-0.5 text-muted-foreground/60">total</span>{/if}
+                </span>
+              {/if}
+            </div>
+
+            {#if usedPct !== null && gpuStats.freeMemoryBytes !== null}
+              <!-- Progress bar -->
+              <div class="h-2 w-full rounded-full bg-muted dark:bg-white/[0.07] overflow-hidden">
+                <div
+                  class="h-full rounded-full transition-all duration-500
+                         {usedPct > 85 ? 'bg-red-500' : usedPct > 65 ? 'bg-amber-500' : 'bg-violet-500'}"
+                  style="width: {usedPct}%">
+                </div>
+              </div>
+              <div class="flex items-center justify-between text-[0.6rem] text-muted-foreground tabular-nums">
+                <span>
+                  {fmtBytes(usedBytes)} used
+                  <span class="text-muted-foreground/50">·</span>
+                  {fmtBytes(gpuStats.freeMemoryBytes)} free
+                </span>
+                <span class="{usedPct > 85 ? 'text-red-500' : usedPct > 65 ? 'text-amber-500' : ''}">
+                  {usedPct}%
+                </span>
+              </div>
+            {:else if gpuStats.freeMemoryBytes}
+              <p class="text-[0.64rem] text-muted-foreground">
+                {fmtBytes(gpuStats.freeMemoryBytes)} free
+              </p>
+            {/if}
+
+            {#if gpuStats.isUnifiedMemory}
+              <p class="text-[0.58rem] text-muted-foreground/60 leading-relaxed -mt-0.5">
+                Apple Silicon uses a single unified memory pool shared by CPU and GPU.
+                "Free" includes inactive pages that can be reclaimed immediately.
+              </p>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- GPU utilisation -->
+        {#if gpuStats.overall > 0 || gpuStats.render > 0 || gpuStats.tiler > 0}
+          <div class="flex items-center gap-4 px-4 py-3 bg-slate-50 dark:bg-[#111118]">
+            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground shrink-0">
+              GPU Usage
+            </span>
+            {#each ([
+              ["Render",  gpuStats.render],
+              ["Tiler",   gpuStats.tiler],
+              ["Overall", gpuStats.overall],
+            ] as [string, number][]).filter(([, v]) => v > 0) as [label, val]}
+              <div class="flex items-center gap-1.5">
+                <div class="h-1.5 w-16 rounded-full bg-muted dark:bg-white/[0.07] overflow-hidden">
+                  <div class="h-full rounded-full bg-violet-500/70 transition-all"
+                       style="width:{Math.round(val * 100)}%"></div>
+                </div>
+                <span class="text-[0.58rem] text-muted-foreground tabular-nums">
+                  {label} {Math.round(val * 100)}%
+                </span>
+              </div>
+            {/each}
+          </div>
+        {/if}
+
+      </CardContent>
+    </Card>
+  </section>
+{/if}
 
 <!-- ── Activity Tracking ────────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">

@@ -83,7 +83,10 @@ pub(crate) use settings::{
     default_theme, default_daily_goal_min, default_embedding_model,
     default_ws_host, default_ws_port, default_update_check_interval, UserSettings,
     NeuttsConfig, default_track_active_window, default_track_input_activity,
+    DoNotDisturbConfig,
 };
+
+mod dnd;
 
 mod tray;
 pub(crate) use tray::{refresh_tray, build_menu, icon_disconnected};
@@ -140,7 +143,7 @@ use label_cmds::{
 mod settings_cmds;
 use settings_cmds::{
     subscribe_eeg, subscribe_ppg, subscribe_imu,
-    get_status, get_devices, set_preferred_device, forget_device, cancel_retry, retry_connect,
+    get_status, get_devices, set_preferred_device, pair_device, forget_device, cancel_retry, retry_connect,
     get_filter_config, set_filter_config, set_notch_preset,
     get_latest_bands, get_embedding_overlap, set_embedding_overlap,
     get_gpu_stats, get_log_config, set_log_config,
@@ -160,6 +163,7 @@ use settings_cmds::{
     get_last_input_activity,
     get_recent_active_windows, get_recent_input_activity,
     get_input_buckets,
+    get_dnd_config, set_dnd_config, get_dnd_active, test_dnd, list_focus_modes,
 };
 
 use std::{
@@ -525,6 +529,20 @@ pub struct AppState {
 
     /// Persistent activity store (`~/.skill/activity.sqlite`).
     pub activity_store: Option<std::sync::Arc<ActivityStore>>,
+
+    // ── Do Not Disturb automation ─────────────────────────────────────────────
+
+    /// Persisted configuration for the auto-DND feature.
+    pub dnd_config: DoNotDisturbConfig,
+
+    /// Whether the app has currently activated macOS DND.
+    /// Tracked so we can cleanly deactivate it when focus drops.
+    pub dnd_active: bool,
+
+    /// Monotonic instant when the focus score first exceeded the configured
+    /// threshold in the current sustained-focus window.  `None` when focus is
+    /// below threshold.
+    pub focus_above_since: Option<std::time::Instant>,
 }
 
 impl Default for AppState {
@@ -632,6 +650,9 @@ impl Default for AppState {
             download_cancel,
             logger,
             session_start_utc: None,
+            dnd_config:          DoNotDisturbConfig::default(),
+            dnd_active:          false,
+            focus_above_since:   None,
         }
     }
 }
@@ -681,6 +702,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         tts_preload:            s.tts_preload,
         track_active_window:    s.track_active_window,
         track_input_activity:   s.track_input_activity,
+        do_not_disturb:         s.dnd_config.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
@@ -2272,10 +2294,28 @@ async fn run_muse_session(
         }
     };
 
-    // 3. Pick device
-    let device = match &preferred_id {
-        Some(id) => all_devices.iter().find(|d| &d.id == id).or_else(|| all_devices.first()).cloned(),
-        None     => all_devices.into_iter().next(),
+    // 3. Pick device — respects the paired-device trust model:
+    //    • First-time (no paired devices): connect to first available so the
+    //      user can get going immediately, then pair on connect.
+    //    • Preferred ID set: connect only to that exact device — no fallback.
+    //    • Paired devices exist but no preferred: connect to any paired device
+    //      that is currently in range.
+    let paired_ids: Vec<String> = {
+        let r = app.state::<Mutex<AppState>>();
+        let s = r.lock_or_recover();
+        s.status.paired_devices.iter().map(|d| d.id.clone()).collect()
+    };
+    let first_time = paired_ids.is_empty();
+
+    let device = if first_time {
+        // No paired devices — first launch or after forgetting all devices.
+        // Connect to the first Muse we find so the onboarding flow works.
+        all_devices.into_iter().next()
+    } else {
+        match &preferred_id {
+            Some(id) => all_devices.iter().find(|d| &d.id == id).cloned(),
+            None     => all_devices.into_iter().find(|d| paired_ids.contains(&d.id)),
+        }
     };
     let device = match device {
         Some(d) => d,
@@ -2691,6 +2731,67 @@ async fn handle_event(
 
                 // Write derived metrics row to _metrics.csv (~4 Hz).
                 csv.push_metrics(csv_path, &snap);
+
+                // ── Auto Do Not Disturb ────────────────────────────────────
+                // Compute the engagement score (0–100) from the current band
+                // snapshot using the same β/(α+θ) sigmoid formula as the
+                // per-epoch embeddings pipeline.
+                //   engagement = sigmoid100(mean(β / (α + θ)), k=2.0, mid=0.8)
+                let engage_raw: f32 = if snap.channels.is_empty() {
+                    0.5
+                } else {
+                    let n = snap.channels.len() as f32;
+                    snap.channels.iter().map(|ch| {
+                        let d = ch.rel_alpha + ch.rel_theta;
+                        if d > 1e-6 { ch.rel_beta / d } else { 0.5 }
+                    }).sum::<f32>() / n
+                };
+                let focus_score: f64 =
+                    (100.0_f32 / (1.0 + (-2.0 * (engage_raw - 0.8)).exp())) as f64;
+
+                {
+                    let sr = app.state::<Mutex<AppState>>();
+                    let mut s = sr.lock_or_recover();
+                    if s.dnd_config.enabled {
+                        let threshold = s.dnd_config.focus_threshold as f64;
+                        let duration  = s.dnd_config.duration_secs as u64;
+                        let now       = std::time::Instant::now();
+
+                        if focus_score >= threshold {
+                            // Focus is high — start or continue the timer.
+                            let above_since = s.focus_above_since.get_or_insert(now);
+                            let elapsed = now.duration_since(*above_since).as_secs();
+                            if !s.dnd_active && elapsed >= duration {
+                                // Threshold met — activate Focus mode.
+                                let mode_id = s.dnd_config.focus_mode_identifier.clone();
+                                drop(s); // release lock before blocking syscall
+                                let ok = dnd::set_dnd(true, &mode_id);
+                                if ok {
+                                    let mut s2 = sr.lock_or_recover();
+                                    s2.dnd_active = true;
+                                    let _ = app.emit("dnd-state-changed", true);
+                                }
+                            }
+                        } else {
+                            // Focus dropped below threshold — reset timer.
+                            s.focus_above_since = None;
+                            if s.dnd_active {
+                                s.dnd_active = false;
+                                drop(s);
+                                dnd::set_dnd(false, "");
+                                let _ = app.emit("dnd-state-changed", false);
+                            }
+                        }
+                    } else if s.dnd_active {
+                        // Feature was disabled while DND was on — clean up.
+                        s.dnd_active        = false;
+                        s.focus_above_since = None;
+                        drop(s);
+                        dnd::set_dnd(false, "");
+                        let _ = app.emit("dnd-state-changed", false);
+                    }
+                }
+                // ── End Auto Do Not Disturb ────────────────────────────────
 
                 let _ = app.emit("eeg-bands", &snap);
                 app.state::<WsBroadcaster>().send("eeg-bands", &snap);
@@ -5235,9 +5336,18 @@ fn confirm_and_quit(app: AppHandle) {
 
 /// Returns `true` when the user confirms they want to quit.
 ///
-/// Uses `rfd::MessageDialog` on all platforms.  rfd handles all threading
-/// and AppKit concerns internally and is safe to call from any background
-/// thread (which is how `confirm_and_quit` uses it).
+/// On macOS we use `NSAlert` via `objc2-app-kit` and dispatch synchronously
+/// to the main queue with `dispatch2::DispatchQueue::main().exec_sync()`.
+/// This avoids the `CFUserNotificationDisplayAlert: called from main
+/// application thread` warning that `rfd` triggers on macOS — rfd internally
+/// uses `dispatch_sync` to run `[NSAlert runModal]` on the main thread, and
+/// macOS prints the warning whenever `CFUserNotificationDisplayAlert` (an
+/// older Carbon-era API that AppKit calls internally in some cases) is invoked
+/// from the main run-loop thread.  Calling `NSAlert` directly and owning the
+/// dispatch avoids that code path entirely.
+///
+/// On all other platforms `rfd::MessageDialog` is used as before.
+#[cfg(not(target_os = "macos"))]
 fn quit_confirmed(lang: &str) -> bool {
     let (title, description) = quit_dialog_strings(lang);
     rfd::MessageDialog::new()
@@ -5246,6 +5356,33 @@ fn quit_confirmed(lang: &str) -> bool {
         .set_buttons(rfd::MessageButtons::YesNo)
         .show()
         == rfd::MessageDialogResult::Yes
+}
+
+#[cfg(target_os = "macos")]
+fn quit_confirmed(lang: &str) -> bool {
+    use dispatch2::DispatchQueue;
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn};
+    use objc2_foundation::NSString;
+
+    let (title, description) = quit_dialog_strings(lang);
+
+    // `exec_sync` blocks the calling (background) thread and runs the closure
+    // on the main thread, then returns.  Capturing `confirmed` by `&mut` is
+    // safe because `exec_sync` is synchronous — the closure has finished by
+    // the time `exec_sync` returns and before `confirmed` is read below.
+    let mut confirmed = false;
+    DispatchQueue::main().exec_sync(|| {
+        // SAFETY: `exec_sync` guarantees this closure runs on the main thread.
+        let mtm = unsafe { MainThreadMarker::new_unchecked() };
+        let alert = NSAlert::new(mtm);
+        alert.setMessageText(&NSString::from_str(title));
+        alert.setInformativeText(&NSString::from_str(description));
+        alert.addButtonWithTitle(&NSString::from_str("Yes"));
+        alert.addButtonWithTitle(&NSString::from_str("No"));
+        confirmed = alert.runModal() == NSAlertFirstButtonReturn;
+    });
+    confirmed
 }
 
 /// Returns the (title, description) strings for the quit confirmation dialog
@@ -5398,6 +5535,8 @@ pub fn run() {
                 s.track_input_activity = data.track_input_activity;
                 s.input_activity_enabled
                     .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
+                // Restore Do Not Disturb automation config.
+                s.dnd_config = data.do_not_disturb;
                 neutts_apply_config(&data.neutts);
                 // Seed discovered list from paired
 
@@ -5763,7 +5902,7 @@ pub fn run() {
             subscribe_ppg,
             subscribe_imu,
             get_status, get_devices,
-            set_preferred_device, forget_device, retry_connect, cancel_retry,
+            set_preferred_device, pair_device, forget_device, retry_connect, cancel_retry,
             open_bt_settings, open_settings_window, open_updates_window, open_model_tab, open_help_window,
             check_accessibility_permission, open_accessibility_settings, open_notifications_settings,
             get_filter_config, set_filter_config, set_notch_preset,
@@ -5817,6 +5956,7 @@ pub fn run() {
             get_last_input_activity,
             get_recent_active_windows, get_recent_input_activity,
             get_input_buckets,
+            get_dnd_config, set_dnd_config, get_dnd_active, test_dnd, list_focus_modes,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,

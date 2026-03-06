@@ -18,7 +18,7 @@ use crate::{
 };
 use crate::tray::refresh_tray;
 use crate::eeg_filter::{FilterConfig, PowerlineFreq};
-use crate::settings::{OpenBciConfig, NeuttsConfig};
+use crate::settings::{OpenBciConfig, NeuttsConfig, DoNotDisturbConfig};
 use crate::active_window::ActiveWindowInfo;
 use crate::activity_store::{ActiveWindowRow, InputActivityRow, InputBucketRow};
 use crate::eeg_bands::BandSnapshot;
@@ -66,6 +66,44 @@ pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice>
         for d in s.discovered.iter_mut() { d.is_preferred = pref.as_deref() == Some(&d.id); }
     }
     save_settings(&app);
+    emit_devices(&app);
+    app.state::<Mutex<AppState>>().lock_or_recover().discovered.clone()
+}
+
+/// Explicitly pair a discovered device so it is trusted for future connections.
+///
+/// Adds the device to `paired_devices`, marks it as `is_paired` in the
+/// discovered list, persists settings, and broadcasts updated state.
+#[tauri::command]
+pub fn pair_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
+    {
+        let r = app.state::<Mutex<AppState>>();
+        let mut s = r.lock_or_recover();
+        // Look up the name from the discovered list.
+        let name = s.discovered.iter()
+            .find(|d| d.id == id)
+            .map(|d| d.name.clone())
+            .unwrap_or_else(|| id.clone());
+        let now = crate::unix_secs();
+        // Insert into paired list if not already there.
+        if !s.status.paired_devices.iter().any(|d| d.id == id) {
+            s.status.paired_devices.push(crate::PairedDevice {
+                id:        id.clone(),
+                name:      name.clone(),
+                last_seen: now,
+            });
+        }
+        // Mark as paired in the discovered/settings list.
+        for d in s.discovered.iter_mut() {
+            if d.id == id {
+                d.is_paired = true;
+                d.name      = name.clone();
+            }
+        }
+    }
+    save_settings(&app);
+    refresh_tray(&app);
+    emit_status(&app);
     emit_devices(&app);
     app.state::<Mutex<AppState>>().lock_or_recover().discovered.clone()
 }
@@ -667,6 +705,81 @@ pub fn get_input_buckets(
         .as_ref()
         .map(|s| s.get_input_buckets(start, end))
         .unwrap_or_default()
+}
+
+// ── Do Not Disturb automation ─────────────────────────────────────────────────
+
+/// Return all Focus modes configured on this Mac as `{ identifier, name }` pairs.
+///
+/// On macOS 12+ this reads `ModeConfigurations.json`; falls back to the
+/// well-known first-party list if the file is unavailable.  Returns an empty
+/// array on non-macOS platforms.
+#[tauri::command]
+pub fn list_focus_modes() -> Vec<crate::dnd::FocusModeOption> {
+    crate::dnd::list_focus_modes()
+}
+
+/// Manually enable or disable a Focus mode for testing purposes.
+///
+/// This bypasses the EEG threshold logic entirely — it calls the OS Focus
+/// toggle directly using the mode identifier stored in the current DND config,
+/// and updates `dnd_active` so the UI reflects the change.
+/// Returns `true` if the OS call succeeded.
+#[tauri::command]
+pub fn test_dnd(
+    enabled: bool,
+    app:     AppHandle,
+    state:   tauri::State<'_, Mutex<AppState>>,
+) -> bool {
+    let mode_id = state.lock_or_recover().dnd_config.focus_mode_identifier.clone();
+    let ok = crate::dnd::set_dnd(enabled, &mode_id);
+    if ok {
+        state.lock_or_recover().dnd_active = enabled;
+        let _ = app.emit("dnd-state-changed", enabled);
+    }
+    ok
+}
+
+/// Return whether DND is currently active (i.e. the app has enabled it).
+#[tauri::command]
+pub fn get_dnd_active(state: tauri::State<'_, Mutex<AppState>>) -> bool {
+    state.lock_or_recover().dnd_active
+}
+
+/// Return the current Do Not Disturb automation configuration.
+#[tauri::command]
+pub fn get_dnd_config(state: tauri::State<'_, Mutex<AppState>>) -> DoNotDisturbConfig {
+    state.lock_or_recover().dnd_config.clone()
+}
+
+/// Persist new Do Not Disturb automation configuration.
+///
+/// If the feature is disabled and DND is currently active, DND is cleared
+/// immediately so the user is not left in an unintended DND state.
+#[tauri::command]
+pub fn set_dnd_config(
+    config: DoNotDisturbConfig,
+    app:    AppHandle,
+    state:  tauri::State<'_, Mutex<AppState>>,
+) {
+    let was_active = {
+        let mut s = state.lock_or_recover();
+        let active = s.dnd_active;
+        s.dnd_config          = config.clone();
+        s.focus_above_since   = None; // reset timer on any config change
+        if !config.enabled && s.dnd_active {
+            s.dnd_active = false;
+        }
+        active && !config.enabled
+    };
+
+    // If we just disabled the feature while DND was on, clear it.
+    if was_active {
+        crate::dnd::set_dnd(false, "");
+        let _ = app.emit("dnd-state-changed", false);
+    }
+
+    crate::save_settings(&app);
 }
 
 /// Open a native file-picker dialog and return the selected WAV file path.

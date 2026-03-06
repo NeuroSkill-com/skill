@@ -160,6 +160,9 @@ crossbeam-channel = "0.5.15"
 # On Linux / Windows the default ort backend is used instead.
 [target.'cfg(target_os = "macos")'.dependencies]
 fastembed = { version = "5.11.0", features = ["metal"] }
+# Pure-Rust Focus Mode / Do Not Disturb control — no Swift, no ObjC, no
+# private frameworks.  Replaces the hand-rolled Assertions.json writer.
+macos-focus = "0.0.1"
 # objc2 stack — pinned to the same versions rfd already pulls in so no extra
 # compilation is needed.  Used to build the quit dialog with the app icon.
 objc2            = "0.6.4"

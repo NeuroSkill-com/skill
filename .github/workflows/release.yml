@@ -70,11 +70,20 @@ jobs:
         run: npm ci
 
       # ── ImageMagick (needed by scripts/stamp-dmg-icon.sh) ────────────────────
-      # sips, iconutil, and Python/AppKit ship with the macOS runner image;
-      # only ImageMagick needs to be installed explicitly.
-      # brew's binary bottle makes this fast (~20 s).
-      - name: Install ImageMagick
-        run: brew install imagemagick
+      # sips, iconutil, and Python/AppKit ship with the macOS runner image.
+      # ImageMagick is NOT pre-installed on macos-26 (confirmed against the
+      # actions/runner-images macos-26-arm64-Readme.md manifest), so we install
+      # it via Homebrew when missing.  The guard avoids a redundant install if
+      # a future runner image ever bundles it.
+      - name: Ensure ImageMagick is available
+        run: |
+          if command -v magick >/dev/null 2>&1; then
+            echo "ImageMagick already present: $(magick --version | head -1)"
+          else
+            echo "ImageMagick not found — installing via Homebrew…"
+            brew install imagemagick
+            echo "Installed: $(magick --version | head -1)"
+          fi
 
       # ── Pre-flight: verify every secret is set ───────────────────────────────
       # Catches missing / renamed secrets in seconds instead of after a 15-minute

@@ -486,7 +486,7 @@ mod tests {
         let (rmssd, sdnn, pnn50) = hrv_time_domain(&ibis);
         assert!(sdnn > 0.0);
         assert!(rmssd > 0.0);
-        assert!(pnn50 >= 0.0 && pnn50 <= 100.0);
+        assert!((0.0..=100.0).contains(&pnn50));
     }
 
     #[test]
@@ -505,7 +505,7 @@ mod tests {
         let ir:  Vec<f64> = (0..128).map(|i| 1000.0 + 10.0 * (i as f64 * 0.1).sin()).collect();
         let red: Vec<f64> = (0..128).map(|i| 800.0  + 8.0  * (i as f64 * 0.1).sin()).collect();
         let spo2 = spo2_from_red_ir(&red, &ir);
-        assert!(spo2 >= 70.0 && spo2 <= 100.0, "SpO2={spo2}");
+        assert!((70.0..=100.0).contains(&spo2), "SpO2={spo2}");
     }
 
     // ── moving_average ────────────────────────────────────────────────────────
@@ -571,7 +571,7 @@ mod tests {
     fn hrv_time_domain_pnn50_is_percentage() {
         let ibis = vec![0.8, 0.85, 0.75, 0.9, 0.65];
         let (_, _, pnn50) = hrv_time_domain(&ibis);
-        assert!(pnn50 >= 0.0 && pnn50 <= 100.0, "pnn50={pnn50}");
+        assert!((0.0..=100.0).contains(&pnn50), "pnn50={pnn50}");
     }
 
     // ── spo2_from_red_ir ──────────────────────────────────────────────────────
@@ -596,7 +596,7 @@ mod tests {
         let ir:  Vec<f64> = (0..64).map(|i| 1000.0 + 100.0 * (i as f64 * 0.3).sin()).collect();
         let red: Vec<f64> = (0..64).map(|i|   50.0 +   1.0 * (i as f64 * 0.3).sin()).collect();
         let spo2 = spo2_from_red_ir(&red, &ir);
-        assert!(spo2 >= 70.0 && spo2 <= 100.0, "SpO₂={spo2} out of clamp range");
+        assert!((70.0..=100.0).contains(&spo2), "SpO₂={spo2} out of clamp range");
     }
 
     // ── perfusion_index_from_ir ───────────────────────────────────────────────
@@ -667,7 +667,7 @@ mod tests {
     fn ppg_analyzer_insufficient_data_returns_none() {
         let mut a = PpgAnalyzer::new(5.0);
         // Push < 32 samples → compute_epoch should return None.
-        a.push(1, &vec![1000.0; 20]);
+        a.push(1, &[1000.0; 20]);
         assert!(a.compute_epoch(20).is_none());
     }
 }

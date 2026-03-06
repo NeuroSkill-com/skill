@@ -374,7 +374,7 @@ mod tests {
         // Two queued jobs of 500 ms each = 1000 ms = exactly 1 s (ceiling)
         // We can't easily test est_secs without injecting pending jobs directly,
         // so verify the formula: ⌈(total_est_ms) / 1000⌉
-        let ceil = |ms: u64| (ms + 999) / 1000;
+        let ceil = |ms: u64| ms.div_ceil(1000);
         assert_eq!(ceil(0),    0);
         assert_eq!(ceil(1),    1);
         assert_eq!(ceil(1000), 1);

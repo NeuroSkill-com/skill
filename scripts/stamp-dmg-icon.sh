@@ -71,6 +71,38 @@ if [ -z "$IM_CMD" ]; then
     exit 1
 fi
 
+# ── Pick best available bold font ─────────────────────────────────────────────
+#
+# Priority list (roughly: macOS system → DejaVu → GNU FreeFont → IM built-in).
+# We query "magick -list font" once and pick the first match.
+
+BADGE_FONT=""
+FONT_CANDIDATES=(
+    "Helvetica-Bold"
+    "Arial-Bold"
+    "DejaVu-Sans-Bold"
+    "Liberation-Sans-Bold"
+    "FreeSans-Bold"
+    "FreeMono-Bold"
+    "FreeSerif-Bold"
+    "Courier-Bold"
+)
+
+_available_fonts="$("$IM_CMD" -list font 2>/dev/null | awk '/Font:/{print $2}')"
+
+for candidate in "${FONT_CANDIDATES[@]}"; do
+    if echo "$_available_fonts" | grep -qx "$candidate"; then
+        BADGE_FONT="$candidate"
+        break
+    fi
+done
+
+if [ -n "$BADGE_FONT" ]; then
+    log "Using font: $BADGE_FONT"
+else
+    log "No known bold font found — ImageMagick will use its default"
+fi
+
 # ── Verify iconutil is available ──────────────────────────────────────────────
 
 if ! command -v iconutil >/dev/null 2>&1; then
@@ -120,6 +152,12 @@ BADGE_TEXT_COLOR="red"
 # centred both horizontally and vertically within the pill regardless of
 # the version string length.  Adjust BADGE_FONT_SIZE if strings are very long.
 
+# Build the optional font flag only if we found a suitable font.
+_FONT_ARGS=()
+if [ -n "$BADGE_FONT" ]; then
+    _FONT_ARGS=(-font "$BADGE_FONT")
+fi
+
 "$IM_CMD" "$SOURCE_ICON" \
     -resize 512x512 \
     \( +clone \
@@ -131,7 +169,7 @@ BADGE_TEXT_COLOR="red"
     -composite \
     -fill "$BADGE_TEXT_COLOR" \
     -stroke none \
-    -font DejaVu-Sans-Bold \
+    "${_FONT_ARGS[@]}" \
     -pointsize "$BADGE_FONT_SIZE" \
     -gravity Center \
     -annotate +0+173 "v${VERSION}" \

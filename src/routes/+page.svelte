@@ -31,6 +31,7 @@ the Free Software Foundation, version 3 only. -->
   import { Separator } from "$lib/components/ui/separator";
   import { t } from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
+  import { addToast } from "$lib/toast-store.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
   import LanguagePicker from "$lib/LanguagePicker.svelte";
   import ThemeToggle    from "$lib/ThemeToggle.svelte";
@@ -67,6 +68,7 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Types ──────────────────────────────────────────────────────────────────
   interface PairedDevice { id: string; name: string; last_seen: number; }
+  interface DiscoveredDevice { id: string; name: string; last_rssi: number; is_paired: boolean; is_preferred: boolean; }
   type PowerlineFreq = "Hz60" | "Hz50";
   interface FilterConfig {
     sample_rate:        number;
@@ -512,6 +514,9 @@ the Free Software Foundation, version 3 only. -->
     { key: "goalSet",      label: t("dashboard.setupGoal"),     done: onboardDone.goalSet },
   ]);
 
+  // Track unpaired device IDs we've already toasted about so we don't spam.
+  const knownUnpairedIds = new Set<string>();
+
   async function retryConnect()   { await invoke("retry_connect"); }
   async function cancelRetry()    { await invoke("cancel_retry"); }
   async function openBtSettings() { await invoke("open_bt_settings"); }
@@ -607,6 +612,23 @@ the Free Software Foundation, version 3 only. -->
       status = ev.payload;
       if (prev !== "connected" && status.state === "connected") startUptime();
       if (prev === "connected"  && status.state !== "connected") stopUptime();
+    }));
+
+    // When the background scanner discovers a new unpaired device, let the user
+    // know so they can go to Settings → Devices and pair it.
+    unlisteners.push(await listen<DiscoveredDevice[]>("devices-updated", ev => {
+      const unpaired = ev.payload.filter(d => !d.is_paired && d.last_rssi !== 0);
+      for (const dev of unpaired) {
+        if (!knownUnpairedIds.has(dev.id)) {
+          knownUnpairedIds.add(dev.id);
+          addToast(
+            "info",
+            t("settings.newDeviceNotice"),
+            `${dev.name} — ${t("settings.newDeviceNoticeHint")}`,
+            8_000,
+          );
+        }
+      }
     }));
 
     // Spectrogram columns: 8 Hz, one column per filter hop (HOP=32 @ 256 Hz).

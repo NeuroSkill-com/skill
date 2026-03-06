@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn calibration_auto_start_is_true() {
-        assert!(CALIBRATION_AUTO_START);
+        const { assert!(CALIBRATION_AUTO_START); }
     }
 
     // ── WebSocket defaults ────────────────────────────────────────────────────
@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn ws_default_port_is_nonzero() {
-        assert!(WS_DEFAULT_PORT > 0);
+        const { assert!(WS_DEFAULT_PORT > 0); }
     }
 
     // ── Band analysis window ──────────────────────────────────────────────────

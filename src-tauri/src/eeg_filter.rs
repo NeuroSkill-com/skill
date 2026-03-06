@@ -704,10 +704,10 @@ mod tests {
     fn all_four_channels_produce_output_in_same_hop() {
         let mut f = EegFilter::new(FilterConfig::default());
         for ch in 0..EEG_CHANNELS {
-            f.push(ch, &vec![0.0; HOP]);
+            f.push(ch, &[0.0; HOP]);
         }
-        for ch in 0..EEG_CHANNELS {
-            assert!(f.pending_len(ch) > 0, "ch {ch} ({}) empty", CHANNEL_NAMES[ch]);
+        for (ch, name) in CHANNEL_NAMES.iter().enumerate().take(EEG_CHANNELS) {
+            assert!(f.pending_len(ch) > 0, "ch {ch} ({name}) empty");
         }
     }
 

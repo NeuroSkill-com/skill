@@ -1368,15 +1368,16 @@ mod tests {
         let expected = ["alpha", "beta", "theta", "delta"];
 
         let mut a = BandAnalyzer::new();
-        for ch in 0..EEG_CHANNELS {
-            a.push(ch, &signals[ch]);
+        for (ch, sig) in signals.iter().enumerate().take(EEG_CHANNELS) {
+            a.push(ch, sig);
         }
         let s = a.latest.expect("snapshot should exist");
-        for ch in 0..EEG_CHANNELS {
+        let freqs = [10, 20, 6, 2];
+        for (ch, exp) in expected.iter().enumerate().take(EEG_CHANNELS) {
             assert_eq!(
-                s.channels[ch].dominant, expected[ch],
-                "ch{ch} ({} Hz): expected '{}', got '{}'",
-                [10, 20, 6, 2][ch], expected[ch], s.channels[ch].dominant
+                s.channels[ch].dominant, *exp,
+                "ch{ch} ({} Hz): expected '{exp}', got '{}'",
+                freqs[ch], s.channels[ch].dominant
             );
         }
     }

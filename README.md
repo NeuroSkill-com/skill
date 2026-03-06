@@ -393,6 +393,23 @@ skill/
 └── README.md
 ```
 
+### Pre-commit Checks
+
+A Git pre-commit hook runs two fast sanity checks before every commit:
+
+| Check | Command |
+|---|---|
+| `cargo clippy` | `cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings` |
+| `svelte-check` | `npm run check` |
+
+The hook is already installed at `.git/hooks/pre-commit` — no setup required. Both checks must pass; any warning from Clippy is treated as an error. To bypass in an emergency:
+
+```bash
+git commit --no-verify
+```
+
+---
+
 ## Versioning
 
 The `bump` script keeps `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` in sync in one step.

@@ -5801,6 +5801,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "macos-focus"
+version = "0.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5bbc91b86705c527663f01d126520b236146bf719440722787cba4a6d6b35e20"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "uuid",
+]
+
+[[package]]
 name = "macro_rules_attribute"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9042,6 +9055,7 @@ dependencies = [
  "hound",
  "kittentts",
  "libc",
+ "macos-focus",
  "mdns-sd",
  "muse-rs",
  "ndarray 0.17.2",
