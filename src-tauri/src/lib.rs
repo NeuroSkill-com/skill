@@ -69,7 +69,8 @@ mod autostart;
 mod tts;
 pub mod device;
 use tts::{tts_init, tts_speak, tts_unload, tts_list_voices, tts_list_neutts_voices, tts_get_voice, tts_set_voice};
-pub(crate) use tts::{neutts_apply_config, init_tts_dirs, init_neutts_samples_dir, tts_shutdown};
+pub(crate) use tts::{neutts_apply_config, init_tts_dirs, init_neutts_samples_dir,
+                     init_espeak_bundled_data_path, tts_shutdown};
 
 mod settings;
 pub(crate) use settings::{
@@ -5166,13 +5167,24 @@ pub fn run() {
         .manage(std::sync::Arc::new(EmbedderState(std::sync::Mutex::new(None))))
         .manage(std::sync::Arc::new(label_index::LabelIndexState::new()))
         .setup(|app| {
-            // Resolve bundled NeuTTS preset sample files from the Tauri resource dir.
-            // Must happen before any tts_init call, but after the app is set up.
+            // Resolve bundled resource paths and register them with the TTS
+            // subsystem.  Both calls must happen before any tts_init command
+            // fires (i.e. before any worker thread starts) because they write
+            // into OnceCell statics — the first write wins.
             {
                 use tauri::Manager;
-                let samples_dir = app.path().resource_dir()
-                    .unwrap_or_else(|_| std::path::PathBuf::from("resources"))
-                    .join("neutts-samples");
+                let resource_dir = app.path().resource_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("resources"));
+
+                // ── espeak-ng data ────────────────────────────────────────────
+                // Contents/Resources/espeak-ng-data/ is bundled by build.rs from
+                // espeak-static/share/espeak-ng-data/.  Registering it here
+                // (via a OnceCell) ensures phonemise() always finds the data,
+                // even on machines that have no system espeak-ng installed.
+                init_espeak_bundled_data_path(&resource_dir);
+
+                // ── NeuTTS preset voice samples ───────────────────────────────
+                let samples_dir = resource_dir.join("neutts-samples");
                 init_neutts_samples_dir(samples_dir);
             }
 

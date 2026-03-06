@@ -12,31 +12,29 @@ fn main() {
     //
     // libespeak-ng must be linked statically so the binary has no runtime
     // dependency on a system espeak-ng installation.  We enforce this here
-    // (in addition to kittentts's build.rs) so that a plain `cargo build`
-    // without ESPEAK_LIB_DIR set still produces a fully static binary when
-    // the pre-built archive is present.
+    // (in addition to kittentts/neutts build.rs) so that a plain `cargo build`
+    // without ESPEAK_LIB_DIR set still produces a fully static binary.
+    //
+    // If the pre-built archive (espeak-static/lib/libespeak-ng.a) is absent,
+    // build-espeak-static.sh is invoked automatically on both macOS and Linux.
     enforce_espeak_static();
 
-    // ── macOS: bake the dev data path and bundle for .app ────────────────────
+    // ── Bake the dev data path into the binary (all platforms) ───────────────
     //
-    // 1. Bake `espeak-static/share/espeak-ng-data` as an absolute path into the
-    //    binary (ESPEAK_DATA_PATH_DEV) so `cargo run` / plain debug builds find
-    //    the data without needing ESPEAK_DATA_PATH set or a Homebrew install.
-    // 2. Copy espeak-ng-data/ into src-tauri/resources/ so Tauri places it at
-    //    Contents/Resources/espeak-ng-data/ in the .app bundle.
-    #[cfg(target_os = "macos")]
-    {
-        emit_espeak_data_path_dev();
-        bundle_espeak_data_macos();
-    }
+    // Emits ESPEAK_DATA_PATH_DEV so that `cargo run` / plain debug builds on
+    // the build machine find the data without needing ESPEAK_DATA_PATH set or
+    // a system espeak-ng install.  This is a last-resort fallback; the Tauri
+    // bundle path (Contents/Resources/espeak-ng-data) takes priority at runtime
+    // via init_espeak_bundled_data_path() called from lib.rs setup().
+    emit_espeak_data_path_dev();
 
-    // ── Linux: populate resources/espeak-ng-data/ for tauri_build::build() ───
+    // ── Copy espeak-ng-data/ into resources/ for Tauri bundling ──────────────
     //
-    // tauri.conf.json lists resources/espeak-ng-data as a bundle resource on
-    // all platforms.  On Linux, bundle_espeak_data_macos() never runs, so we
-    // must copy (or link) the data directory ourselves before tauri_build::build()
-    // validates the path.  The source is preferably the archive we built via
-    // build-espeak-static.sh; failing that, we fall back to the system package.
+    // tauri.conf.json declares resources/espeak-ng-data as a bundle resource on
+    // all platforms.  This step must run before tauri_build::build() validates
+    // the resource paths.
+    #[cfg(target_os = "macos")]
+    bundle_espeak_data_macos();
     #[cfg(target_os = "linux")]
     bundle_espeak_data_linux();
 
@@ -45,15 +43,16 @@ fn main() {
 
 // ── Static linking enforcement ────────────────────────────────────────────────
 //
-// Resolution order (mirrors kittentts/build.rs so both agree on the same lib):
+// Resolution order (mirrors kittentts/neutts build.rs so all three agree on
+// the same archive):
 //
-//  1. ESPEAK_LIB_DIR env var   — set by npm tauri:build:mac or by the user
-//  2. espeak-static/lib/       — local build produced by build-espeak-static.sh
+//  1. ESPEAK_LIB_DIR env var   — set via .cargo/config.toml
+//  2. espeak-static/lib/       — local build from build-espeak-static.sh
 //  3. Platform path walk       — system / Homebrew locations (static only)
 //
-// If none of the above yields libespeak-ng.a on macOS, the build panics.
-// On Linux, a missing static archive is a warning (dynamic link is acceptable
-// for development; CI / release builds should set ESPEAK_LIB_DIR).
+// If none of the above yields libespeak-ng.a the build script is invoked
+// automatically on all supported platforms (macOS + Linux).  The build panics
+// if it still cannot locate the archive after running the script.
 
 fn enforce_espeak_static() {
     println!("cargo:rerun-if-env-changed=ESPEAK_LIB_DIR");
@@ -62,10 +61,10 @@ fn enforce_espeak_static() {
     let target_os   = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
 
-    // 1. Explicit ESPEAK_LIB_DIR (always set via .cargo/config.toml).
-    //    Auto-build the archive if it does not yet exist.
+    // 1. ESPEAK_LIB_DIR (always set by .cargo/config.toml to espeak-static/lib).
+    //    If the archive is absent, build it from source first.
     if let Ok(dir) = std::env::var("ESPEAK_LIB_DIR") {
-        if !Path::new(&dir).join("libespeak-ng.a").exists() && target_os == "macos" {
+        if !Path::new(&dir).join("libespeak-ng.a").exists() {
             build_espeak_static();
         }
         require_static_archive(&dir, &target_os);
@@ -73,7 +72,7 @@ fn enforce_espeak_static() {
     }
 
     // 2. Fallback: local build artifact (ESPEAK_LIB_DIR not set).
-    if !Path::new("espeak-static/lib/libespeak-ng.a").exists() && target_os == "macos" {
+    if !Path::new("espeak-static/lib/libespeak-ng.a").exists() {
         build_espeak_static();
     }
 
@@ -90,26 +89,20 @@ fn enforce_espeak_static() {
         return;
     }
 
-    // Nothing found.
-    if target_os == "macos" {
-        panic!(
-            "\n\nbuild.rs: libespeak-ng.a not found even after running \
-             scripts/build-espeak-static.sh.\n\
-             Check the script output above for errors.\n\n"
-        );
-    } else {
-        println!(
-            "cargo:warning=build.rs: libespeak-ng.a not found; \
-             espeak-ng may be linked dynamically. \
-             Set ESPEAK_LIB_DIR to a directory containing libespeak-ng.a for a \
-             fully static build."
-        );
-    }
+    // Still nothing — hard error on all platforms.
+    panic!(
+        "\n\nbuild.rs: libespeak-ng.a not found even after running \
+         scripts/build-espeak-static.sh.\n\
+         Check the script output above for errors.\n\n"
+    );
 }
 
 /// Run `scripts/build-espeak-static.sh` from the workspace root.
-/// Called automatically on macOS when `espeak-static/lib/libespeak-ng.a` is absent.
-#[cfg(target_os = "macos")]
+///
+/// Invoked automatically on **all** platforms when `espeak-static/lib/libespeak-ng.a`
+/// is absent.  The script uses cmake + git (both ship with Xcode CLT on macOS
+/// and are installable via apt/dnf on Linux), and produces a self-contained
+/// merged static archive at `src-tauri/espeak-static/lib/libespeak-ng.a`.
 fn build_espeak_static() {
     // build.rs runs from src-tauri/; the script lives one level up.
     let script = std::fs::canonicalize("../scripts/build-espeak-static.sh")
@@ -126,7 +119,7 @@ fn build_espeak_static() {
     eprintln!("build.rs: libespeak-ng.a not found — running {} …", script.display());
 
     // Augment PATH so cmake, libtool, nm, git are found even when Cargo
-    // launched us with a minimal PATH (no Homebrew prefix).
+    // launched us with a minimal environment.
     let current_path = std::env::var("PATH").unwrap_or_default();
     let full_path = format!(
         "/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:{current_path}"
@@ -155,11 +148,6 @@ fn build_espeak_static() {
     println!("cargo:warning=build.rs: espeak-ng static library built successfully.");
 }
 
-#[cfg(not(target_os = "macos"))]
-fn build_espeak_static() {
-    // No-op on non-macOS; the platform path walk handles Linux.
-}
-
 /// Emit `rustc-link-search` + `rustc-link-lib=static=espeak-ng` for `dir`.
 /// Also links the C++ standard library required by espeak-ng's object files.
 fn emit_static_link(dir: &str, target_os: &str) {
@@ -175,21 +163,18 @@ fn emit_static_link(dir: &str, target_os: &str) {
 }
 
 /// Verify that `libespeak-ng.a` is present in `dir`, then emit link directives.
-/// Panics with a clear message on macOS; warns on Linux.
+/// Panics on all platforms if the archive is missing — the caller must have
+/// already invoked `build_espeak_static()` to ensure it exists.
 fn require_static_archive(dir: &str, target_os: &str) {
     if Path::new(dir).join("libespeak-ng.a").exists() {
         emit_static_link(dir, target_os);
-    } else if target_os == "macos" {
+    } else {
         panic!(
             "\n\nbuild.rs: ESPEAK_LIB_DIR is set to {dir:?} but libespeak-ng.a \
-             was not found there.\n\
+             was not found there even after running build-espeak-static.sh.\n\
+             Check the script output above for errors.\n\
              \n\
-             Run:  bash scripts/build-espeak-static.sh\n\n"
-        );
-    } else {
-        println!(
-            "cargo:warning=build.rs: ESPEAK_LIB_DIR={dir:?} but libespeak-ng.a \
-             not found there; espeak-ng may be linked dynamically."
+             Manual fix:  bash scripts/build-espeak-static.sh\n\n"
         );
     }
 }
@@ -243,14 +228,16 @@ fn brew_prefix(formula: &str) -> Option<String> {
 // tts.rs resolves that path at runtime via init_espeak_data_path().
 
 /// Bake the absolute path to `espeak-static/share/espeak-ng-data` into the
-/// binary as the compile-time constant `ESPEAK_DATA_PATH_DEV`.
+/// binary as the compile-time env `ESPEAK_DATA_PATH_DEV`.
 ///
-/// This lets plain `cargo run` / debug builds find the data directory without
-/// setting `ESPEAK_DATA_PATH` or having a Homebrew espeak-ng installed.
-/// The value is an absolute path on the *build* machine; it is only used as a
-/// last-resort fallback when neither the bundle path nor `ESPEAK_DATA_PATH`
-/// env var is found at runtime.
-#[cfg(target_os = "macos")]
+/// This lets plain `cargo run` / debug builds on the **build machine** find the
+/// data directory without needing `ESPEAK_DATA_PATH` set or a system espeak-ng.
+/// The value is an absolute path resolved at build time; it is only used as a
+/// last-resort fallback in `init_espeak_data_path()` — the bundle path
+/// (`Contents/Resources/espeak-ng-data`) takes priority via the
+/// `init_espeak_bundled_data_path()` call in lib.rs setup().
+///
+/// Works on both macOS and Linux.
 fn emit_espeak_data_path_dev() {
     // ESPEAK_LIB_DIR is always set via .cargo/config.toml to
     // <workspace>/espeak-static/lib.  The data lives one level up, in
@@ -266,21 +253,18 @@ fn emit_espeak_data_path_dev() {
         println!("cargo:rerun-if-changed=espeak-static/share/espeak-ng-data");
 
         if data_dir.is_dir() {
-            println!(
-                "cargo:rustc-env=ESPEAK_DATA_PATH_DEV={}",
-                data_dir.display()
-            );
-            println!(
-                "cargo:warning=espeak-ng dev data path baked in: {}",
-                data_dir.display()
-            );
+            // Canonicalise so the baked path is always absolute even if the
+            // ESPEAK_LIB_DIR value is relative (which it is from config.toml).
+            let abs = std::fs::canonicalize(&data_dir).unwrap_or(data_dir);
+            println!("cargo:rustc-env=ESPEAK_DATA_PATH_DEV={}", abs.display());
+            println!("cargo:warning=espeak-ng dev data path baked in: {}", abs.display());
         } else {
             // Directory not yet present (first build before script ran).
-            // The shell script will create it; Cargo will re-run build.rs
-            // on the next `cargo build` call via the rerun-if-changed above.
+            // Cargo will re-run build.rs on the next `cargo build` via the
+            // rerun-if-changed above, at which point the data will be present.
             println!(
                 "cargo:warning=espeak-ng data dir not found yet ({}); \
-                 will be set after first full build.",
+                 will be baked in after the first full build.",
                 data_dir.display()
             );
         }

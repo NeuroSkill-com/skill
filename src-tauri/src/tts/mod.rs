@@ -110,32 +110,55 @@ impl TtsProgressEvent {
 
 // ─── espeak-ng data path ──────────────────────────────────────────────────────
 
+/// Called from **`lib.rs` setup()** — before any worker thread starts — with the
+/// Tauri resource directory.  Sets the espeak-ng data path to the directory
+/// that was bundled at build time (`{resource_dir}/espeak-ng-data`).
+///
+/// Because both kittentts and neutts use a `OnceCell` for the data path, the
+/// **first** call wins.  Calling this from `setup()` ensures the correct bundle
+/// path is locked in before `init_espeak_data_path()` runs on a worker thread.
+pub(crate) fn init_espeak_bundled_data_path(resource_dir: &std::path::Path) {
+    let data_path = resource_dir.join("espeak-ng-data");
+    if data_path.is_dir() {
+        #[cfg(feature = "tts-kitten")]
+        kittentts::phonemize::set_data_path(&data_path);
+        // Use `::neutts::` (crate root) to avoid ambiguity with the `neutts` submodule.
+        #[cfg(feature = "tts-neutts")]
+        ::neutts::phonemize::set_data_path(&data_path);
+    }
+    // If the bundle path doesn't exist (e.g. first-run dev build before the
+    // first tauri bundle), init_espeak_data_path() on the worker will try the
+    // ESPEAK_DATA_PATH_DEV fallback below.
+}
+
+/// Called from **worker-thread startup** (neutts and kittentts workers).
+///
+/// Resolves the espeak-ng data directory in priority order and calls
+/// `set_data_path()`.  Because `set_data_path()` uses a `OnceCell`, it is a
+/// no-op if `init_espeak_bundled_data_path()` already ran from `setup()`.
+///
+/// Priority:
+///   1. `ESPEAK_DATA_PATH` env var           — explicit runtime override
+///   2. `ESPEAK_DATA_PATH_DEV`               — absolute path baked in by
+///                                             `build.rs` pointing at the
+///                                             `espeak-static/share/espeak-ng-data`
+///                                             directory on the *build* machine.
+///                                             Used for plain `cargo run` builds.
+///   3. espeak-ng compiled-in path           — NULL → espeak-ng uses its own
+///                                             system path as a last resort.
+///
+/// We only call `set_data_path()` when the path actually exists on disk so we
+/// never hand a non-existent path to espeak, which would permanently poison the
+/// `OnceCell` init result and break all phonemisation.
 pub(super) fn init_espeak_data_path() {
-    // Resolve the espeak-ng data directory in priority order:
-    //
-    //   1. ESPEAK_DATA_PATH env var (explicit runtime override)
-    //   2. Compile-time dev-tree fallback  ({CARGO_MANIFEST_DIR}/../../../neutts-rs/…)
-    //
-    // We only call `set_data_path()` when the resolved path **actually exists**.
-    // If neither candidate exists we leave DATA_PATH unset so that the neutts
-    // crate falls through to:
-    //   a. NEUTTS_ESPEAK_DATA_DIR baked in at build time by the neutts build.rs
-    //      (present when espeak-ng was built from source during `cargo build`), or
-    //   b. NULL → espeak-ng uses its own compiled-in system path
-    //      (e.g. /opt/homebrew/share/espeak-ng-data on macOS Homebrew installs).
-    //
-    // Previously we always set the path to the dev-tree fallback, even on user
-    // machines where that compile-time path does not exist, causing
-    // espeak_ng_Initialize to fail and every phonemisation call to return
-    // "Phonemisation of ref_text failed".
-    let explicit = std::env::var("ESPEAK_DATA_PATH").ok();
-    let dev_fallback = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../neutts-rs/espeak-ng-data");
+    let explicit   = std::env::var("ESPEAK_DATA_PATH").ok();
+    let dev_baked  = option_env!("ESPEAK_DATA_PATH_DEV"); // absolute path from build.rs
 
     let resolved = explicit
         .as_deref()
         .into_iter()
-        .chain(std::iter::once(dev_fallback))
-        .find(|p| std::path::Path::new(p).exists());
+        .chain(dev_baked)
+        .find(|p| std::path::Path::new(p).is_dir());
 
     if let Some(dir) = resolved {
         let data_path = std::path::Path::new(dir);
@@ -145,7 +168,9 @@ pub(super) fn init_espeak_data_path() {
         #[cfg(feature = "tts-neutts")]
         ::neutts::phonemize::set_data_path(data_path);
     }
-    // else: leave DATA_PATH unset; espeak-ng will find its own data directory.
+    // else: leave DATA_PATH unset; espeak-ng falls through to its compiled-in
+    // system path (works when a system espeak-ng is installed, or when the
+    // static lib was built with a matching CMAKE_INSTALL_PREFIX).
 }
 
 // ─── Shared audio output ──────────────────────────────────────────────────────
