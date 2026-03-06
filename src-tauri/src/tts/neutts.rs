@@ -3,13 +3,12 @@
 //! NeuTTS backend — GGUF backbone + NeuCodec decoder, voice-cloning, multilingual.
 //!
 //! Compiled only when the `tts-neutts` Cargo feature is enabled.
-#![cfg(feature = "tts-neutts")]
+
 
 use std::path::{Path, PathBuf};
 use std::sync::{OnceLock, RwLock, atomic::{AtomicBool, Ordering}};
 
 use hf_hub::{Cache, Repo, api::sync::ApiBuilder as HfApiBuilder};
-use hound;
 use rodio::{DeviceSinkBuilder, MixerDeviceSink};
 use sha2::{Digest, Sha256};
 use tokio::sync::oneshot;
@@ -172,12 +171,12 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
     for cmd in rx {
         match cmd {
             // ── Init ─────────────────────────────────────────────────────────
-            Cmd::Init { backbone_repo, gguf_file, voice_preset, ref_wav_path, ref_text, mut cb, done } => {
+            Cmd::Init { backbone_repo, gguf_file, voice_preset, ref_wav_path, ref_text, cb, done } => {
                 LOADING.store(true, Ordering::Relaxed);
 
                 if model.is_none() || loaded_backbone != backbone_repo {
                     READY.store(false, Ordering::Relaxed);
-                    match load(&backbone_repo, gguf_file.as_deref(), |p| cb(p)) {
+                    match load(&backbone_repo, gguf_file.as_deref(), cb) {
                         Ok(m) => {
                             eprintln!("[neutts] backbone ready (repo={backbone_repo})");
                             loaded_backbone = backbone_repo;
@@ -232,7 +231,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 
                 // Per-utterance voice override (loads inline without touching stored state).
                 let (eff_codes, eff_text, eff_vkey): (
-                    std::borrow::Cow<Vec<i32>>,
+                    std::borrow::Cow<[i32]>,
                     std::borrow::Cow<str>,
                     std::borrow::Cow<str>,
                 ) = match voice_override.as_deref().filter(|v| !v.is_empty()) {

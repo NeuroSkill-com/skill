@@ -1920,10 +1920,13 @@ const uk: Record<string, string> = {
   "ttsTab.statusLoading":         "Завантаження…",
   "ttsTab.statusIdle":            "Не активний",
   "ttsTab.statusUnloaded":        "Не завантажено",
+  "ttsTab.statusError":           "Помилка",
   "ttsTab.preloadButton":         "Попереднє завантаження",
+  "ttsTab.retryButton":           "Повторити",
   "ttsTab.preloadOnStartup":      "Попереднє завантаження рушія при запуску",
   "ttsTab.preloadOnStartupDesc":  "Прогріває активний рушій у фоні при запуску програми",
   "ttsTab.unloadButton":          "Вивантажити",
+  "ttsTab.errorTitle":            "Помилка завантаження",
   "ttsTab.requirements":          "Потрібний espeak-ng у PATH",
   "ttsTab.requirementsDesc":      "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng",
 

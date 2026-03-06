@@ -5438,9 +5438,7 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kittentts"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd4e6a21a0a3cb8efb9c26b6a68be7800293fe6e39111755525a9d4de0ab1768"
+version = "0.2.2"
 dependencies = [
  "anyhow",
  "fancy-regex",
@@ -6193,8 +6191,6 @@ dependencies = [
 [[package]]
 name = "neutts"
 version = "0.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683f2af09abe06e6bdbdfbd36963da1af8679c6fbfc26f8c44f6877acd7298c3"
 dependencies = [
  "anyhow",
  "burn",

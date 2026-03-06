@@ -1921,10 +1921,13 @@ const de: Record<string, string> = {
   "ttsTab.statusLoading":         "Wird geladen…",
   "ttsTab.statusIdle":            "Inaktiv",
   "ttsTab.statusUnloaded":        "Nicht geladen",
+  "ttsTab.statusError":           "Fehler",
   "ttsTab.preloadButton":         "Vorladen",
+  "ttsTab.retryButton":           "Wiederholen",
   "ttsTab.preloadOnStartup":      "Engine beim Start vorladen",
   "ttsTab.preloadOnStartupDesc":  "Lädt die aktive Engine beim App-Start im Hintergrund vor",
   "ttsTab.unloadButton":          "Entladen",
+  "ttsTab.errorTitle":            "Ladefehler",
   "ttsTab.requirements":          "Benötigt espeak-ng im PATH",
   "ttsTab.requirementsDesc":      "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng",
 

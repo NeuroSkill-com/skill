@@ -1921,10 +1921,13 @@ const he: Record<string, string> = {
   "ttsTab.statusLoading":         "טוען…",
   "ttsTab.statusIdle":            "לא פעיל",
   "ttsTab.statusUnloaded":        "לא טעון",
+  "ttsTab.statusError":           "שגיאה",
   "ttsTab.preloadButton":         "טעינה מוקדמת",
+  "ttsTab.retryButton":           "נסה שוב",
   "ttsTab.preloadOnStartup":      "טעינה מוקדמת של המנוע בהפעלה",
   "ttsTab.preloadOnStartupDesc":  "מחמם את המנוע הפעיל ברקע בעת הפעלת האפליקציה",
   "ttsTab.unloadButton":          "פריקה",
+  "ttsTab.errorTitle":            "שגיאת טעינה",
   "ttsTab.requirements":          "דורש espeak-ng ב-PATH",
   "ttsTab.requirementsDesc":      "macOS: brew install espeak-ng · Ubuntu: apt install espeak-ng",
 

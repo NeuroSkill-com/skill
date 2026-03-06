@@ -3,7 +3,7 @@
 //! KittenTTS backend — ONNX-based English TTS, ~30 MB, no GPU required.
 //!
 //! Compiled only when the `tts-kitten` Cargo feature is enabled.
-#![cfg(feature = "tts-kitten")]
+
 
 use std::sync::{OnceLock, atomic::{AtomicBool, Ordering}};
 

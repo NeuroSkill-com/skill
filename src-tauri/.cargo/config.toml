@@ -9,3 +9,31 @@
 [env]
 ESPEAK_LIB_DIR    = { value = "espeak-static/lib",                    relative = true }
 ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static.sh",  relative = true }
+# ── macOS deployment target ───────────────────────────────────────────────────
+#
+# llama.cpp uses std::filesystem (fs::path / fs::u8path) which was introduced
+# in macOS 10.15.  Xcode 26+ enforces availability annotations strictly, so
+# building against an older deployment target produces hard errors like:
+#   "'path' is unavailable: introduced in macOS 10.15"
+#
+# Two separate knobs are needed:
+#
+#   MACOSX_DEPLOYMENT_TARGET
+#     Read by the `cc` crate to generate -mmacosx-version-min in
+#     CMAKE_C_FLAGS / CMAKE_CXX_FLAGS (passed by cmake-0.1.57).
+#
+#   CMAKE_OSX_DEPLOYMENT_TARGET
+#     llama-cpp-sys-2/build.rs forwards all CMAKE_* env vars directly to
+#     cmake configure via config.define(key, value).  cmake then appends
+#     its own -mmacosx-version-min=10.15 AFTER CMAKE_C_FLAGS, so Clang's
+#     "last flag wins" rule overrides the 10.13 baked into CMAKE_C_FLAGS.
+#
+# force=true is required so that a system-level MACOSX_DEPLOYMENT_TARGET
+# (e.g. set by Xcode to 10.13) cannot silently override these values.
+#
+# ⚠️  After changing either value you MUST delete the stale cmake cache:
+#     rm -rf src-tauri/target/release/build/llama-cpp-sys-2-*/
+# The cmake crate skips reconfiguration when CMakeCache.txt exists, so the old
+# min-version flags stay baked in until the cache directory is removed.
+MACOSX_DEPLOYMENT_TARGET    = { value = "10.15", force = true }
+CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }

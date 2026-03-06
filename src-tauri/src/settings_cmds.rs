@@ -9,7 +9,6 @@
 use std::sync::Mutex;
 use crate::MutexExt;
 use tauri::{AppHandle, Emitter, Manager};
-use rfd;
 
 use crate::{
     AppState, MuseStatus, DiscoveredDevice, EegPacket, PpgPacket, ImuPacket,

@@ -102,6 +102,10 @@ impl TtsProgressEvent {
     pub(super) fn unloaded() -> Self {
         Self { phase: "unloaded".into(), step: 0, total: 0, label: String::new() }
     }
+    /// Loading failed — `label` contains the human-readable error message.
+    pub(super) fn error(label: String) -> Self {
+        Self { phase: "error".into(), step: 0, total: 0, label }
+    }
 }
 
 // ─── espeak-ng data path ──────────────────────────────────────────────────────
@@ -178,10 +182,8 @@ pub(crate) fn tts_shutdown() {
     #[cfg(feature = "tts-neutts")]
     {
         let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
-        if neutts::try_shutdown(tx) {
-            if rx.recv_timeout(timeout).is_err() {
-                eprintln!("[neutts] shutdown timed out — forcing drop");
-            }
+        if neutts::try_shutdown(tx) && rx.recv_timeout(timeout).is_err() {
+            eprintln!("[neutts] shutdown timed out — forcing drop");
         }
     }
 }
@@ -242,7 +244,10 @@ pub async fn tts_init(app_handle: AppHandle) -> Result<(), String> {
             }).map_err(|e| format!("neutts init channel send: {e}"))?;
             let result = rx.await.map_err(|e| format!("neutts init channel recv: {e}"))
                 .and_then(|r| r);
-            if result.is_ok() { emit(TtsProgressEvent::ready(3)); }
+            match &result {
+                Ok(_)    => emit(TtsProgressEvent::ready(3)),
+                Err(msg) => emit(TtsProgressEvent::error(msg.clone())),
+            }
             return result;
         }
     } else {
@@ -268,7 +273,10 @@ pub async fn tts_init(app_handle: AppHandle) -> Result<(), String> {
             }).map_err(|e| format!("kitten init channel send: {e}"))?;
             let result = rx.await.map_err(|e| format!("kitten init channel recv: {e}"))
                 .and_then(|r| r);
-            if result.is_ok() { emit(TtsProgressEvent::ready(4)); }
+            match &result {
+                Ok(_)    => emit(TtsProgressEvent::ready(4)),
+                Err(msg) => emit(TtsProgressEvent::error(msg.clone())),
+            }
             return result;
         }
     }
@@ -335,7 +343,6 @@ pub async fn tts_speak(text: String, voice: Option<String>) {
                 done: tx,
             });
             let _ = rx.await;
-            return;
         }
     } else {
         #[cfg(feature = "tts-kitten")]
@@ -350,7 +357,6 @@ pub async fn tts_speak(text: String, voice: Option<String>) {
                 text, voice: resolved_voice, done: tx,
             });
             let _ = rx.await;
-            return;
         }
     }
 }
@@ -417,7 +423,6 @@ pub async fn tts_set_voice(voice: String) {
             if neutts::is_preset(&voice) {
                 neutts::set_voice_preset(voice);
             }
-            return;
         }
     } else {
         #[cfg(feature = "tts-kitten")]

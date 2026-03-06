@@ -78,11 +78,12 @@ the Free Software Foundation, version 3 only. -->
   // ── State ──────────────────────────────────────────────────────────────────
 
   // Engine status
-  type EnginePhase = "idle" | "loading" | "ready" | "unloaded";
+  type EnginePhase = "idle" | "loading" | "ready" | "unloaded" | "error";
   let enginePhase = $state<EnginePhase>("idle");
   let loadLabel   = $state("");
   let loadStep    = $state(0);
   let loadTotal   = $state(3);
+  let errorMsg    = $state("");
 
   const loadPct = $derived(
     enginePhase === "ready"   ? 100 :
@@ -140,15 +141,23 @@ the Free Software Foundation, version 3 only. -->
         enginePhase = "ready";
         loadStep    = loadTotal;
         loadLabel   = "";
+        errorMsg    = "";
       } else if (p.phase === "unloaded") {
         enginePhase = "unloaded";
         loadStep    = 0;
         loadLabel   = "";
+        errorMsg    = "";
+      } else if (p.phase === "error") {
+        enginePhase = "error";
+        loadStep    = 0;
+        loadLabel   = "";
+        errorMsg    = p.label;
       } else {
         enginePhase = "loading";
         loadStep    = p.step;
         loadTotal   = p.total;
         loadLabel   = p.label;
+        errorMsg    = "";
       }
     });
 
@@ -290,6 +299,11 @@ the Free Software Foundation, version 3 only. -->
             <span class="text-[0.76rem] font-semibold text-amber-600 dark:text-amber-400 animate-pulse">
               {t("ttsTab.statusLoading")}
             </span>
+          {:else if enginePhase === "error"}
+            <span class="w-2 h-2 rounded-full bg-rose-500 shrink-0"></span>
+            <span class="text-[0.76rem] font-semibold text-rose-600 dark:text-rose-400">
+              {t("ttsTab.statusError")}
+            </span>
           {:else if enginePhase === "unloaded"}
             <span class="w-2 h-2 rounded-full bg-muted-foreground/20 shrink-0"></span>
             <span class="text-[0.76rem] font-semibold text-muted-foreground">
@@ -311,7 +325,7 @@ the Free Software Foundation, version 3 only. -->
                      bg-muted dark:bg-[#1a1a28] px-2.5 py-1 text-[0.62rem] font-semibold
                      text-muted-foreground hover:text-foreground transition-colors
                      disabled:opacity-40 disabled:cursor-not-allowed">
-              {t("ttsTab.preloadButton")}
+              {enginePhase === "error" ? t("ttsTab.retryButton") : t("ttsTab.preloadButton")}
             </button>
             <button
               onclick={unload}
@@ -342,6 +356,19 @@ the Free Software Foundation, version 3 only. -->
               <div class="h-full rounded-full bg-indigo-500 transition-all duration-500 ease-out"
                    style="width: {loadPct}%"></div>
             </div>
+          </div>
+        {/if}
+
+        <!-- Error message -->
+        {#if enginePhase === "error" && errorMsg}
+          <div class="rounded-lg border border-rose-200 dark:border-rose-800/60
+                      bg-rose-50 dark:bg-rose-950/30 px-3 py-2">
+            <p class="text-[0.62rem] font-semibold text-rose-700 dark:text-rose-400 mb-0.5">
+              {t("ttsTab.errorTitle")}
+            </p>
+            <p class="text-[0.58rem] text-rose-600/80 dark:text-rose-400/70 font-mono break-all leading-relaxed">
+              {errorMsg}
+            </p>
           </div>
         {/if}
 

@@ -60,7 +60,7 @@ csv = "1"
 # Model weights (~30 MB) are downloaded from HuggingFace Hub on first use.
 # Uses the local checkout to pin deflate-only zip (avoids lzma-sys conflict
 # with tracel-llvm-bundler which also links the native lzma library).
-kittentts = { version = "0.2.1", features = ["espeak"], optional = true }
+kittentts = { version = "0.2.2", features = ["espeak"], optional = true }
 
 # NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder (local path).
 # backbone: GGUF LLM via llama-cpp-2 (requires cmake + C++ at build time).
@@ -164,3 +164,24 @@ tempfile = "3"
 [patch.crates-io]
 cubek-matmul = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug     = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
+# Use local kittentts-rs so that ort is linked statically (no copy-dylibs).
+# The Pyke CDN tarball ships libonnxruntime.a; without copy-dylibs the provider
+# dylibs are not copied next to the binary, which is correct for a Tauri .app bundle.
+kittentts    = { path = "../../../kittentts-rs" }
+neutts       = { path = "../../../neutts-rs" }
+
+# ── Build profiles ────────────────────────────────────────────────────────────
+#
+# incremental = false (dev only)
+#
+# Rust's incremental compilation on macOS uses "thin archives" for rlibs.
+# When a compilation unit inside candle-core produces a zero-length .o file
+# (any module that is entirely cfg-gated away at the chosen feature set), the
+# thin-archive builder tries to mmap it and panics:
+#   "failed to map object file: memory map must have a non-zero length"
+# Disabling incremental avoids the thin-archive code path entirely.
+# Release builds are unaffected (they never use incremental by default).
+# Tracked upstream: https://github.com/rust-lang/rust/issues/129443
+[profile.dev]
+incremental   = false
+codegen-units = 1
