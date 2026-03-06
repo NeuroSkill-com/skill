@@ -393,6 +393,25 @@ skill/
 └── README.md
 ```
 
+## Versioning
+
+The `bump` script keeps `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` in sync in one step.
+
+| Command | Behaviour |
+|---|---|
+| `npm run bump` | Auto-increments the **patch** digit (`0.0.3 → 0.0.4`) |
+| `npm run bump 1.2.0` | Sets all three files to the exact version supplied |
+
+```bash
+# patch bump (0.0.x)
+npm run bump
+
+# explicit version
+npm run bump 1.2.0
+```
+
+---
+
 ## Release
 
 Generate new keys and update `tauri.conf.json`:
