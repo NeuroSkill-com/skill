@@ -1894,6 +1894,9 @@ const de: Record<string, string> = {
   "dnd.forceOffBtn":            "Jetzt beenden",
   "dnd.exitNotification":       "Austritts-Benachrichtigung",
   "dnd.exitNotificationDesc":   "Benachrichtigung senden, wenn der Fokusmodus automatisch deaktiviert wird (Score gesunken, schlechtes Signal oder Funktion deaktiviert).",
+  "dnd.untilActivation":        "bis zur Aktivierung",
+  "dnd.activating":             "Fokusmodus wird aktiviert…",
+  "dnd.buildingScore":          "Engagement {score} / {threshold}",
 
   // ── Interactive search ───────────────────────────────────────────────────
   "search.interactiveQueryLabel":       "Suche",

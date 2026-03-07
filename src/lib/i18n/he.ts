@@ -1889,6 +1889,9 @@ const he: Record<string, string> = {
   "dnd.forceOffBtn":            "כבה עכשיו",
   "dnd.exitNotification":       "התראת יציאה",
   "dnd.exitNotificationDesc":   "שלח התראה כאשר מצב הפוקוס מושבת אוטומטית (ציון ירד, איכות אות נמוכה, או הפיצ׳ר הושבת).",
+  "dnd.untilActivation":        "עד להפעלה",
+  "dnd.activating":             "מפעיל מצב פוקוס…",
+  "dnd.buildingScore":          "מעורבות {score} / {threshold}",
 
   // ── Window titles ────────────────────────────────────────────────────────
   "window.title.main":        "{app}",

@@ -1888,6 +1888,9 @@ const uk: Record<string, string> = {
   "dnd.forceOffBtn":            "Вимкнути зараз",
   "dnd.exitNotification":       "Сповіщення про вихід",
   "dnd.exitNotificationDesc":   "Надсилати сповіщення, коли режим фокусу автоматично деактивується (оцінка впала, поганий сигнал або функцію вимкнено).",
+  "dnd.untilActivation":        "до активації",
+  "dnd.activating":             "Активація режиму фокусу…",
+  "dnd.buildingScore":          "Залученість {score} / {threshold}",
 
   // ── Window titles ────────────────────────────────────────────────────────
   "window.title.main":        "{app}",

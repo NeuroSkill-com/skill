@@ -1889,6 +1889,9 @@ const fr: Record<string, string> = {
   "dnd.forceOffBtn":            "Désactiver maintenant",
   "dnd.exitNotification":       "Notification de sortie",
   "dnd.exitNotificationDesc":   "Envoyer une notification quand le mode Focus est désactivé automatiquement (score insuffisant, signal faible ou fonctionnalité désactivée).",
+  "dnd.untilActivation":        "avant l'activation",
+  "dnd.activating":             "Activation du mode Focus…",
+  "dnd.buildingScore":          "Engagement {score} / {threshold}",
 
   // ── Interactive search ───────────────────────────────────────────────────
   "search.interactiveQueryLabel":       "Recherche",

@@ -228,6 +228,54 @@ pub async fn open_api_window(app: AppHandle) -> Result<(), String> {
         .resizable(true).center().build().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Return the last app version for which the What's New window was dismissed.
+///
+/// An empty string means the window has never been seen.
+#[tauri::command]
+pub fn get_whats_new_seen_version(state: tauri::State<'_, Mutex<AppState>>) -> String {
+    state.lock_or_recover().last_seen_whats_new_version.clone()
+}
+
+/// Persist the acknowledged version and close the What's New window.
+///
+/// Combining both operations in Rust avoids relying on the frontend window
+/// API (which can silently fail in secondary webview windows).
+#[tauri::command]
+pub fn dismiss_whats_new(version: String, app: AppHandle) {
+    {
+        let r = app.state::<Mutex<AppState>>();
+        r.lock_or_recover().last_seen_whats_new_version = version;
+    }
+    save_settings(&app);
+    if let Some(win) = app.get_webview_window("whats-new") {
+        let _ = win.close();
+    }
+}
+
+/// Open (or focus) the What's New window.
+///
+/// The frontend calls `get_whats_new_seen_version` first and only invokes
+/// this command when the stored version differs from the running version.
+/// The window's own page calls `set_whats_new_seen_version` on dismiss.
+#[tauri::command]
+pub async fn open_whats_new_window(app: AppHandle) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window("whats-new") {
+        let _ = win.show(); let _ = win.set_focus(); return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "whats-new",
+        tauri::WebviewUrl::App("whats-new".into()),
+    )
+    .title("What's New in NeuroSkill™")
+    .inner_size(520.0, 620.0)
+    .resizable(false)
+    .center()
+    .build()
+    .map(|_| ())
+    .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn open_onboarding_window(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("onboarding") {

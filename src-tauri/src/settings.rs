@@ -463,6 +463,11 @@ pub(crate) struct UserSettings {
     /// Automatic Do Not Disturb when focus is sustained.  macOS only.
     #[serde(default)]
     pub do_not_disturb: DoNotDisturbConfig,
+
+    /// Last app version for which the "What's New" window was shown and
+    /// dismissed by the user.  Empty string means it has never been seen.
+    #[serde(default)]
+    pub last_seen_whats_new_version: String,
 }
 
 fn default_tts_preload() -> bool { true }
@@ -587,8 +592,9 @@ impl Default for UserSettings {
             neutts:                 NeuttsConfig::default(),
             tts_preload:            default_tts_preload(),
             track_active_window:    default_track_active_window(),
-            track_input_activity:   default_track_input_activity(),
-            do_not_disturb:         DoNotDisturbConfig::default(),
+            track_input_activity:          default_track_input_activity(),
+            do_not_disturb:                DoNotDisturbConfig::default(),
+            last_seen_whats_new_version:   String::new(),
         }
     }
 }

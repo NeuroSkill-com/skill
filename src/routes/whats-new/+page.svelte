@@ -1,0 +1,180 @@
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<!-- Copyright (C) 2026 NeuroSkill.com
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 3 only. -->
+<!-- What's New — standalone window shown once per app version. -->
+<script lang="ts">
+  import { onMount }       from "svelte";
+  import { invoke }        from "@tauri-apps/api/core";
+  import { t }             from "$lib/i18n/index.svelte";
+  import { useWindowTitle } from "$lib/window-title.svelte";
+  import ThemeToggle       from "$lib/ThemeToggle.svelte";
+  import changelogRaw      from "../../../CHANGELOG.md?raw";
+
+  useWindowTitle("whatsNew.title");
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let appVersion = $state("…");
+
+  // ── Changelog parsing ──────────────────────────────────────────────────────
+
+  interface ChangeSection {
+    heading: string;
+    items:   string[];
+  }
+
+  interface VersionEntry {
+    version:  string;
+    date:     string;
+    sections: ChangeSection[];
+  }
+
+  function parseChangelog(raw: string): VersionEntry[] {
+    const entries: VersionEntry[] = [];
+    const versionBlockRe = /^##\s+\[([^\]]+)\]\s*[—–-]+\s*(\S+)/m;
+    const blocks = raw.split(/^(?=##\s+\[)/m).filter(b => b.trim());
+
+    for (const block of blocks) {
+      const headerMatch = block.match(versionBlockRe);
+      if (!headerMatch) continue;
+
+      const version = headerMatch[1].trim();
+      const date    = headerMatch[2].trim();
+      const body    = block.slice(block.indexOf("\n") + 1);
+
+      const sections: ChangeSection[] = [];
+      let   current:  ChangeSection   = { heading: "", items: [] };
+
+      for (const rawLine of body.split("\n")) {
+        const line = rawLine.trimEnd();
+        if (/^###\s/.test(line)) {
+          if (current.items.length > 0 || current.heading) sections.push(current);
+          current = { heading: line.replace(/^###\s+/, "").trim(), items: [] };
+        } else if (/^[-*+]\s/.test(line)) {
+          current.items.push(line.replace(/^[-*+]\s+/, "").trim());
+        }
+      }
+      if (current.items.length > 0 || current.heading) sections.push(current);
+      if (sections.length > 0) entries.push({ version, date, sections });
+    }
+
+    return entries;
+  }
+
+  const changelog: VersionEntry[] = parseChangelog(changelogRaw);
+  const latest: VersionEntry | undefined = changelog[0];
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  onMount(async () => {
+    try {
+      appVersion = await invoke<string>("get_app_version");
+    } catch {
+      appVersion = latest?.version ?? "?";
+    }
+  });
+
+  // ── Dismiss — handled entirely in Rust (saves version + closes window) ────
+  async function dismiss() {
+    await invoke("dismiss_whats_new", { version: appVersion });
+  }
+</script>
+
+<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
+
+  <!-- ── Title bar ──────────────────────────────────────────────────────────── -->
+  <div class="flex items-center gap-2.5 px-4 pt-4 pb-3
+              border-b border-border dark:border-white/[0.07] shrink-0"
+       data-tauri-drag-region>
+    <!-- Sparkle icon -->
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+         class="w-3.5 h-3.5 text-violet-500 pointer-events-none shrink-0"
+         aria-hidden="true">
+      <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/>
+      <path d="M5 3l.75 2.25L8 6l-2.25.75L5 9l-.75-2.25L2 6l2.25-.75z" stroke-width="1.5"/>
+    </svg>
+    <span class="text-[0.82rem] font-semibold tracking-tight pointer-events-none">
+      {t("whatsNew.title")}
+    </span>
+    <span class="flex-1" data-tauri-drag-region></span>
+    <ThemeToggle />
+  </div>
+
+  {#if latest}
+    <!-- ── Gradient header ──────────────────────────────────────────────────── -->
+    <div class="px-6 pt-5 pb-4 shrink-0
+                bg-gradient-to-br from-violet-500/10 via-blue-500/8 to-sky-500/10
+                dark:from-violet-500/15 dark:via-blue-500/12 dark:to-sky-500/15
+                border-b border-border dark:border-white/[0.06]">
+      <div class="flex items-center gap-3">
+        <!-- Icon badge -->
+        <div class="flex items-center justify-center w-10 h-10 rounded-xl shrink-0
+                    bg-gradient-to-br from-violet-500 to-blue-600
+                    shadow-lg shadow-violet-500/30 dark:shadow-violet-500/40">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white"
+               stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+               class="w-5 h-5" aria-hidden="true">
+            <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/>
+            <path d="M5 3l.75 2.25L8 6l-2.25.75L5 9l-.75-2.25L2 6l2.25-.75z" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[0.9rem] font-bold leading-tight text-foreground">
+            {t("whatsNew.title")}
+          </span>
+          <span class="text-[0.6rem] font-semibold text-muted-foreground/60 tracking-wide uppercase">
+            {t("whatsNew.version", { version: latest.version })}
+            &nbsp;·&nbsp;
+            {latest.date}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Scrollable changelog body ──────────────────────────────────────── -->
+    <div class="flex-1 overflow-y-auto overscroll-contain px-6 py-5
+                flex flex-col gap-5 text-[0.78rem]">
+      {#each latest.sections as section}
+        <div class="flex flex-col gap-2">
+          {#if section.heading}
+            <h3 class="text-[0.72rem] font-bold tracking-wide uppercase
+                       text-violet-600 dark:text-violet-400 leading-tight">
+              {section.heading}
+            </h3>
+          {/if}
+          <ul class="flex flex-col gap-1.5 pl-0">
+            {#each section.items as item}
+              <li class="flex items-start gap-2 text-[0.75rem] text-foreground/85 leading-relaxed">
+                <!-- Consistent SVG chevron bullet -->
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
+                     class="w-3 h-3 mt-[0.25em] shrink-0 text-violet-500 dark:text-violet-400"
+                     aria-hidden="true">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+                <span>{item}</span>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/each}
+    </div>
+
+    <!-- ── Footer ─────────────────────────────────────────────────────────── -->
+    <div class="px-6 py-4 border-t border-border dark:border-white/[0.06]
+                flex items-center justify-end shrink-0">
+      <button
+        onclick={dismiss}
+        class="px-6 h-9 rounded-lg text-[0.78rem] font-semibold text-white
+               bg-gradient-to-r from-violet-500 to-blue-600
+               hover:from-violet-600 hover:to-blue-700
+               shadow shadow-violet-500/20 dark:shadow-violet-500/30
+               transition-all cursor-pointer select-none">
+        {t("whatsNew.gotIt")}
+      </button>
+    </div>
+  {/if}
+
+</main>

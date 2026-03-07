@@ -169,7 +169,9 @@ pub(crate) use window_cmds::open_calibration_window_inner;
 use window_cmds::{
     open_bt_settings, open_settings_window, open_updates_window, open_model_tab, open_help_window,
     open_search_window, open_session_window, open_label_window, open_labels_window,
-    open_focus_timer_window, open_api_window, open_onboarding_window,
+    open_focus_timer_window, open_api_window,
+    open_whats_new_window, get_whats_new_seen_version, dismiss_whats_new,
+    open_onboarding_window,
     complete_onboarding, get_onboarding_complete, close_label_window,
     check_accessibility_permission, open_accessibility_settings, open_notifications_settings,
     open_calibration_window, open_and_start_calibration, close_calibration_window,
@@ -433,6 +435,7 @@ pub struct AppState {
     pub calibration_profiles: Vec<CalibrationProfile>,
     pub active_calibration_id: String,
     pub onboarding_complete: bool,
+    pub last_seen_whats_new_version: String,
 
     pub umap_config: UmapUserConfig,
     pub theme: String,
@@ -523,6 +526,7 @@ impl Default for AppState {
             calibration_profiles: vec![CalibrationProfile::default()],
             active_calibration_id: "default".into(),
             onboarding_complete: false,
+            last_seen_whats_new_version: String::new(),
             umap_config: load_umap_config(&skill_dir),
             theme: default_theme(),
             language: String::new(),
@@ -594,7 +598,8 @@ pub(crate) fn save_settings(app: &AppHandle) {
         calibration:            CalibrationConfig::default(),
         calibration_profiles:   s.calibration_profiles.clone(),
         active_calibration_id:  s.active_calibration_id.clone(),
-        onboarding_complete:    s.onboarding_complete,
+        onboarding_complete:                s.onboarding_complete,
+        last_seen_whats_new_version:        s.last_seen_whats_new_version.clone(),
         theme:                  s.theme.clone(),
         language:               s.language.clone(),
         daily_goal_min:         s.daily_goal_min,
@@ -1021,7 +1026,8 @@ pub fn run() {
                 } else {
                     data.active_calibration_id
                 };
-                s.onboarding_complete          = data.onboarding_complete;
+                s.onboarding_complete                = data.onboarding_complete;
+                s.last_seen_whats_new_version        = data.last_seen_whats_new_version;
                 s.theme                        = data.theme;
                 s.language                     = data.language;
                 s.daily_goal_min               = data.daily_goal_min;
@@ -1208,7 +1214,8 @@ pub fn run() {
                 .build(app)?;
 
             if let Some(win) = app.get_webview_window("main") {
-                let _ = win.hide();
+                let _ = win.show();
+                let _ = win.set_focus();
                 let w = win.clone();
                 win.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -1478,6 +1485,8 @@ pub fn run() {
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,
+            open_whats_new_window,
+            get_whats_new_seen_version, dismiss_whats_new,
             open_onboarding_window, complete_onboarding, get_onboarding_complete,
             commands::search_embeddings,
             commands::enqueue_search_embeddings,

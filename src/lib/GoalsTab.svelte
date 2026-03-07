@@ -66,6 +66,11 @@ the Free Software Foundation, version 3 only. -->
   let dndOsActive            = $state<boolean | null>(null); // real system-level state
   let dndExitSecsRemain      = $state(0);    // >0 while exit countdown is running
   let dndExitHeldByLookback  = $state(false);// true when lookback is resetting countdown
+  // Activation-progress fields — populated by dnd-eligibility events
+  let dndAvgScore            = $state(0);
+  let dndSampleCount         = $state(0);
+  let dndWindowSize          = $state(0);
+  let dndThresholdLive       = $state(60);   // mirrors dndConfig.focus_threshold
   let dndSaving              = $state(false);
   let dndTesting             = $state(false);
   let focusModes             = $state<FocusModeOption[]>([]);
@@ -127,13 +132,24 @@ the Free Software Foundation, version 3 only. -->
   async function refreshDndState() {
     try {
       // get_dnd_active  → app-controlled flag
-      // get_dnd_status  → includes os_active from the 5-second OS poll cache
+      // get_dnd_status  → full pipeline snapshot (os_active, avg_score, …)
       const [appActive, status] = await Promise.all([
         invoke<boolean>("get_dnd_active"),
-        invoke<{ dnd_active: boolean; os_active: boolean | null }>("get_dnd_status"),
+        invoke<{
+          dnd_active:   boolean;
+          os_active:    boolean | null;
+          avg_score:    number;
+          sample_count: number;
+          window_size:  number;
+          threshold:    number;
+        }>("get_dnd_status"),
       ]);
-      dndActive   = appActive;
-      dndOsActive = status.os_active ?? null;
+      dndActive        = appActive;
+      dndOsActive      = status.os_active      ?? null;
+      dndAvgScore      = status.avg_score      ?? 0;
+      dndSampleCount   = status.sample_count   ?? 0;
+      dndWindowSize    = status.window_size    ?? 0;
+      dndThresholdLive = status.threshold      ?? dndConfig.focus_threshold;
     } catch {}
   }
 
@@ -167,18 +183,27 @@ the Free Software Foundation, version 3 only. -->
       if (!ev.payload) { dndExitSecsRemain = 0; dndExitHeldByLookback = false; }
     });
 
-    // Keep the exit countdown and lookback state fresh from the ~4 Hz eligibility event.
-    // os_active is now included in the payload (read from the 5-second cache, not live file).
+    // Keep exit countdown, lookback state, and activation progress fresh from
+    // the ~4 Hz eligibility event.
+    // os_active is read from the 5-second OS-poll cache (not live file).
     const eligibilityUnlisten = await listen<{
       dnd_active:            boolean;
       exit_secs_remaining:   number;
       exit_held_by_lookback: boolean;
       os_active:             boolean | null;
+      avg_score:             number;
+      sample_count:          number;
+      window_size:           number;
+      threshold:             number;
     }>("dnd-eligibility", (ev) => {
       dndActive             = ev.payload.dnd_active;
-      dndOsActive           = ev.payload.os_active ?? null;
+      dndOsActive           = ev.payload.os_active          ?? null;
       dndExitSecsRemain     = Math.ceil(ev.payload.exit_secs_remaining ?? 0);
       dndExitHeldByLookback = ev.payload.exit_held_by_lookback ?? false;
+      dndAvgScore           = ev.payload.avg_score           ?? 0;
+      dndSampleCount        = ev.payload.sample_count        ?? 0;
+      dndWindowSize         = ev.payload.window_size         ?? 0;
+      dndThresholdLive      = ev.payload.threshold           ?? dndConfig.focus_threshold;
     });
 
     // Background OS poll fires when system DND state changes externally
@@ -760,6 +785,96 @@ the Free Software Foundation, version 3 only. -->
               {/if}
             </div>
           </div>
+
+          <!-- ── Activation progress bar ─────────────────────────────────── -->
+          <!--
+            Shown when automation is on, DND is not yet active, and at least
+            one EEG sample has arrived.  Two phases:
+
+            A) Score below threshold → score-progress bar (how close you are)
+            B) Score above threshold AND window still filling → window-fill bar
+               with a big MM:SS countdown until the window is complete and DND
+               can be triggered.
+
+            Once the window is full and avg ≥ threshold the backend activates
+            DND in the same tick, so this state is transient in phase B.
+          -->
+          {#if !dndActive && dndSampleCount > 0}
+            {@const scorePct      = dndThresholdLive > 0
+              ? Math.min(100, (dndAvgScore / dndThresholdLive) * 100) : 0}
+            {@const windowFillPct = dndWindowSize > 0
+              ? Math.min(100, (dndSampleCount / dndWindowSize) * 100) : 0}
+            {@const windowRemSecs = Math.max(0, Math.round((dndWindowSize - dndSampleCount) / 4))}
+            {@const scoreAbove    = dndAvgScore >= dndThresholdLive}
+            {@const countingDown  = scoreAbove && windowRemSecs > 0}
+            {@const amm           = Math.floor(windowRemSecs / 60)}
+            {@const ass           = windowRemSecs % 60}
+
+            <div class="px-4 pb-3.5 pt-0.5 flex flex-col gap-2 bg-slate-50 dark:bg-[#111118]
+                        border-t border-border/50 dark:border-white/[0.04]">
+
+              <!-- Big countdown / score readout -->
+              <div class="flex items-baseline gap-2">
+                {#if countingDown}
+                  <span class="text-[1.6rem] font-black tabular-nums leading-none
+                               text-violet-500 dark:text-violet-400"
+                        style="font-variant-numeric: tabular-nums;">
+                    {String(amm).padStart(2, "0")}:{String(ass).padStart(2, "0")}
+                  </span>
+                  <span class="text-[0.6rem] text-violet-500/70 dark:text-violet-400/70 font-medium pb-0.5">
+                    {t("dnd.untilActivation")}
+                  </span>
+                {:else if scoreAbove}
+                  <span class="text-[0.65rem] font-semibold text-violet-600 dark:text-violet-400">
+                    {t("dnd.activating")}
+                  </span>
+                {:else}
+                  <span class="text-[0.65rem] font-semibold text-muted-foreground/60">
+                    {t("dnd.buildingScore", {
+                      score:     dndAvgScore.toFixed(0),
+                      threshold: dndThresholdLive.toFixed(0),
+                    })}
+                  </span>
+                {/if}
+              </div>
+
+              <!-- Score progress bar (fills 0 → threshold, capped at 100%) -->
+              <div class="relative h-2 w-full rounded-full overflow-hidden
+                          bg-muted/60 dark:bg-white/[0.06]">
+                <div class="absolute inset-y-0 left-0 rounded-full
+                            transition-[width] duration-1000 ease-linear
+                            {scoreAbove
+                              ? 'bg-violet-500 dark:bg-violet-400'
+                              : scorePct > 70
+                                ? 'bg-blue-400 dark:bg-blue-500'
+                                : 'bg-blue-500/60 dark:bg-blue-600/60'}"
+                     style="width:{scorePct}%">
+                </div>
+              </div>
+
+              <!-- Window-fill sub-bar: visible only when score is already above threshold -->
+              {#if scoreAbove}
+                <div class="relative h-1.5 w-full rounded-full overflow-hidden
+                            bg-muted/60 dark:bg-white/[0.06]">
+                  <div class="absolute inset-y-0 left-0 rounded-full
+                              transition-[width] duration-1000 ease-linear
+                              bg-violet-400/60 dark:bg-violet-500/60"
+                       style="width:{windowFillPct}%">
+                  </div>
+                </div>
+              {/if}
+
+              <!-- Axis labels -->
+              <div class="flex justify-between text-[0.42rem] text-muted-foreground/35
+                          tabular-nums select-none -mt-0.5">
+                <span>0</span>
+                <span class="{scoreAbove ? 'text-violet-500/50 dark:text-violet-400/50' : ''}">
+                  ≥{dndThresholdLive.toFixed(0)} activates
+                </span>
+                <span>100</span>
+              </div>
+            </div>
+          {/if}
 
           <!-- Exit countdown timer — visible whenever the exit window is running -->
           {#if isCounting || isHeld}
