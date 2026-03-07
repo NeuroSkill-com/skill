@@ -4,7 +4,7 @@
 
 > **⚠️ Research Use Only — Not a Medical Device**
 >
-> NeuroSkill™ is an open-source research tool for exploratory EEG analysis. It is **NOT** a medical device
+> NeuroSkill™ is an open-source research tool for exploratory EXG analysis. It is **NOT** a medical device
 > and has **NOT** been cleared or approved by the FDA, CE, or any regulatory body. It must not be
 > used for clinical diagnosis, treatment decisions, or any medical purpose. All metrics are
 > experimental research outputs — not validated clinical measurements. Do not rely on any output of
@@ -13,7 +13,7 @@
 >
 > **This software is provided for non-commercial research and educational use only.**
 
-**NeuroSkill™** is a desktop neurofeedback and brain-computer interface application for the BCI devices. It streams, analyses, embeds, and visualises EEG data in real time — all processing runs locally on-device.
+**NeuroSkill™** is a desktop neurofeedback and brain-computer interface application for the BCI devices. It streams, analyses, embeds, and visualises EXG data in real time — all processing runs locally on-device.
 
 Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 frontend).
 
@@ -23,21 +23,21 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 
 | Feature | Description |
 |---------|-------------|
-| **Live EEG Waveforms** | multi-channel real-time scrolling waveform with glow effect, gradient fill, live-edge pulse dot, configurable bandpass filter, and signal-quality indicators |
-| **GPU Band-Power Analysis** | Hann-windowed 512-sample FFT via `gpu_fft` — all 4 channels in a single GPU dispatch at ~4 Hz. Six clinical EEG bands (0.5–100 Hz) |
-| **ZUNA Neural Embeddings** | GPU-accelerated transformer encoder (ZUNA) converts 5-second EEG epochs into 32-dimensional embedding vectors for similarity search |
+| **Live EXG Waveforms** | multi-channel real-time scrolling waveform with glow effect, gradient fill, live-edge pulse dot, configurable bandpass filter, and signal-quality indicators |
+| **GPU Band-Power Analysis** | Hann-windowed 512-sample FFT via `gpu_fft` — all 4 channels in a single GPU dispatch at ~4 Hz. Six clinical EXG bands (0.5–100 Hz) |
+| **ZUNA Neural Embeddings** | GPU-accelerated transformer encoder (ZUNA) converts 5-second EXG epochs into 32-dimensional embedding vectors for similarity search |
 | **Session Compare** | Side-by-side comparison of any two recording sessions: band powers, derived scores, FAA, sleep staging, and 3D UMAP embedding projection. Launch directly from History via **Quick Compare** mode |
 | **Quick Compare** | Select any two sessions from the History list with checkboxes; opens compare window pre-loaded with both sessions |
 | **3D UMAP Viewer** | Interactive Three.js scatter plot of session embeddings projected to 3D. Auto-orbit, hover tooltips, click-to-connect labelled points with multi-label support |
 | **Sleep Staging** | Automatic Wake/N1/N2/N3/REM classification from band-power ratios with hypnogram visualisation |
 | **Label System** | Attach user-defined tags to moments during recording. Full CRUD management window (search, inline edit, delete). Labels stored alongside embeddings and visualised in UMAP |
-| **Focus Timer** | Pomodoro-style work/break timer (25/5, 50/10, 15/5, or custom). Optional auto-label EEG at each phase transition. Launched from tray, Command Palette, or global shortcut |
+| **Focus Timer** | Pomodoro-style work/break timer (25/5, 50/10, 15/5, or custom). Optional auto-label EXG at each phase transition. Launched from tray, Command Palette, or global shortcut |
 | **Calibration Presets** | 9 one-click presets (Baseline, Focus/Relax, Meditation, TBR, Pre-sleep, Gaming, Children, Clinical, Stress) that fill all calibration fields automatically |
 | **Onboarding Checklist** | Dashboard card tracking first-time setup: pair device → calibrate → 5-min session → set goal. Progress persisted in localStorage |
 | **Similarity Search** | Approximate nearest-neighbour search across daily HNSW indices to find similar brain states. Streaming results via Tauri `Channel` — results appear as each query completes |
 | **WebSocket API** | JSON-based LAN API with mDNS discovery (`_skill._tcp`). Commands: `status`, `label`, `search`, `compare`, `sessions`, `sleep`, `umap`, `umap_poll`. Built-in CLI/Python/Node.js code examples in the API window |
 | **Job Queue** | Serial background queue for expensive compute (UMAP). Context menu shows live queue depth and ETA. Returns ETA immediately; frontend polls for results |
-| **PPG Sensor** | Records ambient, infrared, and red PPG channels alongside EEG |
+| **PPG Sensor** | Records ambient, infrared, and red PPG channels alongside EXG |
 | **Calibration** | Guided eyes-open / eyes-closed protocol with labelled epoch recording. 9 use-case presets for common scenarios |
 | **Tray Menu** | System tray with connection status, Open NeuroSkill™ (⌘⇧O), Focus Timer (⌘⇧P), Session Compare (⌘⇧M), and quick actions |
 | **Keyboard Shortcuts** | Press `?` anywhere for a full shortcut cheat sheet. All global shortcuts configurable in Settings → Shortcuts |
@@ -52,20 +52,20 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 ```
 ┌─────────────────────────────────────────────────────┐
 │                   SvelteKit Frontend                │
-│  Svelte 5 · Tailwind · Three.js · shadcn-svelte    │
+│  Svelte 5 · Tailwind · Three.js · shadcn-svelte     │
 ├─────────────────────────────────────────────────────┤
 │                  Tauri v2 Bridge                    │
 │         IPC commands · Event emitters               │
 ├─────────────────────────────────────────────────────┤
 │                   Rust Backend                      │
-│  CoreBluetooth/BlueZ · gpu_fft · ZUNA (wgpu)       │
+│  CoreBluetooth/BlueZ · gpu_fft · ZUNA (wgpu)        │
 │  rusqlite · fast_hnsw · umap_rs · job_queue         │
 └─────────────────────────────────────────────────────┘
 ```
 
 ### Data Flow
 
-1. **BLE** → Raw EEG samples at 256 Hz (4 channels × 12 samples/packet)
+1. **BLE** → Raw EXG samples at 256 Hz (4 channels × 12 samples/packet)
 2. **Signal Filter** → Bandpass + notch filter for display
 3. **Band Analyzer** → GPU FFT every 64 samples (~4 Hz) → `BandSnapshot`
 4. **ZUNA Encoder** → Every 5 s epoch → 32-D embedding vector (wgpu)
@@ -80,9 +80,9 @@ All data is stored locally in `~/.skill/` organised by UTC date:
 ```
 ~/.skill/
   20260224/
-    eeg.sqlite              ← embeddings, metrics, labels
-    eeg_embeddings.hnsw     ← daily HNSW approximate-NN index
-    session_*.csv           ← raw EEG samples
+    EXG.sqlite              ← embeddings, metrics, labels
+    EXG_embeddings.hnsw     ← daily HNSW approximate-NN index
+    session_*.csv           ← raw EXG samples
   20260225/
     ...
 ```
@@ -98,7 +98,7 @@ Each row represents one 2.5-second epoch (5 s window, 50% overlap):
 | `device_id` | TEXT | BLE peripheral identifier |
 | `device_name` | TEXT | Headset display name |
 | `hnsw_id` | INTEGER | Zero-based row in daily HNSW file |
-| `eeg_embedding` | BLOB | f32 LE × 32 (128 bytes) |
+| `EXG_embedding` | BLOB | f32 LE × 32 (128 bytes) |
 | `label` | TEXT | User-defined tag (nullable) |
 | `rel_delta` … `rel_high_gamma` | REAL | Relative band powers (6 bands, averaged across channels) |
 | `focus_score` | REAL | Focus score (0–100) |
@@ -145,7 +145,7 @@ Each row represents one 2.5-second epoch (5 s window, 50% overlap):
 
 ## Computed Metrics Reference
 
-All metrics are computed from a **512-sample Hann-windowed FFT** at 256 Hz (0.5 Hz/bin resolution) and stored in `eeg.sqlite` every epoch.
+All metrics are computed from a **512-sample Hann-windowed FFT** at 256 Hz (0.5 Hz/bin resolution) and stored in `EXG.sqlite` every epoch.
 
 ### Band Powers
 
@@ -166,7 +166,7 @@ Absolute power (µV²) is computed from the Heinzel-normalised one-sided PSD. Re
 
 | Metric | Formula | Range | Description | Reference |
 |--------|---------|-------|-------------|-----------|
-| **Focus** | σ(β / (α + θ)) | 0–100 | Sustained attention / concentration index | Lubar, J. F. (1991). *Discourse on the development of EEG diagnostics and biofeedback for attention-deficit/hyperactivity disorders.* Biofeedback and Self-regulation, 16(3), 201–225. |
+| **Focus** | σ(β / (α + θ)) | 0–100 | Sustained attention / concentration index | Lubar, J. F. (1991). *Discourse on the development of EXG diagnostics and biofeedback for attention-deficit/hyperactivity disorders.* Biofeedback and Self-regulation, 16(3), 201–225. |
 | **Relaxation** | σ(α / (β + θ)) | 0–100 | Calm wakefulness / alpha-dominance index | Aftanas, L. I., & Golocheikine, S. A. (2001). *Human anterior and frontal midline theta and lower alpha reflect emotionally positive state and internalized attention.* Neuroscience Letters, 310(1), 57–60. |
 | **Engagement** | σ(β / (α + θ), k=2) | 0–100 | Cognitive engagement with gentler sigmoid | Pope, A. T., Bogart, E. H., & Bartolome, D. S. (1995). *Biocybernetic system evaluates indices of operator engagement in automated task.* Biological Psychology, 40(1-2), 187–195. |
 
@@ -174,25 +174,25 @@ Absolute power (µV²) is computed from the Heinzel-normalised one-sided PSD. Re
 
 | Metric | Formula | Unit | Description | Reference |
 |--------|---------|------|-------------|-----------|
-| **FAA** | ln(AF8 α) − ln(AF7 α) | ln(µV²) | Positive → approach motivation; negative → withdrawal/avoidance | Coan, J. A., & Allen, J. J. B. (2004). *Frontal EEG asymmetry as a moderator and mediator of emotion.* Biological Psychology, 67(1-2), 7–50. |
+| **FAA** | ln(AF8 α) − ln(AF7 α) | ln(µV²) | Positive → approach motivation; negative → withdrawal/avoidance | Coan, J. A., & Allen, J. J. B. (2004). *Frontal EXG asymmetry as a moderator and mediator of emotion.* Biological Psychology, 67(1-2), 7–50. |
 
 ### Cross-Band Ratios
 
 | Metric | Formula | Description | Reference |
 |--------|---------|-------------|-----------|
-| **TAR** | θ / α | Theta/Alpha ratio — drowsiness, meditative states, anxiety | Putman, P. (2011). *Resting state EEG delta–beta coherence in relation to anxiety, behavioral inhibition, and selective attentional processing of threatening stimuli.* International Journal of Psychophysiology, 80(1), 63–68. |
-| **BAR** | β / α | Beta/Alpha ratio — attention, stress, cortical arousal | Angelidis, A., Hagenaars, M., van Son, D., van der Does, W., & Putman, P. (2018). *Do not look away! Spontaneous frontal EEG theta/beta ratio as a marker for cognitive control over attention to mild and high threat.* Biological Psychology, 135, 8–17. |
-| **DTR** | δ / θ | Delta/Theta ratio — deep sleep, deep relaxation | Knyazev, G. G. (2012). *EEG delta oscillations as a correlate of basic homeostatic and motivational processes.* Neuroscience & Biobehavioral Reviews, 36(1), 677–695. |
+| **TAR** | θ / α | Theta/Alpha ratio — drowsiness, meditative states, anxiety | Putman, P. (2011). *Resting state EXG delta–beta coherence in relation to anxiety, behavioral inhibition, and selective attentional processing of threatening stimuli.* International Journal of Psychophysiology, 80(1), 63–68. |
+| **BAR** | β / α | Beta/Alpha ratio — attention, stress, cortical arousal | Angelidis, A., Hagenaars, M., van Son, D., van der Does, W., & Putman, P. (2018). *Do not look away! Spontaneous frontal EXG theta/beta ratio as a marker for cognitive control over attention to mild and high threat.* Biological Psychology, 135, 8–17. |
+| **DTR** | δ / θ | Delta/Theta ratio — deep sleep, deep relaxation | Knyazev, G. G. (2012). *EXG delta oscillations as a correlate of basic homeostatic and motivational processes.* Neuroscience & Biobehavioral Reviews, 36(1), 677–695. |
 | **TBR** | θ_abs / β_abs | Theta/Beta ratio (absolute power) — FDA-cleared ADHD biomarker | Monastra, V. J., Lubar, J. F., & Linden, M. (2001). *The development of a quantitative electroencephalographic scanning process for attention deficit–hyperactivity disorder: Reliability and validity studies.* Neuropsychology, 15(1), 136–144. |
 
 ### Spectral Shape Metrics
 
 | Metric | Formula | Range | Description | Reference |
 |--------|---------|-------|-------------|-----------|
-| **PSE** | −Σ pᵢ ln(pᵢ) / ln(5) | 0–1 | Power Spectral Entropy — spectral complexity. Higher = more uniform distribution | Inouye, T., Shinosaki, K., Sakamoto, H., Toi, S., Ukai, S., Iyama, A., Katsuda, Y., & Hirano, M. (1991). *Quantification of EEG irregularity by use of the entropy of the power spectrum.* Electroencephalography and Clinical Neurophysiology, 79(3), 204–210. |
-| **APF** | argmax PSD(8–13 Hz) | Hz | Alpha Peak Frequency — individual alpha frequency, cognitive speed marker | Klimesch, W. (1999). *EEG alpha and theta oscillations reflect cognitive and memory performance: a review and analysis.* Brain Research Reviews, 29(2-3), 169–195. |
-| **SEF95** | freq at 95th percentile of cumulative PSD | Hz | Spectral Edge Frequency — consciousness depth / anaesthesia monitoring. Drops during sleep | Rampil, I. J. (1998). *A primer for EEG signal processing in anesthesia.* Anesthesiology, 89(4), 980–1002. |
-| **Spectral Centroid** | Σ(f·P(f)) / Σ P(f) | Hz | Centre of mass of the power spectrum — global arousal indicator. Higher = more alert | Gudmundsson, S., Runarsson, T. P., Sigurdsson, S., Eiriksdottir, G., & Johnsen, K. (2007). *Reliability of quantitative EEG features.* Clinical Neurophysiology, 118(10), 2162–2171. |
+| **PSE** | −Σ pᵢ ln(pᵢ) / ln(5) | 0–1 | Power Spectral Entropy — spectral complexity. Higher = more uniform distribution | Inouye, T., Shinosaki, K., Sakamoto, H., Toi, S., Ukai, S., Iyama, A., Katsuda, Y., & Hirano, M. (1991). *Quantification of EXG irregularity by use of the entropy of the power spectrum.* Electroencephalography and Clinical Neurophysiology, 79(3), 204–210. |
+| **APF** | argmax PSD(8–13 Hz) | Hz | Alpha Peak Frequency — individual alpha frequency, cognitive speed marker | Klimesch, W. (1999). *EXG alpha and theta oscillations reflect cognitive and memory performance: a review and analysis.* Brain Research Reviews, 29(2-3), 169–195. |
+| **SEF95** | freq at 95th percentile of cumulative PSD | Hz | Spectral Edge Frequency — consciousness depth / anaesthesia monitoring. Drops during sleep | Rampil, I. J. (1998). *A primer for EXG signal processing in anesthesia.* Anesthesiology, 89(4), 980–1002. |
+| **Spectral Centroid** | Σ(f·P(f)) / Σ P(f) | Hz | Centre of mass of the power spectrum — global arousal indicator. Higher = more alert | Gudmundsson, S., Runarsson, T. P., Sigurdsson, S., Eiriksdottir, G., & Johnsen, K. (2007). *Reliability of quantitative EXG features.* Clinical Neurophysiology, 118(10), 2162–2171. |
 | **BPS** | slope of log₁₀(P) vs log₁₀(f), 1–50 Hz | — | Band-Power Slope (aperiodic 1/f exponent). More negative = steeper spectral fall-off | Donoghue, T., Haller, M., Peterson, E. J., Varma, P., Sebastian, P., Gao, R., Noto, T., Lara, A. H., Wallings, J. D., Knight, R. T., Shestyuk, A., & Voytek, B. (2020). *Parameterizing neural power spectra into periodic and aperiodic components.* Nature Neuroscience, 23(12), 1655–1665. |
 | **SNR** | 10 log₁₀(P₁₋₅₀ / P₅₀₋₆₀) | dB | Signal-to-Noise Ratio — broadband (1–50 Hz) power vs line-noise (50–60 Hz) | Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice.* MIT Press. ISBN: 978-0262019873 |
 
@@ -201,13 +201,13 @@ Absolute power (µV²) is computed from the Heinzel-normalised one-sided PSD. Re
 | Metric | Formula | Range | Description | Reference |
 |--------|---------|-------|-------------|-----------|
 | **Coherence** | Pearson r of α_rel across channel pairs | −1 to 1 | Inter-channel alpha synchrony (simplified coherence) | Lachaux, J.-P., Rodriguez, E., Martinerie, J., & Varela, F. J. (1999). *Measuring phase synchrony in brain signals.* Human Brain Mapping, 8(4), 194–208. |
-| **Mu Suppression** | α_current / α_baseline (EMA) | 0–5 | Mu rhythm suppression index. <1.0 = suppression (motor imagery, action observation) | Pfurtscheller, G., & Lopes da Silva, F. H. (1999). *Event-related EEG/MEG synchronization and desynchronization: basic principles.* Clinical Neurophysiology, 110(11), 1842–1857. |
+| **Mu Suppression** | α_current / α_baseline (EMA) | 0–5 | Mu rhythm suppression index. <1.0 = suppression (motor imagery, action observation) | Pfurtscheller, G., & Lopes da Silva, F. H. (1999). *Event-related EXG/MEG synchronization and desynchronization: basic principles.* Clinical Neurophysiology, 110(11), 1842–1857. |
 
 ### Time-Domain Features (Hjorth Parameters)
 
 | Metric | Formula | Unit | Description | Reference |
 |--------|---------|------|-------------|-----------|
-| **Hjorth Activity** | var(x) | µV² | Total signal variance (power). Higher = more active signal | Hjorth, B. (1970). *EEG analysis based on time domain properties.* Electroencephalography and Clinical Neurophysiology, 29(3), 306–310. |
+| **Hjorth Activity** | var(x) | µV² | Total signal variance (power). Higher = more active signal | Hjorth, B. (1970). *EXG analysis based on time domain properties.* Electroencephalography and Clinical Neurophysiology, 29(3), 306–310. |
 | **Hjorth Mobility** | √(var(x') / var(x)) | — | Estimate of mean frequency (time-domain). Higher = faster oscillations | Hjorth (1970), same as above |
 | **Hjorth Complexity** | mobility(x') / mobility(x) | — | Spectral bandwidth / spectral spread. Deviation from a pure sine wave | Hjorth (1970), same as above |
 
@@ -217,7 +217,7 @@ Absolute power (µV²) is computed from the Heinzel-normalised one-sided PSD. Re
 |--------|---------|-------|-------------|-----------|
 | **Permutation Entropy** | H(ordinal patterns, m=3) / ln(3!) | 0–1 | Complexity of the signal's ordinal structure. Higher = more irregular/complex. Robust to noise | Bandt, C. & Pompe, B. (2002). *Permutation entropy: a natural complexity measure for time series.* Physical Review Letters, 88(17), 174102. |
 | **Higuchi Fractal Dimension** | slope of log(L(k)) vs log(1/k), k=1..8 | ~1–2 | Fractal complexity of the signal. Higher = more complex. Effective for seizure/consciousness discrimination | Higuchi, T. (1988). *Approach to an irregular time series on the basis of the fractal theory.* Physica D: Nonlinear Phenomena, 31(2), 277–283. |
-| **DFA Exponent** | slope of log(F(n)) vs log(n) | ~0.5–1.5 | Detrended Fluctuation Analysis scaling exponent. α≈0.5 = white noise, α≈1.0 = 1/f noise, α≈1.5 = Brownian motion. Healthy EEG ≈ 0.6–0.8 | Peng, C.-K., Buldyrev, S. V., Havlin, S., Simons, M., Stanley, H. E., & Goldberger, A. L. (1994). *Mosaic organization of DNA nucleotides.* Physical Review E, 49(2), 1685–1689. |
+| **DFA Exponent** | slope of log(F(n)) vs log(n) | ~0.5–1.5 | Detrended Fluctuation Analysis scaling exponent. α≈0.5 = white noise, α≈1.0 = 1/f noise, α≈1.5 = Brownian motion. Healthy EXG ≈ 0.6–0.8 | Peng, C.-K., Buldyrev, S. V., Havlin, S., Simons, M., Stanley, H. E., & Goldberger, A. L. (1994). *Mosaic organization of DNA nucleotides.* Physical Review E, 49(2), 1685–1689. |
 | **Sample Entropy** | −ln(A/B), m=2, r=0.2·σ | ≥ 0 | Signal regularity. Lower = more regular/predictable. Robust improvement over Approximate Entropy | Richman, J. S. & Moorman, J. R. (2000). *Physiological time-series analysis using approximate entropy and sample entropy.* American Journal of Physiology – Heart and Circulatory Physiology, 278(6), H2039–H2049. |
 
 ### Cross-Frequency Coupling
@@ -258,7 +258,7 @@ All PPG metrics require the infrared and red optical sensors available on device
 
 ## WebSocket API
 
-NeuroSkill™ broadcasts EEG data and accepts commands over a local WebSocket server, advertised via mDNS as `_skill._tcp`.
+NeuroSkill™ broadcasts EXG data and accepts commands over a local WebSocket server, advertised via mDNS as `_skill._tcp`.
 
 ### Discovery
 
@@ -273,20 +273,20 @@ avahi-browse _skill._tcp
 ### Broadcast Events (server → client)
 
 ```json
-{ "event": "eeg-bands",     "payload": { "channels": [...], "faa": 0.12, ... } }
+{ "event": "EXG-bands",     "payload": { "channels": [...], "faa": 0.12, ... } }
 { "event": "muse-status",   "payload": { "state": "connected", ... } }
 { "event": "label-created", "payload": { "id": 42, "text": "eyes closed" } }
 ```
 
 | Event | Rate | Description |
 |-------|------|-------------|
-| `eeg-bands` | ~4 Hz | Derived scores, band powers, heart rate, head pose — all 60+ fields |
+| `EXG-bands` | ~4 Hz | Derived scores, band powers, heart rate, head pose — all 60+ fields |
 | `muse-status` | ~1 Hz | Device heartbeat: battery, sample counts, connection state |
 | `label-created` | on-demand | Fired when any client creates a label |
 
-> **Note:** Raw EEG samples (256 Hz), PPG (64 Hz), IMU (50 Hz), and spectrogram
+> **Note:** Raw EXG samples (256 Hz), PPG (64 Hz), IMU (50 Hz), and spectrogram
 > slices are **not** broadcast over the WebSocket API — their high frequency
-> would overwhelm the connection. Use the `eeg-bands` event for real-time
+> would overwhelm the connection. Use the `EXG-bands` event for real-time
 > derived metrics, or the `status` command for a one-shot snapshot.
 
 ### Commands (client → server)
@@ -295,7 +295,7 @@ avahi-browse _skill._tcp
 |---------|-----------|-------------|
 | `status` | — | Device state, scores, embeddings count, sleep summary |
 | `label` | `text` | Attach a label to the current moment |
-| `search` | `start_utc`, `end_utc`, `k` | Find k-nearest EEG embeddings |
+| `search` | `start_utc`, `end_utc`, `k` | Find k-nearest EXG embeddings |
 | `sessions` | — | List all recording sessions |
 | `compare` | `a_start_utc`, `a_end_utc`, `b_start_utc`, `b_end_utc` | Full comparison: metrics A/B, sleep A/B, UMAP ticket |
 | `sleep` | `start_utc`, `end_utc` | Sleep staging for a time range |
@@ -318,7 +318,7 @@ node test.js 62853     # explicit port
 | Default (macOS) | Default (Win/Linux) | Action |
 |----------------|---------------------|--------|
 | ⌘⇧O | Ctrl+Shift+O | Open NeuroSkill™ window |
-| ⌘⇧L | Ctrl+Shift+L | Add EEG label |
+| ⌘⇧L | Ctrl+Shift+L | Add EXG label |
 | ⌘⇧F | Ctrl+Shift+F | Open similarity search |
 | ⌘⇧, | Ctrl+Shift+, | Open Settings |
 | ⌘⇧C | Ctrl+Shift+C | Open Calibration |
@@ -357,7 +357,7 @@ All global shortcuts are fully **configurable** in **Settings → Shortcuts**.
 npm install
 
 # Download ZUNA encoder weights
-python3 -c "from huggingface_hub import snapshot_download; snapshot_download('mariozechner/zuna-eeg-v1')"
+python3 -c "from huggingface_hub import snapshot_download; snapshot_download('mariozechner/zuna-EXG-v1')"
 
 # Run in development mode
 cargo tauri dev
@@ -378,13 +378,13 @@ skill/
 │   └── lib/                    # Components, i18n, utilities
 │       ├── UmapViewer3D.svelte # 3D UMAP scatter (raw Three.js)
 │       ├── HelpFaq.svelte      # Help & FAQ content
-│       ├── EegChart.svelte     # Real-time waveform display
+│       ├── EXGChart.svelte     # Real-time waveform display
 │       └── i18n/               # en, de, fr, he, uk
 ├── src-tauri/                  # Rust backend
 │   └── src/
 │       ├── lib.rs              # App state, Tauri commands, BLE
-│       ├── eeg_bands.rs        # GPU FFT band-power analysis
-│       ├── eeg_embeddings.rs   # ZUNA encoder + SQLite/HNSW storage
+│       ├── EXG_bands.rs        # GPU FFT band-power analysis
+│       ├── EXG_embeddings.rs   # ZUNA encoder + SQLite/HNSW storage
 │       ├── ws_commands.rs      # WebSocket command handlers
 │       ├── ws_server.rs        # WebSocket server + mDNS
 │       ├── job_queue.rs        # Serial background job queue
