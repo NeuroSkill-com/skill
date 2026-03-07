@@ -6,7 +6,7 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!--
   GPU utilisation chart — macOS only.
-  Visible only while the ZUNA encoder is loaded.
+  Visible whenever GPU stats are available (i.e. on supported hardware).
 
   Smoothness strategy:
   • GPU stats polled every 500 ms (separate from the 6 s model-status check).
@@ -42,7 +42,7 @@ the Free Software Foundation, version 3 only. -->
   let container: HTMLDivElement    | undefined = $state();
   let canvas:    HTMLCanvasElement | undefined = $state();
 
-  const visible = $derived(modelActive && gpuStats !== null);
+  const visible = $derived(gpuStats !== null);
   const col     = $derived(gpuStats ? colorForLoad(gpuStats.overall) : C_NEUTRAL);
 
   // ── Non-reactive (mutated inside rAF — no Svelte overhead) ────────────────
@@ -215,7 +215,7 @@ the Free Software Foundation, version 3 only. -->
       const gpu = await invoke<GpuStats | null>("get_gpu_stats");
       gpuErrCount = 0;
       gpuStats = gpu;
-      if (gpu !== null && modelActive) {
+      if (gpu !== null) {
         const ts = Date.now();
         // Keep only samples within the window + a small buffer
         history = [...history.filter(p => p.ts >= ts - WIN_MS - 2_000),
@@ -261,7 +261,7 @@ the Free Software Foundation, version 3 only. -->
 
     <div class="flex items-center gap-2 px-3.5 pt-2 pb-1.5 bg-white dark:bg-[#14141e]">
       <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground shrink-0">{t("gpu.title")}</span>
-      <span class="gpu-live w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+      <span class="gpu-live w-1.5 h-1.5 rounded-full shrink-0" style="background:{col}"></span>
       <span class="ml-auto text-[0.56rem] text-muted-foreground/50 tabular-nums shrink-0">
         {t("gpu.render")}&nbsp;{(gpuStats!.render * 100).toFixed(0)}%&nbsp;·&nbsp;{t("gpu.tiler")}&nbsp;{(gpuStats!.tiler * 100).toFixed(0)}%
       </span>
