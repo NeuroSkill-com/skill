@@ -729,7 +729,7 @@ the Free Software Foundation, version 3 only. -->
 
 <main class="h-screen overflow-y-auto p-2 flex flex-col items-center" onscroll={handleScroll}
       aria-label="Dashboard">
-  <!-- GPU utilisation chart — visible only while ZUNA encoder is active -->
+  <!-- GPU utilisation chart — always visible when GPU stats are available -->
   <div class="w-full max-w-[460px]">
     <GpuChart />
   </div>

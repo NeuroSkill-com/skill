@@ -316,23 +316,22 @@ mod macos {
     /// Read a GPU utilisation percentage stored as **either**:
     ///
     /// * An integer 0–100  (`kCFNumberSInt32Type` / `kCFNumberSInt64Type`) —
-    ///   the format used through macOS 12 (Monterey).
-    /// * A float 0.0–1.0   (`kCFNumberFloat64Type`) — the format used from
-    ///   macOS 13 (Ventura) onwards on Apple Silicon.
-    /// * A float 0.0–100.0 (`kCFNumberFloat64Type`) — seen on some Intel
-    ///   discrete-GPU drivers.
+    ///   the format used by all known Apple Silicon (AGX) and Intel drivers.
+    ///   Matches the `as? Int` pattern used by the Stats app, which is the
+    ///   reference implementation proven to work on macOS 13–15.
+    /// * A float 0.0–100.0 or 0.0–1.0 (`kCFNumberFloat64Type`) —
+    ///   fallback for discrete AMD/Nvidia drivers that store float values.
     ///
     /// Returns a normalised 0.0–1.0 fraction, or `None` if the key is absent.
     fn dict_pct(dict: CFDictionaryRef, key: &str) -> Option<f32> {
-        // Try float first — if the stored type is already a float this is the
-        // only path that returns the correct value; the integer path would
-        // truncate 0.73 → 0.
-        if let Some(f) = dict_f64(dict, key) {
-            // Values > 1.0 are percentage-style (0–100); ≤ 1.0 are fractional.
-            return Some(if f > 1.0 { (f / 100.0) as f32 } else { f as f32 });
+        // Read as integer first — this matches exactly what the Stats app does
+        // (`stats["key"] as? Int`) and is the correct format for AGX / Intel.
+        if let Some(i) = dict_i64(dict, key) {
+            return Some(i.clamp(0, 100) as f32 / 100.0);
         }
-        // Fallback: integer percentage (pre-Ventura IOKit / Intel discrete GPU).
-        dict_i64(dict, key).map(|i| i.clamp(0, 100) as f32 / 100.0)
+        // Fallback: float (some discrete AMD/Nvidia drivers).
+        // Values > 1.0 are already percentage-style (0–100); ≤ 1.0 are fractional.
+        dict_f64(dict, key).map(|f| if f > 1.0 { (f / 100.0) as f32 } else { f as f32 })
     }
 
     // ── IOAccelerator loop ────────────────────────────────────────────────
@@ -346,12 +345,15 @@ mod macos {
     }
 
     fn read_accelerators() -> Vec<AcceleratorInfo> {
-        let matching = unsafe {
-            IOServiceMatching(match CString::new("IOAccelerator") {
-                Ok(c) => c.as_ptr(),
-                Err(_) => return vec![],
-            })
+        // Keep `name` alive for the entire call — IOServiceMatching reads the
+        // C string immediately, but the pointer must remain valid until the
+        // function returns.  Using a match-arm temporary drops it before the
+        // outer call, causing a use-after-free and an empty service list.
+        let name = match CString::new("IOAccelerator") {
+            Ok(s)  => s,
+            Err(_) => return vec![],
         };
+        let matching = unsafe { IOServiceMatching(name.as_ptr()) };
         if matching.is_null() { return vec![]; }
 
         let mut iter: IOIteratorT = 0;
