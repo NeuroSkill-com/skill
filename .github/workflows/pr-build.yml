@@ -382,6 +382,54 @@ jobs:
             ${{ steps.artifacts.outputs.app_tar }}
             ${{ steps.artifacts.outputs.app_sig }}
 
+      # ── Notify Discord of preview build result ───────────────────────────────
+      - name: Notify Discord of preview build
+        if: always()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          SHA="${{ steps.label.outputs.sha }}"
+          VERSION="${{ steps.label.outputs.conf_version }}"
+          TITLE="${{ steps.label.outputs.build_title }}"
+          ARTIFACT="${{ steps.label.outputs.artifact_name }}"
+          PR="${{ steps.meta.outputs.pr }}"
+          BRANCH="${{ steps.meta.outputs.branch }}"
+
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            COLOR=3066993   # green
+            EMOJI="✅"
+            DESC="Preview build succeeded. Artifact available for 14 days."
+          else
+            COLOR=15158332  # red
+            EMOJI="❌"
+            DESC="Preview build failed. Check the run for details."
+          fi
+
+          PR_FIELD=""
+          if [[ -n "$PR" ]]; then
+            PR_URL="${{ github.server_url }}/${{ github.repository }}/pull/$PR"
+            PR_FIELD="{\"name\": \"PR\", \"value\": \"[#$PR]($PR_URL)\", \"inline\": true},"
+          fi
+
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"$EMOJI Preview Build — \`v$VERSION\` @ \`$SHA\`\",
+                \"description\": \"$DESC\n\n**[View run & download artifact]($RUN_URL)**\",
+                \"url\": \"$RUN_URL\",
+                \"color\": $COLOR,
+                \"fields\": [
+                  $PR_FIELD
+                  {\"name\": \"Branch\",   \"value\": \"\`$BRANCH\`\",   \"inline\": true},
+                  {\"name\": \"Artifact\", \"value\": \"\`$ARTIFACT\`\", \"inline\": true}
+                ],
+                \"footer\": {\"text\": \"${{ github.repository }}\"}
+              }]
+            }"
+
       # ── Post (or update) a download-link comment on the PR ───────────────────
       #
       # Only runs when triggered by the "build" label on a PR.

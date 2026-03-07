@@ -376,3 +376,42 @@ jobs:
             ${{ steps.artifacts.outputs.app_tar }}
             ${{ steps.artifacts.outputs.app_sig }}
             latest.json
+
+      # ── Discord notification ────────────────────────────────────────────────
+      - name: Notify Discord of release
+        if: always()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.TAG }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            COLOR=3066993   # green
+            TITLE="🚀 Release v${{ env.VERSION }} — Published"
+            DESC="A new release has been published and is ready to download."
+            LINK_LINE="**[Download v${{ env.VERSION }}]($RELEASE_URL)**"
+          else
+            COLOR=15158332  # red
+            TITLE="💥 Release v${{ env.VERSION }} — Failed"
+            DESC="The release build failed. Check the run for details."
+            LINK_LINE="**[View failed run]($RUN_URL)**"
+          fi
+
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"$TITLE\",
+                \"description\": \"$DESC\n\n$LINK_LINE\",
+                \"url\": \"$RUN_URL\",
+                \"color\": $COLOR,
+                \"fields\": [
+                  {\"name\": \"Tag\",     \"value\": \"\`${{ env.TAG }}\`\",      \"inline\": true},
+                  {\"name\": \"Version\", \"value\": \"\`${{ env.VERSION }}\`\",  \"inline\": true},
+                  {\"name\": \"Actor\",   \"value\": \"${{ github.actor }}\",      \"inline\": true}
+                ],
+                \"footer\": {\"text\": \"${{ github.repository }}\"}
+              }]
+            }"
