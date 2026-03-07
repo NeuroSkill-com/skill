@@ -786,18 +786,17 @@ the Free Software Foundation, version 3 only. -->
             </div>
           </div>
 
-          <!-- ── Activation progress bar ─────────────────────────────────── -->
+          <!-- ── Activation countdown bar ───────────────────────────────── -->
           <!--
-            Shown when automation is on, DND is not yet active, and at least
-            one EEG sample has arrived.  Two phases:
+            Two phases, unified into one bar:
 
-            A) Score below threshold → score-progress bar (how close you are)
-            B) Score above threshold AND window still filling → window-fill bar
-               with a big MM:SS countdown until the window is complete and DND
-               can be triggered.
+            A) Score below threshold → score-fill bar (how close you are to
+               the threshold).  No countdown yet — we don't know when the
+               score will cross the line.
 
-            Once the window is full and avg ≥ threshold the backend activates
-            DND in the same tick, so this state is transient in phase B.
+            B) Score at/above threshold, window still accumulating → window-
+               fill bar with MM:SS countdown.  Once the window is full the
+               backend activates DND in the same tick.
           -->
           {#if !dndActive && dndSampleCount > 0}
             {@const scorePct      = dndThresholdLive > 0
@@ -810,103 +809,104 @@ the Free Software Foundation, version 3 only. -->
             {@const amm           = Math.floor(windowRemSecs / 60)}
             {@const ass           = windowRemSecs % 60}
 
-            <div class="px-4 pb-3.5 pt-0.5 flex flex-col gap-2 bg-slate-50 dark:bg-[#111118]
+            <div class="px-4 pb-3.5 pt-2 flex flex-col gap-2 bg-slate-50 dark:bg-[#111118]
                         border-t border-border/50 dark:border-white/[0.04]">
 
-              <!-- Big countdown / score readout -->
-              <div class="flex items-baseline gap-2">
+              <!-- Header row -->
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[0.55rem] font-semibold tracking-widest uppercase
+                             {scoreAbove ? 'text-violet-500/70 dark:text-violet-400/60'
+                                         : 'text-muted-foreground/40'}">
+                  {scoreAbove ? t("dnd.untilActivation") : t("dnd.buildingLabel")}
+                </span>
                 {#if countingDown}
-                  <span class="text-[1.6rem] font-black tabular-nums leading-none
-                               text-violet-500 dark:text-violet-400"
+                  <span class="text-[1.1rem] font-black tabular-nums leading-none
+                               text-violet-500 dark:text-violet-400 ml-auto"
                         style="font-variant-numeric: tabular-nums;">
                     {String(amm).padStart(2, "0")}:{String(ass).padStart(2, "0")}
                   </span>
-                  <span class="text-[0.6rem] text-violet-500/70 dark:text-violet-400/70 font-medium pb-0.5">
-                    {t("dnd.untilActivation")}
-                  </span>
                 {:else if scoreAbove}
-                  <span class="text-[0.65rem] font-semibold text-violet-600 dark:text-violet-400">
+                  <span class="text-[0.65rem] font-semibold text-violet-600 dark:text-violet-400 ml-auto">
                     {t("dnd.activating")}
                   </span>
                 {:else}
-                  <span class="text-[0.65rem] font-semibold text-muted-foreground/60">
-                    {t("dnd.buildingScore", {
-                      score:     dndAvgScore.toFixed(0),
-                      threshold: dndThresholdLive.toFixed(0),
-                    })}
+                  <span class="text-[0.65rem] font-semibold tabular-nums text-muted-foreground/60 ml-auto">
+                    {dndAvgScore.toFixed(0)} / {dndThresholdLive.toFixed(0)}
                   </span>
                 {/if}
               </div>
 
-              <!-- Score progress bar (fills 0 → threshold, capped at 100%) -->
-              <div class="relative h-2 w-full rounded-full overflow-hidden
+              <!-- Single countdown / progress bar -->
+              <div class="relative h-2.5 w-full rounded-full overflow-hidden
                           bg-muted/60 dark:bg-white/[0.06]">
-                <div class="absolute inset-y-0 left-0 rounded-full
-                            transition-[width] duration-1000 ease-linear
-                            {scoreAbove
-                              ? 'bg-violet-500 dark:bg-violet-400'
-                              : scorePct > 70
-                                ? 'bg-blue-400 dark:bg-blue-500'
-                                : 'bg-blue-500/60 dark:bg-blue-600/60'}"
-                     style="width:{scorePct}%">
-                </div>
-              </div>
-
-              <!-- Window-fill sub-bar: visible only when score is already above threshold -->
-              {#if scoreAbove}
-                <div class="relative h-1.5 w-full rounded-full overflow-hidden
-                            bg-muted/60 dark:bg-white/[0.06]">
+                {#if scoreAbove}
+                  <!-- Phase B: window-fill countdown bar (violet) -->
                   <div class="absolute inset-y-0 left-0 rounded-full
                               transition-[width] duration-1000 ease-linear
-                              bg-violet-400/60 dark:bg-violet-500/60"
-                       style="width:{windowFillPct}%">
-                  </div>
-                </div>
-              {/if}
+                              bg-violet-500 dark:bg-violet-400"
+                       style="width:{windowFillPct}%"></div>
+                {:else}
+                  <!-- Phase A: score-to-threshold bar (blue) -->
+                  <div class="absolute inset-y-0 left-0 rounded-full
+                              transition-[width] duration-1000 ease-linear
+                              {scorePct > 70
+                                ? 'bg-blue-400 dark:bg-blue-500'
+                                : 'bg-blue-500/60 dark:bg-blue-600/60'}"
+                       style="width:{scorePct}%"></div>
+                {/if}
+              </div>
 
               <!-- Axis labels -->
               <div class="flex justify-between text-[0.42rem] text-muted-foreground/35
                           tabular-nums select-none -mt-0.5">
-                <span>0</span>
-                <span class="{scoreAbove ? 'text-violet-500/50 dark:text-violet-400/50' : ''}">
-                  ≥{dndThresholdLive.toFixed(0)} activates
-                </span>
-                <span>100</span>
+                {#if scoreAbove}
+                  <span>0s</span>
+                  <span class="text-violet-500/50 dark:text-violet-400/50">activates</span>
+                  <span>{dndConfig.duration_secs}s</span>
+                {:else}
+                  <span>0</span>
+                  <span class="text-blue-500/50 dark:text-blue-400/50">≥{dndThresholdLive.toFixed(0)} to start</span>
+                  <span>100</span>
+                {/if}
               </div>
             </div>
           {/if}
 
-          <!-- Exit countdown timer — visible whenever the exit window is running -->
+          <!-- ── Exit countdown bar ──────────────────────────────────────── -->
+          <!--
+            Counting: amber bar fills left → right over exit_duration_secs.
+                      When full the backend clears DND.
+            Held:     lookback found recent focus — pulsing sky bar, no timer.
+          -->
           {#if isCounting || isHeld}
             {@const totalSecs   = dndConfig.exit_duration_secs}
             {@const elapsedSecs = isCounting ? totalSecs - dndExitSecsRemain : 0}
             {@const pct         = isCounting ? Math.min(100, (elapsedSecs / totalSecs) * 100) : 0}
             {@const mm          = isCounting ? Math.floor(dndExitSecsRemain / 60) : 0}
             {@const ss          = isCounting ? dndExitSecsRemain % 60             : 0}
-            <div class="px-4 pb-3.5 pt-0.5 flex flex-col gap-2 bg-slate-50 dark:bg-[#111118]
+
+            <div class="px-4 pb-3.5 pt-2 flex flex-col gap-2 bg-slate-50 dark:bg-[#111118]
                         border-t border-border/50 dark:border-white/[0.04]">
 
-              <!-- Big countdown number (amber when running, sky when held) -->
-              <div class="flex items-baseline gap-2">
+              <!-- Header row -->
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[0.55rem] font-semibold tracking-widest uppercase
+                             {isCounting
+                               ? 'text-amber-500/70 dark:text-amber-400/60'
+                               : 'text-sky-500/70 dark:text-sky-400/60'}">
+                  {isCounting ? t("dnd.untilExit") : t("dnd.exitHeld", { ago: String(dndConfig.focus_lookback_secs) })}
+                </span>
                 {#if isCounting}
-                  <span class="text-[1.6rem] font-black tabular-nums leading-none
-                               text-amber-500 dark:text-amber-400"
+                  <span class="text-[1.1rem] font-black tabular-nums leading-none
+                               text-amber-500 dark:text-amber-400 ml-auto"
                         style="font-variant-numeric: tabular-nums;">
                     {String(mm).padStart(2, "0")}:{String(ss).padStart(2, "0")}
-                  </span>
-                  <span class="text-[0.6rem] text-amber-500/70 dark:text-amber-400/70 font-medium pb-0.5">
-                    {t("dnd.untilExit")}
-                  </span>
-                {:else}
-                  <!-- held: no numeric countdown, just a label -->
-                  <span class="text-[0.65rem] font-semibold text-sky-600 dark:text-sky-400">
-                    {t("dnd.exitHeld", { ago: String(dndConfig.focus_lookback_secs) })}
                   </span>
                 {/if}
               </div>
 
-              <!-- Progress track: fills left → right as the exit window elapses -->
-              <div class="relative h-2 w-full rounded-full overflow-hidden
+              <!-- Progress bar -->
+              <div class="relative h-2.5 w-full rounded-full overflow-hidden
                           bg-muted/60 dark:bg-white/[0.06]">
                 {#if isCounting}
                   <div class="absolute inset-y-0 left-0 rounded-full
@@ -914,20 +914,24 @@ the Free Software Foundation, version 3 only. -->
                               transition-[width] duration-1000 ease-linear"
                        style="width:{pct}%"></div>
                 {:else}
-                  <!-- held: thin leading pulse at position 0 -->
-                  <div class="absolute inset-y-0 left-0 w-4 rounded-full
-                              bg-sky-400 dark:bg-sky-500 opacity-60 animate-pulse"></div>
+                  <!-- held: pulsing sky sliver at the left edge -->
+                  <div class="absolute inset-y-0 left-0 w-5 rounded-full
+                              bg-sky-400 dark:bg-sky-500 opacity-70 animate-pulse"></div>
                 {/if}
               </div>
 
               <!-- Axis labels -->
               <div class="flex justify-between text-[0.42rem] text-muted-foreground/35
                           tabular-nums select-none -mt-0.5">
-                <span>0s</span>
-                {#if totalSecs >= 120}
-                  <span>{Math.round(totalSecs / 2)}s</span>
+                {#if isCounting}
+                  <span>0s</span>
+                  <span class="text-amber-500/50 dark:text-amber-400/50">exits</span>
+                  <span>{totalSecs >= 120 ? `${Math.round(totalSecs / 60)}m` : `${totalSecs}s`}</span>
+                {:else}
+                  <span class="text-sky-500/50 dark:text-sky-400/50 w-full text-center">
+                    reset while focus was recent
+                  </span>
                 {/if}
-                <span>{totalSecs}s</span>
               </div>
             </div>
           {/if}

@@ -1892,6 +1892,7 @@ const fr: Record<string, string> = {
   "dnd.untilActivation":        "avant l'activation",
   "dnd.activating":             "Activation du mode Focus…",
   "dnd.buildingScore":          "Engagement {score} / {threshold}",
+  "dnd.buildingLabel":          "Accumulation de l'engagement",
 
   // ── Interactive search ───────────────────────────────────────────────────
   "search.interactiveQueryLabel":       "Recherche",

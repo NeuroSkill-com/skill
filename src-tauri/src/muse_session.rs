@@ -512,7 +512,7 @@ pub(crate) async fn handle_event(
                         if avg_score >= threshold {
                             s.dnd_below_ticks = 0;
                             below_ticks       = 0;
-                            if !s.dnd_active && snr_db >= SNR_LOW_DB {
+                            if !s.dnd_active && snr_db >= SNR_LOW_DB && sample_count >= window {
                                 let mode_id = s.dnd_config.focus_mode_identifier.clone();
                                 set_dnd_to = Some((true, mode_id));
                             }

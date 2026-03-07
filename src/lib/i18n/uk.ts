@@ -1891,6 +1891,7 @@ const uk: Record<string, string> = {
   "dnd.untilActivation":        "до активації",
   "dnd.activating":             "Активація режиму фокусу…",
   "dnd.buildingScore":          "Залученість {score} / {threshold}",
+  "dnd.buildingLabel":          "Накопичення залученості",
 
   // ── Window titles ────────────────────────────────────────────────────────
   "window.title.main":        "{app}",

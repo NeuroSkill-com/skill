@@ -382,6 +382,7 @@ const en: Record<string, string> = {
   "dnd.untilActivation":        "until activation",
   "dnd.activating":             "Activating focus mode…",
   "dnd.buildingScore":          "Engagement {score} / {threshold}",
+  "dnd.buildingLabel":          "Building engagement",
   "updates.title":                     "Software Updates",
   "updates.currentVersion":            "Current version: v{version}",
   "updates.upToDate":                  "You're up to date",

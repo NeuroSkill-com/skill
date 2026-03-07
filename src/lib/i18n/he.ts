@@ -1892,6 +1892,7 @@ const he: Record<string, string> = {
   "dnd.untilActivation":        "עד להפעלה",
   "dnd.activating":             "מפעיל מצב פוקוס…",
   "dnd.buildingScore":          "מעורבות {score} / {threshold}",
+  "dnd.buildingLabel":          "בניית מעורבות",
 
   // ── Window titles ────────────────────────────────────────────────────────
   "window.title.main":        "{app}",
