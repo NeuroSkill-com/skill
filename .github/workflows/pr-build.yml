@@ -18,6 +18,21 @@ name: Preview Build
 #
 # Artifact name: skill-preview-pr<N>-<sha8>   (label trigger)
 #                skill-preview-<branch>-<sha8> (dispatch trigger)
+#
+# ── Security hardening ────────────────────────────────────────────────────────
+#
+# Third-party (fork) PRs are blocked at three independent layers:
+#
+#   1. Job condition  — skips the entire job if head.repo ≠ this repo.
+#   2. Labeler check  — verifies the actor who added the label has ≥ write
+#                       permission even for same-repo PRs.
+#   3. Secret gate    — asserts all Release secrets are present BEFORE any
+#                       PR code is checked out or executed.
+#
+# A fourth layer (GitHub UI) must be configured manually:
+#   Settings → Environments → Release → Required reviewers
+#   Add one or two trusted maintainers so GitHub pauses the job and requires a
+#   human approval click before any environment secret is released.
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
@@ -47,11 +62,21 @@ permissions:
 
 jobs:
   preview:
-    # For label events only run when the label is literally "build".
-    # workflow_dispatch events always run.
+    # ── [FIX 1] Fork rejection ────────────────────────────────────────────────
+    # For label events: only run when
+    #   a) the label is literally "build", AND
+    #   b) the PR originates from this repo (not a fork).
+    # Forks do not receive environment secrets under pull_request, but they
+    # can still execute arbitrary code on the runner before the secret check.
+    # Rejecting them here stops the job before a single line of PR code runs.
+    # workflow_dispatch events always originate from a maintainer — always run.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && github.event.label.name == 'build')
+      (
+        github.event_name == 'pull_request' &&
+        github.event.label.name == 'build' &&
+        github.event.pull_request.head.repo.full_name == github.repository
+      )
 
     name: Preview — aarch64-apple-darwin
     runs-on: macos-26
@@ -60,6 +85,69 @@ jobs:
     environment: Release
 
     steps:
+      # ── [FIX 2] Verify the labeler has write (or higher) permission ─────────
+      #
+      # Labels can only be added by collaborators, but a repo may grant "read"
+      # or "triage" to outside collaborators who can still apply labels.
+      # This step confirms the actor has at minimum "write" access before the
+      # job proceeds.  Runs only for label events; dispatch is always a
+      # maintainer.
+      - name: Verify labeler has write access
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039f74a4aee543508d474c4c82a9f1b84 # v7.0.1
+        with:
+          script: |
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner:    context.repo.owner,
+              repo:     context.repo.repo,
+              username: context.actor,
+            });
+            const level   = data.permission;                  // none|read|triage|write|maintain|admin
+            const allowed = ['write', 'maintain', 'admin'];
+            if (!allowed.includes(level)) {
+              core.setFailed(
+                `Actor '${context.actor}' has permission '${level}' — ` +
+                `only write / maintain / admin may trigger preview builds.`
+              );
+            }
+            console.log(`✓ Actor '${context.actor}' has permission '${level}'.`);
+
+      # ── [FIX 3] Verify signing secrets BEFORE any PR code is executed ───────
+      #
+      # The original workflow checked secrets after npm ci and build-espeak-static.sh,
+      # meaning PR code ran first.  By asserting secrets here — before checkout —
+      # we guarantee no untrusted code ever touches the runner if secrets are absent.
+      #
+      # Fail fast before the 20-minute build if any secret is missing.
+      # Values are never printed.
+      - name: Verify signing and notarization secrets
+        env:
+          APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:                   ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:             ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY:  ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          ok=true
+          for var in \
+            APPLE_CERTIFICATE \
+            APPLE_CERTIFICATE_PASSWORD \
+            APPLE_SIGNING_IDENTITY \
+            APPLE_ID \
+            APPLE_PASSWORD \
+            APPLE_TEAM_ID \
+            TAURI_SIGNING_PRIVATE_KEY
+          do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret '$var' is empty or not set in the Release environment."
+              ok=false
+            fi
+          done
+          $ok || exit 1
+          echo "✓ All signing and notarization secrets are present."
+
       # ── Resolve what to check out ───────────────────────────────────────────
       #
       # For label events  → use the PR head SHA (immutable reference).
@@ -80,8 +168,9 @@ jobs:
           fi
 
       # ── Checkout ────────────────────────────────────────────────────────────
+      # Reached only after all three security gates above have passed.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref:         ${{ steps.meta.outputs.ref }}
           fetch-depth: 0
@@ -122,18 +211,18 @@ jobs:
 
       # ── Rust toolchain ──────────────────────────────────────────────────────
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4305c38b25c5dd5af9c4cfe7dd25e3c5c7ba2e58 # stable (2025-02)
         with:
           targets: aarch64-apple-darwin
 
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34b5c520640 # v2.7.8
         with:
           workspaces: src-tauri
 
       # ── Node.js ─────────────────────────────────────────────────────────────
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: '20'
           cache: 'npm'
@@ -148,7 +237,7 @@ jobs:
       # ── espeak-ng static library ─────────────────────────────────────────────
       - name: Cache espeak-ng static lib
         id: cache-espeak
-        uses: actions/cache@v4
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
         with:
           path: src-tauri/espeak-static
           key: macos-arm64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
@@ -156,38 +245,6 @@ jobs:
       - name: Build espeak-ng static lib
         if: steps.cache-espeak.outputs.cache-hit != 'true'
         run: ESPEAK_ARCHS=arm64 bash scripts/build-espeak-static.sh
-
-      # ── Verify signing secrets are present ──────────────────────────────────
-      #
-      # Fail fast before the 20-minute build if any secret is missing.
-      # Values are never printed.
-      - name: Verify signing and notarization secrets
-        env:
-          APPLE_CERTIFICATE:          ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY:     ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID:                   ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD:             ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID:              ${{ secrets.APPLE_TEAM_ID }}
-          TAURI_SIGNING_PRIVATE_KEY:  ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          ok=true
-          for var in \
-            APPLE_CERTIFICATE \
-            APPLE_CERTIFICATE_PASSWORD \
-            APPLE_SIGNING_IDENTITY \
-            APPLE_ID \
-            APPLE_PASSWORD \
-            APPLE_TEAM_ID \
-            TAURI_SIGNING_PRIVATE_KEY
-          do
-            if [ -z "${!var}" ]; then
-              echo "::error::Secret '$var' is empty or not set in the Release environment."
-              ok=false
-            fi
-          done
-          $ok || exit 1
-          echo "✓ All signing and notarization secrets are present."
 
       # ── Validate Apple notarization credentials ──────────────────────────────
       - name: Validate Apple notarization credentials
@@ -297,9 +354,6 @@ jobs:
           echo "  SIG : $APP_SIG"
 
       # ── Stamp version badge onto the DMG icon ────────────────────────────────
-      # Same stamp used in the official release — makes preview DMGs visually
-      # distinguishable in Finder (icon shows "v<version>") so you can compare
-      # builds at a glance without reading filenames.
       - name: Stamp version badge onto DMG icon
         run: |
           bash scripts/stamp-dmg-icon.sh \
@@ -318,7 +372,7 @@ jobs:
       #   *.app.tar.gz.sig — Ed25519 updater signature
       - name: Upload preview artifacts
         id: upload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           name:             ${{ steps.label.outputs.artifact_name }}
           retention-days:   14
@@ -335,7 +389,7 @@ jobs:
       # rather than creating a new one — keeps the PR thread tidy.
       - name: Comment on PR with download link
         if: steps.meta.outputs.pr != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039f74a4aee543508d474c4c82a9f1b84 # v7.0.1
         with:
           script: |
             const pr      = Number('${{ steps.meta.outputs.pr }}');
