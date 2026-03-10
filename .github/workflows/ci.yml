@@ -58,15 +58,15 @@ jobs:
 
       - name: Build espeak-ng static lib
         if: steps.cache-espeak.outputs.cache-hit != 'true'
-        run: bash scripts/build-espeak-static.sh
+        run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
 
       - name: cargo check
         working-directory: src-tauri
-        run: cargo check --locked
+        run: cargo check --locked --target x86_64-unknown-linux-gnu
 
       - name: cargo clippy
         working-directory: src-tauri
-        run: cargo clippy --locked -- -D warnings
+        run: cargo clippy --locked --target x86_64-unknown-linux-gnu -- -D warnings
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:

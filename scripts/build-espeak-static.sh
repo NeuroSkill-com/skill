@@ -82,7 +82,7 @@ echo "Clone complete."
 
 # ---------- cmake configure ---------------------------------------------------
 HOST_ARCH="$(uname -m)"
-OSX_ARCH="${ESPEAK_ARCHS:-$HOST_ARCH}"
+OSX_ARCH="${ESPEAK_ARCHS:-arm64}"
 
 step "CMake configure (arch: $OSX_ARCH)"
 cmake -S "$BUILD_TMP/espeak-ng" \

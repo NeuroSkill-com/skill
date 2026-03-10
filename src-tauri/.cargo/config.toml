@@ -1,3 +1,16 @@
+# ── Default build target ──────────────────────────────────────────────────────
+#
+# Always compile for Apple Silicon.  This makes `cargo build`, `cargo check`,
+# `cargo clippy`, and `npx tauri build` (without an explicit --target flag) all
+# default to aarch64-apple-darwin so x86_64 slices are never produced by
+# accident.
+#
+# The Linux CI jobs override this by passing --target x86_64-unknown-linux-gnu
+# explicitly to cargo check / cargo clippy.
+
+[build]
+target = "aarch64-apple-darwin"
+
 # ── espeak-ng static library ──────────────────────────────────────────────────
 #
 # These two env vars are injected into every build script in this workspace so
