@@ -513,6 +513,11 @@ fn run_sampling_loop(
     let mut n_cur = n_prompt;
     let mut finish_reason = "length".to_string();
     let mut pending = String::new();
+    // After a forced </think> injection, discard tokens (still decoded into KV
+    // cache for coherence) until the model reaches a clean line break.
+    // This prevents the orphaned tail of the interrupted thinking sentence
+    // ("s?), hacking.") from leaking into the visible response.
+    let mut discard_until_nl = false;
 
     'gen: loop {
         if n_cur >= n_prompt + max_new { break; }
@@ -528,6 +533,24 @@ fn run_sampling_loop(
         }
 
         let piece = model.token_to_str(token, Special::Plaintext).unwrap_or_default();
+
+        // After forced </think> injection: decode token into KV cache for
+        // coherence, but suppress it from the output stream until the model
+        // reaches a clean line boundary (end of the orphaned thinking tail).
+        if discard_until_nl {
+            if piece.contains('\n') {
+                discard_until_nl = false;
+                // The newline itself is not emitted — next token starts fresh.
+            }
+            let mut b = LlamaBatch::new(1, 1);
+            b.add(token, n_cur as i32, &[0], true).ok();
+            if ctx.decode(&mut b).is_err() {
+                token_tx.send(InferToken::Error("decode error".into())).ok();
+                break;
+            }
+            n_cur += 1;
+            continue;
+        }
 
         // Think-budget enforcement: inject </think> when budget exhausted.
         if let Some(inject) = think_tracker.feed(&piece) {
@@ -546,6 +569,16 @@ fn run_sampling_loop(
                     n_cur += inj_toks.len();
                 }
             }
+            // Decode the triggering token too, but discard its text — the
+            // model was mid-sentence when we cut it off.
+            discard_until_nl = true;
+            let mut b = LlamaBatch::new(1, 1);
+            b.add(token, n_cur as i32, &[0], true).ok();
+            if ctx.decode(&mut b).is_err() {
+                token_tx.send(InferToken::Error("decode error".into())).ok();
+                break;
+            }
+            n_cur += 1;
             continue;
         }
 

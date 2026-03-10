@@ -15,6 +15,7 @@
   import { invoke }                   from "@tauri-apps/api/core";
   import { listen }                   from "@tauri-apps/api/event";
   import ThemeToggle                  from "$lib/ThemeToggle.svelte";
+  import MarkdownRenderer             from "$lib/MarkdownRenderer.svelte";
   import LanguagePicker               from "$lib/LanguagePicker.svelte";
   import { t }                        from "$lib/i18n/index.svelte";
 
@@ -51,11 +52,13 @@
    * show it collapsed (or hide it entirely).
    */
   function parseThinking(raw: string): { thinking: string; content: string } {
+    // Strip any leading whitespace/newlines the model emits before <think>.
+    const trimmed = raw.trimStart();
     // Completed think block
-    const full = raw.match(/^<think>([\s\S]*?)<\/think>\s*([\s\S]*)$/);
+    const full = trimmed.match(/^<think>([\s\S]*?)<\/think>\s*([\s\S]*)$/);
     if (full) return { thinking: full[1].trim(), content: full[2] };
     // Still-open think block (streaming)
-    const open = raw.match(/^<think>([\s\S]*)$/);
+    const open = trimmed.match(/^<think>([\s\S]*)$/);
     if (open) return { thinking: open[1], content: "" };
     return { thinking: "", content: raw };
   }
@@ -98,6 +101,31 @@
   let fileInputEl    = $state<HTMLInputElement | null>(null);
   let attachments    = $state<Attachment[]>([]);
 
+  // ── Input history navigation (↑ / ↓) ──────────────────────────────────────
+  // histIdx = -1  →  showing the live draft
+  // histIdx =  0  →  last sent user message
+  // histIdx =  1  →  second-to-last, etc.
+  let histIdx        = $state(-1);
+  let histDraft      = $state("");   // preserves the in-progress draft while browsing
+
+  /** Sent user messages, newest-first, deduplicated consecutive entries. */
+  const userHistory = $derived(
+    messages
+      .filter(m => m.role === "user" && m.content.trim())
+      .map(m => m.content)
+      .reverse()
+      .filter((c, i, a) => i === 0 || c !== a[i - 1])
+  );
+
+  // Id of the last message whose copy button was just clicked (drives ✓ flash)
+  let copiedMsgId    = $state<number | null>(null);
+
+  function copyMessage(msg: Message) {
+    navigator.clipboard.writeText(msg.content).catch(() => {});
+    copiedMsgId = msg.id;
+    setTimeout(() => { if (copiedMsgId === msg.id) copiedMsgId = null; }, 1500);
+  }
+
   // Settings panel
   let showSettings   = $state(false);
   let temperature    = $state(0.8);
@@ -129,11 +157,23 @@
     : "text-muted-foreground/40"
   );
 
+  // ── Scroll pinning ─────────────────────────────────────────────────────────
+  // When the user scrolls up we stop auto-scrolling; as soon as they return
+  // to within SNAP_PX of the bottom we re-enable it.
+
+  let pinned = $state(true);
+  const SNAP_PX = 48;
+
+  function onMsgsScroll() {
+    if (!msgsEl) return;
+    pinned = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < SNAP_PX;
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  async function scrollBottom() {
+  async function scrollBottom(force = false) {
     await tick();
-    if (msgsEl) msgsEl.scrollTop = msgsEl.scrollHeight;
+    if (msgsEl && (pinned || force)) msgsEl.scrollTop = msgsEl.scrollHeight;
   }
 
   function autoResizeInput() {
@@ -143,7 +183,45 @@
   }
 
   function inputKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); return; }
+
+    // ── History navigation ────────────────────────────────────────────────
+    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      if (!inputEl) return;
+
+      const cur    = inputEl.selectionStart ?? 0;
+      const onFirst = !input.slice(0, cur).includes("\n");
+      const onLast  = !input.slice(cur).includes("\n");
+
+      if (e.key === "ArrowUp" && onFirst) {
+        if (userHistory.length === 0) return;
+        e.preventDefault();
+        if (histIdx === -1) histDraft = input;            // save live draft
+        const next = Math.min(histIdx + 1, userHistory.length - 1);
+        if (next === histIdx) return;
+        histIdx = next;
+        input   = userHistory[histIdx];
+        autoResizeInput();
+        // place cursor at end on next tick
+        tick().then(() => inputEl?.setSelectionRange(input.length, input.length));
+        return;
+      }
+
+      if (e.key === "ArrowDown" && onLast) {
+        if (histIdx === -1) return;                       // already at draft
+        e.preventDefault();
+        const next = histIdx - 1;
+        if (next < 0) {
+          histIdx = -1;
+          input   = histDraft;
+        } else {
+          histIdx = next;
+          input   = userHistory[histIdx];
+        }
+        autoResizeInput();
+        tick().then(() => inputEl?.setSelectionRange(input.length, input.length));
+      }
+    }
   }
 
   // ── Image attachments ──────────────────────────────────────────────────────
@@ -217,7 +295,10 @@
   async function sendMessage() {
     const text = input.trim();
     if ((!text && attachments.length === 0) || generating || status !== "running") return;
-    input = "";
+    input     = "";
+    histIdx   = -1;
+    histDraft = "";
+    pinned    = true;          // always snap to bottom when the user sends
     autoResizeInput();
     const sentAttachments = attachments;
     attachments = [];
@@ -233,7 +314,7 @@
 
     const assistantMsg: Message = { id: ++msgId, role: "assistant", content: "", pending: true };
     messages = [...messages, assistantMsg];
-    await scrollBottom();
+    await scrollBottom(true);   // force — user just sent, must see response start
 
     generating = true;
     abortCtrl  = new AbortController();
@@ -570,8 +651,10 @@
   {/if}
 
   <!-- ── Message list ──────────────────────────────────────────────────────── -->
+  <div class="relative flex-1 min-h-0">
   <main bind:this={msgsEl}
-        class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4
+        onscroll={onMsgsScroll}
+        class="h-full overflow-y-auto px-4 py-4 flex flex-col gap-4
                scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border">
 
     <!-- Empty state -->
@@ -701,15 +784,44 @@
 
               <!-- Response bubble (shown once we're past the <think> block) -->
               {#if msg.content || (!msg.pending)}
-                <div class="rounded-2xl rounded-tl-sm bg-muted dark:bg-[#1a1a28]
-                            px-3.5 py-2.5 text-[0.78rem] leading-relaxed text-foreground
-                            whitespace-pre-wrap break-words">
-                  {#if msg.pending && msg.content === ""}
-                    <!-- Generating but still in think block — show nothing yet -->
-                  {:else}
-                    {msg.content}{#if msg.pending}<span
-                      class="inline-block w-0.5 h-[1em] bg-foreground/70 animate-pulse ml-0.5 align-middle"
-                    ></span>{/if}
+                <div class="group/bubble flex flex-col gap-0.5">
+                  <div class="rounded-2xl rounded-tl-sm bg-muted dark:bg-[#1a1a28]
+                              px-3.5 py-2.5 text-[0.78rem] leading-relaxed text-foreground
+                              break-words overflow-hidden">
+                    {#if !(msg.pending && msg.content === "")}
+                      <MarkdownRenderer content={msg.content} pending={msg.pending} />
+                    {/if}
+                  </div>
+
+                  <!-- Copy raw markdown — visible on hover once generation is done -->
+                  {#if !msg.pending && msg.content}
+                    <div class="flex opacity-0 group-hover/bubble:opacity-100 transition-opacity duration-150">
+                      <button
+                        onclick={() => copyMessage(msg)}
+                        title="Copy"
+                        class="flex items-center gap-1 px-1.5 py-0.5 rounded-md
+                               text-muted-foreground/50 hover:text-muted-foreground
+                               hover:bg-muted transition-colors cursor-pointer text-[0.6rem]">
+                        {#if copiedMsgId === msg.id}
+                          <!-- Checkmark -->
+                          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                               class="w-3 h-3 text-emerald-500">
+                            <polyline points="2 8 6 12 14 4"/>
+                          </svg>
+                          <span class="text-emerald-500">Copied</span>
+                        {:else}
+                          <!-- Copy icon -->
+                          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                               stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                               class="w-3 h-3">
+                            <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+                            <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/>
+                          </svg>
+                          Copy
+                        {/if}
+                      </button>
+                    </div>
                   {/if}
                 </div>
               {/if}
@@ -750,6 +862,27 @@
     {/if}
 
   </main>
+
+  <!-- Jump-to-bottom button — appears when user has scrolled up -->
+  {#if !pinned}
+    <button
+      onclick={() => { pinned = true; msgsEl && (msgsEl.scrollTop = msgsEl.scrollHeight); }}
+      aria-label="Scroll to bottom"
+      class="absolute bottom-3 left-1/2 -translate-x-1/2
+             flex items-center gap-1.5 px-3 py-1.5 rounded-full
+             bg-background border border-border shadow-md
+             text-[0.65rem] font-medium text-muted-foreground
+             hover:text-foreground hover:border-violet-500/40 hover:shadow-violet-500/10
+             transition-all cursor-pointer select-none">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
+        <line x1="8" y1="2" x2="8" y2="13"/>
+        <polyline points="4 9 8 13 12 9"/>
+      </svg>
+      Jump to bottom
+    </button>
+  {/if}
+  </div>
 
   <!-- Hidden file input for image uploads -->
   <input
