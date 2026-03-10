@@ -127,8 +127,16 @@ macro_rules! llm_error { ($app:expr, $buf:expr, $($t:tt)*) => { push_log($app, $
 // ── Wire protocol between axum handlers and the actor ─────────────────────────
 
 enum InferRequest {
-    /// Generate a chat completion (prompt already formatted by caller).
+    /// Generate a chat completion from a list of `{"role","content"}` messages.
+    /// The actor applies `model.apply_chat_template()` so the correct EOS/stop
+    /// tokens are always used regardless of the model family.
     Generate {
+        messages: Vec<Value>,
+        params:   GenParams,
+        token_tx: UnboundedSender<InferToken>,
+    },
+    /// Raw text completion (prompt already formatted by the caller).
+    Complete {
         prompt:   String,
         params:   GenParams,
         token_tx: UnboundedSender<InferToken>,
@@ -159,13 +167,20 @@ pub enum InferToken {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GenParams {
-    pub temperature:    f32,
-    pub top_k:          i32,
-    pub top_p:          f32,
-    pub repeat_penalty: f32,
-    pub seed:           u32,
-    pub max_tokens:     usize,
-    pub stop:           Vec<String>,
+    pub temperature:      f32,
+    pub top_k:            i32,
+    pub top_p:            f32,
+    pub repeat_penalty:   f32,
+    pub seed:             u32,
+    pub max_tokens:       usize,
+    pub stop:             Vec<String>,
+    /// Maximum tokens the model may spend inside a `<think>…</think>` block.
+    ///
+    /// `None`  = unlimited thinking (default off — model decides).
+    /// `Some(0)` = skip thinking entirely (pre-fill empty `<think>\n\n</think>`).
+    /// `Some(n)` = force-close the think block after `n` tokens.
+    #[serde(default)]
+    pub thinking_budget:  Option<u32>,
 }
 
 impl Default for GenParams {
@@ -178,6 +193,8 @@ impl Default for GenParams {
             seed:           0xDEAD_BEEF,
             max_tokens:     2048,
             stop:           Vec::new(),
+            // Default: minimal (512 tokens) so simple queries don't over-think.
+            thinking_budget: Some(512),
         }
     }
 }
@@ -290,6 +307,253 @@ pub fn cell_status(cell: &LlmStateCell) -> (LlmStatus, String) {
 
 // ── Actor thread ───────────────────────────────────────────────────────────────
 
+// ── Think-budget tracker ──────────────────────────────────────────────────────
+
+/// Tracks the model's `<think>…</think>` block and enforces a token budget.
+///
+/// Feed every decoded piece via `feed()`.  When the budget is exhausted the
+/// method returns `Some("\n</think>\n")` — that string should be:
+///   1. Appended to the outgoing `pending` buffer (so the UI sees it), and
+///   2. Tokenised and decoded into the KV cache (so the model continues from
+///      a logically consistent state after the closing tag).
+struct ThinkTracker {
+    budget:    Option<u32>,
+    inside:    bool,
+    closed:    bool,
+    tag_buf:   String,   // accumulate chars to detect multi-token tags
+    tok_count: u32,
+}
+
+impl ThinkTracker {
+    fn new(budget: Option<u32>) -> Self {
+        Self { budget, inside: false, closed: false, tag_buf: String::new(), tok_count: 0 }
+    }
+
+    /// Returns `Some(inject)` if the think block must be force-closed now.
+    fn feed(&mut self, piece: &str) -> Option<String> {
+        if self.closed { return None; }
+
+        self.tag_buf.push_str(piece);
+        // Keep tag_buf bounded — only need enough to detect the longest tag
+        let cap = "</think>".len() + 4;
+        if self.tag_buf.len() > cap * 2 {
+            let drain = self.tag_buf.len() - cap;
+            self.tag_buf.drain(..drain);
+        }
+
+        if !self.inside {
+            // Detect <think> opening
+            if self.tag_buf.contains("<think>") {
+                self.inside = true;
+                // Trim everything up to and including the opening tag
+                if let Some(p) = self.tag_buf.find("<think>") {
+                    self.tag_buf = self.tag_buf[p + 7..].to_string();
+                }
+            }
+            return None;
+        }
+
+        // Inside the think block
+        self.tok_count += 1;
+
+        // Check for natural close
+        if self.tag_buf.contains("</think>") {
+            self.inside = false;
+            self.closed = true;
+            self.tag_buf.clear();
+            return None;
+        }
+
+        // Enforce budget
+        if let Some(budget) = self.budget {
+            if self.tok_count >= budget {
+                self.inside = false;
+                self.closed = true;
+                self.tag_buf.clear();
+                return Some("\n</think>\n".to_string());
+            }
+        }
+        None
+    }
+}
+
+// ── Generation helper ─────────────────────────────────────────────────────────
+
+/// Execute one generation pass: tokenise `prompt`, decode the prompt batch,
+/// run the sampling loop with a hold-back stop-string buffer, and stream
+/// `InferToken` messages back through `token_tx`.
+///
+/// The hold-back buffer works like this:
+///   – Every decoded piece is appended to `pending`.
+///   – We emit only the prefix of `pending` that is guaranteed to NOT be the
+///     start of any stop string (i.e. everything except the last
+///     `max_stop_len - 1` characters).
+///   – On loop exit we flush whatever is left, trimming any trailing stop string.
+///
+/// This means stop strings that span multiple token pieces are handled
+/// correctly without blocking the stream for more than a few bytes.
+fn run_generation(
+    model:    &llama_cpp_4::model::LlamaModel,
+    ctx:      &mut llama_cpp_4::context::LlamaContext<'_>,
+    app:      &tauri::AppHandle,
+    log_buf:  &LlmLogBuffer,
+    prompt:   String,
+    params:   GenParams,
+    token_tx: UnboundedSender<InferToken>,
+) {
+    ctx.clear_kv_cache();
+
+    // When thinking is disabled, pre-fill an empty <think>\n\n</think>\n block
+    // so the model jumps straight to the response without generating reasoning.
+    let prompt = if params.thinking_budget == Some(0) {
+        format!("{prompt}<think>\n\n</think>\n")
+    } else {
+        prompt
+    };
+
+    let Ok(tokens) = model.str_to_token(&prompt, AddBos::Always) else {
+        token_tx.send(InferToken::Error("tokenization failed".into())).ok();
+        return;
+    };
+    let n_prompt = tokens.len();
+    let n_ctx    = ctx.n_ctx() as usize;
+
+    llm_info!(app, log_buf, "prompt: {n_prompt} tokens, thinking_budget={:?}", params.thinking_budget);
+    if n_prompt >= n_ctx {
+        let msg = format!("prompt too long ({n_prompt} ≥ n_ctx {n_ctx})");
+        llm_warn!(app, log_buf, "{msg}");
+        token_tx.send(InferToken::Error(msg)).ok();
+        return;
+    }
+
+    let mut batch = LlamaBatch::new(n_ctx, 1);
+    for (i, &tok) in tokens.iter().enumerate() {
+        if batch.add(tok, i as i32, &[0], i == n_prompt - 1).is_err() { break; }
+    }
+    if ctx.decode(&mut batch).is_err() {
+        llm_error!(app, log_buf, "decode error on prompt");
+        token_tx.send(InferToken::Error("decode error on prompt".into())).ok();
+        return;
+    }
+
+    let mut sampler = LlamaSampler::chain_simple([
+        LlamaSampler::top_k(params.top_k),
+        LlamaSampler::top_p(params.top_p, 1),
+        LlamaSampler::temp(params.temperature),
+        LlamaSampler::dist(params.seed),
+    ]);
+
+    // Stop strings: user-supplied + model-family defaults.
+    let mut stop_strings = params.stop.clone();
+    for s in &["<|im_end|>", "<|endoftext|>", "<|user|>",
+                "<|eot_id|>", "<|EOT|>", "[/INST]"] {
+        if !stop_strings.iter().any(|x| x == s) {
+            stop_strings.push(s.to_string());
+        }
+    }
+    let max_stop_len = stop_strings.iter().map(|s| s.len()).max().unwrap_or(0);
+    let hold_back    = max_stop_len.saturating_sub(1);
+
+    // Think-budget tracker (only active when budget > 0; budget=0 already handled above)
+    let tracker_budget = match params.thinking_budget {
+        Some(0) | None => None,
+        Some(n)        => Some(n),
+    };
+    let mut think_tracker = ThinkTracker::new(tracker_budget);
+
+    let max_new = params.max_tokens.min(n_ctx - n_prompt);
+    let mut n_cur = n_prompt;
+    let mut finish_reason = "length".to_string();
+    let mut pending = String::new();
+
+    'gen: loop {
+        if n_cur >= n_prompt + max_new { break; }
+
+        let token = sampler.sample(ctx, batch.n_tokens() - 1);
+        sampler.accept(token);
+
+        if model.is_eog_token(token) {
+            finish_reason = "stop".to_string();
+            break;
+        }
+
+        let piece = model.token_to_str(token, Special::Plaintext).unwrap_or_default();
+
+        // Think-budget enforcement: inject </think> when budget exhausted.
+        if let Some(inject) = think_tracker.feed(&piece) {
+            // Emit the injected close tag as a delta so the frontend sees it.
+            pending.push_str(&inject);
+
+            // Tokenise the injected string and decode it into the KV cache so
+            // the model's internal state stays consistent.
+            if let Ok(inj_toks) = model.str_to_token(&inject, AddBos::Never) {
+                if !inj_toks.is_empty() {
+                    let mut inj_batch = LlamaBatch::new(inj_toks.len(), 1);
+                    for (i, &t) in inj_toks.iter().enumerate() {
+                        inj_batch.add(t, n_cur as i32 + i as i32, &[0],
+                                      i == inj_toks.len() - 1).ok();
+                    }
+                    if ctx.decode(&mut inj_batch).is_err() {
+                        llm_warn!(app, log_buf, "decode error injecting </think>");
+                    }
+                    n_cur += inj_toks.len();
+                    // Re-seed the batch for the next normal token
+                    batch.clear();
+                    // Use last injected token as the new "last decoded" position
+                    let last_tok = inj_toks[inj_toks.len() - 1];
+                    batch.add(last_tok, (n_cur - 1) as i32, &[0], true).ok();
+                }
+            }
+        }
+
+        pending.push_str(&piece);
+
+        // Check if accumulated buffer ends with any stop string.
+        for stop in &stop_strings {
+            if pending.ends_with(stop.as_str()) {
+                let safe_end = pending.len() - stop.len();
+                if safe_end > 0 {
+                    token_tx.send(InferToken::Delta(pending[..safe_end].to_string())).ok();
+                }
+                finish_reason = "stop".to_string();
+                break 'gen;
+            }
+        }
+
+        // Emit safe prefix (hold back potential partial stop string).
+        if pending.len() > hold_back {
+            let emit_end = pending.len() - hold_back;
+            let emit_end = (0..=emit_end).rev()
+                .find(|&i| pending.is_char_boundary(i))
+                .unwrap_or(0);
+            if emit_end > 0 {
+                let chunk: String = pending.drain(..emit_end).collect();
+                if token_tx.send(InferToken::Delta(chunk)).is_err() { break; }
+            }
+        }
+
+        batch.clear();
+        if batch.add(token, n_cur as i32, &[0], true).is_err() { break; }
+        if ctx.decode(&mut batch).is_err() {
+            token_tx.send(InferToken::Error("decode error".into())).ok();
+            break;
+        }
+        n_cur += 1;
+    }
+
+    // Flush remaining hold-back buffer, trimming any trailing stop string.
+    let flush_end = stop_strings.iter()
+        .find_map(|s| pending.ends_with(s.as_str()).then_some(pending.len() - s.len()))
+        .unwrap_or(pending.len());
+    if flush_end > 0 {
+        token_tx.send(InferToken::Delta(pending[..flush_end].to_string())).ok();
+    }
+
+    let n_gen = n_cur - n_prompt;
+    llm_info!(app, log_buf, "generation done — {n_gen} tokens, finish_reason={finish_reason}");
+    token_tx.send(InferToken::Done { finish_reason }).ok();
+}
+
 fn run_actor(
     mut rx:        tokio::sync::mpsc::UnboundedReceiver<InferRequest>,
     config:        LlmConfig,
@@ -398,95 +662,57 @@ fn run_actor(
                 result_tx.send(true).ok();
             }
 
-            InferRequest::Generate { prompt, params, token_tx } => {
-                llm_info!(&app, &log_buf, "generation request — max_tokens={}, temp={:.2}, top_k={}, top_p={:.2}",
-                          params.max_tokens, params.temperature, params.top_k, params.top_p);
-                // Reset KV cache from previous request.
-                ctx.clear_kv_cache();
+            InferRequest::Generate { messages, params, token_tx } => {
+                llm_info!(&app, &log_buf, "chat request — {} messages, max_tokens={}",
+                          messages.len(), params.max_tokens);
 
-                // Tokenize.
-                let Ok(tokens) = model.str_to_token(&prompt, AddBos::Always) else {
-                    token_tx.send(InferToken::Error("tokenization failed".into())).ok();
-                    continue;
+                // Build LlamaChatMessage list and apply the model's own template.
+                // This gives correct EOS handling for every model family
+                // (ChatML for Qwen, Llama-3 tokens, etc.) without any hardcoded
+                // template strings.
+                // Content can be a plain string OR an array of content-parts
+                // (multimodal format: [{type:"text",text:"…"},{type:"image_url",…}]).
+                // Extract text-only for now; image tokens are not yet supported.
+                fn extract_text(content: &Value) -> String {
+                    match content {
+                        Value::String(s) => s.clone(),
+                        Value::Array(parts) => parts.iter()
+                            .filter_map(|p| {
+                                (p.get("type")?.as_str() == Some("text"))
+                                    .then(|| p.get("text")?.as_str()?.to_string())
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                        _ => String::new(),
+                    }
+                }
+
+                let chat_msgs: Vec<llama_cpp_4::model::LlamaChatMessage> = messages
+                    .iter()
+                    .filter_map(|m| {
+                        let role    = m.get("role")?.as_str()?.to_string();
+                        let content = extract_text(m.get("content")?);
+                        llama_cpp_4::model::LlamaChatMessage::new(role, content).ok()
+                    })
+                    .collect();
+
+                let prompt = match model.apply_chat_template(None, chat_msgs, true) {
+                    Ok(p)  => p,
+                    Err(e) => {
+                        llm_error!(&app, &log_buf, "apply_chat_template failed: {e}");
+                        token_tx.send(InferToken::Error(format!("template error: {e}"))).ok();
+                        continue;
+                    }
                 };
-                let n_prompt = tokens.len();
-                let n_ctx    = ctx.n_ctx() as usize;
 
-                llm_info!(&app, &log_buf, "prompt: {n_prompt} tokens");
-                if n_prompt >= n_ctx {
-                    let msg = format!("prompt too long ({n_prompt} ≥ n_ctx {n_ctx})");
-                    llm_warn!(&app, &log_buf, "{msg}");
-                    token_tx.send(InferToken::Error(msg)).ok();
-                    continue;
-                }
+                run_generation(&model, &mut ctx, &app, &log_buf,
+                               prompt, params, token_tx);
+            }
 
-                // Fill prompt batch.
-                let mut batch = LlamaBatch::new(n_ctx, 1);
-                for (i, &tok) in tokens.iter().enumerate() {
-                    let last = i == n_prompt - 1;
-                    if batch.add(tok, i as i32, &[0], last).is_err() { break; }
-                }
-
-                if ctx.decode(&mut batch).is_err() {
-                    llm_error!(&app, &log_buf, "decode error on prompt");
-                    token_tx.send(InferToken::Error("decode error on prompt".into())).ok();
-                    continue;
-                }
-
-                // Build sampler chain.
-                let mut sampler = LlamaSampler::chain_simple([
-                    LlamaSampler::top_k(params.top_k),
-                    LlamaSampler::top_p(params.top_p, 1),
-                    LlamaSampler::temp(params.temperature),
-                    LlamaSampler::dist(params.seed),
-                ]);
-
-                let max_new = params.max_tokens.min(n_ctx - n_prompt);
-                let mut n_cur = n_prompt;
-                let mut finish_reason = "length".to_string();
-
-                'gen: loop {
-                    if n_cur >= n_prompt + max_new { break; }
-
-                    let token = sampler.sample(&ctx, batch.n_tokens() - 1);
-                    sampler.accept(token);
-
-                    if model.is_eog_token(token) {
-                        finish_reason = "stop".to_string();
-                        break;
-                    }
-
-                    let text = model.token_to_str(token, Special::Plaintext)
-                        .unwrap_or_default();
-
-                    // Check stop sequences.
-                    if !params.stop.is_empty() {
-                        for stop in &params.stop {
-                            if text.contains(stop.as_str()) {
-                                finish_reason = "stop".to_string();
-                                break 'gen;
-                            }
-                        }
-                    }
-
-                    if !text.is_empty() {
-                        // If the receiver dropped (client disconnected), stop generating.
-                        if token_tx.send(InferToken::Delta(text)).is_err() { break; }
-                    }
-
-                    batch.clear();
-                    if batch.add(token, n_cur as i32, &[0], true).is_err() { break; }
-                    if ctx.decode(&mut batch).is_err() {
-                        token_tx.send(InferToken::Error("decode error".into())).ok();
-                        break;
-                    }
-
-                    n_cur += 1;
-                }
-
-                let n_gen = n_cur - n_prompt;
-                llm_info!(&app, &log_buf, "generation done — {n_gen} tokens, finish_reason={finish_reason}");
-                token_tx.send(InferToken::Done { finish_reason }).ok();
+            InferRequest::Complete { prompt, params, token_tx } => {
+                llm_info!(&app, &log_buf, "completion request — max_tokens={}", params.max_tokens);
+                run_generation(&model, &mut ctx, &app, &log_buf,
+                               prompt, params, token_tx);
             }
 
             InferRequest::Embed { inputs, result_tx } => {
@@ -713,10 +939,11 @@ async fn chat_completions(
                 Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
     }
 
-    let prompt = format_chat_messages(&req.messages);
     let (tok_tx, tok_rx) = mpsc::unbounded_channel();
     let _ = state.req_tx.send(InferRequest::Generate {
-        prompt, params: req.gen.clone(), token_tx: tok_tx,
+        messages: req.messages.clone(),
+        params:   req.gen.clone(),
+        token_tx: tok_tx,
     });
 
     if req.stream {
@@ -747,7 +974,7 @@ async fn completions(
         _ => String::new(),
     };
     let (tok_tx, tok_rx) = mpsc::unbounded_channel();
-    let _ = state.req_tx.send(InferRequest::Generate {
+    let _ = state.req_tx.send(InferRequest::Complete {
         prompt, params: req.gen.clone(), token_tx: tok_tx,
     });
 
@@ -951,17 +1178,6 @@ async fn collect_completion_response(
 ///
 /// TODO: send raw messages to the actor and let it apply the model's built-in
 /// chat template via `model.apply_chat_template()`.
-pub fn format_chat_messages(messages: &[Value]) -> String {
-    let mut out = String::new();
-    for msg in messages {
-        let role    = msg.get("role").and_then(|r| r.as_str()).unwrap_or("user");
-        let content = msg.get("content").and_then(|c| c.as_str()).unwrap_or("");
-        out.push_str(&format!("<|{role}|>\n{content}\n"));
-    }
-    out.push_str("<|assistant|>\n");
-    out
-}
-
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 fn unix_ts() -> u64 {

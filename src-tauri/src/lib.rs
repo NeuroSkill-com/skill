@@ -135,6 +135,7 @@ pub(crate) use settings::{
     default_label_shortcut, default_search_shortcut, default_settings_shortcut,
     default_calibration_shortcut, default_help_shortcut, default_history_shortcut,
     default_api_shortcut, default_theme_shortcut, default_focus_timer_shortcut,
+    #[cfg(feature = "llm")] default_chat_shortcut,
     default_theme, default_daily_goal_min, default_embedding_model,
     default_ws_host, default_ws_port, default_update_check_interval, UserSettings,
     NeuttsConfig, default_track_active_window, default_track_input_activity,
@@ -158,6 +159,7 @@ use shortcut_cmds::{
     get_api_shortcut, set_api_shortcut,
     get_theme_shortcut, set_theme_shortcut,
     get_focus_timer_shortcut, set_focus_timer_shortcut,
+    #[cfg(feature = "llm")] get_chat_shortcut, #[cfg(feature = "llm")] set_chat_shortcut,
 };
 
 mod active_window;
@@ -446,6 +448,8 @@ pub struct AppState {
     pub api_shortcut:         String,
     pub theme_shortcut:       String,
     pub focus_timer_shortcut: String,
+    #[cfg(feature = "llm")]
+    pub chat_shortcut:        String,
     pub calibration_profiles: Vec<CalibrationProfile>,
     pub active_calibration_id: String,
     pub onboarding_complete: bool,

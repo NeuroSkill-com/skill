@@ -457,6 +457,8 @@ pub(crate) fn default_history_shortcut()     -> String { "CmdOrCtrl+Shift+J".int
 pub(crate) fn default_api_shortcut()         -> String { "CmdOrCtrl+Shift+A".into() }
 pub(crate) fn default_theme_shortcut()       -> String { "CmdOrCtrl+Shift+T".into() }
 pub(crate) fn default_focus_timer_shortcut() -> String { "CmdOrCtrl+Shift+P".into() }
+#[cfg(feature = "llm")]
+pub(crate) fn default_chat_shortcut()        -> String { "CmdOrCtrl+Shift+I".into() }
 
 // ── UserSettings (serialised to settings.json) ────────────────────────────────
 
@@ -488,6 +490,9 @@ pub(crate) struct UserSettings {
     pub theme_shortcut:         String,
     #[serde(default = "default_focus_timer_shortcut")]
     pub focus_timer_shortcut:   String,
+    #[cfg(feature = "llm")]
+    #[serde(default = "default_chat_shortcut")]
+    pub chat_shortcut:          String,
     /// Legacy two-action config — read once to migrate; never written back.
     #[serde(default, skip_serializing)]
     pub calibration:            CalibrationConfig,
@@ -665,6 +670,8 @@ impl Default for UserSettings {
             api_shortcut:           default_api_shortcut(),
             theme_shortcut:         default_theme_shortcut(),
             focus_timer_shortcut:   default_focus_timer_shortcut(),
+            #[cfg(feature = "llm")]
+            chat_shortcut:          default_chat_shortcut(),
             calibration:            CalibrationConfig::default(),
             calibration_profiles:   Vec::new(),
             active_calibration_id:  String::new(),
