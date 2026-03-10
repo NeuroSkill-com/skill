@@ -320,6 +320,14 @@ pub const APP_ACKNOWLEDGEMENTS: &str =
      Pope et al. (1995), and Kosmyna & Maes (2019).";
 
 
+// ── Skill data directory ──────────────────────────────────────────────────────
+
+/// The skill data directory name, always located at `~/.skill`.
+///
+/// This is **hardcoded** — the directory is never configurable at runtime.
+/// All files (settings, databases, model weights, logs) live under this path.
+pub const SKILL_DIR: &str = ".skill";
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -421,6 +429,13 @@ mod tests {
         for sym in &BAND_SYMBOLS {
             assert!(!sym.is_empty(), "band symbol is empty");
         }
+    }
+
+    // ── Skill directory ───────────────────────────────────────────────────────
+
+    #[test]
+    fn skill_dir_is_dot_skill() {
+        assert_eq!(SKILL_DIR, ".skill");
     }
 
     // ── Hardware constants ────────────────────────────────────────────────────
