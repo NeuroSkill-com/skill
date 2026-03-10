@@ -1,27 +1,24 @@
 #!/usr/bin/env node
 /**
- * Cross-platform Tauri build wrapper.
+ * Tauri wrapper — pre-builds the espeak-ng static library for the current
+ * platform before delegating to the Tauri CLI.
  *
- * On macOS           → always builds for aarch64-apple-darwin (Apple Silicon).
- *                      Runs build-espeak-static.sh first.
- * On Windows (MSVC)  → builds for the host triple (x86_64-pc-windows-msvc).
- *                      Runs build-espeak-static.ps1 first.
- * On Linux           → builds for the host triple (x86_64-unknown-linux-gnu).
- *                      Runs build-espeak-static.sh first.
+ * Handles: dev, build (and passes everything else straight through).
  *
- * MinGW cross-compilation (any host):
- *   npm run tauri:build -- --target x86_64-pc-windows-gnu
- *   Runs build-espeak-static-mingw.sh and passes --target to tauri build.
- *   Requires: x86_64-w64-mingw32-gcc (Linux/macOS) or MSYS2 MinGW on Windows.
+ * Usage (via npm — all standard Tauri flags work as normal):
+ *   npm run tauri dev
+ *   npm run tauri build
+ *   npm run tauri build -- --debug
+ *   npm run tauri build -- --target x86_64-pc-windows-gnu
+ *   npm run tauri info
  *
- * Usage (via npm):
- *   npm run tauri:build
- *   npm run tauri:build -- --target x86_64-pc-windows-gnu
- *
- * Usage (direct):
- *   node scripts/tauri-build.js [extra tauri-cli flags …]
- *   node scripts/tauri-build.js --debug
- *   node scripts/tauri-build.js --target x86_64-pc-windows-gnu
+ * Platform behaviour for `dev` and `build`:
+ *   macOS         → bash scripts/build-espeak-static.sh
+ *                   `build` also adds --target aarch64-apple-darwin --no-sign
+ *   Windows MSVC  → PowerShell scripts\build-espeak-static.ps1
+ *   Linux         → bash scripts/build-espeak-static.sh
+ *   *-windows-gnu → bash scripts/build-espeak-static-mingw.sh
+ *                   (cross-compile from Linux/macOS, or native MSYS2)
  */
 
 import { execSync } from "child_process";
@@ -35,98 +32,92 @@ const root = resolve(__dirname, "..");
 const isMac = platform() === "darwin";
 const isWin = platform() === "win32";
 
-// ── Parse --target from the argument list ────────────────────────────────────
-// All args (including --target) are forwarded to `npx tauri build` via `extra`.
-// We also inspect the target to decide which espeak library to pre-build.
-const args = process.argv.slice(2);
-const extra = args.join(" ");
+// ── Parse arguments ───────────────────────────────────────────────────────────
+// argv: ["node", "tauri-build.js", subcommand?, ...rest]
+const [subcommand = "", ...subArgs] = process.argv.slice(2);
 
+// Subcommands that need espeak pre-built before Tauri runs.
+const needsEspeak = subcommand === "dev" || subcommand === "build";
+
+// ── Pass-through for subcommands that don't need espeak ───────────────────────
+if (!needsEspeak) {
+  const cmd = ["npx", "tauri", subcommand, ...subArgs]
+    .filter(Boolean)
+    .join(" ");
+  execSync(cmd, { cwd: root, stdio: "inherit" });
+  process.exit(0);
+}
+
+// ── Parse --target from subArgs ───────────────────────────────────────────────
 let explicitTarget = null;
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "--target" && i + 1 < args.length) {
-    explicitTarget = args[i + 1];
+for (let i = 0; i < subArgs.length; i++) {
+  if (subArgs[i] === "--target" && i + 1 < subArgs.length) {
+    explicitTarget = subArgs[i + 1];
     break;
   }
-  if (args[i].startsWith("--target=")) {
-    explicitTarget = args[i].slice("--target=".length);
+  if (subArgs[i].startsWith("--target=")) {
+    explicitTarget = subArgs[i].slice("--target=".length);
     break;
   }
 }
 
-// Any *-windows-gnu triple triggers the MinGW build path regardless of host.
 const isMingwTarget = explicitTarget?.endsWith("-windows-gnu") ?? false;
 
-// ── MinGW cross-compilation ───────────────────────────────────────────────────
-// Triggered by --target *-windows-gnu from any host:
-//   Linux/macOS: uses x86_64-w64-mingw32-* cross-compiler
-//   MSYS2:       uses the native MinGW toolchain (no cross prefix)
+// ── Pre-build espeak-ng and resolve ESPEAK_LIB_DIR ───────────────────────────
+let espeakLib;
+let platformFlags = []; // extra flags injected before the user's subArgs
+
 if (isMingwTarget) {
-  console.log(`→ building espeak-ng MinGW static library for ${explicitTarget} …`);
+  // MinGW cross-compilation — works from Linux, macOS, or MSYS2 on Windows.
+  console.log(
+    `→ building espeak-ng static library (MinGW) for ${explicitTarget} …`
+  );
   execSync("bash scripts/build-espeak-static-mingw.sh", {
     cwd: root,
     stdio: "inherit",
   });
+  espeakLib = resolve(root, "src-tauri/espeak-static-mingw/lib");
 
-  const espeakLib = resolve(root, "src-tauri/espeak-static-mingw/lib");
-  const cmd = `npx tauri build ${extra}`.trimEnd();
-  console.log(`→ ${cmd}`);
-  execSync(cmd, {
-    cwd: root,
-    stdio: "inherit",
-    env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
-  });
-
-// ── macOS native ──────────────────────────────────────────────────────────────
 } else if (isMac) {
   console.log("→ building espeak-ng static library …");
   execSync("bash scripts/build-espeak-static.sh", {
     cwd: root,
     stdio: "inherit",
   });
+  espeakLib = resolve(root, "src-tauri/espeak-static/lib");
+  // Release builds target Apple Silicon; dev builds use the host triple.
+  if (subcommand === "build" && !explicitTarget) {
+    platformFlags = ["--target", "aarch64-apple-darwin", "--no-sign"];
+  }
 
-  const espeakLib = resolve(root, "src-tauri/espeak-static/lib");
-  const cmd =
-    `npx tauri build --target aarch64-apple-darwin --no-sign ${extra}`.trimEnd();
-  console.log(`→ ${cmd}`);
-  execSync(cmd, {
-    cwd: root,
-    stdio: "inherit",
-    env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
-  });
-
-// ── Windows native (MSVC) ─────────────────────────────────────────────────────
 } else if (isWin) {
-  // Must run from a Developer PowerShell for VS (lib.exe in PATH) so that
-  // the MSVC companion-library merge step works.
-  console.log("→ building espeak-ng static library (MSVC / PowerShell) …");
+  // Native Windows — MSVC toolchain via PowerShell.
+  // Must run from a Developer PowerShell for VS so lib.exe is on PATH.
+  console.log("→ building espeak-ng static library (MSVC) …");
   execSync(
     "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build-espeak-static.ps1",
     { cwd: root, stdio: "inherit" }
   );
+  espeakLib = resolve(root, "src-tauri\\espeak-static\\lib");
 
-  const espeakLib = resolve(root, "src-tauri\\espeak-static\\lib");
-  const cmd = `npx tauri build ${extra}`.trimEnd();
-  console.log(`→ ${cmd}`);
-  execSync(cmd, {
-    cwd: root,
-    stdio: "inherit",
-    env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
-  });
-
-// ── Linux native ──────────────────────────────────────────────────────────────
 } else {
+  // Linux native.
   console.log("→ building espeak-ng static library …");
   execSync("bash scripts/build-espeak-static.sh", {
     cwd: root,
     stdio: "inherit",
   });
-
-  const espeakLib = resolve(root, "src-tauri/espeak-static/lib");
-  const cmd = `npx tauri build ${extra}`.trimEnd();
-  console.log(`→ ${cmd}`);
-  execSync(cmd, {
-    cwd: root,
-    stdio: "inherit",
-    env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
-  });
+  espeakLib = resolve(root, "src-tauri/espeak-static/lib");
 }
+
+// ── Run Tauri ─────────────────────────────────────────────────────────────────
+const cmd = ["npx", "tauri", subcommand, ...platformFlags, ...subArgs]
+  .join(" ")
+  .trimEnd();
+
+console.log(`→ ${cmd}`);
+execSync(cmd, {
+  cwd: root,
+  stdio: "inherit",
+  env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
+});
