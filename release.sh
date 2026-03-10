@@ -367,7 +367,7 @@ npm install --prefer-offline 2>/dev/null || npm install
 
 TAURI_TARGET="${TAURI_TARGET:-aarch64-apple-darwin}"
 
-TAURI_ARGS=(build)
+TAURI_ARGS=(build --no-sign)
 if [ -n "${TAURI_TARGET:-}" ]; then
     TAURI_ARGS+=(--target "$TAURI_TARGET")
     log "Target: $TAURI_TARGET"
