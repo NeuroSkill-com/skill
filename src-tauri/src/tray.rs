@@ -86,8 +86,7 @@ fn icon_bt_off()                -> Image<'static> { Image::from_bytes(ICON_BT_OF
 
 pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu<tauri::Wry>> {
     let (label_shortcut, search_shortcut, settings_shortcut, calibration_shortcut,
-         help_shortcut, history_shortcut, api_shortcut, focus_timer_shortcut,
-         #[cfg(feature = "llm")] chat_shortcut) = {
+         help_shortcut, history_shortcut, api_shortcut, focus_timer_shortcut) = {
         let r = app.state::<Mutex<AppState>>();
         let g = r.lock_or_recover();
         (
@@ -99,8 +98,13 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
             g.history_shortcut.clone(),
             g.api_shortcut.clone(),
             g.focus_timer_shortcut.clone(),
-            #[cfg(feature = "llm")] g.chat_shortcut.clone(),
         )
+    };
+    #[cfg(feature = "llm")]
+    let chat_shortcut = {
+        let r = app.state::<Mutex<AppState>>();
+        let s = r.lock_or_recover().chat_shortcut.clone();
+        s
     };
 
     let menu = Menu::new(app)?;

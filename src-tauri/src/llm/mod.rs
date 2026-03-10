@@ -158,8 +158,11 @@ enum InferRequest {
     /// Generate a chat completion from a list of `{"role","content"}` messages.
     /// The actor applies `model.apply_chat_template()` so the correct EOS/stop
     /// tokens are always used regardless of the model family.
+    /// `images` holds raw image bytes (decoded from base64 data-URLs or fetched
+    /// from URLs) in the same order as the `image_url` parts across all messages.
     Generate {
         messages: Vec<Value>,
+        images:   Vec<Vec<u8>>,
         params:   GenParams,
         token_tx: UnboundedSender<InferToken>,
     },
@@ -420,6 +423,167 @@ impl ThinkTracker {
 ///
 /// This means stop strings that span multiple token pieces are handled
 /// correctly without blocking the stream for more than a few bytes.
+// ── Image decoding helpers (available to any code, used by the actor) ─────────
+
+/// Decode a base64 data-URL (`data:<mime>;base64,<data>`) or return `None`
+/// for plain HTTP/S URLs (which we cannot fetch synchronously from the actor).
+fn decode_image_url(url: &str) -> Option<Vec<u8>> {
+    let data = url.strip_prefix("data:")?;
+    // data:<mime>;base64,<payload>
+    let payload = data.split(';').nth(1)?.strip_prefix("base64,")?;
+    use base64::Engine as _;
+    base64::engine::general_purpose::STANDARD.decode(payload).ok()
+}
+
+/// Extract all raw image bytes from a single `content` value (string or parts array).
+/// Returns images in document order.
+fn extract_images_from_content(content: &Value) -> Vec<Vec<u8>> {
+    let Value::Array(parts) = content else { return Vec::new() };
+    parts.iter()
+        .filter_map(|p| {
+            if p.get("type")?.as_str() != Some("image_url") { return None; }
+            let url = p.get("image_url")?.get("url")?.as_str()?;
+            decode_image_url(url)
+        })
+        .collect()
+}
+
+// ── Shared sampling loop ───────────────────────────────────────────────────────
+
+/// Run the token-by-token generation loop starting at `n_prompt` KV positions.
+///
+/// Precondition: the KV cache already contains the fully-decoded prompt (text
+/// or text+images) and the logits for the last prompt position are valid.
+/// `sampler.sample(ctx, -1)` samples from those logits.
+#[allow(clippy::too_many_arguments)]
+fn run_sampling_loop(
+    model:    &llama_cpp_4::model::LlamaModel,
+    ctx:      &mut llama_cpp_4::context::LlamaContext<'_>,
+    app:      &tauri::AppHandle,
+    log_buf:  &LlmLogBuffer,
+    log_file: Option<&LlmLogFile>,
+    params:   &GenParams,
+    token_tx: UnboundedSender<InferToken>,
+    n_prompt: usize,
+) {
+    let n_ctx = ctx.n_ctx() as usize;
+
+    let mut sampler = LlamaSampler::chain_simple([
+        LlamaSampler::top_k(params.top_k),
+        LlamaSampler::top_p(params.top_p, 1),
+        LlamaSampler::temp(params.temperature),
+        LlamaSampler::dist(params.seed),
+    ]);
+
+    // Stop strings: user-supplied + model-family defaults.
+    let mut stop_strings = params.stop.clone();
+    for s in &["<|im_end|>", "<|endoftext|>", "<|user|>",
+                "<|eot_id|>", "<|EOT|>", "[/INST]"] {
+        if !stop_strings.iter().any(|x| x == s) {
+            stop_strings.push(s.to_string());
+        }
+    }
+    let max_stop_len = stop_strings.iter().map(|s| s.len()).max().unwrap_or(0);
+    let hold_back    = max_stop_len.saturating_sub(1);
+
+    // Think-budget tracker (budget=0 is handled before this call; None = unlimited)
+    let tracker_budget = match params.thinking_budget {
+        Some(0) | None => None,
+        Some(n)        => Some(n),
+    };
+    let mut think_tracker = ThinkTracker::new(tracker_budget);
+
+    let max_new = params.max_tokens.min(n_ctx.saturating_sub(n_prompt));
+    let mut n_cur = n_prompt;
+    let mut finish_reason = "length".to_string();
+    let mut pending = String::new();
+
+    'gen: loop {
+        if n_cur >= n_prompt + max_new { break; }
+
+        // -1 = "last token that had logits computed" — works after both
+        // `ctx.decode()` (text-only path) and `eval_chunks()` (mtmd path).
+        let token = sampler.sample(ctx, -1);
+        sampler.accept(token);
+
+        if model.is_eog_token(token) {
+            finish_reason = "stop".to_string();
+            break;
+        }
+
+        let piece = model.token_to_str(token, Special::Plaintext).unwrap_or_default();
+
+        // Think-budget enforcement: inject </think> when budget exhausted.
+        if let Some(inject) = think_tracker.feed(&piece) {
+            token_tx.send(InferToken::Delta(inject.clone())).ok();
+
+            if let Ok(inj_toks) = model.str_to_token(&inject, AddBos::Never) {
+                if !inj_toks.is_empty() {
+                    let mut inj_batch = LlamaBatch::new(inj_toks.len(), 1);
+                    for (i, &t) in inj_toks.iter().enumerate() {
+                        inj_batch.add(t, n_cur as i32 + i as i32, &[0],
+                                      i == inj_toks.len() - 1).ok();
+                    }
+                    if ctx.decode(&mut inj_batch).is_err() {
+                        llm_warn!(app, log_buf, log_file, "decode error injecting </think>");
+                    }
+                    n_cur += inj_toks.len();
+                }
+            }
+            continue;
+        }
+
+        pending.push_str(&piece);
+
+        // Check for stop strings.
+        for stop in &stop_strings {
+            if pending.ends_with(stop.as_str()) {
+                let safe_end = pending.len().saturating_sub(stop.len());
+                if safe_end > 0 {
+                    token_tx.send(InferToken::Delta(pending[..safe_end].to_string())).ok();
+                }
+                finish_reason = "stop".to_string();
+                break 'gen;
+            }
+        }
+
+        // Emit safe prefix (hold back potential partial stop string).
+        if pending.len() > hold_back {
+            let emit_end = pending.len() - hold_back;
+            let emit_end = (0..=emit_end).rev()
+                .find(|&i| pending.is_char_boundary(i))
+                .unwrap_or(0);
+            if emit_end > 0 {
+                let chunk: String = pending.drain(..emit_end).collect();
+                if token_tx.send(InferToken::Delta(chunk)).is_err() { break; }
+            }
+        }
+
+        // Decode the new token so `sampler.sample(ctx, -1)` works next iteration.
+        let mut gen_batch = LlamaBatch::new(1, 1);
+        if gen_batch.add(token, n_cur as i32, &[0], true).is_err() { break; }
+        if ctx.decode(&mut gen_batch).is_err() {
+            token_tx.send(InferToken::Error("decode error".into())).ok();
+            break;
+        }
+        n_cur += 1;
+    }
+
+    // Flush hold-back buffer, trimming any trailing stop string.
+    let flush_end = stop_strings.iter()
+        .find_map(|s| pending.ends_with(s.as_str()).then_some(pending.len().saturating_sub(s.len())))
+        .unwrap_or(pending.len());
+    if flush_end > 0 {
+        token_tx.send(InferToken::Delta(pending[..flush_end].to_string())).ok();
+    }
+
+    let n_gen = n_cur.saturating_sub(n_prompt);
+    llm_info!(app, log_buf, log_file, "generation done — {n_gen} tokens, finish_reason={finish_reason}");
+    token_tx.send(InferToken::Done { finish_reason }).ok();
+}
+
+// ── Text-only generation ───────────────────────────────────────────────────────
+
 #[allow(clippy::too_many_arguments)]
 fn run_generation(
     model:    &llama_cpp_4::model::LlamaModel,
@@ -433,8 +597,7 @@ fn run_generation(
 ) {
     ctx.clear_kv_cache();
 
-    // When thinking is disabled, pre-fill an empty <think>\n\n</think>\n block
-    // so the model jumps straight to the response without generating reasoning.
+    // When thinking is disabled, pre-fill an empty <think>\n\n</think>\n block.
     let prompt = if params.thinking_budget == Some(0) {
         format!("{prompt}<think>\n\n</think>\n")
     } else {
@@ -466,139 +629,104 @@ fn run_generation(
         return;
     }
 
-    let mut sampler = LlamaSampler::chain_simple([
-        LlamaSampler::top_k(params.top_k),
-        LlamaSampler::top_p(params.top_p, 1),
-        LlamaSampler::temp(params.temperature),
-        LlamaSampler::dist(params.seed),
-    ]);
+    run_sampling_loop(model, ctx, app, log_buf, log_file, &params, token_tx, n_prompt);
+}
 
-    // Stop strings: user-supplied + model-family defaults.
-    let mut stop_strings = params.stop.clone();
-    for s in &["<|im_end|>", "<|endoftext|>", "<|user|>",
-                "<|eot_id|>", "<|EOT|>", "[/INST]"] {
-        if !stop_strings.iter().any(|x| x == s) {
-            stop_strings.push(s.to_string());
-        }
-    }
-    let max_stop_len = stop_strings.iter().map(|s| s.len()).max().unwrap_or(0);
-    let hold_back    = max_stop_len.saturating_sub(1);
+// ── Multimodal generation (llm-mtmd feature) ──────────────────────────────────
 
-    // Think-budget tracker (only active when budget > 0; budget=0 already handled above)
-    let tracker_budget = match params.thinking_budget {
-        Some(0) | None => None,
-        Some(n)        => Some(n),
+#[cfg(feature = "llm-mtmd")]
+#[allow(clippy::too_many_arguments)]
+fn run_generation_multimodal(
+    model:     &llama_cpp_4::model::LlamaModel,
+    ctx:       &mut llama_cpp_4::context::LlamaContext<'_>,
+    mtmd_ctx:  &llama_cpp_4::mtmd::MtmdContext,
+    app:       &tauri::AppHandle,
+    log_buf:   &LlmLogBuffer,
+    log_file:  Option<&LlmLogFile>,
+    prompt:    String,   // contains media markers in place of image_url parts
+    images:    Vec<Vec<u8>>,
+    params:    GenParams,
+    token_tx:  UnboundedSender<InferToken>,
+) {
+    use llama_cpp_4::mtmd::{MtmdBitmap, MtmdInputChunks, MtmdInputText};
+
+    ctx.clear_kv_cache();
+
+    let n_ctx = ctx.n_ctx() as usize;
+
+    // When thinking is disabled, pre-fill an empty <think>\n\n</think>\n block.
+    let prompt = if params.thinking_budget == Some(0) {
+        format!("{prompt}<think>\n\n</think>\n")
+    } else {
+        prompt
     };
-    let mut think_tracker = ThinkTracker::new(tracker_budget);
 
-    let max_new = params.max_tokens.min(n_ctx - n_prompt);
-    let mut n_cur = n_prompt;
-    let mut finish_reason = "length".to_string();
-    let mut pending = String::new();
-
-    'gen: loop {
-        if n_cur >= n_prompt + max_new { break; }
-
-        let token = sampler.sample(ctx, batch.n_tokens() - 1);
-        sampler.accept(token);
-
-        if model.is_eog_token(token) {
-            finish_reason = "stop".to_string();
-            break;
-        }
-
-        let piece = model.token_to_str(token, Special::Plaintext).unwrap_or_default();
-
-        // Think-budget enforcement: inject </think> when budget exhausted.
-        if let Some(inject) = think_tracker.feed(&piece) {
-            // Stream the injected close tag to the frontend.
-            pending.push_str(&inject);
-            token_tx.send(InferToken::Delta(inject.clone())).ok();
-            pending.clear();
-
-            // Tokenise and decode the injected string into the KV cache so
-            // the model's internal state stays consistent, then continue from
-            // the last injected token (skip re-processing the triggering token).
-            if let Ok(inj_toks) = model.str_to_token(&inject, AddBos::Never) {
-                if !inj_toks.is_empty() {
-                    let mut inj_batch = LlamaBatch::new(inj_toks.len(), 1);
-                    for (i, &t) in inj_toks.iter().enumerate() {
-                        inj_batch.add(t, n_cur as i32 + i as i32, &[0],
-                                      i == inj_toks.len() - 1).ok();
-                    }
-                    if ctx.decode(&mut inj_batch).is_err() {
-                        llm_warn!(app, log_buf, log_file, "decode error injecting </think>");
-                    }
-                    n_cur += inj_toks.len();
-                    // Seed the batch with the last injected token so the sampler
-                    // picks up from the correct position on the next iteration.
-                    batch.clear();
-                    let last_tok = inj_toks[inj_toks.len() - 1];
-                    batch.add(last_tok, (n_cur - 1) as i32, &[0], true).ok();
+    // Decode raw bytes → MtmdBitmap (auto-detects JPEG/PNG/etc.)
+    let bitmaps: Vec<MtmdBitmap> = images.iter()
+        .enumerate()
+        .filter_map(|(i, bytes)| {
+            match MtmdBitmap::from_buf(mtmd_ctx, bytes) {
+                Ok(b)  => Some(b),
+                Err(e) => {
+                    llm_warn!(app, log_buf, log_file, "image {i} decode failed: {e}");
+                    None
                 }
             }
-            // Don't process the triggering token further; jump to next sample.
-            continue;
-        }
+        })
+        .collect();
 
-        pending.push_str(&piece);
-
-        // Check if accumulated buffer ends with any stop string.
-        for stop in &stop_strings {
-            if pending.ends_with(stop.as_str()) {
-                let safe_end = pending.len().saturating_sub(stop.len());
-                if safe_end > 0 {
-                    token_tx.send(InferToken::Delta(pending[..safe_end].to_string())).ok();
-                }
-                finish_reason = "stop".to_string();
-                break 'gen;
-            }
-        }
-
-        // Emit safe prefix (hold back potential partial stop string).
-        if pending.len() > hold_back {
-            let emit_end = pending.len() - hold_back;
-            let emit_end = (0..=emit_end).rev()
-                .find(|&i| pending.is_char_boundary(i))
-                .unwrap_or(0);
-            if emit_end > 0 {
-                let chunk: String = pending.drain(..emit_end).collect();
-                if token_tx.send(InferToken::Delta(chunk)).is_err() { break; }
-            }
-        }
-
-        batch.clear();
-        if batch.add(token, n_cur as i32, &[0], true).is_err() { break; }
-        if ctx.decode(&mut batch).is_err() {
-            token_tx.send(InferToken::Error("decode error".into())).ok();
-            break;
-        }
-        n_cur += 1;
+    if bitmaps.is_empty() && !images.is_empty() {
+        token_tx.send(InferToken::Error("all images failed to decode".into())).ok();
+        return;
     }
 
-    // Flush remaining hold-back buffer, trimming any trailing stop string.
-    let flush_end = stop_strings.iter()
-        .find_map(|s| pending.ends_with(s.as_str()).then_some(pending.len().saturating_sub(s.len())))
-        .unwrap_or(pending.len());
-    if flush_end > 0 {
-        token_tx.send(InferToken::Delta(pending[..flush_end].to_string())).ok();
+    llm_info!(app, log_buf, log_file,
+        "multimodal prompt — {} image(s), thinking_budget={:?}",
+        bitmaps.len(), params.thinking_budget);
+
+    let bitmap_refs: Vec<&MtmdBitmap> = bitmaps.iter().collect();
+    let text = MtmdInputText::new(&prompt, true, true);
+    let mut chunks = MtmdInputChunks::new();
+
+    if let Err(e) = mtmd_ctx.tokenize(&text, &bitmap_refs, &mut chunks) {
+        let msg = format!("mtmd tokenize error: {e}");
+        llm_error!(app, log_buf, log_file, "{msg}");
+        token_tx.send(InferToken::Error(msg)).ok();
+        return;
     }
 
-    let n_gen = n_cur - n_prompt;
-    llm_info!(app, log_buf, log_file, "generation done — {n_gen} tokens, finish_reason={finish_reason}");
-    token_tx.send(InferToken::Done { finish_reason }).ok();
+    let n_tokens = chunks.n_tokens();
+    llm_info!(app, log_buf, log_file, "prompt+images: ~{n_tokens} tokens");
+    if n_tokens >= n_ctx {
+        let msg = format!("prompt+images too long ({n_tokens} ≥ n_ctx {n_ctx})");
+        llm_warn!(app, log_buf, log_file, "{msg}");
+        token_tx.send(InferToken::Error(msg)).ok();
+        return;
+    }
+
+    let n_batch = ctx.n_batch() as i32;
+    let mut n_past = 0i32;
+    if let Err(e) = mtmd_ctx.eval_chunks(ctx.as_ptr(), &chunks, 0, 0, n_batch, true, &mut n_past) {
+        let msg = format!("mtmd eval error: {e}");
+        llm_error!(app, log_buf, log_file, "{msg}");
+        token_tx.send(InferToken::Error(msg)).ok();
+        return;
+    }
+
+    let n_prompt = n_past as usize;
+    run_sampling_loop(model, ctx, app, log_buf, log_file, &params, token_tx, n_prompt);
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_actor(
-    mut rx:        tokio::sync::mpsc::UnboundedReceiver<InferRequest>,
-    config:        LlmConfig,
-    model_path:    std::path::PathBuf,
-    _mmproj_path:  Option<std::path::PathBuf>,
-    app:           tauri::AppHandle,
-    log_buf:       LlmLogBuffer,
-    log_path:      Option<std::path::PathBuf>,
-    ready_flag:    Arc<AtomicBool>,
+    mut rx:       tokio::sync::mpsc::UnboundedReceiver<InferRequest>,
+    config:       LlmConfig,
+    model_path:   std::path::PathBuf,
+    mmproj_path:  Option<std::path::PathBuf>,
+    app:          tauri::AppHandle,
+    log_buf:      LlmLogBuffer,
+    log_path:     Option<std::path::PathBuf>,
+    ready_flag:   Arc<AtomicBool>,
 ) {
     // ── per-session log file ──────────────────────────────────────────────────
     let log_file_handle: Option<LlmLogFile> = log_path.as_ref().and_then(|p| {
@@ -663,6 +791,26 @@ fn run_actor(
     llm_info!(&app, &log_buf, log_file, "context ready — n_ctx={} — running warmup pass…", ctx.n_ctx());
     let _ = app.emit("llm:status", json!({"status":"loading","detail":"warming_up"}));
 
+    // ── Multimodal projector (llm-mtmd feature) ───────────────────────────────
+    #[cfg(feature = "llm-mtmd")]
+    let mtmd_ctx: Option<llama_cpp_4::mtmd::MtmdContext> = mmproj_path.as_ref().and_then(|p| {
+        use llama_cpp_4::mtmd::{MtmdContext, MtmdContextParams};
+        match MtmdContext::init_from_file(p, &model, MtmdContextParams::default()) {
+            Ok(mc) => {
+                llm_info!(&app, &log_buf, log_file,
+                    "mmproj loaded ✓ — vision={} audio={}",
+                    mc.supports_vision(), mc.supports_audio());
+                Some(mc)
+            }
+            Err(e) => {
+                llm_error!(&app, &log_buf, log_file, "failed to load mmproj: {e}");
+                None
+            }
+        }
+    });
+    #[cfg(not(feature = "llm-mtmd"))]
+    let _ = &mmproj_path; // suppress unused warning
+
     // ── Warmup / prewarm ──────────────────────────────────────────────────────
     // Running one tiny decode pass compiles Metal/CUDA/Vulkan shader graphs,
     // transfers weights to VRAM, and allocates the KV-cache backing store so
@@ -708,18 +856,22 @@ fn run_actor(
                 result_tx.send(true).ok();
             }
 
-            InferRequest::Generate { messages, params, token_tx } => {
-                llm_info!(&app, &log_buf, log_file, "chat request — {} messages, max_tokens={}",
-                          messages.len(), params.max_tokens);
+            InferRequest::Generate { messages, images, params, token_tx } => {
+                llm_info!(&app, &log_buf, log_file, "chat request — {} messages, {} image(s), max_tokens={}",
+                          messages.len(), images.len(), params.max_tokens);
 
-                // Build LlamaChatMessage list and apply the model's own template.
-                // This gives correct EOS handling for every model family
-                // (ChatML for Qwen, Llama-3 tokens, etc.) without any hardcoded
-                // template strings.
-                // Content can be a plain string OR an array of content-parts
-                // (multimodal format: [{type:"text",text:"…"},{type:"image_url",…}]).
-                // Extract text-only for now; image tokens are not yet supported.
-                fn extract_text(content: &Value) -> String {
+                // ── Build the prompt text ─────────────────────────────────────
+                // Content may be a plain string OR a parts array
+                // [{type:"text",text:"…"},{type:"image_url",url:"…"}].
+                // For the multimodal path we replace each image_url part with
+                // the mtmd media marker; for the text-only path we skip images.
+
+                #[cfg(feature = "llm-mtmd")]
+                let use_mtmd = !images.is_empty() && mtmd_ctx.is_some();
+                #[cfg(not(feature = "llm-mtmd"))]
+                let use_mtmd = false;
+
+                fn extract_text_plain(content: &Value) -> String {
                     match content {
                         Value::String(s) => s.clone(),
                         Value::Array(parts) => parts.iter()
@@ -728,16 +880,44 @@ fn run_actor(
                                 Some(p.get("text")?.as_str()?.to_string())
                             })
                             .collect::<Vec<_>>()
-                            .join("\n"),
+                            .join(" "),
                         _ => String::new(),
                     }
                 }
+
+                fn extract_text_with_markers(content: &Value, marker: &str) -> String {
+                    match content {
+                        Value::String(s) => s.clone(),
+                        Value::Array(parts) => parts.iter()
+                            .filter_map(|p| {
+                                match p.get("type")?.as_str()? {
+                                    "text"      => Some(p.get("text")?.as_str()?.to_string()),
+                                    "image_url" => Some(marker.to_string()),
+                                    _           => None,
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                        _ => String::new(),
+                    }
+                }
+
+                let extract_fn: fn(&Value, &str) -> String = if use_mtmd {
+                    extract_text_with_markers
+                } else {
+                    |c, _| extract_text_plain(c)
+                };
+
+                #[cfg(feature = "llm-mtmd")]
+                let marker = llama_cpp_4::mtmd::MtmdContext::default_marker();
+                #[cfg(not(feature = "llm-mtmd"))]
+                let marker = "";
 
                 let chat_msgs: Vec<llama_cpp_4::model::LlamaChatMessage> = messages
                     .iter()
                     .filter_map(|m| {
                         let role    = m.get("role")?.as_str()?.to_string();
-                        let content = extract_text(m.get("content")?);
+                        let content = extract_fn(m.get("content")?, marker);
                         llama_cpp_4::model::LlamaChatMessage::new(role, content).ok()
                     })
                     .collect();
@@ -750,6 +930,16 @@ fn run_actor(
                         continue;
                     }
                 };
+
+                // ── Dispatch to text-only or multimodal path ──────────────────
+                #[cfg(feature = "llm-mtmd")]
+                if use_mtmd {
+                    if let Some(ref mc) = mtmd_ctx {
+                        run_generation_multimodal(&model, &mut ctx, mc,
+                            &app, &log_buf, log_file, prompt, images, params, token_tx);
+                        continue;
+                    }
+                }
 
                 run_generation(&model, &mut ctx, &app, &log_buf, log_file,
                                prompt, params, token_tx);
@@ -996,9 +1186,20 @@ async fn chat_completions(
                 Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
     }
 
+    // Extract images from all messages in document order.
+    // Only base64 data-URLs are supported (plain HTTP URLs are skipped).
+    let images: Vec<Vec<u8>> = req.messages.iter()
+        .flat_map(|m| {
+            m.get("content")
+                .map(|c| extract_images_from_content(c))
+                .unwrap_or_default()
+        })
+        .collect();
+
     let (tok_tx, tok_rx) = mpsc::unbounded_channel();
     let _ = state.req_tx.send(InferRequest::Generate {
         messages: req.messages.clone(),
+        images,
         params:   req.gen.clone(),
         token_tx: tok_tx,
     });
