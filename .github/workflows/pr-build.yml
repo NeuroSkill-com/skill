@@ -297,21 +297,71 @@ jobs:
           security list-keychains -d user \
             -s "$KEYCHAIN_PATH" login.keychain
 
-      # ── Tauri build — compile + bundle only (no signing) ────────────────────
-      #
-      # Identical structure to release.yml.  --no-sign bypasses Tauri's
-      # built-in codesign/notarytool, which crash with SIGILL on macOS 26;
-      # the two steps below replace them with direct invocations.
-      - name: Build Tauri app bundle
+      # ── Compile: frontend + Rust binary ──────────────────────────────────────
+      # Identical rationale to release.yml — see that file for full details.
+      - name: Compile (frontend + Rust)
         env:
-          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: |
-          npx tauri build \
-            --target aarch64-apple-darwin \
-            --bundles app \
-            --no-sign
+          npm run build
+          cd src-tauri
+          cargo build --release --target aarch64-apple-darwin
+
+      # ── Assemble .app bundle ──────────────────────────────────────────────
+      - name: Create .app bundle
+        run: |
+          APP_NAME="NeuroSkill™"
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_BUNDLE="$BUNDLE_DIR/macos/${APP_NAME}.app"
+
+          mkdir -p "$APP_BUNDLE/Contents/MacOS"
+          mkdir -p "$APP_BUNDLE/Contents/Resources"
+
+          cp "src-tauri/target/aarch64-apple-darwin/release/skill" \
+             "$APP_BUNDLE/Contents/MacOS/skill"
+          chmod +x "$APP_BUNDLE/Contents/MacOS/skill"
+
+          cp "src-tauri/icons/icon.icns" \
+             "$APP_BUNDLE/Contents/Resources/icon.icns"
+
+          cp -R "src-tauri/resources/espeak-ng-data" \
+                "$APP_BUNDLE/Contents/Resources/"
+          cp -R "src-tauri/resources/neutts-samples" \
+                "$APP_BUNDLE/Contents/Resources/"
+
+          # All lines inside <<'PYEOF' are indented 10 spaces to stay inside the
+          # YAML literal block scalar.  Python sees them at column 0 after YAML
+          # strips the prefix — valid for top-level code.
+          python3 - "$APP_BUNDLE/Contents" "${{ env.VERSION }}" <<'PYEOF'
+          import plistlib, sys, os
+          contents, version = sys.argv[1], sys.argv[2]
+          with open("src-tauri/Info.plist", "rb") as f:
+              custom = plistlib.load(f)
+          base = {
+              "CFBundleIdentifier":         "com.neuroskill.skill",
+              "CFBundleExecutable":         "skill",
+              "CFBundleName":               "NeuroSkill\u2122",
+              "CFBundleDisplayName":        "NeuroSkill\u2122",
+              "CFBundleVersion":            version,
+              "CFBundleShortVersionString": version,
+              "CFBundlePackageType":        "APPL",
+              "CFBundleSignature":          "????",
+              "NSHighResolutionCapable":    True,
+              "NSRequiresAquaSystemAppearance": False,
+              "LSMinimumSystemVersion":     "11.0",
+              "CFBundleIconFile":           "icon",
+          }
+          merged = {**base, **custom}
+          out = os.path.join(contents, "Info.plist")
+          with open(out, "wb") as f:
+              plistlib.dump(merged, f, fmt=plistlib.FMT_XML)
+          print(f"Info.plist written to {out}")
+          for k, v in sorted(merged.items()):
+              print(f"  {k} = {v!r}")
+          PYEOF
+
+          echo "Bundle contents:"
+          find "$APP_BUNDLE" -maxdepth 3 | sort
 
       # ── Sign and notarize the .app bundle ─────────────────────────────────
       - name: Sign and notarize .app
@@ -342,11 +392,8 @@ jobs:
           xcrun stapler staple "$APP_BUNDLE"
           rm -f "$NOTARIZE_ZIP"
 
-      # ── Rebuild updater artifact from signed + stapled .app ───────────────
-      #
-      # The .tar.gz Tauri produced above wraps the unsigned .app.  Now that
-      # the .app is signed, notarized, and stapled we replace both artifacts
-      # so the Tauri updater delivers a correctly signed bundle to end-users.
+      # ── Create updater artifact from the signed + stapled .app ─────────────
+      # See release.yml for full rationale.
       - name: Recreate updater artifact from signed .app
         env:
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

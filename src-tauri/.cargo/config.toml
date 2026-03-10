@@ -1,15 +1,23 @@
 # ── Default build target ──────────────────────────────────────────────────────
 #
-# Always compile for Apple Silicon.  This makes `cargo build`, `cargo check`,
-# `cargo clippy`, and `npx tauri build` (without an explicit --target flag) all
-# default to aarch64-apple-darwin so x86_64 slices are never produced by
-# accident.
+# cargo's [build] section has no per-host-OS conditionals, so a hardcoded
+# `target = "aarch64-apple-darwin"` here would break Windows / Linux builds
+# ("can't find crate for `core`").
 #
-# The Linux CI jobs override this by passing --target x86_64-unknown-linux-gnu
-# explicitly to cargo check / cargo clippy.
+# Platform default is therefore left as the host triple.  Per-platform
+# targeting is handled at two levels:
+#
+#   1. npm / Tauri builds (recommended):
+#        npm run tauri:build          ← auto-selects target via scripts/tauri-build.js
+#        macOS  → --target aarch64-apple-darwin
+#        Windows/Linux → host triple (no --target flag)
+#
+#   2. Raw `cargo` on macOS:
+#        Either pass --target aarch64-apple-darwin explicitly, or let direnv
+#        source the repo-root .envrc which exports CARGO_BUILD_TARGET for you.
 
 [build]
-target = "aarch64-apple-darwin"
+# target intentionally omitted — defaults to the host triple
 
 # ── espeak-ng static library ──────────────────────────────────────────────────
 #
