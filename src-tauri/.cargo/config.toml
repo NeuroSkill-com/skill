@@ -15,6 +15,27 @@
 #   2. Raw `cargo` on macOS:
 #        Either pass --target aarch64-apple-darwin explicitly, or let direnv
 #        source the repo-root .envrc which exports CARGO_BUILD_TARGET for you.
+#
+# ── Windows build prerequisite: LLVM / libclang ───────────────────────────────
+#
+# llama-cpp-sys uses bindgen to generate Rust↔C bindings at build time.
+# bindgen requires libclang.dll, which ships with the LLVM toolchain.
+#
+# One-time setup (run once, then restart your terminal):
+#
+#   winget install LLVM.LLVM
+#
+#   # Then add to your user environment (PowerShell):
+#   [System.Environment]::SetEnvironmentVariable(
+#       "LIBCLANG_PATH", "C:\Program Files\LLVM\bin", "User")
+#
+# Without this, cargo build fails with:
+#   "Unable to find libclang: couldn't find any valid shared libraries
+#    matching: ['clang.dll', 'libclang.dll']"
+#
+# LIBCLANG_PATH is intentionally NOT set here because the path is
+# installation-dependent and force=true would break machines where LLVM
+# lives elsewhere.  Set it in your system/user environment variables instead.
 
 [build]
 # target intentionally omitted — defaults to the host triple

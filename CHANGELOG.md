@@ -4,6 +4,58 @@ All notable changes to NeuroSkill™ are documented here.
 
 ---
 
+## [0.0.11] — 2026-03-10
+
+### LLM / Chat
+
+- **LLM engine** — full on-device inference via `llama-cpp-4` (llama.cpp
+  bindings). Runs text and multimodal (vision) models locally with no cloud
+  dependency
+- **Model catalog** (`llm_catalog.json`) — curated list of GGUF models
+  (Qwen3.5 4B/27B, Llama-3.2-Vision, Gemma3, etc.) with per-entry metadata:
+  repo, filename, quantisation, size, family description, tags, recommended
+  flag. Bundled into the app at compile time
+- **Tauri commands**: `get_llm_catalog`, `set_llm_active_model`,
+  `set_llm_active_mmproj`, `download_llm_model`, `cancel_llm_download`,
+  `delete_llm_model`, `refresh_llm_catalog`, `get_llm_logs`,
+  `start_llm_server`, `stop_llm_server`, `get_llm_server_status`,
+  `open_chat_window`
+- **HTTP inference server** (`axum` router) — OpenAI-compatible endpoints
+  (`/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`) served
+  locally so third-party tools can connect to the on-device model
+- **Vision / multimodal** — image inputs decoded from data-URL or base64
+  and fed through a clip mmproj; `autoload_mmproj` setting automatically
+  selects the best downloaded projector for the active model
+- **Thinking-model support** — forced `</think>` injection after a budget
+  cap; orphaned tail tokens are discarded (decoded into KV cache for
+  coherence, suppressed from output) until the next clean line boundary
+- **File upload** in chat — images attachable to messages; previewed in
+  the UI before sending
+- **Markdown renderer** (`MarkdownRenderer.svelte`) — renders streamed
+  assistant output with code blocks, tables, and inline formatting
+- **Chat window** (`src/routes/chat/+page.svelte`) — full chat UI with
+  message history, streaming tokens, stop button, model/mmproj selectors,
+  generation parameter controls
+- **Global chat shortcut** — configurable keyboard shortcut (stored in
+  settings) focuses the existing chat window or opens a new one
+- **i18n** — `llm.*` keys added to all five language files (en, de, fr,
+  he, uk)
+
+### Build / CI
+
+- **Bypass Tauri's built-in signing pipeline** in both `release.yml` and
+  `pr-build.yml` — Tauri's `create-dmg` subprocess crashes with `SIGILL`
+  on macOS 26 (hdiutil API change); replaced with explicit steps:
+  1. `npx tauri build --bundles app --no-sign` — compile only
+  2. `codesign` — deep-sign with `--options runtime` + `--entitlements`
+  3. `xcrun notarytool submit … --wait` — notarize
+  4. `xcrun stapler staple` — staple ticket to bundle
+  5. Recreate `.app.tar.gz` from the signed bundle, then
+     `npx tauri signer sign` — re-sign the updater artifact with Ed25519
+- `release.sh` — minor fix to `TAURI_TARGET` default propagation
+
+---
+
 ## [0.0.9] — 2026-03-10
 
 ### Dependencies

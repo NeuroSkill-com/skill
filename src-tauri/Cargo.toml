@@ -179,7 +179,7 @@ ndarray   = "0.17"
 # GPU-accelerated parametric UMAP (burn + CubeCL / wgpu backend).
 # Uses the fast-map repo's local checkout to avoid burn-optim 0.20.1 ABI mismatch
 # on crates.io.  Repository: https://github.com/eugenehp/fast-map
-fast-umap = { version = "1.2.2", default-features = false }
+fast-umap = { version = "1.2.3", default-features = false }
 
 # Direct access to burn::backend::{Wgpu, wgpu::WgpuDevice} in eeg_embeddings.rs.
 burn      = { version = "0.20.1", default-features = false, features = ["wgpu"] }
