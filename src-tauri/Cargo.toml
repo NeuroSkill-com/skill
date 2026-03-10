@@ -29,7 +29,7 @@ license = "GPL-3.0-only"
 #                conflict; both features can be active simultaneously.
 #
 [features]
-default    = ["tts-kitten", "tts-neutts", "llm"]
+default    = ["tts-kitten", "tts-neutts"] # , "llm"
 tts-kitten = ["dep:kittentts", "dep:rodio"]
 tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound"]
 
@@ -149,7 +149,7 @@ async-stream      = "0.3"
 # neutts 0.0.5 migrated from llama-cpp-2 → llama-cpp-4 so there is no longer
 # a `links = "llama"` conflict when both `tts-neutts` and `llm` are enabled.
 # Cargo deduplicates both into a single llama-cpp-4 package.
-llama-cpp-4 = { version = "0.2.2", optional = true }
+llama-cpp-4 = { version = "0.2.3", optional = true }
 
 # mDNS / Bonjour service discovery
 mdns-sd = "0.18"

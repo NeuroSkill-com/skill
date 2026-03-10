@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [0.0.9] — 2026-03-10
 
+### Dependencies
+
+- Updated `llama-cpp-4` and `llama-cpp-sys-4` from 0.2.2 → 0.2.3
+
 ### Build / CI
 
 - Fixed pre-commit hook failing on macOS when CUDA Toolkit is absent

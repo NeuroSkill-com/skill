@@ -1603,6 +1603,7 @@ pub fn run() {
             set_llm_active_model,
             #[cfg(feature = "llm")]
             set_llm_active_mmproj,
+            #[cfg(feature = "llm")]
             set_llm_autoload_mmproj,
             #[cfg(feature = "llm")]
             get_llm_logs,
