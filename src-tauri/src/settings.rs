@@ -414,10 +414,19 @@ pub struct LlmConfig {
     /// Only meaningful with `llm-mtmd` + a GPU feature.
     #[serde(default)]
     pub no_mmproj_gpu: bool,
+
+    /// Automatically load the vision projector (mmproj) when the LLM server
+    /// starts, without requiring the user to explicitly select one.
+    /// The best downloaded mmproj from the same repo as the active model is
+    /// chosen (recommended first, then BF16 > F16 > F32 by quant preference).
+    /// Default: `true`.
+    #[serde(default = "default_autoload_mmproj")]
+    pub autoload_mmproj: bool,
 }
 
 fn default_llm_parallel()      -> usize { 1 }
 fn default_mmproj_n_threads()  -> i32   { 4 }
+fn default_autoload_mmproj()   -> bool  { true }
 
 impl Default for LlmConfig {
     fn default() -> Self {
@@ -433,6 +442,7 @@ impl Default for LlmConfig {
             mmproj:           None,
             mmproj_n_threads: default_mmproj_n_threads(),
             no_mmproj_gpu:    false,
+            autoload_mmproj:  default_autoload_mmproj(),
         }
     }
 }

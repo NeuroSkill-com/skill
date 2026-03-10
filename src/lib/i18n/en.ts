@@ -2369,8 +2369,64 @@ const en: Record<string, string> = {
 
   "llm.mmproj.nThreads":                "Encoder threads",
   "llm.mmproj.nThreadsDesc":            "CPU threads for the vision/audio encoder.",
+  "llm.mmproj.autoload":                "Auto-load vision encoder",
+  "llm.mmproj.autoloadDesc":            "Automatically load the best available vision projector (mmproj) when the server starts.",
   "llm.mmproj.noGpu":                   "CPU-only mmproj",
   "llm.mmproj.noGpuDesc":               "Disable GPU offloading for the projector model.",
+
+  // ── Chat window ─────────────────────────────────────────────────────────────
+  "chat.status.running":                "Running",
+  "chat.status.loading":                "Loading model…",
+  "chat.status.stopped":                "Server stopped",
+
+  "chat.btn.start":                     "Start",
+  "chat.btn.stop":                      "Stop",
+  "chat.btn.cancel":                    "Cancel",
+  "chat.btn.newChat":                   "New chat",
+  "chat.btn.params":                    "Parameters",
+  "chat.btn.startServer":               "Start LLM server",
+  "chat.btn.send":                      "Send message",
+
+  "chat.systemPrompt":                  "System prompt",
+  "chat.thinkDepth":                    "Thinking depth",
+
+  "chat.think.minimal":                 "Minimal",
+  "chat.think.normal":                  "Normal",
+  "chat.think.extended":                "Extended",
+  "chat.think.unlimited":               "Unlimited",
+  "chat.think.minimalDesc":             "Up to 512 tokens of reasoning — fast, good for simple queries",
+  "chat.think.normalDesc":              "Up to 2 048 tokens — balanced for most tasks",
+  "chat.think.extendedDesc":            "Up to 8 192 tokens — best for complex reasoning",
+  "chat.think.unlimitedDesc":           "No limit — let the model think as long as it needs",
+
+  "chat.param.temperature":             "Temperature",
+  "chat.param.maxTokens":               "Max tokens",
+  "chat.param.topK":                    "Top-K",
+  "chat.param.topP":                    "Top-P",
+
+  "chat.empty.stopped":                 "LLM server is not running",
+  "chat.empty.stoppedHint":             "Start the server to begin chatting. Make sure a model is downloaded in Settings → LLM.",
+  "chat.empty.loadingHint":             "Watch the server log in Settings → LLM for progress.",
+  "chat.empty.ready":                   "Type a message to start chatting.",
+
+  "chat.thinking":                      "Thinking…",
+  "chat.thought":                       "Thought",
+  "chat.words":                         "{count} words",
+  "chat.firstToken":                    "first token",
+  "chat.tok":                           "tok",
+  "chat.ctxUsage":                      "Context window usage",
+
+  "chat.noVision":                      "No vision projector loaded — images will be ignored. Select a vision model and download its mmproj in Settings → LLM.",
+  "chat.attachImage":                   "Attach image",
+  "chat.attachImageNoVision":           "Attach image (⚠ no vision projector loaded — image will be ignored)",
+  "chat.removeAttachment":              "Remove attachment",
+
+  "chat.inputPlaceholder":              "Message… (Enter to send, Shift+Enter for newline)",
+  "chat.inputPlaceholderStopped":       "Start the server first",
+
+  "chat.hint.running":                  "Enter to send · Shift+Enter for newline",
+  "chat.hint.loading":                  "Loading — check Settings → LLM for progress",
+  "chat.hint.stopped":                  "Start the server in the top bar or Settings → LLM",
 
   "llm.noFeature":                      "LLM support is not compiled in.",
   "llm.noFeatureHint":                  "Rebuild with --features llm (and optionally llm-metal / llm-cuda / llm-mtmd) to enable the embedded OpenAI-compatible inference server.",

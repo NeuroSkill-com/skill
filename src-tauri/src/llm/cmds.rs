@@ -71,6 +71,19 @@ pub fn set_llm_active_model(
     crate::save_settings_handle(&app);
 }
 
+/// Toggle whether the vision projector is auto-loaded when the server starts.
+#[tauri::command]
+pub fn set_llm_autoload_mmproj(
+    enabled: bool,
+    app:     AppHandle,
+    state:   tauri::State<'_, Mutex<AppState>>,
+) {
+    let mut s = state.lock_or_recover();
+    s.llm_config.autoload_mmproj = enabled;
+    drop(s);
+    crate::save_settings_handle(&app);
+}
+
 /// Set the active mmproj projector (by filename, or empty to disable).
 #[tauri::command]
 pub fn set_llm_active_mmproj(
@@ -293,7 +306,7 @@ pub async fn start_llm_server(
     app:   AppHandle,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> Result<String, String> {
-    let (config, catalog, log_buf, cell, skill_dir) = {
+    let (mut config, catalog, log_buf, cell, skill_dir) = {
         let s = state.lock_or_recover();
         (
             s.llm_config.clone(),
@@ -309,6 +322,15 @@ pub async fn start_llm_server(
     }
 
     push_log(&app, &log_buf, "info", "start_llm_server command received");
+
+    // If no mmproj is explicitly set but autoload is on, resolve the best one.
+    if config.mmproj.is_none() {
+        config.mmproj = catalog.resolve_mmproj_path(config.autoload_mmproj);
+        if let Some(ref p) = config.mmproj {
+            push_log(&app, &log_buf, "info",
+                &format!("autoload_mmproj: selected {}", p.display()));
+        }
+    }
 
     // Run init on a blocking thread — it loads the model which can take seconds.
     let new_state = tokio::task::spawn_blocking(move || {
@@ -360,8 +382,12 @@ pub fn stop_llm_server(
 /// Return the current server status: `Stopped | Loading | Running`.
 #[derive(serde::Serialize)]
 pub struct LlmServerStatusResponse {
-    pub status:     LlmStatus,
-    pub model_name: String,
+    pub status:         LlmStatus,
+    pub model_name:     String,
+    /// Context window size in tokens (0 = model not yet loaded).
+    pub n_ctx:          usize,
+    /// True when a vision projector is loaded and image input is supported.
+    pub supports_vision: bool,
 }
 
 #[tauri::command]
@@ -370,7 +396,14 @@ pub fn get_llm_server_status(
 ) -> LlmServerStatusResponse {
     let s = state.lock_or_recover();
     let (status, model_name) = cell_status(&s.llm_state_cell);
-    LlmServerStatusResponse { status, model_name }
+    let (n_ctx, supports_vision) = s.llm_state_cell.lock().unwrap()
+        .as_ref()
+        .map(|srv| (
+            srv.n_ctx.load(std::sync::atomic::Ordering::Relaxed),
+            srv.vision_ready.load(std::sync::atomic::Ordering::Relaxed),
+        ))
+        .unwrap_or((0, false));
+    LlmServerStatusResponse { status, model_name, n_ctx, supports_vision }
 }
 
 // ── Chat window ───────────────────────────────────────────────────────────────

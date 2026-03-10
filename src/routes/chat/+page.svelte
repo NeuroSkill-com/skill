@@ -15,6 +15,8 @@
   import { invoke }                   from "@tauri-apps/api/core";
   import { listen }                   from "@tauri-apps/api/event";
   import ThemeToggle                  from "$lib/ThemeToggle.svelte";
+  import LanguagePicker               from "$lib/LanguagePicker.svelte";
+  import { t }                        from "$lib/i18n/index.svelte";
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -37,6 +39,8 @@
     ttft?:        number;
     /** ms for full response */
     elapsed?:     number;
+    /** Token usage from the final SSE chunk */
+    usage?:       UsageInfo;
   }
 
   /**
@@ -58,13 +62,20 @@
 
   interface ServerStatusPayload { status: ServerStatus; model_name: string; }
 
+  interface UsageInfo {
+    prompt_tokens:     number;
+    completion_tokens: number;
+    total_tokens:      number;
+    n_ctx:             number;
+  }
+
   /** Thinking budget levels: token limit for <think> block. null = unlimited. */
   type ThinkingLevel = "minimal" | "normal" | "extended" | "unlimited";
-  const THINKING_LEVELS: { label: string; key: ThinkingLevel; budget: number | null }[] = [
-    { label: "Minimal",   key: "minimal",   budget: 512   },
-    { label: "Normal",    key: "normal",    budget: 2048  },
-    { label: "Extended",  key: "extended",  budget: 8192  },
-    { label: "Unlimited", key: "unlimited", budget: null  },
+  const THINKING_LEVELS: { labelKey: string; key: ThinkingLevel; budget: number | null }[] = [
+    { labelKey: "chat.think.minimal",   key: "minimal",   budget: 512   },
+    { labelKey: "chat.think.normal",    key: "normal",    budget: 2048  },
+    { labelKey: "chat.think.extended",  key: "extended",  budget: 8192  },
+    { labelKey: "chat.think.unlimited", key: "unlimited", budget: null  },
   ];
 
   interface Attachment { dataUrl: string; mimeType: string; name: string; }
@@ -74,6 +85,7 @@
   let port           = $state(8375);
   let status         = $state<ServerStatus>("stopped");
   let modelName      = $state("");
+  let supportsVision = $state(false);
   let messages       = $state<Message[]>([]);
   let input          = $state("");
   let systemPrompt   = $state("You are a helpful assistant.");
@@ -107,9 +119,9 @@
   const canStop   = $derived(status === "running" || status === "loading");
 
   const statusLabel = $derived(
-    status === "running" ? modelName || "Running"
-    : status === "loading" ? "Loading model…"
-    : "Server stopped"
+    status === "running" ? modelName || t("chat.status.running")
+    : status === "loading" ? t("chat.status.loading")
+    : t("chat.status.stopped")
   );
   const statusColor = $derived(
     status === "running" ? "text-emerald-500"
@@ -247,6 +259,7 @@
     ];
 
     let rawAcc = ""; // full raw text including <think> tags
+    let usage: UsageInfo | undefined;
 
     try {
       const resp = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
@@ -308,6 +321,9 @@
               await scrollBottom();
             }
 
+            // Capture usage when server sends it (on Done chunk)
+            if (json.usage?.n_ctx) usage = json.usage as UsageInfo;
+
             // Check finish_reason
             const fr = json.choices?.[0]?.finish_reason;
             if (fr && fr !== "null") break outer;
@@ -319,7 +335,7 @@
       const { thinking, content } = parseThinking(rawAcc);
       messages = messages.map(m =>
         m.id === assistantMsg.id
-          ? { ...m, pending: false, content, thinking, ttft, elapsed }
+          ? { ...m, pending: false, content, thinking, ttft, elapsed, usage }
           : m
       );
     } catch (err: any) {
@@ -365,9 +381,10 @@
 
     // Initial status
     try {
-      const s = await invoke<{ status: ServerStatus; model_name: string }>("get_llm_server_status");
-      status    = s.status;
-      modelName = s.model_name;
+      const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean }>("get_llm_server_status");
+      status         = s.status;
+      modelName      = s.model_name;
+      supportsVision = s.supports_vision ?? false;
     } catch {}
 
     // Live status events
@@ -383,9 +400,10 @@
     pollTimer = setInterval(async () => {
       if (status !== "loading") { clearInterval(pollTimer!); return; }
       try {
-        const s = await invoke<{ status: ServerStatus; model_name: string }>("get_llm_server_status");
-        status    = s.status;
-        modelName = s.model_name;
+        const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean }>("get_llm_server_status");
+        status         = s.status;
+        modelName      = s.model_name;
+        supportsVision = s.supports_vision ?? false;
       } catch {}
     }, 1500);
 
@@ -435,7 +453,7 @@
         <svg viewBox="0 0 24 24" fill="currentColor" class="w-3 h-3">
           <polygon points="5,3 19,12 5,21"/>
         </svg>
-        Start
+        {t("chat.btn.start")}
       </button>
     {:else if canStop}
       <button
@@ -446,7 +464,7 @@
         <svg viewBox="0 0 24 24" fill="currentColor" class="w-3 h-3">
           <rect x="4" y="4" width="16" height="16" rx="2"/>
         </svg>
-        {status === "loading" ? "Cancel" : "Stop"}
+        {status === "loading" ? t("chat.btn.cancel") : t("chat.btn.stop")}
       </button>
     {/if}
 
@@ -454,7 +472,7 @@
     <button
       onclick={clearChat}
       disabled={messages.length === 0}
-      title="New chat"
+      title={t("chat.btn.newChat")}
       class="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-muted
              disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -463,13 +481,16 @@
       </svg>
     </button>
 
+    <!-- Language picker -->
+    <LanguagePicker />
+
     <!-- Theme toggle -->
     <ThemeToggle />
 
     <!-- Settings toggle -->
     <button
       onclick={() => showSettings = !showSettings}
-      title="Parameters"
+      title={t("chat.btn.params")}
       class="p-1.5 rounded-lg transition-colors cursor-pointer
              {showSettings
                ? 'text-violet-600 bg-violet-500/10'
@@ -492,7 +513,7 @@
       <div class="flex flex-col gap-1">
         <label for="chat-system-prompt"
                class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
-          System prompt
+          {t("chat.systemPrompt")}
         </label>
         <textarea
           id="chat-system-prompt"
@@ -507,7 +528,7 @@
       <!-- Thinking level -->
       <div class="flex flex-col gap-1">
         <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
-          Thinking depth
+          {t("chat.thinkDepth")}
         </span>
         <div class="flex rounded-lg overflow-hidden border border-border text-[0.65rem] font-medium">
           {#each THINKING_LEVELS as lvl}
@@ -517,32 +538,26 @@
                      {thinkingLevel === lvl.key
                        ? 'bg-violet-600 text-white'
                        : 'bg-background text-muted-foreground hover:bg-muted'}">
-              {lvl.label}
+              {t(lvl.labelKey)}
             </button>
           {/each}
         </div>
         <p class="text-[0.58rem] text-muted-foreground/60">
-          {thinkingLevel === "minimal"
-            ? "Up to 512 tokens of reasoning — fast, good for simple queries"
-            : thinkingLevel === "normal"
-            ? "Up to 2 048 tokens — balanced for most tasks"
-            : thinkingLevel === "extended"
-            ? "Up to 8 192 tokens — best for complex reasoning"
-            : "No limit — let the model think as long as it needs"}
+          {t(`chat.think.${thinkingLevel}Desc`)}
         </p>
       </div>
 
       <!-- Sliders row -->
       <div class="grid grid-cols-2 gap-3">
         {#each [
-          { label: "Temperature", min: 0, max: 2,    step: 0.05, value: temperature,  set: (v: number) => temperature = v },
-          { label: "Max tokens",  min: 64, max: 8192, step: 64,  value: maxTokens,    set: (v: number) => maxTokens   = v },
-          { label: "Top-K",       min: 1,  max: 200,  step: 1,   value: topK,         set: (v: number) => topK        = v },
-          { label: "Top-P",       min: 0,  max: 1,    step: 0.05, value: topP,        set: (v: number) => topP        = v },
+          { labelKey: "chat.param.temperature", min: 0,  max: 2,    step: 0.05, value: temperature, set: (v: number) => temperature = v },
+          { labelKey: "chat.param.maxTokens",  min: 64, max: 8192, step: 64,  value: maxTokens,   set: (v: number) => maxTokens   = v },
+          { labelKey: "chat.param.topK",       min: 1,  max: 200,  step: 1,   value: topK,        set: (v: number) => topK        = v },
+          { labelKey: "chat.param.topP",       min: 0,  max: 1,    step: 0.05, value: topP,       set: (v: number) => topP        = v },
         ] as s}
           <div class="flex flex-col gap-0.5">
             <div class="flex items-baseline justify-between">
-              <span class="text-[0.6rem] text-muted-foreground">{s.label}</span>
+              <span class="text-[0.6rem] text-muted-foreground">{t(s.labelKey)}</span>
               <span class="text-[0.62rem] font-mono text-foreground tabular-nums">{s.value}</span>
             </div>
             <input type="range" min={s.min} max={s.max} step={s.step} value={s.value}
@@ -573,22 +588,22 @@
         </div>
         {#if status === "stopped"}
           <div class="flex flex-col items-center gap-2">
-            <p class="text-[0.82rem] font-semibold text-foreground">LLM server is not running</p>
+            <p class="text-[0.82rem] font-semibold text-foreground">{t("chat.empty.stopped")}</p>
             <p class="text-[0.7rem] text-muted-foreground max-w-xs leading-relaxed">
-              Start the server to begin chatting. Make sure a model is downloaded in Settings → LLM.
+              {t("chat.empty.stoppedHint")}
             </p>
             <button
               onclick={startServer}
               class="mt-1 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-700
                      text-white text-[0.72rem] font-semibold transition-colors cursor-pointer">
-              Start LLM server
+              {t("chat.btn.startServer")}
             </button>
           </div>
         {:else if status === "loading"}
           <div class="flex flex-col items-center gap-2">
-            <p class="text-[0.82rem] font-semibold text-foreground">Loading model…</p>
+            <p class="text-[0.82rem] font-semibold text-foreground">{t("chat.status.loading")}</p>
             <p class="text-[0.7rem] text-muted-foreground">
-              Watch the server log in Settings → LLM for progress.
+              {t("chat.empty.loadingHint")}
             </p>
             <div class="mt-1 flex gap-1">
               {#each [0,1,2] as i}
@@ -598,7 +613,7 @@
             </div>
           </div>
         {:else}
-          <p class="text-[0.8rem] text-muted-foreground">Type a message to start chatting.</p>
+          <p class="text-[0.8rem] text-muted-foreground">{t("chat.empty.ready")}</p>
         {/if}
       </div>
 
@@ -659,18 +674,18 @@
                                 style="animation-delay:{i*0.12}s"></span>
                         {/each}
                       </span>
-                      <span class="text-[0.65rem]">Thinking…</span>
+                      <span class="text-[0.65rem]">{t("chat.thinking")}</span>
                     {:else}
                       <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 shrink-0
                            transition-transform {msg.thinkOpen ? 'rotate-90' : ''}">
                         <path d="M6 3l5 5-5 5V3z"/>
                       </svg>
                       <span class="text-[0.65rem] font-medium">
-                        {msg.pending ? "Thinking…" : "Thought"}
+                        {msg.pending ? t("chat.thinking") : t("chat.thought")}
                       </span>
                       {#if !msg.pending && msg.thinking}
                         <span class="ml-auto text-[0.6rem] text-muted-foreground/50">
-                          {msg.thinking.trim().split(/\s+/).length} words
+                          {t("chat.words", { count: msg.thinking.trim().split(/\s+/).length })}
                         </span>
                       {/if}
                     {/if}
@@ -699,12 +714,34 @@
                 </div>
               {/if}
 
-              <!-- Timing info -->
-              {#if !msg.pending && msg.elapsed !== undefined}
-                <span class="text-[0.55rem] text-muted-foreground/50 px-1">
-                  {fmtMs(msg.elapsed)}
-                  {#if msg.ttft !== undefined} · first token {fmtMs(msg.ttft)}{/if}
-                </span>
+              <!-- Timing + context usage -->
+              {#if !msg.pending && (msg.elapsed !== undefined || msg.usage)}
+                <div class="flex flex-col gap-1 px-1">
+                  {#if msg.elapsed !== undefined}
+                    <span class="text-[0.55rem] text-muted-foreground/50">
+                      {fmtMs(msg.elapsed)}
+                      {#if msg.ttft !== undefined} · {t("chat.firstToken")} {fmtMs(msg.ttft)}{/if}
+                      {#if msg.usage}
+                         · {msg.usage.prompt_tokens}+{msg.usage.completion_tokens} {t("chat.tok")}
+                      {/if}
+                    </span>
+                  {/if}
+                  {#if msg.usage && msg.usage.n_ctx > 0}
+                    {@const usedPct = Math.round((msg.usage.total_tokens / msg.usage.n_ctx) * 100)}
+                    {@const barColor = usedPct >= 90 ? "bg-red-500"
+                                     : usedPct >= 70 ? "bg-amber-500"
+                                     :                 "bg-emerald-500"}
+                    <div class="flex items-center gap-1.5" title="{t('chat.ctxUsage')}: {msg.usage.total_tokens} / {msg.usage.n_ctx} {t('chat.tok')} ({usedPct}%)">
+                      <div class="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                        <div class="h-full rounded-full {barColor} transition-all"
+                             style="width: {Math.min(usedPct, 100)}%"></div>
+                      </div>
+                      <span class="text-[0.5rem] tabular-nums text-muted-foreground/40 shrink-0">
+                        {msg.usage.total_tokens}/{msg.usage.n_ctx}
+                      </span>
+                    </div>
+                  {/if}
+                </div>
               {/if}
             </div>
           </div>
@@ -728,16 +765,32 @@
   <footer class="shrink-0 border-t border-border dark:border-white/[0.06]
                   bg-white dark:bg-[#0f0f18] px-3 py-2.5">
 
+    <!-- Vision-not-supported warning (shown when images attached but no mmproj loaded) -->
+    {#if attachments.length > 0 && !supportsVision}
+      <div class="flex items-center gap-2 mb-2 px-2 py-1.5 rounded-lg
+                   bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5 shrink-0">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span class="text-[0.65rem] font-medium leading-snug">
+          {t("chat.noVision")}
+        </span>
+      </div>
+    {/if}
+
     <!-- Attachment thumbnails strip -->
     {#if attachments.length > 0}
       <div class="flex flex-wrap gap-1.5 mb-2 px-1">
         {#each attachments as att, i}
           <div class="relative group">
             <img src={att.dataUrl} alt={att.name}
-                 class="h-16 w-16 rounded-lg object-cover border border-border shadow-sm" />
+                 class="h-16 w-16 rounded-lg object-cover border border-border shadow-sm
+                        {!supportsVision ? 'opacity-50 grayscale' : ''}" />
             <button
               onclick={() => removeAttachment(i)}
-              aria-label="Remove attachment"
+              aria-label={t("chat.removeAttachment")}
               class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white
                      flex items-center justify-center opacity-0 group-hover:opacity-100
                      transition-opacity cursor-pointer shadow">
@@ -760,10 +813,12 @@
       <button
         onclick={openFilePicker}
         disabled={status !== "running" || generating}
-        title="Attach image"
-        class="shrink-0 p-1 rounded-md text-muted-foreground/50 hover:text-foreground
-               hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed
-               transition-colors cursor-pointer self-center">
+        title={supportsVision ? t("chat.attachImage") : t("chat.attachImageNoVision")}
+        class="shrink-0 p-1 rounded-md transition-colors cursor-pointer self-center
+               disabled:opacity-30 disabled:cursor-not-allowed
+               {supportsVision
+                 ? 'text-muted-foreground/50 hover:text-foreground hover:bg-muted'
+                 : 'text-amber-500/70 hover:text-amber-500 hover:bg-amber-500/10'}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
              stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
           <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -777,9 +832,9 @@
         bind:value={input}
         onkeydown={inputKeydown}
         oninput={autoResizeInput}
-        placeholder={status === "running" ? "Message… (Enter to send, Shift+Enter for newline)"
-                     : status === "loading" ? "Loading model…"
-                     : "Start the server first"}
+        placeholder={status === "running" ? t("chat.inputPlaceholder")
+                     : status === "loading" ? t("chat.status.loading")
+                     : t("chat.inputPlaceholderStopped")}
         disabled={status !== "running" || generating}
         rows="1"
         class="flex-1 bg-transparent text-[0.78rem] text-foreground resize-none
@@ -792,7 +847,7 @@
         <!-- Abort button -->
         <button
           onclick={abort}
-          aria-label="Stop generating"
+          aria-label={t("chat.btn.stop")}
           class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center
                  bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors cursor-pointer">
           <svg viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5">
@@ -804,7 +859,7 @@
         <button
           onclick={sendMessage}
           disabled={!canSend}
-          aria-label="Send message"
+          aria-label={t("chat.btn.send")}
           class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-colors
                  {canSend
                    ? 'bg-violet-600 hover:bg-violet-700 text-white cursor-pointer'
@@ -821,11 +876,11 @@
     <!-- Footer hint -->
     <p class="text-[0.55rem] text-muted-foreground/30 text-center mt-1.5">
       {#if status === "running"}
-        {modelName} · Enter to send · Shift+Enter for newline
+        {modelName} · {t("chat.hint.running")}
       {:else if status === "loading"}
-        Loading — check Settings → LLM for progress
+        {t("chat.hint.loading")}
       {:else}
-        Start the server in the top bar or Settings → LLM
+        {t("chat.hint.stopped")}
       {/if}
     </p>
   </footer>

@@ -235,6 +235,7 @@ use settings_cmds::{
 use llm::cmds::{
     get_llm_catalog, download_llm_model, cancel_llm_download,
     delete_llm_model, refresh_llm_catalog, set_llm_active_model, set_llm_active_mmproj,
+    set_llm_autoload_mmproj,
     get_llm_logs, start_llm_server, stop_llm_server, get_llm_server_status, open_chat_window,
 };
 
@@ -1602,6 +1603,7 @@ pub fn run() {
             set_llm_active_model,
             #[cfg(feature = "llm")]
             set_llm_active_mmproj,
+            set_llm_autoload_mmproj,
             #[cfg(feature = "llm")]
             get_llm_logs,
             #[cfg(feature = "llm")]

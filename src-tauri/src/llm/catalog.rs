@@ -228,6 +228,49 @@ impl LlmCatalog {
                 && e.state == DownloadState::Downloaded)
             .and_then(|e| e.local_path.clone())
     }
+
+    /// Find the best downloaded mmproj for the currently active model.
+    ///
+    /// Matches by repo (same HuggingFace repo as the active model entry).
+    /// Preference order: recommended first, then by quant (BF16 > F16 > F32).
+    /// Returns `None` if no compatible mmproj is downloaded.
+    pub fn best_mmproj_for_active_model(&self) -> Option<&LlmModelEntry> {
+        // Find the repo of the active model.
+        let active_repo = self.entries.iter()
+            .find(|e| !e.is_mmproj && e.filename == self.active_model)?
+            .repo.as_str();
+
+        fn quant_rank(quant: &str) -> u8 {
+            match quant.to_uppercase().as_str() {
+                "BF16" => 0,
+                "F16"  => 1,
+                _      => 2,  // F32 and others
+            }
+        }
+
+        self.entries.iter()
+            .filter(|e| e.is_mmproj
+                && e.repo == active_repo
+                && e.state == DownloadState::Downloaded)
+            .min_by_key(|e| (!e.recommended as u8, quant_rank(&e.quant)))
+    }
+
+    /// If `autoload_mmproj` is requested and no mmproj is currently selected,
+    /// pick the best available one for the active model and return its path.
+    /// Does **not** mutate `active_mmproj` — the caller decides whether to
+    /// persist the selection.
+    pub fn resolve_mmproj_path(&self, autoload: bool) -> Option<PathBuf> {
+        // Explicit selection always wins.
+        if let path @ Some(_) = self.active_mmproj_path() {
+            return path;
+        }
+        if autoload {
+            self.best_mmproj_for_active_model()
+                .and_then(|e| e.local_path.clone())
+        } else {
+            None
+        }
+    }
 }
 
 // ── Path extension helper (avoids a temporary binding) ───────────────────────

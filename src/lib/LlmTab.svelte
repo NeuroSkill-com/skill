@@ -3,10 +3,8 @@
 <!--
   LLM Settings Tab
   ─────────────────
-  • Model families from multiple Unsloth GGUF repos
-  • Simple card per family, showing recommended quant + size prominently
-  • "Show all quants" expands to full list with all sizes
-  • Download / cancel / delete / select per quant
+  • Family dropdown → shows all quants for the selected family
+  • Progress bar per quant while downloading
   • Advanced inference settings (GPU layers, ctx size, etc.)
   • Server log viewer with auto-scroll
 -->
@@ -50,16 +48,16 @@
     enabled: boolean; model_path: string | null; n_gpu_layers: number;
     ctx_size: number | null; parallel: number; api_key: string | null;
     mmproj: string | null; mmproj_n_threads: number; no_mmproj_gpu: boolean;
+    autoload_mmproj: boolean;
   }
 
-  // Model family derived from entries sharing the same family_id
   interface ModelFamily {
-    id:       string;
-    name:     string;
-    desc:     string;
-    tags:     string[];
-    entries:  LlmModelEntry[];     // non-mmproj entries, sorted
-    mmproj:   LlmModelEntry[];
+    id:          string;
+    name:        string;
+    desc:        string;
+    tags:        string[];
+    entries:     LlmModelEntry[];   // non-mmproj, in catalog order
+    mmproj:      LlmModelEntry[];
     recommended: LlmModelEntry | undefined;
     downloaded:  LlmModelEntry[];
   }
@@ -70,7 +68,7 @@
   let config  = $state<LlmConfig>({
     enabled: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
-    mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false,
+    mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
   });
 
   let configSaving    = $state(false);
@@ -79,12 +77,11 @@
   let ctxSizeInput    = $state("");
   let serverStatus    = $state<"stopped"|"loading"|"running">("stopped");
   let startError      = $state("");
-  let showAdvanced    = $state(false);  // Advanced inference settings section
+  let showAdvanced    = $state(false);
 
-  // Per-family "show all quants" expand state: Set<family_id>
-  let expandedFamilies = $state<Set<string>>(new Set());
+  /** The family currently shown in the detail panel. */
+  let selectedFamilyId = $state<string>("");
 
-  // Log state
   let logs          = $state<LlmLogEntry[]>([]);
   let logAutoScroll = $state(true);
   let logEl         = $state<HTMLElement | null>(null);
@@ -95,7 +92,6 @@
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  // Group entries into model families
   const families = $derived.by<ModelFamily[]>(() => {
     const map = new Map<string, ModelFamily>();
     for (const e of catalog.entries) {
@@ -117,6 +113,7 @@
         if (e.state === "downloaded") f.downloaded.push(e);
       }
     }
+    // Downloaded families first, then alphabetical
     return Array.from(map.values()).sort((a, b) => {
       const aDl = a.downloaded.length > 0 ? 0 : 1;
       const bDl = b.downloaded.length > 0 ? 0 : 1;
@@ -124,6 +121,22 @@
       return a.name.localeCompare(b.name);
     });
   });
+
+  /** Auto-select a family when the list first loads or active model changes. */
+  $effect(() => {
+    if (families.length === 0) return;
+    // If current selection still exists, keep it
+    if (selectedFamilyId && families.some(f => f.id === selectedFamilyId)) return;
+    // Otherwise pick: active model's family → first downloaded → first
+    const activeEntry = catalog.entries.find(e => !e.is_mmproj && e.filename === catalog.active_model);
+    if (activeEntry) { selectedFamilyId = activeEntry.family_id; return; }
+    const dlFamily = families.find(f => f.downloaded.length > 0);
+    selectedFamilyId = (dlFamily ?? families[0]).id;
+  });
+
+  const selectedFamily = $derived(
+    families.find(f => f.id === selectedFamilyId) ?? families[0] ?? null
+  );
 
   const hasActive = $derived(
     catalog.entries.some(e => !e.is_mmproj && e.filename === catalog.active_model && e.state === "downloaded")
@@ -136,20 +149,18 @@
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function fmtSize(gb: number): string {
-    if (gb < 0.1) return `${(gb * 1024).toFixed(0)} MB`;
-    if (gb < 1)   return `${(gb * 1024).toFixed(0)} MB`;
+    if (gb < 1) return `${(gb * 1024).toFixed(0)} MB`;
     return `${gb.toFixed(1)} GB`;
   }
 
   function tagColor(tag: string): string {
     switch (tag) {
-      case "chat":       return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
-      case "reasoning":  return "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20";
-      case "coding":     return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
-      case "vision":     case "multimodal":
-                         return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20";
-      case "tiny":       return "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20";
-      default:           return "bg-slate-500/10 text-slate-500 border-slate-500/20";
+      case "chat":      return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
+      case "reasoning": return "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20";
+      case "coding":    return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
+      case "vision": case "multimodal":
+                        return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20";
+      default:          return "bg-slate-500/10 text-slate-500 border-slate-500/20";
     }
   }
 
@@ -162,32 +173,17 @@
     return MAP[tag] ?? tag;
   }
 
-  function stateBadgeClass(s: DownloadState): string {
-    switch (s) {
-      case "downloaded":  return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
-      case "downloading": return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
-      case "failed":      return "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20";
-      case "cancelled":   return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20";
-      default:            return "bg-slate-500/10 text-slate-500 border-slate-500/20";
-    }
-  }
-
-  /** Quants to show for a family: recommended + non-advanced in simple mode; all in expanded. */
-  function visibleEntries(f: ModelFamily): LlmModelEntry[] {
-    if (expandedFamilies.has(f.id)) return f.entries;
-    // Simple mode: downloaded + recommended + Q4_K_M (the "also good" quant)
-    return f.entries.filter(e =>
-      e.state === "downloaded" ||
-      e.filename === catalog.active_model ||
-      e.recommended ||
-      !e.advanced
-    );
-  }
-
-  function toggleFamily(fid: string) {
-    const s = new Set(expandedFamilies);
-    if (s.has(fid)) s.delete(fid); else s.add(fid);
-    expandedFamilies = s;
+  /** Option label for the <select> dropdown — concise with status hint. */
+  function familyOptionLabel(f: ModelFamily): string {
+    const active = f.entries.some(e => e.filename === catalog.active_model);
+    const dlCount = f.downloaded.length;
+    const loading = f.entries.some(e => e.state === "downloading");
+    let prefix = "";
+    if (active)        prefix = "✓ ";
+    else if (loading)  prefix = "⬇ ";
+    let suffix = "";
+    if (dlCount > 0 && !active) suffix = ` (${dlCount} downloaded)`;
+    return `${prefix}${f.name}${suffix}`;
   }
 
   // ── Data loading ───────────────────────────────────────────────────────────
@@ -233,14 +229,11 @@
   async function selectModel(filename: string) {
     await invoke("set_llm_active_model", { filename });
     await loadCatalog();
-    // Auto-restart the server with the new model in the background.
-    // Stop first (no-op if not running), then start.
     try { await invoke("stop_llm_server"); } catch {}
     startError = "";
     invoke("start_llm_server").catch((e: any) => {
       startError = typeof e === "string" ? e : (e?.message ?? "Failed to start LLM server");
     });
-    // Give it a moment then refresh status so the UI shows "Loading…"
     await new Promise(r => setTimeout(r, 300));
     await loadCatalog();
   }
@@ -280,7 +273,7 @@
       serverStatus = s.status;
     } catch {}
     try {
-      unlistenStatus = await listen<{ status: "stopped"|"loading"|"running" }>(
+      unlistenStatus = await listen<{ status: string }>(
         "llm:status", ev => { serverStatus = (ev.payload as any).status ?? serverStatus; }
       );
     } catch {}
@@ -425,7 +418,7 @@
 </section>
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
-<!-- Model families                                                              -->
+<!-- Model picker                                                                -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
   <div class="flex items-center gap-2 px-0.5">
@@ -447,93 +440,118 @@
       </CardContent>
     </Card>
   {:else}
-    {#each families as family (family.id)}
-      {@const isExpanded = expandedFamilies.has(family.id)}
-      {@const shown      = visibleEntries(family)}
-      {@const hasHidden  = shown.length < family.entries.length}
-      {@const hasVision  = family.tags.some((t: string) => t === "vision" || t === "multimodal")}
+
+    <!-- Family dropdown -->
+    <div class="relative">
+      <select
+        bind:value={selectedFamilyId}
+        class="w-full appearance-none rounded-xl border border-border dark:border-white/[0.06]
+               bg-white dark:bg-[#14141e] text-foreground text-[0.78rem] font-semibold
+               px-3.5 py-2.5 pr-9 cursor-pointer focus:outline-none
+               focus-visible:ring-2 focus-visible:ring-ring/50">
+        {#each families as f (f.id)}
+          <option value={f.id}>{familyOptionLabel(f)}</option>
+        {/each}
+      </select>
+      <!-- Custom caret -->
+      <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+        <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3">
+          <path d="M3 6l5 5 5-5H3z"/>
+        </svg>
+      </span>
+    </div>
+
+    <!-- Selected family detail panel -->
+    {#if selectedFamily}
+      {@const hasVision = selectedFamily.tags.some((t: string) => t === "vision" || t === "multimodal")}
 
       <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
         <CardContent class="py-0 px-0 flex flex-col">
 
-          <!-- Family header -->
-          <div class="flex items-start gap-3 px-4 pt-3.5 pb-2">
-            <div class="flex flex-col gap-1 flex-1 min-w-0">
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="text-[0.82rem] font-bold text-foreground">{family.name}</span>
-                {#each family.tags.filter((t: string) => !["tiny","small","medium","large"].includes(t)) as tag}
-                  <Badge variant="outline" class="text-[0.5rem] py-0 px-1.5 {tagColor(tag)}">
-                    {tagLabel(tag)}
-                  </Badge>
-                {/each}
-                {#if family.downloaded.length > 0}
-                  <Badge variant="outline"
-                    class="text-[0.5rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600
-                           dark:text-emerald-400 border-emerald-500/20">
-                    {family.downloaded.length} downloaded
-                  </Badge>
-                {/if}
-              </div>
-              <p class="text-[0.65rem] text-muted-foreground leading-snug">{family.desc}</p>
+          <!-- Family header: description + tags -->
+          <div class="px-4 pt-3.5 pb-3 flex flex-col gap-1.5">
+            <p class="text-[0.68rem] text-muted-foreground leading-snug">
+              {selectedFamily.desc}
+            </p>
+            <div class="flex items-center gap-1 flex-wrap">
+              {#each selectedFamily.tags.filter((t: string) => !["tiny","small","medium","large"].includes(t)) as tag}
+                <Badge variant="outline" class="text-[0.5rem] py-0 px-1.5 {tagColor(tag)}">
+                  {tagLabel(tag)}
+                </Badge>
+              {/each}
+              <span class="text-[0.55rem] font-mono text-muted-foreground/40 ml-auto truncate">
+                {selectedFamily.entries[0]?.repo ?? ""}
+              </span>
             </div>
+          </div>
 
-            <!-- Repo link -->
-            <span class="text-[0.55rem] text-muted-foreground/50 font-mono shrink-0 mt-0.5 truncate max-w-[45%]">
-              {family.entries[0]?.repo ?? ""}
-            </span>
+          <!-- Column headers -->
+          <div class="grid grid-cols-[4rem_4rem_1fr_auto] gap-x-2 items-center
+                       px-4 py-1.5 border-t border-b border-border/40 dark:border-white/[0.04]
+                       bg-slate-50 dark:bg-[#111118]">
+            <span class="text-[0.54rem] font-semibold uppercase tracking-widest text-muted-foreground/60">Quant</span>
+            <span class="text-[0.54rem] font-semibold uppercase tracking-widest text-muted-foreground/60">Size</span>
+            <span class="text-[0.54rem] font-semibold uppercase tracking-widest text-muted-foreground/60">Notes</span>
+            <span></span>
           </div>
 
           <!-- Quant rows -->
           <div class="flex flex-col divide-y divide-border/40 dark:divide-white/[0.04]">
-            {#each shown as entry (entry.filename)}
-              {@const isActive     = catalog.active_model === entry.filename}
-              {@const downloading  = entry.state === "downloading"}
-              {@const downloaded   = entry.state === "downloaded"}
-              {@const failed       = entry.state === "failed" || entry.state === "cancelled"}
+            {#each selectedFamily.entries as entry (entry.filename)}
+              {@const isActive    = catalog.active_model === entry.filename}
+              {@const downloading = entry.state === "downloading"}
+              {@const downloaded  = entry.state === "downloaded"}
+              {@const failed      = entry.state === "failed" || entry.state === "cancelled"}
 
-              <div class="flex flex-col gap-1.5 px-4 py-2.5
-                          {isActive ? 'bg-violet-50/60 dark:bg-violet-950/20' : ''}">
+              <div class="flex flex-col gap-1 px-4 py-2.5
+                           {isActive ? 'bg-violet-50/60 dark:bg-violet-950/20' : ''}">
 
-                <!-- Main row: quant · size · badges · actions -->
-                <div class="flex items-center gap-2 min-w-0">
-                  <!-- Quant name + size -->
-                  <div class="flex items-baseline gap-1.5 flex-1 min-w-0">
-                    <span class="text-[0.8rem] font-bold font-mono text-foreground shrink-0">
-                      {entry.quant}
-                    </span>
-                    <span class="text-[0.72rem] font-semibold tabular-nums text-muted-foreground shrink-0
-                                  {downloaded ? 'text-foreground/70' : ''}">
-                      {fmtSize(entry.size_gb)}
-                    </span>
+                <!-- Main row -->
+                <div class="grid grid-cols-[4rem_4rem_1fr_auto] gap-x-2 items-center min-w-0">
+
+                  <!-- Quant badge -->
+                  <span class="text-[0.74rem] font-bold font-mono text-foreground truncate">
+                    {entry.quant}
                     {#if entry.recommended}
-                      <span class="text-[0.58rem] text-violet-600 dark:text-violet-400 shrink-0">
-                        ★ recommended
-                      </span>
+                      <span class="text-[0.52rem] text-violet-500 font-sans not-italic ml-0.5">★</span>
                     {/if}
-                    {#if isActive}
-                      <span class="text-[0.58rem] text-emerald-600 dark:text-emerald-400 shrink-0">
-                        ✓ active
-                      </span>
-                    {/if}
-                    <!-- short description (truncated) -->
-                    <span class="text-[0.62rem] text-muted-foreground/60 truncate hidden sm:block">
+                  </span>
+
+                  <!-- Size -->
+                  <span class="text-[0.72rem] tabular-nums font-semibold
+                                {downloaded ? 'text-foreground/80' : 'text-muted-foreground'}">
+                    {fmtSize(entry.size_gb)}
+                  </span>
+
+                  <!-- Description + status badges -->
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="text-[0.63rem] text-muted-foreground/70 truncate">
                       {entry.description}
                     </span>
+                    {#if isActive}
+                      <span class="shrink-0 text-[0.52rem] font-semibold
+                                   text-emerald-600 dark:text-emerald-400">✓ active</span>
+                    {/if}
+                    {#if downloading}
+                      <span class="shrink-0 text-[0.52rem] text-blue-500 animate-pulse">downloading…</span>
+                    {/if}
+                    {#if failed}
+                      <span class="shrink-0 text-[0.52rem] text-red-500">failed</span>
+                    {/if}
                   </div>
 
                   <!-- Action buttons -->
-                  <div class="flex items-center gap-1 shrink-0">
+                  <div class="flex items-center gap-1 shrink-0 justify-end">
                     {#if downloading}
                       <Button size="sm" variant="outline"
-                        class="h-6 text-[0.6rem] px-2 text-destructive border-destructive/30
-                               hover:bg-destructive/10"
+                        class="h-6 text-[0.6rem] px-2 text-destructive border-destructive/30 hover:bg-destructive/10"
                         onclick={() => cancelDownload(entry.filename)}>
                         Cancel
                       </Button>
 
                     {:else if downloaded}
                       <Button size="sm" variant="ghost"
-                        class="h-6 text-[0.6rem] px-2 text-muted-foreground hover:text-red-500"
+                        class="h-6 text-[0.6rem] px-2 text-muted-foreground/60 hover:text-red-500"
                         onclick={() => deleteModel(entry.filename)}>
                         Delete
                       </Button>
@@ -543,7 +561,7 @@
                                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20'
                                  : 'bg-violet-600 hover:bg-violet-700 text-white'}"
                         onclick={() => selectModel(entry.filename)}>
-                        {isActive ? "Selected" : "Use"}
+                        {isActive ? "Active" : "Use"}
                       </Button>
 
                     {:else}
@@ -558,32 +576,33 @@
 
                 <!-- Progress bar -->
                 {#if downloading}
-                  <div class="h-1 w-full rounded-full bg-muted overflow-hidden">
+                  <div class="h-1 w-full rounded-full bg-muted overflow-hidden mt-0.5">
                     {#if entry.progress > 0}
                       <div class="h-full rounded-full bg-blue-500 transition-all duration-300"
-                           style="width:{entry.progress * 100}%"></div>
+                           style="width:{(entry.progress * 100).toFixed(1)}%"></div>
                     {:else}
-                      <div class="h-full rounded-full bg-blue-500
-                                  animate-[progress-indeterminate_1.6s_ease-in-out_infinite]"
-                           style="width:40%"></div>
+                      <!-- Indeterminate pulse -->
+                      <div class="h-full w-2/5 rounded-full bg-blue-500
+                                  animate-[progress-indeterminate_1.6s_ease-in-out_infinite]">
+                      </div>
                     {/if}
                   </div>
                   {#if entry.status_msg}
-                    <p class="text-[0.58rem] text-blue-500 truncate -mt-0.5">{entry.status_msg}</p>
+                    <p class="text-[0.58rem] text-blue-500 truncate">{entry.status_msg}</p>
                   {/if}
                 {/if}
 
-                <!-- Error message -->
+                <!-- Error -->
                 {#if failed && entry.status_msg}
                   <p class="text-[0.6rem] text-destructive/80 font-mono break-all leading-relaxed
-                             rounded bg-destructive/5 border border-destructive/10 px-2 py-1 -mt-0.5">
+                             rounded bg-destructive/5 border border-destructive/10 px-2 py-1">
                     {entry.status_msg}
                   </p>
                 {/if}
 
-                <!-- Local path (when downloaded) -->
+                <!-- Local path -->
                 {#if downloaded && entry.local_path}
-                  <p class="text-[0.56rem] font-mono text-muted-foreground/50 break-all leading-tight -mt-0.5">
+                  <p class="text-[0.53rem] font-mono text-muted-foreground/40 break-all leading-tight">
                     {entry.local_path}
                   </p>
                 {/if}
@@ -592,78 +611,83 @@
             {/each}
           </div>
 
-          <!-- Expand / collapse quants footer -->
-          <button
-            onclick={() => toggleFamily(family.id)}
-            class="flex items-center justify-center gap-1.5 py-2 text-[0.6rem]
-                   text-muted-foreground/60 hover:text-muted-foreground
-                   border-t border-border/40 dark:border-white/[0.04]
-                   bg-slate-50/50 dark:bg-[#111118]/50 w-full
-                   transition-colors cursor-pointer select-none">
-            {#if isExpanded}
-              <svg viewBox="0 0 16 16" fill="currentColor" class="w-2.5 h-2.5">
-                <path d="M3 10l5-5 5 5H3z"/>
-              </svg>
-              Show less
-            {:else}
-              <svg viewBox="0 0 16 16" fill="currentColor" class="w-2.5 h-2.5">
-                <path d="M3 6l5 5 5-5H3z"/>
-              </svg>
-              {hasHidden
-                ? `Show all ${family.entries.length} quants`
-                : `${family.entries.length} quant${family.entries.length !== 1 ? "s" : ""}`}
-            {/if}
-          </button>
-
-          <!-- mmproj section (vision models only) -->
-          {#if hasVision && family.mmproj.length > 0}
-            <div class="border-t border-border dark:border-white/[0.06] px-4 py-2.5 bg-amber-50/30 dark:bg-amber-950/10">
+          <!-- Vision projector section -->
+          {#if hasVision && selectedFamily.mmproj.length > 0}
+            <div class="border-t border-border dark:border-white/[0.06]
+                         px-4 py-3 bg-amber-50/30 dark:bg-amber-950/10">
               <p class="text-[0.6rem] font-semibold text-amber-700 dark:text-amber-400 mb-2">
                 Vision projector (required for image input)
               </p>
-              {#each family.mmproj as mp (mp.filename)}
-                {@const isActiveMm = catalog.active_mmproj === mp.filename}
-                <div class="flex items-center gap-2 py-1">
-                  <div class="flex-1 min-w-0">
-                    <span class="text-[0.7rem] font-mono text-foreground">{mp.filename}</span>
-                    <span class="text-[0.62rem] text-muted-foreground ml-2">{fmtSize(mp.size_gb)}</span>
-                    {#if mp.recommended}
-                      <span class="text-[0.58rem] text-violet-600 dark:text-violet-400 ml-1.5">★</span>
+              <div class="flex flex-col gap-1.5">
+                {#each selectedFamily.mmproj as mp (mp.filename)}
+                  {@const isActiveMm  = catalog.active_mmproj === mp.filename}
+                  {@const mpDl        = mp.state === "downloading"}
+                  {@const mpDownloaded = mp.state === "downloaded"}
+
+                  <div class="flex flex-col gap-1">
+                    <div class="flex items-center gap-2">
+                      <div class="flex-1 min-w-0 flex items-center gap-1.5">
+                        <span class="text-[0.68rem] font-mono text-foreground truncate">{mp.filename}</span>
+                        <span class="text-[0.62rem] text-muted-foreground shrink-0">{fmtSize(mp.size_gb)}</span>
+                        {#if mp.recommended}
+                          <span class="text-[0.52rem] text-violet-500">★</span>
+                        {/if}
+                        {#if isActiveMm}
+                          <span class="text-[0.52rem] font-semibold text-amber-600 dark:text-amber-400 shrink-0">
+                            ✓ active
+                          </span>
+                        {/if}
+                      </div>
+                      <div class="flex items-center gap-1 shrink-0">
+                        {#if mpDl}
+                          <Button size="sm" variant="outline"
+                            class="h-5 text-[0.58rem] px-1.5 text-destructive border-destructive/30"
+                            onclick={() => cancelDownload(mp.filename)}>Cancel</Button>
+                        {:else if mpDownloaded}
+                          <Button size="sm" variant="ghost"
+                            class="h-5 text-[0.58rem] px-1.5 text-muted-foreground/60 hover:text-red-500"
+                            onclick={() => deleteModel(mp.filename)}>Delete</Button>
+                          <Button size="sm"
+                            class="h-5 text-[0.58rem] px-2
+                                   {isActiveMm
+                                     ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
+                                     : 'bg-amber-600 hover:bg-amber-700 text-white'}"
+                            onclick={() => selectMmproj(mp.filename)}>
+                            {isActiveMm ? "Active" : "Use"}
+                          </Button>
+                        {:else}
+                          <Button size="sm"
+                            class="h-5 text-[0.58rem] px-2 bg-amber-600 hover:bg-amber-700 text-white"
+                            onclick={() => download(mp.filename)}>
+                            Download {fmtSize(mp.size_gb)}
+                          </Button>
+                        {/if}
+                      </div>
+                    </div>
+
+                    {#if mpDl}
+                      <div class="h-1 w-full rounded-full bg-muted overflow-hidden">
+                        {#if mp.progress > 0}
+                          <div class="h-full rounded-full bg-amber-500 transition-all duration-300"
+                               style="width:{(mp.progress * 100).toFixed(1)}%"></div>
+                        {:else}
+                          <div class="h-full w-2/5 rounded-full bg-amber-500
+                                      animate-[progress-indeterminate_1.6s_ease-in-out_infinite]"></div>
+                        {/if}
+                      </div>
+                      {#if mp.status_msg}
+                        <p class="text-[0.56rem] text-amber-600 truncate">{mp.status_msg}</p>
+                      {/if}
                     {/if}
                   </div>
-                  <div class="flex items-center gap-1 shrink-0">
-                    {#if mp.state === "downloading"}
-                      <Button size="sm" variant="outline"
-                        class="h-5 text-[0.58rem] px-1.5 text-destructive border-destructive/30"
-                        onclick={() => cancelDownload(mp.filename)}>Cancel</Button>
-                    {:else if mp.state === "downloaded"}
-                      <Button size="sm" variant="ghost"
-                        class="h-5 text-[0.58rem] px-1.5 text-muted-foreground hover:text-red-500"
-                        onclick={() => deleteModel(mp.filename)}>Delete</Button>
-                      <Button size="sm"
-                        class="h-5 text-[0.58rem] px-2
-                               {isActiveMm
-                                 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30'
-                                 : 'bg-amber-600 hover:bg-amber-700 text-white'}"
-                        onclick={() => selectMmproj(mp.filename)}>
-                        {isActiveMm ? "Active" : "Use"}
-                      </Button>
-                    {:else}
-                      <Button size="sm"
-                        class="h-5 text-[0.58rem] px-2 bg-amber-600 hover:bg-amber-700 text-white"
-                        onclick={() => download(mp.filename)}>
-                        Download {fmtSize(mp.size_gb)}
-                      </Button>
-                    {/if}
-                  </div>
-                </div>
-              {/each}
+                {/each}
+              </div>
             </div>
           {/if}
 
         </CardContent>
       </Card>
-    {/each}
+    {/if}
   {/if}
 </section>
 
@@ -780,23 +804,44 @@
         </div>
       </div>
 
-      <!-- Multimodal settings (only if mmproj downloaded) -->
-      {#if catalog.entries.some(e => e.is_mmproj && e.state === "downloaded")}
-        <div class="flex items-center justify-between gap-4 px-4 py-3.5">
+      <!-- Multimodal -->
+      {#if catalog.entries.some(e => e.is_mmproj)}
+        <!-- Auto-load vision encoder -->
+        <div class="flex items-center justify-between gap-4 px-4 py-3.5
+                    border-t border-border/40 dark:border-white/[0.04]">
           <div class="flex flex-col gap-0.5">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.mmproj.noGpu")}</span>
-            <span class="text-[0.65rem] text-muted-foreground">{t("llm.mmproj.noGpuDesc")}</span>
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.mmproj.autoload")}</span>
+            <span class="text-[0.65rem] text-muted-foreground">{t("llm.mmproj.autoloadDesc")}</span>
           </div>
-          <button role="switch" aria-checked={config.no_mmproj_gpu} aria-label={t("llm.mmproj.noGpu")}
-            onclick={async () => { config = { ...config, no_mmproj_gpu: !config.no_mmproj_gpu }; await saveConfig(); }}
+          <button role="switch" aria-checked={config.autoload_mmproj} aria-label={t("llm.mmproj.autoload")}
+            onclick={async () => { config = { ...config, autoload_mmproj: !config.autoload_mmproj }; await saveConfig(); }}
             class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
                    border-transparent transition-colors duration-200
-                   {config.no_mmproj_gpu ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
+                   {config.autoload_mmproj ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
             <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
                           transform transition-transform duration-200
-                          {config.no_mmproj_gpu ? 'translate-x-4' : 'translate-x-0'}"></span>
+                          {config.autoload_mmproj ? 'translate-x-4' : 'translate-x-0'}"></span>
           </button>
         </div>
+
+        <!-- No-GPU for mmproj (only relevant when a projector is downloaded) -->
+        {#if catalog.entries.some(e => e.is_mmproj && e.state === "downloaded")}
+          <div class="flex items-center justify-between gap-4 px-4 py-3.5">
+            <div class="flex flex-col gap-0.5">
+              <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.mmproj.noGpu")}</span>
+              <span class="text-[0.65rem] text-muted-foreground">{t("llm.mmproj.noGpuDesc")}</span>
+            </div>
+            <button role="switch" aria-checked={config.no_mmproj_gpu} aria-label={t("llm.mmproj.noGpu")}
+              onclick={async () => { config = { ...config, no_mmproj_gpu: !config.no_mmproj_gpu }; await saveConfig(); }}
+              class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
+                     border-transparent transition-colors duration-200
+                     {config.no_mmproj_gpu ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
+              <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
+                            transform transition-transform duration-200
+                            {config.no_mmproj_gpu ? 'translate-x-4' : 'translate-x-0'}"></span>
+            </button>
+          </div>
+        {/if}
       {/if}
 
       <!-- curl quick test -->

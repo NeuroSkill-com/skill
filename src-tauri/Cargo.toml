@@ -44,7 +44,7 @@ tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound"]
 # `llm-cuda`   — CUDA GPU offload (NVIDIA)
 # `llm-vulkan` — Vulkan GPU offload (cross-platform)
 # `llm-mtmd`   — multimodal: image/audio inputs via libmtmd
-llm        = ["dep:llama-cpp-4", "axum/multipart"]
+llm        = ["dep:llama-cpp-4", "axum/multipart", "llm-mtmd"]
 llm-metal  = ["llm", "llama-cpp-4?/metal"]
 llm-cuda   = ["llm", "llama-cpp-4?/cuda"]
 llm-vulkan = ["llm", "llama-cpp-4?/vulkan"]
@@ -149,7 +149,7 @@ async-stream      = "0.3"
 # neutts 0.0.5 migrated from llama-cpp-2 → llama-cpp-4 so there is no longer
 # a `links = "llama"` conflict when both `tts-neutts` and `llm` are enabled.
 # Cargo deduplicates both into a single llama-cpp-4 package.
-llama-cpp-4 = { version = "0.2", optional = true }
+llama-cpp-4 = { version = "0.2.2", optional = true }
 
 # mDNS / Bonjour service discovery
 mdns-sd = "0.18"

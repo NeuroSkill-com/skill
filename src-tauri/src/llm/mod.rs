@@ -188,7 +188,12 @@ pub enum InferToken {
     /// A piece of decoded text to stream to the client.
     Delta(String),
     /// Generation finished normally.
-    Done { finish_reason: String },
+    Done {
+        finish_reason:     String,
+        prompt_tokens:     usize,
+        completion_tokens: usize,
+        n_ctx:             usize,
+    },
     /// Generation aborted with an error.
     Error(String),
 }
@@ -260,15 +265,19 @@ struct EmbeddingsRequest {
 
 pub struct LlmServerState {
     /// Channel to the inference actor.
-    req_tx:      tokio::sync::mpsc::UnboundedSender<InferRequest>,
+    req_tx:           tokio::sync::mpsc::UnboundedSender<InferRequest>,
     /// Display name shown in `/v1/models`.
-    model_name:  String,
+    model_name:       String,
     /// Optional Bearer token required on every request.
-    pub api_key: Option<String>,
+    pub api_key:      Option<String>,
     /// Set to `true` by the actor once the model + context are fully loaded.
-    pub ready:   Arc<AtomicBool>,
+    pub ready:        Arc<AtomicBool>,
+    /// Context window size in tokens; set by the actor after context creation.
+    pub n_ctx:        Arc<std::sync::atomic::AtomicUsize>,
+    /// Whether a vision projector (mmproj) was loaded — enables image input.
+    pub vision_ready: Arc<AtomicBool>,
     /// OS thread handle for the actor.  Taken (set to `None`) by `shutdown()`.
-    join_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
+    join_handle:      Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 impl LlmServerState {
@@ -369,6 +378,11 @@ impl ThinkTracker {
         let cap = "</think>".len() + 4;
         if self.tag_buf.len() > cap * 2 {
             let drain = self.tag_buf.len() - cap;
+            // Snap to a char boundary — raw byte arithmetic can land inside a
+            // multi-byte codepoint (e.g. CJK) and cause a panic.
+            let drain = (0..=drain).rev()
+                .find(|&i| self.tag_buf.is_char_boundary(i))
+                .unwrap_or(0);
             self.tag_buf.drain(..drain);
         }
 
@@ -410,19 +424,20 @@ impl ThinkTracker {
 
 // ── Generation helper ─────────────────────────────────────────────────────────
 
-/// Execute one generation pass: tokenise `prompt`, decode the prompt batch,
-/// run the sampling loop with a hold-back stop-string buffer, and stream
-/// `InferToken` messages back through `token_tx`.
-///
-/// The hold-back buffer works like this:
-///   – Every decoded piece is appended to `pending`.
-///   – We emit only the prefix of `pending` that is guaranteed to NOT be the
-///     start of any stop string (i.e. everything except the last
-///     `max_stop_len - 1` characters).
-///   – On loop exit we flush whatever is left, trimming any trailing stop string.
-///
-/// This means stop strings that span multiple token pieces are handled
-/// correctly without blocking the stream for more than a few bytes.
+// Execute one generation pass: tokenise `prompt`, decode the prompt batch,
+// run the sampling loop with a hold-back stop-string buffer, and stream
+// `InferToken` messages back through `token_tx`.
+//
+// The hold-back buffer works like this:
+//   – Every decoded piece is appended to `pending`.
+//   – We emit only the prefix of `pending` that is guaranteed to NOT be the
+//     start of any stop string (i.e. everything except the last
+//     `max_stop_len - 1` characters).
+//   – On loop exit we flush whatever is left, trimming any trailing stop string.
+//
+// This means stop strings that span multiple token pieces are handled
+// correctly without blocking the stream for more than a few bytes.
+
 // ── Image decoding helpers (available to any code, used by the actor) ─────────
 
 /// Decode a base64 data-URL (`data:<mime>;base64,<data>`) or return `None`
@@ -467,6 +482,7 @@ fn run_sampling_loop(
     n_prompt: usize,
 ) {
     let n_ctx = ctx.n_ctx() as usize;
+    let n_batch = ctx.n_batch() as usize; let _ = n_batch; // available for future use
 
     let mut sampler = LlamaSampler::chain_simple([
         LlamaSampler::top_k(params.top_k),
@@ -578,8 +594,14 @@ fn run_sampling_loop(
     }
 
     let n_gen = n_cur.saturating_sub(n_prompt);
-    llm_info!(app, log_buf, log_file, "generation done — {n_gen} tokens, finish_reason={finish_reason}");
-    token_tx.send(InferToken::Done { finish_reason }).ok();
+    llm_info!(app, log_buf, log_file,
+        "generation done — prompt={n_prompt} completion={n_gen} ctx={n_ctx} finish={finish_reason}");
+    token_tx.send(InferToken::Done {
+        finish_reason,
+        prompt_tokens:     n_prompt,
+        completion_tokens: n_gen,
+        n_ctx,
+    }).ok();
 }
 
 // ── Text-only generation ───────────────────────────────────────────────────────
@@ -722,11 +744,13 @@ fn run_actor(
     mut rx:       tokio::sync::mpsc::UnboundedReceiver<InferRequest>,
     config:       LlmConfig,
     model_path:   std::path::PathBuf,
-    mmproj_path:  Option<std::path::PathBuf>,
-    app:          tauri::AppHandle,
-    log_buf:      LlmLogBuffer,
-    log_path:     Option<std::path::PathBuf>,
-    ready_flag:   Arc<AtomicBool>,
+    mmproj_path:   Option<std::path::PathBuf>,
+    app:           tauri::AppHandle,
+    log_buf:       LlmLogBuffer,
+    log_path:      Option<std::path::PathBuf>,
+    ready_flag:    Arc<AtomicBool>,
+    n_ctx_flag:    Arc<std::sync::atomic::AtomicUsize>,
+    vision_flag:   Arc<AtomicBool>,
 ) {
     // ── per-session log file ──────────────────────────────────────────────────
     let log_file_handle: Option<LlmLogFile> = log_path.as_ref().and_then(|p| {
@@ -788,6 +812,7 @@ fn run_actor(
         Err(e) => { llm_error!(&app, &log_buf, log_file, "failed to create context: {e}"); return; }
     };
 
+    n_ctx_flag.store(ctx.n_ctx() as usize, Ordering::Relaxed);
     llm_info!(&app, &log_buf, log_file, "context ready — n_ctx={} — running warmup pass…", ctx.n_ctx());
     let _ = app.emit("llm:status", json!({"status":"loading","detail":"warming_up"}));
 
@@ -800,6 +825,7 @@ fn run_actor(
                 llm_info!(&app, &log_buf, log_file,
                     "mmproj loaded ✓ — vision={} audio={}",
                     mc.supports_vision(), mc.supports_audio());
+                vision_flag.store(true, Ordering::Relaxed);
                 Some(mc)
             }
             Err(e) => {
@@ -809,7 +835,7 @@ fn run_actor(
         }
     });
     #[cfg(not(feature = "llm-mtmd"))]
-    let _ = &mmproj_path; // suppress unused warning
+    let _ = &mmproj_path;
 
     // ── Warmup / prewarm ──────────────────────────────────────────────────────
     // Running one tiny decode pass compiles Metal/CUDA/Vulkan shader graphs,
@@ -1075,7 +1101,9 @@ pub fn init(
     push_log(&app, &log_buf, "info", &format!("session log → {}", log_path.display()));
 
     let (req_tx, req_rx) = mpsc::unbounded_channel::<InferRequest>();
-    let ready_flag = Arc::new(AtomicBool::new(false));
+    let ready_flag  = Arc::new(AtomicBool::new(false));
+    let n_ctx_flag  = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let vision_flag = Arc::new(AtomicBool::new(false));
 
     let config2     = config.clone();
     let path2       = model_path.clone();
@@ -1083,22 +1111,26 @@ pub fn init(
     let app2        = app.clone();
     let buf2        = log_buf.clone();
     let ready2      = ready_flag.clone();
+    let n_ctx2      = n_ctx_flag.clone();
+    let vision2     = vision_flag.clone();
 
     let join_handle = std::thread::Builder::new()
         .name("llm-actor".into())
-        .stack_size(8 * 1024 * 1024)   // llama.cpp is stack-hungry
-        .spawn(move || run_actor(req_rx, config2, path2, mmproj2, app2, buf2, Some(log_path), ready2))
+        .stack_size(8 * 1024 * 1024)
+        .spawn(move || run_actor(req_rx, config2, path2, mmproj2, app2, buf2,
+                                 Some(log_path), ready2, n_ctx2, vision2))
         .expect("failed to spawn llm-actor thread");
 
-    // Emit "loading" status so the chat window can show a spinner.
     let _ = app.emit("llm:status", json!({"status":"loading","model":model_name}));
 
     Some(Arc::new(LlmServerState {
         req_tx,
         model_name,
-        api_key:     config.api_key.clone(),
-        ready:       ready_flag,
-        join_handle: Mutex::new(Some(join_handle)),
+        api_key:      config.api_key.clone(),
+        ready:        ready_flag,
+        n_ctx:        n_ctx_flag,
+        vision_ready: vision_flag,
+        join_handle:  Mutex::new(Some(join_handle)),
     }))
 }
 
@@ -1191,7 +1223,7 @@ async fn chat_completions(
     let images: Vec<Vec<u8>> = req.messages.iter()
         .flat_map(|m| {
             m.get("content")
-                .map(|c| extract_images_from_content(c))
+                .map(extract_images_from_content)
                 .unwrap_or_default()
         })
         .collect();
@@ -1300,11 +1332,17 @@ async fn stream_chat_response(
                     })).unwrap_or_default();
                     yield Ok::<sse::Event, String>(sse::Event::default().data(data));
                 }
-                InferToken::Done { finish_reason } => {
+                InferToken::Done { finish_reason, prompt_tokens, completion_tokens, n_ctx } => {
                     let data = serde_json::to_string(&json!({
                         "id": id, "object": "chat.completion.chunk",
                         "created": ts, "model": model_name,
                         "choices": [{"index":0,"delta":{},"finish_reason":finish_reason}],
+                        "usage": {
+                            "prompt_tokens":     prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                            "total_tokens":      prompt_tokens + completion_tokens,
+                            "n_ctx":             n_ctx,
+                        },
                     })).unwrap_or_default();
                     yield Ok(sse::Event::default().data(data));
                     yield Ok(sse::Event::default().data("[DONE]"));
@@ -1330,14 +1368,20 @@ async fn collect_chat_response(
 ) -> Response {
     let id = format!("chatcmpl-{}", short_id());
     let ts = unix_ts();
-    let mut text          = String::new();
-    let mut finish_reason = "stop".to_string();
+    let mut text              = String::new();
+    let mut finish_reason     = "stop".to_string();
+    let mut prompt_tokens     = 0usize;
+    let mut completion_tokens = 0usize;
+    let mut n_ctx             = 0usize;
 
     while let Some(tok) = tok_rx.recv().await {
         match tok {
-            InferToken::Delta(t)          => text.push_str(&t),
-            InferToken::Done { finish_reason: fr } => { finish_reason = fr; break; }
-            InferToken::Error(e)          => {
+            InferToken::Delta(t) => text.push_str(&t),
+            InferToken::Done { finish_reason: fr, prompt_tokens: pt, completion_tokens: ct, n_ctx: nc } => {
+                finish_reason = fr; prompt_tokens = pt; completion_tokens = ct; n_ctx = nc;
+                break;
+            }
+            InferToken::Error(e) => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response();
             }
         }
@@ -1350,7 +1394,12 @@ async fn collect_chat_response(
             "message": {"role": "assistant", "content": text},
             "finish_reason": finish_reason,
         }],
-        "usage": {"prompt_tokens":0,"completion_tokens":0,"total_tokens":0},
+        "usage": {
+            "prompt_tokens":     prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens":      prompt_tokens + completion_tokens,
+            "n_ctx":             n_ctx,
+        },
     })).into_response()
 }
 
@@ -1373,7 +1422,7 @@ async fn stream_completion_response(
                     })).unwrap_or_default();
                     yield Ok::<sse::Event, String>(sse::Event::default().data(data));
                 }
-                InferToken::Done { finish_reason } => {
+                InferToken::Done { finish_reason, .. } => {
                     let data = serde_json::to_string(&json!({
                         "id": id, "object": "text_completion.chunk",
                         "created": ts, "model": model_name,
@@ -1410,7 +1459,7 @@ async fn collect_completion_response(
     while let Some(tok) = tok_rx.recv().await {
         match tok {
             InferToken::Delta(t)                   => text.push_str(&t),
-            InferToken::Done { finish_reason: fr } => { finish_reason = fr; break; }
+            InferToken::Done { finish_reason: fr, .. } => { finish_reason = fr; break; }
             InferToken::Error(e)                   => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response();
             }
