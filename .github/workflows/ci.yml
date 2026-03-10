@@ -60,6 +60,10 @@ jobs:
         if: steps.cache-espeak.outputs.cache-hit != 'true'
         run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
 
+      - name: Update Cargo.lock for Linux
+        working-directory: src-tauri
+        run: cargo fetch --target x86_64-unknown-linux-gnu
+
       - name: cargo check
         working-directory: src-tauri
         run: cargo check --locked --target x86_64-unknown-linux-gnu
