@@ -1691,6 +1691,9 @@ pub fn run() {
                 // Without this handler the click is silently ignored.
                 // show_and_recover_main() also handles the blank-page case
                 // that can occur after the window has been hidden for a day.
+                // RunEvent::Reopen is a macOS-only variant; the #[cfg] attr
+                // prevents a compile error on Linux and Windows.
+                #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => {
                     if let Some(win) = app.get_webview_window("main") {
                         let _ = win.show();

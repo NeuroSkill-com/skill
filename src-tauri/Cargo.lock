@@ -3370,8 +3370,6 @@ dependencies = [
 [[package]]
 name = "fast-hnsw"
 version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64519a75152c70cb64416b582c5ad2c4041fa3e36e8dc7d40b7d6f594d770831"
 dependencies = [
  "memmap2",
  "rand 0.8.5",

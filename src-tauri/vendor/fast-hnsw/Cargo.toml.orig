@@ -1,0 +1,47 @@
+[package]
+name = "fast-hnsw"
+version = "1.0.0"
+edition = "2021"
+description = "Pure-Rust implementation of Hierarchical Navigable Small World (HNSW) approximate nearest-neighbour search"
+authors = ["Nataliya Kosmyna <nkosmyna@mit.edu>"]
+license = "MIT"
+repository = "https://github.com/nataliyakosmyna/fast-hnsw"
+homepage = "https://github.com/nataliyakosmyna/fast-hnsw"
+
+exclude = [
+    "/figures/*"
+]
+
+[dependencies]
+rand     = { version = "0.8", features = ["small_rng"] }
+memmap2  = "0.9"   # pure-Rust mmap wrapper; zero C/C++ deps
+
+[dev-dependencies]
+rand        = { version = "0.8", features = ["small_rng"] }
+hnsw_rs     = "0.3.3"
+hnsw_ext    = { package = "hnsw", version = "0.11.0" }   # rust-cv / Geordon Worley
+rand_pcg    = "0.3"                                       # RNG required by hnsw_ext
+space       = { version = "0.17", default-features = false, features = ["alloc"] } # Metric trait
+
+[[bench]]
+name  = "bench"
+path  = "benches/bench.rs"
+harness = false
+
+[[bench]]
+name  = "compare"
+path  = "benches/compare.rs"
+harness = false
+
+[[bench]]
+name  = "persist"
+path  = "benches/persist.rs"
+harness = false
+
+[[example]]
+name = "demo"
+path = "examples/demo.rs"
+
+[[example]]
+name = "store"
+path = "examples/store.rs"

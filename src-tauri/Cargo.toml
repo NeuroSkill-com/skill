@@ -241,6 +241,12 @@ tempfile = "3"
 [patch.crates-io]
 cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
+# fast-hnsw 1.0.0 calls mmap.advise(memmap2::Advice::Random) unconditionally,
+# but memmap2::Advice and Mmap::advise() are #[cfg(unix)] — not available on
+# Windows.  The advise call is a read-ahead hint only; wrapping it in
+# #[cfg(unix)] is the complete fix.  Patched locally until upstream releases
+# a new version.
+fast-hnsw       = { path = "vendor/fast-hnsw" }
 # Use local llama-cpp-4 / llama-cpp-sys-4 so that the SIGILL fix (0.2.5
 # CMAKE_OSX_ARCHITECTURES / CMAKE_CROSSCOMPILING correction) is always active,
 # even before crates.io propagates the release.  Both our `llm` feature and
