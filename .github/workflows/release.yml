@@ -202,35 +202,84 @@ jobs:
           security list-keychains -d user \
             -s "$KEYCHAIN_PATH" login.keychain
 
-      # ── Tauri build — sign + notarize + create updater artifacts ─────────────
+      # ── Tauri build — compile + bundle only (no signing) ────────────────────
       #
-      # Secrets required:
-      #   APPLE_SIGNING_IDENTITY              — e.g. "Developer ID Application: Jane (A1B2C3D4E5)"
-      #   APPLE_ID                            — Apple ID email used with notarytool
-      #   APPLE_PASSWORD                      — app-specific password (appleid.apple.com)
-      #   APPLE_TEAM_ID                       — 10-character Team ID
-      #   TAURI_SIGNING_PRIVATE_KEY           — base64 Ed25519 private key (from generate-keys.py)
-      #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  — key password (empty string if none)
+      # --no-sign bypasses Tauri's built-in codesign/notarytool calls.
+      # On macOS 26 those subprocess invocations crash with SIGILL (runner
+      # incompatibility); the two steps below replace them with direct calls.
       #
-      # What Tauri does automatically when these vars are set:
-      #   1. codesign --deep --options runtime --entitlements ./entitlements.plist
-      #   2. xcrun notarytool submit … --wait
-      #   3. xcrun stapler staple
-      #   4. Creates <app>.tar.gz + <app>.tar.gz.sig  (updater artifacts)
-      #   5. Packages the signed + notarized .dmg
-      - name: Build Tauri app (sign + notarize)
+      # TAURI_SIGNING_PRIVATE_KEY is still passed so Tauri emits the Ed25519
+      # updater artifacts (.app.tar.gz + .tar.gz.sig) alongside the .app.
+      # They are rebuilt from the signed .app in the "Recreate updater
+      # artifact" step; producing them here first validates the bundle layout.
+      - name: Build Tauri app bundle
         env:
-          APPLE_SIGNING_IDENTITY:             ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID:                           ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD:                     ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID:                      ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: |
           npx tauri build \
             --target aarch64-apple-darwin \
-            --bundles app
+            --bundles app \
+            --no-sign
+
+      # ── Sign and notarize the .app bundle ─────────────────────────────────
+      #
+      # Replaces Tauri's built-in signing, which crashes on macOS 26.
+      # Identical to what Tauri would have done internally, but invoked
+      # directly so the runner incompatibility can't take down the build.
+      - name: Sign and notarize .app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:               ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:         ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:          ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
+
+          codesign \
+            --deep --force --verify --verbose \
+            --timestamp --options runtime \
+            --entitlements "src-tauri/entitlements.plist" \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            "$APP_BUNDLE"
+          codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+
+          NOTARIZE_ZIP="$(mktemp -d)/$(basename "$APP_BUNDLE" .app).zip"
+          ditto -c -k --keepParent "$APP_BUNDLE" "$NOTARIZE_ZIP"
+          xcrun notarytool submit "$NOTARIZE_ZIP" \
+            --apple-id "$APPLE_ID"      \
+            --password "$APPLE_PASSWORD" \
+            --team-id  "$APPLE_TEAM_ID"  \
+            --wait --timeout 1800
+          xcrun stapler staple "$APP_BUNDLE"
+          rm -f "$NOTARIZE_ZIP"
+
+      # ── Rebuild updater artifact from signed + stapled .app ───────────────
+      #
+      # The .tar.gz Tauri produced above wraps the unsigned .app.  Now that
+      # the .app is signed, notarized, and stapled we replace both artifacts
+      # so the Tauri updater delivers a correctly signed bundle to end-users.
+      - name: Recreate updater artifact from signed .app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
+
+          # Remove stale artifacts built from the unsigned .app
+          find "$BUNDLE_DIR/macos" \
+            \( -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \) -delete
+
+          # Recreate tarball from the signed + notarized + stapled .app
+          TAR_PATH="$BUNDLE_DIR/macos/$(basename "$APP_BUNDLE").tar.gz"
+          tar -czf "$TAR_PATH" \
+            -C "$(dirname "$APP_BUNDLE")" "$(basename "$APP_BUNDLE")"
+
+          # Re-sign with Tauri's Ed25519 key
+          npx tauri signer sign -f "$TAR_PATH"
 
       # ── Create DMG from the signed + notarized .app ───────────────────────────
       #

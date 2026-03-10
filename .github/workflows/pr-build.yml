@@ -297,23 +297,72 @@ jobs:
           security list-keychains -d user \
             -s "$KEYCHAIN_PATH" login.keychain
 
-      # ── Tauri build — sign + notarize ────────────────────────────────────────
+      # ── Tauri build — compile + bundle only (no signing) ────────────────────
       #
-      # Identical to the official release build.  The only difference is that no
-      # GitHub Release is created and the artifact name includes the SHA.
-      - name: Build Tauri app (sign + notarize)
+      # Identical structure to release.yml.  --no-sign bypasses Tauri's
+      # built-in codesign/notarytool, which crash with SIGILL on macOS 26;
+      # the two steps below replace them with direct invocations.
+      - name: Build Tauri app bundle
         env:
-          APPLE_SIGNING_IDENTITY:             ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID:                           ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD:                     ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID:                      ${{ secrets.APPLE_TEAM_ID }}
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: |
           npx tauri build \
             --target aarch64-apple-darwin \
-            --bundles app
+            --bundles app \
+            --no-sign
+
+      # ── Sign and notarize the .app bundle ─────────────────────────────────
+      - name: Sign and notarize .app
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:               ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:         ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:          ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
+
+          codesign \
+            --deep --force --verify --verbose \
+            --timestamp --options runtime \
+            --entitlements "src-tauri/entitlements.plist" \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            "$APP_BUNDLE"
+          codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+
+          NOTARIZE_ZIP="$(mktemp -d)/$(basename "$APP_BUNDLE" .app).zip"
+          ditto -c -k --keepParent "$APP_BUNDLE" "$NOTARIZE_ZIP"
+          xcrun notarytool submit "$NOTARIZE_ZIP" \
+            --apple-id "$APPLE_ID"      \
+            --password "$APPLE_PASSWORD" \
+            --team-id  "$APPLE_TEAM_ID"  \
+            --wait --timeout 1800
+          xcrun stapler staple "$APP_BUNDLE"
+          rm -f "$NOTARIZE_ZIP"
+
+      # ── Rebuild updater artifact from signed + stapled .app ───────────────
+      #
+      # The .tar.gz Tauri produced above wraps the unsigned .app.  Now that
+      # the .app is signed, notarized, and stapled we replace both artifacts
+      # so the Tauri updater delivers a correctly signed bundle to end-users.
+      - name: Recreate updater artifact from signed .app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
+
+          find "$BUNDLE_DIR/macos" \
+            \( -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \) -delete
+
+          TAR_PATH="$BUNDLE_DIR/macos/$(basename "$APP_BUNDLE").tar.gz"
+          tar -czf "$TAR_PATH" \
+            -C "$(dirname "$APP_BUNDLE")" "$(basename "$APP_BUNDLE")"
+
+          npx tauri signer sign -f "$TAR_PATH"
 
       # ── Create DMG from the signed + notarized .app ───────────────────────────
       # See release.yml for full rationale — Tauri's create-dmg script fails on
