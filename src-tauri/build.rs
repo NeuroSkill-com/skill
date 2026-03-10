@@ -211,11 +211,9 @@ fn build_espeak_static_mingw() {
     );
     let shell_cmd = format!("exec 1>&2; bash '{}'", script.display());
 
-    // On Windows (MSYS2) bash should already be in PATH; the PATH augmentation
-    // above is harmless (non-existent directories are skipped).
-    let shell = if cfg!(target_os = "windows") { "bash" } else { "bash" };
-
-    let status = Command::new(shell)
+    // bash is available on all supported hosts: Linux, macOS, and MSYS2/MinGW
+    // on Windows (the MinGW target is only reachable from an MSYS2 shell).
+    let status = Command::new("bash")
         .args(["-c", &shell_cmd])
         .env("PATH", &full_path)
         .status()
@@ -601,11 +599,33 @@ fn copy_dir_all(src: &str, dst: &str) {
 
 fn remove_if_exists(path: &Path) {
     if path.exists() {
+        clear_readonly(path);
+        std::fs::remove_file(path).ok();
+    }
+}
+
+/// Clear the read-only attribute on `path` so a subsequent write or remove
+/// does not fail with "Permission denied".
+///
+/// On Unix we set only the owner-write bit (0o200) rather than calling
+/// `set_readonly(false)`, which would make the file world-writable.
+/// On Windows `set_readonly(false)` is the correct cross-platform API.
+fn clear_readonly(path: &Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(path) {
+            let mut perms = meta.permissions();
+            perms.set_mode(perms.mode() | 0o200); // owner-write only
+            std::fs::set_permissions(path, perms).ok();
+        }
+    }
+    #[cfg(not(unix))]
+    {
         if let Ok(meta) = std::fs::metadata(path) {
             let mut perms = meta.permissions();
             perms.set_readonly(false);
             std::fs::set_permissions(path, perms).ok();
         }
-        std::fs::remove_file(path).ok();
     }
 }
