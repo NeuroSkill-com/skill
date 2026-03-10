@@ -49,8 +49,39 @@
 # `relative = true` resolves paths relative to this file (src-tauri/).
 
 [env]
-ESPEAK_LIB_DIR    = { value = "espeak-static/lib",                    relative = true }
+ESPEAK_LIB_DIR      = { value = "espeak-static/lib",                   relative = true }
+# ESPEAK_BUILD_SCRIPT is read by kittentts/neutts build scripts to auto-build
+# the static archive when ESPEAK_LIB_DIR does not yet contain the library.
+# On macOS/Linux it points to the bash script; on Windows it points to the
+# PowerShell equivalent (overridden in the target-specific section below).
 ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static.sh",  relative = true }
+
+# ── Windows MSVC: PowerShell build script ─────────────────────────────────────
+#
+# kittentts/neutts build scripts check ESPEAK_BUILD_SCRIPT and invoke it when
+# the static archive is absent.  On Windows MSVC the .sh script cannot run, so
+# we override to the .ps1 equivalent.
+[target.x86_64-pc-windows-msvc.env]
+ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static.ps1", relative = true }
+
+[target.aarch64-pc-windows-msvc.env]
+ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static.ps1", relative = true }
+
+# ── Windows MinGW (x86_64-pc-windows-gnu): MinGW bash build script ────────────
+#
+# The MinGW target uses a separate output directory (espeak-static-mingw/) so
+# the libespeak-ng.a cross-compiled for Windows never overwrites the native
+# libespeak-ng.a built for the host (Linux or macOS).
+#
+# ESPEAK_LIB_DIR overrides the global value for this target.
+# ESPEAK_BUILD_SCRIPT overrides to the MinGW-aware bash script.
+[target.x86_64-pc-windows-gnu.env]
+ESPEAK_LIB_DIR      = { value = "espeak-static-mingw/lib",                        relative = true }
+ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static-mingw.sh",        relative = true }
+
+[target.i686-pc-windows-gnu.env]
+ESPEAK_LIB_DIR      = { value = "espeak-static-mingw/lib",                        relative = true }
+ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static-mingw.sh",        relative = true }
 # ── macOS deployment target ───────────────────────────────────────────────────
 #
 # llama.cpp uses std::filesystem (fs::path / fs::u8path) which was introduced
