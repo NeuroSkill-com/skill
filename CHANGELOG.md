@@ -33,11 +33,18 @@ All notable changes to NeuroSkill™ are documented here.
     espeak build step passes `ESPEAK_ARCHS=x86_64` explicitly
   - `pr-build.yml` and `release.yml` were already correct (`--target
     aarch64-apple-darwin`, `ESPEAK_ARCHS=arm64`)
-- Fixed `tauri:build:mac` crashing with SIGILL after a successful compile on
-  macOS 26.3: Tauri's codesign step fails fatally when no signing identity is
-  present, propagating the failure as `process.kill(pid, SIGILL)`; added
-  `--no-sign` to the local dev build script (CI workflows supply real
-  credentials and are unaffected)
+- Fixed SIGILL crash after successful compile on macOS 26.3 in both local
+  and CI builds; root cause traced via lldb + macOS crash report:
+  - Tauri's bundled `create-dmg` script spawns `bundle_dmg.sh` as a child
+    process which fails on macOS 26 (hdiutil API change); Node.js propagates
+    the child's fatal exit as `process.kill(pid, SIGILL)` via
+    `ProcessWrap::OnExit` → promise rejection chain
+  - Local dev (`tauri:build:mac`): added `--no-sign` — no certificate on dev
+    machines, codesign would have failed at the same stage
+  - CI (`release.yml`, `pr-build.yml`): replaced `--bundles app,dmg` with
+    `--bundles app`; added an explicit "Create DMG" step that uses `hdiutil`
+    directly, stamps the version badge, then signs and notarizes — identical
+    end result with no dependency on Tauri's create-dmg script
 - Fixed pre-commit hook failing on macOS when CUDA Toolkit is absent
   - `cargo clippy --all-features` activated `llm-cuda` and `llm-vulkan`,
     causing `llama-cpp-sys` to pass `-DGGML_CUDA=ON -DGGML_VULKAN=ON` to

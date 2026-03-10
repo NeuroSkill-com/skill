@@ -230,7 +230,57 @@ jobs:
         run: |
           npx tauri build \
             --target aarch64-apple-darwin \
-            --bundles app,dmg
+            --bundles app
+
+      # ── Create DMG from the signed + notarized .app ───────────────────────────
+      #
+      # Tauri's bundled create-dmg script spawns bundle_dmg.sh as a subprocess
+      # which fails on macOS 26 (hdiutil API change), causing the CLI to
+      # propagate the failure as SIGILL.  We build the DMG directly with hdiutil
+      # instead — same result without the create-dmg dependency.
+      #
+      # Order: create staging → hdiutil create → stamp icon → codesign → notarize → staple
+      # The stamp must happen before signing so the signature covers the final icon.
+      - name: Create DMG
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID:               ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD:         ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID:          ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
+          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
+          DMG_DIR="$BUNDLE_DIR/dmg"
+          DMG_OUT="$DMG_DIR/NeuroSkill_${VERSION}_aarch64.dmg"
+          mkdir -p "$DMG_DIR"
+
+          STAGING="$(mktemp -d)"
+          cp -R "$APP_BUNDLE" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+
+          hdiutil create \
+            -volname "NeuroSkill" \
+            -srcfolder "$STAGING" \
+            -ov -format UDZO \
+            "$DMG_OUT"
+          rm -rf "$STAGING"
+
+          bash scripts/stamp-dmg-icon.sh \
+            "$DMG_OUT" "$VERSION" "src-tauri/icons/icon.png" \
+          || echo "⚠ DMG icon stamp skipped (non-fatal)"
+
+          codesign --force --timestamp \
+            --sign "$APPLE_SIGNING_IDENTITY" \
+            "$DMG_OUT"
+
+          xcrun notarytool submit "$DMG_OUT" \
+            --apple-id  "$APPLE_ID"       \
+            --password  "$APPLE_PASSWORD"  \
+            --team-id   "$APPLE_TEAM_ID"   \
+            --wait --timeout 1800
+          xcrun stapler staple "$DMG_OUT"
+
+          echo "DMG: $DMG_OUT  ($(du -sh "$DMG_OUT" | cut -f1))"
 
       # ── Always delete the temporary keychain ──────────────────────────────────
       - name: Delete temporary keychain
@@ -271,17 +321,6 @@ jobs:
           echo "  TAR : $APP_TAR  ($(du -sh "$APP_TAR" | cut -f1))"
           echo "  SIG : $APP_SIG"
           echo "  DMG : $DMG  ($(du -sh "$DMG" | cut -f1))"
-
-      # ── Stamp version badge onto the DMG icon ────────────────────────────────
-      # Composites "v<version>" over the app icon and attaches the result as the
-      # DMG file's custom Finder icon via NSWorkspace so every build is instantly
-      # distinguishable in Finder's icon / gallery view without reading filenames.
-      - name: Stamp version badge onto DMG icon
-        run: |
-          bash scripts/stamp-dmg-icon.sh \
-            "${{ steps.artifacts.outputs.dmg }}" \
-            "${{ env.VERSION }}" \
-            "src-tauri/icons/icon.png"
 
       # ── Generate latest.json ──────────────────────────────────────────────────
       #
