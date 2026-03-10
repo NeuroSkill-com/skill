@@ -34,6 +34,12 @@ the Free Software Foundation, version 3 only. -->
   // toasts appear in whichever window is currently visible.
   const unlisteners: UnlistenFn[] = [];
   onMount(async () => {
+    // Sentinel read by the Rust side when re-showing this window from the
+    // system tray or Dock after a long idle period.  Its absence means the
+    // WKWebView web-content process was killed by macOS (memory pressure)
+    // and the page is blank — Rust detects this and triggers a reload.
+    (window as unknown as Record<string, unknown>)["__skill_loaded"] = true;
+
     // Restore theme & language from settings.json (overrides localStorage)
     await Promise.all([initThemeFromSettings(), initLocaleFromSettings()]);
 

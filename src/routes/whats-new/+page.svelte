@@ -6,65 +6,49 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- What's New — standalone window shown once per app version. -->
 <script lang="ts">
-  import { onMount }       from "svelte";
-  import { invoke }        from "@tauri-apps/api/core";
-  import { t }             from "$lib/i18n/index.svelte";
+  import { onMount }        from "svelte";
+  import { invoke }         from "@tauri-apps/api/core";
+  import { t }              from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
-  import ThemeToggle       from "$lib/ThemeToggle.svelte";
-  import changelogRaw      from "../../../CHANGELOG.md?raw";
+  import ThemeToggle        from "$lib/ThemeToggle.svelte";
+  import MarkdownRenderer   from "$lib/MarkdownRenderer.svelte";
+  import changelogRaw       from "../../../CHANGELOG.md?raw";
 
   useWindowTitle("whatsNew.title");
 
+  // ── Changelog extraction ───────────────────────────────────────────────────
+  // Must run before $state initialisation below — `const` is not hoisted so
+  // referencing `latest` before its declaration is a ReferenceError (TDZ).
+
+  interface VersionMeta {
+    version: string;
+    date:    string;
+    body:    string;
+  }
+
+  function extractLatest(raw: string): VersionMeta | undefined {
+    const headerRe = /^##\s+\[([^\]]+)\][^\S\n]*[—–-]+[^\S\n]*(\S+)/m;
+    const match = raw.match(headerRe);
+    if (!match) return undefined;
+
+    const version     = match[1].trim();
+    const date        = match[2].trim();
+    const afterHeader = raw.slice(raw.indexOf(match[0]) + match[0].length);
+    const nextBlock   = afterHeader.search(/^##\s+\[/m);
+    const body        = (nextBlock === -1
+      ? afterHeader
+      : afterHeader.slice(0, nextBlock)
+    ).trim();
+
+    return { version, date, body };
+  }
+
+  const latest = extractLatest(changelogRaw);
+
   // ── State ──────────────────────────────────────────────────────────────────
-  let appVersion = $state("…");
-
-  // ── Changelog parsing ──────────────────────────────────────────────────────
-
-  interface ChangeSection {
-    heading: string;
-    items:   string[];
-  }
-
-  interface VersionEntry {
-    version:  string;
-    date:     string;
-    sections: ChangeSection[];
-  }
-
-  function parseChangelog(raw: string): VersionEntry[] {
-    const entries: VersionEntry[] = [];
-    const versionBlockRe = /^##\s+\[([^\]]+)\]\s*[—–-]+\s*(\S+)/m;
-    const blocks = raw.split(/^(?=##\s+\[)/m).filter(b => b.trim());
-
-    for (const block of blocks) {
-      const headerMatch = block.match(versionBlockRe);
-      if (!headerMatch) continue;
-
-      const version = headerMatch[1].trim();
-      const date    = headerMatch[2].trim();
-      const body    = block.slice(block.indexOf("\n") + 1);
-
-      const sections: ChangeSection[] = [];
-      let   current:  ChangeSection   = { heading: "", items: [] };
-
-      for (const rawLine of body.split("\n")) {
-        const line = rawLine.trimEnd();
-        if (/^###\s/.test(line)) {
-          if (current.items.length > 0 || current.heading) sections.push(current);
-          current = { heading: line.replace(/^###\s+/, "").trim(), items: [] };
-        } else if (/^[-*+]\s/.test(line)) {
-          current.items.push(line.replace(/^[-*+]\s+/, "").trim());
-        }
-      }
-      if (current.items.length > 0 || current.heading) sections.push(current);
-      if (sections.length > 0) entries.push({ version, date, sections });
-    }
-
-    return entries;
-  }
-
-  const changelog: VersionEntry[] = parseChangelog(changelogRaw);
-  const latest: VersionEntry | undefined = changelog[0];
+  // Seed from the CHANGELOG so dismiss_whats_new never persists "…" in the
+  // rare race where the user clicks "Got it" before get_app_version() resolves.
+  let appVersion = $state(latest?.version ?? "…");
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   onMount(async () => {
@@ -134,32 +118,8 @@ the Free Software Foundation, version 3 only. -->
     </div>
 
     <!-- ── Scrollable changelog body ──────────────────────────────────────── -->
-    <div class="flex-1 overflow-y-auto overscroll-contain px-6 py-5
-                flex flex-col gap-5 text-[0.78rem]">
-      {#each latest.sections as section}
-        <div class="flex flex-col gap-2">
-          {#if section.heading}
-            <h3 class="text-[0.72rem] font-bold tracking-wide uppercase
-                       text-violet-600 dark:text-violet-400 leading-tight">
-              {section.heading}
-            </h3>
-          {/if}
-          <ul class="flex flex-col gap-1.5 pl-0">
-            {#each section.items as item}
-              <li class="flex items-start gap-2 text-[0.75rem] text-foreground/85 leading-relaxed">
-                <!-- Consistent SVG chevron bullet -->
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"
-                     class="w-3 h-3 mt-[0.25em] shrink-0 text-violet-500 dark:text-violet-400"
-                     aria-hidden="true">
-                  <path d="M9 18l6-6-6-6"/>
-                </svg>
-                <span>{item}</span>
-              </li>
-            {/each}
-          </ul>
-        </div>
-      {/each}
+    <div class="wn-body flex-1 overflow-y-auto overscroll-contain px-6 py-5 text-[0.78rem]">
+      <MarkdownRenderer content={latest.body} />
     </div>
 
     <!-- ── Footer ─────────────────────────────────────────────────────────── -->
@@ -178,3 +138,52 @@ the Free Software Foundation, version 3 only. -->
   {/if}
 
 </main>
+
+<style>
+  /*
+   * Scope markdown styles to the What's New body so they don't leak.
+   * MarkdownRenderer uses font-size: inherit and :global() rules scoped
+   * to .mdr — these overrides live inside .wn-body to win on specificity
+   * without touching the chat renderer's styles.
+   */
+  .wn-body :global(.mdr) {
+    font-size: 0.78rem;
+    line-height: 1.6;
+  }
+
+  /* Section headings (###) — match the violet accent, keep compact */
+  .wn-body :global(.mdr h1),
+  .wn-body :global(.mdr h2),
+  .wn-body :global(.mdr h3),
+  .wn-body :global(.mdr h4) {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: oklch(0.55 0.22 293);   /* violet-600 */
+    margin: 1.1em 0 0.4em;
+  }
+  :global(.dark) .wn-body :global(.mdr h1),
+  :global(.dark) .wn-body :global(.mdr h2),
+  :global(.dark) .wn-body :global(.mdr h3),
+  :global(.dark) .wn-body :global(.mdr h4) {
+    color: oklch(0.68 0.19 293);   /* violet-400 */
+  }
+
+  /* Tighten list spacing for the dense changelog layout */
+  .wn-body :global(.mdr ul),
+  .wn-body :global(.mdr ol) {
+    margin: 0.2em 0;
+    padding-left: 1.25em;
+  }
+  .wn-body :global(.mdr li) {
+    margin: 0.2em 0;
+    color: oklch(from var(--foreground) l c h / 85%);
+  }
+  .wn-body :global(.mdr li::marker) {
+    color: oklch(0.58 0.24 293);   /* violet-500 */
+  }
+
+  /* Paragraphs inside list items — no extra gap */
+  .wn-body :global(.mdr li > p) { margin: 0; }
+</style>

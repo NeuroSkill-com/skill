@@ -4,6 +4,82 @@ All notable changes to NeuroSkill™ are documented here.
 
 ---
 
+## [0.0.13] — 2026-03-10
+
+### Dependencies
+
+- `llama-cpp-4` `0.2.3` → `0.2.5`
+- `kittentts` `0.2.2` → `0.2.4`
+- `neutts` `0.0.5` → `0.0.7`
+
+### Bug fixes
+
+- **Blank main window after long idle** — after a full day in the system
+  tray with the window hidden, macOS can silently terminate WKWebView's
+  web-content process under memory pressure, leaving a blank white page
+  that only a full app restart could recover from
+  - `+layout.svelte` sets `window.__skill_loaded = true` in `onMount` as
+    a renderer-liveness sentinel
+  - New `show_and_recover_main()` Rust helper checks the sentinel on every
+    show via `eval()`; if the flag is absent it triggers `location.reload()`
+    (renderer alive but content cleared), and falls back to `navigate()` if
+    `eval()` itself returns `Err` (renderer process fully dead, WKWebView
+    needs a fresh process spawned)
+  - `RunEvent::Reopen` handler added — clicking the macOS Dock icon while
+    all windows are hidden now shows the main window and runs the same
+    two-layer recovery (previously a silent no-op)
+
+- **Update loop — first check delayed by full interval** — the background
+  updater slept `interval_secs` *before* the first check, so with the
+  default 1-hour interval the first background check fired ~61 minutes after
+  launch; pattern changed to check-then-sleep so the first check fires 30
+  seconds after startup as intended
+
+- **Update loop — update silently dropped on CDN race** — when the Rust
+  background task emitted `update-available`, the frontend had to re-run
+  `check()` to obtain a downloadable `Update` object; if `check()` returned
+  `null` (latest.json not yet propagated to all CDN edge nodes), `available`
+  was wiped and `phase` reverted to `"idle"` with no user feedback; fixed
+  by threading the event payload as a `hint` through `checkAndDownload()` —
+  the known version stays visible in the UI during the re-check, and a CDN
+  race surfaces an actionable "Retry" error instead of a silent reset
+
+- **What's New — dismiss race with uninitialised version** — `appVersion`
+  started as the string `"…"` and was populated asynchronously via IPC;
+  clicking "Got it" before the call resolved stored `"…"` in
+  `last_seen_whats_new_version`, causing the window to reopen on every
+  subsequent launch; fixed by seeding `appVersion` synchronously from the
+  CHANGELOG version embedded at build time
+
+- **What's New — markdown not rendered** — changelog entries containing
+  `**bold**`, `` `code` `` spans, multi-line bullet continuations, and
+  numbered sub-lists were all rendered as plain text; replaced the
+  hand-rolled `parseChangelog` parser (which dropped any line not starting
+  with `- `) and the manual `{#each sections}` template with
+  `MarkdownRenderer` (existing component backed by `marked` + GFM); scoped
+  CSS overrides inside `.wn-body` preserve the compact window style without
+  affecting the chat renderer
+
+### Build / CI
+
+- **CI `cargo check --locked` failing on Linux** — `Cargo.lock` generated
+  on macOS caused the Linux CI job to fail with "cannot update the lock file
+  because --locked was passed"; added `cargo fetch --target
+  x86_64-unknown-linux-gnu` before `cargo check --locked` to resolve
+  platform-specific dependencies for Linux without touching the network
+  during the check itself
+
+- **Release — single notarization round trip** — the release workflow
+  previously issued two separate `xcrun notarytool submit --wait` calls
+  (one for the `.app` as a ZIP, one for the DMG), each waiting up to 20+
+  minutes; consolidated to a single DMG submission — Apple's service
+  registers notarization tickets for all signed content inside the container,
+  so `xcrun stapler staple` succeeds on both the DMG and the `.app`
+  afterward without a second submission; the updater tarball step is
+  reordered to run after the DMG step so it always packages a stapled `.app`
+
+---
+
 ## [0.0.11] — 2026-03-10
 
 ### LLM / Chat

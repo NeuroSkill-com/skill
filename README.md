@@ -437,13 +437,7 @@ Generate new keys and update `tauri.conf.json`:
 npm run tauri signer generate -- -w ~/.tauri/skill.key
 ```
 
-Requirements (macOS):
-
-```shell
-brew install create-dmg  
-```
-
- ### Required GitHub secrets                                                                                       
+### Required GitHub secrets                                                                                       
                                                                                                                    
 | Secret                             | What it is                                   |
 |------------------------------------|----------------------------------------------|
@@ -479,11 +473,14 @@ bash release.sh --dry-run
 
 # Build only (no signing, no upload)
 ESPEAK_LIB_DIR="$(pwd)/src-tauri/espeak-static/lib" \
-  npx tauri build --target aarch64-apple-darwin --bundles app,dmg
+  npx tauri build --target aarch64-apple-darwin --bundles app
 
-# Full local release with real Apple credentials (skips S3 upload)
+# Full local release with real Apple credentials (skips upload)
 SKIP_UPLOAD=1 bash release.sh        # reads credentials from env.txt
 ```
+
+> **Note:** The DMG is built with `hdiutil` directly (no `create-dmg` dependency).
+> `brew install create-dmg` is no longer required.
 
 Check that the tag version matches `tauri.conf.json` before pushing a tag:
 
@@ -502,6 +499,11 @@ CONF=$(grep '"version"' src-tauri/tauri.conf.json | head -1 \
 | Dry-run release | `bash release.sh --dry-run` |
 | Build without signing | `SKIP_NOTARIZE=1 SKIP_UPLOAD=1 bash release.sh` |
 | Full local release | `SKIP_UPLOAD=1 bash release.sh` |
+
+> **CI note:** The Linux `rust-check` job runs `cargo fetch --target
+> x86_64-unknown-linux-gnu` before `cargo check --locked` to resolve any
+> platform-specific dependencies that differ from the macOS-generated
+> `Cargo.lock`, without requiring network access during the check itself.
 
 ---
 

@@ -127,14 +127,26 @@ the Free Software Foundation, version 3 only. -->
   }
 
   /** Check the update endpoint, store the result, and immediately download
-   *  if an update is found.  Safe to call when phase is "idle" or "error".  */
-  async function checkAndDownload() {
+   *  if an update is found.  Safe to call when phase is "idle" or "error".
+   *
+   *  @param hint  Metadata pre-fetched by the background Rust task.  When
+   *               present the UI keeps showing the known version while we
+   *               obtain a fresh Update object (which carries download
+   *               capability).  If check() then returns null — e.g. because
+   *               CDN edge nodes haven't propagated latest.json yet — we
+   *               surface an error instead of silently going back to "idle".
+   */
+  async function checkAndDownload(
+    hint?: { version: string; date?: string; body?: string },
+  ) {
     if (phase === "checking" || phase === "downloading" || phase === "ready") return;
 
     stopCountdown();
-    phase    = "checking";
-    error    = "";
-    available = null;
+    phase = "checking";
+    error = "";
+    // Preserve any hint metadata so the UI shows the version during the
+    // network round-trip.  Only wipe available for a manual "Check Now".
+    if (!hint) available = null;
 
     try {
       const update = await check();
@@ -143,11 +155,17 @@ the Free Software Foundation, version 3 only. -->
       if (update) {
         available = {
           version: update.version,
-          date:    update.date    ?? undefined,
-          body:    update.body    ?? undefined,
+          date:    update.date ?? undefined,
+          body:    update.body ?? undefined,
         };
         // Immediately start downloading — no "Download Now" click needed.
         await doInstall(update);
+      } else if (hint) {
+        // The background task detected an update but check() now disagrees —
+        // most likely a CDN propagation race (latest.json not yet on all
+        // edges).  Surface an actionable error rather than silently dropping.
+        phase = "error";
+        error = `Update v${hint.version} was detected but could not be prepared (CDN may still be propagating). Click "Retry" in a moment.`;
       } else {
         available = null;
         phase = "idle";
@@ -213,11 +231,11 @@ the Free Software Foundation, version 3 only. -->
         (ev) => {
           if (phase === "checking" || phase === "downloading" || phase === "ready") return;
           saveLastChecked();
-          // Store display info immediately so the UI updates, then download.
-          available = ev.payload;
-          // checkAndDownload() will overwrite available with fresh data and
-          // call doInstall() — the whole chain runs in the background.
-          checkAndDownload();
+          // Pass the event payload as a hint so checkAndDownload() keeps the
+          // version visible in the UI while it fetches a fresh Update object,
+          // and surfaces an error if check() returns null (CDN race) instead
+          // of silently reverting to "idle".
+          checkAndDownload(ev.payload);
         },
       ),
       await listen("update-checked", () => {

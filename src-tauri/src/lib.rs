@@ -1242,6 +1242,38 @@ pub fn run() {
             };
             let init_menu = build_menu(app.handle(), &init_status)?;
 
+            // ── Main-window recovery helper ───────────────────────────────────
+            //
+            // After a full day in the system tray with the window hidden,
+            // macOS can silently kill WKWebView's web-content process under
+            // memory pressure.  The host process stays alive and
+            // `get_webview_window("main")` still returns `Some`, but calling
+            // `win.show()` reveals a blank white page.  Only a full app
+            // restart normally recovers — but we can do better:
+            //
+            // Recovery (two layers, tried in order):
+            //   1. eval() checks `window.__skill_loaded` (set in +layout.svelte
+            //      onMount).  Absent sentinel → page is blank → reload().
+            //      This handles "renderer alive but content gone".
+            //   2. If eval() itself returns Err the renderer process is fully
+            //      dead and cannot accept JS at all.  navigate() forces
+            //      WKWebView to spawn a fresh renderer and reload the URL.
+            //      This handles "renderer process terminated".
+            fn show_and_recover_main(app: &AppHandle) {
+                let Some(win) = app.get_webview_window("main") else { return };
+                let _ = win.show();
+                let _ = win.set_focus();
+                if win
+                    .eval("window.__skill_loaded||(window.location.reload(),false)")
+                    .is_err()
+                {
+                    // eval failed — renderer dead; navigate() restarts it.
+                    if let Ok(url) = "tauri://localhost".parse() {
+                        let _ = win.navigate(url);
+                    }
+                }
+            }
+
             TrayIconBuilder::with_id("main")
                 .icon(icon_disconnected())
                 .tooltip("NeuroSkill™ – Disconnected")
@@ -1250,9 +1282,7 @@ pub fn run() {
                 .on_menu_event(|app, event| {
                     let id = event.id.as_ref();
                     if id == "open_skill" {
-                        if let Some(win) = app.get_webview_window("main") {
-                            let _ = win.show(); let _ = win.set_focus();
-                        }
+                        show_and_recover_main(app);
                     } else if id == "disconnect" || id == "cancel" {
                         {
                             let r = app.state::<Mutex<AppState>>();
@@ -1324,6 +1354,10 @@ pub fn run() {
                 let w = win.clone();
                 win.on_window_event(move |event| {
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        // Hide instead of close so the app stays alive in the
+                        // tray.  The window (and its WebView) are preserved;
+                        // show_and_recover_main() handles blank-page recovery
+                        // when it is made visible again.
                         api.prevent_close();
                         let _ = w.hide();
                     }
@@ -1415,18 +1449,16 @@ pub fn run() {
             let app_upd = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 use tauri_plugin_updater::UpdaterExt;
+                // Short startup delay so the rest of the app is fully
+                // initialised before we hit the network.
                 tokio::time::sleep(Duration::from_secs(30)).await;
                 loop {
-                    let interval_secs = {
-                        let r = app_upd.state::<Mutex<AppState>>();
-                        let g = r.lock_or_recover();
-                        g.update_check_interval_secs
-                    };
-                    if interval_secs == 0 {
-                        tokio::time::sleep(Duration::from_secs(60)).await;
-                        continue;
-                    }
-                    tokio::time::sleep(Duration::from_secs(interval_secs)).await;
+                    // ── Check first, then sleep ───────────────────────────────
+                    // Previous pattern was sleep→check, which meant the first
+                    // background check fired at startup_delay + interval_secs
+                    // (up to 61 minutes with the default 1-hour interval).
+                    // Now we check immediately after the startup delay, then
+                    // wait interval_secs before the next one.
                     eprintln!("[updater] running background update check");
                     match app_upd.updater() {
                         Err(e) => eprintln!("[updater] cannot get updater: {e}"),
@@ -1453,6 +1485,17 @@ pub fn run() {
                             }
                         }
                     }
+
+                    // ── Sleep after check ─────────────────────────────────────
+                    let interval_secs = {
+                        let r = app_upd.state::<Mutex<AppState>>();
+                        let g = r.lock_or_recover();
+                        g.update_check_interval_secs
+                    };
+                    // When auto-check is disabled (0), poll every 60 s so the
+                    // loop wakes up promptly when the user re-enables it.
+                    let sleep_secs = if interval_secs == 0 { 60 } else { interval_secs };
+                    tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
                 }
             });
 
@@ -1642,6 +1685,25 @@ pub fn run() {
             match event {
                 tauri::RunEvent::ExitRequested { api, code, .. } => {
                     if code.is_none() { api.prevent_exit(); }
+                }
+                // macOS: user clicks the Dock icon while the app is running
+                // with no visible windows (all hidden in the tray).
+                // Without this handler the click is silently ignored.
+                // show_and_recover_main() also handles the blank-page case
+                // that can occur after the window has been hidden for a day.
+                tauri::RunEvent::Reopen { .. } => {
+                    if let Some(win) = app.get_webview_window("main") {
+                        let _ = win.show();
+                        let _ = win.set_focus();
+                        if win
+                            .eval("window.__skill_loaded||(window.location.reload(),false)")
+                            .is_err()
+                        {
+                            if let Ok(url) = "tauri://localhost".parse() {
+                                let _ = win.navigate(url);
+                            }
+                        }
+                    }
                 }
                 tauri::RunEvent::Exit => {
                     // Stop the LLM actor *before* tts_shutdown() and before the
