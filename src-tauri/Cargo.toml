@@ -1,6 +1,6 @@
 [package]
 name = "skill"
-version = "0.0.13"
+version = "0.0.14"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -25,7 +25,7 @@ license = "GPL-3.0-only"
 #                Multimodal (image / audio inputs):
 #                  --features llm-mtmd
 #
-#                neutts 0.0.5 uses llama-cpp-4 too — no `links = "llama"`
+#                neutts 0.0.7 uses llama-cpp-4 too — no `links = "llama"`
 #                conflict; both features can be active simultaneously.
 #
 [features]
@@ -35,7 +35,7 @@ tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound"]
 
 # ── LLM feature tree ──────────────────────────────────────────────────────────
 #
-# neutts 0.0.5 migrated its backbone from llama-cpp-2 to llama-cpp-4.
+# neutts 0.0.7 migrated its backbone from llama-cpp-2 to llama-cpp-4.
 # Both neutts and llama-cpp-4 now resolve to the same package — Cargo
 # deduplicates them, so the `links = "llama"` conflict is fully resolved.
 #
@@ -93,10 +93,10 @@ csv = "1"
 # Model weights (~30 MB) are downloaded from HuggingFace Hub on first use.
 # Uses the local checkout to pin deflate-only zip (avoids lzma-sys conflict
 # with tracel-llvm-bundler which also links the native lzma library).
-kittentts = { version = "0.2.2", features = ["espeak"], optional = true }
+kittentts = { version = "0.2.4", features = ["espeak"], optional = true }
 
 # NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder.
-# 0.0.5+: backbone is now llama-cpp-4 (was llama-cpp-2).  This means neutts
+# 0.0.7+: backbone is now llama-cpp-4 (was llama-cpp-2).  This means neutts
 #         and our `llm` feature share the same native llama library — Cargo
 #         deduplicates them into one package, so the `links = "llama"` conflict
 #         that existed with 0.0.4 is fully resolved.
@@ -109,7 +109,7 @@ kittentts = { version = "0.2.2", features = ["espeak"], optional = true }
 #           sentence on Apple Silicon — effectively broken from a UX standpoint.
 #           Declared here for non-macOS; the macOS entry is in
 #           [target.'cfg(target_os = "macos")'.dependencies] below with `metal`.
-neutts = { version = "0.0.5", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
+neutts = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
 
 # Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
@@ -146,10 +146,10 @@ async-stream      = "0.3"
 # ── LLM (OpenAI-compatible local inference via llama-cpp-4) ────────────────────
 # Optional — enabled by the `llm` feature flag (see [features] above).
 #
-# neutts 0.0.5 migrated from llama-cpp-2 → llama-cpp-4 so there is no longer
+# neutts 0.0.7 migrated from llama-cpp-2 → llama-cpp-4 so there is no longer
 # a `links = "llama"` conflict when both `tts-neutts` and `llm` are enabled.
 # Cargo deduplicates both into a single llama-cpp-4 package.
-llama-cpp-4 = { version = "0.2.3", optional = true } # patched to local path via [patch.crates-io]
+llama-cpp-4 = { version = "0.2.5", optional = true } # patched to local path via [patch.crates-io]
 
 # mDNS / Bonjour service discovery
 mdns-sd = "0.18"
@@ -217,7 +217,7 @@ dispatch2        = "0.3.1"
 # `metal` passes llama-cpp-2/metal which enables the Metal compute backend.
 # Without this the backbone falls back to CPU and a single utterance can take
 # 30–120 s, making TTS appear broken.
-neutts = { version = "0.0.5", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
+neutts = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 fastembed = { version = "5.11.0" }
@@ -230,7 +230,7 @@ tempfile = "3"
 [patch.crates-io]
 cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
-# Use local llama-cpp-4 / llama-cpp-sys-4 so that the SIGILL fix (0.2.3
+# Use local llama-cpp-4 / llama-cpp-sys-4 so that the SIGILL fix (0.2.5
 # CMAKE_OSX_ARCHITECTURES / CMAKE_CROSSCOMPILING correction) is always active,
 # even before crates.io propagates the release.  Both our `llm` feature and
 # neutts's backbone resolve to the same local crate — no `links = "llama"` conflict.

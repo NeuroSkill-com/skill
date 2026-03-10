@@ -5383,9 +5383,9 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kittentts"
-version = "0.2.2"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "761cc66da3cf015a5bafd30c284e05a23bbc96a1715aa85767728b187d165dfe"
+checksum = "1367947dcb13d5150a9a48133e51c50f82848ef97455b0de8a59b5220b2abede"
 dependencies = [
  "anyhow",
  "fancy-regex",
@@ -5595,9 +5595,9 @@ checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "llama-cpp-4"
-version = "0.2.3"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4adf7e62fecfd5deb16416e3859059572aced9ee08eb98acc83f16a9e360a864"
+checksum = "5d02a047f422938b0a6a9ac781fe66a5f0233755ac17aeb95b22ac3f03e6a8b6"
 dependencies = [
  "enumflags2",
  "llama-cpp-sys-4",
@@ -5607,9 +5607,9 @@ dependencies = [
 
 [[package]]
 name = "llama-cpp-sys-4"
-version = "0.2.3"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c55add544a7cd557a0a99590e98825645eb219fc2beeffc91c25cc6be0562580"
+checksum = "5a51785e86b765dff0eb4d869a26e537c5c53695115895380b9bee4c1e893ca0"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
@@ -6174,9 +6174,9 @@ dependencies = [
 
 [[package]]
 name = "neutts"
-version = "0.0.5"
+version = "0.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a063d06a161a4c4ee93a6fa368dff82d2df7f14586922ebaaa6f51771231045e"
+checksum = "9a532304b1d33b1ff0e0a73de6fa0c73671c0fff9ad4883eee8e705420c88faf"
 dependencies = [
  "anyhow",
  "burn",
@@ -8997,7 +8997,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
 name = "skill"
-version = "0.0.13"
+version = "0.0.14"
 dependencies = [
  "async-stream",
  "axum",
