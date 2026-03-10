@@ -4,6 +4,20 @@ All notable changes to NeuroSkill™ are documented here.
 
 ---
 
+## [0.0.9] — 2026-03-10
+
+### Build / CI
+
+- Fixed pre-commit hook failing on macOS when CUDA Toolkit is absent
+  - `cargo clippy --all-features` activated `llm-cuda` and `llm-vulkan`,
+    causing `llama-cpp-sys` to pass `-DGGML_CUDA=ON -DGGML_VULKAN=ON` to
+    CMake, which hard-errors if no CUDA Toolkit is found
+  - Hook now selects platform-appropriate features: `--features llm-metal`
+    on macOS, default features on Linux/Windows — CUDA/Vulkan features are
+    never activated where their native toolkits are unavailable
+
+---
+
 ## [0.0.6] — 2026-03-06
 
 ### Do Not Disturb / Focus Mode
