@@ -89,11 +89,13 @@ tokio = { version = "1", features = ["full"] }
 csv = "1"
 
 # TTS — lightweight ONNX-based speech synthesis (English only for calibration)
-# espeak-ng must be installed on the system (brew / apt / apk install espeak-ng).
 # Model weights (~30 MB) are downloaded from HuggingFace Hub on first use.
-# Uses the local checkout to pin deflate-only zip (avoids lzma-sys conflict
-# with tracel-llvm-bundler which also links the native lzma library).
-kittentts = { version = "0.2.4", features = ["espeak"], optional = true }
+#
+# espeak feature: gated to non-Windows only (see
+# [target.'cfg(not(target_os = "windows"))'.dependencies] below).
+# On Windows, build-espeak-static.sh cannot run (no bash), so we build
+# without espeak and TTS phonemisation falls back to the built-in romaniser.
+kittentts = { version = "0.2.4", optional = true }
 
 # NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder.
 # 0.0.7+: backbone is now llama-cpp-4 (was llama-cpp-2).  This means neutts
@@ -102,6 +104,7 @@ kittentts = { version = "0.2.4", features = ["espeak"], optional = true }
 #         that existed with 0.0.4 is fully resolved.
 # backbone: GGUF LLM via llama-cpp-4 (requires cmake + C++ at build time).
 # espeak:   raw text → IPA → model (requires espeak-ng at runtime).
+#           Gated to non-Windows — see note on kittentts above.
 # wgpu:     GPU-accelerated NeuCodec decoder via Burn/wgpu backend.
 # fast:     polynomial-approximation RoPE caching (6-12× fewer cycles).
 # metal:    macOS Metal GPU for the backbone (llama-cpp-4?/metal).
@@ -109,7 +112,7 @@ kittentts = { version = "0.2.4", features = ["espeak"], optional = true }
 #           sentence on Apple Silicon — effectively broken from a UX standpoint.
 #           Declared here for non-macOS; the macOS entry is in
 #           [target.'cfg(target_os = "macos")'.dependencies] below with `metal`.
-neutts = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
+neutts = { version = "0.0.7", features = ["backbone", "fast", "wgpu"], optional = true }
 
 # Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
@@ -218,6 +221,14 @@ dispatch2        = "0.3.1"
 # Without this the backbone falls back to CPU and a single utterance can take
 # 30–120 s, making TTS appear broken.
 neutts = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
+
+[target.'cfg(not(target_os = "windows"))'.dependencies]
+# Cargo merges features across [dependencies] and target-specific sections,
+# so on macOS and Linux these entries ADD `espeak` to the base declarations
+# above.  On Windows the section is skipped entirely — build-espeak-static.sh
+# is never invoked and the crates fall back to their built-in romaniser.
+kittentts = { version = "0.2.4", features = ["espeak"], optional = true }
+neutts    = { version = "0.0.7", features = ["espeak"],             optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 fastembed = { version = "5.11.0" }

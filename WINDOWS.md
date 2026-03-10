@@ -67,9 +67,11 @@ triple instead.
 
 ## Known limitations
 
-- espeak-ng (`kittentts` / `neutts`) has no Windows build path yet.
-  `build.rs` will attempt to run `build-espeak-static.sh`, which requires
-  a Bash environment (WSL or Git Bash). TTS features may not compile.
+- **TTS phonemisation** — `kittentts` and `neutts` build without the
+  `espeak` feature on Windows (the `espeak` feature requires
+  `build-espeak-static.sh`, which cannot run without Bash). Both crates
+  fall back to their built-in romaniser; speech synthesis still works but
+  quality may be lower than on macOS / Linux where espeak-ng is used.
 - No Windows CI pipeline exists yet; breakage may go undetected between
   commits.
 - The app has only been tested on macOS. UI, tray behaviour, and BLE
