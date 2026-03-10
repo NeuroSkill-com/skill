@@ -8,35 +8,47 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn main() {
-    // ── espeak-ng: always static, all platforms ───────────────────────────────
+    // ── espeak-ng: static on macOS / Linux; skipped on Windows ───────────────
     //
     // libespeak-ng must be linked statically so the binary has no runtime
     // dependency on a system espeak-ng installation.  We enforce this here
     // (in addition to kittentts/neutts build.rs) so that a plain `cargo build`
     // without ESPEAK_LIB_DIR set still produces a fully static binary.
     //
+    // On Windows, kittentts and neutts are built without the `espeak` feature
+    // (see Cargo.toml [target.'cfg(not(target_os = "windows"))'.dependencies]),
+    // so no static linking is needed and build-espeak-static.sh is never run.
+    //
     // If the pre-built archive (espeak-static/lib/libespeak-ng.a) is absent,
-    // build-espeak-static.sh is invoked automatically on both macOS and Linux.
+    // build-espeak-static.sh is invoked automatically on macOS and Linux.
     enforce_espeak_static();
 
-    // ── Bake the dev data path into the binary (all platforms) ───────────────
+    // ── Bake the dev data path into the binary (macOS / Linux only) ──────────
     //
     // Emits ESPEAK_DATA_PATH_DEV so that `cargo run` / plain debug builds on
     // the build machine find the data without needing ESPEAK_DATA_PATH set or
     // a system espeak-ng install.  This is a last-resort fallback; the Tauri
     // bundle path (Contents/Resources/espeak-ng-data) takes priority at runtime
     // via init_espeak_bundled_data_path() called from lib.rs setup().
+    // Skipped on Windows (espeak not used).
     emit_espeak_data_path_dev();
 
     // ── Copy espeak-ng-data/ into resources/ for Tauri bundling ──────────────
     //
-    // tauri.conf.json declares resources/espeak-ng-data as a bundle resource on
-    // all platforms.  This step must run before tauri_build::build() validates
-    // the resource paths.
+    // tauri.conf.json declares resources/espeak-ng-data as a bundle resource.
+    // This step must run before tauri_build::build() validates the resource
+    // paths.
+    //
+    // On macOS / Linux the directory is populated from the static build or from
+    // a system espeak-ng install.  On Windows it is created as an empty
+    // placeholder so the Tauri bundler does not error on the missing path;
+    // kittentts/neutts do not use espeak on Windows so no data is needed.
     #[cfg(target_os = "macos")]
     bundle_espeak_data_macos();
     #[cfg(target_os = "linux")]
     bundle_espeak_data_linux();
+    #[cfg(target_os = "windows")]
+    bundle_espeak_data_windows();
 
     tauri_build::build()
 }
@@ -51,8 +63,9 @@ fn main() {
 //  3. Platform path walk       — system / Homebrew locations (static only)
 //
 // If none of the above yields libespeak-ng.a the build script is invoked
-// automatically on all supported platforms (macOS + Linux).  The build panics
-// if it still cannot locate the archive after running the script.
+// automatically on macOS and Linux.  The build panics if it still cannot
+// locate the archive after running the script.  On Windows this function
+// returns immediately — no static archive is required (espeak not used).
 
 fn enforce_espeak_static() {
     println!("cargo:rerun-if-env-changed=ESPEAK_LIB_DIR");
@@ -60,6 +73,18 @@ fn enforce_espeak_static() {
 
     let target_os   = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+
+    // On Windows, kittentts and neutts are built without the `espeak` feature
+    // (see [target.'cfg(not(target_os = "windows"))'.dependencies] in Cargo.toml).
+    // No static espeak-ng library is needed, and build-espeak-static.sh cannot
+    // run without Bash.  Skip entirely.
+    if target_os == "windows" {
+        println!(
+            "cargo:warning=build.rs: skipping espeak-ng static enforcement on Windows \
+             (kittentts/neutts use built-in romaniser instead)."
+        );
+        return;
+    }
 
     // 1. ESPEAK_LIB_DIR (always set by .cargo/config.toml to espeak-static/lib).
     //    If the archive is absent, build it from source first.
@@ -237,8 +262,11 @@ fn brew_prefix(formula: &str) -> Option<String> {
 /// (`Contents/Resources/espeak-ng-data`) takes priority via the
 /// `init_espeak_bundled_data_path()` call in lib.rs setup().
 ///
-/// Works on both macOS and Linux.
+/// Works on both macOS and Linux.  Skipped on Windows (espeak not used).
 fn emit_espeak_data_path_dev() {
+    if std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default() == "windows" {
+        return;
+    }
     // ESPEAK_LIB_DIR is always set via .cargo/config.toml to
     // <workspace>/espeak-static/lib.  The data lives one level up, in
     // <workspace>/espeak-static/share/espeak-ng-data.
@@ -353,6 +381,32 @@ fn bundle_espeak_data_linux() {
     copy_dir_all(data_src, data_dst);
 
     println!("cargo:rerun-if-changed={data_src}");
+}
+
+// ── Windows bundle helper ─────────────────────────────────────────────────────
+//
+// On Windows, kittentts and neutts are compiled without the `espeak` feature,
+// so no espeak-ng-data is needed at runtime.  However tauri.conf.json declares
+// `resources/espeak-ng-data` as a bundle resource for all platforms; if the
+// directory is absent the Tauri bundler errors out.
+//
+// We create an empty placeholder directory here so the bundler is satisfied.
+// The directory will be included in the Windows installer but contains nothing,
+// which is correct — espeak is simply not used on Windows.
+
+#[cfg(target_os = "windows")]
+fn bundle_espeak_data_windows() {
+    let data_dst = "resources/espeak-ng-data";
+    if !Path::new(data_dst).exists() {
+        std::fs::create_dir_all(data_dst)
+            .unwrap_or_else(|e| {
+                panic!("build.rs: create_dir_all({data_dst}) failed: {e}");
+            });
+        println!(
+            "cargo:warning=build.rs: created empty resources/espeak-ng-data placeholder \
+             for Windows bundle (espeak not used on Windows)."
+        );
+    }
 }
 
 /// Recursively copy a directory tree from `src` to `dst`.

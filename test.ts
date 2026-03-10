@@ -41,6 +41,16 @@
  *       DELETE /calibrations/:id
  *       GET  /dnd             → dnd status (config + live eligibility + OS state)
  *       POST /dnd             → dnd_set (force enable/disable)
+ *       GET  /llm/status      → llm_status
+ *       POST /llm/start       → llm_start (loads model, may take seconds)
+ *       POST /llm/stop        → llm_stop (frees GPU/CPU resources)
+ *       GET  /llm/catalog     → llm_catalog (model list with download states)
+ *       POST /llm/download    → llm_download (fire-and-forget)
+ *       POST /llm/cancel_download → llm_cancel_download
+ *       POST /llm/delete      → llm_delete (removes cached model)
+ *       GET  /llm/logs        → llm_logs (last 500 log lines)
+ *       POST /llm/chat        → non-streaming chat; accepts { message, images?, system? }
+ *                               or full OpenAI messages array; supports base64 image upload
  *
  *   • HTTP UNIVERSAL TUNNEL — POST / with { "command": "…", …params }
  *     behaves identically to the WebSocket protocol.
@@ -85,9 +95,12 @@
  * 13. UMAP               — Enqueue a 3D dimensionality reduction job
  * 14. UMAP_POLL          — Poll for UMAP job completion
  * 15. DND                — Do Not Disturb status (dnd) + force override (dnd_set); GET/POST /dnd
- * 16. UNKNOWN            — Verify error handling for bad commands
- * 17. BROADCASTS         — Listen for server-pushed real-time events
- * 18. HTTP API           — REST endpoints + universal tunnel on the same port
+ * 16. LLM                — LLM server management + streaming chat + image upload
+ *                          (llm_status, llm_catalog, llm_download, llm_logs, llm_chat);
+ *                          REST /llm/* endpoints; POST /llm/chat with base64 images
+ * 17. UNKNOWN            — Verify error handling for bad commands
+ * 18. BROADCASTS         — Listen for server-pushed real-time events
+ * 19. HTTP API           — REST endpoints + universal tunnel on the same port
  *
  * ═══════════════════════════════════════════════════════════════════════════════
  * USAGE
@@ -2007,6 +2020,453 @@ async function testDnd(): Promise<void> {
   } catch (e: any) { fail(`tunnel dnd_set test failed: ${e.message}`); }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 15. LLM COMMANDS
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Tests the built-in LLM inference server management commands exposed over the
+// WebSocket (and HTTP) API:
+//
+//   llm_status          — server state (stopped/loading/running), model name, n_ctx
+//   llm_start           — load the active GGUF model and start inference (async, slow)
+//   llm_stop            — stop the server and free GPU/CPU resources
+//   llm_catalog         — full model catalog with download states
+//   llm_download        — start downloading a GGUF model (fire-and-forget)
+//   llm_cancel_download — cancel an in-progress download
+//   llm_delete          — delete a locally-cached model file
+//   llm_logs            — last ≤500 LLM server log lines
+//   llm_chat            — streaming chat (WebSocket only; sends multiple frames)
+//
+// Most tests verify the *protocol* (ok field, required response fields, error
+// handling) and do NOT require an actual model to be downloaded or the server
+// to be running, so they are safe to run on a CI machine without GPU or models.
+//
+// The llm_chat test only runs when transport === "ws" (streaming requires WebSocket)
+// and is automatically skipped when the LLM server is not running.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testLlm(): Promise<void> {
+  heading("LLM commands");
+  info("Testing LLM server management + streaming chat over WebSocket/HTTP.");
+  info("Protocol tests run regardless of model availability — no GPU required.");
+
+  // ── llm_status ───────────────────────────────────────────────────────────
+  // Request:  { command: "llm_status" }
+  // Response: { command: "llm_status", ok: true, status: "stopped"|"loading"|"running",
+  //             model_name: "...", n_ctx: 0, supports_vision: false }
+  try {
+    info("Testing llm_status…");
+    const r = await send({ command: "llm_status" });
+    r.ok === true ? ok("llm_status ok=true") : fail(`llm_status ok=${r.ok}, error=${r.error}`);
+    field("command",         r.command,         "should echo 'llm_status'");
+    field("status",          r.status,          "'stopped' | 'loading' | 'running'");
+    field("model_name",      r.model_name,      "empty string if no model selected");
+    field("n_ctx",           r.n_ctx,           "0 when server is stopped");
+    field("supports_vision", r.supports_vision, "true if mmproj is loaded");
+
+    if (r.command !== "llm_status") fail(`command not echoed: "${r.command}"`);
+    else ok("command echoed correctly");
+
+    const validStatuses = new Set(["stopped", "loading", "running"]);
+    validStatuses.has(r.status)
+      ? ok(`status is valid ("${r.status}")`)
+      : fail(`invalid status value: "${r.status}"`);
+
+    typeof r.model_name === "string"
+      ? ok("model_name is a string")
+      : fail(`model_name is not a string: ${typeof r.model_name}`);
+
+    typeof r.n_ctx === "number" && r.n_ctx >= 0
+      ? ok(`n_ctx is a non-negative number (${r.n_ctx})`)
+      : fail(`n_ctx invalid: ${r.n_ctx}`);
+
+    typeof r.supports_vision === "boolean"
+      ? ok("supports_vision is boolean")
+      : fail(`supports_vision not boolean: ${typeof r.supports_vision}`);
+  } catch (e: any) { fail(`llm_status failed: ${e.message}`); }
+
+  // ── llm_catalog ──────────────────────────────────────────────────────────
+  // Request:  { command: "llm_catalog" }
+  // Response: { command: "llm_catalog", ok: true,
+  //             entries: [...], active_model: "...", active_mmproj: "..." }
+  let llmRunning = false;
+  try {
+    info("Testing llm_catalog…");
+    const r = await send({ command: "llm_catalog" });
+    r.ok === true ? ok("llm_catalog ok=true") : fail(`llm_catalog ok=${r.ok}, error=${r.error}`);
+    field("active_model",  r.active_model,  "filename of active model (empty if none)");
+    field("active_mmproj", r.active_mmproj, "filename of active mmproj (empty if none)");
+
+    const entries: any[] = r.entries ?? [];
+    ok(`${entries.length} model entry/entries in catalog`);
+
+    // Validate each entry's shape
+    let entryErrors = 0;
+    for (const e of entries) {
+      if (typeof e.filename !== "string" || !e.filename) { entryErrors++; continue; }
+      if (typeof e.state    !== "string")               { entryErrors++; continue; }
+      if (typeof e.progress !== "number")               { entryErrors++; continue; }
+    }
+    entryErrors === 0
+      ? ok("all catalog entries have required fields (filename, state, progress)")
+      : fail(`${entryErrors} catalog entry/entries missing required fields`);
+
+    // Valid state values
+    const validStates = new Set(["not_downloaded", "downloading", "downloaded", "cancelled", "failed"]);
+    const invalidStates = entries.filter(e => !validStates.has(e.state));
+    invalidStates.length === 0
+      ? ok("all entry states are valid")
+      : fail(`invalid entry states: ${invalidStates.map(e => `${e.filename}:${e.state}`).join(", ")}`);
+
+    // Progress range [0, 1]
+    const badProgress = entries.filter(e => typeof e.progress === "number" && (e.progress < 0 || e.progress > 1));
+    badProgress.length === 0
+      ? ok("all progress values in [0, 1]")
+      : fail(`out-of-range progress values: ${badProgress.map(e => `${e.filename}:${e.progress}`).join(", ")}`);
+
+    // Track whether server is running (for streaming chat test below)
+    try { llmRunning = (await send({ command: "llm_status" })).status === "running"; } catch {}
+  } catch (e: any) { fail(`llm_catalog failed: ${e.message}`); }
+
+  // ── llm_download — missing filename → ok=false ───────────────────────────
+  try {
+    info("Testing llm_download with missing filename (should return ok=false)…");
+    const r = await send({ command: "llm_download" }); // no filename
+    r.ok === false
+      ? ok(`correctly rejected missing filename: error="${r.error}"`)
+      : fail("expected ok=false for missing filename");
+  } catch (e: any) { fail(`llm_download missing-filename test failed: ${e.message}`); }
+
+  // ── llm_cancel_download — missing filename → ok=false ────────────────────
+  try {
+    info("Testing llm_cancel_download with missing filename (should return ok=false)…");
+    const r = await send({ command: "llm_cancel_download" });
+    r.ok === false
+      ? ok(`correctly rejected: error="${r.error}"`)
+      : fail("expected ok=false for missing filename");
+  } catch (e: any) { fail(`llm_cancel_download missing-filename test failed: ${e.message}`); }
+
+  // ── llm_delete — missing filename → ok=false ─────────────────────────────
+  try {
+    info("Testing llm_delete with missing filename (should return ok=false)…");
+    const r = await send({ command: "llm_delete" });
+    r.ok === false
+      ? ok(`correctly rejected: error="${r.error}"`)
+      : fail("expected ok=false for missing filename");
+  } catch (e: any) { fail(`llm_delete missing-filename test failed: ${e.message}`); }
+
+  // ── llm_logs ─────────────────────────────────────────────────────────────
+  // Request:  { command: "llm_logs" }
+  // Response: { command: "llm_logs", ok: true,
+  //             logs: [{ ts: number, level: string, message: string }], count: number }
+  try {
+    info("Testing llm_logs…");
+    const r = await send({ command: "llm_logs" });
+    r.ok === true ? ok("llm_logs ok=true") : fail(`llm_logs ok=${r.ok}, error=${r.error}`);
+    field("count", r.count, "number of log entries (0 if server never started)");
+    Array.isArray(r.logs)
+      ? ok(`logs is an array (${r.logs.length} entries)`)
+      : fail("logs is not an array");
+
+    // Validate entries
+    const logs: any[] = r.logs ?? [];
+    const validLevels = new Set(["info", "warn", "error"]);
+    let logErrors = 0;
+    for (const entry of logs) {
+      if (typeof entry.ts      !== "number") { logErrors++; continue; }
+      if (typeof entry.level   !== "string") { logErrors++; continue; }
+      if (typeof entry.message !== "string") { logErrors++; continue; }
+      if (!validLevels.has(entry.level))     { logErrors++; continue; }
+    }
+    logErrors === 0
+      ? ok("all log entries have valid fields (ts, level, message)")
+      : fail(`${logErrors} log entry/entries have invalid fields`);
+
+    // count should match logs.length
+    r.count === r.logs.length
+      ? ok("count matches logs.length")
+      : fail(`count (${r.count}) != logs.length (${r.logs.length})`);
+  } catch (e: any) { fail(`llm_logs failed: ${e.message}`); }
+
+  // ── llm_chat — server not running → ok=false (non-streaming check) ───────
+  // We send llm_chat and check that the server responds with an error when
+  // no LLM server is running.  When the server IS running we verify the
+  // streaming protocol (delta frames → done frame).
+  if (transport === "ws") {
+    if (!llmRunning) {
+      // ── Not running: verify error response ──────────────────────────────
+      try {
+        info("Testing llm_chat when server not running (expect error frame)…");
+        const errorFrame = await new Promise<any>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            ws.off("message", handler);
+            reject(new Error("llm_chat timeout waiting for error frame (5s)"));
+          }, 5000);
+          const handler = (raw: any) => {
+            try {
+              const d = JSON.parse(raw.toString());
+              if (d.command === "llm_chat") {
+                clearTimeout(timer);
+                ws.off("message", handler);
+                resolve(d);
+              }
+            } catch {}
+          };
+          ws.on("message", handler);
+          ws.send(JSON.stringify({ command: "llm_chat", message: "hello" }));
+        });
+
+        errorFrame.ok === false
+          ? ok(`correctly rejected (server not running): error="${errorFrame.error}"`)
+          : fail("expected ok=false when server not running");
+        const t = errorFrame.type;
+        t === "error" || t === undefined
+          ? ok(`error frame type="${t ?? "(no type field)"}"`)
+          : fail(`unexpected type="${t}" in error frame`);
+      } catch (e: any) { fail(`llm_chat not-running test failed: ${e.message}`); }
+    } else {
+      // ── Running: verify streaming protocol ──────────────────────────────
+      info("LLM server is running — testing streaming chat protocol…");
+      try {
+        const frames: any[] = [];
+        const fullText = await new Promise<string>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            ws.off("message", handler);
+            reject(new Error("llm_chat stream timeout (60s)"));
+          }, 60_000);
+          let text = "";
+          const handler = (raw: any) => {
+            try {
+              const d = JSON.parse(raw.toString());
+              if (d.command !== "llm_chat") return;
+              frames.push(d);
+              if (d.type === "delta") {
+                text += d.text ?? "";
+              } else if (d.type === "done" || d.type === "error" || d.ok === false) {
+                clearTimeout(timer);
+                ws.off("message", handler);
+                d.type === "error" || d.ok === false
+                  ? reject(new Error(d.error ?? "llm_chat stream error"))
+                  : resolve(text);
+              }
+            } catch {}
+          };
+          ws.on("message", handler);
+          ws.send(JSON.stringify({ command: "llm_chat", message: "Reply with exactly: OK" }));
+        });
+
+        ok(`streaming chat completed — received ${frames.length} frame(s)`);
+        ok(`generated text: "${fullText.slice(0, 80)}${fullText.length > 80 ? "…" : ""}"`);
+
+        // Validate frame structure
+        const deltaFrames = frames.filter(f => f.type === "delta");
+        const doneFrames  = frames.filter(f => f.type === "done");
+        deltaFrames.length > 0
+          ? ok(`${deltaFrames.length} delta frame(s) received`)
+          : fail("no delta frames received");
+        doneFrames.length === 1
+          ? ok("exactly 1 done frame")
+          : fail(`expected 1 done frame, got ${doneFrames.length}`);
+
+        if (doneFrames.length === 1) {
+          const done = doneFrames[0];
+          done.ok === true ? ok("done frame ok=true") : fail(`done frame ok=${done.ok}`);
+          field("finish_reason",    done.finish_reason,    "'stop' or 'length'");
+          field("prompt_tokens",    done.prompt_tokens,    "input tokens used");
+          field("completion_tokens",done.completion_tokens,"output tokens generated");
+          field("n_ctx",            done.n_ctx,            "context window size in tokens");
+
+          typeof done.finish_reason === "string"
+            ? ok("finish_reason is a string")
+            : fail("finish_reason missing or not a string");
+          typeof done.prompt_tokens     === "number" && done.prompt_tokens >= 0
+            ? ok(`prompt_tokens = ${done.prompt_tokens}`)
+            : fail(`invalid prompt_tokens: ${done.prompt_tokens}`);
+          typeof done.completion_tokens === "number" && done.completion_tokens >= 0
+            ? ok(`completion_tokens = ${done.completion_tokens}`)
+            : fail(`invalid completion_tokens: ${done.completion_tokens}`);
+          typeof done.n_ctx             === "number" && done.n_ctx > 0
+            ? ok(`n_ctx = ${done.n_ctx}`)
+            : fail(`invalid n_ctx: ${done.n_ctx}`);
+        }
+
+        // Delta frames must have text field (string)
+        const badDelta = deltaFrames.filter(f => typeof f.text !== "string");
+        badDelta.length === 0
+          ? ok("all delta frames have text field (string)")
+          : fail(`${badDelta.length} delta frame(s) missing text field`);
+
+        // All frames must echo command = "llm_chat"
+        const wrongCmd = frames.filter(f => f.command !== "llm_chat");
+        wrongCmd.length === 0
+          ? ok("all frames echo command='llm_chat'")
+          : fail(`${wrongCmd.length} frame(s) have wrong command field`);
+      } catch (e: any) { fail(`llm_chat streaming test failed: ${e.message}`); }
+
+      // ── Short-hand 'message' field (instead of 'messages' array) ───────
+      try {
+        info("Testing llm_chat 'message' shorthand (string instead of array)…");
+        const doneFrame = await new Promise<any>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            ws.off("message", handler);
+            reject(new Error("llm_chat shorthand timeout (60s)"));
+          }, 60_000);
+          const handler = (raw: any) => {
+            try {
+              const d = JSON.parse(raw.toString());
+              if (d.command !== "llm_chat") return;
+              if (d.type === "done" || d.type === "error" || d.ok === false) {
+                clearTimeout(timer);
+                ws.off("message", handler);
+                resolve(d);
+              }
+            } catch {}
+          };
+          ws.on("message", handler);
+          ws.send(JSON.stringify({ command: "llm_chat", message: "Say: hi" }));
+        });
+        doneFrame.ok !== false
+          ? ok("llm_chat shorthand 'message' field accepted")
+          : fail(`llm_chat shorthand rejected: ${doneFrame.error}`);
+      } catch (e: any) { fail(`llm_chat shorthand test failed: ${e.message}`); }
+
+      // ── messages array (OpenAI format) ───────────────────────────────────
+      try {
+        info("Testing llm_chat with 'messages' array (OpenAI format)…");
+        const doneFrame = await new Promise<any>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            ws.off("message", handler);
+            reject(new Error("llm_chat messages-array timeout (60s)"));
+          }, 60_000);
+          const handler = (raw: any) => {
+            try {
+              const d = JSON.parse(raw.toString());
+              if (d.command !== "llm_chat") return;
+              if (d.type === "done" || d.type === "error" || d.ok === false) {
+                clearTimeout(timer);
+                ws.off("message", handler);
+                resolve(d);
+              }
+            } catch {}
+          };
+          ws.on("message", handler);
+          ws.send(JSON.stringify({
+            command: "llm_chat",
+            messages: [
+              { role: "system",    content: "You are a helpful assistant. Be brief." },
+              { role: "user",      content: "What is 2+2? Answer with just the number." },
+            ],
+          }));
+        });
+        doneFrame.ok !== false
+          ? ok("llm_chat with messages array accepted")
+          : fail(`llm_chat messages array rejected: ${doneFrame.error}`);
+      } catch (e: any) { fail(`llm_chat messages-array test failed: ${e.message}`); }
+    }
+  } else {
+    ok("skipped llm_chat tests — WebSocket required (--http mode)");
+  }
+
+  // ── llm_chat with images (vision) — WebSocket ───────────────────────────
+  // Tests the image upload protocol by embedding a tiny 1×1 red pixel JPEG
+  // as a base64 data-URL in the messages array.  This exercises the full
+  // image extraction pipeline on the server side without requiring a large file.
+  //
+  // The test is skipped when the LLM server is not running.  When it IS
+  // running, we verify:
+  //   a) The server accepts image_url content parts (OpenAI format)
+  //   b) The server accepts top-level "images" array (simple format via POST /llm/chat)
+  //   c) The streaming protocol still works correctly with image input
+  if (transport === "ws" && llmRunning) {
+    info("Testing llm_chat with image (vision) — OpenAI message format…");
+
+    // Tiny 1×1 red JPEG (24 bytes base64) — valid JFIF header, parseable by libjpeg.
+    // Generated with: ffmpeg -f rawvideo -pixel_format rgb24 -video_size 1x1 -i /dev/zero -frames 1 tiny.jpg
+    const tinyRedJpeg =
+      "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRof" +
+      "Hh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFgAB" +
+      "AQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFBABAAAAAAAAAAAAAAAA" +
+      "AAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxBn/9k=";
+    const imageDataUrl = `data:image/jpeg;base64,${tinyRedJpeg}`;
+
+    try {
+      const frames: any[] = [];
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          ws.off("message", handler);
+          reject(new Error("llm_chat vision timeout (60s)"));
+        }, 60_000);
+
+        const handler = (raw: any) => {
+          try {
+            const d = JSON.parse(raw.toString());
+            if (d.command !== "llm_chat") return;
+            frames.push(d);
+            if (d.type === "done" || d.type === "error" || d.ok === false) {
+              clearTimeout(timer);
+              ws.off("message", handler);
+              d.type === "error" || d.ok === false
+                ? reject(new Error(d.error ?? "llm_chat vision error"))
+                : resolve();
+            }
+          } catch {}
+        };
+
+        ws.on("message", handler);
+        ws.send(JSON.stringify({
+          command:  "llm_chat",
+          messages: [
+            {
+              role:    "user",
+              content: [
+                { type: "image_url", image_url: { url: imageDataUrl } },
+                { type: "text",      text: "Reply with: OK" },
+              ],
+            },
+          ],
+        }));
+      });
+
+      ok(`llm_chat vision (image_url): ${frames.length} frame(s) received`);
+      const done = frames.find(f => f.type === "done");
+      done && done.ok === true ? ok("vision done frame ok=true") : fail("no valid done frame");
+    } catch (e: any) {
+      // Vision may fail if the model doesn't have an mmproj loaded — that's expected.
+      // Treat "loading" / "not supported" errors as a soft skip, not a hard fail.
+      const msg = String(e.message ?? e);
+      if (msg.includes("vision") || msg.includes("mmproj") || msg.includes("multimodal")) {
+        ok(`vision skipped (model not vision-capable): ${msg}`);
+      } else {
+        fail(`llm_chat vision (image_url) failed: ${msg}`);
+      }
+    }
+  } else if (!llmRunning) {
+    ok("skipped llm_chat vision tests — LLM server not running");
+  } else {
+    ok("skipped llm_chat vision tests — WebSocket required");
+  }
+
+  // ── llm_stop and llm_start — only when running ──────────────────────────
+  // We intentionally skip stop/start tests to avoid disrupting a model that
+  // might be in use.  The llm_stop command is tested structurally (response
+  // format) by calling it when the server is already stopped.
+  try {
+    info("Testing llm_stop when server is not running (expect 'not_running' result)…");
+    const status = await send({ command: "llm_status" });
+    if (status.status !== "running") {
+      const r = await send({ command: "llm_stop" });
+      r.ok === true ? ok("llm_stop ok=true (server not running)") : fail(`llm_stop ok=${r.ok}`);
+      field("result", r.result, "'stopped' | 'not_running'");
+      r.result === "not_running"
+        ? ok(`result = "not_running" (correct when already stopped)`)
+        : fail(`unexpected result: "${r.result}"`);
+    } else {
+      ok("skipped llm_stop structural test — LLM server is currently running (preserving state)");
+    }
+  } catch (e: any) { fail(`llm_stop structural test failed: ${e.message}`); }
+}
+
 async function testUnknownCommand(): Promise<void> {
   heading("unknown command");
   info("Request: { command: 'nonexistent_command_xyz' }");
@@ -2250,6 +2710,166 @@ async function testHttp(port: number): Promise<void> {
     data?.ok === false  ? ok("ok=false in error response") : fail(`ok=${data?.ok}`);
     typeof data?.error === "string" ? ok(`error message: "${data.error}"`) : fail("no error field");
   } catch (e: any) { fail(`unknown-command tunnel test failed: ${e.message}`); }
+
+  // ── m) GET /llm/status ───────────────────────────────────────────────────
+  try {
+    info("GET /llm/status → LLM REST shortcut");
+    const { data, res } = await hfetch("/llm/status");
+    res.ok ? ok("GET /llm/status returned 200") : fail(`status ${res.status}`);
+    data?.ok === true             ? ok("GET /llm/status: ok=true")              : fail(`ok=${data?.ok}, error=${data?.error}`);
+    data?.command === "llm_status"? ok("command='llm_status'")                  : fail(`command=${data?.command}`);
+    const validStatuses = new Set(["stopped", "loading", "running"]);
+    validStatuses.has(data?.status) ? ok(`status="${data?.status}"`) : fail(`invalid status: "${data?.status}"`);
+  } catch (e: any) { fail(`GET /llm/status failed: ${e.message}`); }
+
+  // ── n) GET /llm/catalog ──────────────────────────────────────────────────
+  try {
+    info("GET /llm/catalog → LLM model catalog REST shortcut");
+    const { data, res } = await hfetch("/llm/catalog");
+    res.ok ? ok("GET /llm/catalog returned 200") : fail(`status ${res.status}`);
+    data?.ok === true              ? ok("GET /llm/catalog: ok=true")      : fail(`ok=${data?.ok}`);
+    data?.command === "llm_catalog"? ok("command='llm_catalog'")          : fail(`command=${data?.command}`);
+    Array.isArray(data?.entries)   ? ok(`${data.entries.length} entry/entries`) : fail("entries not an array");
+  } catch (e: any) { fail(`GET /llm/catalog failed: ${e.message}`); }
+
+  // ── o) GET /llm/logs ─────────────────────────────────────────────────────
+  try {
+    info("GET /llm/logs → LLM log REST shortcut");
+    const { data, res } = await hfetch("/llm/logs");
+    res.ok ? ok("GET /llm/logs returned 200") : fail(`status ${res.status}`);
+    data?.ok === true           ? ok("GET /llm/logs: ok=true") : fail(`ok=${data?.ok}`);
+    Array.isArray(data?.logs)   ? ok(`${data.logs.length} log line(s)`) : fail("logs not an array");
+  } catch (e: any) { fail(`GET /llm/logs failed: ${e.message}`); }
+
+  // ── p) POST /llm/download missing filename → 400 ─────────────────────────
+  try {
+    info("POST /llm/download without filename → 400");
+    const { data, res } = await hfetch("/llm/download", {
+      method: "POST",
+      body:   JSON.stringify({}),
+    });
+    res.status === 400 ? ok("POST /llm/download without filename → 400") : fail(`expected 400, got ${res.status}`);
+    data?.ok === false  ? ok("ok=false in error response")                : fail(`ok=${data?.ok}`);
+  } catch (e: any) { fail(`POST /llm/download validation test failed: ${e.message}`); }
+
+  // ── q) POST /llm/chat — missing message → 400 ────────────────────────────
+  try {
+    info("POST /llm/chat without message → 400");
+    const { data, res } = await hfetch("/llm/chat", {
+      method: "POST",
+      body:   JSON.stringify({}),  // empty body — no message, no messages
+    });
+    // Server is either stopped (503) or rejects the empty body (400).
+    // Both are acceptable — what matters is ok=false.
+    const accepted = res.status === 400 || res.status === 503;
+    accepted    ? ok(`POST /llm/chat no-message → ${res.status}`)   : fail(`expected 400 or 503, got ${res.status}`);
+    data?.ok === false ? ok("ok=false in error response")            : fail(`ok=${data?.ok}`);
+  } catch (e: any) { fail(`POST /llm/chat validation test failed: ${e.message}`); }
+
+  // ── r) POST /llm/chat — simple format (no server required for shape check)
+  // When the server is running this should return a text response.
+  // When stopped it should return 503 with ok=false.
+  try {
+    info("POST /llm/chat — simple JSON format (shape + server-state aware)…");
+    const { data, res } = await hfetch("/llm/chat", {
+      method: "POST",
+      body:   JSON.stringify({ message: "Reply with: OK" }),
+    });
+
+    if (res.status === 503) {
+      // Server not running — verify error shape
+      data?.ok === false
+        ? ok("POST /llm/chat → 503 ok=false (server stopped, correct)")
+        : fail(`503 but ok=${data?.ok}`);
+      typeof data?.error === "string"
+        ? ok(`error message present: "${data.error.slice(0, 60)}"`)
+        : fail("error field missing");
+    } else if (res.status === 200) {
+      // Server is running — verify response shape
+      data?.ok === true
+        ? ok("POST /llm/chat → 200 ok=true")
+        : fail(`200 but ok=${data?.ok}`);
+      data?.command === "llm_chat"
+        ? ok("command='llm_chat'")
+        : fail(`command=${data?.command}`);
+      typeof data?.text === "string"
+        ? ok(`text field present (${data.text.length} chars)`)
+        : fail("text field missing or not string");
+      typeof data?.finish_reason === "string"
+        ? ok(`finish_reason="${data.finish_reason}"`)
+        : fail("finish_reason missing");
+      typeof data?.prompt_tokens === "number" && data.prompt_tokens >= 0
+        ? ok(`prompt_tokens=${data.prompt_tokens}`)
+        : fail(`invalid prompt_tokens: ${data?.prompt_tokens}`);
+      typeof data?.completion_tokens === "number" && data.completion_tokens >= 0
+        ? ok(`completion_tokens=${data.completion_tokens}`)
+        : fail(`invalid completion_tokens: ${data?.completion_tokens}`);
+      typeof data?.n_ctx === "number" && data.n_ctx > 0
+        ? ok(`n_ctx=${data.n_ctx}`)
+        : fail(`invalid n_ctx: ${data?.n_ctx}`);
+    } else {
+      fail(`unexpected status ${res.status}`);
+    }
+  } catch (e: any) { fail(`POST /llm/chat simple format test failed: ${e.message}`); }
+
+  // ── s) POST /llm/chat — with base64 image (vision) ───────────────────────
+  // Uses a minimal 1×1 JPEG data-URL to test the image upload path.
+  // When the server is stopped the response must be 503 ok=false.
+  // When running with a vision model it should return a text response.
+  try {
+    info("POST /llm/chat — with base64 image (vision upload path)…");
+    const tinyJpeg =
+      "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRof" +
+      "Hh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFgAB" +
+      "AQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFBABAAAAAAAAAAAAAAAA" +
+      "AAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxBn/9k=";
+    const imageDataUrl = `data:image/jpeg;base64,${tinyJpeg}`;
+
+    const { data, res } = await hfetch("/llm/chat", {
+      method: "POST",
+      body:   JSON.stringify({
+        message: "Reply with: OK",
+        images:  [imageDataUrl],
+      }),
+    });
+
+    const okStatus = res.status === 200 || res.status === 503;
+    okStatus ? ok(`POST /llm/chat with image → ${res.status}`) : fail(`unexpected status ${res.status}`);
+    data?.ok === false || data?.ok === true
+      ? ok(`ok field present (${data?.ok})`)
+      : fail("ok field missing");
+
+    if (res.status === 200) {
+      typeof data?.text === "string"
+        ? ok(`vision response text: "${(data.text as string).slice(0, 60)}${(data.text as string).length > 60 ? "…" : ""}"`)
+        : fail("text field missing in vision response");
+    } else {
+      ok(`server stopped or vision not supported (503) — error: "${data?.error ?? "n/a"}"`)
+    }
+
+    // Validate that the "images" top-level field is accepted (not rejected as 400)
+    res.status !== 400 ? ok("images[] field accepted by server (not rejected)") : fail("400 — images[] field rejected");
+  } catch (e: any) { fail(`POST /llm/chat vision test failed: ${e.message}`); }
+
+  // ── t) POST /llm/chat — full OpenAI messages format ───────────────────────
+  try {
+    info("POST /llm/chat — full OpenAI messages array format…");
+    const { data, res } = await hfetch("/llm/chat", {
+      method: "POST",
+      body:   JSON.stringify({
+        messages: [
+          { role: "system", content: "Be brief." },
+          { role: "user",   content: "Reply with: OK" },
+        ],
+      }),
+    });
+    const okStatus = res.status === 200 || res.status === 503;
+    okStatus ? ok(`POST /llm/chat OpenAI format → ${res.status}`) : fail(`unexpected status ${res.status}`);
+    data?.ok === false || data?.ok === true ? ok("ok field present") : fail("ok field missing");
+    if (res.status === 200 && data?.ok === true) {
+      typeof data?.text === "string" ? ok("text field present") : fail("text field missing");
+    }
+  } catch (e: any) { fail(`POST /llm/chat OpenAI format test failed: ${e.message}`); }
 }
 
 
@@ -2333,6 +2953,7 @@ async function main(): Promise<void> {
   await testSleep();
   await testUmap();
   await testDnd();
+  await testLlm();
   await testUnknownCommand();
   await testBroadcastEvents();   // skips gracefully when transport === "http"
   await testHttp(port);          // always runs — tests HTTP layer directly

@@ -302,6 +302,28 @@ impl LlmServerState {
             let _ = h.join();
         }
     }
+
+    /// Send a chat completion request and stream the generated tokens back via
+    /// the returned `UnboundedReceiver`.
+    ///
+    /// Returns `Err` when the model is still loading or the actor has exited.
+    /// Images should be raw JPEG/PNG bytes decoded from base64 data-URLs; pass
+    /// an empty `Vec` for text-only prompts.
+    pub fn chat(
+        &self,
+        messages: Vec<Value>,
+        images:   Vec<Vec<u8>>,
+        params:   GenParams,
+    ) -> Result<tokio::sync::mpsc::UnboundedReceiver<InferToken>, String> {
+        if !self.is_ready() {
+            return Err("LLM model still loading — retry in a few seconds".to_string());
+        }
+        let (tok_tx, tok_rx) = tokio::sync::mpsc::unbounded_channel();
+        self.req_tx
+            .send(InferRequest::Generate { messages, images, params, token_tx: tok_tx })
+            .map_err(|_| "LLM actor has exited".to_string())?;
+        Ok(tok_rx)
+    }
 }
 
 /// A dynamic cell that holds the (optional) running server state.
@@ -448,6 +470,25 @@ fn decode_image_url(url: &str) -> Option<Vec<u8>> {
     let payload = data.split(';').nth(1)?.strip_prefix("base64,")?;
     use base64::Engine as _;
     base64::engine::general_purpose::STANDARD.decode(payload).ok()
+}
+
+/// Decode all base64-embedded images across an entire messages array.
+///
+/// Iterates every message's `content` field (which may be a string or an
+/// OpenAI-style parts array) and collects raw JPEG/PNG bytes in document
+/// order.  Plain HTTP/S image URLs are silently skipped — only
+/// `data:<mime>;base64,<…>` data-URLs are supported.
+///
+/// Call this before passing `messages` to [`LlmServerState::chat`] so the
+/// actor receives pre-decoded bytes alongside the text context.
+pub fn extract_images_from_messages(messages: &[Value]) -> Vec<Vec<u8>> {
+    messages.iter()
+        .flat_map(|m| {
+            m.get("content")
+                .map(extract_images_from_content)
+                .unwrap_or_default()
+        })
+        .collect()
 }
 
 /// Extract all raw image bytes from a single `content` value (string or parts array).

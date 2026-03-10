@@ -1600,6 +1600,378 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 ---
 
+### `llm`
+
+Control the built-in on-device LLM inference server (OpenAI-compatible, powered by llama.cpp).
+All subcommands route to the WebSocket/HTTP API — no GPU dependency for status/catalog/logs queries.
+
+#### Subcommands
+
+| Subcommand | Description |
+|---|---|
+| `llm status` | Server state (stopped/loading/running), model name, context window |
+| `llm start` | Load the active model and start the inference server |
+| `llm stop` | Stop the server and free GPU/CPU memory |
+| `llm catalog` | List all GGUF models with download states and active selections |
+| `llm download <filename>` | Download a model by filename (fire-and-forget; poll catalog for progress) |
+| `llm cancel <filename>` | Cancel an in-progress download |
+| `llm delete <filename>` | Delete a locally-cached model file |
+| `llm logs` | Print the last 500 LLM server log lines |
+| `llm chat` | **Interactive multi-turn REPL** — type `exit` to quit (**WebSocket only**) |
+| `llm chat "message"` | Single-shot: send one message, stream the reply, and exit (**WebSocket only**) |
+
+```bash
+# Server lifecycle
+node cli.ts llm status
+node cli.ts llm start          # loads model — may take several seconds
+node cli.ts llm stop
+
+# Model management
+node cli.ts llm catalog
+node cli.ts llm catalog --json | jq '.entries[] | select(.state == "downloaded")'
+node cli.ts llm download "Qwen3-1.7B-Q4_K_M.gguf"   # fire-and-forget
+node cli.ts llm catalog     # poll for download progress
+node cli.ts llm delete "Qwen3-1.7B-Q4_K_M.gguf"
+
+# Logs
+node cli.ts llm logs
+
+# ── Interactive multi-turn chat REPL ──────────────────────────────────────────
+node cli.ts llm chat                          # opens interactive REPL
+
+# With a system prompt (persists for the whole session):
+node cli.ts llm chat --system "You are a concise EEG neuroscience assistant."
+
+# With GenParam overrides:
+node cli.ts llm chat --temperature 0.3 --max-tokens 512
+
+# Combined — system prompt + lower temperature for factual answers:
+node cli.ts llm chat \
+  --system "Answer in one sentence. Only use what you know about EEG." \
+  --temperature 0.2
+
+# ── Single-shot chat (pipe-friendly) ─────────────────────────────────────────
+node cli.ts llm chat "What EEG frequency bands are associated with meditation?"
+node cli.ts llm chat "Explain delta waves" --temperature 0.3 --max-tokens 256
+node cli.ts llm chat "Summarize my session" --json   # JSON output: {text, tokens}
+```
+
+**Interactive REPL commands** (type these at the `You:` prompt):
+
+| Command | Effect |
+|---|---|
+| `/clear` | Clear conversation history (system prompt is kept) |
+| `/history` | Print all messages in the current conversation |
+| `/help` | Show REPL command help |
+| `exit` or `quit` | End the session |
+| `Ctrl+C` or `Ctrl+D` | End the session immediately |
+
+**WebSocket protocol — `llm_chat` (streaming):**
+
+`llm_chat` is the only WebSocket command that returns **multiple frames** per request.
+Tokens stream back as `delta` frames; generation ends with a single `done` (or `error`) frame.
+
+```js
+ws.send(JSON.stringify({
+  command:  "llm_chat",
+  messages: [
+    { role: "system", content: "You are a concise EEG assistant." },
+    { role: "user",   content: "What does high theta power indicate?" },
+  ],
+  // Optional GenParams — all have sensible defaults:
+  // temperature: 0.8, top_k: 40, top_p: 0.9, repeat_penalty: 1.1,
+  // max_tokens: 2048, thinking_budget: 512  (set to 0 to skip <think> blocks)
+}));
+
+// Short-hand for single user message:
+ws.send(JSON.stringify({ command: "llm_chat", message: "Hello!" }));
+```
+
+**Server sends multiple frames back:**
+
+```jsonc
+// Delta frames (one per token batch):
+{ "command": "llm_chat", "type": "delta", "text": "High theta" }
+{ "command": "llm_chat", "type": "delta", "text": " power (4–8 Hz)" }
+// ...
+
+// Final done frame:
+{
+  "command":           "llm_chat",
+  "ok":                true,
+  "type":              "done",
+  "finish_reason":     "stop",     // "stop" | "length"
+  "prompt_tokens":     42,
+  "completion_tokens": 87,
+  "n_ctx":             4096
+}
+
+// Or on error:
+{
+  "command": "llm_chat",
+  "ok":      false,
+  "type":    "error",
+  "error":   "LLM server not running — send { \"command\": \"llm_start\" } first"
+}
+```
+
+**HTTP REST shortcuts** (non-streaming):
+
+```bash
+# Status
+curl -s http://127.0.0.1:8375/llm/status | jq '{status, model_name, n_ctx}'
+
+# Start / stop
+curl -s -X POST http://127.0.0.1:8375/llm/start
+curl -s -X POST http://127.0.0.1:8375/llm/stop
+
+# Catalog
+curl -s http://127.0.0.1:8375/llm/catalog | jq '.entries[] | select(.state == "downloaded") | .filename'
+
+# Download a model (fire-and-forget; poll /llm/catalog for progress)
+curl -s -X POST http://127.0.0.1:8375/llm/download \
+  -H "Content-Type: application/json" \
+  -d '{"filename":"Qwen3-1.7B-Q4_K_M.gguf"}'
+
+# Cancel / delete
+curl -s -X POST http://127.0.0.1:8375/llm/cancel_download \
+  -H "Content-Type: application/json" \
+  -d '{"filename":"Qwen3-1.7B-Q4_K_M.gguf"}'
+curl -s -X POST http://127.0.0.1:8375/llm/delete \
+  -H "Content-Type: application/json" \
+  -d '{"filename":"Qwen3-1.7B-Q4_K_M.gguf"}'
+
+# Logs
+curl -s http://127.0.0.1:8375/llm/logs | jq '.logs[-10:]'
+
+# ── POST /llm/chat — non-streaming chat with optional image upload ────────────
+
+# Plain text message
+curl -s -X POST http://127.0.0.1:8375/llm/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What is EEG coherence?"}' | jq '{text, finish_reason, completion_tokens}'
+
+# With a system prompt and GenParams
+curl -s -X POST http://127.0.0.1:8375/llm/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Summarize in one line.","system":"Be extremely brief.","temperature":0.3}'
+
+# With an image (base64 data-URL in the "images" array)
+IMAGE_B64=$(base64 -i screenshot.png)
+curl -s -X POST http://127.0.0.1:8375/llm/chat \
+  -H "Content-Type: application/json" \
+  -d "{\"message\":\"What do you see in this image?\",\"images\":[\"data:image/png;base64,${IMAGE_B64}\"]}"
+
+# Full OpenAI messages format (multi-turn, vision content parts)
+curl -s -X POST http://127.0.0.1:8375/llm/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      {"role":"system","content":"You are a neuroscience assistant."},
+      {"role":"user","content":[
+        {"type":"image_url","image_url":{"url":"data:image/jpeg;base64,..."}},
+        {"type":"text","text":"What brain region might this scan show?"}
+      ]}
+    ]
+  }' | jq '.text'
+```
+
+**`POST /llm/chat` response** (always complete JSON, never streamed):
+```json
+{
+  "command":           "llm_chat",
+  "ok":                true,
+  "text":              "EEG coherence measures…",
+  "finish_reason":     "stop",
+  "prompt_tokens":     42,
+  "completion_tokens": 87,
+  "n_ctx":             4096
+}
+```
+
+**Image upload via CLI** (WebSocket streaming):
+
+```bash
+# Single-shot with one image
+node cli.ts llm chat "What do you see?" --image screenshot.png
+
+# Multiple images
+node cli.ts llm chat "Compare these EEG plots" --image session1.png --image session2.png
+
+# With system prompt + GenParams
+node cli.ts llm chat "Describe this headset" \
+  --image headset.jpg \
+  --system "You are a hardware expert." \
+  --temperature 0.2
+
+# HTTP non-streaming (works without WebSocket)
+node cli.ts llm chat "What's in this scan?" --image brain.png --http
+
+# Interactive REPL with image staging (type /image inside the session)
+node cli.ts llm chat
+# You: /image eeg_plot.png
+# You: What anomalies do you see in this EEG trace?
+```
+
+**Image upload via WebSocket** (`llm_chat` streaming protocol):
+
+Images are embedded directly in the `messages` array as OpenAI-format `image_url` content parts using base64 `data:` URLs.  The server extracts and decodes them automatically before passing to the inference actor.
+
+```js
+// Single image + text (standard OpenAI vision format)
+ws.send(JSON.stringify({
+  command:  "llm_chat",
+  messages: [
+    {
+      role:    "user",
+      content: [
+        { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo…" } },
+        { type: "text",      text: "What do you see in this EEG spectrogram?" },
+      ],
+    },
+  ],
+}));
+
+// Multiple images (in document order)
+ws.send(JSON.stringify({
+  command:  "llm_chat",
+  messages: [
+    {
+      role:    "user",
+      content: [
+        { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/4AAQ…" } },
+        { type: "image_url", image_url: { url: "data:image/jpeg;base64,/9j/4BBQ…" } },
+        { type: "text",      text: "Compare these two EEG recordings." },
+      ],
+    },
+  ],
+}));
+```
+
+> **Vision requirement:** Image input requires the LLM server to be started with a
+> vision-capable model that has an mmproj (multi-modal projector) loaded.
+> Check `supports_vision: true` in `llm_status` before sending images.
+> If `supports_vision` is false the server will still attempt inference but will
+> ignore the image content.
+
+**WebSocket commands** (also available via `POST /` universal tunnel):
+
+| Command | Required params | Optional params | Description |
+|---|---|---|---|
+| `llm_status` | — | — | Server state + model info |
+| `llm_start` | — | — | Start inference server (blocks until model loaded) |
+| `llm_stop` | — | — | Stop server + free resources |
+| `llm_catalog` | — | — | Full model catalog with live download progress |
+| `llm_download` | `filename` (string) | — | Start model download |
+| `llm_cancel_download` | `filename` (string) | — | Cancel in-progress download |
+| `llm_delete` | `filename` (string) | — | Delete cached model file |
+| `llm_logs` | — | — | Last ≤500 log entries |
+| `llm_chat` | `messages` (array) **or** `message` (string) | `temperature`, `top_k`, `top_p`, `repeat_penalty`, `seed`, `max_tokens`, `thinking_budget` | Streaming chat (multi-frame response; `messages` grows per turn for multi-turn) |
+
+**GenParams reference** (applicable to `llm_chat`):
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `temperature` | float | 0.8 | Sampling temperature (0 = deterministic) |
+| `top_k` | int | 40 | Top-K sampling |
+| `top_p` | float | 0.9 | Nucleus sampling threshold |
+| `repeat_penalty` | float | 1.1 | Repetition penalty |
+| `seed` | uint | 0xDEADBEEF | RNG seed for reproducible output |
+| `max_tokens` | uint | 2048 | Maximum tokens to generate |
+| `thinking_budget` | uint \| null | 512 | Max tokens in `<think>…</think>` block (`0` = skip thinking, `null` = unlimited) |
+
+**LLM server status values:**
+
+| `status` | Meaning |
+|---|---|
+| `"stopped"` | No model loaded; `llm_start` required |
+| `"loading"` | Model is being loaded from disk / initialising |
+| `"running"` | Model ready; `llm_chat` and `/v1/*` endpoints are live |
+
+**Download state values** (in `llm_catalog` entries):
+
+| `state` | Meaning |
+|---|---|
+| `"not_downloaded"` | Model not present locally |
+| `"downloading"` | Download in progress; check `progress` (0.0–1.0) |
+| `"downloaded"` | Model cached locally; ready to use |
+| `"cancelled"` | Download was cancelled |
+| `"failed"` | Download failed; `status_msg` has details |
+
+> **Note:** The LLM server also exposes an OpenAI-compatible HTTP API on the same
+> port at `/v1/chat/completions`, `/v1/completions`, and `/v1/embeddings` once started.
+> Use any OpenAI client library by pointing it at `http://127.0.0.1:<port>`.
+
+**Python example — streaming over WebSocket:**
+
+```python
+import asyncio, json
+import websockets
+
+async def llm_chat(port: int, message: str):
+    async with websockets.connect(f"ws://127.0.0.1:{port}") as ws:
+        # Start server if needed
+        await ws.send(json.dumps({"command": "llm_start"}))
+        resp = json.loads(await ws.recv())
+        print("server:", resp.get("result"))
+
+        # Stream a chat response
+        await ws.send(json.dumps({"command": "llm_chat", "message": message}))
+        text = ""
+        async for raw in ws:
+            frame = json.loads(raw)
+            if frame.get("command") != "llm_chat":
+                continue  # broadcast event — skip
+            if frame.get("type") == "delta":
+                print(frame["text"], end="", flush=True)
+                text += frame["text"]
+            elif frame.get("type") == "done":
+                print(f"\n[{frame['finish_reason']} | {frame['completion_tokens']} tokens]")
+                break
+            elif frame.get("type") == "error" or frame.get("ok") is False:
+                raise RuntimeError(frame.get("error", "llm_chat error"))
+
+asyncio.run(llm_chat(8375, "Explain delta waves in one sentence."))
+```
+
+**Node.js example — streaming via ws:**
+
+```js
+const WebSocket = require("ws");
+const ws = new WebSocket("ws://127.0.0.1:8375");
+
+ws.on("open", () => {
+  // Start server
+  ws.send(JSON.stringify({ command: "llm_start" }));
+});
+
+ws.on("message", (raw) => {
+  const frame = JSON.parse(raw);
+
+  if (frame.command === "llm_start" && frame.ok) {
+    // Server ready — send a chat message
+    ws.send(JSON.stringify({ command: "llm_chat", message: "What is EEG coherence?" }));
+    return;
+  }
+
+  if (frame.command !== "llm_chat") return;
+
+  switch (frame.type) {
+    case "delta": process.stdout.write(frame.text); break;
+    case "done":
+      console.log(`\n[${frame.finish_reason} | ${frame.completion_tokens} tokens]`);
+      ws.close();
+      break;
+    case "error":
+      console.error("Error:", frame.error);
+      ws.close();
+      break;
+  }
+});
+```
+
+---
+
 ## Data Reference
 
 ### EEG Band Powers

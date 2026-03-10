@@ -69,22 +69,6 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      # ── ImageMagick (needed by scripts/stamp-dmg-icon.sh) ────────────────────
-      # sips, iconutil, and Python/AppKit ship with the macOS runner image.
-      # ImageMagick is NOT pre-installed on macos-26 (confirmed against the
-      # actions/runner-images macos-26-arm64-Readme.md manifest), so we install
-      # it via Homebrew when missing.  The guard avoids a redundant install if
-      # a future runner image ever bundles it.
-      - name: Ensure ImageMagick is available
-        run: |
-          if command -v magick >/dev/null 2>&1; then
-            echo "ImageMagick already present: $(magick --version | head -1)"
-          else
-            echo "ImageMagick not found — installing via Homebrew…"
-            brew install imagemagick
-            echo "Installed: $(magick --version | head -1)"
-          fi
-
       # ── Pre-flight: verify every secret is set ───────────────────────────────
       # Catches missing / renamed secrets in seconds instead of after a 15-minute
       # build.  Each variable is checked for non-empty; none of the values are
@@ -331,8 +315,6 @@ jobs:
       # signed binaries inside the DMG, so after this step both the DMG and the
       # .app can be stapled without a second notarytool submission.
       #
-      # Order: create staging → hdiutil create → stamp icon → codesign → notarize → staple DMG → staple .app
-      # The stamp must happen before signing so the signature covers the final icon.
       - name: Create DMG
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -356,10 +338,6 @@ jobs:
             -ov -format UDZO \
             "$DMG_OUT"
           rm -rf "$STAGING"
-
-          bash scripts/stamp-dmg-icon.sh \
-            "$DMG_OUT" "$VERSION" "src-tauri/icons/icon.png" \
-          || echo "⚠ DMG icon stamp skipped (non-fatal)"
 
           codesign --force --timestamp \
             --sign "$APPLE_SIGNING_IDENTITY" \

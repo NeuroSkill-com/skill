@@ -230,10 +230,6 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      # ── ImageMagick (needed by scripts/stamp-dmg-icon.sh) ────────────────────
-      - name: Install ImageMagick
-        run: brew install imagemagick
-
       # ── espeak-ng static library ─────────────────────────────────────────────
       - name: Cache espeak-ng static lib
         id: cache-espeak
@@ -437,10 +433,6 @@ jobs:
             -ov -format UDZO \
             "$DMG_OUT"
           rm -rf "$STAGING"
-
-          bash scripts/stamp-dmg-icon.sh \
-            "$DMG_OUT" "$VERSION" "src-tauri/icons/icon.png" \
-          || echo "⚠ DMG icon stamp skipped (non-fatal)"
 
           codesign --force --timestamp \
             --sign "$APPLE_SIGNING_IDENTITY" \

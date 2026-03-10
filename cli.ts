@@ -33,6 +33,17 @@ const CLI_VERSION = "1.1.0";
  *   dnd                            Show DND automation status (config + live eligibility + OS state)
  *   dnd on                         Force-enable DND immediately (bypass EEG threshold)
  *   dnd off                        Force-disable DND immediately
+ *   llm status                     LLM server status (stopped/loading/running)
+ *   llm start                      Load active model and start LLM inference server
+ *   llm stop                       Stop LLM inference server and free GPU memory
+ *   llm catalog                    Show model catalog with download states
+ *   llm download <filename>        Download a GGUF model (fire-and-forget; poll catalog for progress)
+ *   llm cancel <filename>          Cancel an in-progress model download
+ *   llm delete <filename>          Delete a locally-cached model file
+ *   llm logs                       Print last 500 LLM server log lines
+ *   llm chat                       Interactive multi-turn chat REPL (WebSocket only)
+ *   llm chat "message"             Single-shot: send one message and stream the reply
+ *   llm chat "describe" --image a.jpg --image b.png   Vision: attach images to message
  *   raw '{"command":"..."}'        Send arbitrary JSON, print full response
  *
  * Transport selection (default: try WebSocket, fall back to HTTP):
@@ -595,6 +606,29 @@ interface Args {
   subAction?: string;
   /** Numeric ID for `calibrations get <id>`. */
   id?: number;
+  /**
+   * One or more image file paths for `llm chat`.
+   * Each file is base64-encoded and embedded as an `image_url` content part.
+   * Can be specified multiple times: `--image a.jpg --image b.png`.
+   * Requires the LLM server to be loaded with a vision-capable model (mmproj).
+   */
+  images?: string[];
+  /**
+   * System prompt for `llm chat` (prepended as a `{ role: "system" }` message).
+   * Example: `--system "You are a concise EEG assistant."`.
+   * Omit to let the model use its built-in defaults.
+   */
+  system?: string;
+  /**
+   * Maximum tokens to generate per llm_chat turn.
+   * Passed as `max_tokens` in GenParams.  Default: model default (2048).
+   */
+  maxTokens?: number;
+  /**
+   * Sampling temperature for llm_chat (0 = deterministic, 1 = creative).
+   * Passed as `temperature` in GenParams.  Default: 0.8.
+   */
+  temperature?: number;
 }
 
 /**
@@ -639,6 +673,7 @@ function parseArgs(): Args {
     "--k", "--k-text", "--k-eeg", "--k-labels", "--reach", "--ef",
     "--mode", "--profile", "--seconds", "--poll",
     "--context", "--at", "--voice",
+    "--system", "--max-tokens", "--temperature", "--image",
   ]);
 
   let i = 0;
@@ -669,11 +704,23 @@ function parseArgs(): Args {
     else if (a === "--ef")       { args.ef      = nextInt("--ef");      }
     else if (a === "--seconds")  { args.seconds = nextInt("--seconds"); }
     else if (a === "--poll")     { args.poll    = nextInt("--poll");    }
-    else if (a === "--at")       { args.at      = nextInt("--at");      }
-    else if (a === "--mode")     { args.mode    = argv[++i]; }
-    else if (a === "--profile")  { args.profile = argv[++i]; }
-    else if (a === "--context")  { args.context = argv[++i]; }
-    else if (a === "--voice")    { args.voice   = argv[++i]; }
+    else if (a === "--at")          { args.at          = nextInt("--at");          }
+    else if (a === "--max-tokens")  { args.maxTokens   = nextInt("--max-tokens");   }
+    else if (a === "--mode")        { args.mode        = argv[++i]; }
+    else if (a === "--profile")     { args.profile     = argv[++i]; }
+    else if (a === "--context")     { args.context     = argv[++i]; }
+    else if (a === "--voice")       { args.voice       = argv[++i]; }
+    else if (a === "--system")      { args.system      = argv[++i]; }
+    else if (a === "--image")       { (args.images ??= []).push(argv[++i]); }
+    else if (a === "--temperature") {
+      const raw = argv[++i];
+      const n   = Number(raw);
+      if (raw == null || raw.trim() === "" || isNaN(n)) {
+        console.error(`error: --temperature requires a numeric value (got: ${JSON.stringify(raw)})`);
+        process.exit(1);
+      }
+      args.temperature = n;
+    }
     // ── Positional arguments ─────────────────────────────────────────────
     else if (!args.command)      { args.command = a.toLowerCase(); }
     else if (args.command === "label"         && !args.text)    { args.text    = a; }
@@ -683,6 +730,22 @@ function parseArgs(): Args {
     else if (args.command === "notify"        && !args.text)    { args.text    = a; }
     else if (args.command === "notify"        && !args.body)    { args.body    = a; }
     else if (args.command === "raw"           && !args.rawJson) { args.rawJson = a; }
+    else if (args.command === "llm" && !args.subAction) {
+      // llm <subAction> [arg]
+      args.subAction = a.toLowerCase();
+    }
+    else if (args.command === "llm" && args.subAction === "download" && !args.text) {
+      args.text = a; // model filename
+    }
+    else if (args.command === "llm" && args.subAction === "cancel" && !args.text) {
+      args.text = a; // model filename
+    }
+    else if (args.command === "llm" && args.subAction === "delete" && !args.text) {
+      args.text = a; // model filename
+    }
+    else if (args.command === "llm" && args.subAction === "chat" && !args.text) {
+      args.text = a; // user message
+    }
     else if (args.command === "dnd" && !args.subAction && (a === "on" || a === "off")) {
       args.subAction = a; // "on" or "off" → maps to dnd_set { enabled: true/false }
     }
@@ -740,6 +803,16 @@ ${m("calibrate [--profile <name-or-id>]",            "open calibration window an
 ${m("timer",                                         "open focus-timer window and start work phase immediately")}
 ${m("umap [--a-start .. --a-end .. --b-start .. --b-end ..]", "3D UMAP projection (waits for result)")}
 ${m("dnd [on|off]",                                    "show DND automation status; 'on'/'off' force-overrides immediately")}
+${m("llm status",                                      "LLM server status (stopped/loading/running)")}
+${m("llm start",                                     "load active model and start LLM inference server")}
+${m("llm stop",                                      "stop LLM inference server and free GPU memory")}
+${m("llm catalog",                                   "show model catalog with download states")}
+${m("llm download <filename>",                       "download a GGUF model by filename (fire-and-forget)")}
+${m("llm cancel <filename>",                         "cancel an in-progress model download")}
+${m("llm delete <filename>",                         "delete a locally-cached model file")}
+${m("llm logs",                                      "print last 500 LLM server log lines")}
+${m("llm chat",                                       "interactive multi-turn chat REPL; type /help inside for commands")}
+${m('llm chat "message"',                            "single-shot: send one message, stream the reply, and exit")}
 ${m("listen [--seconds <n>]",                        "listen for broadcast events (default: 5s)")}
 ${m("raw '{\"command\":\"status\"}'",                "send raw JSON, print full response")}
 
@@ -764,6 +837,10 @@ ${BOLD}OPTIONS${RESET}
   ${YELLOW}--reach <n>${RESET}       (interactive) temporal window in minutes around each EEG point (default: 10)
   ${YELLOW}--voice <name>${RESET}    say: voice name to use (e.g. ${GREEN}Jasper${RESET}); omit to use the server default
   ${YELLOW}--profile <p>${RESET}     calibrate: profile name or UUID to run (default: active profile)
+  ${YELLOW}--image <path>${RESET}     llm chat: attach an image (can be repeated: --image a.jpg --image b.png)
+  ${YELLOW}--system "..."${RESET}    llm chat: prepend a system prompt (e.g. ${GREEN}"You are a concise EEG assistant."${RESET})
+  ${YELLOW}--temperature <f>${RESET} llm chat: sampling temperature 0–2 (default 0.8; 0 = deterministic)
+  ${YELLOW}--max-tokens <n>${RESET}  llm chat: maximum tokens to generate per turn (default 2048)
   ${YELLOW}--help${RESET}            show this help
   ${YELLOW}--version${RESET}         print CLI version and exit
 
@@ -986,6 +1063,28 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}#     ppg ×12${RESET}
   ${DIM}#     scores ×5${RESET}
   ${DIM}#   [{ "event": "eeg", "electrode": 0, "samples": [...], "timestamp": 1740412800.5 }, ...]${RESET}
+
+  ${BOLD}llm${RESET} — LLM inference server management + chat
+  ${DIM}$${RESET} npx tsx cli.ts llm status
+  ${DIM}$${RESET} npx tsx cli.ts llm start           ${DIM}# load active model (may take seconds)${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts llm stop
+  ${DIM}$${RESET} npx tsx cli.ts llm catalog
+  ${DIM}$${RESET} npx tsx cli.ts llm download "Qwen3-1.7B-Q4_K_M.gguf"
+  ${DIM}$${RESET} npx tsx cli.ts llm logs
+  ${DIM}$${RESET} npx tsx cli.ts llm chat             ${DIM}# interactive REPL (multi-turn, type 'exit' to quit)${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts llm chat "What EEG band is linked to relaxation?"
+  ${DIM}$${RESET} npx tsx cli.ts llm chat --system "You are a concise neuroscience assistant."
+  ${DIM}$${RESET} npx tsx cli.ts llm chat "Explain delta waves" --temperature 0.3 --max-tokens 256
+  ${DIM}$${RESET} npx tsx cli.ts llm chat "What's in this image?" --image eeg_plot.png
+  ${DIM}$${RESET} npx tsx cli.ts llm chat "Compare these" --image a.jpg --image b.jpg
+  ${DIM}$${RESET} npx tsx cli.ts llm chat "Describe" --image scan.png --http   ${DIM}# HTTP non-streaming${RESET}
+  ${DIM}# Interactive REPL commands:${RESET}
+  ${DIM}#   /image <path> — stage an image for the next message${RESET}
+  ${DIM}#   /images       — show staged image count${RESET}
+  ${DIM}#   /clear        — clear conversation history (keep system prompt)${RESET}
+  ${DIM}#   /history      — show all messages in the current conversation${RESET}
+  ${DIM}#   /help         — show REPL help${RESET}
+  ${DIM}#   exit          — end the session${RESET}
 
   ${BOLD}raw${RESET} — send arbitrary JSON
   ${DIM}$${RESET} npx tsx cli.ts raw '{"command":"status"}'
@@ -3070,6 +3169,496 @@ async function cmdListen(seconds: number): Promise<void> {
  *
  * @param rawJson - The raw JSON string to send, e.g. `'{"command":"status"}'`.
  */
+// ── LLM image helpers ─────────────────────────────────────────────────────────
+
+import { readFileSync } from "fs";
+import { extname } from "path";
+
+/**
+ * Infer the MIME type from a file extension.
+ */
+function imageMime(filePath: string): string {
+  const ext = extname(filePath).toLowerCase();
+  switch (ext) {
+    case ".png":  return "image/png";
+    case ".gif":  return "image/gif";
+    case ".webp": return "image/webp";
+    case ".bmp":  return "image/bmp";
+    default:      return "image/jpeg";
+  }
+}
+
+/**
+ * Read one image file from disk and return an OpenAI-format `image_url` content part:
+ * ```json
+ * { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,..." } }
+ * ```
+ * Throws if the file cannot be read.
+ */
+function loadImagePart(filePath: string): { type: string; image_url: { url: string } } {
+  let data: Buffer;
+  try { data = readFileSync(filePath); }
+  catch (e: any) { printError(`cannot read image file "${filePath}": ${e.message}`); }
+  const mime = imageMime(filePath);
+  const url  = `data:${mime};base64,${data!.toString("base64")}`;
+  return { type: "image_url", image_url: { url } };
+}
+
+/**
+ * Load multiple image files and return them as `image_url` content parts.
+ * Exits with an error if any file cannot be read.
+ */
+function loadImageParts(
+  filePaths: string[],
+): Array<{ type: string; image_url: { url: string } }> {
+  return filePaths.map(loadImagePart);
+}
+
+/**
+ * Build an OpenAI user message that may contain images + text.
+ *
+ * If `imageParts` is non-empty the content is a parts array
+ * `[...imageParts, {type:"text", text}]`; otherwise it is a plain string.
+ */
+function buildUserMessage(
+  text: string,
+  imageParts: Array<{ type: string; image_url: { url: string } }>,
+): { role: string; content: unknown } {
+  if (imageParts.length === 0) {
+    return { role: "user", content: text };
+  }
+  const parts: unknown[] = [...imageParts];
+  if (text) parts.push({ type: "text", text });
+  return { role: "user", content: parts };
+}
+
+// ── LLM command ───────────────────────────────────────────────────────────────
+
+/**
+ * `llm` — control the built-in LLM inference server.
+ *
+ * Subcommands:
+ *   status                  Print server state (stopped/loading/running), model, context size
+ *   start                   Load the active model and start the inference server
+ *   stop                    Stop the server and free GPU/CPU memory
+ *   catalog                 List all models with download states and active selections
+ *   download <filename>     Download a GGUF model by filename (fire-and-forget; poll catalog for progress)
+ *   cancel <filename>       Cancel an in-progress download
+ *   delete <filename>       Delete a locally-cached model file
+ *   logs                    Print last 500 LLM server log lines
+ *   chat                    Interactive multi-turn REPL (type /help inside; exit to quit)
+ *   chat "message"          Single-shot: send one message, stream the reply, and exit
+ *   chat --image <path>     Attach images to a message (vision models only)
+ */
+async function cmdLlm(args: Args): Promise<void> {
+  const sub = args.subAction ?? "status";
+
+  switch (sub) {
+    // ── status ──────────────────────────────────────────────────────────────
+    case "status": {
+      print(`${BOLD}🤖 llm status${RESET}`);
+      const r = await send({ command: "llm_status" });
+      if (!r.ok) { printResult(r); printError(r.error ?? "llm_status failed"); }
+      const statusColor = r.status === "running" ? GREEN : r.status === "loading" ? YELLOW : GRAY;
+      print(`  status         ${statusColor}${r.status}${RESET}`);
+      if (r.model_name) print(`  model          ${CYAN}${r.model_name}${RESET}`);
+      if (r.n_ctx)       print(`  context window ${CYAN}${r.n_ctx}${RESET} tokens`);
+      print(`  vision         ${r.supports_vision ? `${GREEN}yes${RESET}` : `${GRAY}no${RESET}`}`);
+      printResult(r);
+      break;
+    }
+
+    // ── start ────────────────────────────────────────────────────────────────
+    case "start": {
+      print(`${BOLD}🤖 llm start${RESET} ${DIM}(loading model — this may take several seconds)${RESET}`);
+      const r = await send({ command: "llm_start" }, 120_000);
+      if (!r.ok) { printResult(r); printError(r.error ?? "llm_start failed"); }
+      print(`  ${GREEN}✓${RESET} ${r.result}`);
+      printResult(r);
+      break;
+    }
+
+    // ── stop ─────────────────────────────────────────────────────────────────
+    case "stop": {
+      print(`${BOLD}🤖 llm stop${RESET}`);
+      const r = await send({ command: "llm_stop" });
+      if (!r.ok) { printResult(r); printError(r.error ?? "llm_stop failed"); }
+      print(`  ${GREEN}✓${RESET} ${r.result}`);
+      printResult(r);
+      break;
+    }
+
+    // ── catalog ───────────────────────────────────────────────────────────────
+    case "catalog": {
+      print(`${BOLD}🤖 llm catalog${RESET}`);
+      const r = await send({ command: "llm_catalog" });
+      if (!r.ok) { printResult(r); printError(r.error ?? "llm_catalog failed"); }
+      const entries: any[] = r.entries ?? [];
+      print(`  ${entries.length} model(s) in catalog`);
+      print(`  active model   ${CYAN}${r.active_model || "(none)"}${RESET}`);
+      print(`  active mmproj  ${CYAN}${r.active_mmproj || "(none)"}${RESET}`);
+      print("");
+      for (const e of entries) {
+        const stateColor = e.state === "downloaded" ? GREEN
+          : e.state === "downloading" ? YELLOW
+          : e.state === "failed"      ? RED
+          : GRAY;
+        const pct = e.state === "downloading" ? ` ${Math.round((e.progress ?? 0) * 100)}%` : "";
+        const active = e.filename === r.active_model ? ` ${GREEN}← active${RESET}` : "";
+        print(`  ${stateColor}${e.state}${RESET}${pct}  ${CYAN}${e.filename}${RESET}${active}`);
+        if (e.status_msg) print(`            ${DIM}${e.status_msg}${RESET}`);
+      }
+      printResult(r);
+      break;
+    }
+
+    // ── download ─────────────────────────────────────────────────────────────
+    case "download": {
+      const filename = args.text;
+      if (!filename) printError("usage: cli.ts llm download <filename>");
+      print(`${BOLD}🤖 llm download${RESET} ${CYAN}${filename}${RESET} ${DIM}(fire-and-forget — poll 'llm catalog' for progress)${RESET}`);
+      const r = await send({ command: "llm_download", filename });
+      if (!r.ok) { printResult(r); printError(r.error ?? "llm_download failed"); }
+      print(`  ${GREEN}✓${RESET} queued: ${CYAN}${r.filename}${RESET}`);
+      printResult(r);
+      break;
+    }
+
+    // ── cancel ───────────────────────────────────────────────────────────────
+    case "cancel": {
+      const filename = args.text;
+      if (!filename) printError("usage: cli.ts llm cancel <filename>");
+      print(`${BOLD}🤖 llm cancel${RESET} ${CYAN}${filename}${RESET}`);
+      const r = await send({ command: "llm_cancel_download", filename });
+      if (!r.ok) { printResult(r); printError(r.error ?? "llm_cancel_download failed"); }
+      print(`  ${GREEN}✓${RESET} cancel signalled for ${CYAN}${r.filename}${RESET}`);
+      printResult(r);
+      break;
+    }
+
+    // ── delete ───────────────────────────────────────────────────────────────
+    case "delete": {
+      const filename = args.text;
+      if (!filename) printError("usage: cli.ts llm delete <filename>");
+      print(`${BOLD}🤖 llm delete${RESET} ${CYAN}${filename}${RESET}`);
+      const r = await send({ command: "llm_delete", filename });
+      if (!r.ok) { printResult(r); printError(r.error ?? "llm_delete failed"); }
+      print(`  ${GREEN}✓${RESET} deleted ${CYAN}${r.filename}${RESET}`);
+      printResult(r);
+      break;
+    }
+
+    // ── logs ─────────────────────────────────────────────────────────────────
+    case "logs": {
+      print(`${BOLD}🤖 llm logs${RESET}`);
+      const r = await send({ command: "llm_logs" });
+      if (!r.ok) { printResult(r); printError(r.error ?? "llm_logs failed"); }
+      const logs: any[] = r.logs ?? [];
+      if (logs.length === 0) {
+        print(`  ${GRAY}(no log entries)${RESET}`);
+      } else {
+        for (const entry of logs) {
+          const levelColor = entry.level === "error" ? RED : entry.level === "warn" ? YELLOW : GRAY;
+          const ts = new Date(entry.ts).toISOString().replace("T", " ").replace("Z", "");
+          print(`  ${GRAY}${ts}${RESET} ${levelColor}[${entry.level}]${RESET} ${entry.message}`);
+        }
+      }
+      print(`  ${DIM}${logs.length} log line(s)${RESET}`);
+      printResult(r);
+      break;
+    }
+
+    // ── chat ─────────────────────────────────────────────────────────────────
+    case "chat": {
+      if (transport !== "ws") {
+        printError(
+          "llm chat requires WebSocket (HTTP has no streaming support).\n" +
+          "  Use --ws to force WebSocket, or omit --http for auto-transport."
+        );
+      }
+
+      // ── Shared GenParams (applied to every turn) ──────────────────────────
+      const genParams: Record<string, unknown> = {};
+      if (args.temperature !== undefined) genParams.temperature = args.temperature;
+      if (args.maxTokens   !== undefined) genParams.max_tokens  = args.maxTokens;
+
+      // ── Stream one assistant turn, returns accumulated text ───────────────
+      /**
+       * Send a `llm_chat` WebSocket command with the current conversation
+       * history and stream delta tokens directly to stdout.
+       *
+       * Resolves with the full assistant reply text so the caller can append
+       * it to the history for the next turn.  Rejects on timeout or error.
+       */
+      function streamTurn(
+        messages: Array<{ role: string; content: string }>,
+        timeoutMs = 120_000,
+      ): Promise<{ text: string; promptTokens: number; completionTokens: number; nCtx: number }> {
+        return new Promise((resolve, reject) => {
+          let text = "";
+          const timer = setTimeout(() => {
+            ws.off("message", handler);
+            reject(new Error("llm_chat timeout"));
+          }, timeoutMs);
+
+          const handler = (raw: any) => {
+            let data: any;
+            try { data = JSON.parse(raw.toString()); } catch { return; }
+            if (data.command !== "llm_chat") return;
+
+            switch (data.type) {
+              case "delta":
+                process.stdout.write(data.text ?? "");
+                text += data.text ?? "";
+                break;
+              case "done":
+                process.stdout.write("\n");
+                clearTimeout(timer);
+                ws.off("message", handler);
+                resolve({
+                  text,
+                  promptTokens:     data.prompt_tokens     ?? 0,
+                  completionTokens: data.completion_tokens ?? 0,
+                  nCtx:             data.n_ctx             ?? 0,
+                });
+                break;
+              case "error":
+                clearTimeout(timer);
+                ws.off("message", handler);
+                reject(new Error(data.error ?? "llm_chat error"));
+                break;
+              default:
+                if (data.ok === false) {
+                  clearTimeout(timer);
+                  ws.off("message", handler);
+                  reject(new Error(data.error ?? "llm_chat failed"));
+                }
+            }
+          };
+
+          ws.on("message", handler);
+          ws.send(JSON.stringify({ command: "llm_chat", messages, ...genParams }));
+        });
+      }
+
+      // ── Conversation history (grows across turns) ─────────────────────────
+      const history: Array<{ role: string; content: unknown }> = [];
+      if (args.system) {
+        history.push({ role: "system", content: args.system });
+      }
+
+      // ── Single-shot mode: message provided on command line ────────────────
+      if (args.text) {
+        // Load any --image flags from disk
+        const imgParts = loadImageParts(args.images ?? []);
+        if (imgParts.length > 0 && transport !== "ws") {
+          // HTTP fallback: use POST /llm/chat which accepts base64 JSON
+          const imageUrls = imgParts.map(p => p.image_url.url);
+          const payload: Record<string, unknown> = {
+            message:     args.text,
+            images:      imageUrls,
+            ...(args.system      && { system:      args.system      }),
+            ...(args.temperature !== undefined && { temperature: args.temperature }),
+            ...(args.maxTokens   !== undefined && { max_tokens:  args.maxTokens   }),
+          };
+          print(`${BOLD}🤖 llm chat${RESET} ${DIM}${args.text}${RESET} ${DIM}[${imgParts.length} image(s) via HTTP]${RESET}\n`);
+          let res: Response;
+          try {
+            res = await fetch(`${httpBase}/llm/chat`, {
+              method:  "POST",
+              headers: { "Content-Type": "application/json" },
+              body:    JSON.stringify(payload),
+            });
+          } catch (e: any) { printError(`POST /llm/chat failed: ${e.message}`); }
+          const r = await res!.json();
+          if (!r.ok) { printResult(r); printError(r.error ?? "llm chat failed"); }
+          print(r.text);
+          if (!jsonMode) {
+            print(`\n${DIM}  finish: ${r.prompt_tokens}+${r.completion_tokens} tokens, n_ctx=${r.n_ctx}${RESET}`);
+          } else {
+            console.log(JSON.stringify({ text: r.text, prompt_tokens: r.prompt_tokens, completion_tokens: r.completion_tokens }));
+          }
+          break;
+        }
+
+        history.push(buildUserMessage(args.text, imgParts));
+        const imgNote = imgParts.length > 0 ? ` ${DIM}[${imgParts.length} image(s)]${RESET}` : "";
+        print(`${BOLD}🤖 llm chat${RESET} ${DIM}${args.text}${RESET}${imgNote}\n`);
+        const result = await streamTurn(history as Array<{ role: string; content: string }>);
+        if (!jsonMode) {
+          print(`\n${DIM}  finish: ${result.promptTokens}+${result.completionTokens} tokens, n_ctx=${result.nCtx}${RESET}`);
+        } else {
+          console.log(JSON.stringify({
+            text:               result.text,
+            prompt_tokens:      result.promptTokens,
+            completion_tokens:  result.completionTokens,
+          }));
+        }
+        break;
+      }
+
+      // ── Interactive REPL mode: no message arg provided ────────────────────
+      const readline = await import("readline");
+      const rl = readline.createInterface({
+        input:  process.stdin,
+        output: process.stdout,
+        terminal: true,
+      });
+
+      // Track token usage across the session
+      let totalPrompt = 0;
+      let totalCompletion = 0;
+      let turnCount = 0;
+      // Images staged for the next message (set via /image command)
+      let pendingImages: Array<{ type: string; image_url: { url: string } }> =
+        loadImageParts(args.images ?? []);
+
+      const systemNote = args.system
+        ? `${DIM}system: ${args.system.slice(0, 60)}${args.system.length > 60 ? "…" : ""}${RESET}\n`
+        : "";
+
+      // Print header
+      process.stdout.write(
+        `\n${BOLD}🤖 NeuroSkill™ LLM Chat${RESET}  ${DIM}(type ${CYAN}exit${DIM} or press ${CYAN}Ctrl+C${DIM} to quit)${RESET}\n` +
+        systemNote +
+        `${DIM}─────────────────────────────────────────────────────────────${RESET}\n\n`,
+      );
+
+      // Wrap the readline question in a promise so we can await it
+      const question = (prompt: string): Promise<string | null> =>
+        new Promise((resolve) => {
+          rl.question(prompt, resolve);
+          rl.once("close", () => resolve(null)); // Ctrl+D / pipe closed
+        });
+
+      // Graceful Ctrl+C
+      rl.on("SIGINT", () => {
+        process.stdout.write("\n");
+        rl.close();
+      });
+
+      // Chat loop
+      while (true) {
+        // Show pending image indicator in the prompt
+        const imgIndicator = pendingImages.length > 0
+          ? `${YELLOW}[${pendingImages.length} img]${RESET} `
+          : "";
+        const input = await question(`${imgIndicator}${BOLD}${CYAN}You:${RESET} `);
+
+        // null = Ctrl+D / pipe closed
+        if (input === null) break;
+
+        const trimmed = input.trim();
+        if (!trimmed) continue;
+        if (trimmed.toLowerCase() === "exit" || trimmed.toLowerCase() === "quit") break;
+
+        // ── REPL commands ────────────────────────────────────────────────────
+        if (trimmed === "/clear") {
+          history.length = 0;
+          if (args.system) history.push({ role: "system", content: args.system });
+          pendingImages = [];
+          turnCount = 0;
+          process.stdout.write(`${DIM}  conversation cleared${RESET}\n\n`);
+          continue;
+        }
+
+        if (trimmed === "/history") {
+          for (const m of history) {
+            const roleColor = m.role === "user" ? CYAN : m.role === "system" ? YELLOW : GREEN;
+            const contentStr = typeof m.content === "string"
+              ? m.content
+              : JSON.stringify(m.content);
+            process.stdout.write(
+              `${roleColor}[${m.role}]${RESET} ${contentStr.slice(0, 120)}${contentStr.length > 120 ? "…" : ""}\n`,
+            );
+          }
+          process.stdout.write("\n");
+          continue;
+        }
+
+        if (trimmed.startsWith("/image ")) {
+          // /image <path> — load image file for the next message
+          const imgPath = trimmed.slice(7).trim();
+          try {
+            const part = loadImagePart(imgPath);
+            pendingImages.push(part);
+            process.stdout.write(
+              `${GREEN}  ✓ image staged${RESET}: ${CYAN}${imgPath}${RESET} ` +
+              `${DIM}(${pendingImages.length} pending — send your message to include it)${RESET}\n\n`,
+            );
+          } catch {
+            process.stdout.write(`${RED}  error: cannot read image file "${imgPath}"${RESET}\n\n`);
+          }
+          continue;
+        }
+
+        if (trimmed === "/images") {
+          if (pendingImages.length === 0) {
+            process.stdout.write(`${DIM}  no images staged${RESET}\n\n`);
+          } else {
+            process.stdout.write(`${DIM}  ${pendingImages.length} image(s) staged for next message${RESET}\n\n`);
+          }
+          continue;
+        }
+
+        if (trimmed === "/help") {
+          process.stdout.write(
+            `${DIM}  /clear           — clear conversation history (keep system prompt)\n` +
+            `  /history         — print all messages in the conversation\n` +
+            `  /image <path>    — stage an image file for the next message\n` +
+            `  /images          — show count of staged images\n` +
+            `  /help            — show this help\n` +
+            `  exit             — end the session\n\n${RESET}`,
+          );
+          continue;
+        }
+
+        // ── Send message (with any staged images) ─────────────────────────
+        const userMsg = buildUserMessage(trimmed, pendingImages);
+        const imgNote = pendingImages.length > 0 ? ` ${DIM}[${pendingImages.length} img]${RESET}` : "";
+        pendingImages = []; // consume staged images
+
+        history.push(userMsg);
+        process.stdout.write(`\n${BOLD}${GREEN}Assistant:${RESET}${imgNote} `);
+
+        let result: { text: string; promptTokens: number; completionTokens: number; nCtx: number };
+        try {
+          result = await streamTurn(history as Array<{ role: string; content: string }>);
+        } catch (e: any) {
+          process.stdout.write(`\n${RED}Error: ${e.message}${RESET}\n\n`);
+          history.pop(); // remove the user message so history stays consistent
+          continue;
+        }
+
+        history.push({ role: "assistant", content: result.text });
+        turnCount++;
+        totalPrompt     += result.promptTokens;
+        totalCompletion += result.completionTokens;
+
+        process.stdout.write(
+          `${DIM}  [${result.promptTokens}+${result.completionTokens} tokens, n_ctx=${result.nCtx}]${RESET}\n\n`,
+        );
+      }
+
+      // Session summary
+      rl.close();
+      if (turnCount > 0) {
+        process.stdout.write(
+          `${DIM}─────────────────────────────────────────────────────────────\n` +
+          `  session ended — ${turnCount} turn(s), ` +
+          `${totalPrompt} prompt + ${totalCompletion} completion tokens\n${RESET}\n`,
+        );
+      } else {
+        process.stdout.write(`${DIM}  (no messages sent)${RESET}\n`);
+      }
+      break;
+    }
+
+    default:
+      printError(`unknown llm subcommand: "${sub}". Valid: status start stop catalog download cancel delete logs chat`);
+  }
+}
+
 async function cmdRaw(rawJson: string): Promise<void> {
   let cmd: any;
   try {
@@ -3204,6 +3793,9 @@ async function main(): Promise<void> {
           );
         }
         await cmdListen(args.seconds ?? 5);
+        break;
+      case "llm":
+        await cmdLlm(args);
         break;
       case "raw":
         if (!args.rawJson) printError("usage: cli.ts raw '{\"command\":\"status\"}'");

@@ -55,6 +55,7 @@
 //! Existing WS clients continue to connect to `ws://host:port/` as before.
 
 use std::net::SocketAddr;
+use std::sync::Mutex;
 
 use axum::{
     extract::{ConnectInfo, FromRequestParts, Path, Request, State, WebSocketUpgrade},
@@ -118,6 +119,16 @@ pub fn router(state: SharedState) -> Router {
             .patch(update_calibration_patch)
             .delete(delete_calibration_delete))
         .route("/dnd",            get(dnd_get).post(dnd_post))
+        // ── LLM REST shortcuts ─────────────────────────────────────────────
+        .route("/llm/status",           get(llm_status_get))
+        .route("/llm/start",            post(llm_start_post))
+        .route("/llm/stop",             post(llm_stop_post))
+        .route("/llm/catalog",          get(llm_catalog_get))
+        .route("/llm/download",         post(llm_download_post))
+        .route("/llm/cancel_download",  post(llm_cancel_download_post))
+        .route("/llm/delete",           post(llm_delete_post))
+        .route("/llm/logs",             get(llm_logs_get))
+        .route("/llm/chat",             post(llm_chat_post))
         // ── CORS: allow all origins so browsers / notebooks can call freely
         .layer(CorsLayer::new()
             .allow_origin(Any)
@@ -213,29 +224,41 @@ async fn root_get(
                 "list_calibrations","get_calibration",
                 "create_calibration","update_calibration","delete_calibration",
                 "run_calibration",
-                "dnd","dnd_set"
+                "dnd","dnd_set",
+                "llm_status","llm_start","llm_stop","llm_catalog",
+                "llm_download","llm_cancel_download","llm_delete","llm_logs",
+                "llm_chat (WebSocket streaming + POST /llm/chat non-streaming)"
             ],
             "rest": {
-                "GET /status":             "status snapshot",
-                "GET /sessions":           "list sessions",
-                "POST /label":             "create label",
-                "POST /notify":            "OS notification",
-                "POST /say":               "speak text via TTS (fire-and-forget)",
-                "POST /calibrate":         "open calibration + auto-start",
-                "POST /timer":             "open focus timer + auto-start",
-                "POST /search":            "EEG ANN search",
-                "POST /search_labels":     "text/context label search",
-                "POST /compare":           "A/B comparison",
-                "POST /sleep":             "sleep staging",
-                "POST /umap":              "enqueue UMAP job",
-                "GET  /umap/{job_id}":     "poll UMAP job",
-                "GET  /calibrations":      "list profiles",
-                "POST /calibrations":      "create profile",
-                "GET  /calibrations/{id}":  "get profile",
-                "PATCH /calibrations/{id}": "update profile",
-                "DELETE /calibrations/{id}":"delete profile",
-                "GET  /dnd":              "DND automation status (config + live eligibility)",
-                "POST /dnd":              "force-enable/disable DND: { \"enabled\": bool }"
+                "GET /status":                  "status snapshot",
+                "GET /sessions":                "list sessions",
+                "POST /label":                  "create label",
+                "POST /notify":                 "OS notification",
+                "POST /say":                    "speak text via TTS (fire-and-forget)",
+                "POST /calibrate":              "open calibration + auto-start",
+                "POST /timer":                  "open focus timer + auto-start",
+                "POST /search":                 "EEG ANN search",
+                "POST /search_labels":          "text/context label search",
+                "POST /compare":                "A/B comparison",
+                "POST /sleep":                  "sleep staging",
+                "POST /umap":                   "enqueue UMAP job",
+                "GET  /umap/{job_id}":          "poll UMAP job",
+                "GET  /calibrations":           "list profiles",
+                "POST /calibrations":           "create profile",
+                "GET  /calibrations/{id}":      "get profile",
+                "PATCH /calibrations/{id}":     "update profile",
+                "DELETE /calibrations/{id}":    "delete profile",
+                "GET  /dnd":                    "DND automation status (config + live eligibility)",
+                "POST /dnd":                    "force-enable/disable DND: { \"enabled\": bool }",
+                "GET  /llm/status":             "LLM server status (stopped/loading/running)",
+                "POST /llm/start":              "start LLM inference server (loads model)",
+                "POST /llm/stop":               "stop LLM inference server (frees GPU memory)",
+                "GET  /llm/catalog":            "model catalog with download states",
+                "POST /llm/download":           "start model download: { \"filename\": \"...\" }",
+                "POST /llm/cancel_download":    "cancel download: { \"filename\": \"...\" }",
+                "POST /llm/delete":             "delete cached model: { \"filename\": \"...\" }",
+                "GET  /llm/logs":               "last 500 LLM server log lines",
+                "POST /llm/chat":               "non-streaming chat: { message, images?, system?, temperature?, max_tokens? } → { text, finish_reason, tokens }"
             }
         });
         (StatusCode::OK, Json(info)).into_response()
@@ -417,6 +440,373 @@ async fn delete_calibration_delete(
     cmd(&s, &peer_str(addr), "delete_calibration", json!({ "id": id })).await
 }
 
+// ── LLM REST shortcut handlers ────────────────────────────────────────────────
+
+async fn llm_status_get(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "llm_status", json!({})).await
+}
+
+async fn llm_start_post(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "llm_start", json!({})).await
+}
+
+async fn llm_stop_post(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "llm_stop", json!({})).await
+}
+
+async fn llm_catalog_get(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "llm_catalog", json!({})).await
+}
+
+async fn llm_download_post(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "llm_download", merge(json!({}), body)).await
+}
+
+async fn llm_cancel_download_post(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "llm_cancel_download", merge(json!({}), body)).await
+}
+
+async fn llm_delete_post(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "llm_delete", merge(json!({}), body)).await
+}
+
+async fn llm_logs_get(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "llm_logs", json!({})).await
+}
+
+/// `POST /llm/chat` — non-streaming LLM chat over HTTP.
+///
+/// Accepts a JSON body in either of two formats:
+///
+/// **Simple format** (plain text or text + base64 images):
+/// ```json
+/// {
+///   "message":     "What's in this image?",
+///   "images":      ["data:image/jpeg;base64,…", "data:image/png;base64,…"],
+///   "system":      "You are a concise assistant.",
+///   "temperature": 0.7,
+///   "max_tokens":  512
+/// }
+/// ```
+///
+/// **Full OpenAI messages format** (for multi-turn or vision content parts):
+/// ```json
+/// {
+///   "messages": [
+///     {"role": "system",    "content": "You are helpful."},
+///     {"role": "user",      "content": [
+///       {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,…"}},
+///       {"type": "text",      "text": "Describe this EEG headset."}
+///     ]}
+///   ],
+///   "temperature": 0.8
+/// }
+/// ```
+///
+/// Response (always complete, never streamed):
+/// ```json
+/// {
+///   "command": "llm_chat",
+///   "ok": true,
+///   "text": "The image shows…",
+///   "finish_reason": "stop",
+///   "prompt_tokens": 42,
+///   "completion_tokens": 87,
+///   "n_ctx": 4096
+/// }
+/// ```
+#[cfg(feature = "llm")]
+async fn llm_chat_post(
+    State(state): State<SharedState>,
+    addr:  ConnectInfo<SocketAddr>,
+    body:  Option<Json<Value>>,
+) -> Response {
+    use tauri::Manager as _;
+
+    let peer = peer_str(addr);
+    let msg  = body.map(|b| b.0).unwrap_or_else(|| json!({}));
+
+    // ── Build messages array ──────────────────────────────────────────────────
+    let messages: Vec<Value> = if let Some(arr) = msg.get("messages").and_then(|v| v.as_array()) {
+        // Full OpenAI messages array — pass through as-is.
+        arr.clone()
+    } else {
+        // Simple format: optional system + user message + top-level images list.
+        let mut msgs: Vec<Value> = Vec::new();
+
+        if let Some(sys) = msg.get("system").and_then(|v| v.as_str()) {
+            msgs.push(json!({ "role": "system", "content": sys }));
+        }
+
+        // Build user content: mix of image_url parts and text.
+        let mut parts: Vec<Value> = Vec::new();
+
+        // top-level "images": ["data:image/jpeg;base64,...", ...]
+        if let Some(imgs) = msg.get("images").and_then(|v| v.as_array()) {
+            for url in imgs {
+                if let Some(u) = url.as_str() {
+                    parts.push(json!({
+                        "type": "image_url",
+                        "image_url": { "url": u }
+                    }));
+                }
+            }
+        }
+
+        let text = msg.get("message").and_then(|v| v.as_str()).unwrap_or("");
+        if text.is_empty() && parts.is_empty() {
+            let body = json!({ "command": "llm_chat", "ok": false,
+                "error": "'message' or 'messages' field required" });
+            return (StatusCode::BAD_REQUEST, Json(body)).into_response();
+        }
+
+        // If images present, use a parts array; otherwise a plain string.
+        if parts.is_empty() {
+            msgs.push(json!({ "role": "user", "content": text }));
+        } else {
+            if !text.is_empty() {
+                parts.push(json!({ "type": "text", "text": text }));
+            }
+            msgs.push(json!({ "role": "user", "content": parts }));
+        }
+        msgs
+    };
+
+    // ── GenParams ─────────────────────────────────────────────────────────────
+    let params = serde_json::from_value::<crate::llm::GenParams>(msg.clone())
+        .unwrap_or_default();
+
+    // ── Get server ────────────────────────────────────────────────────────────
+    let cell = state.app.state::<Mutex<crate::AppState>>().lock_or_recover().llm_state_cell.clone();
+    let server = { cell.lock().unwrap().as_ref().cloned() };
+
+    let Some(server) = server else {
+        let body = json!({ "command": "llm_chat", "ok": false,
+            "error": "LLM server not running — POST /llm/start first" });
+        state.tracker.lock_or_recover().log_request(&peer, "llm_chat", false);
+        return (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response();
+    };
+
+    // ── Collect response ──────────────────────────────────────────────────────
+    let images = crate::llm::extract_images_from_messages(&messages);
+    let mut tok_rx = match server.chat(messages, images, params) {
+        Ok(rx)  => rx,
+        Err(e)  => {
+            let body = json!({ "command": "llm_chat", "ok": false, "error": e });
+            state.tracker.lock_or_recover().log_request(&peer, "llm_chat", false);
+            return (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response();
+        }
+    };
+
+    let mut text              = String::new();
+    let mut finish_reason     = "stop".to_string();
+    let mut prompt_tokens     = 0usize;
+    let mut completion_tokens = 0usize;
+    let mut n_ctx             = 0usize;
+
+    while let Some(tok) = tok_rx.recv().await {
+        match tok {
+            crate::llm::InferToken::Delta(t) => text.push_str(&t),
+            crate::llm::InferToken::Done { finish_reason: fr, prompt_tokens: pt,
+                                           completion_tokens: ct, n_ctx: nc } => {
+                finish_reason = fr; prompt_tokens = pt; completion_tokens = ct; n_ctx = nc;
+                break;
+            }
+            crate::llm::InferToken::Error(e) => {
+                let body = json!({ "command": "llm_chat", "ok": false, "error": e });
+                state.tracker.lock_or_recover().log_request(&peer, "llm_chat", false);
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(body)).into_response();
+            }
+        }
+    }
+
+    state.tracker.lock_or_recover().log_request(&peer, "llm_chat", true);
+    let body = json!({
+        "command":           "llm_chat",
+        "ok":                true,
+        "text":              text,
+        "finish_reason":     finish_reason,
+        "prompt_tokens":     prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "n_ctx":             n_ctx,
+    });
+    (StatusCode::OK, Json(body)).into_response()
+}
+
+// Stub when llm feature is disabled.
+#[cfg(not(feature = "llm"))]
+async fn llm_chat_post(
+    State(_): State<SharedState>, _addr: ConnectInfo<SocketAddr>,
+    _body: Option<Json<Value>>,
+) -> Response {
+    let body = json!({ "command": "llm_chat", "ok": false,
+        "error": "LLM feature not compiled in this build" });
+    (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response()
+}
+
+// ── LLM chat — streaming WebSocket handler ────────────────────────────────────
+
+/// Handle `llm_chat` over WebSocket.  Streams `delta` tokens back to the
+/// client as individual frames; sends a final `done` or `error` frame.
+///
+/// # Wire protocol (client → server)
+/// ```json
+/// {
+///   "command": "llm_chat",
+///   "messages": [{"role":"user","content":"Hello!"}],
+///   "temperature": 0.8,
+///   "max_tokens": 2048
+/// }
+/// ```
+/// Short-hand (single user message):
+/// ```json
+/// { "command": "llm_chat", "message": "What is EEG coherence?" }
+/// ```
+///
+/// # Wire protocol (server → client, multiple frames)
+/// ```json
+/// { "command": "llm_chat", "type": "delta", "text": "Hello" }
+/// { "command": "llm_chat", "type": "delta", "text": "!" }
+/// { "command": "llm_chat", "ok": true,  "type": "done",
+///   "finish_reason": "stop", "prompt_tokens": 12, "completion_tokens": 1, "n_ctx": 4096 }
+/// ```
+/// Or on error:
+/// ```json
+/// { "command": "llm_chat", "ok": false, "type": "error", "error": "..." }
+/// ```
+#[cfg(feature = "llm")]
+async fn handle_llm_chat_ws(
+    state: &SharedState,
+    peer:  &str,
+    text:  &str,
+    sink:  &mut futures_util::stream::SplitSink<
+        axum::extract::ws::WebSocket,
+        axum::extract::ws::Message,
+    >,
+) -> Result<(), ()> {
+    use axum::extract::ws::Message;
+
+    /// Send a JSON object as a WebSocket text frame.
+    macro_rules! ws_send {
+        ($sink:expr, $val:expr) => {{
+            let s = serde_json::to_string(&$val).unwrap_or_default();
+            $sink.send(Message::Text(s.into())).await.map_err(|_| ())?;
+        }};
+    }
+
+    let msg: Value = match serde_json::from_str(text) {
+        Ok(v)  => v,
+        Err(_) => {
+            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":"invalid JSON"}));
+            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+            return Ok(());
+        }
+    };
+
+    eprintln!("[ws] {peer} → llm_chat");
+
+    // ── Resolve messages ──────────────────────────────────────────────────────
+    let messages: Vec<Value> = if let Some(arr) = msg.get("messages").and_then(|v| v.as_array()) {
+        arr.clone()
+    } else if let Some(s) = msg.get("message").and_then(|v| v.as_str()) {
+        vec![json!({"role":"user","content":s})]
+    } else {
+        ws_send!(sink, json!({
+            "command":"llm_chat","ok":false,"type":"error",
+            "error":"'messages' array required (or 'message' shorthand string)"
+        }));
+        state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+        return Ok(());
+    };
+
+    // ── Resolve GenParams ─────────────────────────────────────────────────────
+    let params = serde_json::from_value::<crate::llm::GenParams>(msg.clone())
+        .unwrap_or_default();
+
+    // ── Get the running server ────────────────────────────────────────────────
+    use tauri::Manager as _;
+    let app_state = state.app.state::<Mutex<crate::AppState>>();
+    let cell = app_state.lock_or_recover().llm_state_cell.clone();
+    let server = { cell.lock().unwrap().as_ref().cloned() };
+
+    let Some(server) = server else {
+        ws_send!(sink, json!({
+            "command":"llm_chat","ok":false,"type":"error",
+            "error":"LLM server not running — send { \"command\": \"llm_start\" } first"
+        }));
+        state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+        return Ok(());
+    };
+
+    // ── Extract images embedded in messages (base64 data-URLs only) ──────────
+    let images = crate::llm::extract_images_from_messages(&messages);
+
+    // ── Send to actor and stream tokens ───────────────────────────────────────
+    let mut tok_rx = match server.chat(messages, images, params) {
+        Ok(rx)   => rx,
+        Err(e)   => {
+            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":e}));
+            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+            return Ok(());
+        }
+    };
+
+    while let Some(tok) = tok_rx.recv().await {
+        match tok {
+            crate::llm::InferToken::Delta(text) => {
+                ws_send!(sink, json!({"command":"llm_chat","type":"delta","text":text}));
+            }
+            crate::llm::InferToken::Done {
+                finish_reason, prompt_tokens, completion_tokens, n_ctx,
+            } => {
+                ws_send!(sink, json!({
+                    "command":          "llm_chat",
+                    "ok":               true,
+                    "type":             "done",
+                    "finish_reason":    finish_reason,
+                    "prompt_tokens":    prompt_tokens,
+                    "completion_tokens":completion_tokens,
+                    "n_ctx":            n_ctx,
+                }));
+                state.tracker.lock_or_recover().log_request(peer, "llm_chat", true);
+                return Ok(());
+            }
+            crate::llm::InferToken::Error(e) => {
+                ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":e}));
+                state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+                return Ok(());
+            }
+        }
+    }
+
+    // Channel closed without a Done/Error — actor exited mid-generation.
+    ws_send!(sink, json!({
+        "command":"llm_chat","ok":false,"type":"error",
+        "error":"LLM actor exited unexpectedly"
+    }));
+    state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+    Ok(())
+}
+
 // ── WebSocket client task ─────────────────────────────────────────────────────
 
 /// One connected WebSocket client.
@@ -452,8 +842,28 @@ async fn ws_client_task(
                 None | Some(Err(_))            => break,
                 Some(Ok(Message::Close(_)))    => break,
                 Some(Ok(Message::Text(text)))  => {
-                    let text: &str = &text;
-                    if let Some(resp) = handle_ws_text(&state, &peer, text).await {
+                    let text_str: &str = &text;
+                    // llm_chat is handled specially: it streams multiple
+                    // frames back over the socket rather than a single response.
+                    let is_llm_chat = serde_json::from_str::<Value>(text_str)
+                        .ok()
+                        .and_then(|v| v.get("command").and_then(|c| c.as_str()).map(|c| c == "llm_chat"))
+                        .unwrap_or(false);
+
+                    if is_llm_chat {
+                        #[cfg(feature = "llm")]
+                        {
+                            if handle_llm_chat_ws(&state, &peer, text_str, &mut sink).await.is_err() {
+                                break;
+                            }
+                        }
+                        #[cfg(not(feature = "llm"))]
+                        {
+                            let resp = json!({"command":"llm_chat","ok":false,"error":"LLM feature not compiled in this build"});
+                            let s = serde_json::to_string(&resp).unwrap_or_default();
+                            if sink.send(Message::Text(s.into())).await.is_err() { break; }
+                        }
+                    } else if let Some(resp) = handle_ws_text(&state, &peer, text_str).await {
                         if sink.send(Message::Text(resp.into())).await.is_err() { break; }
                     }
                 }

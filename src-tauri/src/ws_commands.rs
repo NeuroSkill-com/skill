@@ -1587,6 +1587,218 @@ pub async fn say(_app: &AppHandle, msg: &Value) -> Result<Value, String> {
     Ok(resp)
 }
 
+// ── LLM commands (feature = "llm") ───────────────────────────────────────────
+
+/// `llm_status` — return the current LLM server state.
+///
+/// ```json
+/// { "command": "llm_status" }
+/// → { "command": "llm_status", "ok": true,
+///     "status": "stopped"|"loading"|"running",
+///     "model_name": "Qwen3-1.7B-Q4_K_M.gguf",
+///     "n_ctx": 4096, "supports_vision": false }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_status(app: &AppHandle) -> Result<Value, String> {
+    use std::sync::atomic::Ordering;
+    let state = app.state::<Mutex<AppState>>();
+    let s = state.lock_or_recover();
+    let (status, model_name) = crate::llm::cell_status(&s.llm_state_cell);
+    let (n_ctx, supports_vision) = s.llm_state_cell.lock().unwrap()
+        .as_ref()
+        .map(|srv| (
+            srv.n_ctx.load(Ordering::Relaxed),
+            srv.vision_ready.load(Ordering::Relaxed),
+        ))
+        .unwrap_or((0, false));
+    Ok(serde_json::json!({
+        "status":          status,
+        "model_name":      model_name,
+        "n_ctx":           n_ctx,
+        "supports_vision": supports_vision,
+    }))
+}
+
+/// `llm_start` — load the active model and start the LLM inference server.
+///
+/// Blocks until the model is fully loaded (which can take several seconds
+/// depending on model size and hardware).  Returns `ok=false` on failure.
+///
+/// ```json
+/// { "command": "llm_start" }
+/// → { "command": "llm_start", "ok": true, "result": "started"|"already_running" }
+/// ```
+#[cfg(feature = "llm")]
+async fn llm_start(app: &AppHandle) -> Result<Value, String> {
+    let (mut config, catalog, log_buf, cell, skill_dir) = {
+        let st = app.state::<Mutex<AppState>>();
+        let s = st.lock_or_recover();
+        (
+            s.llm_config.clone(),
+            s.llm_catalog.clone(),
+            s.llm_logs.clone(),
+            s.llm_state_cell.clone(),
+            s.skill_dir.clone(),
+        )
+    };
+
+    if cell.lock().unwrap().is_some() {
+        return Ok(serde_json::json!({ "result": "already_running" }));
+    }
+
+    // Resolve mmproj if autoload is on and none is set.
+    if config.mmproj.is_none() {
+        config.mmproj = catalog.resolve_mmproj_path(config.autoload_mmproj);
+    }
+
+    crate::llm::push_log(app, &log_buf, "info", "llm_start command received via WebSocket");
+
+    let app2 = app.clone();
+    let new_state = tokio::task::spawn_blocking(move || {
+        crate::llm::init(&config, &catalog, app2, log_buf, &skill_dir)
+    }).await.map_err(|e| e.to_string())?;
+
+    match new_state {
+        Some(s) => {
+            *cell.lock().unwrap() = Some(s);
+            Ok(serde_json::json!({ "result": "started" }))
+        }
+        None => Err(
+            "Failed to start LLM server. \
+             Check that a model is downloaded and selected in Settings → LLM.".to_string()
+        ),
+    }
+}
+
+/// `llm_stop` — stop the LLM inference server and free all GPU/CPU resources.
+///
+/// ```json
+/// { "command": "llm_stop" }
+/// → { "command": "llm_stop", "ok": true, "result": "stopped"|"not_running" }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_stop(app: &AppHandle) -> Result<Value, String> {
+    let (cell, log_buf) = {
+        let st = app.state::<Mutex<AppState>>();
+        let s = st.lock_or_recover();
+        (s.llm_state_cell.clone(), s.llm_logs.clone())
+    };
+    let server_state = { cell.lock().unwrap().take() };
+    if let Some(server_state) = server_state {
+        crate::llm::push_log(app, &log_buf, "info", "llm_stop command received via WebSocket");
+        match std::sync::Arc::try_unwrap(server_state) {
+            Ok(owned) => owned.shutdown(),
+            Err(arc)  => drop(arc),
+        }
+        crate::llm::push_log(app, &log_buf, "info", "LLM server stopped");
+        Ok(serde_json::json!({ "result": "stopped" }))
+    } else {
+        Ok(serde_json::json!({ "result": "not_running" }))
+    }
+}
+
+/// `llm_catalog` — return the model catalog with download states and selections.
+///
+/// ```json
+/// { "command": "llm_catalog" }
+/// → { "command": "llm_catalog", "ok": true,
+///     "entries": [...], "active_model": "...", "active_mmproj": "..." }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_catalog(app: &AppHandle) -> Result<Value, String> {
+    let state = app.state::<Mutex<AppState>>();
+    let mut s = state.lock_or_recover();
+    // Sync in-flight downloads into the catalog so callers see live progress.
+    let downloads = s.llm_downloads.clone();
+    for (filename, prog_arc) in &downloads {
+        if let Ok(prog) = prog_arc.lock() {
+            if let Some(entry) = s.llm_catalog.entries
+                .iter_mut()
+                .find(|e| &e.filename == filename)
+            {
+                entry.state      = prog.state.clone();
+                entry.status_msg = prog.status_msg.clone();
+                entry.progress   = prog.progress;
+            }
+        }
+    }
+    serde_json::to_value(&s.llm_catalog).map_err(|e| e.to_string())
+}
+
+/// `llm_download` — start downloading a GGUF model by filename (fire-and-forget).
+///
+/// Poll `llm_catalog` for progress updates.
+///
+/// ```json
+/// { "command": "llm_download", "filename": "Qwen3-1.7B-Q4_K_M.gguf" }
+/// → { "command": "llm_download", "ok": true, "result": "queued", "filename": "..." }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_download(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let filename = msg["filename"]
+        .as_str()
+        .ok_or_else(|| "llm_download: 'filename' field required (string)".to_string())?
+        .to_string();
+    crate::llm::cmds::download_llm_model(
+        filename.clone(),
+        app.clone(),
+        app.state::<Mutex<AppState>>(),
+    );
+    Ok(serde_json::json!({ "result": "queued", "filename": filename }))
+}
+
+/// `llm_cancel_download` — cancel an in-progress model download.
+///
+/// ```json
+/// { "command": "llm_cancel_download", "filename": "Qwen3-1.7B-Q4_K_M.gguf" }
+/// → { "command": "llm_cancel_download", "ok": true, "filename": "..." }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_cancel_download(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let filename = msg["filename"]
+        .as_str()
+        .ok_or_else(|| "llm_cancel_download: 'filename' field required".to_string())?
+        .to_string();
+    crate::llm::cmds::cancel_llm_download(filename.clone(), app.state::<Mutex<AppState>>());
+    Ok(serde_json::json!({ "filename": filename }))
+}
+
+/// `llm_delete` — delete a locally-cached model file.
+///
+/// ```json
+/// { "command": "llm_delete", "filename": "Qwen3-1.7B-Q4_K_M.gguf" }
+/// → { "command": "llm_delete", "ok": true, "filename": "..." }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_delete(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let filename = msg["filename"]
+        .as_str()
+        .ok_or_else(|| "llm_delete: 'filename' field required".to_string())?
+        .to_string();
+    crate::llm::cmds::delete_llm_model(
+        filename.clone(),
+        app.clone(),
+        app.state::<Mutex<AppState>>(),
+    );
+    Ok(serde_json::json!({ "filename": filename }))
+}
+
+/// `llm_logs` — return the last ≤500 LLM server log lines.
+///
+/// ```json
+/// { "command": "llm_logs" }
+/// → { "command": "llm_logs", "ok": true,
+///     "logs": [{ "ts": 1740412800000, "level": "info", "message": "..." }, …] }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_logs(app: &AppHandle) -> Result<Value, String> {
+    let state = app.state::<Mutex<AppState>>();
+    let s = state.lock_or_recover();
+    let log = s.llm_logs.lock().unwrap();
+    let logs: Vec<&crate::llm::LlmLogEntry> = log.iter().collect();
+    Ok(serde_json::json!({ "logs": logs, "count": logs.len() }))
+}
+
 // ── Central dispatcher ────────────────────────────────────────────────────────
 
 /// Dispatch a named command to the appropriate handler function.
@@ -1623,6 +1835,23 @@ pub async fn dispatch(
         "say"                 => say(app, msg).await,
         "dnd"                 => dnd_status(app),
         "dnd_set"             => dnd_set(app, msg),
+        // ── LLM commands (llm_chat is handled before dispatch — see api.rs) ──
+        #[cfg(feature = "llm")]
+        "llm_status"          => llm_status(app),
+        #[cfg(feature = "llm")]
+        "llm_start"           => llm_start(app).await,
+        #[cfg(feature = "llm")]
+        "llm_stop"            => llm_stop(app),
+        #[cfg(feature = "llm")]
+        "llm_catalog"         => llm_catalog(app),
+        #[cfg(feature = "llm")]
+        "llm_download"        => llm_download(app, msg),
+        #[cfg(feature = "llm")]
+        "llm_cancel_download" => llm_cancel_download(app, msg),
+        #[cfg(feature = "llm")]
+        "llm_delete"          => llm_delete(app, msg),
+        #[cfg(feature = "llm")]
+        "llm_logs"            => llm_logs(app),
         other                 => Err(format!("unknown command: \"{other}\"")),
     }
 }
