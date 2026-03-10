@@ -14,6 +14,7 @@
   import { onMount, onDestroy, tick } from "svelte";
   import { invoke }                   from "@tauri-apps/api/core";
   import { listen }                   from "@tauri-apps/api/event";
+  import ThemeToggle                  from "$lib/ThemeToggle.svelte";
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -408,7 +409,7 @@
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Root container (full window height, dark/light theme-aware)                -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
-<div class="flex flex-col h-screen bg-background text-foreground overflow-hidden select-none">
+<div class="flex flex-col h-screen bg-background text-foreground overflow-hidden">
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
   <header class="flex items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
@@ -462,6 +463,9 @@
       </svg>
     </button>
 
+    <!-- Theme toggle -->
+    <ThemeToggle />
+
     <!-- Settings toggle -->
     <button
       onclick={() => showSettings = !showSettings}
@@ -486,10 +490,12 @@
 
       <!-- System prompt -->
       <div class="flex flex-col gap-1">
-        <label class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
+        <label for="chat-system-prompt"
+               class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
           System prompt
         </label>
         <textarea
+          id="chat-system-prompt"
           bind:value={systemPrompt}
           rows="2"
           class="w-full rounded-lg border border-border bg-background text-[0.73rem]
@@ -500,9 +506,9 @@
 
       <!-- Thinking level -->
       <div class="flex flex-col gap-1">
-        <label class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
+        <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
           Thinking depth
-        </label>
+        </span>
         <div class="flex rounded-lg overflow-hidden border border-border text-[0.65rem] font-medium">
           {#each THINKING_LEVELS as lvl}
             <button
@@ -731,6 +737,7 @@
                  class="h-16 w-16 rounded-lg object-cover border border-border shadow-sm" />
             <button
               onclick={() => removeAttachment(i)}
+              aria-label="Remove attachment"
               class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-500 text-white
                      flex items-center justify-center opacity-0 group-hover:opacity-100
                      transition-opacity cursor-pointer shadow">
@@ -785,6 +792,7 @@
         <!-- Abort button -->
         <button
           onclick={abort}
+          aria-label="Stop generating"
           class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center
                  bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors cursor-pointer">
           <svg viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5">
@@ -796,6 +804,7 @@
         <button
           onclick={sendMessage}
           disabled={!canSend}
+          aria-label="Send message"
           class="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-colors
                  {canSend
                    ? 'bg-violet-600 hover:bg-violet-700 text-white cursor-pointer'

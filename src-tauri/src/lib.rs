@@ -135,7 +135,6 @@ pub(crate) use settings::{
     default_label_shortcut, default_search_shortcut, default_settings_shortcut,
     default_calibration_shortcut, default_help_shortcut, default_history_shortcut,
     default_api_shortcut, default_theme_shortcut, default_focus_timer_shortcut,
-    #[cfg(feature = "llm")] default_chat_shortcut,
     default_theme, default_daily_goal_min, default_embedding_model,
     default_ws_host, default_ws_port, default_update_check_interval, UserSettings,
     NeuttsConfig, default_track_active_window, default_track_input_activity,
@@ -143,6 +142,9 @@ pub(crate) use settings::{
 };
 
 mod dnd;
+
+#[cfg(feature = "llm")]
+pub(crate) use settings::default_chat_shortcut;
 
 mod tray;
 pub(crate) use tray::{refresh_tray, build_menu, icon_disconnected};
@@ -159,8 +161,10 @@ use shortcut_cmds::{
     get_api_shortcut, set_api_shortcut,
     get_theme_shortcut, set_theme_shortcut,
     get_focus_timer_shortcut, set_focus_timer_shortcut,
-    #[cfg(feature = "llm")] get_chat_shortcut, #[cfg(feature = "llm")] set_chat_shortcut,
 };
+#[cfg(feature = "llm")]
+use shortcut_cmds::{get_chat_shortcut, set_chat_shortcut};
+
 
 mod active_window;
 pub(crate) use active_window::ActiveWindowInfo;
@@ -570,6 +574,8 @@ impl Default for AppState {
             api_shortcut:         default_api_shortcut(),
             theme_shortcut:       default_theme_shortcut(),
             focus_timer_shortcut: default_focus_timer_shortcut(),
+            #[cfg(feature = "llm")]
+            chat_shortcut:        default_chat_shortcut(),
             calibration_profiles: vec![CalibrationProfile::default()],
             active_calibration_id: "default".into(),
             onboarding_complete: false,
@@ -651,6 +657,8 @@ pub(crate) fn save_settings(app: &AppHandle) {
         api_shortcut:           s.api_shortcut.clone(),
         theme_shortcut:         s.theme_shortcut.clone(),
         focus_timer_shortcut:   s.focus_timer_shortcut.clone(),
+        #[cfg(feature = "llm")]
+        chat_shortcut:          s.chat_shortcut.clone(),
         calibration:            CalibrationConfig::default(),
         calibration_profiles:   s.calibration_profiles.clone(),
         active_calibration_id:  s.active_calibration_id.clone(),
@@ -1040,17 +1048,16 @@ pub fn run() {
             // Routes are always mounted; cell holds None until started.
             #[cfg(feature = "llm")]
             {
-                let (catalog, log_buf, cell) = {
+                let (catalog, log_buf, cell, skill_dir) = {
                     let guard = app.state::<Mutex<AppState>>();
                     let s = guard.lock().unwrap();
-                    (s.llm_catalog.clone(), s.llm_logs.clone(), s.llm_state_cell.clone())
+                    (s.llm_catalog.clone(), s.llm_logs.clone(), s.llm_state_cell.clone(), s.skill_dir.clone())
                 };
                 if llm_cfg.enabled {
                     let app_handle = app.handle().clone();
-                    // Spawn init on a blocking thread; don't hold the setup thread.
                     let cell2 = cell.clone();
                     std::thread::spawn(move || {
-                        if let Some(state) = llm::init(&llm_cfg, &catalog, app_handle, log_buf) {
+                        if let Some(state) = llm::init(&llm_cfg, &catalog, app_handle, log_buf, &skill_dir) {
                             *cell2.lock().unwrap() = Some(state);
                         }
                     });
@@ -1605,6 +1612,10 @@ pub fn run() {
             get_llm_server_status,
             #[cfg(feature = "llm")]
             open_chat_window,
+            #[cfg(feature = "llm")]
+            get_chat_shortcut,
+            #[cfg(feature = "llm")]
+            set_chat_shortcut,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,

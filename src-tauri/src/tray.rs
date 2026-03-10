@@ -39,21 +39,22 @@ static LAST_MENU_KEY: Mutex<String> = Mutex::new(String::new());
 /// Two identical keys guarantee identical menus; a different key means the
 /// menu must be rebuilt.
 fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
-    let (ls, ss, sets, cs, hs, hist, api, ts, ft) = {
-        let r = app.state::<Mutex<AppState>>();
-        let g = r.lock_or_recover();
-        (
-            g.label_shortcut.clone(),
-            g.search_shortcut.clone(),
-            g.settings_shortcut.clone(),
-            g.calibration_shortcut.clone(),
-            g.help_shortcut.clone(),
-            g.history_shortcut.clone(),
-            g.api_shortcut.clone(),
-            g.theme_shortcut.clone(),
-            g.focus_timer_shortcut.clone(),
-        )
-    };
+    let r = app.state::<Mutex<AppState>>();
+    let g = r.lock_or_recover();
+    let ls   = g.label_shortcut.clone();
+    let ss   = g.search_shortcut.clone();
+    let sets = g.settings_shortcut.clone();
+    let cs   = g.calibration_shortcut.clone();
+    let hs   = g.help_shortcut.clone();
+    let hist = g.history_shortcut.clone();
+    let api  = g.api_shortcut.clone();
+    let ts   = g.theme_shortcut.clone();
+    let ft   = g.focus_timer_shortcut.clone();
+    #[cfg(feature = "llm")]
+    let chat = g.chat_shortcut.clone();
+    #[cfg(not(feature = "llm"))]
+    let chat = String::new();
+    drop(g);
 
     let pairs = st.paired_devices
         .iter()
@@ -61,15 +62,12 @@ fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
         .collect::<Vec<_>>()
         .join(",");
 
-    // Battery is displayed as a rounded integer; avoid rebuilds for sub-1%
-    // noise by including only the integer part.
     let batt  = st.battery as u32;
     let state = st.state.as_str();
     let name  = st.device_name.as_deref().unwrap_or("");
     let tgt   = st.target_name.as_deref().unwrap_or("");
 
-    // Use all-captured-identifier form (Rust 1.58+) to keep this readable.
-    format!("{state}|{name}|{batt}|{tgt}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}")
+    format!("{state}|{name}|{batt}|{tgt}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}")
 }
 
 // ── Embedded icons ────────────────────────────────────────────────────────────
@@ -88,7 +86,8 @@ fn icon_bt_off()                -> Image<'static> { Image::from_bytes(ICON_BT_OF
 
 pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu<tauri::Wry>> {
     let (label_shortcut, search_shortcut, settings_shortcut, calibration_shortcut,
-         help_shortcut, history_shortcut, api_shortcut, focus_timer_shortcut) = {
+         help_shortcut, history_shortcut, api_shortcut, focus_timer_shortcut,
+         #[cfg(feature = "llm")] chat_shortcut) = {
         let r = app.state::<Mutex<AppState>>();
         let g = r.lock_or_recover();
         (
@@ -100,6 +99,7 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
             g.history_shortcut.clone(),
             g.api_shortcut.clone(),
             g.focus_timer_shortcut.clone(),
+            #[cfg(feature = "llm")] g.chat_shortcut.clone(),
         )
     };
 
@@ -175,7 +175,10 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
     menu.append(&MenuItem::with_id(app, "help",        "Help…",               true, help_accel)?)?;
     menu.append(&MenuItem::with_id(app, "api",         "API Status…",         true, api_accel)?)?;
     #[cfg(feature = "llm")]
-    menu.append(&MenuItem::with_id(app, "chat",        "Chat…",               true, None::<&str>)?)?;
+    {
+        let chat_accel: Option<&str> = if chat_shortcut.is_empty() { None } else { Some(&chat_shortcut) };
+        menu.append(&MenuItem::with_id(app, "chat", "Chat…", true, chat_accel)?)?;
+    }
 
     {
         let queue  = app.state::<std::sync::Arc<crate::job_queue::JobQueue>>();

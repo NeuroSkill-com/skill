@@ -103,26 +103,54 @@ pub fn new_log_buffer() -> LlmLogBuffer {
     Arc::new(Mutex::new(VecDeque::with_capacity(LOG_CAP)))
 }
 
-/// Append a log entry to the buffer and emit a `llm:log` Tauri event.
-fn push_log(app: &tauri::AppHandle, buf: &LlmLogBuffer, level: &str, msg: &str) {
+/// Optional file sink for LLM log lines.
+///
+/// `Arc<Mutex<…>>` so both `push_log` (called from any thread via macros)
+/// and `run_actor` (which creates it) can hold a reference.
+pub type LlmLogFile = Arc<Mutex<std::io::BufWriter<std::fs::File>>>;
+
+/// Append a log entry to the in-memory buffer, emit a `llm:log` Tauri event,
+/// and optionally write to the per-session log file.
+fn push_log_inner(
+    app:      &tauri::AppHandle,
+    buf:      &LlmLogBuffer,
+    file:     Option<&LlmLogFile>,
+    level:    &str,
+    msg:      &str,
+) {
     eprintln!("[llm][{level}] {msg}");
-    let entry = LlmLogEntry {
-        ts:      unix_ts_ms(),
-        level:   level.to_string(),
-        message: msg.to_string(),
-    };
-    {
-        let mut q = buf.lock().unwrap();
-        if q.len() >= LOG_CAP { q.pop_front(); }
-        q.push_back(entry.clone());
-    }
-    // Best-effort — ignore errors if no window is open yet.
+    let ts    = unix_ts_ms();
+    let entry = LlmLogEntry { ts, level: level.to_string(), message: msg.to_string() };
+
+    { let mut q = buf.lock().unwrap(); if q.len() >= LOG_CAP { q.pop_front(); } q.push_back(entry.clone()); }
     let _ = app.emit("llm:log", entry);
+
+    if let Some(f) = file {
+        use std::io::Write;
+        let dt = chrono_iso(ts);
+        let _ = writeln!(f.lock().unwrap(), "[{dt}] [{level:5}] {msg}");
+    }
 }
 
-macro_rules! llm_info  { ($app:expr, $buf:expr, $($t:tt)*) => { push_log($app, $buf, "info",  &format!($($t)*)) } }
-macro_rules! llm_warn  { ($app:expr, $buf:expr, $($t:tt)*) => { push_log($app, $buf, "warn",  &format!($($t)*)) } }
-macro_rules! llm_error { ($app:expr, $buf:expr, $($t:tt)*) => { push_log($app, $buf, "error", &format!($($t)*)) } }
+/// Convenience wrapper — no file sink (used from axum handlers / cmds).
+pub fn push_log(app: &tauri::AppHandle, buf: &LlmLogBuffer, level: &str, msg: &str) {
+    push_log_inner(app, buf, None, level, msg);
+}
+
+/// Format a Unix-ms timestamp as `HH:MM:SS.mmm` (no libc/chrono dependency).
+fn chrono_iso(ts_ms: u64) -> String {
+    let total_s  = ts_ms / 1000;
+    let ms       = ts_ms % 1000;
+    let secs     = total_s % 60;
+    let mins     = (total_s / 60) % 60;
+    let hours    = (total_s / 3600) % 24;
+    format!("{hours:02}:{mins:02}:{secs:02}.{ms:03}")
+}
+
+// Actor-side macros include the optional file sink.
+macro_rules! llm_info  { ($app:expr, $buf:expr, $file:expr, $($t:tt)*) => { push_log_inner($app, $buf, $file, "info",  &format!($($t)*)) } }
+macro_rules! llm_warn  { ($app:expr, $buf:expr, $file:expr, $($t:tt)*) => { push_log_inner($app, $buf, $file, "warn",  &format!($($t)*)) } }
+macro_rules! llm_error { ($app:expr, $buf:expr, $file:expr, $($t:tt)*) => { push_log_inner($app, $buf, $file, "error", &format!($($t)*)) } }
 
 // ── Wire protocol between axum handlers and the actor ─────────────────────────
 
@@ -392,11 +420,13 @@ impl ThinkTracker {
 ///
 /// This means stop strings that span multiple token pieces are handled
 /// correctly without blocking the stream for more than a few bytes.
+#[allow(clippy::too_many_arguments)]
 fn run_generation(
     model:    &llama_cpp_4::model::LlamaModel,
     ctx:      &mut llama_cpp_4::context::LlamaContext<'_>,
     app:      &tauri::AppHandle,
     log_buf:  &LlmLogBuffer,
+    log_file: Option<&LlmLogFile>,
     prompt:   String,
     params:   GenParams,
     token_tx: UnboundedSender<InferToken>,
@@ -418,10 +448,10 @@ fn run_generation(
     let n_prompt = tokens.len();
     let n_ctx    = ctx.n_ctx() as usize;
 
-    llm_info!(app, log_buf, "prompt: {n_prompt} tokens, thinking_budget={:?}", params.thinking_budget);
+    llm_info!(app, log_buf, log_file, "prompt: {n_prompt} tokens, thinking_budget={:?}", params.thinking_budget);
     if n_prompt >= n_ctx {
         let msg = format!("prompt too long ({n_prompt} ≥ n_ctx {n_ctx})");
-        llm_warn!(app, log_buf, "{msg}");
+        llm_warn!(app, log_buf, log_file, "{msg}");
         token_tx.send(InferToken::Error(msg)).ok();
         return;
     }
@@ -431,7 +461,7 @@ fn run_generation(
         if batch.add(tok, i as i32, &[0], i == n_prompt - 1).is_err() { break; }
     }
     if ctx.decode(&mut batch).is_err() {
-        llm_error!(app, log_buf, "decode error on prompt");
+        llm_error!(app, log_buf, log_file, "decode error on prompt");
         token_tx.send(InferToken::Error("decode error on prompt".into())).ok();
         return;
     }
@@ -481,11 +511,14 @@ fn run_generation(
 
         // Think-budget enforcement: inject </think> when budget exhausted.
         if let Some(inject) = think_tracker.feed(&piece) {
-            // Emit the injected close tag as a delta so the frontend sees it.
+            // Stream the injected close tag to the frontend.
             pending.push_str(&inject);
+            token_tx.send(InferToken::Delta(inject.clone())).ok();
+            pending.clear();
 
-            // Tokenise the injected string and decode it into the KV cache so
-            // the model's internal state stays consistent.
+            // Tokenise and decode the injected string into the KV cache so
+            // the model's internal state stays consistent, then continue from
+            // the last injected token (skip re-processing the triggering token).
             if let Ok(inj_toks) = model.str_to_token(&inject, AddBos::Never) {
                 if !inj_toks.is_empty() {
                     let mut inj_batch = LlamaBatch::new(inj_toks.len(), 1);
@@ -494,16 +527,18 @@ fn run_generation(
                                       i == inj_toks.len() - 1).ok();
                     }
                     if ctx.decode(&mut inj_batch).is_err() {
-                        llm_warn!(app, log_buf, "decode error injecting </think>");
+                        llm_warn!(app, log_buf, log_file, "decode error injecting </think>");
                     }
                     n_cur += inj_toks.len();
-                    // Re-seed the batch for the next normal token
+                    // Seed the batch with the last injected token so the sampler
+                    // picks up from the correct position on the next iteration.
                     batch.clear();
-                    // Use last injected token as the new "last decoded" position
                     let last_tok = inj_toks[inj_toks.len() - 1];
                     batch.add(last_tok, (n_cur - 1) as i32, &[0], true).ok();
                 }
             }
+            // Don't process the triggering token further; jump to next sample.
+            continue;
         }
 
         pending.push_str(&piece);
@@ -511,7 +546,7 @@ fn run_generation(
         // Check if accumulated buffer ends with any stop string.
         for stop in &stop_strings {
             if pending.ends_with(stop.as_str()) {
-                let safe_end = pending.len() - stop.len();
+                let safe_end = pending.len().saturating_sub(stop.len());
                 if safe_end > 0 {
                     token_tx.send(InferToken::Delta(pending[..safe_end].to_string())).ok();
                 }
@@ -543,17 +578,18 @@ fn run_generation(
 
     // Flush remaining hold-back buffer, trimming any trailing stop string.
     let flush_end = stop_strings.iter()
-        .find_map(|s| pending.ends_with(s.as_str()).then_some(pending.len() - s.len()))
+        .find_map(|s| pending.ends_with(s.as_str()).then_some(pending.len().saturating_sub(s.len())))
         .unwrap_or(pending.len());
     if flush_end > 0 {
         token_tx.send(InferToken::Delta(pending[..flush_end].to_string())).ok();
     }
 
     let n_gen = n_cur - n_prompt;
-    llm_info!(app, log_buf, "generation done — {n_gen} tokens, finish_reason={finish_reason}");
+    llm_info!(app, log_buf, log_file, "generation done — {n_gen} tokens, finish_reason={finish_reason}");
     token_tx.send(InferToken::Done { finish_reason }).ok();
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_actor(
     mut rx:        tokio::sync::mpsc::UnboundedReceiver<InferRequest>,
     config:        LlmConfig,
@@ -561,8 +597,18 @@ fn run_actor(
     _mmproj_path:  Option<std::path::PathBuf>,
     app:           tauri::AppHandle,
     log_buf:       LlmLogBuffer,
+    log_path:      Option<std::path::PathBuf>,
     ready_flag:    Arc<AtomicBool>,
 ) {
+    // ── per-session log file ──────────────────────────────────────────────────
+    let log_file_handle: Option<LlmLogFile> = log_path.as_ref().and_then(|p| {
+        std::fs::OpenOptions::new()
+            .create(true).write(true).truncate(true)
+            .open(p).ok()
+            .map(|f| Arc::new(Mutex::new(std::io::BufWriter::new(f))))
+    });
+    let log_file = log_file_handle.as_ref();
+
     // ── init backend ──────────────────────────────────────────────────────────
     // llama-cpp-4's backend is a process-wide singleton gated by an AtomicBool.
     // neutts (if compiled in) may have already called init(); that returns
@@ -578,31 +624,31 @@ fn run_actor(
     // call `llama_backend_free` — neutts will do it.
     let (mut backend_md, we_own_backend) = match LlamaBackend::init() {
         Ok(b) => {
-            llm_info!(&app, &log_buf, "llama backend initialised");
+            llm_info!(&app, &log_buf, log_file, "llama backend initialised");
             (std::mem::ManuallyDrop::new(b), true)
         }
         Err(_) => {
-            llm_info!(&app, &log_buf, "llama backend already initialised (shared with neutts)");
+            llm_info!(&app, &log_buf, log_file, "llama backend already initialised (shared with neutts)");
             // SAFETY: ZST — no data, no pointers.
             (std::mem::ManuallyDrop::new(unsafe { std::mem::zeroed::<LlamaBackend>() }), false)
         }
     };
     backend_md.void_logs(); // silence llama.cpp's verbose stderr
-    let backend: &LlamaBackend = &*backend_md;
+    let backend: &LlamaBackend = &backend_md;
 
     // ── load model ──
-    llm_info!(&app, &log_buf, "loading model: {}", model_path.display());
+    llm_info!(&app, &log_buf, log_file, "loading model: {}", model_path.display());
     let model_params = LlamaModelParams::default()
         .with_n_gpu_layers(config.n_gpu_layers);
 
     let model = match LlamaModel::load_from_file(backend, &model_path, &model_params) {
-        Ok(m)  => { llm_info!(&app, &log_buf, "model loaded ✓"); m }
-        Err(e) => { llm_error!(&app, &log_buf, "failed to load model: {e}"); return; }
+        Ok(m)  => { llm_info!(&app, &log_buf, log_file, "model loaded ✓"); m }
+        Err(e) => { llm_error!(&app, &log_buf, log_file, "failed to load model: {e}"); return; }
     };
 
     // ── create generation context ──
     let ctx_size = NonZeroU32::new(config.ctx_size.unwrap_or(4096));
-    llm_info!(&app, &log_buf, "creating context (n_ctx={}, n_gpu_layers={})",
+    llm_info!(&app, &log_buf, log_file, "creating context (n_ctx={}, n_gpu_layers={})",
               ctx_size.map_or(0, |n| n.get()), config.n_gpu_layers);
     let ctx_params = LlamaContextParams::default()
         .with_n_ctx(ctx_size)
@@ -611,10 +657,10 @@ fn run_actor(
 
     let mut ctx = match model.new_context(backend, ctx_params) {
         Ok(c)  => c,
-        Err(e) => { llm_error!(&app, &log_buf, "failed to create context: {e}"); return; }
+        Err(e) => { llm_error!(&app, &log_buf, log_file, "failed to create context: {e}"); return; }
     };
 
-    llm_info!(&app, &log_buf, "context ready — n_ctx={} — running warmup pass…", ctx.n_ctx());
+    llm_info!(&app, &log_buf, log_file, "context ready — n_ctx={} — running warmup pass…", ctx.n_ctx());
     let _ = app.emit("llm:status", json!({"status":"loading","detail":"warming_up"}));
 
     // ── Warmup / prewarm ──────────────────────────────────────────────────────
@@ -644,15 +690,15 @@ fn run_actor(
     })();
 
     if warmup_ok {
-        llm_info!(&app, &log_buf, "warmup complete — GPU kernels compiled, weights in VRAM");
+        llm_info!(&app, &log_buf, log_file, "warmup complete — GPU kernels compiled, weights in VRAM");
     } else {
-        llm_warn!(&app, &log_buf, "warmup decode failed — first request may be slow");
+        llm_warn!(&app, &log_buf, log_file, "warmup decode failed — first request may be slow");
     }
 
     // Signal that the model is fully loaded and warmed up.
     ready_flag.store(true, Ordering::Relaxed);
     let model_file = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
-    llm_info!(&app, &log_buf, "server ready — model={}", model_file);
+    llm_info!(&app, &log_buf, log_file, "server ready — model={}", model_file);
     let _ = app.emit("llm:status", json!({"status":"running","model":model_file}));
 
     // ── event loop ──
@@ -663,7 +709,7 @@ fn run_actor(
             }
 
             InferRequest::Generate { messages, params, token_tx } => {
-                llm_info!(&app, &log_buf, "chat request — {} messages, max_tokens={}",
+                llm_info!(&app, &log_buf, log_file, "chat request — {} messages, max_tokens={}",
                           messages.len(), params.max_tokens);
 
                 // Build LlamaChatMessage list and apply the model's own template.
@@ -678,8 +724,8 @@ fn run_actor(
                         Value::String(s) => s.clone(),
                         Value::Array(parts) => parts.iter()
                             .filter_map(|p| {
-                                (p.get("type")?.as_str() == Some("text"))
-                                    .then(|| p.get("text")?.as_str()?.to_string())
+                                if p.get("type")?.as_str() != Some("text") { return None; }
+                                Some(p.get("text")?.as_str()?.to_string())
                             })
                             .collect::<Vec<_>>()
                             .join("\n"),
@@ -699,24 +745,24 @@ fn run_actor(
                 let prompt = match model.apply_chat_template(None, chat_msgs, true) {
                     Ok(p)  => p,
                     Err(e) => {
-                        llm_error!(&app, &log_buf, "apply_chat_template failed: {e}");
+                        llm_error!(&app, &log_buf, log_file, "apply_chat_template failed: {e}");
                         token_tx.send(InferToken::Error(format!("template error: {e}"))).ok();
                         continue;
                     }
                 };
 
-                run_generation(&model, &mut ctx, &app, &log_buf,
+                run_generation(&model, &mut ctx, &app, &log_buf, log_file,
                                prompt, params, token_tx);
             }
 
             InferRequest::Complete { prompt, params, token_tx } => {
-                llm_info!(&app, &log_buf, "completion request — max_tokens={}", params.max_tokens);
-                run_generation(&model, &mut ctx, &app, &log_buf,
+                llm_info!(&app, &log_buf, log_file, "completion request — max_tokens={}", params.max_tokens);
+                run_generation(&model, &mut ctx, &app, &log_buf, log_file,
                                prompt, params, token_tx);
             }
 
             InferRequest::Embed { inputs, result_tx } => {
-                llm_info!(&app, &log_buf, "embeddings request — {} input(s)", inputs.len());
+                llm_info!(&app, &log_buf, log_file, "embeddings request — {} input(s)", inputs.len());
                 // Create a temporary embeddings context (cheap: no KV cache).
                 let emb_params = LlamaContextParams::default()
                     .with_n_ctx(NonZeroU32::new(512))
@@ -757,7 +803,7 @@ fn run_actor(
                 })();
 
                 if let Ok(ref vecs) = embed_result {
-                    llm_info!(&app, &log_buf, "embeddings done — {} vector(s)", vecs.len());
+                    llm_info!(&app, &log_buf, log_file, "embeddings done — {} vector(s)", vecs.len());
                 }
                 result_tx.send(embed_result).ok();
             }
@@ -782,7 +828,7 @@ fn run_actor(
     }
     // else: leave backend free to neutts
 
-    llm_info!(&app, &log_buf, "actor exiting — GPU resources released");
+    llm_info!(&app, &log_buf, log_file, "actor exiting — GPU resources released");
     let _ = app.emit("llm:status", json!({"status":"stopped"}));
 }
 
@@ -795,10 +841,11 @@ fn run_actor(
 /// - `config.enabled == false`
 /// - No model is selected or the model file does not exist
 pub fn init(
-    config:  &LlmConfig,
-    catalog: &LlmCatalog,
-    app:     tauri::AppHandle,
-    log_buf: LlmLogBuffer,
+    config:    &LlmConfig,
+    catalog:   &LlmCatalog,
+    app:       tauri::AppHandle,
+    log_buf:   LlmLogBuffer,
+    skill_dir: &std::path::Path,
 ) -> Option<Arc<LlmServerState>> {
     if !config.enabled {
         push_log(&app, &log_buf, "info", "LLM server disabled — skipping init");
@@ -827,6 +874,16 @@ pub fn init(
 
     push_log(&app, &log_buf, "info", &format!("starting LLM server — model: {model_name}"));
 
+    // ── Per-session log file ──────────────────────────────────────────────────
+    // Written to skill_dir/llm_<unix-seconds>.txt so each server run has its
+    // own timestamped transcript alongside the other skill log files.
+    let ts_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let log_path = skill_dir.join(format!("llm_{ts_secs}.txt"));
+    push_log(&app, &log_buf, "info", &format!("session log → {}", log_path.display()));
+
     let (req_tx, req_rx) = mpsc::unbounded_channel::<InferRequest>();
     let ready_flag = Arc::new(AtomicBool::new(false));
 
@@ -840,7 +897,7 @@ pub fn init(
     let join_handle = std::thread::Builder::new()
         .name("llm-actor".into())
         .stack_size(8 * 1024 * 1024)   // llama.cpp is stack-hungry
-        .spawn(move || run_actor(req_rx, config2, path2, mmproj2, app2, buf2, ready2))
+        .spawn(move || run_actor(req_rx, config2, path2, mmproj2, app2, buf2, Some(log_path), ready2))
         .expect("failed to spawn llm-actor thread");
 
     // Emit "loading" status so the chat window can show a spinner.
@@ -1168,16 +1225,17 @@ async fn collect_completion_response(
 
 // ── Chat-template helper ──────────────────────────────────────────────────────
 
-/// Format a list of OpenAI chat messages into a plain-text prompt.
-///
-/// Ideally we would call `model.apply_chat_template()` here, but that requires
-/// a reference to the model which lives only in the actor thread.  We use the
-/// simple `<|role|>\ncontent\n` format that most modern chat models support
-/// (Qwen3, Llama-3, Mistral, etc.).  The actor applies the template in the
-/// `Generate` handler when the model is available.
-///
-/// TODO: send raw messages to the actor and let it apply the model's built-in
-/// chat template via `model.apply_chat_template()`.
+// Format a list of OpenAI chat messages into a plain-text prompt.
+//
+// Ideally we would call `model.apply_chat_template()` here, but that requires
+// a reference to the model which lives only in the actor thread.  We use the
+// simple `<|role|>\ncontent\n` format that most modern chat models support
+// (Qwen3, Llama-3, Mistral, etc.).  The actor applies the template in the
+// `Generate` handler when the model is available.
+//
+// TODO: send raw messages to the actor and let it apply the model's built-in
+// chat template via `model.apply_chat_template()`.
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 fn unix_ts() -> u64 {

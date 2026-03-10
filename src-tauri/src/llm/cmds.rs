@@ -123,7 +123,7 @@ pub fn download_llm_model(
         // Skip if already downloading.
         if s.llm_downloads.contains_key(&filename) {
             if let Some(prog) = s.llm_downloads.get(&filename) {
-                if prog.lock().map_or(false, |p| p.state == DownloadState::Downloading) {
+                if prog.lock().is_ok_and(|p| p.state == DownloadState::Downloading) {
                     return;
                 }
             }
@@ -293,13 +293,14 @@ pub async fn start_llm_server(
     app:   AppHandle,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> Result<String, String> {
-    let (config, catalog, log_buf, cell) = {
+    let (config, catalog, log_buf, cell, skill_dir) = {
         let s = state.lock_or_recover();
         (
             s.llm_config.clone(),
             s.llm_catalog.clone(),
             s.llm_logs.clone(),
             s.llm_state_cell.clone(),
+            s.skill_dir.clone(),
         )
     };
 
@@ -311,7 +312,7 @@ pub async fn start_llm_server(
 
     // Run init on a blocking thread — it loads the model which can take seconds.
     let new_state = tokio::task::spawn_blocking(move || {
-        crate::llm::init(&config, &catalog, app, log_buf)
+        crate::llm::init(&config, &catalog, app, log_buf, &skill_dir)
     }).await.map_err(|e| e.to_string())?;
 
     match new_state {

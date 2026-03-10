@@ -100,6 +100,29 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
         tauri::async_runtime::spawn(async move { let _ = open_focus_timer_window(a).await; });
     }) { eprintln!("[shortcut] focus_timer: {e}"); }
 
+    #[cfg(feature = "llm")]
+    {
+        let chat = {
+            let r = app.state::<Mutex<AppState>>();
+            let s = r.lock_or_recover().chat_shortcut.clone();
+            s
+        };
+        if let Err(e) = register_one(app, &chat, |a| {
+            tauri::async_runtime::spawn(async move {
+                if let Some(w) = a.get_webview_window("chat") {
+                    let _ = w.show(); let _ = w.set_focus();
+                } else {
+                    let _ = tauri::WebviewWindowBuilder::new(&a, "chat",
+                        tauri::WebviewUrl::App("chat".into()))
+                        .title("NeuroSkill™ – Chat")
+                        .inner_size(720.0, 900.0)
+                        .min_inner_size(480.0, 600.0)
+                        .resizable(true).center().build();
+                }
+            });
+        }) { eprintln!("[shortcut] chat: {e}"); }
+    }
+
     // "Open NeuroSkill™" — always CmdOrCtrl+Shift+O (not user-configurable)
     if let Err(e) = register_one(app, "CmdOrCtrl+Shift+O", |a| {
         if let Some(win) = a.get_webview_window("main") {
@@ -148,3 +171,6 @@ shortcut_pair!(get_history_shortcut,     set_history_shortcut,     history_short
 shortcut_pair!(get_api_shortcut,         set_api_shortcut,         api_shortcut,         "api");
 shortcut_pair!(get_theme_shortcut,       set_theme_shortcut,       theme_shortcut,       "theme");
 shortcut_pair!(get_focus_timer_shortcut, set_focus_timer_shortcut, focus_timer_shortcut, "focus_timer");
+
+#[cfg(feature = "llm")]
+shortcut_pair!(get_chat_shortcut, set_chat_shortcut, chat_shortcut, "chat");
