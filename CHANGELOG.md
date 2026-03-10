@@ -8,10 +8,36 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Dependencies
 
-- Updated `llama-cpp-4` and `llama-cpp-sys-4` from 0.2.2 → 0.2.3
+- Migrated `llama-cpp-4` and `llama-cpp-sys-4` to local path via
+  `[patch.crates-io]` (`../../../llama-cpp-rs/llama-cpp-4` and
+  `../../../llama-cpp-rs/llama-cpp-sys-4`) — ensures the SIGILL fix
+  (correct `CMAKE_OSX_ARCHITECTURES` / `CMAKE_CROSSCOMPILING` for Apple
+  cross-arch builds) is always active; both the `llm` feature and neutts's
+  backbone resolve to the same local crate, preserving the `links = "llama"`
+  deduplication
 
 ### Build / CI
 
+- macOS builds now target `aarch64-apple-darwin` (arm64) only — x86_64
+  is no longer compiled
+  - `tauri:build:mac` npm script passes `--target aarch64-apple-darwin`
+  - `release.sh` defaults `TAURI_TARGET` to `aarch64-apple-darwin` (still
+    overridable via env var for universal or x86_64 builds)
+  - `build-espeak-static.sh` defaults `CMAKE_OSX_ARCHITECTURES` to `arm64`
+    instead of the host architecture (still overridable via `ESPEAK_ARCHS`)
+  - `.cargo/config.toml` sets `[build] target = "aarch64-apple-darwin"` so
+    plain `cargo build` / `cargo check` / `npx tauri build` all default to
+    arm64 without requiring an explicit `--target` flag
+  - `ci.yml` Linux `cargo check` / `cargo clippy` steps now pass
+    `--target x86_64-unknown-linux-gnu` to override the config.toml default;
+    espeak build step passes `ESPEAK_ARCHS=x86_64` explicitly
+  - `pr-build.yml` and `release.yml` were already correct (`--target
+    aarch64-apple-darwin`, `ESPEAK_ARCHS=arm64`)
+- Fixed `tauri:build:mac` crashing with SIGILL after a successful compile on
+  macOS 26.3: Tauri's codesign step fails fatally when no signing identity is
+  present, propagating the failure as `process.kill(pid, SIGILL)`; added
+  `--no-sign` to the local dev build script (CI workflows supply real
+  credentials and are unaffected)
 - Fixed pre-commit hook failing on macOS when CUDA Toolkit is absent
   - `cargo clippy --all-features` activated `llm-cuda` and `llm-vulkan`,
     causing `llama-cpp-sys` to pass `-DGGML_CUDA=ON -DGGML_VULKAN=ON` to
