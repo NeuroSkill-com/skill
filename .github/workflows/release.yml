@@ -356,8 +356,10 @@ jobs:
           tar -czf "$TAR_PATH" \
             -C "$(dirname "$APP_BUNDLE")" "$(basename "$APP_BUNDLE")"
 
-          # Sign with Tauri's Ed25519 key
-          npx tauri signer sign -f "$TAR_PATH"
+          # Sign with Tauri's Ed25519 key.
+          # FILE is a positional argument in Tauri v2; -f is now --private-key-path
+          # and would conflict with the TAURI_SIGNING_PRIVATE_KEY env var (--private-key).
+          npx tauri signer sign "$TAR_PATH"
 
       # ── Create DMG from the signed + notarized .app ───────────────────────────
       #

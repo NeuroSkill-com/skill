@@ -532,21 +532,47 @@ fi
 
 ok "DMG: $DMG_OUT"
 
-# ── Step 5: Collect updater artifacts ──────────────────────────────────────────
+# ── Step 5: Recreate updater artifact from the signed + notarized .app ─────────
+#
+# `npx tauri build --no-sign` packs the .app into a .tar.gz *before* we
+# code-sign and notarize it, so the bundler-produced tarball contains a stale,
+# unsigned copy.  We delete it and rebuild from the freshly-signed .app.
+#
+# Signing note: in Tauri v2, `tauri signer sign` takes the file as a plain
+# positional argument.  The short flag `-f` is now an alias for
+# `--private-key-path` (the path to the *key* file) and therefore conflicts with
+# the TAURI_SIGNING_PRIVATE_KEY env var (which maps to `--private-key`).
+# Using `-f <tarball>` would produce:
+#   error: the argument '--private-key-path' cannot be used with '--private-key'
 
-# Tauri produces a .tar.gz + .tar.gz.sig (macOS) or .nsis.zip + .nsis.zip.sig
-# (Windows) when TAURI_SIGNING_PRIVATE_KEY is set during the build.
+log "Recreating updater tarball from signed .app…"
+
+# Remove any stale tarball(s) the Tauri bundler produced before signing.
+find "$BUNDLE_BASE" \
+    \( -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \) -delete 2>/dev/null || true
 
 UPDATER_BUNDLE=""
 UPDATER_SIG=""
 
-while IFS= read -r f; do
-    case "$f" in
-        *.tar.gz.sig|*.nsis.zip.sig) UPDATER_SIG="$f" ;;
-        *.tar.gz|*.nsis.zip)         UPDATER_BUNDLE="$f" ;;
-    esac
-done < <(find "$BUNDLE_BASE" \( -name "*.tar.gz" -o -name "*.tar.gz.sig" \
-                                -o -name "*.nsis.zip" -o -name "*.nsis.zip.sig" \) 2>/dev/null)
+if [ "$DRY_RUN" = "1" ]; then
+    UPDATER_BUNDLE="$BUNDLE_BASE/macos/$(basename "$APP_BUNDLE").tar.gz"
+    UPDATER_SIG="$UPDATER_BUNDLE.sig"
+    dry "tar -czf $UPDATER_BUNDLE -C $(dirname "$APP_BUNDLE") $(basename "$APP_BUNDLE")"
+    dry "npx tauri signer sign $UPDATER_BUNDLE"
+else
+    UPDATER_BUNDLE="$BUNDLE_BASE/macos/$(basename "$APP_BUNDLE").tar.gz"
+    tar -czf "$UPDATER_BUNDLE" \
+        -C "$(dirname "$APP_BUNDLE")" "$(basename "$APP_BUNDLE")"
+    ok "Updater tarball created: $UPDATER_BUNDLE"
+
+    # Sign with the Tauri Ed25519 key.
+    # FILE is a positional argument — do NOT use -f (that flag is --private-key-path).
+    npx tauri signer sign "$UPDATER_BUNDLE"
+
+    UPDATER_SIG="$UPDATER_BUNDLE.sig"
+    [ -f "$UPDATER_SIG" ] || fail "Signer did not produce $UPDATER_SIG"
+    ok "Updater artifact signed: $UPDATER_SIG"
+fi
 
 log "Updater artifacts:"
 [ -n "$UPDATER_BUNDLE" ] && echo "  bundle:    $UPDATER_BUNDLE"
