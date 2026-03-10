@@ -373,7 +373,7 @@ the Free Software Foundation, version 3 only. -->
             <Button size="sm" variant="outline"
                     class="text-[0.72rem] h-8 px-4 gap-1.5 shrink-0"
                     disabled={phase === "checking"}
-                    onclick={checkAndDownload}>
+                    onclick={() => checkAndDownload()}>
               {#if phase === "checking"}
                 <svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"
                      stroke="currentColor" stroke-width="2">
