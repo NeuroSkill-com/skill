@@ -265,11 +265,14 @@ impl Default for CalibrationConfig {
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
-/// The default data directory: `$HOME/.skill` (fallback: `.skill`).
+/// The skill data directory: always `$HOME/.skill` (fallback: `.skill`).
+///
+/// This path is **hardcoded** and never configurable at runtime.
+/// The directory name is defined by [`crate::constants::SKILL_DIR`].
 pub fn default_skill_dir() -> PathBuf {
     std::env::var("HOME")
-        .map(|h| PathBuf::from(h).join(".skill"))
-        .unwrap_or_else(|_| PathBuf::from(".skill"))
+        .map(|h| PathBuf::from(h).join(crate::constants::SKILL_DIR))
+        .unwrap_or_else(|_| PathBuf::from(crate::constants::SKILL_DIR))
 }
 
 pub(crate) fn settings_path(skill_dir: &Path) -> PathBuf {
@@ -287,17 +290,6 @@ pub(crate) fn tilde_path(p: &Path) -> String {
         }
     }
     p.to_string_lossy().to_string()
-}
-
-/// Expand a leading `~` or `~/` to `$HOME`.
-pub(crate) fn expand_tilde(p: &str) -> String {
-    if p == "~" { return std::env::var("HOME").unwrap_or_else(|_| p.to_string()); }
-    if let Some(rest) = p.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return format!("{}/{}", home.trim_end_matches('/'), rest);
-        }
-    }
-    p.to_string()
 }
 
 // ── NeuTTS configuration ──────────────────────────────────────────────────────
@@ -876,7 +868,7 @@ mod tests {
         assert_eq!(UmapUserConfig::default().timeout_secs, 120);
     }
 
-    // ── tilde_path / expand_tilde ─────────────────────────────────────────────
+    // ── tilde_path ────────────────────────────────────────────────────────────
 
     #[test]
     fn tilde_path_contracts_home() {
@@ -891,35 +883,6 @@ mod tests {
     fn tilde_path_leaves_non_home_path_unchanged() {
         let p = std::path::Path::new("/tmp/some/path.json");
         assert_eq!(tilde_path(p), "/tmp/some/path.json");
-    }
-
-    #[test]
-    fn expand_tilde_expands_tilde_slash() {
-        if let Ok(home) = std::env::var("HOME") {
-            let expanded = expand_tilde("~/.skill/settings.json");
-            assert!(
-                expanded.starts_with(&home),
-                "expected path starting with HOME '{home}', got '{expanded}'"
-            );
-            assert!(expanded.ends_with("/.skill/settings.json"));
-        }
-    }
-
-    #[test]
-    fn expand_tilde_leaves_absolute_path_unchanged() {
-        assert_eq!(expand_tilde("/tmp/foo"), "/tmp/foo");
-    }
-
-    #[test]
-    fn expand_tilde_leaves_relative_path_unchanged() {
-        assert_eq!(expand_tilde("relative/path"), "relative/path");
-    }
-
-    #[test]
-    fn expand_tilde_bare_tilde_becomes_home() {
-        if let Ok(home) = std::env::var("HOME") {
-            assert_eq!(expand_tilde("~"), home);
-        }
     }
 
     // ── OpenBciConfig defaults ────────────────────────────────────────────────

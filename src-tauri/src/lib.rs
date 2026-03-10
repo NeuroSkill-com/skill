@@ -131,7 +131,7 @@ mod settings;
 pub(crate) use settings::{
     UmapUserConfig, CalibrationAction, CalibrationProfile, CalibrationConfig, new_profile_id,
     load_umap_config, load_settings, settings_path,
-    default_skill_dir, tilde_path, expand_tilde,
+    default_skill_dir,
     default_label_shortcut, default_search_shortcut, default_settings_shortcut,
     default_calibration_shortcut, default_help_shortcut, default_history_shortcut,
     default_api_shortcut, default_theme_shortcut, default_focus_timer_shortcut,
@@ -526,17 +526,7 @@ pub struct AppState {
 
 impl Default for AppState {
     fn default() -> Self {
-        let default_dir = default_skill_dir();
-        let _ = std::fs::create_dir_all(&default_dir);
-        let bootstrap = load_settings(&default_dir);
-        let skill_dir = match &bootstrap.data_dir {
-            Some(d) if !d.is_empty() => {
-                let p = std::path::PathBuf::from(expand_tilde(d));
-                let _ = std::fs::create_dir_all(&p);
-                p
-            }
-            _ => default_dir,
-        };
+        let skill_dir = default_skill_dir();
         let _ = std::fs::create_dir_all(&skill_dir);
 
         init_tts_dirs(&skill_dir);
@@ -644,11 +634,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         preferred_id:           s.preferred_id.clone(),
         filter_config:          s.status.filter_config,
         embedding_overlap_secs: s.status.embedding_overlap_secs,
-        data_dir: {
-            let d = tilde_path(&s.skill_dir);
-            let def = tilde_path(&default_skill_dir());
-            if d == def { None } else { Some(d) }
-        },
+        data_dir: None, // always ~/.skill — not persisted
         label_shortcut:         s.label_shortcut.clone(),
         search_shortcut:        s.search_shortcut.clone(),
         settings_shortcut:      s.settings_shortcut.clone(),

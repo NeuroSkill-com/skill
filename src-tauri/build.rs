@@ -42,15 +42,30 @@ fn main() {
 
     // ── Copy espeak-ng-data/ into resources/ for Tauri bundling ──────────────
     //
-    // The bundle function is selected by BUILD HOST (cfg!), not target.
-    // For cross-compilation (Linux host → Windows MinGW target) the Linux
-    // function runs and finds data via ESPEAK_LIB_DIR → espeak-static-mingw/.
-    #[cfg(target_os = "macos")]
-    bundle_espeak_data_macos();
-    #[cfg(target_os = "linux")]
-    bundle_espeak_data_linux();
-    #[cfg(target_os = "windows")]
-    bundle_espeak_data_windows();
+    // Only copy during release builds.  In dev mode the binary resolves espeak
+    // data via the ESPEAK_DATA_PATH_DEV compile-time env (baked above), so no
+    // copy is required.
+    //
+    // Skipping the copy in dev mode breaks an infinite rebuild loop that
+    // otherwise occurs in `tauri dev`:
+    //   build.rs copies → resources/espeak-ng-data/ changes
+    //   → Tauri file watcher triggers cargo run
+    //   → build.rs copies again → ...
+    //
+    // In dev mode we still create the (empty) directory so that Tauri's
+    // resource-path validation in tauri.conf.json does not error on startup.
+    let profile = std::env::var("PROFILE").unwrap_or_default();
+    if profile == "release" {
+        #[cfg(target_os = "macos")]
+        bundle_espeak_data_macos();
+        #[cfg(target_os = "linux")]
+        bundle_espeak_data_linux();
+        #[cfg(target_os = "windows")]
+        bundle_espeak_data_windows();
+    } else {
+        std::fs::create_dir_all("resources/espeak-ng-data")
+            .unwrap_or_else(|e| panic!("build.rs: create_dir_all(resources/espeak-ng-data): {e}"));
+    }
 
     tauri_build::build()
 }

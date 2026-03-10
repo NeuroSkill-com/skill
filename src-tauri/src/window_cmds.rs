@@ -13,8 +13,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::{
     AppState, CalibrationProfile, CalibrationConfig, new_profile_id,
     save_settings, unix_secs, send_toast, ToastLevel,
-    default_skill_dir, tilde_path, expand_tilde,
+    default_skill_dir,
 };
+use crate::settings::tilde_path;
 use crate::ws_server::WsBroadcaster;
 
 // ── Permissions ───────────────────────────────────────────────────────────────
@@ -500,32 +501,15 @@ pub fn get_app_name(app: AppHandle) -> String {
 }
 
 #[tauri::command]
-pub fn get_data_dir(state: tauri::State<'_, Mutex<AppState>>) -> (String, String) {
-    let s = state.lock_or_recover();
-    let current = tilde_path(&s.skill_dir);
-    let default  = tilde_path(&default_skill_dir());
-    (current, default)
+pub fn get_data_dir(_state: tauri::State<'_, Mutex<AppState>>) -> (String, String) {
+    // skill_dir is always ~/.skill — hardcoded, never configurable
+    let fixed = tilde_path(&default_skill_dir());
+    (fixed.clone(), fixed)
 }
 
 #[tauri::command]
-pub fn set_data_dir(path: String, app: AppHandle) -> Result<(), String> {
-    if !path.is_empty() {
-        let p = std::path::PathBuf::from(expand_tilde(&path));
-        std::fs::create_dir_all(&p).map_err(|e| format!("Cannot create directory: {e}"))?;
-        let test = p.join(".skill_write_test");
-        std::fs::write(&test, b"ok").map_err(|e| format!("Directory not writable: {e}"))?;
-        let _ = std::fs::remove_file(test);
-    }
-    {
-        let r = app.state::<Mutex<AppState>>();
-        let mut s = r.lock_or_recover();
-        s.skill_dir = if path.is_empty() {
-            default_skill_dir()
-        } else {
-            std::path::PathBuf::from(expand_tilde(&path))
-        };
-    }
-    save_settings(&app);
+pub fn set_data_dir(_path: String, _app: AppHandle) -> Result<(), String> {
+    // skill_dir is always ~/.skill — this command is intentionally a no-op
     Ok(())
 }
 
