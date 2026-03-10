@@ -2317,6 +2317,67 @@ const en: Record<string, string> = {
   "perm.whyNotificationsDesc":        "To notify you when you hit your daily recording goal and when updates are ready.",
   "perm.privacyNote":                 "All data is stored locally on your device and is never transmitted to any server. You can disable any feature in Settings → Activity Tracking.",
 
+  // ── LLM tab ───────────────────────────────────────────────────────────────
+  "settingsTabs.llm":                   "LLM",
+
+  "llm.section.server":                 "Local LLM Server",
+  "llm.section.models":                 "Language Models",
+  "llm.section.mmproj":                 "Multimodal Projectors",
+  "llm.section.inference":              "Inference Settings",
+
+  "llm.enabled":                        "Enable LLM server",
+  "llm.enabledDesc":                    "Run an OpenAI-compatible inference server on the same port as the WebSocket API. Requires the llm Cargo feature and a downloaded model.",
+
+  "llm.status.running":                 "Running",
+  "llm.status.disabled":                "Disabled",
+  "llm.status.noModel":                 "No model selected",
+
+  "llm.endpoint":                       "API endpoint",
+  "llm.endpointHint":                   "Served on the same port as the WebSocket API.",
+  "llm.restartRequired":                "Restart the app for changes to take effect.",
+
+  "llm.repo":                           "HuggingFace repo",
+  "llm.recommended":                    "Recommended",
+  "llm.active":                         "Active",
+  "llm.mmproj":                         "Multimodal",
+
+  "llm.state.notDownloaded":            "Not downloaded",
+  "llm.state.downloading":              "Downloading…",
+  "llm.state.downloaded":               "Downloaded",
+  "llm.state.failed":                   "Failed",
+  "llm.state.cancelled":                "Cancelled",
+
+  "llm.btn.download":                   "Download",
+  "llm.btn.cancel":                     "Cancel",
+  "llm.btn.delete":                     "Delete",
+  "llm.btn.select":                     "Use",
+  "llm.btn.selected":                   "Selected",
+  "llm.btn.refresh":                    "Refresh cache",
+
+  "llm.size":                           "{gb} GB",
+  "llm.localPath":                      "Local path",
+
+  "llm.inference.gpuLayers":            "GPU layers",
+  "llm.inference.gpuLayersDesc":        "Layers to offload to GPU (0 = CPU only, high = GPU). Requires llm-metal / llm-cuda feature.",
+  "llm.inference.ctxSize":              "Context size",
+  "llm.inference.ctxSizeDesc":          "KV-cache size in tokens (empty = model default, capped at 4096).",
+  "llm.inference.parallel":             "Max concurrent requests",
+  "llm.inference.parallelDesc":         "Serialises decode loops while keeping HTTP connections responsive.",
+  "llm.inference.apiKey":               "API key (optional)",
+  "llm.inference.apiKeyDesc":           "Require this Bearer token on every /v1/* request. Leave empty for open access.",
+  "llm.inference.apiKeyPlaceholder":    "sk-…",
+
+  "llm.mmproj.nThreads":                "Encoder threads",
+  "llm.mmproj.nThreadsDesc":            "CPU threads for the vision/audio encoder.",
+  "llm.mmproj.noGpu":                   "CPU-only mmproj",
+  "llm.mmproj.noGpuDesc":               "Disable GPU offloading for the projector model.",
+
+  "llm.noFeature":                      "LLM support is not compiled in.",
+  "llm.noFeatureHint":                  "Rebuild with --features llm (and optionally llm-metal / llm-cuda / llm-mtmd) to enable the embedded OpenAI-compatible inference server.",
+
+  "llm.endpoints.title":                "OpenAI-compatible endpoints",
+  "llm.endpoints.hint":                 "All endpoints are served on the same port as the WebSocket / REST API.",
+
   // ── Help: Permissions FAQ entries ─────────────────────────────────────────
   "helpFaq.q51":  "Why does {app} ask for Accessibility permission on macOS?",
   "helpFaq.a51":  "{app} uses the macOS CGEventTap API to record the last time a key was pressed or the mouse moved. This is used to compute keyboard and mouse activity timestamps shown in the Activity Tracking panel. Only the timestamp is stored — no keystrokes, no cursor positions. The feature degrades silently if permission is not granted.",

@@ -354,6 +354,89 @@ impl Default for NeuttsConfig {
     }
 }
 
+// ── LLM server configuration ──────────────────────────────────────────────────
+
+/// Configuration for the embedded OpenAI-compatible LLM inference server.
+///
+/// Persisted in `~/.skill/settings.json` under the `llm` key.
+/// Requires the `llm` Cargo feature to have any effect at runtime.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LlmConfig {
+    /// Enable the LLM server.  When `false` (the default) no model is loaded
+    /// and all `/v1/*` endpoints return HTTP 503.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Absolute path to a GGUF model file.  Required when `enabled = true`.
+    ///
+    /// Example: `"/Users/alice/.cache/huggingface/hub/…/model.Q4_K_M.gguf"`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_path: Option<std::path::PathBuf>,
+
+    /// Number of transformer layers to offload to the GPU.
+    /// `0` = CPU-only inference.  `-1` (stored as `u32::MAX`) = offload all.
+    /// Only meaningful when the binary was compiled with `llm-metal`,
+    /// `llm-cuda`, or `llm-vulkan`.
+    #[serde(default)]
+    pub n_gpu_layers: u32,
+
+    /// KV-cache / context size in tokens.  `None` → use the model's trained
+    /// context length (capped at 4096 tokens to avoid OOM).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ctx_size: Option<u32>,
+
+    /// Maximum number of inference requests processed concurrently.
+    /// llama.cpp contexts are not thread-safe — this effectively serialises
+    /// the decode loop while keeping HTTP connections open and responsive.
+    /// Default: 1.
+    #[serde(default = "default_llm_parallel")]
+    pub parallel: usize,
+
+    /// Optional Bearer token required on every `/v1/*` request.
+    /// When `None` (the default) the API is open to any local caller.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+
+    // ── Multimodal (requires `llm-mtmd` feature) ──────────────────────────────
+
+    /// Path to the multimodal projector (mmproj) GGUF file.
+    /// Enables `POST /v1/files` and image/audio inputs in chat completions.
+    /// Only used when the binary is compiled with `--features llm-mtmd`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mmproj: Option<std::path::PathBuf>,
+
+    /// Number of threads used by the vision/audio encoder.  Default: 4.
+    #[serde(default = "default_mmproj_n_threads")]
+    pub mmproj_n_threads: i32,
+
+    /// Disable GPU offloading for the mmproj model (use CPU instead).
+    /// Only meaningful with `llm-mtmd` + a GPU feature.
+    #[serde(default)]
+    pub no_mmproj_gpu: bool,
+}
+
+fn default_llm_parallel()      -> usize { 1 }
+fn default_mmproj_n_threads()  -> i32   { 4 }
+
+impl Default for LlmConfig {
+    fn default() -> Self {
+        Self {
+            enabled:          false,
+            model_path:       None,
+            // Offload every layer to the GPU by default.
+            // The user can reduce this if VRAM is insufficient.
+            n_gpu_layers:     u32::MAX,
+            ctx_size:         None,
+            parallel:         default_llm_parallel(),
+            api_key:          None,
+            mmproj:           None,
+            mmproj_n_threads: default_mmproj_n_threads(),
+            no_mmproj_gpu:    false,
+        }
+    }
+}
+
 // ── Default values (pub(crate) so AppState::default() can use them) ───────────
 
 pub(crate) fn default_ws_host() -> String { crate::constants::WS_HOST.into() }
@@ -468,6 +551,12 @@ pub(crate) struct UserSettings {
     /// dismissed by the user.  Empty string means it has never been seen.
     #[serde(default)]
     pub last_seen_whats_new_version: String,
+
+    /// Embedded OpenAI-compatible LLM inference server.
+    /// All `/v1/*` endpoints (chat, completions, embeddings, files) are served
+    /// on the same TCP port as the WebSocket API when enabled.
+    #[serde(default)]
+    pub llm: LlmConfig,
 }
 
 fn default_tts_preload() -> bool { true }
@@ -595,6 +684,7 @@ impl Default for UserSettings {
             track_input_activity:          default_track_input_activity(),
             do_not_disturb:                DoNotDisturbConfig::default(),
             last_seen_whats_new_version:   String::new(),
+            llm:                           LlmConfig::default(),
         }
     }
 }

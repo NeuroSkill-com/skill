@@ -1,0 +1,1001 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 NeuroSkill.com
+//! OpenAI-compatible LLM inference server — native llama-cpp-4 backend.
+//!
+//! # Architecture
+//!
+//! A dedicated OS thread ("actor") owns the `LlamaBackend`, `LlamaModel`, and
+//! `LlamaContext`.  Axum HTTP handlers communicate with the actor through a
+//! pair of channels:
+//!
+//! ```text
+//!  axum handler  ──InferRequest──▶  actor thread
+//!  axum handler  ◀──InferToken ──  actor thread   (unbounded mpsc per request)
+//! ```
+//!
+//! This design sidesteps all `LlamaContext<'model>` lifetime issues: the actor
+//! owns both the model and the context in a single scope, so lifetimes are
+//! trivially satisfied.
+//!
+//! # Concurrency
+//!
+//! The actor processes requests one at a time (the llama.cpp decode loop is
+//! not thread-safe).  The `InferRequest` channel's sender-side is held behind
+//! an `Arc<Mutex<>>`, so multiple concurrent HTTP requests will queue up behind
+//! the actor without deadlocking.
+//!
+//! # Endpoints
+//!
+//! | Method | Path                     | Description                     |
+//! |--------|--------------------------|---------------------------------|
+//! | GET    | `/health`                | Own liveness + model ready state|
+//! | GET    | `/v1/models`             | List loaded model               |
+//! | POST   | `/v1/chat/completions`   | Chat (streaming SSE + JSON)     |
+//! | POST   | `/v1/completions`        | Raw text completion             |
+//! | POST   | `/v1/embeddings`         | Dense embeddings (mean pool)    |
+//!
+//! # Feature flags
+//!
+//! | Flag         | Effect                                          |
+//! |--------------|-------------------------------------------------|
+//! | `llm`        | Core: model loading + inference actor           |
+//! | `llm-metal`  | Metal GPU offload (macOS)                       |
+//! | `llm-cuda`   | CUDA GPU offload (NVIDIA)                       |
+//! | `llm-vulkan` | Vulkan GPU offload (cross-platform)             |
+//! | `llm-mtmd`   | Multimodal: image/audio via libmtmd             |
+
+pub mod tools;
+pub mod catalog;
+pub mod cmds;
+
+use std::{
+    collections::VecDeque,
+    num::NonZeroU32,
+    sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use axum::{
+    Json,
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response, sse},
+    routing::{get, post},
+    Router,
+};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use tokio::sync::mpsc::{self, UnboundedSender};
+use tauri::Emitter as _;
+
+use llama_cpp_4::{
+    context::params::{LlamaContextParams, LlamaPoolingType},
+    llama_backend::LlamaBackend,
+    llama_batch::LlamaBatch,
+    model::{AddBos, LlamaModel, Special, params::LlamaModelParams},
+    sampling::LlamaSampler,
+};
+
+use crate::settings::LlmConfig;
+use catalog::LlmCatalog;
+
+// ── Log buffer ────────────────────────────────────────────────────────────────
+
+/// One line in the LLM server log.
+#[derive(Debug, Clone, Serialize)]
+pub struct LlmLogEntry {
+    /// Unix timestamp in milliseconds.
+    pub ts:      u64,
+    /// `"info"` | `"warn"` | `"error"`
+    pub level:   String,
+    /// Human-readable message.
+    pub message: String,
+}
+
+/// Shared log ring-buffer (max [`LOG_CAP`] entries, oldest dropped first).
+pub type LlmLogBuffer = Arc<Mutex<VecDeque<LlmLogEntry>>>;
+
+/// Maximum number of log lines kept in memory.
+const LOG_CAP: usize = 500;
+
+/// Create a new, empty log buffer.
+pub fn new_log_buffer() -> LlmLogBuffer {
+    Arc::new(Mutex::new(VecDeque::with_capacity(LOG_CAP)))
+}
+
+/// Append a log entry to the buffer and emit a `llm:log` Tauri event.
+fn push_log(app: &tauri::AppHandle, buf: &LlmLogBuffer, level: &str, msg: &str) {
+    eprintln!("[llm][{level}] {msg}");
+    let entry = LlmLogEntry {
+        ts:      unix_ts_ms(),
+        level:   level.to_string(),
+        message: msg.to_string(),
+    };
+    {
+        let mut q = buf.lock().unwrap();
+        if q.len() >= LOG_CAP { q.pop_front(); }
+        q.push_back(entry.clone());
+    }
+    // Best-effort — ignore errors if no window is open yet.
+    let _ = app.emit("llm:log", entry);
+}
+
+macro_rules! llm_info  { ($app:expr, $buf:expr, $($t:tt)*) => { push_log($app, $buf, "info",  &format!($($t)*)) } }
+macro_rules! llm_warn  { ($app:expr, $buf:expr, $($t:tt)*) => { push_log($app, $buf, "warn",  &format!($($t)*)) } }
+macro_rules! llm_error { ($app:expr, $buf:expr, $($t:tt)*) => { push_log($app, $buf, "error", &format!($($t)*)) } }
+
+// ── Wire protocol between axum handlers and the actor ─────────────────────────
+
+enum InferRequest {
+    /// Generate a chat completion (prompt already formatted by caller).
+    Generate {
+        prompt:   String,
+        params:   GenParams,
+        token_tx: UnboundedSender<InferToken>,
+    },
+    /// Compute mean-pooled embeddings for a list of strings.
+    Embed {
+        inputs:    Vec<String>,
+        result_tx: tokio::sync::oneshot::Sender<Result<Vec<Vec<f32>>, String>>,
+    },
+    /// Simple liveness probe (kept for future use; status now via `AtomicBool`).
+    #[allow(dead_code)]
+    Health {
+        result_tx: tokio::sync::oneshot::Sender<bool>,
+    },
+}
+
+pub enum InferToken {
+    /// A piece of decoded text to stream to the client.
+    Delta(String),
+    /// Generation finished normally.
+    Done { finish_reason: String },
+    /// Generation aborted with an error.
+    Error(String),
+}
+
+// ── Request / response types ──────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GenParams {
+    pub temperature:    f32,
+    pub top_k:          i32,
+    pub top_p:          f32,
+    pub repeat_penalty: f32,
+    pub seed:           u32,
+    pub max_tokens:     usize,
+    pub stop:           Vec<String>,
+}
+
+impl Default for GenParams {
+    fn default() -> Self {
+        Self {
+            temperature:    0.8,
+            top_k:          40,
+            top_p:          0.9,
+            repeat_penalty: 1.1,
+            seed:           0xDEAD_BEEF,
+            max_tokens:     2048,
+            stop:           Vec::new(),
+        }
+    }
+}
+
+// Chat completions request
+#[derive(Debug, Deserialize)]
+struct ChatRequest {
+    messages: Vec<Value>,
+    #[serde(default)]
+    stream:   bool,
+    #[serde(flatten)]
+    gen:      GenParams,
+}
+
+// Text completions request
+#[derive(Debug, Deserialize)]
+struct CompletionRequest {
+    prompt: Value, // String or Vec<String>
+    #[serde(default)]
+    stream: bool,
+    #[serde(flatten)]
+    gen:    GenParams,
+}
+
+// Embeddings request
+#[derive(Debug, Deserialize)]
+struct EmbeddingsRequest {
+    input: Value, // String or Vec<String>
+}
+
+// ── Shared state (held in axum Router via `.with_state()`) ────────────────────
+
+pub struct LlmServerState {
+    /// Channel to the inference actor.
+    req_tx:      tokio::sync::mpsc::UnboundedSender<InferRequest>,
+    /// Display name shown in `/v1/models`.
+    model_name:  String,
+    /// Optional Bearer token required on every request.
+    pub api_key: Option<String>,
+    /// Set to `true` by the actor once the model + context are fully loaded.
+    pub ready:   Arc<AtomicBool>,
+    /// OS thread handle for the actor.  Taken (set to `None`) by `shutdown()`.
+    join_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
+}
+
+impl LlmServerState {
+    /// Whether the actor has finished loading the model.
+    pub fn is_ready(&self) -> bool { self.ready.load(Ordering::Relaxed) }
+
+    /// Stop the actor and **block until the thread has fully exited**.
+    ///
+    /// Dropping `req_tx` closes the channel → the actor's `blocking_recv()`
+    /// loop returns `None` → the actor drops `ctx`, `model`, and backend in
+    /// the correct order → Metal/CUDA resources are released.
+    ///
+    /// Must be called while the caller holds the **only** remaining
+    /// `Arc<LlmServerState>` (i.e. the cell has already been taken).
+    pub fn shutdown(self) {
+        // Taking the join handle *before* `req_tx` is dropped prevents a race
+        // where the thread exits and the handle becomes invalid.
+        let handle = self.join_handle.lock().unwrap().take();
+        // Dropping `self` here also drops `req_tx`, closing the channel.
+        drop(self);
+        if let Some(h) = handle {
+            let _ = h.join();
+        }
+    }
+}
+
+/// A dynamic cell that holds the (optional) running server state.
+///
+/// The axum router always has `/v1/*` routes registered; they check this cell
+/// at request time and return 503 when `None` (server stopped/not started).
+/// `start_llm_server` / `stop_llm_server` Tauri commands swap the contents.
+pub type LlmStateCell = Arc<Mutex<Option<Arc<LlmServerState>>>>;
+
+/// Create a new, empty server state cell.
+pub fn new_state_cell() -> LlmStateCell {
+    Arc::new(Mutex::new(None))
+}
+
+/// Gracefully stop the server referenced by `cell`, blocking until the actor
+/// thread has fully exited.  Safe to call from any thread, including the Tauri
+/// `RunEvent::Exit` handler.  No-op if the server is not running.
+pub fn shutdown_cell(cell: &LlmStateCell) {
+    if let Some(server_state) = cell.lock().unwrap().take() {
+        match Arc::try_unwrap(server_state) {
+            Ok(owned) => owned.shutdown(),
+            Err(arc)  => drop(arc),   // in-flight axum handler; actor exits when arc drops
+        }
+    }
+}
+
+// ── Server status ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmStatus { Stopped, Loading, Running }
+
+/// Query the current server status from the cell.
+pub fn cell_status(cell: &LlmStateCell) -> (LlmStatus, String) {
+    match &*cell.lock().unwrap() {
+        None    => (LlmStatus::Stopped, String::new()),
+        Some(s) => (
+            if s.is_ready() { LlmStatus::Running } else { LlmStatus::Loading },
+            s.model_name.clone(),
+        ),
+    }
+}
+
+// ── Actor thread ───────────────────────────────────────────────────────────────
+
+fn run_actor(
+    mut rx:        tokio::sync::mpsc::UnboundedReceiver<InferRequest>,
+    config:        LlmConfig,
+    model_path:    std::path::PathBuf,
+    _mmproj_path:  Option<std::path::PathBuf>,
+    app:           tauri::AppHandle,
+    log_buf:       LlmLogBuffer,
+    ready_flag:    Arc<AtomicBool>,
+) {
+    // ── init backend ──────────────────────────────────────────────────────────
+    // llama-cpp-4's backend is a process-wide singleton gated by an AtomicBool.
+    // neutts (if compiled in) may have already called init(); that returns
+    // BackendAlreadyInitialized.  Either way the native library is ready.
+    //
+    // We wrap the handle in ManuallyDrop to prevent our Drop from calling
+    // llama_backend_free() — neutts may still need the singleton.
+    // LlamaBackend is a zero-field unit struct (a compile-time proof token),
+    // so mem::zeroed() is valid and Deref/DerefMut work transparently.
+    // `LlamaBackend` is a process-wide singleton.  Track whether *we* called
+    // `init()` so we know whether to free it when the actor exits.
+    // If neutts already holds the singleton, we get a ZST proxy but must NOT
+    // call `llama_backend_free` — neutts will do it.
+    let (mut backend_md, we_own_backend) = match LlamaBackend::init() {
+        Ok(b) => {
+            llm_info!(&app, &log_buf, "llama backend initialised");
+            (std::mem::ManuallyDrop::new(b), true)
+        }
+        Err(_) => {
+            llm_info!(&app, &log_buf, "llama backend already initialised (shared with neutts)");
+            // SAFETY: ZST — no data, no pointers.
+            (std::mem::ManuallyDrop::new(unsafe { std::mem::zeroed::<LlamaBackend>() }), false)
+        }
+    };
+    backend_md.void_logs(); // silence llama.cpp's verbose stderr
+    let backend: &LlamaBackend = &*backend_md;
+
+    // ── load model ──
+    llm_info!(&app, &log_buf, "loading model: {}", model_path.display());
+    let model_params = LlamaModelParams::default()
+        .with_n_gpu_layers(config.n_gpu_layers);
+
+    let model = match LlamaModel::load_from_file(backend, &model_path, &model_params) {
+        Ok(m)  => { llm_info!(&app, &log_buf, "model loaded ✓"); m }
+        Err(e) => { llm_error!(&app, &log_buf, "failed to load model: {e}"); return; }
+    };
+
+    // ── create generation context ──
+    let ctx_size = NonZeroU32::new(config.ctx_size.unwrap_or(4096));
+    llm_info!(&app, &log_buf, "creating context (n_ctx={}, n_gpu_layers={})",
+              ctx_size.map_or(0, |n| n.get()), config.n_gpu_layers);
+    let ctx_params = LlamaContextParams::default()
+        .with_n_ctx(ctx_size)
+        .with_n_threads(-1)
+        .with_n_threads_batch(-1);
+
+    let mut ctx = match model.new_context(backend, ctx_params) {
+        Ok(c)  => c,
+        Err(e) => { llm_error!(&app, &log_buf, "failed to create context: {e}"); return; }
+    };
+
+    llm_info!(&app, &log_buf, "context ready — n_ctx={} — running warmup pass…", ctx.n_ctx());
+    let _ = app.emit("llm:status", json!({"status":"loading","detail":"warming_up"}));
+
+    // ── Warmup / prewarm ──────────────────────────────────────────────────────
+    // Running one tiny decode pass compiles Metal/CUDA/Vulkan shader graphs,
+    // transfers weights to VRAM, and allocates the KV-cache backing store so
+    // the very first real user request is not penalised.
+    //
+    // We feed a single BOS token, decode it, then clear the KV cache so the
+    // context is pristine for the first real request.
+    let warmup_ok = (|| -> bool {
+        // Use the model's BOS token; fall back to token 1 (almost universal).
+        let bos = model.token_bos();
+        let warmup_tokens = if let Ok(toks) = model.str_to_token(" ", AddBos::Always) {
+            toks
+        } else {
+            vec![bos]
+        };
+        let n = warmup_tokens.len().min(4); // at most 4 tokens
+        let mut batch = LlamaBatch::new(n, 1);
+        for (i, &tok) in warmup_tokens[..n].iter().enumerate() {
+            let last = i == n - 1;
+            if batch.add(tok, i as i32, &[0], last).is_err() { return false; }
+        }
+        let ok = ctx.decode(&mut batch).is_ok();
+        ctx.clear_kv_cache();
+        ok
+    })();
+
+    if warmup_ok {
+        llm_info!(&app, &log_buf, "warmup complete — GPU kernels compiled, weights in VRAM");
+    } else {
+        llm_warn!(&app, &log_buf, "warmup decode failed — first request may be slow");
+    }
+
+    // Signal that the model is fully loaded and warmed up.
+    ready_flag.store(true, Ordering::Relaxed);
+    let model_file = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+    llm_info!(&app, &log_buf, "server ready — model={}", model_file);
+    let _ = app.emit("llm:status", json!({"status":"running","model":model_file}));
+
+    // ── event loop ──
+    while let Some(req) = rx.blocking_recv() {
+        match req {
+            InferRequest::Health { result_tx } => {
+                result_tx.send(true).ok();
+            }
+
+            InferRequest::Generate { prompt, params, token_tx } => {
+                llm_info!(&app, &log_buf, "generation request — max_tokens={}, temp={:.2}, top_k={}, top_p={:.2}",
+                          params.max_tokens, params.temperature, params.top_k, params.top_p);
+                // Reset KV cache from previous request.
+                ctx.clear_kv_cache();
+
+                // Tokenize.
+                let Ok(tokens) = model.str_to_token(&prompt, AddBos::Always) else {
+                    token_tx.send(InferToken::Error("tokenization failed".into())).ok();
+                    continue;
+                };
+                let n_prompt = tokens.len();
+                let n_ctx    = ctx.n_ctx() as usize;
+
+                llm_info!(&app, &log_buf, "prompt: {n_prompt} tokens");
+                if n_prompt >= n_ctx {
+                    let msg = format!("prompt too long ({n_prompt} ≥ n_ctx {n_ctx})");
+                    llm_warn!(&app, &log_buf, "{msg}");
+                    token_tx.send(InferToken::Error(msg)).ok();
+                    continue;
+                }
+
+                // Fill prompt batch.
+                let mut batch = LlamaBatch::new(n_ctx, 1);
+                for (i, &tok) in tokens.iter().enumerate() {
+                    let last = i == n_prompt - 1;
+                    if batch.add(tok, i as i32, &[0], last).is_err() { break; }
+                }
+
+                if ctx.decode(&mut batch).is_err() {
+                    llm_error!(&app, &log_buf, "decode error on prompt");
+                    token_tx.send(InferToken::Error("decode error on prompt".into())).ok();
+                    continue;
+                }
+
+                // Build sampler chain.
+                let mut sampler = LlamaSampler::chain_simple([
+                    LlamaSampler::top_k(params.top_k),
+                    LlamaSampler::top_p(params.top_p, 1),
+                    LlamaSampler::temp(params.temperature),
+                    LlamaSampler::dist(params.seed),
+                ]);
+
+                let max_new = params.max_tokens.min(n_ctx - n_prompt);
+                let mut n_cur = n_prompt;
+                let mut finish_reason = "length".to_string();
+
+                'gen: loop {
+                    if n_cur >= n_prompt + max_new { break; }
+
+                    let token = sampler.sample(&ctx, batch.n_tokens() - 1);
+                    sampler.accept(token);
+
+                    if model.is_eog_token(token) {
+                        finish_reason = "stop".to_string();
+                        break;
+                    }
+
+                    let text = model.token_to_str(token, Special::Plaintext)
+                        .unwrap_or_default();
+
+                    // Check stop sequences.
+                    if !params.stop.is_empty() {
+                        for stop in &params.stop {
+                            if text.contains(stop.as_str()) {
+                                finish_reason = "stop".to_string();
+                                break 'gen;
+                            }
+                        }
+                    }
+
+                    if !text.is_empty() {
+                        // If the receiver dropped (client disconnected), stop generating.
+                        if token_tx.send(InferToken::Delta(text)).is_err() { break; }
+                    }
+
+                    batch.clear();
+                    if batch.add(token, n_cur as i32, &[0], true).is_err() { break; }
+                    if ctx.decode(&mut batch).is_err() {
+                        token_tx.send(InferToken::Error("decode error".into())).ok();
+                        break;
+                    }
+
+                    n_cur += 1;
+                }
+
+                let n_gen = n_cur - n_prompt;
+                llm_info!(&app, &log_buf, "generation done — {n_gen} tokens, finish_reason={finish_reason}");
+                token_tx.send(InferToken::Done { finish_reason }).ok();
+            }
+
+            InferRequest::Embed { inputs, result_tx } => {
+                llm_info!(&app, &log_buf, "embeddings request — {} input(s)", inputs.len());
+                // Create a temporary embeddings context (cheap: no KV cache).
+                let emb_params = LlamaContextParams::default()
+                    .with_n_ctx(NonZeroU32::new(512))
+                    .with_embeddings(true)
+                    .with_pooling_type(LlamaPoolingType::Mean);
+
+                let mut emb_ctx = match model.new_context(backend, emb_params) {
+                    Ok(c)  => c,
+                    Err(e) => {
+                        result_tx.send(Err(e.to_string())).ok();
+                        continue;
+                    }
+                };
+
+                let embed_result: Result<Vec<Vec<f32>>, String> = (|| {
+                    let mut all = Vec::new();
+                    for text in &inputs {
+                        emb_ctx.clear_kv_cache();
+
+                        let tokens = model.str_to_token(text, AddBos::Always)
+                            .map_err(|e| e.to_string())?;
+                        let n = tokens.len().min(emb_ctx.n_ctx() as usize - 1);
+
+                        let mut batch = LlamaBatch::new(n + 1, 1);
+                        for (i, &tok) in tokens[..n].iter().enumerate() {
+                            let last = i == n - 1;
+                            batch.add(tok, i as i32, &[0], last).ok();
+                        }
+
+                        emb_ctx.decode(&mut batch)
+                            .map_err(|_| "embed decode error".to_string())?;
+
+                        let vec = emb_ctx.embeddings_seq_ith(0)
+                            .map_err(|e| e.to_string())?;
+                        all.push(vec.to_vec());
+                    }
+                    Ok(all)
+                })();
+
+                if let Ok(ref vecs) = embed_result {
+                    llm_info!(&app, &log_buf, "embeddings done — {} vector(s)", vecs.len());
+                }
+                result_tx.send(embed_result).ok();
+            }
+        }
+    }
+
+    // ── Ordered teardown ──────────────────────────────────────────────────────
+    // GPU resources must be released in strict order:
+    //   LlamaContext  (holds Metal/CUDA compute state)  → drop first
+    //   LlamaModel    (holds weight tensors in VRAM)    → drop second
+    //   LlamaBackend  (calls llama_backend_free)        → drop last
+    //
+    // Rust drops locals in reverse-declaration order, which already gives us
+    // ctx → model → backend_md.  We make it explicit with `drop()` calls so
+    // the ordering is visible and enforced even if locals are re-arranged.
+    drop(ctx);
+    drop(model);
+    if we_own_backend {
+        // SAFETY: we called init() so we own the singleton; ctx and model are
+        // already dropped above, so no dangling references to backend remain.
+        unsafe { std::mem::ManuallyDrop::drop(&mut backend_md); }
+    }
+    // else: leave backend free to neutts
+
+    llm_info!(&app, &log_buf, "actor exiting — GPU resources released");
+    let _ = app.emit("llm:status", json!({"status":"stopped"}));
+}
+
+// ── Public init ────────────────────────────────────────────────────────────────
+
+/// Initialise the LLM server state.
+///
+/// Spawns the inference actor thread and returns the shared state used by the
+/// axum router.  Returns `None` when:
+/// - `config.enabled == false`
+/// - No model is selected or the model file does not exist
+pub fn init(
+    config:  &LlmConfig,
+    catalog: &LlmCatalog,
+    app:     tauri::AppHandle,
+    log_buf: LlmLogBuffer,
+) -> Option<Arc<LlmServerState>> {
+    if !config.enabled {
+        push_log(&app, &log_buf, "info", "LLM server disabled — skipping init");
+        return None;
+    }
+
+    let model_path = catalog.active_model_path()
+        .or_else(|| config.model_path.clone())
+        .or_else(|| {
+            push_log(&app, &log_buf, "warn", "no model selected — LLM server disabled");
+            None
+        })?;
+
+    if !model_path.exists() {
+        push_log(&app, &log_buf, "error",
+            &format!("model file not found: {} — LLM server disabled", model_path.display()));
+        return None;
+    }
+
+    let mmproj_path = catalog.active_mmproj_path();
+    let model_name  = model_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("llama.cpp-model")
+        .to_owned();
+
+    push_log(&app, &log_buf, "info", &format!("starting LLM server — model: {model_name}"));
+
+    let (req_tx, req_rx) = mpsc::unbounded_channel::<InferRequest>();
+    let ready_flag = Arc::new(AtomicBool::new(false));
+
+    let config2     = config.clone();
+    let path2       = model_path.clone();
+    let mmproj2     = mmproj_path.clone();
+    let app2        = app.clone();
+    let buf2        = log_buf.clone();
+    let ready2      = ready_flag.clone();
+
+    let join_handle = std::thread::Builder::new()
+        .name("llm-actor".into())
+        .stack_size(8 * 1024 * 1024)   // llama.cpp is stack-hungry
+        .spawn(move || run_actor(req_rx, config2, path2, mmproj2, app2, buf2, ready2))
+        .expect("failed to spawn llm-actor thread");
+
+    // Emit "loading" status so the chat window can show a spinner.
+    let _ = app.emit("llm:status", json!({"status":"loading","model":model_name}));
+
+    Some(Arc::new(LlmServerState {
+        req_tx,
+        model_name,
+        api_key:     config.api_key.clone(),
+        ready:       ready_flag,
+        join_handle: Mutex::new(Some(join_handle)),
+    }))
+}
+
+// ── Auth + cell-extraction helpers ────────────────────────────────────────────
+
+fn check_auth(state: &LlmServerState, headers: &axum::http::HeaderMap) -> bool {
+    let Some(ref key) = state.api_key else { return true; };
+    headers.get("Authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .map(|token| token == key.as_str())
+        .unwrap_or(false)
+}
+
+/// Lock the cell, clone the inner Arc (cheap), and return an error response if
+/// the server is not running.  Usage: `let state = get_state!(cell);`
+macro_rules! get_state {
+    ($cell:expr) => {{
+        match $cell.lock().unwrap().clone() {
+            Some(s) => s,
+            None => return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error":{
+                    "message": "LLM server not running — POST /llm/start or use the Settings → LLM tab",
+                    "code":    "server_not_running"
+                }})),
+            ).into_response(),
+        }
+    }};
+}
+
+macro_rules! require_auth {
+    ($state:expr, $headers:expr) => {
+        if !check_auth(&$state, &$headers) {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error":{"message":"Invalid API key","type":"invalid_request_error","code":"invalid_api_key"}
+            }))).into_response();
+        }
+    };
+}
+
+// ── Handlers ───────────────────────────────────────────────────────────────────
+
+async fn health(State(cell): State<LlmStateCell>) -> Response {
+    match &*cell.lock().unwrap() {
+        None    => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"status":"stopped"}))).into_response(),
+        Some(s) => {
+            let status = if s.is_ready() { "ok" } else { "loading" };
+            Json(json!({"status": status, "model": s.model_name})).into_response()
+        }
+    }
+}
+
+/// `GET /llm/status` — machine-readable server status for external callers.
+async fn server_status(State(cell): State<LlmStateCell>) -> Response {
+    let (status, model) = cell_status(&cell);
+    Json(json!({"status": status, "model": model})).into_response()
+}
+
+async fn list_models(
+    State(cell): State<LlmStateCell>,
+    headers:     axum::http::HeaderMap,
+) -> Response {
+    let state = get_state!(cell);
+    require_auth!(state, headers);
+    let ts = unix_ts();
+    Json(json!({
+        "object": "list",
+        "data": [{"id": state.model_name, "object": "model", "created": ts, "owned_by": "skill"}]
+    })).into_response()
+}
+
+// ── /v1/chat/completions ──────────────────────────────────────────────────────
+
+async fn chat_completions(
+    State(cell): State<LlmStateCell>,
+    headers:     axum::http::HeaderMap,
+    Json(req):   Json<ChatRequest>,
+) -> Response {
+    let state = get_state!(cell);
+    require_auth!(state, headers);
+
+    if !state.is_ready() {
+        return (StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
+    }
+
+    let prompt = format_chat_messages(&req.messages);
+    let (tok_tx, tok_rx) = mpsc::unbounded_channel();
+    let _ = state.req_tx.send(InferRequest::Generate {
+        prompt, params: req.gen.clone(), token_tx: tok_tx,
+    });
+
+    if req.stream {
+        stream_chat_response(tok_rx, &state.model_name).await
+    } else {
+        collect_chat_response(tok_rx, &state.model_name).await
+    }
+}
+
+// ── /v1/completions ───────────────────────────────────────────────────────────
+
+async fn completions(
+    State(cell): State<LlmStateCell>,
+    headers:     axum::http::HeaderMap,
+    Json(req):   Json<CompletionRequest>,
+) -> Response {
+    let state = get_state!(cell);
+    require_auth!(state, headers);
+
+    if !state.is_ready() {
+        return (StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
+    }
+
+    let prompt = match &req.prompt {
+        Value::String(s) => s.clone(),
+        Value::Array(arr) => arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join("\n"),
+        _ => String::new(),
+    };
+    let (tok_tx, tok_rx) = mpsc::unbounded_channel();
+    let _ = state.req_tx.send(InferRequest::Generate {
+        prompt, params: req.gen.clone(), token_tx: tok_tx,
+    });
+
+    if req.stream {
+        stream_completion_response(tok_rx, &state.model_name).await
+    } else {
+        collect_completion_response(tok_rx, &state.model_name).await
+    }
+}
+
+// ── /v1/embeddings ────────────────────────────────────────────────────────────
+
+async fn embeddings(
+    State(cell): State<LlmStateCell>,
+    headers:     axum::http::HeaderMap,
+    Json(req):   Json<EmbeddingsRequest>,
+) -> Response {
+    let state = get_state!(cell);
+    require_auth!(state, headers);
+
+    let inputs: Vec<String> = match &req.input {
+        Value::String(s) => vec![s.clone()],
+        Value::Array(arr) => arr.iter().filter_map(|v| v.as_str().map(String::from)).collect(),
+        _ => return (StatusCode::BAD_REQUEST, Json(json!({"error":"invalid input"}))).into_response(),
+    };
+
+    if !state.is_ready() {
+        return (StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
+    }
+
+    let (result_tx, result_rx) = tokio::sync::oneshot::channel();
+    let _ = state.req_tx.send(InferRequest::Embed { inputs, result_tx });
+
+    match result_rx.await {
+        Ok(Ok(vecs)) => {
+            let data: Vec<Value> = vecs.into_iter().enumerate().map(|(i, vec)| json!({
+                "object": "embedding", "index": i, "embedding": vec,
+            })).collect();
+            Json(json!({"object":"list","data":data,"model":state.model_name})).into_response()
+        }
+        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response(),
+        Err(_)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":"actor died"}))).into_response(),
+    }
+}
+
+// ── Streaming helpers ─────────────────────────────────────────────────────────
+
+async fn stream_chat_response(
+    mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
+    model_name: &str,
+) -> Response {
+    let model_name = model_name.to_owned();
+    let id = format!("chatcmpl-{}", short_id());
+    let ts = unix_ts();
+
+    let stream = async_stream::stream! {
+        while let Some(tok) = tok_rx.recv().await {
+            match tok {
+                InferToken::Delta(text) => {
+                    let data = serde_json::to_string(&json!({
+                        "id": id, "object": "chat.completion.chunk",
+                        "created": ts, "model": model_name,
+                        "choices": [{"index":0,"delta":{"content":text},"finish_reason":null}],
+                    })).unwrap_or_default();
+                    yield Ok::<sse::Event, String>(sse::Event::default().data(data));
+                }
+                InferToken::Done { finish_reason } => {
+                    let data = serde_json::to_string(&json!({
+                        "id": id, "object": "chat.completion.chunk",
+                        "created": ts, "model": model_name,
+                        "choices": [{"index":0,"delta":{},"finish_reason":finish_reason}],
+                    })).unwrap_or_default();
+                    yield Ok(sse::Event::default().data(data));
+                    yield Ok(sse::Event::default().data("[DONE]"));
+                    return;
+                }
+                InferToken::Error(e) => {
+                    let data = serde_json::to_string(&json!({"error":e})).unwrap_or_default();
+                    yield Ok(sse::Event::default().data(data));
+                    return;
+                }
+            }
+        }
+    };
+
+    sse::Sse::new(stream)
+        .keep_alive(sse::KeepAlive::default())
+        .into_response()
+}
+
+async fn collect_chat_response(
+    mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
+    model_name: &str,
+) -> Response {
+    let id = format!("chatcmpl-{}", short_id());
+    let ts = unix_ts();
+    let mut text          = String::new();
+    let mut finish_reason = "stop".to_string();
+
+    while let Some(tok) = tok_rx.recv().await {
+        match tok {
+            InferToken::Delta(t)          => text.push_str(&t),
+            InferToken::Done { finish_reason: fr } => { finish_reason = fr; break; }
+            InferToken::Error(e)          => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response();
+            }
+        }
+    }
+
+    Json(json!({
+        "id": id, "object": "chat.completion", "created": ts, "model": model_name,
+        "choices": [{
+            "index": 0,
+            "message": {"role": "assistant", "content": text},
+            "finish_reason": finish_reason,
+        }],
+        "usage": {"prompt_tokens":0,"completion_tokens":0,"total_tokens":0},
+    })).into_response()
+}
+
+async fn stream_completion_response(
+    mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
+    model_name: &str,
+) -> Response {
+    let model_name = model_name.to_owned();
+    let id = format!("cmpl-{}", short_id());
+    let ts = unix_ts();
+
+    let stream = async_stream::stream! {
+        while let Some(tok) = tok_rx.recv().await {
+            match tok {
+                InferToken::Delta(text) => {
+                    let data = serde_json::to_string(&json!({
+                        "id": id, "object": "text_completion.chunk",
+                        "created": ts, "model": model_name,
+                        "choices": [{"text": text, "index": 0, "finish_reason": null}],
+                    })).unwrap_or_default();
+                    yield Ok::<sse::Event, String>(sse::Event::default().data(data));
+                }
+                InferToken::Done { finish_reason } => {
+                    let data = serde_json::to_string(&json!({
+                        "id": id, "object": "text_completion.chunk",
+                        "created": ts, "model": model_name,
+                        "choices": [{"text": "", "index": 0, "finish_reason": finish_reason}],
+                    })).unwrap_or_default();
+                    yield Ok(sse::Event::default().data(data));
+                    yield Ok(sse::Event::default().data("[DONE]"));
+                    return;
+                }
+                InferToken::Error(e) => {
+                    yield Ok(sse::Event::default().data(
+                        serde_json::to_string(&json!({"error":e})).unwrap_or_default()
+                    ));
+                    return;
+                }
+            }
+        }
+    };
+
+    sse::Sse::new(stream)
+        .keep_alive(sse::KeepAlive::default())
+        .into_response()
+}
+
+async fn collect_completion_response(
+    mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
+    model_name: &str,
+) -> Response {
+    let id = format!("cmpl-{}", short_id());
+    let ts = unix_ts();
+    let mut text          = String::new();
+    let mut finish_reason = "stop".to_string();
+
+    while let Some(tok) = tok_rx.recv().await {
+        match tok {
+            InferToken::Delta(t)                   => text.push_str(&t),
+            InferToken::Done { finish_reason: fr } => { finish_reason = fr; break; }
+            InferToken::Error(e)                   => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response();
+            }
+        }
+    }
+
+    Json(json!({
+        "id": id, "object": "text_completion", "created": ts, "model": model_name,
+        "choices": [{"text": text, "index": 0, "finish_reason": finish_reason}],
+        "usage": {"prompt_tokens":0,"completion_tokens":0,"total_tokens":0},
+    })).into_response()
+}
+
+// ── Chat-template helper ──────────────────────────────────────────────────────
+
+/// Format a list of OpenAI chat messages into a plain-text prompt.
+///
+/// Ideally we would call `model.apply_chat_template()` here, but that requires
+/// a reference to the model which lives only in the actor thread.  We use the
+/// simple `<|role|>\ncontent\n` format that most modern chat models support
+/// (Qwen3, Llama-3, Mistral, etc.).  The actor applies the template in the
+/// `Generate` handler when the model is available.
+///
+/// TODO: send raw messages to the actor and let it apply the model's built-in
+/// chat template via `model.apply_chat_template()`.
+pub fn format_chat_messages(messages: &[Value]) -> String {
+    let mut out = String::new();
+    for msg in messages {
+        let role    = msg.get("role").and_then(|r| r.as_str()).unwrap_or("user");
+        let content = msg.get("content").and_then(|c| c.as_str()).unwrap_or("");
+        out.push_str(&format!("<|{role}|>\n{content}\n"));
+    }
+    out.push_str("<|assistant|>\n");
+    out
+}
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+
+fn unix_ts() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+fn unix_ts_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+fn short_id() -> String {
+    format!("{:x}", unix_ts() ^ 0xCAFE_BABE)
+}
+
+// ── Router ────────────────────────────────────────────────────────────────────
+
+/// Build and return the LLM sub-router.
+///
+/// The router uses a `LlmStateCell` rather than a direct `Arc<LlmServerState>`.
+/// Routes are always mounted; handlers return HTTP 503 when the cell is `None`
+/// (server stopped).  Merge into the main axum router with `.merge(llm::router(cell))`.
+pub fn router(cell: LlmStateCell) -> Router {
+    Router::new()
+        .route("/health",                       get(health))
+        .route("/llm/status",                   get(server_status))
+        .route("/v1/models",                    get(list_models))
+        .route("/v1/chat/completions",          post(chat_completions))
+        .route("/v1/completions",               post(completions))
+        .route("/v1/embeddings",                post(embeddings))
+        .with_state(cell)
+}

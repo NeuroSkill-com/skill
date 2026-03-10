@@ -3,7 +3,7 @@
   "identifier": "default",
   "description": "Capability for all Skill windows",
   "windows": ["main", "settings", "calibration", "api", "onboarding",
-              "search", "help", "labels", "label", "focus-timer", "about", "session-*"],
+              "search", "help", "labels", "label", "focus-timer", "about", "session-*", "chat"],
   "permissions": [
     "core:default",
     "core:window:allow-set-title",

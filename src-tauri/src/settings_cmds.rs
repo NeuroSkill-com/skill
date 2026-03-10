@@ -901,3 +901,48 @@ pub async fn pick_ref_wav_file() -> Option<String> {
     .ok()
     .flatten()
 }
+
+// ── LLM server configuration ──────────────────────────────────────────────────
+
+/// Return the current LLM server configuration.
+///
+/// The LLM endpoints (`/v1/*`) are only active when `enabled = true` **and**
+/// the binary was compiled with `--features llm`.  Changes take effect on the
+/// next app restart.
+#[tauri::command]
+pub fn get_llm_config(
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> crate::settings::LlmConfig {
+    state.lock_or_recover().llm_config.clone()
+}
+
+/// Update the LLM server configuration and persist it to `settings.json`.
+///
+/// A full app restart is required for changes to take effect (model loading
+/// happens during Tauri setup, before the event loop starts).
+#[tauri::command]
+pub fn set_llm_config(
+    config: crate::settings::LlmConfig,
+    app:    AppHandle,
+    state:  tauri::State<'_, Mutex<AppState>>,
+) {
+    state.lock_or_recover().llm_config = config;
+    save_settings(&app);
+}
+
+/// Open a native file-picker dialog for selecting a GGUF model file.
+///
+/// Returns `None` if the user cancels.
+#[tauri::command]
+pub async fn pick_gguf_file() -> Option<String> {
+    tokio::task::spawn_blocking(|| {
+        rfd::FileDialog::new()
+            .add_filter("GGUF model", &["gguf"])
+            .set_title("Select GGUF model file")
+            .pick_file()
+            .map(|p| p.to_string_lossy().into_owned())
+    })
+    .await
+    .ok()
+    .flatten()
+}

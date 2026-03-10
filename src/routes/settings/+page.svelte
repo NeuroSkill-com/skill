@@ -19,6 +19,7 @@ the Free Software Foundation, version 3 only. -->
   import UpdatesTab       from "$lib/UpdatesTab.svelte";
   import TtsTab           from "$lib/TtsTab.svelte";
   import PermissionsTab   from "$lib/PermissionsTab.svelte";
+  import LlmTab           from "$lib/LlmTab.svelte";
   import { Button }       from "$lib/components/ui/button";
   import { t }            from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
@@ -26,15 +27,16 @@ the Free Software Foundation, version 3 only. -->
   import LanguagePicker   from "$lib/LanguagePicker.svelte";
   import ThemeToggle      from "$lib/ThemeToggle.svelte";
 
-  type Tab = "goals" | "calibration" | "embeddings" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions";
+  type Tab = "goals" | "calibration" | "embeddings" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions" | "llm";
   let tab = $state<Tab>("goals");
   let appVersion = $state("…");
 
-  const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "model", "embeddings", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
+  const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "llm", "model", "embeddings", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
   const TAB_LABELS: Record<Tab, () => string> = {
     goals:       () => t("settingsTabs.goals"),
     calibration: () => t("settingsTabs.calibration"),
     tts:         () => t("settingsTabs.tts"),
+    llm:         () => t("settingsTabs.llm"),
     embeddings:  () => t("settingsTabs.embeddings"),
     appearance:  () => t("settingsTabs.appearance"),
     settings:    () => t("settingsTabs.settings"),
@@ -175,6 +177,8 @@ the Free Software Foundation, version 3 only. -->
       <EmbeddingsTab />
     {:else if tab === "tts"}
       <TtsTab />
+    {:else if tab === "llm"}
+      <LlmTab />
     {:else if tab === "umap"}
       <UmapTab />
     {:else if tab === "updates"}

@@ -192,6 +192,12 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use tower_http::cors::{CorsLayer, AllowOrigin, AllowHeaders, AllowMethods};
+use axum::http::{Method, HeaderName};
+
+#[cfg(feature = "llm")]
+use crate::llm::LlmStateCell;
+
 use mdns_sd::{ServiceDaemon, ServiceInfo};
 use serde::Serialize;
 use tauri::AppHandle;
@@ -297,11 +303,22 @@ pub struct ServeHandle {
     tracker:  SharedTracker,
     /// The OS-assigned TCP port the server is bound to.
     pub port: u16,
+    /// Dynamic LLM state cell — routes are always mounted, content swapped at runtime.
+    #[cfg(feature = "llm")]
+    llm_cell: Option<LlmStateCell>,
 }
 
 impl ServeHandle {
-    /// Start the combined HTTP + WebSocket server.  Spawn this with
-    /// `tauri::async_runtime::spawn`.  Never returns.
+    /// Attach the LLM state cell so that `/v1/*` and `/llm/*` routes are
+    /// always mounted.  The cell content is swapped by start/stop commands
+    /// without touching the router.  Call before [`serve`].
+    #[cfg(feature = "llm")]
+    pub fn set_llm(&mut self, cell: LlmStateCell) {
+        self.llm_cell = Some(cell);
+    }
+
+    /// Start the combined HTTP + WebSocket + (optional) LLM server.
+    /// Spawn this with `tauri::async_runtime::spawn`.  Never returns.
     pub async fn serve(self, app: AppHandle) {
         let listener = TcpListener::from_std(self.listener)
             .expect("[ws] TcpListener::from_std failed");
@@ -310,7 +327,43 @@ impl ServeHandle {
             tx:      self.tx,
             tracker: self.tracker,
         };
+
+        // Build the main WS/REST router, then always merge the LLM router if
+        // the `llm` feature is enabled (routes return 503 when no model is loaded).
+        #[cfg(feature = "llm")]
+        let router = {
+            let base = crate::api::router(state);
+            let cell = self.llm_cell.unwrap_or_else(crate::llm::new_state_cell);
+            eprintln!("[llm] mounting /v1/* and /llm/* routes on the shared HTTP port");
+            base.merge(crate::llm::router(cell))
+        };
+
+        #[cfg(not(feature = "llm"))]
         let router = crate::api::router(state);
+
+        // CORS — allow the Tauri WebView (null/tauri://) and any localhost
+        // origin to call the REST + LLM endpoints from JS.
+        let cors = CorsLayer::new()
+            .allow_origin(AllowOrigin::predicate(|origin, _| {
+                let s = origin.as_bytes();
+                s == b"null"                                     // Tauri WebView
+                    || s.starts_with(b"tauri://")               // tauri:// scheme
+                    || s.starts_with(b"http://localhost")        // Vite dev server
+                    || s.starts_with(b"http://127.0.0.1")        // loopback
+            }))
+            .allow_methods(AllowMethods::list([
+                Method::GET, Method::POST, Method::PUT,
+                Method::DELETE, Method::OPTIONS, Method::HEAD,
+            ]))
+            .allow_headers(AllowHeaders::list([
+                HeaderName::from_static("content-type"),
+                HeaderName::from_static("authorization"),
+                HeaderName::from_static("x-requested-with"),
+            ]))
+            .allow_credentials(false);
+
+        let router = router.layer(cors);
+
         eprintln!("[http/ws] listening on :{}", listener.local_addr().map_or(0, |a| a.port()));
         axum::serve(
             listener,
@@ -347,7 +400,14 @@ pub fn bind_with(host: impl AsRef<str>, port: u16) -> (WsBroadcaster, ServeHandl
 
     let tracker = Arc::new(StdMutex::new(WsTracker::new(port)));
     let broadcaster  = WsBroadcaster { tx: tx.clone(), tracker: tracker.clone() };
-    let serve_handle = ServeHandle { listener: std_listener, tx, port, tracker };
+    let serve_handle = ServeHandle {
+        listener: std_listener,
+        tx,
+        port,
+        tracker,
+        #[cfg(feature = "llm")]
+        llm_cell: None,
+    };
 
     (broadcaster, serve_handle)
 }

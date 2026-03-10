@@ -72,6 +72,11 @@ mod label_index;
 mod ws_server;
 mod api;
 
+/// OpenAI-compatible LLM inference server — same port as WebSocket API.
+/// Enabled by the `llm` Cargo feature; no-op when the feature is absent.
+#[cfg(feature = "llm")]
+mod llm;
+
 use ws_server::WsBroadcaster;
 
 // ── New extracted modules ─────────────────────────────────────────────────────
@@ -216,6 +221,15 @@ use settings_cmds::{
     get_recent_active_windows, get_recent_input_activity,
     get_input_buckets,
     get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status, test_dnd, list_focus_modes,
+    get_llm_config, set_llm_config, pick_gguf_file,
+};
+
+// LLM catalog commands (feature-gated)
+#[cfg(feature = "llm")]
+use llm::cmds::{
+    get_llm_catalog, download_llm_model, cancel_llm_download,
+    delete_llm_model, refresh_llm_catalog, set_llm_active_model, set_llm_active_mmproj,
+    get_llm_logs, start_llm_server, stop_llm_server, get_llm_server_status, open_chat_window,
 };
 
 // ── Imports ───────────────────────────────────────────────────────────────────
@@ -470,6 +484,35 @@ pub struct AppState {
     /// Consecutive ticks for which SNR has been below 5 dB.
     /// When this reaches ~240 (≈ 1 minute at 4 Hz), focus mode is dropped.
     pub dnd_snr_low_ticks:  u32,
+
+    /// Persisted LLM server configuration.  Loaded from settings.json at startup
+    /// and passed to `llm::init()` before the axum router is built.
+    pub llm_config:         crate::settings::LlmConfig,
+
+    /// LLM model catalog — tracks which GGUF files are available / downloaded.
+    /// Persisted to `~/.skill/llm_catalog.json`.
+    #[cfg(feature = "llm")]
+    pub llm_catalog: crate::llm::catalog::LlmCatalog,
+
+    /// Per-file download progress (keyed by filename).
+    /// Lives only in memory; lost on restart (state is re-probed from cache).
+    #[cfg(feature = "llm")]
+    pub llm_downloads: std::collections::HashMap<
+        String,
+        std::sync::Arc<std::sync::Mutex<crate::llm::catalog::DownloadProgress>>,
+    >,
+
+    /// Ring-buffer of LLM server log entries (max 500).
+    /// Populated by the inference actor; read by the `get_llm_logs` command
+    /// and also pushed to the frontend via `llm:log` Tauri events.
+    #[cfg(feature = "llm")]
+    pub llm_logs: crate::llm::LlmLogBuffer,
+
+    /// Dynamic LLM server state cell.
+    /// `None` = server stopped.  Swapped by start/stop Tauri commands.
+    /// Shared with the axum router so HTTP handlers always see the current state.
+    #[cfg(feature = "llm")]
+    pub llm_state_cell: crate::llm::LlmStateCell,
 }
 
 impl Default for AppState {
@@ -550,6 +593,8 @@ impl Default for AppState {
             kbd_event_count:   std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             mouse_event_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             activity_store:    ActivityStore::open(&skill_dir).map(std::sync::Arc::new),
+            #[cfg(feature = "llm")]
+            llm_catalog:        crate::llm::catalog::LlmCatalog::load(&skill_dir),
             skill_dir,
             model_config,
             model_status,
@@ -563,6 +608,13 @@ impl Default for AppState {
             dnd_below_ticks:    0,
             dnd_score_history:  std::collections::VecDeque::new(),
             dnd_snr_low_ticks:  0,
+            llm_config:         crate::settings::LlmConfig::default(),
+            #[cfg(feature = "llm")]
+            llm_downloads:      std::collections::HashMap::new(),
+            #[cfg(feature = "llm")]
+            llm_logs:           crate::llm::new_log_buffer(),
+            #[cfg(feature = "llm")]
+            llm_state_cell:     crate::llm::new_state_cell(),
         }
     }
 }
@@ -614,6 +666,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         track_active_window:    s.track_active_window,
         track_input_activity:   s.track_input_activity,
         do_not_disturb:         s.dnd_config.clone(),
+        llm:                    s.llm_config.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
@@ -973,14 +1026,46 @@ pub fn run() {
             }
 
             let app_name = app.package_info().name.to_lowercase();
-            let ws_cfg = {
+            let (ws_cfg, llm_cfg) = {
                 let dir = app.state::<Mutex<AppState>>().lock_or_recover().skill_dir.clone();
                 let s   = load_settings(&dir);
-                (s.ws_host, s.ws_port)
+                ((s.ws_host, s.ws_port), s.llm)
             };
-            let (broadcaster, serve_handle) = ws_server::bind_with(ws_cfg.0, ws_cfg.1);
+
+            // ── LLM server (optional, same port) ──────────────────────────
+            // Routes are always mounted; cell holds None until started.
+            #[cfg(feature = "llm")]
+            {
+                let (catalog, log_buf, cell) = {
+                    let guard = app.state::<Mutex<AppState>>();
+                    let s = guard.lock().unwrap();
+                    (s.llm_catalog.clone(), s.llm_logs.clone(), s.llm_state_cell.clone())
+                };
+                if llm_cfg.enabled {
+                    let app_handle = app.handle().clone();
+                    // Spawn init on a blocking thread; don't hold the setup thread.
+                    let cell2 = cell.clone();
+                    std::thread::spawn(move || {
+                        if let Some(state) = llm::init(&llm_cfg, &catalog, app_handle, log_buf) {
+                            *cell2.lock().unwrap() = Some(state);
+                        }
+                    });
+                }
+            }
+
+            let (broadcaster, mut serve_handle) = ws_server::bind_with(ws_cfg.0, ws_cfg.1);
             ws_server::register_mdns(&app_name, serve_handle.port);
             let ws_app = app.handle().clone();
+
+            // Pass the cell into the serve handle — LLM routes are always
+            // mounted; they return 503 when cell is None (server not running).
+            #[cfg(feature = "llm")]
+            {
+                let cell = app.state::<Mutex<AppState>>()
+                    .lock().unwrap().llm_state_cell.clone();
+                serve_handle.set_llm(cell);
+            }
+
             tauri::async_runtime::spawn(async move { serve_handle.serve(ws_app).await; });
             app.manage(broadcaster);
 
@@ -1043,7 +1128,8 @@ pub fn run() {
                 s.track_input_activity         = data.track_input_activity;
                 s.input_activity_enabled
                     .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
-                s.dnd_config = data.do_not_disturb;
+                s.dnd_config  = data.do_not_disturb;
+                s.llm_config  = data.llm;
                 if let Some(os_active) = crate::dnd::query_os_active() {
                     if !os_active { s.dnd_active = false; }
                 }
@@ -1193,6 +1279,13 @@ pub fn run() {
                     } else if id == "api" {
                         let a = app.clone();
                         tauri::async_runtime::spawn(async move { let _ = open_api_window(a).await; });
+                    } else if id == "chat" {
+                        #[cfg(feature = "llm")] {
+                            let a = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = open_chat_window(a).await;
+                            });
+                        }
                     } else if id == "focus_timer" {
                         let a = app.clone();
                         tauri::async_runtime::spawn(async move {
@@ -1482,6 +1575,32 @@ pub fn run() {
             get_recent_active_windows, get_recent_input_activity,
             get_input_buckets,
             get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status, test_dnd, list_focus_modes,
+            get_llm_config, set_llm_config, pick_gguf_file,
+            // LLM catalog (compiled in regardless; no-op stubs when `llm` feature absent)
+            #[cfg(feature = "llm")]
+            get_llm_catalog,
+            #[cfg(feature = "llm")]
+            download_llm_model,
+            #[cfg(feature = "llm")]
+            cancel_llm_download,
+            #[cfg(feature = "llm")]
+            delete_llm_model,
+            #[cfg(feature = "llm")]
+            refresh_llm_catalog,
+            #[cfg(feature = "llm")]
+            set_llm_active_model,
+            #[cfg(feature = "llm")]
+            set_llm_active_mmproj,
+            #[cfg(feature = "llm")]
+            get_llm_logs,
+            #[cfg(feature = "llm")]
+            start_llm_server,
+            #[cfg(feature = "llm")]
+            stop_llm_server,
+            #[cfg(feature = "llm")]
+            get_llm_server_status,
+            #[cfg(feature = "llm")]
+            open_chat_window,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,
@@ -1501,12 +1620,26 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, event| {
+        .run(|app, event| {
             match event {
                 tauri::RunEvent::ExitRequested { api, code, .. } => {
                     if code.is_none() { api.prevent_exit(); }
                 }
-                tauri::RunEvent::Exit => { tts_shutdown(); }
+                tauri::RunEvent::Exit => {
+                    // Stop the LLM actor *before* tts_shutdown() and before the
+                    // process begins static destruction (Metal device cleanup).
+                    // Joining the thread ensures LlamaContext → LlamaModel →
+                    // LlamaBackend are dropped in order, releasing all GPU
+                    // resources cleanly.
+                    #[cfg(feature = "llm")]
+                    {
+                        let cell = app.state::<Mutex<AppState>>()
+                            .lock().unwrap()
+                            .llm_state_cell.clone();
+                        llm::shutdown_cell(&cell);
+                    }
+                    tts_shutdown();
+                }
                 _ => {}
             }
         });

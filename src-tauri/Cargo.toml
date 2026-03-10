@@ -6,19 +6,49 @@ authors = ["you"]
 edition = "2021"
 license = "GPL-3.0-only"
 
-# ── TTS backend feature flags ─────────────────────────────────────────────────
+# ── Feature flags ─────────────────────────────────────────────────────────────
 #
 #  tts-kitten  — enable KittenTTS (ONNX, English, ~30 MB, espeak-ng required)
 #  tts-neutts  — enable NeuTTS   (GGUF backbone + NeuCodec, voice-cloning,
 #                                  multi-language, espeak-ng + cmake required)
 #
-#  Both are on by default.  Either can be disabled at build time:
-#    cargo build --no-default-features --features tts-neutts
+#  All three are on by default.  To build without LLM support:
+#    cargo build --no-default-features --features tts-kitten,tts-neutts
+#
+#  llm         — OpenAI-compatible local LLM inference server embedded in the
+#                same HTTP port as the WebSocket API.  Uses llama-cpp-4 (Rust
+#                bindings for llama.cpp).  On by default.
+#                GPU offloading flags (pick at most one):
+#                  --features llm-metal   (macOS Metal)
+#                  --features llm-cuda    (NVIDIA CUDA)
+#                  --features llm-vulkan  (cross-platform Vulkan)
+#                Multimodal (image / audio inputs):
+#                  --features llm-mtmd
+#
+#                neutts 0.0.5 uses llama-cpp-4 too — no `links = "llama"`
+#                conflict; both features can be active simultaneously.
 #
 [features]
-default    = ["tts-kitten", "tts-neutts"]
+default    = ["tts-kitten", "tts-neutts", "llm"]
 tts-kitten = ["dep:kittentts", "dep:rodio"]
 tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound"]
+
+# ── LLM feature tree ──────────────────────────────────────────────────────────
+#
+# neutts 0.0.5 migrated its backbone from llama-cpp-2 to llama-cpp-4.
+# Both neutts and llama-cpp-4 now resolve to the same package — Cargo
+# deduplicates them, so the `links = "llama"` conflict is fully resolved.
+#
+# `llm`        — core: load GGUF model, run OpenAI-compatible HTTP server
+# `llm-metal`  — Metal GPU offload (macOS)
+# `llm-cuda`   — CUDA GPU offload (NVIDIA)
+# `llm-vulkan` — Vulkan GPU offload (cross-platform)
+# `llm-mtmd`   — multimodal: image/audio inputs via libmtmd
+llm        = ["dep:llama-cpp-4", "axum/multipart"]
+llm-metal  = ["llm", "llama-cpp-4?/metal"]
+llm-cuda   = ["llm", "llama-cpp-4?/cuda"]
+llm-vulkan = ["llm", "llama-cpp-4?/vulkan"]
+llm-mtmd   = ["llm", "llama-cpp-4?/mtmd"]
 
 [lib]
 name = "skill_lib"
@@ -66,16 +96,20 @@ csv = "1"
 kittentts = { version = "0.2.2", features = ["espeak"], optional = true }
 
 # NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder.
-# backbone: GGUF LLM via llama-cpp-2 (requires cmake + C++ at build time).
+# 0.0.5+: backbone is now llama-cpp-4 (was llama-cpp-2).  This means neutts
+#         and our `llm` feature share the same native llama library — Cargo
+#         deduplicates them into one package, so the `links = "llama"` conflict
+#         that existed with 0.0.4 is fully resolved.
+# backbone: GGUF LLM via llama-cpp-4 (requires cmake + C++ at build time).
 # espeak:   raw text → IPA → model (requires espeak-ng at runtime).
 # wgpu:     GPU-accelerated NeuCodec decoder via Burn/wgpu backend.
 # fast:     polynomial-approximation RoPE caching (6-12× fewer cycles).
-# metal:    macOS Metal GPU for the backbone (llama-cpp-2/metal).
+# metal:    macOS Metal GPU for the backbone (llama-cpp-4?/metal).
 #           Without it the backbone runs on CPU, making inference 30–120 s per
 #           sentence on Apple Silicon — effectively broken from a UX standpoint.
 #           Declared here for non-macOS; the macOS entry is in
 #           [target.'cfg(target_os = "macos")'.dependencies] below with `metal`.
-neutts = { version = "0.0.4", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
+neutts = { version = "0.0.5", features = ["backbone", "espeak", "fast", "wgpu"], optional = true }
 
 # Audio playback — pulled in automatically via tts-kitten / tts-neutts features.
 rodio = { version = "0.22", default-features = false, features = ["playback", "symphonia-wav"], optional = true }
@@ -102,10 +136,20 @@ rfd = { version = "0.17", default-features = false, features = ["file-handle-inn
 # GPU-accelerated FFT for real-time EEG filtering (overlap-save, wgpu backend)
 gpu-fft = { version = "1.1.1", features = ["wgpu"] }
 
-# WebSocket broadcast server
+# WebSocket broadcast server + HTTP REST API
 axum              = { version = "0.8", features = ["ws"] }
 tower-http        = { version = "0.6", features = ["cors"] }
 futures-util      = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# SSE streaming helpers used by the LLM server (zero cost when `llm` is off)
+async-stream      = "0.3"
+
+# ── LLM (OpenAI-compatible local inference via llama-cpp-4) ────────────────────
+# Optional — enabled by the `llm` feature flag (see [features] above).
+#
+# neutts 0.0.5 migrated from llama-cpp-2 → llama-cpp-4 so there is no longer
+# a `links = "llama"` conflict when both `tts-neutts` and `llm` are enabled.
+# Cargo deduplicates both into a single llama-cpp-4 package.
+llama-cpp-4 = { version = "0.2", optional = true }
 
 # mDNS / Bonjour service discovery
 mdns-sd = "0.18"
@@ -173,7 +217,7 @@ dispatch2        = "0.3.1"
 # `metal` passes llama-cpp-2/metal which enables the Metal compute backend.
 # Without this the backbone falls back to CPU and a single utterance can take
 # 30–120 s, making TTS appear broken.
-neutts = { version = "0.0.4", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
+neutts = { version = "0.0.5", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 fastembed = { version = "5.11.0" }

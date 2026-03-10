@@ -336,6 +336,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-stream"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5a71a6f37880a80d1d7f19efd781e4b5de42c88f0722cc13bcb6cc2cfe8476"
+dependencies = [
+ "async-stream-impl",
+ "futures-core",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "async-stream-impl"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7c24de15d275a1ecfd47a380fb4d5ec9bfe0933f309ed5e705b775596a3574d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "async-task"
 version = "4.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -456,6 +478,7 @@ dependencies = [
  "matchit",
  "memchr",
  "mime",
+ "multer",
  "percent-encoding",
  "pin-project-lite",
  "serde_core",
@@ -3479,15 +3502,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
-name = "find_cuda_helper"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9f9e65c593dd01ac77daad909ea4ad17f0d6d1776193fc8ea766356177abdad"
-dependencies = [
- "glob",
-]
-
-[[package]]
 name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5664,31 +5678,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
-name = "llama-cpp-2"
-version = "0.1.138"
+name = "llama-cpp-4"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2947ab625c59d1fdf42e61f538c3fa66f43de2f78316971920873f359483d1d8"
+checksum = "a4c4da413a6e09ae73254513857339653f2046429d4eb0a98f2070c842a185b9"
 dependencies = [
- "encoding_rs",
  "enumflags2",
- "llama-cpp-sys-2",
+ "llama-cpp-sys-4",
  "thiserror 2.0.18",
  "tracing",
- "tracing-core",
 ]
 
 [[package]]
-name = "llama-cpp-sys-2"
-version = "0.1.138"
+name = "llama-cpp-sys-4"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84a529006bf16af70c7485ba957820dc2bc9467d75697e97970c81d2da73c76f"
+checksum = "2710d6dfe302f598b3b49ed8cdb00ebc8c95a7a20c4cfa16bf986fb4dcc23407"
 dependencies = [
  "bindgen 0.72.1",
  "cc",
  "cmake",
- "find_cuda_helper",
  "glob",
- "walkdir",
 ]
 
 [[package]]
@@ -6083,6 +6093,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "multer"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83e87776546dc87511aa5ee218730c92b666d7264ab6ed41f9d215af9cd5224b"
+dependencies = [
+ "bytes",
+ "encoding_rs",
+ "futures-util",
+ "http",
+ "httparse",
+ "memchr",
+ "mime",
+ "spin 0.9.8",
+ "version_check",
+]
+
+[[package]]
 name = "muse-rs"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6220,9 +6247,9 @@ dependencies = [
 
 [[package]]
 name = "neutts"
-version = "0.0.4"
+version = "0.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "683f2af09abe06e6bdbdfbd36963da1af8679c6fbfc26f8c44f6877acd7298c3"
+checksum = "a063d06a161a4c4ee93a6fa368dff82d2df7f14586922ebaaa6f51771231045e"
 dependencies = [
  "anyhow",
  "burn",
@@ -6230,7 +6257,7 @@ dependencies = [
  "fancy-regex",
  "hf-hub 0.5.0",
  "hound",
- "llama-cpp-2",
+ "llama-cpp-4",
  "memmap2",
  "ndarray 0.16.1",
  "once_cell",
@@ -9035,6 +9062,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 name = "skill"
 version = "0.0.8"
 dependencies = [
+ "async-stream",
  "axum",
  "base64 0.22.1",
  "btleplug",
@@ -9055,6 +9083,7 @@ dependencies = [
  "hound",
  "kittentts",
  "libc",
+ "llama-cpp-4",
  "macos-focus",
  "mdns-sd",
  "muse-rs",

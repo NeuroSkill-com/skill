@@ -174,6 +174,8 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
     menu.append(&MenuItem::with_id(app, "settings",    "Settings…",           true, settings_accel)?)?;
     menu.append(&MenuItem::with_id(app, "help",        "Help…",               true, help_accel)?)?;
     menu.append(&MenuItem::with_id(app, "api",         "API Status…",         true, api_accel)?)?;
+    #[cfg(feature = "llm")]
+    menu.append(&MenuItem::with_id(app, "chat",        "Chat…",               true, None::<&str>)?)?;
 
     {
         let queue  = app.state::<std::sync::Arc<crate::job_queue::JobQueue>>();
