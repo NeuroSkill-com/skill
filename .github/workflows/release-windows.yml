@@ -300,6 +300,20 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "[ok] LIBCLANG_PATH=$libclangDir  (libclang.dll at $found)"
 
+          # Also set LLVM_CONFIG to help with toolchain detection
+          "LLVM_CONFIG=C:\LLVM\bin\llvm-config.exe" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] LLVM_CONFIG=C:\LLVM\bin\llvm-config.exe"
+          
+          # Set additional environment to bypass issues in clang-cl with mmx intrinsics
+          "CC=C:\LLVM\bin\clang.exe" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] CC=C:\LLVM\bin\clang.exe"
+          
+          "CXX=C:\LLVM\bin\clang++.exe" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] CXX=C:\LLVM\bin\clang++.exe"
+
       # ── Build frontend ────────────────────────────────────────────────────────
       - name: Build frontend
         run: npm run build

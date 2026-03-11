@@ -257,6 +257,20 @@ jobs:
           "LIBCLANG_PATH=$dir" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "[ok] LIBCLANG_PATH=$dir  (libclang.dll at $($dll.FullName))"
+          
+          # Also set LLVM_CONFIG to help with toolchain detection
+          "LLVM_CONFIG=C:\LLVM\bin\llvm-config.exe" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] LLVM_CONFIG=C:\LLVM\bin\llvm-config.exe"
+          
+          # Set additional environment to bypass issues in clang-cl with mmx intrinsics
+          "CC=C:\LLVM\bin\clang.exe" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] CC=C:\LLVM\bin\clang.exe"
+          
+          "CXX=C:\LLVM\bin\clang++.exe" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] CXX=C:\LLVM\bin\clang++.exe"
 
       # llm-vulkan is always injected on Windows (see scripts/tauri-build.js).
       # Check with the same feature set the actual build uses so compilation
@@ -272,6 +286,9 @@ jobs:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
           VULKAN_SDK:    ${{ env.VULKAN_SDK }}
+          LLVM_CONFIG:   ${{ env.LLVM_CONFIG }}
+          CC:            ${{ env.CC }}
+          CXX:           ${{ env.CXX }}
         run: cargo check --target x86_64-pc-windows-msvc --features llm-vulkan
 
       - name: cargo clippy
@@ -281,6 +298,9 @@ jobs:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
           VULKAN_SDK:    ${{ env.VULKAN_SDK }}
+          LLVM_CONFIG:   ${{ env.LLVM_CONFIG }}
+          CC:            ${{ env.CC }}
+          CXX:           ${{ env.CXX }}
         run: >
           cargo clippy
           --target x86_64-pc-windows-msvc

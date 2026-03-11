@@ -74,6 +74,11 @@ fn main() {
     #[cfg(target_os = "linux")]
     setup_vulkan_sdk_linux();
 
+    // Ensure we're using proper toolchain for the MSVC target
+    if cfg!(target_os = "windows") {
+        println!("cargo:warning=Using Windows build configuration");
+    }
+
     tauri_build::build()
 }
 
