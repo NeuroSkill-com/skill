@@ -25,7 +25,8 @@ import { execSync } from "child_process";
 import { platform, cpus } from "os";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync, unlinkSync } from "fs";
+import { tmpdir } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -107,40 +108,51 @@ if (isMingwTarget) {
   // that env var dies when the child exits.  Re-detect the SDK root here and
   // inject it into process.env so cargo / CMake (grandchildren of this process)
   // can find it without a shell restart.
+  //
+  // We write a temporary .ps1 file rather than using PowerShell's -Command
+  // flag because inline -Command quoting is fragile when passed through
+  // Node's execSync → Windows shell (registry paths, spaces, brackets all
+  // cause problems).  A file-based script has none of those issues.
   if (!process.env.VULKAN_SDK) {
     // Mirror the detection order used by install-vulkan-sdk.ps1:
     //   1. Machine-level env var written by the LunarG installer
-    //   2. Registry key written by the LunarG installer
+    //   2. Registry key written by the LunarG installer (both 64- and 32-bit hives)
     //   3. Newest versioned directory under C:\VulkanSDK\
-    const detectPs = `
-$p = [System.Environment]::GetEnvironmentVariable('VULKAN_SDK','Machine')
-if (-not $p) {
-  foreach ($reg in @('HKLM:\\SOFTWARE\\LunarG\\Vulkan SDK','HKLM:\\SOFTWARE\\WOW6432Node\\LunarG\\Vulkan SDK')) {
-    if (Test-Path $reg) {
-      $ip = (Get-ItemProperty $reg -ErrorAction SilentlyContinue).InstallPath
-      if ($ip -and (Test-Path (Join-Path $ip 'Include\\vulkan\\vulkan.h'))) { $p = $ip; break }
-    }
-  }
-}
-if (-not $p -and (Test-Path 'C:\\VulkanSDK')) {
-  $latest = Get-ChildItem 'C:\\VulkanSDK' -Directory | Sort-Object Name -Descending | Select-Object -First 1
-  if ($latest -and (Test-Path (Join-Path $latest.FullName 'Include\\vulkan\\vulkan.h'))) { $p = $latest.FullName }
-}
-if ($p) { Write-Output $p }
-`.trim().replace(/\n/g, " ");
-
+    const tmpScript = resolve(tmpdir(), `detect-vulkan-${Date.now()}.ps1`);
+    writeFileSync(tmpScript,
+      `$p = [System.Environment]::GetEnvironmentVariable('VULKAN_SDK', 'Machine')\r\n` +
+      `if (-not $p) {\r\n` +
+      `  foreach ($reg in @('HKLM:\\SOFTWARE\\LunarG\\Vulkan SDK', 'HKLM:\\SOFTWARE\\WOW6432Node\\LunarG\\Vulkan SDK')) {\r\n` +
+      `    if (Test-Path $reg) {\r\n` +
+      `      $ip = (Get-ItemProperty $reg -ErrorAction SilentlyContinue).InstallPath\r\n` +
+      `      if ($ip -and (Test-Path (Join-Path $ip 'Include\\vulkan\\vulkan.h'))) { $p = $ip; break }\r\n` +
+      `    }\r\n` +
+      `  }\r\n` +
+      `}\r\n` +
+      `if (-not $p -and (Test-Path 'C:\\VulkanSDK')) {\r\n` +
+      `  $latest = Get-ChildItem 'C:\\VulkanSDK' -Directory | Sort-Object Name -Descending | Select-Object -First 1\r\n` +
+      `  if ($latest -and (Test-Path (Join-Path $latest.FullName 'Include\\vulkan\\vulkan.h'))) { $p = $latest.FullName }\r\n` +
+      `}\r\n` +
+      `if ($p) { Write-Output $p }\r\n`
+    );
     try {
       const detected = execSync(
-        `powershell -NoProfile -Command "${detectPs}"`,
+        `powershell -NoProfile -ExecutionPolicy Bypass -File "${tmpScript}"`,
         { cwd: root }
       ).toString().trim();
       if (detected) {
         process.env.VULKAN_SDK = detected;
         console.log(`→ VULKAN_SDK detected and set: ${detected}`);
+      } else {
+        console.warn("→ WARNING: VULKAN_SDK not detected after install — cargo may fail");
       }
-    } catch {
-      // Non-fatal — if detection fails, cargo will surface the missing SDK.
+    } catch (e) {
+      console.warn(`→ WARNING: Vulkan SDK detection script failed: ${e.message}`);
+    } finally {
+      try { unlinkSync(tmpScript); } catch { /* ignore */ }
     }
+  } else {
+    console.log(`→ VULKAN_SDK already set: ${process.env.VULKAN_SDK}`);
   }
 
   console.log("→ building espeak-ng static library (MSVC) …");
