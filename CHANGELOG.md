@@ -4,7 +4,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ---
 
-## [Unreleased]
+## [0.0.17] — 2026-03-11
 
 ### CI / Build
 
