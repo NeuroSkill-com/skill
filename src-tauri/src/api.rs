@@ -10,10 +10,14 @@
 //!
 //! - `GET  /`                  → WebSocket upgrade *or* JSON API info page
 //! - `POST /`                  → Universal command tunnel (same JSON as WS)
+//!
+//! ## Unversioned shortcuts (legacy / convenience)
+//!
 //! - `GET  /status`            → `status` command
 //! - `GET  /sessions`          → `sessions` command
 //! - `POST /label`             → `label` command
 //! - `POST /notify`            → `notify` command
+//! - `POST /say`               → TTS (fire-and-forget)
 //! - `POST /calibrate`         → `run_calibration` command (auto-start)
 //! - `POST /timer`             → `timer` command (open & auto-start focus timer)
 //! - `POST /search`            → `search` command (EEG ANN)
@@ -27,28 +31,78 @@
 //! - `GET  /calibrations/{id}` → `get_calibration`
 //! - `PATCH /calibrations/{id}` → `update_calibration`
 //! - `DELETE /calibrations/{id}`→ `delete_calibration`
+//! - `GET  /dnd`               → DND automation status
+//! - `POST /dnd`               → force-enable/disable DND
 //!
-//! All endpoints return `{ "command": "…", "ok": true/false, …payload }`.
-//! HTTP status is 200 on success and 400 on error.
+//! ## Versioned `/v1/` endpoints (stateless, one-shot)
 //!
-//! CORS is wide-open (`*`) so browser scripts and Jupyter notebooks can call
-//! the API directly without a proxy.
+//! Every unversioned shortcut above is mirrored at a `/v1/` prefix so that
+//! clients can target a stable, version-tagged namespace.  These are
+//! **identical** to the unversioned variants — same request / response bodies.
 //!
-//! ## Universal tunnel
+//! The `/v1/` path space is shared with the embedded LLM server (when
+//! compiled with `--features llm`): LLM owns `/v1/models`,
+//! `/v1/chat/completions`, `/v1/completions`, and `/v1/embeddings`; all
+//! other `/v1/` paths belong to the Skill API.
+//!
+//! | Method | Path                          | Description                          |
+//! |--------|-------------------------------|--------------------------------------|
+//! | GET    | `/v1/status`                  | Full system status snapshot          |
+//! | GET    | `/v1/sessions`                | List recording sessions              |
+//! | POST   | `/v1/label`                   | Create a timestamped EEG label       |
+//! | POST   | `/v1/notify`                  | Send a native OS notification        |
+//! | POST   | `/v1/say`                     | Speak text via on-device TTS         |
+//! | POST   | `/v1/calibrate`               | Open calibration window + auto-start |
+//! | POST   | `/v1/timer`                   | Open focus timer + auto-start        |
+//! | POST   | `/v1/search`                  | EEG approximate-nearest-neighbour    |
+//! | POST   | `/v1/search_labels`           | Text / semantic label search         |
+//! | POST   | `/v1/compare`                 | A/B band-power comparison            |
+//! | POST   | `/v1/sleep`                   | Sleep-stage classification           |
+//! | POST   | `/v1/umap`                    | Enqueue a UMAP dimensionality job    |
+//! | GET    | `/v1/umap/{job_id}`           | Poll UMAP job result                 |
+//! | GET    | `/v1/calibrations`            | List calibration profiles            |
+//! | POST   | `/v1/calibrations`            | Create calibration profile           |
+//! | GET    | `/v1/calibrations/{id}`       | Get calibration profile by UUID      |
+//! | PATCH  | `/v1/calibrations/{id}`       | Update calibration profile           |
+//! | DELETE | `/v1/calibrations/{id}`       | Delete calibration profile           |
+//! | GET    | `/v1/dnd`                     | DND automation status                |
+//! | POST   | `/v1/dnd`                     | Force-enable/disable DND             |
+//!
+//! ## Quick-start examples
+//!
+//! ```bash
+//! PORT=8375
+//!
+//! # System status
+//! curl http://localhost:$PORT/v1/status | jq .
+//!
+//! # Create a label
+//! curl -X POST http://localhost:$PORT/v1/label \
+//!      -H 'Content-Type: application/json' \
+//!      -d '{"text":"eyes closed meditation","context":"morning session"}'
+//!
+//! # Search the last 10 minutes of EEG
+//! NOW=$(date +%s)
+//! curl -X POST http://localhost:$PORT/v1/search \
+//!      -H 'Content-Type: application/json' \
+//!      -d "{\"start_utc\":$((NOW-600)),\"end_utc\":$NOW,\"k\":5}"
+//!
+//! # Speak a message
+//! curl -X POST http://localhost:$PORT/v1/say \
+//!      -H 'Content-Type: application/json' \
+//!      -d '{"text":"Focus session starting now."}'
+//!
+//! # Enable DND
+//! curl -X POST http://localhost:$PORT/v1/dnd \
+//!      -H 'Content-Type: application/json' \
+//!      -d '{"enabled":true}'
+//! ```
+//!
+//! ## Universal tunnel (any command via POST /)
 //!
 //! `POST /` with body `{ "command": "status" }` is identical to sending the
 //! same JSON over WebSocket.  Every command, including those with nested
 //! parameters, is available this way.
-//!
-//! ## REST shortcuts
-//!
-//! Individual endpoints accept only the *payload* fields (no `"command"` key
-//! needed).  For example:
-//! ```bash
-//! curl -X POST http://localhost:8375/label \
-//!      -H 'Content-Type: application/json' \
-//!      -d '{"text":"eyes closed","context":"morning session"}'
-//! ```
 //!
 //! ## WebSocket (unchanged)
 //!
@@ -98,11 +152,13 @@ pub fn router(state: SharedState) -> Router {
     Router::new()
         // ── Root: WS upgrade OR GET info / POST command tunnel ────────────
         .route("/", get(root_get).post(command_post))
-        // ── REST shortcuts ────────────────────────────────────────────────
+
+        // ── Unversioned REST shortcuts (legacy / convenience) ─────────────
         .route("/status",         get(status_get))
         .route("/sessions",       get(sessions_get))
         .route("/label",          post(label_post))
         .route("/notify",         post(notify_post))
+        .route("/say",            post(say_post))
         .route("/calibrate",      post(calibrate_post))
         .route("/timer",          post(timer_post))
         .route("/search",         post(search_post))
@@ -110,16 +166,41 @@ pub fn router(state: SharedState) -> Router {
         .route("/compare",        post(compare_post))
         .route("/sleep",          post(sleep_post))
         .route("/umap",           post(umap_post))
-        .route("/umap/{job_id}",   get(umap_poll_get))
+        .route("/umap/{job_id}",  get(umap_poll_get))
         .route("/calibrations",
             get(list_calibrations_get).post(create_calibration_post))
-        .route("/say",            post(say_post))
         .route("/calibrations/{id}",
             get(get_calibration_get)
             .patch(update_calibration_patch)
             .delete(delete_calibration_delete))
         .route("/dnd",            get(dnd_get).post(dnd_post))
-        // ── LLM REST shortcuts ─────────────────────────────────────────────
+
+        // ── Versioned /v1/ REST endpoints (stateless, one-shot) ──────────
+        // Mirrors every unversioned shortcut above.  Shares the /v1/ namespace
+        // with the LLM sub-router (/v1/models, /v1/chat/completions, …) —
+        // those paths are disjoint and are registered via .merge() in ws_server.
+        .route("/v1/status",         get(status_get))
+        .route("/v1/sessions",       get(sessions_get))
+        .route("/v1/label",          post(label_post))
+        .route("/v1/notify",         post(notify_post))
+        .route("/v1/say",            post(say_post))
+        .route("/v1/calibrate",      post(calibrate_post))
+        .route("/v1/timer",          post(timer_post))
+        .route("/v1/search",         post(search_post))
+        .route("/v1/search_labels",  post(search_labels_post))
+        .route("/v1/compare",        post(compare_post))
+        .route("/v1/sleep",          post(sleep_post))
+        .route("/v1/umap",           post(umap_post))
+        .route("/v1/umap/{job_id}",  get(umap_poll_get))
+        .route("/v1/calibrations",
+            get(list_calibrations_get).post(create_calibration_post))
+        .route("/v1/calibrations/{id}",
+            get(get_calibration_get)
+            .patch(update_calibration_patch)
+            .delete(delete_calibration_delete))
+        .route("/v1/dnd",            get(dnd_get).post(dnd_post))
+
+        // ── LLM REST shortcuts (non-/v1/ — /v1/ routes are in llm::router)
         .route("/llm/status",           get(llm_status_get))
         .route("/llm/start",            post(llm_start_post))
         .route("/llm/stop",             post(llm_stop_post))
@@ -129,6 +210,7 @@ pub fn router(state: SharedState) -> Router {
         .route("/llm/delete",           post(llm_delete_post))
         .route("/llm/logs",             get(llm_logs_get))
         .route("/llm/chat",             post(llm_chat_post))
+
         // ── CORS: allow all origins so browsers / notebooks can call freely
         .layer(CorsLayer::new()
             .allow_origin(Any)
@@ -216,7 +298,8 @@ async fn root_get(
         let info = json!({
             "name":    "Skill API",
             "version": 1,
-            "docs":    "POST / with {\"command\":\"...\", …params} or use REST shortcuts below",
+            "docs":    "POST / with {\"command\":\"...\", …params} or use /v1/ REST endpoints below",
+            "websocket": "ws://host:port/  — connect then send JSON commands; receive broadcast events",
             "commands": [
                 "status","sessions","label","notify","say","calibrate","timer",
                 "search","search_labels","compare","sleep",
@@ -229,27 +312,31 @@ async fn root_get(
                 "llm_download","llm_cancel_download","llm_delete","llm_logs",
                 "llm_chat (WebSocket streaming + POST /llm/chat non-streaming)"
             ],
-            "rest": {
-                "GET /status":                  "status snapshot",
-                "GET /sessions":                "list sessions",
-                "POST /label":                  "create label",
-                "POST /notify":                 "OS notification",
-                "POST /say":                    "speak text via TTS (fire-and-forget)",
-                "POST /calibrate":              "open calibration + auto-start",
-                "POST /timer":                  "open focus timer + auto-start",
-                "POST /search":                 "EEG ANN search",
-                "POST /search_labels":          "text/context label search",
-                "POST /compare":                "A/B comparison",
-                "POST /sleep":                  "sleep staging",
-                "POST /umap":                   "enqueue UMAP job",
-                "GET  /umap/{job_id}":          "poll UMAP job",
-                "GET  /calibrations":           "list profiles",
-                "POST /calibrations":           "create profile",
-                "GET  /calibrations/{id}":      "get profile",
-                "PATCH /calibrations/{id}":     "update profile",
-                "DELETE /calibrations/{id}":    "delete profile",
-                "GET  /dnd":                    "DND automation status (config + live eligibility)",
-                "POST /dnd":                    "force-enable/disable DND: { \"enabled\": bool }",
+            "v1": {
+                "GET  /v1/status":                  "full system status snapshot",
+                "GET  /v1/sessions":                "list recording sessions",
+                "POST /v1/label":                   "create timestamped EEG label: { text, context? }",
+                "POST /v1/notify":                  "native OS notification: { title, body? }",
+                "POST /v1/say":                     "speak text via TTS: { text, voice? }",
+                "POST /v1/calibrate":               "open calibration window + auto-start: { id? }",
+                "POST /v1/timer":                   "open focus timer + auto-start",
+                "POST /v1/search":                  "EEG ANN search: { start_utc, end_utc, k?, ef? }",
+                "POST /v1/search_labels":           "label search: { query, k?, mode? }",
+                "POST /v1/compare":                 "A/B comparison: { a_start_utc, a_end_utc, b_start_utc, b_end_utc }",
+                "POST /v1/sleep":                   "sleep staging: { start_utc, end_utc }",
+                "POST /v1/umap":                    "enqueue UMAP job: { start_utc, end_utc, … }",
+                "GET  /v1/umap/{job_id}":           "poll UMAP job result",
+                "GET  /v1/calibrations":            "list calibration profiles",
+                "POST /v1/calibrations":            "create calibration profile",
+                "GET  /v1/calibrations/{id}":       "get calibration profile by UUID",
+                "PATCH /v1/calibrations/{id}":      "update calibration profile",
+                "DELETE /v1/calibrations/{id}":     "delete calibration profile",
+                "GET  /v1/dnd":                     "DND automation status",
+                "POST /v1/dnd":                     "force-enable/disable DND: { enabled: bool }",
+                "note":                             "/v1/models /v1/chat/completions /v1/completions /v1/embeddings are served by the LLM sub-router"
+            },
+            "rest_legacy": {
+                "note":                         "Unversioned aliases (e.g. /status, /label) remain for backwards compatibility",
                 "GET  /llm/status":             "LLM server status (stopped/loading/running)",
                 "POST /llm/start":              "start LLM inference server (loads model)",
                 "POST /llm/stop":               "stop LLM inference server (frees GPU memory)",

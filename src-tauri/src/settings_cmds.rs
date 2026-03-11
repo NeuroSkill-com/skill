@@ -212,13 +212,17 @@ pub fn set_embedding_overlap(overlap_secs: f32, app: AppHandle) {
 
 // ── GPU stats ──────────────────────────────────────────────────────────────────
 
-#[cfg(target_os = "macos")]
+/// Return current GPU statistics.
+///
+/// On macOS the utilisation fields (`render`, `tiler`, `overall`) are live
+/// values from the IOKit EWMA sampler.  On Linux and Windows they are always
+/// 0.0 — only memory figures are populated (via `llmfit-core`).
+///
+/// Returns `None` when no GPU can be detected on the current platform.
 #[tauri::command]
-pub fn get_gpu_stats() -> Option<crate::gpu_stats::GpuStats> { crate::gpu_stats::read() }
-
-#[cfg(not(target_os = "macos"))]
-#[tauri::command]
-pub fn get_gpu_stats() -> Option<()> { None }
+pub fn get_gpu_stats() -> Option<crate::gpu_stats::GpuStats> {
+    crate::gpu_stats::read()
+}
 
 // ── Logging config ────────────────────────────────────────────────────────────
 
@@ -261,17 +265,19 @@ pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<AppState>>) -> EegMode
 /// immediately abort the new attempt.  Progress and errors are reflected in
 /// [`EegModelStatus`] which the UI polls every 2 s.
 ///
-/// After a successful download [`EegModelStatus::download_needs_restart`] is
-/// set to `true` — the user must restart the app for the encoder to load.
+/// On success the `encoder_reload_requested` flag is set so the running embed
+/// worker exits and respawns — loading the new weights in-process without
+/// requiring an app restart.
 #[tauri::command]
 pub fn trigger_weights_download(state: tauri::State<'_, Mutex<AppState>>) {
     use std::sync::atomic::Ordering;
 
     let s = state.lock_or_recover();
-    let hf_repo      = s.model_config.hf_repo.clone();
-    let model_status = s.model_status.clone();
-    let cancel       = s.download_cancel.clone();
-    let logger       = s.logger.clone();
+    let hf_repo          = s.model_config.hf_repo.clone();
+    let model_status     = s.model_status.clone();
+    let cancel           = s.download_cancel.clone();
+    let reload_requested = s.encoder_reload_requested.clone();
+    let logger           = s.logger.clone();
     drop(s); // release AppState lock before spawning
 
     // Clear any previous cancellation so the new attempt actually runs.
@@ -280,7 +286,15 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<AppState>>) {
     std::thread::Builder::new()
         .name("hf-download".into())
         .spawn(move || {
-            download_hf_weights(&hf_repo, &model_status, &cancel, true, &logger);
+            // mark_needs_restart=false: instead of prompting restart we signal
+            // the embed worker to reload in-place via encoder_reload_requested.
+            if download_hf_weights(&hf_repo, &model_status, &cancel, false, &logger).is_some() {
+                // Signal the running embed worker (if any) to exit and respawn
+                // so it picks up the freshly downloaded encoder immediately.
+                reload_requested.store(true, Ordering::Relaxed);
+                skill_log!(logger, "embedder",
+                    "weights downloaded — signalling embed worker for in-place reload");
+            }
         })
         .expect("[hf-download] failed to spawn download thread");
 }
@@ -339,6 +353,21 @@ pub fn set_theme(theme: String, app: AppHandle, state: tauri::State<'_, Mutex<Ap
 #[tauri::command]
 pub fn set_language(language: String, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
     state.lock_or_recover().language = language;
+    save_settings(&app);
+}
+
+#[tauri::command]
+pub fn get_accent_color(state: tauri::State<'_, Mutex<AppState>>) -> String {
+    state.lock_or_recover().accent_color.clone()
+}
+
+#[tauri::command]
+pub fn set_accent_color(
+    accent: String,
+    app:    AppHandle,
+    state:  tauri::State<'_, Mutex<AppState>>,
+) {
+    state.lock_or_recover().accent_color = accent;
     save_settings(&app);
 }
 

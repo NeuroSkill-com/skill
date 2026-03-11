@@ -92,6 +92,13 @@ pub struct EegModelStatus {
     /// `true` once the ZUNA encoder has been loaded on the wgpu device.
     pub encoder_loaded: bool,
 
+    /// `true` while the embed worker thread is alive (weights resolved,
+    /// actively loading or running inference).  `false` before any session
+    /// starts and after the worker exits.  Used by the UI to distinguish
+    /// "weights found, worker loading encoder" from "weights found but no
+    /// active session yet — connect headset to begin".
+    pub embed_worker_active: bool,
+
     /// Human-readable encoder summary, e.g.
     /// `"ZUNA  dim=1024  layers=16  head_dim=64  out_dim=32"`.
     pub encoder_describe: Option<String>,

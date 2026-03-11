@@ -87,6 +87,13 @@ the Free Software Foundation, version 3 only. -->
     dndSaving = true;
     try { await invoke("set_dnd_config", { config: dndConfig }); } catch {}
     dndSaving = false;
+    // Mark "set a DND threshold" onboarding step when the user saves with DND enabled.
+    if (dndConfig.enabled) {
+      try {
+        const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
+        if (!ob.dndConfigured) { ob.dndConfigured = true; localStorage.setItem("onboardDone", JSON.stringify(ob)); }
+      } catch (_) {}
+    }
   }
 
   async function toggleDnd() {

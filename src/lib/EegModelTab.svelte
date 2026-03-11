@@ -24,6 +24,7 @@ the Free Software Foundation, version 3 only. -->
   interface EegModelStatus {
     encoder_loaded:         boolean;
     encoder_describe:       string | null;
+    embed_worker_active:    boolean;
     weights_found:          boolean;
     weights_path:           string | null;
     embeddings_today:       number;
@@ -42,6 +43,7 @@ the Free Software Foundation, version 3 only. -->
   });
   let modelStatus = $state<EegModelStatus>({
     encoder_loaded: false, encoder_describe: null,
+    embed_worker_active: false,
     weights_found: false, weights_path: null,
     embeddings_today: 0, daily_db_path: "", daily_hnsw_path: "",
     downloading_weights: false, download_status_msg: null,
@@ -106,10 +108,23 @@ the Free Software Foundation, version 3 only. -->
     !isAutoRetrying &&
     !hasFailed
   );
+  // download_needs_restart is kept for backwards compat but the normal flow
+  // now uses in-place reload — this state is only reached in edge cases.
   const needsRestart     = $derived(modelStatus.download_needs_restart);
+  // Weights present on disk but the embed worker is not yet running (no active
+  // BLE/OpenBCI session).  Show an informational state rather than a spinner.
+  const weightsReadyNoSession = $derived(
+    modelStatus.weights_found &&
+    !modelStatus.encoder_loaded &&
+    !modelStatus.embed_worker_active &&
+    !modelStatus.downloading_weights &&
+    !modelStatus.download_needs_restart
+  );
+  // Worker is running and actively loading the encoder on the GPU.
   const encoderLoading   = $derived(
     modelStatus.weights_found &&
     !modelStatus.encoder_loaded &&
+    modelStatus.embed_worker_active &&
     !modelStatus.download_needs_restart
   );
 
@@ -334,6 +349,22 @@ the Free Software Foundation, version 3 only. -->
               {restarting ? "…" : t("model.restartNow")}
             </Button>
           </div>
+        </div>
+
+      <!-- ── State: weights ready, no active session yet ───────────────────── -->
+      {:else if weightsReadyNoSession}
+        <div class="flex items-center gap-3 px-4 py-3.5">
+          <div class="flex flex-col gap-0.5 min-w-0 flex-1">
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+            <span class="text-[0.65rem] text-muted-foreground/70">
+              {t("model.weightsReadyConnectHeadset")}
+            </span>
+          </div>
+          <Badge variant="outline"
+            class="shrink-0 text-[0.56rem] py-0 px-1.5
+                   bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+            {t("model.ready")}
+          </Badge>
         </div>
 
       <!-- ── State: encoder loading (weights present, GPU compiling) ─────── -->

@@ -970,6 +970,86 @@ the Free Software Foundation, version 3 only. -->
     if (loaded && !animating && selectedLabel) applyHighlight();
   });
 
+  // ── Export ───────────────────────────────────────────────────────────────
+
+  /** Brief "✓ saved" flash after a successful export. */
+  let exportFlash = $state<"png" | "json" | null>(null);
+  let exportFlashTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function flashExport(kind: "png" | "json") {
+    exportFlash = kind;
+    if (exportFlashTimer) clearTimeout(exportFlashTimer);
+    exportFlashTimer = setTimeout(() => { exportFlash = null; }, 1800);
+  }
+
+  /**
+   * Capture the WebGL canvas as a PNG and trigger a browser download.
+   *
+   * Requires `preserveDrawingBuffer: true` on the renderer (set in onMount).
+   * We force a synchronous render immediately before calling `toDataURL` so
+   * the buffer is guaranteed to contain the current frame.
+   */
+  function exportPng() {
+    if (!renderer || !scene || !camera) return;
+    renderer.render(scene, camera);          // ensure buffer is current
+    const url = renderer.domElement.toDataURL("image/png");
+    const a   = document.createElement("a");
+    a.href     = url;
+    a.download = `umap-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.png`;
+    a.click();
+    flashExport("png");
+  }
+
+  /**
+   * Serialise the current point cloud to JSON and trigger a browser download.
+   *
+   * Each entry contains:
+   * - `x_umap / y_umap / z_umap` — raw UMAP coordinates (dimensionality-
+   *   reduced space, as returned by the Rust UMAP worker)
+   * - `x3d / y3d / z3d` — normalised Three.js scene coordinates used for
+   *   rendering (centred on origin, scaled to ±UMAP_SCALE/2)
+   * - `session` — 0 = A, 1 = B
+   * - `utc` — Unix timestamp of the EEG window (seconds)
+   * - `label` — optional annotation string
+   * - `dist` — optional semantic distance from the search anchor
+   */
+  function exportJson() {
+    if (!curPoints.length) return;
+    const pts = curPoints.map((p, i) => {
+      const entry: Record<string, unknown> = {
+        x_umap: p.x,
+        y_umap: p.y,
+        z_umap: p.z ?? 0,
+        x3d:    curPositions[i * 3],
+        y3d:    curPositions[i * 3 + 1],
+        z3d:    curPositions[i * 3 + 2],
+        session: p.session,
+        utc:     p.utc,
+      };
+      if (p.label != null) entry.label = p.label;
+      if (p.dist  != null) entry.dist  = p.dist;
+      return entry;
+    });
+
+    const payload = {
+      exported_at: new Date().toISOString(),
+      n_points:    curPoints.length,
+      n_a:         data.n_a,
+      n_b:         data.n_b,
+      dim:         data.dim,
+      points:      pts,
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `umap-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    flashExport("json");
+  }
+
   // ── Mount ────────────────────────────────────────────────────────────────
   onMount(async () => {
     if (!container) return;
@@ -1009,7 +1089,9 @@ the Free Software Foundation, version 3 only. -->
       camera.position.set(0, 0, 25);
 
       // Renderer — use the canvas we created
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      // preserveDrawingBuffer keeps the framebuffer alive after each render
+      // so that exportPng() can call canvas.toDataURL() at any time.
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
       renderer.setSize(w, h);
       console.log("[UmapViewer3D] renderer created, size:", renderer.getSize(new THREE.Vector2()).toArray());
@@ -1196,6 +1278,7 @@ the Free Software Foundation, version 3 only. -->
   onDestroy(() => {
     stopTrace();
     clearHighlightEdges();
+    if (exportFlashTimer) clearTimeout(exportFlashTimer);
     if (_onCmdDown) window.removeEventListener("keydown", _onCmdDown);
     if (_onCmdUp)   window.removeEventListener("keyup",   _onCmdUp);
     if (animId) cancelAnimationFrame(animId);
@@ -1620,6 +1703,62 @@ the Free Software Foundation, version 3 only. -->
           </span>
         </div>
       {/if}
+
+      <!-- Export buttons (PNG + JSON) -->
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="flex items-center gap-0 rounded-full overflow-hidden shadow-lg backdrop-blur-md
+                  border border-black/10 dark:border-white/10">
+        <!-- PNG -->
+        <div class="flex items-center gap-1 px-2.5 py-1 cursor-pointer transition-colors
+                    {exportFlash === 'png'
+                      ? 'bg-emerald-500/20 dark:bg-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-white/70 dark:bg-black/50 text-slate-500 dark:text-white/60 hover:text-slate-800 dark:hover:text-white/80'}"
+             title={t("umap.exportPngTitle")}
+             onclick={exportPng}>
+          {#if exportFlash === "png"}
+            <!-- Checkmark flash -->
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5 shrink-0">
+              <polyline points="1.5 6 4.5 9 10.5 3"/>
+            </svg>
+            <span class="text-[0.55rem] font-medium whitespace-nowrap">{t("umap.exportedPng")}</span>
+          {:else}
+            <!-- Camera icon -->
+            <svg viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.4"
+                 stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 shrink-0">
+              <path d="M5 1H9L10.5 3H13C13.6 3 14 3.4 14 4V11C14 11.6 13.6 12 13 12H1C0.4 12 0 11.6 0 11V4C0 3.4 0.4 3 1 3H3.5L5 1Z"/>
+              <circle cx="7" cy="7.5" r="2.5"/>
+            </svg>
+            <span class="text-[0.55rem] font-medium whitespace-nowrap">{t("umap.exportPng")}</span>
+          {/if}
+        </div>
+        <!-- Divider -->
+        <div class="w-px h-4 bg-black/10 dark:bg-white/10 shrink-0"></div>
+        <!-- JSON -->
+        <div class="flex items-center gap-1 px-2.5 py-1 cursor-pointer transition-colors
+                    {exportFlash === 'json'
+                      ? 'bg-emerald-500/20 dark:bg-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-white/70 dark:bg-black/50 text-slate-500 dark:text-white/60 hover:text-slate-800 dark:hover:text-white/80'}"
+             title={t("umap.exportJsonTitle")}
+             onclick={exportJson}>
+          {#if exportFlash === "json"}
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5 shrink-0">
+              <polyline points="1.5 6 4.5 9 10.5 3"/>
+            </svg>
+            <span class="text-[0.55rem] font-medium whitespace-nowrap">{t("umap.exportedJson")}</span>
+          {:else}
+            <!-- Download icon -->
+            <svg viewBox="0 0 12 14" fill="none" stroke="currentColor" stroke-width="1.4"
+                 stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-3 shrink-0">
+              <path d="M6 1v8M3 6l3 3 3-3"/>
+              <path d="M1 11h10v2H1z"/>
+            </svg>
+            <span class="text-[0.55rem] font-medium whitespace-nowrap">{t("umap.exportJson")}</span>
+          {/if}
+        </div>
+      </div>
     </div>
   {/if}
 

@@ -353,6 +353,11 @@ the Free Software Foundation, version 3 only. -->
       };
       await invoke("stream_search_embeddings", { startUtc, endUtc, k: kVal || undefined, ef: efVal || undefined, onProgress: ch });
       result = { ...acc };
+      // Mark "run a similarity search" onboarding step as done.
+      try {
+        const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
+        if (!ob.searchRun) { ob.searchRun = true; localStorage.setItem("onboardDone", JSON.stringify(ob)); }
+      } catch (_) {}
     } catch (e) { error = String(e); }
     finally { clearInterval(timer); searching = false; searchStatus = ""; }
     if (result && result.results.length > 0) { showUmap = true; fireUmap(); }

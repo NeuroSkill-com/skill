@@ -69,7 +69,7 @@ impl SessionDsp {
     /// and releases it before building any DSP object.
     pub(crate) fn new(app: &AppHandle) -> Self {
         let (filter_cfg, overlap_secs, skill_dir, model_config,
-             model_status, download_cancel, logger) = {
+             model_status, download_cancel, encoder_reload_requested, logger) = {
             let r = app.state::<Mutex<AppState>>();
             let g = r.lock_or_recover();
             (
@@ -79,6 +79,7 @@ impl SessionDsp {
                 g.model_config.clone(),
                 g.model_status.clone(),
                 g.download_cancel.clone(),
+                g.encoder_reload_requested.clone(),
                 g.logger.clone(),
             )
         }; // lock released here
@@ -91,8 +92,8 @@ impl SessionDsp {
             .arc();
 
         let mut accumulator = EegAccumulator::new(
-            skill_dir, model_config, model_status, download_cancel, logger,
-            global_index,
+            skill_dir, model_config, model_status, download_cancel,
+            encoder_reload_requested, logger, global_index,
         );
         accumulator.set_overlap_secs(overlap_secs);
 

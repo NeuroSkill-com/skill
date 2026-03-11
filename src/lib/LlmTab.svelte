@@ -216,6 +216,11 @@
 
   async function download(filename: string) {
     await invoke("download_llm_model", { filename });
+    // Immediately refresh the catalog so the frontend state flips to
+    // "downloading" before the poll timer fires.  Without this the timer
+    // condition `catalog.entries.some(e => e.state === "downloading")` would
+    // be false on the very first tick and the progress bar would never appear.
+    await loadCatalog();
   }
 
   async function cancelDownload(filename: string) {
@@ -288,9 +293,12 @@
         if (logAutoScroll) await scrollToBottom();
       });
     } catch {}
+    // Poll every 500 ms while a download is active so the progress bar stays
+    // smooth.  The backend blob-monitor fires every 400 ms, so this gives
+    // roughly one UI update per backend tick.
     pollTimer = setInterval(async () => {
       if (catalog.entries.some(e => e.state === "downloading")) await loadCatalog();
-    }, 1500);
+    }, 500);
   });
 
   onDestroy(() => {

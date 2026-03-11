@@ -4,7 +4,7 @@
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
-//! GPU utilisation and memory reading via IOKit + sysctl + Mach APIs.
+//! GPU utilisation and memory reading — cross-platform.
 //!
 //! ## macOS — Apple Silicon (unified memory)
 //!
@@ -22,9 +22,28 @@
 //! * `vramUsedBytesCurrent` — AMD
 //! * `VRAM,totalMB`         — fallback from the parent PCI device
 //!
-//! ## non-macOS
+//! Utilisation is polled at 100 ms and smoothed with an EWMA (τ = 500 ms)
+//! on a dedicated background thread so callers pay no IOKit cost.
 //!
-//! All functions return `None` / default.
+//! ## Linux / Windows — via `llmfit-core`
+//!
+//! [`llmfit_core::hardware::SystemSpecs::detect`] covers:
+//! * NVIDIA via `nvidia-smi` (with sysfs fallback for containerised setups)
+//! * AMD via `rocm-smi` (with sysfs fallback for non-ROCm systems)
+//! * Intel Arc via sysfs / lspci
+//! * Apple Silicon via `system_profiler` (same binary also runs on macOS,
+//!   but the IOKit path above is used there instead)
+//! * Windows GPUs via PowerShell WMI / wmic
+//! * Unified-memory APUs (AMD Ryzen AI) and SoCs (NVIDIA Grace Blackwell)
+//!
+//! GPU utilisation is **not** available on Linux/Windows (no equivalent of
+//! IOKit's `PerformanceStatistics`); `render`, `tiler`, and `overall` are
+//! always 0.0 on those platforms.
+//!
+//! `free_memory_bytes` is refreshed every 5 s on unified-memory platforms
+//! (where it equals available system RAM) by a lightweight `sysinfo` poll.
+//! For discrete GPUs on Linux/Windows it is `None` — live VRAM-free tracking
+//! would require NVML/NVAPI/ADL, which are not in scope here.
 
 use serde::{Deserialize, Serialize};
 
@@ -32,43 +51,55 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub struct GpuStats {
     /// Render engine utilisation, 0.0–1.0 (Apple Silicon `Renderer Utilization %`).
+    /// Always 0.0 on Linux / Windows (IOKit not available).
     pub render:  f32,
     /// Tiler / geometry engine utilisation, 0.0–1.0 (Apple Silicon `Tiler Utilization %`).
+    /// Always 0.0 on Linux / Windows.
     pub tiler:   f32,
     /// Best-effort overall utilisation, 0.0–1.0.
+    /// Always 0.0 on Linux / Windows.
     pub overall: f32,
 
-    /// `true` on Apple Silicon where GPU and CPU share a single unified memory pool.
+    /// `true` on Apple Silicon and other unified-memory architectures (AMD
+    /// Ryzen AI APUs, NVIDIA Grace Blackwell) where GPU and CPU share a single
+    /// physical memory pool.
     pub is_unified_memory: bool,
 
     /// Total GPU-accessible memory in bytes.
-    /// * Unified memory (Apple Silicon): total physical RAM.
+    /// * Unified memory: total physical RAM.
     /// * Discrete GPU: total VRAM.
     ///
     /// `None` if the value could not be read.
     pub total_memory_bytes: Option<u64>,
 
     /// Free / available GPU memory in bytes.
-    /// * Unified memory: `(free + inactive)` pages × page size.
-    /// * Discrete GPU: `vramFreeBytes` from IOAccelerator.
+    /// * macOS unified: `(free + inactive)` pages × page size.
+    /// * macOS discrete: `vramFreeBytes` from IOAccelerator.
+    /// * Linux/Windows unified: available system RAM (refreshed every 5 s).
+    /// * Linux/Windows discrete: `None` (NVML/ADL not in scope).
     ///
     /// `None` if the value could not be read.
     pub free_memory_bytes: Option<u64>,
 }
 
-/// Return smoothed GPU statistics from the background sampler.
+/// Return smoothed GPU statistics.
 ///
-/// The sampler polls IOKit every 100 ms and applies an EWMA (τ = 500 ms) so
-/// that brief render bursts are visible rather than lost between polls.
-/// The first call initialises the poller thread; subsequent calls just clone
-/// from a shared cache — no IOKit work on the caller's thread.
+/// On macOS the sampler polls IOKit every 100 ms and applies an EWMA so
+/// brief render bursts are visible.  The first call initialises the poller
+/// thread; subsequent calls just clone from a shared cache — no IOKit work
+/// on the caller's thread.
 ///
-/// Returns `None` on non-macOS or if IOKit reports no accelerators yet.
+/// On Linux / Windows a one-shot `llmfit-core` detection run is cached
+/// (GPU info is static) while free memory for unified-memory platforms is
+/// refreshed every 5 s from `sysinfo`.
+///
+/// Returns `None` if no GPU could be detected on the current platform.
 pub fn read() -> Option<GpuStats> {
     #[cfg(target_os = "macos")]
     return macos::cached_read();
+
     #[cfg(not(target_os = "macos"))]
-    return None;
+    return non_macos::read();
 }
 
 // ── macOS implementation ──────────────────────────────────────────────────────
@@ -528,5 +559,140 @@ mod macos {
                 free_memory_bytes:  vram_free,
             })
         }
+    }
+}
+
+// ── Linux / Windows implementation via llmfit-core ────────────────────────────
+//
+// Strategy
+// ────────
+// * GPU topology (VRAM total, unified-memory flag, backend) is static — detect
+//   it once via `SystemSpecs::detect()` and cache forever in `GPU_STATIC`.
+//   `detect()` may spawn short-lived child processes (nvidia-smi, rocm-smi …)
+//   so we must not call it on every Tauri poll.
+//
+// * Available RAM for unified-memory platforms is dynamic — a background
+//   thread wakes every `FREE_RAM_INTERVAL` and calls
+//   `sysinfo::System::refresh_memory()`, which is a cheap kernel read.
+//
+// * GPU utilisation (render / tiler / overall) is not provided because there
+//   is no cross-platform equivalent of IOKit's PerformanceStatistics.
+//   All three fields remain 0.0 on Linux / Windows.
+
+#[cfg(not(target_os = "macos"))]
+mod non_macos {
+    use std::sync::{Arc, Mutex, OnceLock};
+    use std::time::{Duration, Instant};
+
+    // Refresh the free-memory figure for unified-memory platforms every 5 s.
+    const FREE_RAM_INTERVAL: Duration = Duration::from_secs(5);
+
+    // ── Static GPU topology (detected once) ───────────────────────────────
+
+    struct StaticGpuInfo {
+        /// VRAM or unified memory pool size in bytes (`None` if unknown).
+        total_bytes:    Option<u64>,
+        /// True for Apple Silicon, AMD Ryzen AI APUs, NVIDIA Grace, etc.
+        unified_memory: bool,
+    }
+
+    static GPU_STATIC: OnceLock<Option<StaticGpuInfo>> = OnceLock::new();
+
+    fn detect_static() -> Option<StaticGpuInfo> {
+        let specs = llmfit_core::hardware::SystemSpecs::detect();
+        if !specs.has_gpu {
+            return None;
+        }
+        let gib: f64 = 1024.0 * 1024.0 * 1024.0;
+        let total_bytes = specs
+            .total_gpu_vram_gb
+            .map(|gb| (gb * gib) as u64)
+            .filter(|&b| b > 0);
+
+        Some(StaticGpuInfo {
+            total_bytes,
+            unified_memory: specs.unified_memory,
+        })
+    }
+
+    // ── Dynamic free-RAM cache for unified-memory platforms ───────────────
+
+    struct FreeRamCache {
+        bytes:       Option<u64>,
+        refreshed:   Instant,
+    }
+
+    static FREE_RAM: OnceLock<Arc<Mutex<FreeRamCache>>> = OnceLock::new();
+
+    fn ensure_free_ram_poller(is_unified: bool) -> Arc<Mutex<FreeRamCache>> {
+        FREE_RAM.get_or_init(|| {
+            let initial = if is_unified { sample_free_ram() } else { None };
+            let cache = Arc::new(Mutex::new(FreeRamCache {
+                bytes:     initial,
+                refreshed: Instant::now(),
+            }));
+
+            // Only bother with a background thread on unified-memory platforms
+            // where free RAM is meaningful.
+            if is_unified {
+                let shared = cache.clone();
+                std::thread::Builder::new()
+                    .name("gpu-free-ram".into())
+                    .spawn(move || loop {
+                        std::thread::sleep(FREE_RAM_INTERVAL);
+                        let bytes = sample_free_ram();
+                        let mut guard = shared.lock().unwrap_or_else(|e| e.into_inner());
+                        guard.bytes     = bytes;
+                        guard.refreshed = Instant::now();
+                    })
+                    .ok(); // non-fatal if thread spawn fails
+            }
+
+            cache
+        })
+        .clone()
+    }
+
+    /// Cheaply read available system RAM via `sysinfo`.
+    ///
+    /// `System::refresh_memory()` is a single sysctl / procfs read — orders of
+    /// magnitude cheaper than the full `System::new_all()` + `refresh_all()`
+    /// used during initial detection.
+    fn sample_free_ram() -> Option<u64> {
+        use sysinfo::{MemoryRefreshKind, RefreshKind, System};
+        let mut sys = System::new_with_specifics(
+            RefreshKind::nothing().with_memory(MemoryRefreshKind::nothing().with_ram()),
+        );
+        sys.refresh_memory();
+        let available = sys.available_memory();
+        if available > 0 { Some(available) } else { None }
+    }
+
+    // ── Public entry point ────────────────────────────────────────────────
+
+    pub fn read() -> Option<super::GpuStats> {
+        // One-shot detection (may spawn nvidia-smi / rocm-smi on first call).
+        let static_info = GPU_STATIC.get_or_init(detect_static).as_ref()?;
+
+        // For unified-memory platforms, retrieve (and lazily start refreshing)
+        // the current available-RAM figure.
+        let free_bytes = if static_info.unified_memory {
+            let cache = ensure_free_ram_poller(true);
+            let guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+            guard.bytes
+        } else {
+            // Discrete GPU: we have no live free-VRAM source without NVML/ADL.
+            None
+        };
+
+        Some(super::GpuStats {
+            // Utilisation is not available outside macOS IOKit.
+            render:  0.0,
+            tiler:   0.0,
+            overall: 0.0,
+            is_unified_memory:  static_info.unified_memory,
+            total_memory_bytes: static_info.total_bytes,
+            free_memory_bytes:  free_bytes,
+        })
     }
 }

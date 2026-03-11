@@ -494,7 +494,8 @@ pub(crate) fn default_ws_port() -> u16    { crate::constants::WS_DEFAULT_PORT }
 pub(crate) fn default_update_check_interval() -> u64 {
     crate::constants::UPDATER_CHECK_INTERVAL_SECS
 }
-pub(crate) fn default_theme()   -> String { "system".into() }
+pub(crate) fn default_theme()        -> String { "system".into() }
+pub(crate) fn default_accent_color() -> String { "violet".into() }
 pub(crate) fn default_daily_goal_min()       -> u32    { 60 }
 pub(crate) fn default_embedding_model()      -> String { "Xenova/bge-small-en-v1.5".into() }
 pub(crate) fn default_overlap_secs()         -> f32    { EMBEDDING_OVERLAP_SECS }
@@ -556,6 +557,8 @@ pub(crate) struct UserSettings {
     pub theme:                  String,
     #[serde(default)]
     pub language:               String,
+    #[serde(default = "default_accent_color")]
+    pub accent_color:           String,
     #[serde(default = "default_daily_goal_min")]
     pub daily_goal_min:         u32,
     #[serde(default)]
@@ -742,6 +745,7 @@ impl Default for UserSettings {
             do_not_disturb:                DoNotDisturbConfig::default(),
             last_seen_whats_new_version:   String::new(),
             llm:                           LlmConfig::default(),
+            accent_color:                  default_accent_color(),
         }
     }
 }

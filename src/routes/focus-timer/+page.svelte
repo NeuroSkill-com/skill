@@ -100,6 +100,73 @@ the Free Software Foundation, version 3 only. -->
     longBreakEvery = c.longBreakEvery;
   }
 
+  // ── Session log ──────────────────────────────────────────────────────────────
+
+  interface LogEntry {
+    type:        "work" | "break" | "longBreak";
+    startUtc:    number;   // unix seconds
+    durationSecs: number;  // planned duration (what was configured)
+    completedAt: number;   // unix seconds
+  }
+
+  const LS_LOG_PREFIX = "skill.focusTimer.log.";
+
+  /** YYYYMMDD string for today (local time). */
+  function todayKey(): string {
+    const d = new Date();
+    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function loadLog(): LogEntry[] {
+    try {
+      const raw = localStorage.getItem(LS_LOG_PREFIX + todayKey());
+      if (raw) return JSON.parse(raw) as LogEntry[];
+    } catch { /* ignore */ }
+    return [];
+  }
+
+  function saveLog(entries: LogEntry[]) {
+    try { localStorage.setItem(LS_LOG_PREFIX + todayKey(), JSON.stringify(entries)); } catch { /* full/private */ }
+  }
+
+  let sessionLog = $state<LogEntry[]>(loadLog());
+
+  function pushLog(entry: LogEntry) {
+    sessionLog = [...sessionLog, entry];
+    saveLog(sessionLog);
+  }
+
+  function clearLog() {
+    sessionLog = [];
+    try { localStorage.removeItem(LS_LOG_PREFIX + todayKey()); } catch { /* ignore */ }
+  }
+
+  // Derived totals
+  const focusSecs  = $derived(sessionLog.filter(e => e.type === "work").reduce((s, e) => s + e.durationSecs, 0));
+  const breakSecs  = $derived(sessionLog.filter(e => e.type !== "work").reduce((s, e) => s + e.durationSecs, 0));
+  const logTotalSecs = $derived(focusSecs + breakSecs);
+  const cyclesDone = $derived(sessionLog.filter(e => e.type === "work").length);
+
+  /** Format seconds as "Xh Ym" (hours suppressed when < 1h) or "Ym Zs" (minutes suppressed when < 1m). */
+  function fmtDuration(secs: number): string {
+    if (secs <= 0) return "0m";
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+    if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+    return `${s}s`;
+  }
+
+  /** Format a UTC unix timestamp as a local HH:MM string. */
+  function fmtTime(utc: number): string {
+    const d = new Date(utc * 1000);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+
+  // Whether the log panel is expanded
+  let logOpen = $state(true);
+
   // ── Timer state ─────────────────────────────────────────────────────────────
   type Phase = "idle" | "work" | "break" | "longBreak";
 
@@ -170,14 +237,24 @@ the Free Software Foundation, version 3 only. -->
     clearInterval(intervalId!);
     intervalId = null;
 
+    const completedAt = Math.floor(Date.now() / 1000);
+
     if (phase === "work") {
       speakAsync("Time's up. Great work!");
       sessionsDone++;
+
+      // Log the completed focus session
+      pushLog({
+        type:         "work",
+        startUtc:     phaseStartUtc,
+        durationSecs: workMins * 60,
+        completedAt,
+      });
+
       // Auto-label the completed focus session
       if (autoLabel) {
         try {
-          const nowUtc = Math.floor(Date.now() / 1000);
-          const label  = `${t("focusTimer.workPhase")} — ${workMins}min`;
+          const label = `${t("focusTimer.workPhase")} — ${workMins}min`;
           await invoke("submit_label", {
             labelStartUtc: phaseStartUtc,
             text: label,
@@ -189,11 +266,19 @@ the Free Software Foundation, version 3 only. -->
       const nextPhase = sessionsDone % longBreakEvery === 0 ? "longBreak" : "break";
       startPhase(nextPhase);
     } else {
+      // Log the completed break
+      pushLog({
+        type:         phase as "break" | "longBreak",
+        startUtc:     phaseStartUtc,
+        durationSecs: phase === "longBreak" ? longBreakMins * 60 : breakMins * 60,
+        completedAt,
+      });
+
       speakAsync("Break over. Ready to focus?");
-      // After break → go back to work (don't auto-start, notify instead)
+      // After break → go back to idle (don't auto-start, notify instead)
       phase       = "idle";
       secondsLeft = 0;
-      // Show a simple alert via toast (best-effort)
+      // Show a toast (best-effort)
       try {
         await invoke("show_toast_from_frontend", {
           level: "info",
@@ -544,6 +629,148 @@ the Free Software Foundation, version 3 only. -->
         {t("focusTimer.reset")} (reset counter)
       </button>
     {/if}
+
+    <!-- ── Session Log ──────────────────────────────────────────────────── -->
+    <div class="w-full rounded-xl border border-border dark:border-white/[0.07]
+                bg-muted/10 overflow-hidden">
+
+      <!-- Collapsible header -->
+      <button
+        onclick={() => logOpen = !logOpen}
+        class="w-full flex items-center justify-between px-3.5 py-2.5
+               hover:bg-muted/30 transition-colors cursor-pointer text-left"
+      >
+        <div class="flex items-center gap-2">
+          <!-- Calendar icon -->
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round"
+               class="w-3.5 h-3.5 text-muted-foreground/60 shrink-0">
+            <rect x="1" y="3" width="14" height="12" rx="1.5"/>
+            <path d="M1 7h14M5 1v4M11 1v4"/>
+          </svg>
+          <span class="text-[0.68rem] font-semibold tracking-wide text-foreground/80">
+            {t("focusTimer.log.title")}
+          </span>
+          {#if cyclesDone > 0}
+            <span class="text-[0.58rem] font-medium px-1.5 py-0.5 rounded-full
+                         bg-blue-500/12 text-blue-600 dark:text-blue-400">
+              {cyclesDone === 1
+                ? t("focusTimer.log.cycles",      { n: cyclesDone })
+                : t("focusTimer.log.cyclesPlural", { n: cyclesDone })}
+            </span>
+          {/if}
+        </div>
+        <!-- Chevron -->
+        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"
+             class="w-3 h-3 text-muted-foreground/40 shrink-0 transition-transform
+                    {logOpen ? 'rotate-180' : ''}">
+          <polyline points="2 4 6 8 10 4"/>
+        </svg>
+      </button>
+
+      {#if logOpen}
+        <!-- Summary stats strip -->
+        {#if cyclesDone > 0 || sessionLog.length > 0}
+          <div class="grid grid-cols-3 divide-x divide-border dark:divide-white/[0.06]
+                      border-t border-border dark:border-white/[0.07]">
+            <!-- Focus total -->
+            <div class="flex flex-col items-center py-2.5 gap-0.5">
+              <span class="text-[0.48rem] font-semibold uppercase tracking-widest
+                           text-blue-500/70">
+                {t("focusTimer.log.focusTime")}
+              </span>
+              <span class="text-[0.82rem] font-bold tabular-nums text-blue-600 dark:text-blue-400">
+                {fmtDuration(focusSecs)}
+              </span>
+            </div>
+            <!-- Break total -->
+            <div class="flex flex-col items-center py-2.5 gap-0.5">
+              <span class="text-[0.48rem] font-semibold uppercase tracking-widest
+                           text-green-500/70">
+                {t("focusTimer.log.breakTime")}
+              </span>
+              <span class="text-[0.82rem] font-bold tabular-nums text-green-600 dark:text-green-400">
+                {fmtDuration(breakSecs)}
+              </span>
+            </div>
+            <!-- Combined total -->
+            <div class="flex flex-col items-center py-2.5 gap-0.5">
+              <span class="text-[0.48rem] font-semibold uppercase tracking-widest
+                           text-muted-foreground/50">
+                {t("focusTimer.log.totalTime")}
+              </span>
+              <span class="text-[0.82rem] font-bold tabular-nums text-foreground/70">
+                {fmtDuration(logTotalSecs)}
+              </span>
+            </div>
+          </div>
+        {/if}
+
+        <!-- Entry list -->
+        <div class="border-t border-border dark:border-white/[0.06]
+                    max-h-52 overflow-y-auto flex flex-col">
+          {#if sessionLog.length === 0}
+            <p class="text-center text-[0.62rem] text-muted-foreground/40
+                      italic py-4 px-3">
+              {t("focusTimer.log.empty")}
+            </p>
+          {:else}
+            <!-- Reverse so newest appears first -->
+            {#each [...sessionLog].reverse() as entry, ri}
+              {@const isWork      = entry.type === "work"}
+              {@const isLongBreak = entry.type === "longBreak"}
+              <div class="flex items-center gap-2.5 px-3.5 py-2
+                          {ri < sessionLog.length - 1
+                            ? 'border-b border-border/50 dark:border-white/[0.04]'
+                            : ''}">
+                <!-- Phase dot -->
+                <span class="w-2 h-2 rounded-full shrink-0
+                             {isWork      ? 'bg-blue-500'
+                             : isLongBreak ? 'bg-purple-500'
+                             :               'bg-green-500'}">
+                </span>
+                <!-- Phase name -->
+                <span class="text-[0.65rem] font-medium flex-1
+                             {isWork      ? 'text-blue-700 dark:text-blue-300'
+                             : isLongBreak ? 'text-purple-700 dark:text-purple-300'
+                             :               'text-green-700 dark:text-green-300'}">
+                  {isWork
+                    ? t("focusTimer.log.work")
+                    : isLongBreak
+                      ? t("focusTimer.log.longBreak")
+                      : t("focusTimer.log.break")}
+                </span>
+                <!-- Duration -->
+                <span class="text-[0.6rem] tabular-nums font-semibold
+                             text-foreground/60">
+                  {fmtDuration(entry.durationSecs)}
+                </span>
+                <!-- Time range: start → end -->
+                <span class="text-[0.56rem] tabular-nums text-muted-foreground/40
+                             whitespace-nowrap">
+                  {fmtTime(entry.startUtc)} → {fmtTime(entry.completedAt)}
+                </span>
+              </div>
+            {/each}
+          {/if}
+        </div>
+
+        <!-- Footer: Clear button -->
+        {#if sessionLog.length > 0}
+          <div class="border-t border-border dark:border-white/[0.06] px-3.5 py-2
+                      flex justify-end">
+            <button
+              onclick={clearLog}
+              class="text-[0.58rem] text-muted-foreground/40
+                     hover:text-red-500/70 transition-colors underline
+                     underline-offset-2 cursor-pointer">
+              {t("focusTimer.log.clearDay")}
+            </button>
+          </div>
+        {/if}
+      {/if}
+    </div>
 
   </div>
 </main>

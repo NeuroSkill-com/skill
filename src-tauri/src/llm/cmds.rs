@@ -434,6 +434,53 @@ pub fn get_last_chat_session(
     ChatSessionResponse { session_id, messages }
 }
 
+/// Load a specific chat session by id.
+#[tauri::command]
+pub fn load_chat_session(
+    id:    i64,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> ChatSessionResponse {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.chat_store.as_mut() else {
+        return ChatSessionResponse { session_id: id, messages: vec![] };
+    };
+    let messages = store.load_session(id);
+    ChatSessionResponse { session_id: id, messages }
+}
+
+/// Return all sessions (newest-first) for the sidebar.
+#[tauri::command]
+pub fn list_chat_sessions(
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Vec<super::chat_store::SessionSummary> {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.chat_store.as_mut() else { return vec![]; };
+    store.list_sessions()
+}
+
+/// Set a custom title for a session (called after auto-title or inline rename).
+#[tauri::command]
+pub fn rename_chat_session(
+    id:    i64,
+    title: String,
+    state: tauri::State<'_, Mutex<AppState>>,
+) {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.chat_store.as_mut() else { return; };
+    store.rename_session(id, &title);
+}
+
+/// Delete a session and all its messages.
+#[tauri::command]
+pub fn delete_chat_session(
+    id:    i64,
+    state: tauri::State<'_, Mutex<AppState>>,
+) {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.chat_store.as_mut() else { return; };
+    store.delete_session(id);
+}
+
 /// Append a single message to a chat session.
 /// Returns the new message row id, or 0 if the store is unavailable.
 #[tauri::command]
@@ -458,6 +505,122 @@ pub fn new_chat_session(
     let mut s = state.lock_or_recover();
     let Some(store) = s.chat_store.as_mut() else { return 0; };
     store.new_session()
+}
+
+// ── IPC chat streaming ────────────────────────────────────────────────────────
+
+/// One message delivered through the Tauri IPC `Channel` for `chat_completions_ipc`.
+///
+/// Serialised as a tagged-union JSON object, e.g.:
+/// ```json
+/// {"type":"delta","content":"Hello"}
+/// {"type":"done","finish_reason":"stop","prompt_tokens":42,"completion_tokens":18,"n_ctx":4096}
+/// {"type":"error","message":"decode error"}
+/// ```
+/// An `"error"` with `message == "aborted"` means the caller invoked
+/// `abort_llm_stream` — the frontend should treat partial content as the
+/// final answer rather than showing an error.
+#[derive(serde::Serialize, Clone)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ChatChunk {
+    Delta   { content: String },
+    Done    { finish_reason: String, prompt_tokens: usize, completion_tokens: usize, n_ctx: usize },
+    Error   { message: String },
+}
+
+/// Stream a chat completion directly through Tauri IPC, bypassing the HTTP
+/// server entirely — no CORS, no port lookup, no WebSocket required.
+///
+/// Tokens arrive on `channel` as `ChatChunk` messages in order:
+/// zero or more `Delta`, then exactly one `Done` **or** one `Error`.
+/// An `Error { message: "aborted" }` is sent when `abort_llm_stream` is called.
+///
+/// The command blocks (async-awaits) until generation finishes, is aborted,
+/// or the channel is closed by the JS side.
+#[tauri::command]
+pub async fn chat_completions_ipc(
+    messages: Vec<serde_json::Value>,
+    params:   super::GenParams,
+    channel:  tauri::ipc::Channel<ChatChunk>,
+    state:    tauri::State<'_, Mutex<AppState>>,
+) -> Result<(), String> {
+    let cell = state.lock_or_recover().llm_state_cell.clone();
+    let srv  = cell.lock().unwrap().clone()
+        .ok_or_else(|| "LLM server not running — start it in Settings → LLM".to_string())?;
+
+    // Subscribe to the abort watch and mark the current value as "seen" so
+    // that only a *new* increment (from `abort_llm_stream`) wakes us up.
+    let mut abort_rx = srv.abort_tx.subscribe();
+    abort_rx.borrow_and_update();
+
+    let images     = super::extract_images_from_messages(&messages);
+    let mut tok_rx = srv.chat(messages, images, params)?;
+
+    loop {
+        tokio::select! {
+            biased;
+
+            // Abort signal — higher priority than new tokens so we stop fast.
+            Ok(()) = abort_rx.changed() => {
+                // Send the partial-result sentinel so the frontend can
+                // finalise its accumulated text rather than showing an error.
+                let _ = channel.send(ChatChunk::Error { message: "aborted".into() });
+                break;
+            }
+
+            tok = tok_rx.recv() => {
+                match tok {
+                    // Actor closed the channel without sending Done — treat as done.
+                    None => break,
+
+                    Some(super::InferToken::Delta(text)) => {
+                        // If the JS side has closed the channel (e.g. window closed),
+                        // send() returns Err — stop gracefully.
+                        if channel.send(ChatChunk::Delta { content: text }).is_err() {
+                            break;
+                        }
+                    }
+
+                    Some(super::InferToken::Done {
+                        finish_reason, prompt_tokens, completion_tokens, n_ctx
+                    }) => {
+                        let _ = channel.send(ChatChunk::Done {
+                            finish_reason, prompt_tokens, completion_tokens, n_ctx,
+                        });
+                        break;
+                    }
+
+                    Some(super::InferToken::Error(msg)) => {
+                        let _ = channel.send(ChatChunk::Error { message: msg });
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Dropping `tok_rx` here closes the receiver side of the actor's unbounded
+    // channel.  The sampling loop in `run_sampling_loop` detects the broken
+    // pipe on its next `token_tx.send()` and exits cleanly — no manual signal
+    // to the actor thread is needed.
+    Ok(())
+}
+
+/// Cancel a running `chat_completions_ipc` stream.
+///
+/// Increments the abort watch in `LlmServerState`; the streaming command
+/// detects the change via `watch::Receiver::changed()` and returns early,
+/// sending `ChatChunk::Error { message: "aborted" }` to the frontend first.
+///
+/// Safe to call even when no generation is in progress — it is a no-op if
+/// the server is stopped or idle.
+#[tauri::command]
+pub fn abort_llm_stream(state: tauri::State<'_, Mutex<AppState>>) {
+    let cell = { let g = state.lock_or_recover(); g.llm_state_cell.clone() };
+    let guard = cell.lock().unwrap();
+    if let Some(srv) = guard.as_ref() {
+        srv.abort_tx.send_modify(|v| *v = v.wrapping_add(1));
+    }
 }
 
 // ── Chat window ───────────────────────────────────────────────────────────────

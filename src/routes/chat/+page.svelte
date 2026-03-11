@@ -4,19 +4,21 @@
   Chat window — Ollama-style interface for the embedded LLM server.
 
   Architecture:
-  • `invoke("get_ws_config")` gives us the port; all inference goes through
-    `fetch("http://localhost:{port}/v1/chat/completions", {stream:true})`.
+  • Token streaming goes through `invoke("chat_completions_ipc", {channel})` —
+    a Tauri IPC Channel — instead of a raw HTTP fetch, avoiding CORS entirely.
   • `invoke("get_llm_server_status")` polls server state.
   • `invoke("start_llm_server")` / `invoke("stop_llm_server")` control the actor.
   • `listen("llm:status")` gives real-time loading → running → stopped events.
 -->
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
-  import { invoke }                   from "@tauri-apps/api/core";
+  import { invoke, Channel }          from "@tauri-apps/api/core";
   import { listen }                   from "@tauri-apps/api/event";
   import ThemeToggle                  from "$lib/ThemeToggle.svelte";
   import MarkdownRenderer             from "$lib/MarkdownRenderer.svelte";
   import LanguagePicker               from "$lib/LanguagePicker.svelte";
+  import ChatSidebar                  from "$lib/ChatSidebar.svelte";
+  import PromptLibrary                from "$lib/PromptLibrary.svelte";
   import { t }                        from "$lib/i18n/index.svelte";
 
   // ── Types ──────────────────────────────────────────────────────────────────
@@ -63,7 +65,7 @@
     return { thinking: "", content: raw };
   }
 
-  interface ServerStatusPayload { status: ServerStatus; model_name: string; }
+  interface ServerStatusPayload { status: ServerStatus; model_name: string; model?: string; supports_vision?: boolean; }
 
   interface UsageInfo {
     prompt_tokens:     number;
@@ -71,6 +73,19 @@
     total_tokens:      number;
     n_ctx:             number;
   }
+
+  // ── IPC streaming types (mirror Rust ChatChunk) ───────────────────────────
+
+  interface ChatChunkDelta { type: "delta"; content: string; }
+  interface ChatChunkDone  {
+    type:              "done";
+    finish_reason:     string;
+    prompt_tokens:     number;
+    completion_tokens: number;
+    n_ctx:             number;
+  }
+  interface ChatChunkError { type: "error"; message: string; }
+  type ChatChunk = ChatChunkDelta | ChatChunkDone | ChatChunkError;
 
   /** Thinking budget levels: token limit for <think> block. null = unlimited. */
   type ThinkingLevel = "minimal" | "normal" | "extended" | "unlimited";
@@ -172,22 +187,112 @@
 
   // ── State ──────────────────────────────────────────────────────────────────
 
-  let port           = $state(8375);
   let status         = $state<ServerStatus>("stopped");
   let modelName      = $state("");
   let supportsVision = $state(false);
   let messages       = $state<Message[]>([]);
   let sessionId      = $state(0);   // current chat_history.sqlite session id
   let input          = $state("");
-  let systemPrompt   = $state("You are a helpful assistant.");
-  let showSystem     = $state(false);
+
+  // ── System prompt (persisted in localStorage) ──────────────────────────────
+
+  const SYSTEM_PROMPT_DEFAULT = "You are a helpful assistant.";
+  const SYSTEM_PROMPT_KEY     = "chat.systemPrompt";
+
+  /**
+   * Preset personas — stored as plain strings so users can pick a starting
+   * point and then edit freely.  The key is used only for i18n lookup.
+   */
+  const SYSTEM_PROMPT_PRESETS: { key: string; icon: string; prompt: string }[] = [
+    {
+      key:    "default",
+      icon:   "🤖",
+      prompt: "You are a helpful assistant.",
+    },
+    {
+      key:    "coach",
+      icon:   "🧘",
+      prompt:
+        "You are a neurofeedback coach specialising in relaxation and stress reduction. " +
+        "Give practical, evidence-based advice grounded in the user's live EEG data. " +
+        "Be encouraging, clear, and concise.",
+    },
+    {
+      key:    "focus",
+      icon:   "🎯",
+      prompt:
+        "You are a focus and cognitive-performance coach. " +
+        "Help the user optimise their attention, working memory, and mental endurance " +
+        "using insights from their EEG readings. Offer actionable protocols.",
+    },
+    {
+      key:    "educator",
+      icon:   "📚",
+      prompt:
+        "You are a neuroscience educator. " +
+        "Explain brain-wave patterns and EEG metrics in plain, accessible language. " +
+        "Use analogies freely and avoid unnecessary jargon.",
+    },
+    {
+      key:    "sleep",
+      icon:   "😴",
+      prompt:
+        "You are a sleep and recovery specialist. " +
+        "Interpret the user's EEG data to provide personalised guidance on improving " +
+        "sleep quality, recovery, and circadian regulation.",
+    },
+    {
+      key:    "mindfulness",
+      icon:   "🌿",
+      prompt:
+        "You are a mindfulness and meditation guide. " +
+        "Use the user's real-time brainwave data to suggest meditation techniques, " +
+        "breathing exercises, and awareness practices tailored to their current state.",
+    },
+  ];
+
+  /**
+   * Load the persisted system prompt from localStorage, falling back to the
+   * default.  This runs synchronously before the component renders so there
+   * is no flash of the wrong value.
+   */
+  function loadSystemPrompt(): string {
+    try {
+      return localStorage.getItem(SYSTEM_PROMPT_KEY) ?? SYSTEM_PROMPT_DEFAULT;
+    } catch {
+      return SYSTEM_PROMPT_DEFAULT;
+    }
+  }
+
+  let systemPrompt = $state(loadSystemPrompt());
+
+  /** Persist on every change via a reactive effect. */
+  $effect(() => {
+    try { localStorage.setItem(SYSTEM_PROMPT_KEY, systemPrompt); } catch { /* storage full */ }
+  });
+
+  /** Apply a preset and focus the textarea so the user can refine it. */
+  let systemPromptEl = $state<HTMLTextAreaElement | null>(null);
+  function applyPreset(prompt: string) {
+    systemPrompt = prompt;
+    tick().then(() => systemPromptEl?.focus());
+  }
+
+  /** Whether the prompt has been edited away from the default. */
+  const isDefaultPrompt = $derived(systemPrompt.trim() === SYSTEM_PROMPT_DEFAULT.trim());
+
   let generating     = $state(false);
-  let abortCtrl      = $state<AbortController | null>(null);
+  let aborting       = $state(false);   // true while abort_llm_stream is in flight
   let msgId          = $state(0);
   let msgsEl         = $state<HTMLElement | null>(null);
   let inputEl        = $state<HTMLTextAreaElement | null>(null);
   let fileInputEl    = $state<HTMLInputElement | null>(null);
+  let promptLibRef   = $state<PromptLibrary | null>(null);
   let attachments    = $state<Attachment[]>([]);
+
+  // ── Sidebar ────────────────────────────────────────────────────────────────
+  let sidebarOpen = $state(true);
+  let sidebarRef  = $state<ChatSidebar | null>(null);
 
   // ── EEG context injection ──────────────────────────────────────────────────
 
@@ -416,17 +521,18 @@
   }
 
   async function stopServer() {
-    if (generating) abort();
+    if (generating) { abort(); await new Promise(r => setTimeout(r, 100)); }
     await invoke("stop_llm_server");
     status = "stopped";
     modelName = "";
   }
 
   function abort() {
-    abortCtrl?.abort();
-    abortCtrl = null;
-    generating = false;
-    // The catch block in sendMessage will finalize the message content.
+    if (aborting) return;
+    aborting = true;
+    // Tell the Rust actor to stop generating; the IPC channel will receive
+    // ChatChunk::Error { message: "aborted" } and finalise the message.
+    invoke("abort_llm_stream").catch(() => {}).finally(() => { aborting = false; });
   }
 
   // ── Chat ───────────────────────────────────────────────────────────────────
@@ -449,6 +555,16 @@
       content: text,
       attachments: sentAttachments.length ? sentAttachments : undefined,
     };
+
+    // Auto-title: use the first user message text as the session title.
+    // We check BEFORE pushing so the count is 0 for the very first message.
+    const isFirstUserMsg = !messages.some(m => m.role === "user" && m.content.trim());
+    if (isFirstUserMsg && text && sessionId > 0) {
+      const autoTitle = text.slice(0, 60).replace(/\n+/g, " ").trim();
+      invoke("rename_chat_session", { id: sessionId, title: autoTitle }).catch(() => {});
+      sidebarRef?.updateTitle(sessionId, autoTitle);
+    }
+
     messages = [...messages, userMsg];
 
     // Persist user message immediately (fire-and-forget)
@@ -463,135 +579,124 @@
     await scrollBottom(true);   // force — user just sent, must see response start
 
     generating = true;
-    abortCtrl  = new AbortController();
     const t0   = performance.now();
     let   ttft: number | undefined;
 
-    // Build the messages array for the API.
-    // History uses plain text content; only the newest user turn may carry images.
-    // Thinking content is excluded from history.
+    // Build the messages array for the IPC command.
+    // History uses plain text content; the newest user turn may carry images.
+    // Thinking content is excluded from history sent to the model.
     const historyMsgs = messages
       .filter(m => !m.pending)
       .map(m => {
         if (m.role === "user" && m.attachments?.length) {
-          // Include images for the current turn (last user message with attachments)
           return { role: m.role, content: buildUserContent(m.content, m.attachments) };
         }
         return { role: m.role, content: m.content };
       });
 
-    // Build system message: base prompt + optional live EEG brain-state block.
+    // Build system message: base persona + optional live EEG brain-state block.
     const systemParts: string[] = [];
     if (systemPrompt.trim()) systemParts.push(systemPrompt.trim());
-    if (eegActive && latestBands)  systemParts.push(buildEegBlock(latestBands));
+    if (eegActive && latestBands) systemParts.push(buildEegBlock(latestBands));
 
     const apiMessages = [
       ...(systemParts.length ? [{ role: "system", content: systemParts.join("\n\n") }] : []),
       ...historyMsgs,
     ];
 
-    let rawAcc = ""; // full raw text including <think> tags
+    let rawAcc = ""; // full raw text including any <think> tags
     let usage: UsageInfo | undefined;
 
-    try {
-      const resp = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          model:            modelName || "default",
-          messages:         apiMessages,
-          stream:           true,
-          temperature,
-          max_tokens:       maxTokens,
-          top_k:            topK,
-          top_p:            topP,
-          thinking_budget:  thinkingBudget,
-        }),
-        signal: abortCtrl.signal,
-      });
+    // ── IPC Channel — tokens stream directly from the Rust actor, no HTTP ──
+    //
+    // Each message is a ChatChunk tagged union:
+    //   { type:"delta",  content:"…" }
+    //   { type:"done",   finish_reason, prompt_tokens, completion_tokens, n_ctx }
+    //   { type:"error",  message:"…" }  (message=="aborted" when user cancelled)
+    //
+    // The channel is alive until `invoke("chat_completions_ipc")` resolves.
+    // Calling `abort_llm_stream` causes the Rust side to send an "aborted"
+    // error chunk and return, which resolves the invoke Promise.
 
-      if (!resp.ok) {
-        const errJson = await resp.json().catch(() => null);
-        const errMsg = errJson?.error?.message ?? `HTTP ${resp.status}`;
-        messages = messages.map(m =>
-          m.id === assistantMsg.id
-            ? { ...m, pending: false, content: `*Error: ${errMsg}*` }
-            : m
-        );
-        return;
-      }
-
-      const reader  = resp.body!.getReader();
-      const decoder = new TextDecoder();
-      let   buf     = "";
-
-      outer: while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split("\n");
-        buf = lines.pop() ?? "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (data === "[DONE]") break outer;
-
-          try {
-            const json  = JSON.parse(data);
-            const delta = json.choices?.[0]?.delta?.content ?? "";
-            if (delta) {
-              if (ttft === undefined) ttft = performance.now() - t0;
-              rawAcc += delta;
-              const { thinking, content } = parseThinking(rawAcc);
-              messages = messages.map(m =>
-                m.id === assistantMsg.id
-                  ? { ...m, content, thinking, thinkOpen: m.thinkOpen ?? false }
-                  : m
-              );
-              await scrollBottom();
-            }
-
-            // Capture usage when server sends it (on Done chunk)
-            if (json.usage?.n_ctx) usage = json.usage as UsageInfo;
-
-            // Check finish_reason
-            const fr = json.choices?.[0]?.finish_reason;
-            if (fr && fr !== "null") break outer;
-          } catch { /* partial JSON chunk — skip */ }
-        }
-      }
-
-      const elapsed = performance.now() - t0;
-      const { thinking, content } = parseThinking(rawAcc);
-      messages = messages.map(m =>
-        m.id === assistantMsg.id
-          ? { ...m, pending: false, content, thinking, ttft, elapsed, usage }
-          : m
-      );
-    } catch (err: any) {
-      if (err?.name !== "AbortError") {
-        messages = messages.map(m =>
-          m.id === assistantMsg.id
-            ? { ...m, pending: false, content: `*Connection error: ${err.message}*` }
-            : m
-        );
-      } else {
-        // Aborted — keep whatever we have so far, parsed
+    const channel = new Channel<ChatChunk>();
+    channel.onmessage = async (chunk: ChatChunk) => {
+      if (chunk.type === "delta") {
+        if (ttft === undefined) ttft = performance.now() - t0;
+        rawAcc += chunk.content;
         const { thinking, content } = parseThinking(rawAcc);
         messages = messages.map(m =>
           m.id === assistantMsg.id
-            ? { ...m, pending: false, content: content || "*(aborted)*", thinking }
+            ? { ...m, content, thinking, thinkOpen: m.thinkOpen ?? false }
             : m
         );
+        await scrollBottom();
+
+      } else if (chunk.type === "done") {
+        const elapsed = performance.now() - t0;
+        const { thinking, content } = parseThinking(rawAcc);
+        usage = {
+          prompt_tokens:     chunk.prompt_tokens,
+          completion_tokens: chunk.completion_tokens,
+          total_tokens:      chunk.prompt_tokens + chunk.completion_tokens,
+          n_ctx:             chunk.n_ctx,
+        };
+        messages = messages.map(m =>
+          m.id === assistantMsg.id
+            ? { ...m, pending: false, content, thinking, ttft, elapsed, usage }
+            : m
+        );
+        await scrollBottom();
+
+      } else if (chunk.type === "error") {
+        // "aborted" → keep whatever was streamed so far as the final answer.
+        // Any other message → show as an error bubble.
+        const { thinking, content } = parseThinking(rawAcc);
+        messages = messages.map(m =>
+          m.id === assistantMsg.id
+            ? {
+                ...m, pending: false,
+                content:  chunk.message === "aborted"
+                  ? (content || "*(aborted)*")
+                  : `*Error: ${chunk.message}*`,
+                thinking: chunk.message === "aborted" ? thinking : undefined,
+              }
+            : m
+        );
+        await scrollBottom();
       }
+    };
+
+    try {
+      await invoke("chat_completions_ipc", {
+        messages: apiMessages,
+        params: {
+          temperature,
+          max_tokens:      maxTokens,
+          top_k:           topK,
+          top_p:           topP,
+          thinking_budget: thinkingBudget,
+        },
+        channel,
+      });
+    } catch (err: any) {
+      // Command-level error (server not running, serialisation failure, etc.)
+      messages = messages.map(m =>
+        m.id === assistantMsg.id
+          ? { ...m, pending: false, content: `*Error: ${String(err)}*` }
+          : m
+      );
     } finally {
-      // Capture the finalized assistant message before any awaits.
+      // Safety net: if the channel closed without a done/error chunk
+      // (e.g. actor crashed), mark the message as no longer pending.
+      messages = messages.map(m =>
+        m.id === assistantMsg.id && m.pending
+          ? { ...m, pending: false, ...parseThinking(rawAcc) }
+          : m
+      );
+
       const finalAssistant = messages.find(m => m.id === assistantMsg.id);
 
       generating = false;
-      abortCtrl  = null;
       await scrollBottom();
       await tick();
       inputEl?.focus();
@@ -608,11 +713,64 @@
     }
   }
 
-  async function clearChat() {
-    messages = [];
+  /** Insert a prompt-library template into the input field. */
+  async function selectPrompt(text: string) {
+    input   = text;
+    histIdx = -1;
+    await tick();
+    autoResizeInput();
+    inputEl?.focus();
+    inputEl?.setSelectionRange(input.length, input.length);
+  }
+
+  /** Create a new empty session and switch to it. */
+  async function newChat() {
+    if (generating) abort();
+    messages  = [];
+    histIdx   = -1;
+    histDraft = "";
     try {
       sessionId = await invoke<number>("new_chat_session");
+      await sidebarRef?.refresh();
     } catch { /* store unavailable — continue without persistence */ }
+    await tick();
+    inputEl?.focus();
+  }
+
+  /** Switch to an existing session by id. */
+  async function loadSession(id: number) {
+    if (id === sessionId) return;
+    if (generating) abort();
+    messages  = [];
+    histIdx   = -1;
+    histDraft = "";
+    pinned    = true;
+    try {
+      const resp = await invoke<ChatSessionResponse>("load_chat_session", { id });
+      sessionId  = resp.session_id;
+      messages   = resp.messages.map(storedToMessage);
+      await scrollBottom(true);
+    } catch {}
+    await tick();
+    inputEl?.focus();
+  }
+
+  /** Called by the sidebar when the user deletes a session. */
+  async function handleSidebarDelete(deletedId: number) {
+    if (deletedId !== sessionId) return;
+    // The active session was deleted — fall back to the most-recent remaining one.
+    messages  = [];
+    sessionId = 0;
+    try {
+      const resp = await invoke<ChatSessionResponse>("get_last_chat_session");
+      sessionId  = resp.session_id;
+      if (resp.messages.length > 0) {
+        messages = resp.messages.map(storedToMessage);
+        await scrollBottom(true);
+      }
+      // Sidebar already removed the item locally; refresh syncs any cascade.
+      await sidebarRef?.refresh();
+    } catch {}
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -622,12 +780,6 @@
   let pollTimer:       ReturnType<typeof setInterval> | undefined;
 
   onMount(async () => {
-    // Port
-    try {
-      const [, p] = await invoke<[string, number]>("get_ws_config");
-      port = p;
-    } catch {}
-
     // Initial status
     try {
       const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean }>("get_llm_server_status");
@@ -640,14 +792,29 @@
     try {
       unlistenStatus = await listen<ServerStatusPayload>("llm:status", ev => {
         status    = ev.payload.status ?? (ev.payload as any).status ?? status;
-        modelName = (ev.payload as any).model ?? modelName;
+        modelName = (ev.payload as any).model ?? ev.payload.model_name ?? modelName;
+        // The actor includes supports_vision in the "running" payload so we can
+        // update immediately without waiting for the next poll cycle.
+        if (ev.payload.supports_vision !== undefined) {
+          supportsVision = ev.payload.supports_vision;
+        }
         if (status === "running") clearInterval(pollTimer!);
+        // When the server stops, vision capability resets.
+        if (status === "stopped") supportsVision = false;
       });
     } catch {}
 
-    // Poll while loading (in case events are delayed)
+    // Poll while loading (in case events are delayed).
+    // We intentionally do NOT stop on the first "running" tick — we do one
+    // extra fetch after the transition to ensure supportsVision is current
+    // even if the llm:status event arrived before vision_flag was written.
+    let ranAfterRunning = false;
     pollTimer = setInterval(async () => {
-      if (status !== "loading") { clearInterval(pollTimer!); return; }
+      if (status !== "loading" && (status !== "running" || ranAfterRunning)) {
+        clearInterval(pollTimer!);
+        return;
+      }
+      if (status === "running") ranAfterRunning = true;
       try {
         const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean }>("get_llm_server_status");
         status         = s.status;
@@ -679,6 +846,8 @@
       }
     } catch { /* store unavailable — start fresh */ }
 
+    // Sidebar loads its own session list via onMount; no extra call needed.
+
     await tick();
     inputEl?.focus();
   });
@@ -687,7 +856,7 @@
     unlistenStatus?.();
     unlistenBands?.();
     clearInterval(pollTimer);
-    abortCtrl?.abort();
+    if (generating) invoke("abort_llm_stream").catch(() => {});
   });
 
   // ── Formatting helpers ─────────────────────────────────────────────────────
@@ -700,12 +869,46 @@
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Root container (full window height, dark/light theme-aware)                -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
-<div class="flex flex-col h-screen bg-background text-foreground overflow-hidden">
+<div class="flex h-screen bg-background text-foreground overflow-hidden">
+
+  <!-- ── Conversation sidebar ───────────────────────────────────────────── -->
+  {#if sidebarOpen}
+    <aside class="w-52 shrink-0 flex flex-col
+                  border-r border-border dark:border-white/[0.06]
+                  bg-slate-50/50 dark:bg-[#0c0c14] overflow-hidden">
+      <ChatSidebar
+        bind:this={sidebarRef}
+        activeId={sessionId}
+        onSelect={loadSession}
+        onNew={newChat}
+        onDelete={handleSidebarDelete}
+      />
+    </aside>
+  {/if}
+
+  <!-- ── Main chat column ───────────────────────────────────────────────── -->
+  <div class="flex flex-col flex-1 min-w-0 overflow-hidden">
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
   <header class="flex items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
                   bg-white dark:bg-[#0f0f18] shrink-0"
           data-tauri-drag-region>
+
+    <!-- Sidebar toggle -->
+    <button
+      onclick={() => sidebarOpen = !sidebarOpen}
+      title={sidebarOpen ? "Hide conversations" : "Show conversations"}
+      class="p-1.5 rounded-lg transition-colors cursor-pointer shrink-0
+             {sidebarOpen
+               ? 'text-violet-600 dark:text-violet-400 bg-violet-500/10'
+               : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted'}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" class="w-3.5 h-3.5">
+        <line x1="3" y1="6"  x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+    </button>
 
     <!-- Model / status -->
     <div class="flex items-center gap-1.5 flex-1 min-w-0">
@@ -765,8 +968,7 @@
 
     <!-- New chat -->
     <button
-      onclick={clearChat}
-      disabled={messages.length === 0}
+      onclick={newChat}
       title={t("chat.btn.newChat")}
       class="p-1.5 rounded-lg text-muted-foreground/60 hover:text-foreground hover:bg-muted
              disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer">
@@ -804,20 +1006,77 @@
     <div class="shrink-0 border-b border-border dark:border-white/[0.06]
                 bg-slate-50/60 dark:bg-[#111118] px-4 py-3 flex flex-col gap-3">
 
-      <!-- System prompt -->
-      <div class="flex flex-col gap-1">
-        <label for="chat-system-prompt"
-               class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
-          {t("chat.systemPrompt")}
-        </label>
+      <!-- ── System prompt ─────────────────────────────────────────────────── -->
+      <div class="flex flex-col gap-1.5">
+
+        <!-- Header row: label + char count + reset -->
+        <div class="flex items-baseline justify-between gap-2">
+          <label for="chat-system-prompt"
+                 class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
+            {t("chat.systemPrompt")}
+          </label>
+          <div class="flex items-center gap-2">
+            <!-- Character counter -->
+            <span class="text-[0.55rem] tabular-nums text-muted-foreground/40 select-none">
+              {t("chat.systemPrompt.chars", { n: systemPrompt.length })}
+            </span>
+            <!-- Reset to default -->
+            {#if !isDefaultPrompt}
+              <button
+                onclick={() => applyPreset(SYSTEM_PROMPT_DEFAULT)}
+                title={t("chat.systemPrompt.reset")}
+                class="flex items-center gap-0.5 text-[0.58rem] text-muted-foreground/50
+                       hover:text-violet-600 dark:hover:text-violet-400 transition-colors
+                       cursor-pointer select-none">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor"
+                     stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+                     class="w-2.5 h-2.5">
+                  <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5"/>
+                  <polyline points="13.5 2.5 13.5 6 10 6"/>
+                </svg>
+                {t("chat.systemPrompt.reset")}
+              </button>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Textarea -->
         <textarea
           id="chat-system-prompt"
+          bind:this={systemPromptEl}
           bind:value={systemPrompt}
-          rows="2"
+          rows="4"
+          spellcheck="true"
           class="w-full rounded-lg border border-border bg-background text-[0.73rem]
-                 text-foreground px-2.5 py-1.5 resize-none focus:outline-none
-                 focus:ring-1 focus:ring-violet-500/50"
+                 text-foreground px-2.5 py-1.5 resize-y leading-relaxed
+                 focus:outline-none focus:ring-1 focus:ring-violet-500/50
+                 min-h-[4.5rem] max-h-48 transition-shadow"
+          style="field-sizing: content"
         ></textarea>
+
+        <!-- Preset persona chips -->
+        <div class="flex flex-col gap-1">
+          <span class="text-[0.55rem] font-semibold uppercase tracking-widest
+                       text-muted-foreground/50 select-none">
+            {t("chat.systemPrompt.presets")}
+          </span>
+          <div class="flex flex-wrap gap-1">
+            {#each SYSTEM_PROMPT_PRESETS as preset}
+              {@const isActive = systemPrompt.trim() === preset.prompt.trim()}
+              <button
+                onclick={() => applyPreset(preset.prompt)}
+                title={preset.prompt}
+                class="flex items-center gap-1 px-2 py-0.5 rounded-md text-[0.63rem]
+                       border transition-all cursor-pointer select-none
+                       {isActive
+                         ? 'border-violet-500/50 bg-violet-500/10 text-violet-700 dark:text-violet-300'
+                         : 'border-border bg-background text-muted-foreground/70 hover:border-violet-400/40 hover:bg-violet-500/8 hover:text-foreground'}">
+                <span aria-hidden="true">{preset.icon}</span>
+                {t(`chat.systemPrompt.preset.${preset.key}`)}
+              </button>
+            {/each}
+          </div>
+        </div>
       </div>
 
       <!-- EEG context injection toggle -->
@@ -1167,7 +1426,7 @@
   />
 
   <!-- ── Input bar ─────────────────────────────────────────────────────────── -->
-  <footer class="shrink-0 border-t border-border dark:border-white/[0.06]
+  <footer class="relative shrink-0 border-t border-border dark:border-white/[0.06]
                   bg-white dark:bg-[#0f0f18] px-3 py-2.5">
 
     <!-- Vision-not-supported warning (shown when images attached but no mmproj loaded) -->
@@ -1209,6 +1468,12 @@
       </div>
     {/if}
 
+    <!-- Prompt-library floating panel (anchored to this footer) -->
+    <PromptLibrary
+      bind:this={promptLibRef}
+      onSelect={selectPrompt}
+    />
+
     <div class="flex items-end gap-2 rounded-xl border border-border dark:border-white/[0.08]
                 bg-background px-3 py-2
                 focus-within:ring-1 focus-within:ring-violet-500/50
@@ -1229,6 +1494,26 @@
           <rect x="3" y="3" width="18" height="18" rx="2"/>
           <circle cx="8.5" cy="8.5" r="1.5"/>
           <polyline points="21 15 16 10 5 21"/>
+        </svg>
+      </button>
+
+      <!-- Prompt library button -->
+      <button
+        onclick={() => promptLibRef?.toggle()}
+        disabled={status !== "running" || generating}
+        title={t("chat.prompts.btn")}
+        aria-label={t("chat.prompts.btn")}
+        class="shrink-0 p-1 rounded-md transition-colors cursor-pointer self-center
+               disabled:opacity-30 disabled:cursor-not-allowed
+               {promptLibRef?.isOpen()
+                 ? 'text-violet-600 dark:text-violet-400 bg-violet-500/10'
+                 : 'text-muted-foreground/50 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-500/10'}">
+        <!-- Sparkle / wand icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4">
+          <path d="M12 2l1.5 4.5L18 8l-4.5 1.5L12 14l-1.5-4.5L6 8l4.5-1.5Z"/>
+          <path d="M19 14l.75 2.25L22 17l-2.25.75L19 20l-.75-2.25L16 17l2.25-.75Z"/>
+          <path d="M5 17l.5 1.5L7 19l-1.5.5L5 21l-.5-1.5L3 19l1.5-.5Z"/>
         </svg>
       </button>
 
@@ -1290,4 +1575,5 @@
     </p>
   </footer>
 
-</div>
+  </div><!-- end main chat column -->
+</div><!-- end root flex container -->

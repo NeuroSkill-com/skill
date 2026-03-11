@@ -82,6 +82,11 @@ the Free Software Foundation, version 3 only. -->
   onMount(async () => {
     appVersion = await invoke<string>("get_app_version");
     await refresh();
+    // Mark "try the API" onboarding step as done.
+    try {
+      const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
+      if (!ob.apiVisited) { ob.apiVisited = true; localStorage.setItem("onboardDone", JSON.stringify(ob)); }
+    } catch (_) {}
     pollTimer = setInterval(refresh, 2000);
     nowTimer  = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
   });

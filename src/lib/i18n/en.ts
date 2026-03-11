@@ -42,6 +42,7 @@ const en: Record<string, string> = {
   "common.settings":        "Settings",
   "common.expand":          "Expand",
   "common.minimise":        "Minimise",
+  "common.noResults":       "No results",
 
   // ── Dashboard (main +page.svelte) ────────────────────────────────────────
   "dashboard.skill":                "{app}",
@@ -242,6 +243,8 @@ const en: Record<string, string> = {
   "appearance.highContrast":          "High Contrast",
   "appearance.highContrastDesc":      "Increase border and text contrast for better visibility.",
 
+  "appearance.accentColor":           "Accent Colour",
+  "appearance.accentColorDesc":       "Sets the primary interactive colour — buttons, active states, focus rings, and highlights throughout the app.",
   "appearance.chartColors":           "Chart Color Scheme",
   "appearance.chartColorsDesc":       "Choose a color palette for EEG waveforms, band-power charts, and metric visualizations. Colorblind-safe options avoid problematic color pairings.",
 
@@ -520,6 +523,7 @@ const en: Record<string, string> = {
   "model.weightsNotFound":        "Weights not found — download via huggingface_hub",
   "model.weightsPath":            "Weights path",
   "model.notFoundInCache":        "Not found in HuggingFace cache",
+  "model.weightsReadyConnectHeadset": "Weights ready — connect your headset to load encoder",
   "model.todaysDb":               "Today's DB",
   "model.embeddingsToday":        "Embeddings today",
   "model.hnswIndex":              "HNSW Index",
@@ -733,6 +737,12 @@ const en: Record<string, string> = {
   "umap.legendSelected":      "selected",
   "umap.legendNearby":        "nearby labels",
   "umap.legendDimmed":        "other (50% transparent)",
+  "umap.exportPng":           "PNG",
+  "umap.exportJson":          "JSON",
+  "umap.exportPngTitle":      "Export scatter plot as PNG image",
+  "umap.exportJsonTitle":     "Export point cloud as JSON",
+  "umap.exportedPng":         "PNG saved",
+  "umap.exportedJson":        "JSON saved",
   // Search extras
   "search.computing3d":       "computing 3D projection…",
   "search.queued":            "queued #{n}",
@@ -1945,11 +1955,23 @@ const en: Record<string, string> = {
   "labels.confirmDelete":      "Delete this label?",
   "labels.showMore":          "show all",
   "labels.yesDelete":          "Yes, delete",
-  "labels.searchPlaceholder":  "Search labels…",
-  "labels.date":               "Date",
-  "labels.duration":           "Duration",
-  "labels.updated":            "Updated",
-  "labels.openLabels":         "All Labels",
+  "labels.searchPlaceholder":           "Search labels…",
+  "labels.date":                        "Date",
+  "labels.duration":                    "Duration",
+  "labels.updated":                     "Updated",
+  "labels.openLabels":                  "All Labels",
+
+  // ── Label search modes ───────────────────────────────────────────────────
+  "labels.search.exact":                "Exact",
+  "labels.search.exactTitle":           "Instant substring filter — matches text as you type",
+  "labels.search.semantic":             "Semantic",
+  "labels.search.semanticTitle":        "Semantic search — finds sessions by meaning using the embedding index (requires the embedding model to be initialised in Settings → Embeddings)",
+  "labels.search.semanticPlaceholder":  "Describe a feeling, activity, or mental state…",
+  "labels.search.semanticHint":         "Type a concept and press Enter — the embedding index ranks results by meaning",
+  "labels.search.searching":            "Searching…",
+  "labels.search.noIndex":              "Embedding model not initialised — open Settings → Embeddings and click Re-embed to build the index first",
+  "labels.search.noResults":            "No semantic matches for \"{q}\"",
+  "labels.search.simTitle":             "Semantic similarity",
 
   // ── Dashboard: recent label ──────────────────────────────────────────────
   "dashboard.recentLabel":     "Latest note",
@@ -1970,6 +1992,10 @@ const en: Record<string, string> = {
   "dashboard.setupCalibrate":  "Run calibration",
   "dashboard.setupSession":    "Record a 5-minute session",
   "dashboard.setupGoal":       "Set a daily goal",
+  "dashboard.setupLlm":        "Download an LLM model",
+  "dashboard.setupSearch":     "Run a similarity search",
+  "dashboard.setupDnd":        "Set a DND focus threshold",
+  "dashboard.setupApi":        "Try the API",
 
   // ── Disconnect / quit confirmation ───────────────────────────────────────
   "quitDialog.title":                "Quit NeuroSkill™",
@@ -2018,6 +2044,18 @@ const en: Record<string, string> = {
   "focusTimer.preset.shortFocus": "Short Focus (15/5)",
   "focusTimer.preset.custom":     "Custom",
   "focusTimer.openTimer":         "Focus Timer",
+
+  "focusTimer.log.title":         "Session Log",
+  "focusTimer.log.empty":         "No sessions completed yet today.",
+  "focusTimer.log.cycles":        "{n} cycle",
+  "focusTimer.log.cyclesPlural":  "{n} cycles",
+  "focusTimer.log.focusTime":     "Focus",
+  "focusTimer.log.breakTime":     "Break",
+  "focusTimer.log.totalTime":     "Total",
+  "focusTimer.log.clearDay":      "Clear today",
+  "focusTimer.log.work":          "Focus",
+  "focusTimer.log.break":         "Break",
+  "focusTimer.log.longBreak":     "Long break",
 
   // ── Calibration presets ───────────────────────────────────────────────────
   "calibration.presets":       "Quick Presets",
@@ -2390,6 +2428,15 @@ const en: Record<string, string> = {
   "chat.btn.send":                      "Send message",
 
   "chat.systemPrompt":                  "System prompt",
+  "chat.systemPrompt.chars":            "{n} chars",
+  "chat.systemPrompt.reset":            "Reset to default",
+  "chat.systemPrompt.presets":          "Quick personas",
+  "chat.systemPrompt.preset.default":   "Default",
+  "chat.systemPrompt.preset.coach":     "Neurofeedback coach",
+  "chat.systemPrompt.preset.focus":     "Focus coach",
+  "chat.systemPrompt.preset.educator":  "Neuroscience educator",
+  "chat.systemPrompt.preset.sleep":     "Sleep specialist",
+  "chat.systemPrompt.preset.mindfulness": "Mindfulness guide",
   "chat.thinkDepth":                    "Thinking depth",
 
   "chat.think.minimal":                 "Minimal",
@@ -2435,6 +2482,17 @@ const en: Record<string, string> = {
   "chat.eeg.off":                       "EEG context off — click to enable brain-state injection",
   "chat.eeg.noSignal":                  "No EEG signal",
   "chat.eeg.contextLabel":              "Inject live EEG brain state",
+
+  // ── Prompt library ───────────────────────────────────────────────────────
+  "chat.prompts.btn":                   "Prompt templates",
+  "chat.prompts.title":                 "Prompt Templates",
+  "chat.prompts.subtitle":              "click a template to fill the message box",
+  "chat.prompts.hint":                  "Templates are a starting point — edit before sending",
+  "chat.prompts.cat.session":           "Session Summary",
+  "chat.prompts.cat.relax":             "Relaxation & Wellbeing",
+  "chat.prompts.cat.education":         "Education",
+  "chat.prompts.cat.focus":             "Focus & Performance",
+  "chat.prompts.cat.analysis":          "Analysis",
 
   "llm.noFeature":                      "LLM support is not compiled in.",
   "llm.noFeatureHint":                  "Rebuild with --features llm (and optionally llm-metal / llm-cuda / llm-mtmd) to enable the embedded OpenAI-compatible inference server.",

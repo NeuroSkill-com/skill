@@ -33,6 +33,19 @@ the Free Software Foundation, version 3 only. -->
     created_at:  number;
   }
 
+  /** Result shape returned by the `search_labels_by_text` Tauri command. */
+  interface LabelNeighbor {
+    label_id:         number;
+    text:             string;
+    context:          string;
+    eeg_start:        number;
+    eeg_end:          number;
+    created_at:       number;
+    embedding_model?: string;
+    /** Cosine distance in [0, 2]: 0 = identical, 2 = opposite. */
+    distance:         number;
+  }
+
   // ── State ──────────────────────────────────────────────────────────────────
   let labels   = $state<LabelRow[]>([]);
   let loading  = $state(true);
@@ -44,23 +57,111 @@ the Free Software Foundation, version 3 only. -->
   let deletingId  = $state<number | null>(null);
   let confirmDel  = $state<number | null>(null);
 
-  // Filtered + paginated
+  // ── Search mode ────────────────────────────────────────────────────────────
+
+  type SearchMode = "exact" | "semantic";
+  let searchMode        = $state<SearchMode>("exact");
+  let semanticResults   = $state<LabelNeighbor[]>([]);
+  let semanticSearching = $state(false);
+  let semanticError     = $state("");
+
+  /** Debounce handle so we don't fire on every keystroke in semantic mode. */
+  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Invoke the HNSW semantic search command (runs in a Tauri worker thread). */
+  async function searchSemantic() {
+    const q = search.trim();
+    if (!q || searchMode !== "semantic") return;
+    semanticSearching = true;
+    semanticError     = "";
+    try {
+      semanticResults = await invoke<LabelNeighbor[]>(
+        "search_labels_by_text", { query: q, k: 50 }
+      );
+    } catch (e) {
+      semanticError   = String(e);
+      semanticResults = [];
+    } finally {
+      semanticSearching = false;
+    }
+  }
+
+  // ── Filtered + paginated ───────────────────────────────────────────────────
+
   const PAGE_SIZE = 50;
   let page = $state(0);
 
-  // Reset to page 0 whenever search changes
-  $effect(() => { search; page = 0; });
+  /** When the user switches to semantic mode or changes the query, (re-)run
+   *  the semantic search with a short debounce.  In exact mode just reset the
+   *  page so the substring filter re-applies immediately. */
+  $effect(() => {
+    const q = search;
+    const m = searchMode;
+    clearTimeout(debounceTimer);
+    page = 0;
+    if (m === "semantic") {
+      if (q.trim()) {
+        debounceTimer = setTimeout(searchSemantic, 420);
+      } else {
+        semanticResults   = [];
+        semanticError     = "";
+        semanticSearching = false;
+      }
+    }
+  });
 
-  let filtered = $derived(
-    search.trim()
-      ? labels.filter(l =>
-          l.text.toLowerCase().includes(search.trim().toLowerCase()) ||
-          l.context.toLowerCase().includes(search.trim().toLowerCase()))
-      : labels
-  );
+  /**
+   * Exact-mode: instant client-side substring filter.
+   * Semantic-mode: ordered by HNSW distance, joined back to the full LabelRow
+   * so edit/delete actions work unchanged.
+   */
+  const activeLabels = $derived.by((): LabelRow[] => {
+    if (searchMode === "exact") {
+      const q = search.trim().toLowerCase();
+      return q
+        ? labels.filter(l =>
+            l.text.toLowerCase().includes(q) ||
+            l.context.toLowerCase().includes(q))
+        : labels;
+    }
+    // Semantic mode ──────────────────────────────────────────────────────
+    if (!search.trim()) return labels;                   // empty query → show all
+    // Re-order labels to match the HNSW ranking.  Labels absent from the
+    // index (never embedded) are silently omitted.
+    return semanticResults
+      .map(r => labels.find(l => l.id === r.label_id))
+      .filter((l): l is LabelRow => l !== undefined);
+  });
 
-  let totalPages     = $derived(Math.max(1, Math.ceil(filtered.length / PAGE_SIZE)));
-  let paginatedLabels = $derived(filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE));
+  /**
+   * label_id → cosine distance for the current semantic result set.
+   * Empty in exact mode.
+   */
+  const distanceMap = $derived.by((): Map<number, number> => {
+    if (searchMode !== "semantic" || !search.trim()) return new Map();
+    const m = new Map<number, number>();
+    for (const r of semanticResults) m.set(r.label_id, r.distance);
+    return m;
+  });
+
+  /**
+   * Similarity percentage from cosine distance (0 = identical, 2 = opposite).
+   * We clamp to [0, 100] and display as an integer.
+   */
+  function simPct(distance: number): number {
+    return Math.round(Math.max(0, Math.min(100, (1 - distance / 2) * 100)));
+  }
+
+  /** Colour class for the similarity badge based on cosine distance. */
+  function simColor(distance: number): string {
+    if (distance < 0.10) return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+    if (distance < 0.25) return "bg-blue-500/15 text-blue-600 dark:text-blue-400";
+    if (distance < 0.45) return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
+    return "bg-muted text-muted-foreground/60";
+  }
+
+  let totalPages      = $derived(Math.max(1, Math.ceil(activeLabels.length / PAGE_SIZE)));
+  let paginatedLabels = $derived(activeLabels.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE));
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   function formatDate(unix: number): string {
@@ -174,7 +275,7 @@ the Free Software Foundation, version 3 only. -->
     </span>
     {#if !loading}
       <Badge variant="secondary" class="text-[0.6rem] px-1.5 py-0">
-        {t("labels.totalLabels", { n: filtered.length })}{totalPages > 1 ? ` — ${t("labels.page", { page: page + 1, total: totalPages })}` : ""}
+        {t("labels.totalLabels", { n: activeLabels.length })}{totalPages > 1 ? ` — ${t("labels.page", { page: page + 1, total: totalPages })}` : ""}
       </Badge>
     {/if}
     <span class="flex-1"></span>
@@ -183,38 +284,115 @@ the Free Software Foundation, version 3 only. -->
   </div>
 
   <!-- ── Search bar ─────────────────────────────────────────────────────────── -->
-  <div class="px-4 py-2.5 border-b border-border dark:border-white/[0.06]">
-    <div class="relative flex items-center">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-           class="absolute left-2.5 w-3.5 h-3.5 text-muted-foreground/60 pointer-events-none">
-        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-      </svg>
-      <input
-        type="text"
-        bind:value={search}
-        placeholder={t("labels.searchPlaceholder")}
-        class="w-full pl-8 pr-3 py-1.5 text-[0.78rem] rounded-lg
-               border border-border dark:border-white/[0.09]
-               bg-muted/30 dark:bg-white/[0.04]
-               text-foreground placeholder:text-muted-foreground/50
-               focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-      />
-      {#if search}
-        <button
-          onclick={() => search = ""}
-          class="absolute right-2.5 text-muted-foreground/50 hover:text-foreground"
-          aria-label={t("common.clear")}
-        >
+  <div class="px-4 py-2.5 border-b border-border dark:border-white/[0.06] flex flex-col gap-1.5">
+
+    <div class="flex items-center gap-2">
+
+      <!-- Text input -->
+      <div class="relative flex-1 flex items-center">
+        <!-- Spinner (semantic) or magnifier icon -->
+        {#if semanticSearching}
+          <div class="absolute left-2.5 w-3.5 h-3.5 text-violet-500 pointer-events-none">
+            <Spinner size="w-3.5 h-3.5" />
+          </div>
+        {:else}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-               class="w-3.5 h-3.5">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
+               class="absolute left-2.5 w-3.5 h-3.5 pointer-events-none
+                      {searchMode === 'semantic'
+                        ? 'text-violet-500/70'
+                        : 'text-muted-foreground/60'}">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
+        {/if}
+
+        <input
+          type="text"
+          bind:value={search}
+          onkeydown={(e) => {
+            if (e.key === "Enter" && searchMode === "semantic") {
+              clearTimeout(debounceTimer);
+              searchSemantic();
+            }
+          }}
+          placeholder={searchMode === "semantic"
+            ? t("labels.search.semanticPlaceholder")
+            : t("labels.searchPlaceholder")}
+          class="w-full pl-8 pr-7 py-1.5 text-[0.78rem] rounded-lg
+                 border bg-muted/30 dark:bg-white/[0.04]
+                 text-foreground placeholder:text-muted-foreground/50
+                 focus:outline-none focus:ring-2 transition-all
+                 {searchMode === 'semantic'
+                   ? 'border-violet-400/40 dark:border-violet-500/30 focus:ring-violet-500/30'
+                   : 'border-border dark:border-white/[0.09] focus:ring-blue-500/30'}"
+        />
+        {#if search}
+          <button
+            onclick={() => { search = ""; semanticResults = []; semanticError = ""; }}
+            class="absolute right-2.5 text-muted-foreground/50 hover:text-foreground transition-colors"
+            aria-label={t("common.clear")}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 class="w-3.5 h-3.5">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        {/if}
+      </div>
+
+      <!-- Mode segmented toggle -->
+      <div class="flex rounded-md border border-border dark:border-white/[0.1]
+                  overflow-hidden text-[0.63rem] font-semibold shrink-0">
+        <button
+          onclick={() => { searchMode = "exact"; semanticResults = []; semanticError = ""; }}
+          title={t("labels.search.exactTitle")}
+          class="px-2.5 py-1 transition-colors leading-none
+                 {searchMode === 'exact'
+                   ? 'bg-blue-500 text-white'
+                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}">
+          {t("labels.search.exact")}
         </button>
-      {/if}
+        <div class="w-px bg-border dark:bg-white/[0.1]"></div>
+        <button
+          onclick={() => { searchMode = "semantic"; if (search.trim()) searchSemantic(); }}
+          title={t("labels.search.semanticTitle")}
+          class="flex items-center gap-1 px-2.5 py-1 transition-colors leading-none
+                 {searchMode === 'semantic'
+                   ? 'bg-violet-600 text-white'
+                   : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}">
+          <!-- Sparkle icon -->
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor"
+               stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+               class="w-2.5 h-2.5 shrink-0">
+            <path d="M8 1.5l.75 2.25L11 4.5l-2.25.75L8 7.5l-.75-2.25L5 4.5l2.25-.75Z"/>
+            <path d="M12 9l.4 1.2L13.5 10.5l-1.1.3L12 12l-.4-1.2L10.5 10.5l1.1-.3Z"/>
+          </svg>
+          {t("labels.search.semantic")}
+        </button>
+      </div>
     </div>
+
+    <!-- Semantic mode: error / hint row -->
+    {#if searchMode === "semantic"}
+      {#if semanticError}
+        <p class="text-[0.62rem] text-destructive/80 px-0.5">
+          {semanticError.includes("not initialized")
+            ? t("labels.search.noIndex")
+            : semanticError}
+        </p>
+      {:else if search.trim() && !semanticSearching && semanticResults.length === 0 && !semanticError}
+        <!-- Triggered after a completed search with 0 results -->
+        <p class="text-[0.62rem] text-muted-foreground/50 px-0.5">
+          {t("labels.search.noResults", { q: search.trim() })}
+        </p>
+      {:else if !search.trim()}
+        <p class="text-[0.58rem] text-muted-foreground/40 px-0.5 select-none">
+          {t("labels.search.semanticHint")}
+        </p>
+      {/if}
+    {/if}
   </div>
 
   <!-- ── Label list ─────────────────────────────────────────────────────────── -->
@@ -225,7 +403,7 @@ the Free Software Foundation, version 3 only. -->
         {t("labels.loading")}
       </div>
 
-    {:else if filtered.length === 0}
+    {:else if activeLabels.length === 0 && !semanticSearching}
       <div class="flex flex-col items-center justify-center gap-3 py-16 px-8 text-center">
         <div class="w-10 h-10 rounded-full bg-muted/40 flex items-center justify-center">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -235,12 +413,14 @@ the Free Software Foundation, version 3 only. -->
             <line x1="7" y1="7" x2="7.01" y2="7"/>
           </svg>
         </div>
-        <p class="text-[0.8rem] font-medium text-foreground/70">
-          {search ? `No labels matching "${search}"` : t("labels.noLabels")}
-        </p>
-        {#if !search}
+        {#if labels.length === 0}
+          <p class="text-[0.8rem] font-medium text-foreground/70">{t("labels.noLabels")}</p>
           <p class="text-[0.68rem] text-muted-foreground/50 max-w-xs leading-relaxed">
             {t("labels.noLabelsHint")}
+          </p>
+        {:else}
+          <p class="text-[0.8rem] font-medium text-foreground/70">
+            {t("labels.search.noResults", { q: search.trim() })}
           </p>
         {/if}
       </div>
@@ -378,6 +558,21 @@ the Free Software Foundation, version 3 only. -->
                 <span>{formatDate(label.created_at)}</span>
                 <span>·</span>
                 <span>{t("labels.duration")}: {formatDuration(label.eeg_start, label.eeg_end)}</span>
+
+                <!-- Semantic similarity badge -->
+                {#if distanceMap.has(label.id)}
+                  {@const dist = distanceMap.get(label.id)!}
+                  <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full
+                               text-[0.55rem] font-semibold {simColor(dist)}"
+                        title="{t('labels.search.simTitle')}: {simPct(dist)}% (dist {dist.toFixed(3)})">
+                    <!-- Sparkle icon -->
+                    <svg viewBox="0 0 10 10" fill="currentColor" class="w-2 h-2 shrink-0 opacity-80">
+                      <path d="M5 .5l.5 1.5L7 2.5 5.5 3 5 4.5 4.5 3 3 2.5l1.5-.5Z"/>
+                    </svg>
+                    {simPct(dist)}%
+                  </span>
+                {/if}
+
                 <span class="flex-1"></span>
                 <button
                   onclick={() => viewSession(label)}
