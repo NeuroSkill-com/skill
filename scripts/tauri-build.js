@@ -100,6 +100,46 @@ if (isMingwTarget) {
   );
   espeakLib = resolve(root, "src-tauri\\espeak-static\\lib");
 
+  // ── Windows: skip Tauri bundling for `build` subcommand ────────────────────
+  //
+  // The Tauri CLI (≥ 2.10, NAPI-RS native module) crashes with
+  // STATUS_ILLEGAL_INSTRUCTION (0xC000_001D) on Windows during the
+  // post-compilation bundle/updater-artifact phase.  The crash happens after
+  // "Built application at:" is printed and is triggered by the
+  // `createUpdaterArtifacts: true` + `"targets": ["app"]` combination:
+  //
+  //  • "app" is a macOS-only bundle format — Tauri skips it on Windows.
+  //  • With no valid Windows bundle produced, the CLI falls through to the
+  //    updater-artifact signing / zstd-compression code path.
+  //  • That code path in cli.win32-x64-msvc.node uses CPU instructions
+  //    (AVX2 or similar) that are not available on all x86-64 processors,
+  //    crashing the entire Node.js process.
+  //
+  // --no-bundle tells Tauri to compile the Rust binary and stop; it skips
+  // all installer creation AND the updater-artifact signing step, so the
+  // crash never occurs.  The compiled skill.exe is still produced at:
+  //   src-tauri\target\release\skill.exe
+  //
+  // Full Windows packaging (NSIS installer + updater ZIP + signing) is
+  // handled separately by release-windows.ps1, which calls
+  //   cargo build --release
+  //   npx tauri bundle --bundle nsis --no-sign
+  // directly — entirely bypassing this code path.
+  //
+  // Only inject the flag when the caller has not already explicitly passed
+  // a --bundle or --no-bundle argument themselves.
+  if (
+    subcommand === "build" &&
+    !subArgs.includes("--bundle") &&
+    !subArgs.includes("--no-bundle")
+  ) {
+    platformFlags = ["--no-bundle"];
+    console.log(
+      "→ Windows: injecting --no-bundle (skips post-build signing crash; " +
+      "use release-windows.ps1 for full NSIS packaging)"
+    );
+  }
+
 } else {
   // Linux native.
   console.log("→ building espeak-ng static library …");

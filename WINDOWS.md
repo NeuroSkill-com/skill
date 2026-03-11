@@ -179,3 +179,32 @@ shot on a non-Windows host.  Use a Windows CI runner (e.g. GitHub Actions
   discovery are untested on Windows.
 - Tauri installer bundling requires a Windows host; see cross-compilation note
   above.
+
+## `npm run tauri:build` exits with STATUS_ILLEGAL_INSTRUCTION (exit 3221225725)
+
+**Symptom** — the Rust compilation completes successfully and you see:
+
+```
+Built application at: C:\...\target\release\skill.exe
+```
+
+…followed immediately by the Node.js error with `status: 3221225725`.
+
+**Cause** — `0xC000_001D` = `STATUS_ILLEGAL_INSTRUCTION`.  The Tauri CLI
+(`@tauri-apps/cli`) is a NAPI-RS native module that runs **inside** the
+Node.js process.  After printing "Built application at:" the CLI enters the
+post-build bundling / updater-artifact phase triggered by
+`createUpdaterArtifacts: true`.  At that point it executes a code path in
+`cli.win32-x64-msvc.node` (zstd compression or Ed25519 signing) that was
+compiled with CPU instructions (AVX2 or similar) not available on all
+x86-64 processors, crashing the entire Node.js process.
+
+**Fix** — `scripts/tauri-build.js` automatically injects `--no-bundle` when
+building on Windows (unless you pass `--bundle` or `--no-bundle` yourself).
+`--no-bundle` tells Tauri to compile the Rust binary and stop, skipping the
+crashing bundling/signing step.  The compiled binary is still produced at
+`src-tauri\target\release\skill.exe`.
+
+If you need a full NSIS installer (e.g. for a release), use
+`release-windows.ps1` which calls `cargo build` and `npx tauri bundle`
+separately and never hits this code path.

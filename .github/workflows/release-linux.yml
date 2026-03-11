@@ -1,0 +1,311 @@
+name: Release — Linux
+
+# Triggered by the same semver tag as the macOS and Windows release workflows.
+# All three run in parallel; each uploads its own binaries and then merges
+# its platform entry into the shared latest.json updater manifest.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write   # create/update GitHub Releases and upload assets
+
+jobs:
+  release-linux:
+    name: Build & Release — x86_64-unknown-linux-gnu
+    runs-on: ubuntu-22.04
+    environment: Release
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Verify tag matches tauri.conf.json version ────────────────────────────
+      - name: Verify version matches tag
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          CONF_VERSION=$(
+            grep '"version"' src-tauri/tauri.conf.json \
+            | head -1 \
+            | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
+          )
+          if [ "$VERSION" != "$CONF_VERSION" ]; then
+            echo "::error::Tag version ($VERSION) does not match" \
+                 "tauri.conf.json version ($CONF_VERSION)."
+            echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
+                 "src-tauri/Cargo.toml, then re-tag."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG"         >> "$GITHUB_ENV"
+          echo "✓ Version verified: $VERSION"
+
+      # ── System dependencies ───────────────────────────────────────────────────
+      # Tauri on Linux requires WebKit2GTK and several supporting libraries.
+      # squashfs-tools provides mksquashfs, used by appimagetool when building
+      # the AppImage bundle.  libfuse2 is needed to run appimagetool itself.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev  \
+            librsvg2-dev          \
+            patchelf              \
+            libssl-dev            \
+            libudev-dev           \
+            libdbus-1-dev         \
+            pkg-config            \
+            libasound2-dev        \
+            cmake                 \
+            binutils              \
+            squashfs-tools        \
+            libfuse2
+
+      # ── Rust toolchain ────────────────────────────────────────────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      # ── Cargo cache ───────────────────────────────────────────────────────────
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # ── Node.js ───────────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # ── Pre-flight: verify every required secret is set ──────────────────────
+      # Linux builds don't need platform code-signing credentials (there is no
+      # Linux equivalent of Apple notarization or Windows Authenticode), but the
+      # shared Tauri Ed25519 updater signing key is still required.
+      - name: Verify signing secrets are present
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Secret 'TAURI_SIGNING_PRIVATE_KEY' is empty or not set."
+            exit 1
+          fi
+          echo "✓ TAURI_SIGNING_PRIVATE_KEY is present."
+
+      # ── espeak-ng static library ──────────────────────────────────────────────
+      # Cache keyed on the build script; a script change busts the cache.
+      - name: Cache espeak-ng static lib
+        id: cache-espeak
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/espeak-static
+            src-tauri/resources/espeak-ng-data
+          key: linux-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
+
+      - name: Build espeak-ng static lib
+        if: steps.cache-espeak.outputs.cache-hit != 'true'
+        run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
+
+      # ── Build frontend ────────────────────────────────────────────────────────
+      - name: Build frontend
+        run: npm run build
+
+      # ── Compile + bundle (frontend + Rust + deb + AppImage) ──────────────────
+      #
+      # Produces two bundle types:
+      #   deb      — Debian/Ubuntu package (.deb)
+      #   appimage — portable self-contained executable (.AppImage)
+      #
+      # With createUpdaterArtifacts: true in tauri.conf.json and
+      # TAURI_SIGNING_PRIVATE_KEY set, Tauri also produces:
+      #   *.AppImage.tar.gz      — AppImage wrapped in tar.gz (updater bundle)
+      #   *.AppImage.tar.gz.sig  — Ed25519 signature for the updater plugin
+      #
+      # APPIMAGE_EXTRACT_AND_RUN=1 tells appimagetool to extract itself rather
+      # than trying to mount via FUSE, which avoids kernel-level FUSE issues in
+      # the GitHub Actions sandbox.
+      - name: Build Tauri (Linux — deb + AppImage)
+        env:
+          ESPEAK_LIB_DIR:                     ${{ github.workspace }}/src-tauri/espeak-static/lib
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPIMAGE_EXTRACT_AND_RUN:           1
+        run: |
+          npx tauri build \
+            --target x86_64-unknown-linux-gnu \
+            --bundles deb,appimage
+
+      # ── Locate build artifacts ────────────────────────────────────────────────
+      - name: Collect artifact paths
+        id: artifacts
+        run: |
+          TARGET_DIR="src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+
+          DEB="$(find "$TARGET_DIR/deb"      -maxdepth 1 -name "*.deb"               | head -1)"
+          IMG="$(find "$TARGET_DIR/appimage" -maxdepth 1 -name "*.AppImage" \
+                   ! -name "*.tar.gz"                                                 | head -1)"
+          TAR="$(find "$TARGET_DIR/appimage" -maxdepth 1 -name "*.AppImage.tar.gz" \
+                   ! -name "*.sig"                                                    | head -1)"
+          SIG="$(find "$TARGET_DIR/appimage" -maxdepth 1 -name "*.AppImage.tar.gz.sig" | head -1)"
+
+          if [ -z "$DEB" ] || [ -z "$IMG" ] || [ -z "$TAR" ] || [ -z "$SIG" ]; then
+            echo "::error::One or more expected artifacts are missing."
+            echo "  DEB : ${DEB:-(not found)}"
+            echo "  IMG : ${IMG:-(not found)}"
+            echo "  TAR : ${TAR:-(not found)}"
+            echo "  SIG : ${SIG:-(not found)}"
+            exit 1
+          fi
+
+          echo "deb=$DEB"                         >> "$GITHUB_OUTPUT"
+          echo "appimage=$IMG"                    >> "$GITHUB_OUTPUT"
+          echo "appimage_tar=$TAR"               >> "$GITHUB_OUTPUT"
+          echo "appimage_sig=$SIG"               >> "$GITHUB_OUTPUT"
+          echo "appimage_tar_name=$(basename "$TAR")" >> "$GITHUB_OUTPUT"
+
+          echo "Artifacts found:"
+          echo "  DEB : $DEB  ($(du -sh "$DEB" | cut -f1))"
+          echo "  IMG : $IMG  ($(du -sh "$IMG" | cut -f1))"
+          echo "  TAR : $TAR  ($(du -sh "$TAR" | cut -f1))"
+          echo "  SIG : $SIG"
+
+      # ── Create / update GitHub Release with Linux binaries ───────────────────
+      #
+      # softprops/action-gh-release creates the release if it doesn't exist yet,
+      # or adds files to it if it was already created by the macOS or Windows
+      # workflow.  latest.json is handled in the next step.
+      #
+      # Linux assets uploaded here:
+      #   *.deb                  — Debian/Ubuntu package
+      #   *.AppImage             — portable Linux executable
+      #   *.AppImage.tar.gz      — Tauri updater bundle
+      #   *.AppImage.tar.gz.sig  — Ed25519 signature for the updater
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:                ${{ env.TAG }}
+          name:                    Skill v${{ env.VERSION }}
+          generate_release_notes:  true
+          fail_on_unmatched_files: true
+          files: |
+            ${{ steps.artifacts.outputs.deb }}
+            ${{ steps.artifacts.outputs.appimage }}
+            ${{ steps.artifacts.outputs.appimage_tar }}
+            ${{ steps.artifacts.outputs.appimage_sig }}
+
+      # ── Update latest.json ────────────────────────────────────────────────────
+      #
+      # Downloads the current latest.json from the release (created by whichever
+      # platform workflow ran first), merges the linux-x86_64 entry, then
+      # re-uploads.  If no latest.json exists yet, creates one from scratch.
+      - name: Update latest.json
+        env:
+          GH_TOKEN:          ${{ github.token }}
+          GH_REPO:           ${{ github.repository }}
+          TAG:               ${{ env.TAG }}
+          VERSION:           ${{ env.VERSION }}
+          APPIMAGE_TAR_NAME: ${{ steps.artifacts.outputs.appimage_tar_name }}
+          APPIMAGE_SIG_PATH: ${{ steps.artifacts.outputs.appimage_sig }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, subprocess, datetime
+
+          version      = os.environ["VERSION"]
+          tag          = os.environ["TAG"]
+          repo         = os.environ["GH_REPO"]
+          tar_name     = os.environ["APPIMAGE_TAR_NAME"]
+          sig_path     = os.environ["APPIMAGE_SIG_PATH"]
+
+          with open(sig_path) as fh:
+              signature = fh.read().strip()
+
+          download_url = (
+              f"https://github.com/{repo}/releases/download/{tag}/{tar_name}"
+          )
+
+          # Try to download the existing latest.json from the release.
+          dl = subprocess.run(
+              ["gh", "release", "download", tag,
+               "--pattern", "latest.json", "--output", "latest.json", "--clobber"],
+              capture_output=True, text=True,
+          )
+
+          if dl.returncode == 0:
+              with open("latest.json") as fh:
+                  manifest = json.load(fh)
+          else:
+              pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+              manifest = {
+                  "version":  version,
+                  "notes":    f"NeuroSkill™ v{version}",
+                  "pub_date": pub_date,
+                  "platforms": {},
+              }
+
+          manifest["platforms"]["linux-x86_64"] = {
+              "url":       download_url,
+              "signature": signature,
+          }
+
+          with open("latest.json", "w") as fh:
+              json.dump(manifest, fh, indent=2)
+              fh.write("\n")
+
+          print("Updated latest.json:")
+          print(json.dumps(manifest, indent=2))
+          PYEOF
+
+          gh release upload "$TAG" latest.json --clobber
+          echo "✓ latest.json uploaded to release $TAG"
+
+      # ── Discord notification ──────────────────────────────────────────────────
+      - name: Notify Discord of release
+        if: always()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          JOB_STATUS:          ${{ job.status }}
+        run: |
+          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.TAG }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            COLOR=3066993
+            TITLE="🚀 Release v${{ env.VERSION }} — Linux Published"
+            DESC="Linux build published and ready to download."
+            LINK_LINE="**[Download v${{ env.VERSION }}]($RELEASE_URL)**"
+          else
+            COLOR=15158332
+            TITLE="💥 Release v${{ env.VERSION }} — Linux Failed"
+            DESC="The Linux release build failed. Check the run for details."
+            LINK_LINE="**[View failed run]($RUN_URL)**"
+          fi
+
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"$TITLE\",
+                \"description\": \"$DESC\n\n$LINK_LINE\",
+                \"url\": \"$RUN_URL\",
+                \"color\": $COLOR,
+                \"fields\": [
+                  {\"name\": \"Tag\",      \"value\": \"\`${{ env.TAG }}\`\",     \"inline\": true},
+                  {\"name\": \"Version\",  \"value\": \"\`${{ env.VERSION }}\`\", \"inline\": true},
+                  {\"name\": \"Platform\", \"value\": \"Linux x86_64\",            \"inline\": true},
+                  {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true}
+                ],
+                \"footer\": {\"text\": \"${{ github.repository }}\"}
+              }]
+            }"

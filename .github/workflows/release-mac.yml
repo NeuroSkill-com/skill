@@ -426,87 +426,17 @@ jobs:
           echo "  SIG : $APP_SIG"
           echo "  DMG : $DMG  ($(du -sh "$DMG" | cut -f1))"
 
-      # ── Generate latest.json ──────────────────────────────────────────────────
+      # ── Create GitHub Release + upload macOS binary assets ───────────────────
       #
-      # latest.json is uploaded as a release asset so it is reachable at:
-      #   https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json
+      # Creates (or updates) the release and uploads the macOS-specific binaries.
+      # latest.json is handled in the next step so that the Windows and Linux
+      # release workflows can each merge their own platform entry without
+      # overwriting each other.
       #
-      # Point tauri.conf.json → plugins.updater.endpoints at that URL so the
-      # built-in updater can find new versions without any server-side logic:
-      #
-      #   "endpoints": [
-      #     "https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json"
-      #   ]
-      #
-      # The Tauri v2 updater JSON schema:
-      #   https://tauri.app/plugin/updater/#update-server-json-format
-      - name: Generate latest.json
-        env:
-          GH_REPO:      ${{ github.repository }}
-          TAG:          ${{ env.TAG }}
-          VERSION:      ${{ env.VERSION }}
-          APP_TAR_NAME: ${{ steps.artifacts.outputs.app_tar_name }}
-          APP_SIG_PATH: ${{ steps.artifacts.outputs.app_sig }}
-        run: |
-          python3 - <<'PYEOF'
-          import json, os, subprocess, datetime, sys
-
-          version      = os.environ["VERSION"]
-          tag          = os.environ["TAG"]
-          repo         = os.environ["GH_REPO"]
-          app_tar_name = os.environ["APP_TAR_NAME"]
-          sig_path     = os.environ["APP_SIG_PATH"]
-
-          with open(sig_path) as fh:
-              signature = fh.read().strip()
-
-          pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-
-          # Use the git tag annotation as release notes; fall back gracefully.
-          try:
-              notes = subprocess.check_output(
-                  ["git", "tag", "-l", "--format=%(contents)", tag],
-                  text=True
-              ).strip()
-          except Exception:
-              notes = ""
-          if not notes:
-              notes = f"NeuroSkill™ v{version}"
-
-          download_url = (
-              f"https://github.com/{repo}/releases/download/{tag}/{app_tar_name}"
-          )
-
-          manifest = {
-              "version": version,
-              "notes":   notes,
-              "pub_date": pub_date,
-              "platforms": {
-                  "darwin-aarch64": {
-                      "url":       download_url,
-                      "signature": signature,
-                  }
-              },
-          }
-
-          with open("latest.json", "w") as fh:
-              json.dump(manifest, fh, indent=2)
-              fh.write("\n")
-
-          print("Generated latest.json:")
-          print(json.dumps(manifest, indent=2))
-          PYEOF
-
-      # ── Create GitHub Release + upload all assets ─────────────────────────────
-      #
-      # Uploaded assets for this release:
-      #   skill_<ver>_aarch64.dmg          — installer (distribute to users)
-      #   skill_<ver>_aarch64.app.tar.gz   — updater bundle (consumed by Tauri updater)
-      #   skill_<ver>_aarch64.app.tar.gz.sig — Ed25519 signature for the updater bundle
-      #   latest.json                      — updater manifest (static endpoint for the updater)
-      #
-      # The `latest.json` asset is accessible at the stable URL:
-      #   https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json
+      # macOS assets uploaded here:
+      #   NeuroSkill_<ver>_aarch64.dmg       — drag-to-install disk image
+      #   NeuroSkill™.app.tar.gz             — Tauri updater bundle
+      #   NeuroSkill™.app.tar.gz.sig         — Ed25519 signature for the updater
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -518,7 +448,92 @@ jobs:
             ${{ steps.artifacts.outputs.dmg }}
             ${{ steps.artifacts.outputs.app_tar }}
             ${{ steps.artifacts.outputs.app_sig }}
-            latest.json
+
+      # ── Update latest.json ────────────────────────────────────────────────────
+      #
+      # Downloads the current latest.json from the release (if a Windows or Linux
+      # platform workflow already uploaded one), merges the darwin-aarch64 entry,
+      # then re-uploads via `gh release upload --clobber`.
+      # If no latest.json exists yet this step creates one from scratch.
+      #
+      # All three platform release workflows (macOS, Windows, Linux) use the same
+      # download → merge → upload pattern, so the single file at:
+      #   https://github.com/NeuroSkill-com/skill/releases/latest/download/latest.json
+      # accumulates entries for every platform as each build completes.
+      # The Tauri updater reads only its own platform key (e.g. "darwin-aarch64")
+      # and ignores the rest, so a partial manifest is valid while other platform
+      # builds are still in flight.
+      - name: Update latest.json
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          GH_REPO:      ${{ github.repository }}
+          TAG:          ${{ env.TAG }}
+          VERSION:      ${{ env.VERSION }}
+          APP_TAR_NAME: ${{ steps.artifacts.outputs.app_tar_name }}
+          APP_SIG_PATH: ${{ steps.artifacts.outputs.app_sig }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, subprocess, datetime
+
+          version      = os.environ["VERSION"]
+          tag          = os.environ["TAG"]
+          repo         = os.environ["GH_REPO"]
+          app_tar_name = os.environ["APP_TAR_NAME"]
+          sig_path     = os.environ["APP_SIG_PATH"]
+
+          with open(sig_path) as fh:
+              signature = fh.read().strip()
+
+          # Use the git tag annotation as release notes; fall back gracefully.
+          try:
+              notes = subprocess.check_output(
+                  ["git", "tag", "-l", "--format=%(contents)", tag],
+                  text=True,
+              ).strip()
+          except Exception:
+              notes = ""
+          if not notes:
+              notes = f"NeuroSkill™ v{version}"
+
+          download_url = (
+              f"https://github.com/{repo}/releases/download/{tag}/{app_tar_name}"
+          )
+
+          # Try to download the existing latest.json from the release.
+          # Another platform workflow may have already uploaded one.
+          dl = subprocess.run(
+              ["gh", "release", "download", tag,
+               "--pattern", "latest.json", "--output", "latest.json", "--clobber"],
+              capture_output=True, text=True,
+          )
+
+          if dl.returncode == 0:
+              with open("latest.json") as fh:
+                  manifest = json.load(fh)
+          else:
+              pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+              manifest = {
+                  "version":  version,
+                  "notes":    notes,
+                  "pub_date": pub_date,
+                  "platforms": {},
+              }
+
+          manifest["platforms"]["darwin-aarch64"] = {
+              "url":       download_url,
+              "signature": signature,
+          }
+
+          with open("latest.json", "w") as fh:
+              json.dump(manifest, fh, indent=2)
+              fh.write("\n")
+
+          print("Updated latest.json:")
+          print(json.dumps(manifest, indent=2))
+          PYEOF
+
+          gh release upload "$TAG" latest.json --clobber
+          echo "✓ latest.json uploaded to release $TAG"
 
       # ── Discord notification ────────────────────────────────────────────────
       - name: Notify Discord of release
