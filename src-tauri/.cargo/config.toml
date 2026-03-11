@@ -56,6 +56,26 @@ ESPEAK_LIB_DIR      = { value = "espeak-static/lib",                   relative 
 # PowerShell equivalent (overridden in the target-specific section below).
 ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static.sh",  relative = true }
 
+# ── Windows MSVC: increase main-thread stack size ────────────────────────────
+#
+# Windows allocates only 1 MB of stack to the main thread by default (vs 8 MB
+# on macOS / Linux).  The Tauri + llama.cpp initialisation path uses enough
+# stack (serde, HNSW, deep generics) to hit the guard page and produce a
+# STATUS_STACK_OVERFLOW (0xC00000FD) crash before any window is shown.
+#
+# /STACK:<reserve>[,<commit>]  — PE header stack reservation.
+#   reserve = 8 MB  (8 * 1024 * 1024 = 8388608)
+#   commit  = 64 KB (default; pages are committed lazily, so this is fine)
+#
+# The flag is passed through -C link-args so it works without a separate
+# .cargo/config linker directive.  It only affects the main thread; worker
+# threads set their own size via std::thread::Builder::stack_size.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-args=/STACK:8388608"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "link-args=/STACK:8388608"]
+
 # ── Windows MinGW (x86_64-pc-windows-gnu): MinGW bash build script ────────────
 #
 # The MinGW target uses a separate output directory (espeak-static-mingw/) so
@@ -68,9 +88,15 @@ ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static.sh",  relative =
 # `npm run tauri`, tauri-build.js overrides ESPEAK_LIB_DIR with an absolute
 # path in the process environment, so these values are only used for direct
 # `cargo build --target x86_64-pc-windows-gnu` invocations.
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "link-args=-Wl,--stack,8388608"]
+
 [target.x86_64-pc-windows-gnu.env]
 ESPEAK_LIB_DIR      = "espeak-static-mingw/lib"
 ESPEAK_BUILD_SCRIPT = "../scripts/build-espeak-static-mingw.sh"
+
+[target.i686-pc-windows-gnu]
+rustflags = ["-C", "link-args=-Wl,--stack,8388608"]
 
 [target.i686-pc-windows-gnu.env]
 ESPEAK_LIB_DIR      = "espeak-static-mingw/lib"

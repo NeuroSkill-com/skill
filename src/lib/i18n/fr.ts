@@ -2066,6 +2066,8 @@ const fr: Record<string, string> = {
   "llm.mmproj.nThreadsDesc":         "CPU threads for the vision/audio encoder.",
   "llm.mmproj.noGpu":                "CPU-only mmproj",
   "llm.mmproj.noGpuDesc":            "Disable GPU offloading for the projector model.",
+  "llm.verbose":                     "Verbose LLM logging",
+  "llm.verboseDesc":                  "Show raw llama.cpp / clip_model_loader output in the log. Off by default.",
   "llm.noFeature":                   "LLM support is not compiled in.",
   "llm.noFeatureHint":               "Rebuild with --features llm to enable the embedded OpenAI-compatible server.",
   "llm.endpoints.title":             "OpenAI-compatible endpoints",

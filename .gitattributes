@@ -1,0 +1,93 @@
+# ── Line endings ──────────────────────────────────────────────────────────────
+#
+# Normalise all text files to LF in the repository; Git converts to the
+# platform native ending on checkout only when core.autocrlf is set.
+# This prevents the "LF will be replaced by CRLF" warnings on Windows and
+# keeps diffs clean regardless of the developer's OS.
+
+# Catch-all: treat everything Git auto-detects as text with LF in the repo.
+* text=auto eol=lf
+
+# ── Source files (always LF) ──────────────────────────────────────────────────
+*.rs          text eol=lf
+*.toml        text eol=lf
+*.lock        text eol=lf
+*.ts          text eol=lf
+*.svelte      text eol=lf
+*.js          text eol=lf
+*.mjs         text eol=lf
+*.cjs         text eol=lf
+*.json        text eol=lf
+*.json5       text eol=lf
+*.css         text eol=lf
+*.html        text eol=lf
+*.md          text eol=lf
+*.txt         text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+*.sh          text eol=lf
+*.bash        text eol=lf
+*.env         text eol=lf
+*.envrc       text eol=lf
+*.gitignore   text eol=lf
+*.gitattributes text eol=lf
+*.editorconfig  text eol=lf
+
+# ── Config / build files ──────────────────────────────────────────────────────
+Makefile      text eol=lf
+Dockerfile*   text eol=lf
+*.cmake       text eol=lf
+CMakeLists.txt text eol=lf
+*.plist       text eol=lf
+*.entitlements text eol=lf
+
+# ── Windows-specific scripts (CRLF on checkout so cmd.exe / PowerShell work) ──
+*.ps1         text eol=crlf
+*.cmd         text eol=crlf
+*.bat         text eol=crlf
+
+# ── Binary files (no line-ending conversion, no diff) ────────────────────────
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.webp        binary
+*.ico         binary
+*.icns        binary
+*.otf         binary
+*.ttf         binary
+*.woff        binary
+*.woff2       binary
+*.glb         binary
+*.gltf        binary
+*.wav         binary
+*.mp3         binary
+*.npy         binary
+*.safetensors binary
+*.gguf        binary
+*.hnsw        binary
+*.sqlite      binary
+*.db          binary
+*.a           binary
+*.lib         binary
+*.dll         binary
+*.so          binary
+*.dylib       binary
+*.exe         binary
+
+# ── Diff drivers ─────────────────────────────────────────────────────────────
+#
+# Tell git diff to use sensible language labels so hunks are easier to read
+# in `git diff`, `git log -p`, and GitHub's PR view.
+
+*.rs          diff=rust
+*.toml        diff=toml
+*.ts          diff=typescript
+*.svelte      diff=html
+*.js          diff=javascript
+*.mjs         diff=javascript
+*.json        diff=json
+*.css         diff=css
+*.md          diff=markdown
+*.sh          diff=bash
+*.ps1         diff=powershell

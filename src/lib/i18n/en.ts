@@ -2373,6 +2373,8 @@ const en: Record<string, string> = {
   "llm.mmproj.autoloadDesc":            "Automatically load the best available vision projector (mmproj) when the server starts.",
   "llm.mmproj.noGpu":                   "CPU-only mmproj",
   "llm.mmproj.noGpuDesc":               "Disable GPU offloading for the projector model.",
+  "llm.verbose":                        "Verbose LLM logging",
+  "llm.verboseDesc":                    "Show raw llama.cpp / clip_model_loader output in the log. Off by default — only enable when debugging model loading.",
 
   // ── Chat window ─────────────────────────────────────────────────────────────
   "chat.status.running":                "Running",
