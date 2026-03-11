@@ -1,4 +1,4 @@
-name: Release
+name: Release - Mac
 
 # Triggered by pushing a semver tag: git tag v1.2.3 && git push origin v1.2.3
 on:
