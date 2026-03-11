@@ -235,12 +235,15 @@
   async function selectModel(filename: string) {
     await invoke("set_llm_active_model", { filename });
     await loadCatalog();
-    try { await invoke("stop_llm_server"); } catch {}
+    // Stop is fire-and-forget — actor join runs in background.
+    invoke("stop_llm_server").catch(() => {});
+    // Give stop a moment to clear the cell before start checks it.
+    await new Promise(r => setTimeout(r, 150));
     startError = "";
+    // Start is also fire-and-forget — UI polls status every second.
     invoke("start_llm_server").catch((e: any) => {
       startError = typeof e === "string" ? e : (e?.message ?? "Failed to start LLM server");
     });
-    await new Promise(r => setTimeout(r, 300));
     await loadCatalog();
   }
 
@@ -257,13 +260,18 @@
 
   async function startServer() {
     startError = "";
-    try { await invoke("start_llm_server"); }
-    catch (e: any) { startError = typeof e === "string" ? e : (e?.message ?? "Unknown error"); }
+    // start_llm_server is fire-and-forget on the Rust side — returns immediately
+    // with "starting"; the 2-second poll picks up Loading → Running transitions
+    // and surfaces any start_error from the background task.
+    invoke("start_llm_server").catch((e: any) => {
+      startError = typeof e === "string" ? e : (e?.message ?? "Unknown error");
+    });
   }
 
   async function stopServer() {
     startError = "";
-    try { await invoke("stop_llm_server"); } catch {}
+    // stop_llm_server is also fire-and-forget — actor join runs in background.
+    invoke("stop_llm_server").catch(() => {});
   }
 
   async function openChat() {
@@ -275,8 +283,12 @@
   onMount(async () => {
     await Promise.all([loadCatalog(), loadConfig()]);
     try {
-      const s = await invoke<{ status: "stopped"|"loading"|"running" }>("get_llm_server_status");
+      const s = await invoke<{
+        status: "stopped"|"loading"|"running";
+        start_error: string | null;
+      }>("get_llm_server_status");
       serverStatus = s.status;
+      if (s.start_error) startError = s.start_error;
     } catch {}
     try {
       unlistenStatus = await listen<{ status: string }>(
@@ -298,7 +310,17 @@
     // roughly one UI update per backend tick.
     pollTimer = setInterval(async () => {
       if (catalog.entries.some(e => e.state === "downloading")) await loadCatalog();
-    }, 500);
+      // Poll server status so Loading → Running and start_error are reflected
+      // without relying solely on push events.
+      try {
+        const s = await invoke<{
+          status: "stopped"|"loading"|"running";
+          start_error: string | null;
+        }>("get_llm_server_status");
+        serverStatus = s.status;
+        if (s.start_error) startError = s.start_error;
+      } catch {}
+    }, 1000);
   });
 
   onDestroy(() => {

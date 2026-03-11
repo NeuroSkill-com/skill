@@ -99,11 +99,17 @@
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  /** Primary label shown in the list item. */
+  /** Full label used for the native tooltip and the inline rename seed. */
   function displayLabel(s: SessionSummary): string {
     if (s.title)   return s.title;
     if (s.preview) return s.preview;
     return "New conversation";
+  }
+
+  /** Truncated label shown in the list — max 10 chars + ellipsis. */
+  function shortLabel(s: SessionSummary): string {
+    const full = displayLabel(s);
+    return full.length > 10 ? full.slice(0, 10) + "…" : full;
   }
 
   function relTime(ms: number): string {
@@ -209,7 +215,7 @@
                   />
                 {:else}
                   <p class="text-[0.72rem] font-medium text-foreground truncate leading-tight">
-                    {displayLabel(s)}
+                    {shortLabel(s)}
                   </p>
                 {/if}
 

@@ -60,7 +60,7 @@
         "Summarise today's neurofeedback session in plain language",
         "What were the key highlights of my last recording?",
         "Create a brief journal entry based on my session data",
-        "How does today's brain activity compare to a healthy baseline?",
+        "How does today's brain activity compare to a yesterday's baseline?",
         "Give me a one-paragraph overview of what happened in my session",
       ],
     },
@@ -68,7 +68,7 @@
       key:   "relax",
       emoji: "🧘",
       prompts: [
-        "Suggest a relaxation technique to boost my alpha waves",
+        // "Suggest a relaxation technique to boost my alpha waves",
         "I feel tense — what breathing exercise can help right now?",
         "How can I enter a deeper meditative state with neurofeedback?",
         "My stress index is elevated — what should I do?",

@@ -31,6 +31,7 @@ the Free Software Foundation, version 3 only. -->
     daily_db_path:          string;
     daily_hnsw_path:        string;
     downloading_weights:    boolean;
+    download_progress:      number;
     download_status_msg:    string | null;
     download_needs_restart: boolean;
     download_retry_attempt: number;
@@ -46,7 +47,8 @@ the Free Software Foundation, version 3 only. -->
     embed_worker_active: false,
     weights_found: false, weights_path: null,
     embeddings_today: 0, daily_db_path: "", daily_hnsw_path: "",
-    downloading_weights: false, download_status_msg: null,
+    downloading_weights: false, download_progress: 0,
+    download_status_msg: null,
     download_needs_restart: false,
     download_retry_attempt: 0, download_retry_in_secs: 0,
   });
@@ -196,10 +198,15 @@ the Free Software Foundation, version 3 only. -->
             </Badge>
           </div>
 
-          <!-- Indeterminate progress bar -->
+          <!-- Progress bar: deterministic when progress > 0, indeterminate while connecting -->
           <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-            <div class="h-full rounded-full bg-blue-500 animate-[progress-indeterminate_1.6s_ease-in-out_infinite]"
-                 style="width:40%"></div>
+            {#if modelStatus.download_progress > 0}
+              <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300"
+                   style="width:{(modelStatus.download_progress * 100).toFixed(1)}%"></div>
+            {:else}
+              <div class="h-full rounded-full bg-blue-500 animate-[progress-indeterminate_1.6s_ease-in-out_infinite]"
+                   style="width:40%"></div>
+            {/if}
           </div>
 
           <!-- Step label -->

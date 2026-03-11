@@ -302,14 +302,22 @@ pub fn get_llm_logs(state: tauri::State<'_, Mutex<AppState>>) -> Vec<LlmLogEntry
 
 /// Start the LLM inference server.
 ///
-/// Returns `"started"` on success or an error string on failure.
-/// No-ops (returns `"already_running"`) if the server is already up.
+/// Immediately returns `"starting"` and loads the model on a background
+/// thread so the UI is never blocked.  The frontend should poll
+/// `get_llm_server_status` (which already happens on a 2-second timer) to
+/// detect when `status` transitions from `Loading` → `Running` or when
+/// `start_error` is non-null after a failed load.
+///
+/// No-ops (returns `"already_running"`) if the server is already up or a
+/// load is already in progress.
 #[tauri::command]
-pub async fn start_llm_server(
+pub fn start_llm_server(
     app:   AppHandle,
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> Result<String, String> {
-    let (mut config, catalog, log_buf, cell, skill_dir) = {
+    use std::sync::atomic::Ordering;
+
+    let (mut config, catalog, log_buf, cell, skill_dir, loading, start_error) = {
         let s = state.lock_or_recover();
         (
             s.llm_config.clone(),
@@ -317,14 +325,23 @@ pub async fn start_llm_server(
             s.llm_logs.clone(),
             s.llm_state_cell.clone(),
             s.skill_dir.clone(),
+            s.llm_loading.clone(),
+            s.llm_start_error.clone(),
         )
     };
 
     if cell.lock().unwrap().is_some() {
         return Ok("already_running".to_string());
     }
+    if loading.load(Ordering::Relaxed) {
+        return Ok("already_loading".to_string());
+    }
 
-    push_log(&app, &log_buf, "info", "start_llm_server command received");
+    // Clear any previous error and mark loading.
+    *start_error.lock().unwrap() = None;
+    loading.store(true, Ordering::Relaxed);
+
+    push_log(&app, &log_buf, "info", "start_llm_server: spawning background load");
 
     // If no mmproj is explicitly set but autoload is on, resolve the best one.
     if config.mmproj.is_none() {
@@ -335,50 +352,72 @@ pub async fn start_llm_server(
         }
     }
 
-    // Run init on a blocking thread — it loads the model which can take seconds.
-    let new_state = tokio::task::spawn_blocking(move || {
-        crate::llm::init(&config, &catalog, app, log_buf, &skill_dir)
-    }).await.map_err(|e| e.to_string())?;
+    // Spawn a background task — load the model without blocking the UI thread.
+    tauri::async_runtime::spawn(async move {
+        let result = tokio::task::spawn_blocking(move || {
+            crate::llm::init(&config, &catalog, app, log_buf, &skill_dir)
+        }).await;
 
-    match new_state {
-        Some(s) => {
-            *cell.lock().unwrap() = Some(s);
-            Ok("started".to_string())
+        loading.store(false, Ordering::Relaxed);
+
+        match result {
+            Ok(Some(s))  => { *cell.lock().unwrap() = Some(s); }
+            Ok(None)     => {
+                *start_error.lock().unwrap() = Some(
+                    "Failed to start LLM server. \
+                     Check that a model is downloaded and selected in Settings → LLM."
+                    .to_string()
+                );
+            }
+            Err(e) => {
+                *start_error.lock().unwrap() = Some(format!("Load task panicked: {e}"));
+            }
         }
-        None => Err(
-            "Failed to start LLM server. \
-             Check that a model is downloaded and selected in Settings → LLM.".to_string()
-        ),
-    }
+    });
+
+    Ok("starting".to_string())
 }
 
 /// Stop the LLM inference server gracefully.
 ///
-/// Drops the actor's send channel (causing `blocking_recv` to return `None`),
-/// then **blocks until the actor thread has fully exited** — ensuring all GPU
-/// resources (Metal/CUDA command encoders, KV cache, model weights) are
-/// released before this function returns.
+/// Takes the server state out of the cell (so new inference requests are
+/// immediately rejected) and joins the actor thread on a background thread
+/// so the UI is never blocked waiting for GPU resources to free up.
 #[tauri::command]
 pub fn stop_llm_server(
     app:   AppHandle,
     state: tauri::State<'_, Mutex<AppState>>,
 ) {
-    let (cell, log_buf) = {
+    let (cell, log_buf, loading, start_error) = {
         let s = state.lock_or_recover();
-        (s.llm_state_cell.clone(), s.llm_logs.clone())
+        (
+            s.llm_state_cell.clone(),
+            s.llm_logs.clone(),
+            s.llm_loading.clone(),
+            s.llm_start_error.clone(),
+        )
     };
-    // Take the Arc out of the cell.  If this is the last Arc (it always
-    // should be — only the cell holds a long-lived reference), dropping it
-    // closes req_tx, the actor exits its loop, and shutdown() joins the thread.
-    // Lock, take, and immediately release the guard so `cell` can be dropped.
+
+    // Cancel any in-progress load as well.
+    loading.store(false, std::sync::atomic::Ordering::Relaxed);
+    *start_error.lock().unwrap() = None;
+
+    // Take the Arc out of the cell so the server is immediately "Stopped"
+    // from the UI's perspective before the actor thread finishes joining.
     let server_state = { cell.lock().unwrap().take() };
     if let Some(server_state) = server_state {
-        push_log(&app, &log_buf, "info", "stopping LLM server — waiting for actor to exit…");
-        match std::sync::Arc::try_unwrap(server_state) {
-            Ok(owned) => owned.shutdown(),
-            Err(arc)  => drop(arc), // in-flight handler; actor exits when last Arc drops
-        }
-        push_log(&app, &log_buf, "info", "LLM server stopped");
+        push_log(&app, &log_buf, "info", "stopping LLM server — freeing resources in background…");
+        // Join the actor thread on a blocking thread so the caller returns
+        // immediately without freezing the UI or the Tauri IPC channel.
+        tauri::async_runtime::spawn(async move {
+            tokio::task::spawn_blocking(move || {
+                match std::sync::Arc::try_unwrap(server_state) {
+                    Ok(owned) => owned.shutdown(),
+                    Err(arc)  => drop(arc),
+                }
+                push_log(&app, &log_buf, "info", "LLM server stopped");
+            }).await.ok();
+        });
     }
 }
 
@@ -391,22 +430,31 @@ pub struct LlmServerStatusResponse {
     pub n_ctx:          usize,
     /// True when a vision projector is loaded and image input is supported.
     pub supports_vision: bool,
+    /// Non-null when the most recent background start attempt failed.
+    /// Cleared when a new start is requested.
+    pub start_error:    Option<String>,
 }
 
 #[tauri::command]
 pub fn get_llm_server_status(
     state: tauri::State<'_, Mutex<AppState>>,
 ) -> LlmServerStatusResponse {
+    use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
-    let (status, model_name) = cell_status(&s.llm_state_cell);
+    // If the background task is loading but the cell is still empty, report Loading.
+    let (mut status, model_name) = cell_status(&s.llm_state_cell);
+    if matches!(status, LlmStatus::Stopped) && s.llm_loading.load(Ordering::Relaxed) {
+        status = LlmStatus::Loading;
+    }
     let (n_ctx, supports_vision) = s.llm_state_cell.lock().unwrap()
         .as_ref()
         .map(|srv| (
-            srv.n_ctx.load(std::sync::atomic::Ordering::Relaxed),
-            srv.vision_ready.load(std::sync::atomic::Ordering::Relaxed),
+            srv.n_ctx.load(Ordering::Relaxed),
+            srv.vision_ready.load(Ordering::Relaxed),
         ))
         .unwrap_or((0, false));
-    LlmServerStatusResponse { status, model_name, n_ctx, supports_vision }
+    let start_error = s.llm_start_error.lock().unwrap().clone();
+    LlmServerStatusResponse { status, model_name, n_ctx, supports_vision, start_error }
 }
 
 // ── Chat history persistence ───────────────────────────────────────────────────

@@ -533,6 +533,17 @@ pub struct AppState {
     #[cfg(feature = "llm")]
     pub llm_state_cell: crate::llm::LlmStateCell,
 
+    /// `true` while a background model-load initiated by `start_llm_server`
+    /// is in progress.  Prevents double-starts and lets `get_llm_server_status`
+    /// return `Loading` even before `llm_state_cell` is populated.
+    #[cfg(feature = "llm")]
+    pub llm_loading: std::sync::Arc<std::sync::atomic::AtomicBool>,
+
+    /// Last error produced by a background `start_llm_server` task.
+    /// Cleared on each new start attempt; read by `get_llm_server_status`.
+    #[cfg(feature = "llm")]
+    pub llm_start_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
+
     /// Persistent chat history store — `~/.skill/chat_history.sqlite`.
     /// `None` when the database could not be opened (degraded gracefully).
     #[cfg(feature = "llm")]
@@ -636,6 +647,10 @@ impl Default for AppState {
             llm_logs:           crate::llm::new_log_buffer(),
             #[cfg(feature = "llm")]
             llm_state_cell:     crate::llm::new_state_cell(),
+            #[cfg(feature = "llm")]
+            llm_loading:        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            #[cfg(feature = "llm")]
+            llm_start_error:    std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
     }
 }
