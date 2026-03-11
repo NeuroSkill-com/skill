@@ -864,7 +864,8 @@ fn run_actor(
         // The Vulkan SDK installer sets `VULKAN_SDK` and adds its bin directory to PATH.
         // Some user configurations may need explicit path injection for robustness.
         if let Ok(vulkan_sdk_path) = std::env::var("VULKAN_SDK") {
-            if let Ok(parent_dir) = std::path::Path::new(&vulkan_sdk_path).parent() {
+            // .parent() returns Option<&Path>, not Result — use `Some` instead of `Ok`
+            if let Some(parent_dir) = std::path::Path::new(&vulkan_sdk_path).parent() {
                 // Prepend Vulkan SDK bin directory to PATH before backend init
                 if let Ok(current_path) = std::env::var("PATH") {
                     std::env::set_var(
