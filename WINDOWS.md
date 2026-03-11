@@ -81,6 +81,17 @@ At **runtime** any Vulkan-capable GPU driver works; llama.cpp falls back to
 CPU automatically when no Vulkan device is found, so the binary runs on
 machines without a discrete GPU.
 
+⚠️ **Important**: If you see garbage/random output instead of readable text
+when running LLM inference with Vulkan on Windows:
+
+1. Verify the Vulkan SDK is installed at `C:\Program Files\Vulkan SDK`
+2. Set the environment variable for this session:
+   ```powershell
+   $env:VULKAN_SDK = "C:\Program Files\Vulkan SDK"
+   ```
+3. Rebuild after installation or ensure PATH includes the SDK's bin directory
+4. For more details, see [WINDOWS-VULKAN-FIX.md](../WINDOWS-VULKAN-FIX.md)
+
 ### 6. Git
 
 Required to clone the espeak-ng source when building the static library:
