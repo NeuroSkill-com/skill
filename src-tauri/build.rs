@@ -116,7 +116,15 @@ fn enforce_espeak_static() {
 
     // 1. ESPEAK_LIB_DIR
     if let Ok(dir) = std::env::var("ESPEAK_LIB_DIR") {
-        if !Path::new(&dir).join(lib).exists() {
+        let archive = Path::new(&dir).join(lib);
+        if !archive.exists() || !is_correct_platform_archive(&archive, &t_os) {
+            if archive.exists() {
+                eprintln!(
+                    "build.rs: {} exists but is built for the wrong platform — rebuilding.",
+                    archive.display()
+                );
+                let _ = std::fs::remove_file(&archive);
+            }
             build_espeak_static(&t_os, &t_env);
         }
         require_static_archive(&dir, &t_os, &t_env);
@@ -132,7 +140,23 @@ fn enforce_espeak_static() {
         "espeak-static/lib"
     };
     let local = format!("{local_dir}/{lib}");
-    if !Path::new(&local).exists() {
+    // Rebuild if missing OR if the cached archive was built for a different
+    // OS (e.g. a Linux ELF archive committed to the repo and then used on macOS).
+    if !Path::new(&local).exists()
+        || !is_correct_platform_archive(Path::new(&local), &t_os)
+    {
+        if Path::new(&local).exists() {
+            eprintln!(
+                "build.rs: {local} exists but is built for the wrong platform — rebuilding."
+            );
+            // Remove the whole espeak-static dir so the build script starts clean.
+            let stale_dir = if t_os == "windows" && t_env == "gnu" {
+                "espeak-static-mingw"
+            } else {
+                "espeak-static"
+            };
+            let _ = std::fs::remove_dir_all(stale_dir);
+        }
         build_espeak_static(&t_os, &t_env);
     }
     if Path::new(&local).exists() {
@@ -152,6 +176,73 @@ fn enforce_espeak_static() {
         "\n\nbuild.rs: {lib} not found even after running the espeak build script.\n\
          Check the script output above for errors.\n\n"
     );
+}
+
+// ── Platform format guard ─────────────────────────────────────────────────────
+//
+// Returns true when `archive` is an object-file archive built for `t_os`.
+//
+// Detection strategy:
+//   macOS  – run `lipo -info`; it prints architecture names for valid Mach-O
+//            archives and exits non-zero for ELF ones.
+//   Linux  – read the first 4 bytes of the first member; ELF magic is
+//            7f 45 4c 46.  Mach-O LE magic is CE/CF FA ED FE.
+//   other  – always return true (no check performed).
+//
+// The function is intentionally conservative: if the tool is absent or the
+// archive cannot be opened, it returns `true` so we don't rebuild needlessly.
+fn is_correct_platform_archive(archive: &Path, t_os: &str) -> bool {
+    match t_os {
+        "macos" => {
+            // `lipo -info` exits 0 only for valid Mach-O fat/thin archives.
+            Command::new("lipo")
+                .args(["-info", &archive.to_string_lossy()])
+                .output()
+                .map(|o| o.status.success())
+                .unwrap_or(true)   // lipo absent → assume OK
+        }
+        "linux" => {
+            // Open the ar archive and peek at the first object's magic bytes.
+            // ar format: "!<arch>\n" (8 bytes), then a sequence of:
+            //   name(16) + date(12) + uid(6) + gid(6) + mode(8) + size(10) + "`\n"(2)
+            //   = 60-byte header, followed by `size` bytes of data.
+            // The first member in a GNU-format archive is the symbol table named
+            // "/" — its data is an index, not an object file.  We skip it and
+            // look at the first real object.
+            fn first_obj_magic(archive: &Path) -> Option<[u8; 4]> {
+                let data = std::fs::read(archive).ok()?;
+                if data.len() < 8 || &data[..8] != b"!<arch>\n" {
+                    return None;
+                }
+                let mut pos: usize = 8;
+                loop {
+                    if pos + 60 > data.len() { return None; }
+                    let hdr = &data[pos..pos + 60];
+                    let name = std::str::from_utf8(&hdr[..16]).ok()?.trim();
+                    let size_str = std::str::from_utf8(&hdr[48..58]).ok()?.trim();
+                    let size: usize = size_str.parse().ok()?;
+                    let obj_start = pos + 60;
+                    let obj_end   = obj_start + size;
+                    // Skip GNU symbol table ("/") and extended name table ("//").
+                    if name != "/" && name != "//" {
+                        if obj_end > data.len() || obj_start + 4 > data.len() {
+                            return None;
+                        }
+                        let mut magic = [0u8; 4];
+                        magic.copy_from_slice(&data[obj_start..obj_start + 4]);
+                        return Some(magic);
+                    }
+                    // Advance past this member (headers are 2-byte-aligned).
+                    pos = obj_end + (size & 1);
+                }
+            }
+            match first_obj_magic(archive) {
+                Some(magic) => magic == [0x7f, b'E', b'L', b'F'],  // ELF magic
+                None        => true,  // can't determine → assume OK
+            }
+        }
+        _ => true,
+    }
 }
 
 // ── Build script dispatch ─────────────────────────────────────────────────────

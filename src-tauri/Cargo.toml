@@ -105,7 +105,7 @@ csv = "1"
 # On Windows, build-espeak-static.ps1 (PowerShell) builds libespeak-ng
 # statically using CMake + MSVC, exactly as build-espeak-static.sh does on
 # macOS/Linux.  See WINDOWS.md for setup instructions.
-kittentts = { version = "0.2.5", features = ["espeak"], optional = true }
+kittentts = { version = "0.2.7", features = ["espeak"], optional = true }
 
 # NeuTTS voice-cloning TTS — GGUF backbone + NeuCodec decoder.
 # 0.0.7+: backbone is now llama-cpp-4 (was llama-cpp-2).  This means neutts
@@ -250,7 +250,7 @@ cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cub
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
 
 # ── kittentts / neutts pre-release patches ───────────────────────────────────
-# Uncomment to test local changes before publishing kittentts 0.2.6 / neutts 0.0.8.
+# Uncomment to test local changes before publishing kittentts 0.2.8 / neutts 0.0.8.
 # Remove once those versions land on crates.io.
 # kittentts = { path = "../../../kittentts-rs" }
 # neutts    = { path = "../../../neutts-rs" }

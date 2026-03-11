@@ -5383,9 +5383,9 @@ checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
 
 [[package]]
 name = "kittentts"
-version = "0.2.5"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "635fcbed606db5f40735d55f733d5cd689ad94fb4cd549f847fefd6b52c3d94e"
+checksum = "13d2cb89fbc08316a57356f305d348cb099e3debf3fa7917c65c699d092d6dd1"
 dependencies = [
  "anyhow",
  "fancy-regex",

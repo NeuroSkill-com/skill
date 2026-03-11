@@ -219,27 +219,29 @@ jobs:
           Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
 
       # ── Standalone LLVM for bindgen ─────────────────────────────────────────
-      # VS's bundled Clang 19 (added to PATH by ilammy/msvc-dev-cmd) is an
-      # MSVC-compat build that omits the __builtin_ia32_* intrinsics required
-      # by its own mmintrin.h, causing bindgen (used by llama-cpp-sys-4) to
-      # crash with "use of undeclared identifier '__builtin_ia32_vec_init_v2si'"
-      # and ~20 similar errors before giving up entirely.
-      # clang-sys checks LIBCLANG_PATH *before* PATH, so we point it at the
-      # standalone LLVM installation whose libclang.dll ships correct headers.
+      # VS2022's bundled Clang 19 is an MSVC-compat build whose mmintrin.h
+      # references __builtin_ia32_* GCC-style intrinsics that clang-cl doesn't
+      # implement, causing bindgen (llama-cpp-sys-4) to crash with ~20
+      # "use of undeclared identifier '__builtin_ia32_…'" errors.
+      # Standalone LLVM 19 has the same header version AND provides all the
+      # required builtins.  clang-sys checks LIBCLANG_PATH *before* PATH, so
+      # pointing it here makes bindgen use standalone LLVM's libclang.dll.
       # Cache key is the LLVM version string; bump it to force a re-install.
+      # Version must match VS2022's bundled Clang (currently 19.x) so that
+      # the standalone headers and the builtins are in sync.
       - name: Cache LLVM
         id: cache-llvm
         uses: actions/cache@v4
         with:
           path: C:\Program Files\LLVM
-          key: windows-llvm-18.1.8
+          key: windows-llvm-19.1.7
 
       - name: Install LLVM + export LIBCLANG_PATH
         shell: powershell
         run: |
           if (-not (Test-Path "C:\Program Files\LLVM\bin")) {
-            Write-Host "Cache miss — installing LLVM 18.1.8 via Chocolatey..."
-            choco install llvm --version=18.1.8 --no-progress -y | Out-Null
+            Write-Host "Cache miss — installing LLVM 19.1.7 via Chocolatey..."
+            choco install llvm --version=19.1.7 --no-progress -y | Out-Null
           } else {
             Write-Host "Cache hit — LLVM already present at C:\Program Files\LLVM"
           }
