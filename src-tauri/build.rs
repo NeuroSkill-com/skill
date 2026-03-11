@@ -504,8 +504,7 @@ fn bundle_espeak_data_linux() {
             "/usr/share/espeak-ng-data".to_string(),
             "/usr/local/share/espeak-ng-data".to_string(),
         ])
-        .filter(|p| !p.contains("//") && Path::new(p.as_str()).is_dir())
-        .next()
+        .find(|p| !p.contains("//") && Path::new(p.as_str()).is_dir())
         .unwrap_or_else(|| {
             panic!(
                 "build.rs: espeak-ng-data/ not found on Linux.\n\
