@@ -103,6 +103,46 @@ if (isMingwTarget) {
     { cwd: root, stdio: "inherit" }
   );
 
+  // The install script sets $env:VULKAN_SDK inside its own child process, but
+  // that env var dies when the child exits.  Re-detect the SDK root here and
+  // inject it into process.env so cargo / CMake (grandchildren of this process)
+  // can find it without a shell restart.
+  if (!process.env.VULKAN_SDK) {
+    // Mirror the detection order used by install-vulkan-sdk.ps1:
+    //   1. Machine-level env var written by the LunarG installer
+    //   2. Registry key written by the LunarG installer
+    //   3. Newest versioned directory under C:\VulkanSDK\
+    const detectPs = `
+$p = [System.Environment]::GetEnvironmentVariable('VULKAN_SDK','Machine')
+if (-not $p) {
+  foreach ($reg in @('HKLM:\\SOFTWARE\\LunarG\\Vulkan SDK','HKLM:\\SOFTWARE\\WOW6432Node\\LunarG\\Vulkan SDK')) {
+    if (Test-Path $reg) {
+      $ip = (Get-ItemProperty $reg -ErrorAction SilentlyContinue).InstallPath
+      if ($ip -and (Test-Path (Join-Path $ip 'Include\\vulkan\\vulkan.h'))) { $p = $ip; break }
+    }
+  }
+}
+if (-not $p -and (Test-Path 'C:\\VulkanSDK')) {
+  $latest = Get-ChildItem 'C:\\VulkanSDK' -Directory | Sort-Object Name -Descending | Select-Object -First 1
+  if ($latest -and (Test-Path (Join-Path $latest.FullName 'Include\\vulkan\\vulkan.h'))) { $p = $latest.FullName }
+}
+if ($p) { Write-Output $p }
+`.trim().replace(/\n/g, " ");
+
+    try {
+      const detected = execSync(
+        `powershell -NoProfile -Command "${detectPs}"`,
+        { cwd: root }
+      ).toString().trim();
+      if (detected) {
+        process.env.VULKAN_SDK = detected;
+        console.log(`→ VULKAN_SDK detected and set: ${detected}`);
+      }
+    } catch {
+      // Non-fatal — if detection fails, cargo will surface the missing SDK.
+    }
+  }
+
   console.log("→ building espeak-ng static library (MSVC) …");
   execSync(
     "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build-espeak-static.ps1",

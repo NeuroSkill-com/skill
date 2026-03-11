@@ -14,6 +14,7 @@
 #   Other Debian/Ubuntu            →  system apt packages     (libvulkan-dev + glslang-tools)
 #   Fedora / RHEL / CentOS         →  dnf
 #   Arch / Manjaro                 →  pacman
+#   Alpine                         →  apk  (vulkan-loader-dev + shaderc + spirv-tools)
 #
 # On success:
 #   Vulkan headers + loader + glslc shader compiler are available to CMake.
@@ -181,6 +182,24 @@ case "$DISTRO_ID" in
         shaderc         \
         spirv-tools
     ok "pacman Vulkan packages installed"
+    ;;
+
+  alpine)
+    step "Installing Vulkan development packages via apk"
+    # vulkan-loader-dev : Vulkan headers + loader (cmake FindVulkan)
+    # vulkan-headers    : standalone Khronos headers (provides vulkan/vulkan.h)
+    # glslang           : glslangValidator shader compiler (llama.cpp fallback)
+    # shaderc           : glslc shader compiler (preferred by llama.cpp)
+    # spirv-tools       : spirv-val / spirv-opt
+    # vulkan-validation-layers : runtime validation (optional, useful for dev)
+    apk add --no-cache \
+        vulkan-loader-dev        \
+        vulkan-headers           \
+        glslang                  \
+        shaderc                  \
+        spirv-tools              \
+        vulkan-validation-layers
+    ok "apk Vulkan packages installed"
     ;;
 
   *)

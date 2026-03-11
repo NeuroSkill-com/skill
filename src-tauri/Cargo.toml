@@ -249,9 +249,11 @@ tempfile = "3"
 cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
 
-# Use local kittentts-rs so that ort is linked statically (no copy-dylibs).
-# The Pyke CDN tarball ships libonnxruntime.a; without copy-dylibs the provider
-# dylibs are not copied next to the binary, which is correct for a Tauri .app bundle.
+# ── kittentts / neutts pre-release patches ───────────────────────────────────
+# Uncomment to test local changes before publishing kittentts 0.2.6 / neutts 0.0.8.
+# Remove once those versions land on crates.io.
+# kittentts = { path = "../../../kittentts-rs" }
+# neutts    = { path = "../../../neutts-rs" }
 
 # ── Build profiles ────────────────────────────────────────────────────────────
 #
