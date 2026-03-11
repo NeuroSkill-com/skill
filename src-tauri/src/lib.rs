@@ -40,7 +40,6 @@ macro_rules! app_log {
 }
 
 /// GPU stats reading is macOS-only (IOKit + CoreFoundation frameworks).
-#[cfg(target_os = "macos")]
 mod gpu_stats;
 
 mod eeg_model_config;
@@ -137,7 +136,7 @@ pub(crate) use settings::{
     default_label_shortcut, default_search_shortcut, default_settings_shortcut,
     default_calibration_shortcut, default_help_shortcut, default_history_shortcut,
     default_api_shortcut, default_theme_shortcut, default_focus_timer_shortcut,
-    default_theme, default_daily_goal_min, default_embedding_model,
+    default_theme, default_accent_color, default_daily_goal_min, default_embedding_model,
     default_ws_host, default_ws_port, default_update_check_interval, UserSettings,
     NeuttsConfig, default_track_active_window, default_track_input_activity,
     DoNotDisturbConfig,
@@ -215,6 +214,7 @@ use settings_cmds::{
     get_eeg_model_config, set_eeg_model_config, get_eeg_model_status,
     trigger_weights_download, cancel_weights_download,
     get_umap_config, set_umap_config, get_theme_and_language, set_theme, set_language,
+    get_accent_color, set_accent_color,
     get_daily_goal, set_daily_goal, get_goal_notified_date, set_goal_notified_date,
     get_daily_recording_mins,
     get_ws_config, set_ws_config,
@@ -239,7 +239,9 @@ use llm::cmds::{
     delete_llm_model, refresh_llm_catalog, set_llm_active_model, set_llm_active_mmproj,
     set_llm_autoload_mmproj,
     get_llm_logs, start_llm_server, stop_llm_server, get_llm_server_status, open_chat_window,
+    chat_completions_ipc, abort_llm_stream,
     get_last_chat_session, save_chat_message, new_chat_session,
+    load_chat_session, list_chat_sessions, rename_chat_session, delete_chat_session,
 };
 
 // ── Imports ───────────────────────────────────────────────────────────────────
@@ -444,6 +446,10 @@ pub struct AppState {
     pub model_config:     EegModelConfig,
     pub model_status:     std::sync::Arc<std::sync::Mutex<EegModelStatus>>,
     pub download_cancel:  std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Set to `true` by `trigger_weights_download` (or the embed worker itself)
+    /// to ask the running embed worker to exit and respawn — loading the newly
+    /// downloaded encoder weights without requiring a full app restart.
+    pub encoder_reload_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
     pub logger:           std::sync::Arc<SkillLogger>,
     pub session_start_utc: Option<u64>,
     pub label_store:      Option<label_store::LabelStore>,
@@ -464,8 +470,9 @@ pub struct AppState {
     pub last_seen_whats_new_version: String,
 
     pub umap_config: UmapUserConfig,
-    pub theme: String,
-    pub language: String,
+    pub theme:        String,
+    pub language:     String,
+    pub accent_color: String,
     pub daily_goal_min: u32,
     pub goal_notified_date: String,
     pub text_embedding_model: String,
@@ -542,6 +549,7 @@ impl Default for AppState {
         let model_config    = load_model_config(&skill_dir);
         let model_status    = std::sync::Arc::new(std::sync::Mutex::new(EegModelStatus::default()));
         let download_cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let encoder_reload_requested = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         let log_config = skill_log::load_log_config(&skill_dir);
         skill_log::ensure_log_config(&skill_dir);
@@ -580,8 +588,9 @@ impl Default for AppState {
             onboarding_complete: false,
             last_seen_whats_new_version: String::new(),
             umap_config: load_umap_config(&skill_dir),
-            theme: default_theme(),
-            language: String::new(),
+            theme:        default_theme(),
+            language:     String::new(),
+            accent_color: default_accent_color(),
             daily_goal_min: default_daily_goal_min(),
             goal_notified_date: String::new(),
             text_embedding_model: default_embedding_model(),
@@ -610,6 +619,7 @@ impl Default for AppState {
             model_config,
             model_status,
             download_cancel,
+            encoder_reload_requested,
             logger,
             session_start_utc: None,
             dnd_config:         DoNotDisturbConfig::default(),
@@ -663,6 +673,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         last_seen_whats_new_version:        s.last_seen_whats_new_version.clone(),
         theme:                  s.theme.clone(),
         language:               s.language.clone(),
+        accent_color:           s.accent_color.clone(),
         daily_goal_min:         s.daily_goal_min,
         goal_notified_date:     s.goal_notified_date.clone(),
         text_embedding_model:   s.text_embedding_model.clone(),
@@ -1184,6 +1195,38 @@ pub fn run() {
                 std::thread::spawn(move || label_idx.load(&sd));
             }
 
+            // ── Startup weights probe ─────────────────────────────────────────
+            // Check whether ZUNA weights are already in the HuggingFace cache
+            // without waiting for a BLE session to start.  This ensures the UI
+            // shows the correct "weights ready" state immediately after restart,
+            // rather than always showing "Download weights" until the first
+            // session begins.
+            {
+                let model_status = {
+                    let r = app.state::<Mutex<AppState>>();
+                    let g = r.lock_or_recover();
+                    g.model_status.clone()
+                };
+                let hf_repo = {
+                    let r = app.state::<Mutex<AppState>>();
+                    let g = r.lock_or_recover();
+                    g.model_config.hf_repo.clone()
+                };
+                std::thread::Builder::new()
+                    .name("weights-probe".into())
+                    .spawn(move || {
+                        if let Some((w, _c)) = crate::eeg_embeddings::probe_hf_weights(&hf_repo) {
+                            let mut st = model_status.lock_or_recover();
+                            st.weights_found  = true;
+                            st.weights_path   = Some(w.display().to_string());
+                            eprintln!("[embedder] startup probe: weights found at {}", w.display());
+                        } else {
+                            eprintln!("[embedder] startup probe: weights not found in HuggingFace cache");
+                        }
+                    })
+                    .expect("[weights-probe] failed to spawn");
+            }
+
             // ── Global cross-day EEG HNSW index ──────────────────────────────
             // Load from disk if ~/.skill/eeg_global.hnsw exists; otherwise
             // scan all daily eeg.sqlite files and build it from scratch.
@@ -1602,6 +1645,7 @@ pub fn run() {
             trigger_weights_download, cancel_weights_download,
             get_umap_config, set_umap_config,
             get_theme_and_language, set_theme, set_language,
+            get_accent_color, set_accent_color,
             get_daily_goal, set_daily_goal,
             get_goal_notified_date, set_goal_notified_date,
             get_daily_recording_mins,
@@ -1679,6 +1723,14 @@ pub fn run() {
             #[cfg(feature = "llm")]
             get_last_chat_session,
             #[cfg(feature = "llm")]
+            load_chat_session,
+            #[cfg(feature = "llm")]
+            list_chat_sessions,
+            #[cfg(feature = "llm")]
+            rename_chat_session,
+            #[cfg(feature = "llm")]
+            delete_chat_session,
+            #[cfg(feature = "llm")]
             save_chat_message,
             #[cfg(feature = "llm")]
             new_chat_session,
@@ -1686,6 +1738,10 @@ pub fn run() {
             get_chat_shortcut,
             #[cfg(feature = "llm")]
             set_chat_shortcut,
+            #[cfg(feature = "llm")]
+            chat_completions_ipc,
+            #[cfg(feature = "llm")]
+            abort_llm_stream,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,

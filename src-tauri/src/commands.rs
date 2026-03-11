@@ -41,6 +41,14 @@ use tauri::Manager as _;
 use crate::constants::{HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE};
 use crate::global_eeg_index::GlobalEegIndex;
 
+/// Shared, optionally-ready global HNSW index.
+///
+/// The outer `Option` lets callers pass `None` when no global index is
+/// available (e.g. WebSocket path before the startup build finishes).
+/// The inner `Option` is `None` while the background build thread is still
+/// running and `Some` once the index is ready.
+pub type GlobalIndexHandle = Option<Arc<Mutex<Option<LabeledIndex<Cosine, i64>>>>>;
+
 // ── Timestamp helpers ─────────────────────────────────────────────────────────
 
 fn is_leap(y: u32) -> bool {
@@ -460,7 +468,7 @@ pub fn search_embeddings_in_range(
     end_utc:      u64,
     k:            usize,
     ef:           usize,
-    global_index: Option<Arc<Mutex<Option<LabeledIndex<Cosine, i64>>>>>,
+    global_index: GlobalIndexHandle,
 ) -> SearchResult {
     let start_ts  = unix_to_ts(start_utc);
     let end_ts    = unix_to_ts(end_utc);

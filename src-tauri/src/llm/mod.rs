@@ -277,6 +277,13 @@ pub struct LlmServerState {
     pub n_ctx:        Arc<std::sync::atomic::AtomicUsize>,
     /// Whether a vision projector (mmproj) was loaded — enables image input.
     pub vision_ready: Arc<AtomicBool>,
+    /// Abort signal for IPC-streamed chat (`chat_completions_ipc`).
+    ///
+    /// Increment the value to cancel a running IPC generation:
+    /// `abort_tx.send_modify(|v| *v = v.wrapping_add(1))`.
+    /// The streaming command subscribes via `abort_tx.subscribe()` and
+    /// breaks out of its token loop as soon as the value changes.
+    pub abort_tx:     tokio::sync::watch::Sender<u64>,
     /// OS thread handle for the actor.  Taken (set to `None`) by `shutdown()`.
     join_handle:      Mutex<Option<std::thread::JoinHandle<()>>>,
 }
@@ -909,33 +916,43 @@ fn run_actor(
     }
 
     #[cfg(feature = "llm-mtmd")]
-    let mtmd_ctx: Option<llama_cpp_4::mtmd::MtmdContext> = mmproj_path.as_ref().and_then(|p| {
-        use llama_cpp_4::mtmd::{MtmdContext, MtmdContextParams};
-        // Silence clip_model_loader tensor spam before loading the projector.
-        // clip.cpp maintains its own logger (separate from llama_log_set),
-        // so we must call mtmd_log_set explicitly.
-        if !config.verbose {
-            unsafe extern "C" fn noop(
-                _level: u32,
-                _text:  *const std::os::raw::c_char,
-                _ud:    *mut   std::os::raw::c_void,
-            ) {}
-            unsafe { mtmd_log_set(Some(noop), std::ptr::null_mut()) };
+    let mtmd_ctx: Option<llama_cpp_4::mtmd::MtmdContext> = {
+        if mmproj_path.is_none() {
+            llm_info!(&app, &log_buf, log_file,
+                "vision disabled — no mmproj file configured; \
+                 download a vision projector in Settings → LLM to enable image input");
         }
-        match MtmdContext::init_from_file(p, &model, MtmdContextParams::default()) {
-            Ok(mc) => {
-                llm_info!(&app, &log_buf, log_file,
-                    "mmproj loaded ✓ — vision={} audio={}",
-                    mc.supports_vision(), mc.supports_audio());
-                vision_flag.store(true, Ordering::Relaxed);
-                Some(mc)
+        mmproj_path.as_ref().and_then(|p| {
+            use llama_cpp_4::mtmd::{MtmdContext, MtmdContextParams};
+            // Silence clip_model_loader tensor spam before loading the projector.
+            // clip.cpp maintains its own logger (separate from llama_log_set),
+            // so we must call mtmd_log_set explicitly.
+            if !config.verbose {
+                unsafe extern "C" fn noop(
+                    _level: u32,
+                    _text:  *const std::os::raw::c_char,
+                    _ud:    *mut   std::os::raw::c_void,
+                ) {}
+                unsafe { mtmd_log_set(Some(noop), std::ptr::null_mut()) };
             }
-            Err(e) => {
-                llm_error!(&app, &log_buf, log_file, "failed to load mmproj: {e}");
-                None
+            match MtmdContext::init_from_file(p, &model, MtmdContextParams::default()) {
+                Ok(mc) => {
+                    llm_info!(&app, &log_buf, log_file,
+                        "mmproj loaded ✓ — vision={} audio={}",
+                        mc.supports_vision(), mc.supports_audio());
+                    vision_flag.store(true, Ordering::Relaxed);
+                    Some(mc)
+                }
+                Err(e) => {
+                    llm_error!(&app, &log_buf, log_file, "failed to load mmproj: {e}");
+                    llm_info!(&app, &log_buf, log_file,
+                        "vision disabled — to enable image input, \
+                         ensure the mmproj file exists or re-download it in Settings → LLM");
+                    None
+                }
             }
-        }
-    });
+        })
+    };
     #[cfg(not(feature = "llm-mtmd"))]
     let _ = &mmproj_path;
 
@@ -973,9 +990,10 @@ fn run_actor(
 
     // Signal that the model is fully loaded and warmed up.
     ready_flag.store(true, Ordering::Relaxed);
-    let model_file = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
-    llm_info!(&app, &log_buf, log_file, "server ready — model={}", model_file);
-    let _ = app.emit("llm:status", json!({"status":"running","model":model_file}));
+    let model_file    = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+    let vision_loaded = vision_flag.load(Ordering::Relaxed);
+    llm_info!(&app, &log_buf, log_file, "server ready — model={} supports_vision={}", model_file, vision_loaded);
+    let _ = app.emit("llm:status", json!({"status":"running","model":model_file,"supports_vision":vision_loaded}));
 
     // ── event loop ──
     while let Some(req) = rx.blocking_recv() {
@@ -1206,6 +1224,7 @@ pub fn init(
     let ready_flag  = Arc::new(AtomicBool::new(false));
     let n_ctx_flag  = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let vision_flag = Arc::new(AtomicBool::new(false));
+    let (abort_tx, _) = tokio::sync::watch::channel(0u64);
 
     let config2     = config.clone();
     let path2       = model_path.clone();
@@ -1232,6 +1251,7 @@ pub fn init(
         ready:        ready_flag,
         n_ctx:        n_ctx_flag,
         vision_ready: vision_flag,
+        abort_tx,
         join_handle:  Mutex::new(Some(join_handle)),
     }))
 }

@@ -163,6 +163,40 @@
 //! });
 //! ```
 //!
+//! ### curl (one-shot via HTTP REST — no persistent connection needed)
+//!
+//! Every WebSocket command is also reachable as a plain HTTP call under `/v1/`.
+//! No WebSocket library required; works from `curl`, Python `requests`,
+//! Jupyter notebooks, shell scripts, etc.
+//!
+//! ```bash
+//! PORT=8375
+//!
+//! # System status
+//! curl http://localhost:$PORT/v1/status | jq .
+//!
+//! # Submit a label
+//! curl -X POST http://localhost:$PORT/v1/label \
+//!      -H 'Content-Type: application/json' \
+//!      -d '{"text":"meditation session","context":"morning"}'
+//!
+//! # Search last 10 minutes
+//! NOW=$(date +%s)
+//! curl -X POST http://localhost:$PORT/v1/search \
+//!      -H 'Content-Type: application/json' \
+//!      -d "{\"start_utc\":$((NOW-600)),\"end_utc\":$NOW,\"k\":5}" | jq .
+//!
+//! # Speak text
+//! curl -X POST http://localhost:$PORT/v1/say \
+//!      -H 'Content-Type: application/json' \
+//!      -d '{"text":"Focus session complete."}'
+//!
+//! # Enable DND
+//! curl -X POST http://localhost:$PORT/v1/dnd \
+//!      -H 'Content-Type: application/json' \
+//!      -d '{"enabled":true}'
+//! ```
+//!
 //! ### curl (one-shot via websocat)
 //!
 //! ```bash

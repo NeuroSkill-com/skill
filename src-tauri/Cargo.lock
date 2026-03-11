@@ -5618,6 +5618,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "llmfit-core"
+version = "0.6.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6302a8ca36191f6c11f28efdf4b44b6cfebb585cbdc9d701d7b57d1de7913ffc"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sysinfo 0.38.4",
+ "ureq 3.2.0",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8997,7 +9009,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 
 [[package]]
 name = "skill"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "async-stream",
  "axum",
@@ -9021,6 +9033,7 @@ dependencies = [
  "kittentts",
  "libc",
  "llama-cpp-4",
+ "llmfit-core",
  "macos-focus",
  "mdns-sd",
  "muse-rs",
@@ -9038,6 +9051,7 @@ dependencies = [
  "serde_json",
  "serialport",
  "sha2",
+ "sysinfo 0.38.4",
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",
@@ -9048,6 +9062,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tower-http",
+ "ureq 2.12.1",
  "zuna-rs",
 ]
 
@@ -9472,6 +9487,20 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-io-kit",
  "windows 0.61.3",
+]
+
+[[package]]
+name = "sysinfo"
+version = "0.38.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92ab6a2f8bfe508deb3c6406578252e491d299cbbf3bc0529ecc3313aee4a52f"
+dependencies = [
+ "libc",
+ "memchr",
+ "ntapi",
+ "objc2-core-foundation",
+ "objc2-io-kit",
+ "windows 0.62.2",
 ]
 
 [[package]]

@@ -766,6 +766,11 @@ pub struct EegAccumulator {
     config:       EegModelConfig,
     status:       Arc<Mutex<EegModelStatus>>,
     cancel:       Arc<std::sync::atomic::AtomicBool>,
+    /// When set to `true` by `trigger_weights_download`, the running embed
+    /// worker will exit its epoch loop and the accumulator will immediately
+    /// respawn a fresh worker that re-runs `resolve_hf_weights` and loads the
+    /// newly downloaded encoder — no app restart needed.
+    reload_requested: Arc<std::sync::atomic::AtomicBool>,
     /// Shared reference to the persistent cross-day global HNSW index.
     /// `None` inside the Option while the startup build is still running.
     global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
@@ -773,17 +778,18 @@ pub struct EegAccumulator {
 
 impl EegAccumulator {
     pub fn new(
-        skill_dir:    PathBuf,
-        config:       EegModelConfig,
-        status:       Arc<Mutex<EegModelStatus>>,
-        cancel:       Arc<std::sync::atomic::AtomicBool>,
-        logger:       Arc<SkillLogger>,
-        global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
+        skill_dir:        PathBuf,
+        config:           EegModelConfig,
+        status:           Arc<Mutex<EegModelStatus>>,
+        cancel:           Arc<std::sync::atomic::AtomicBool>,
+        reload_requested: Arc<std::sync::atomic::AtomicBool>,
+        logger:           Arc<SkillLogger>,
+        global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
     ) -> Self {
         let tx = Self::spawn_worker(
             skill_dir.clone(), config.clone(),
-            status.clone(), cancel.clone(), logger.clone(),
-            global_index.clone(),
+            status.clone(), cancel.clone(), reload_requested.clone(),
+            logger.clone(), global_index.clone(),
         );
         Self {
             bufs:        std::array::from_fn(|_| VecDeque::new()),
@@ -802,6 +808,7 @@ impl EegAccumulator {
             config,
             status,
             cancel,
+            reload_requested,
             global_index,
         }
     }
@@ -810,29 +817,32 @@ impl EegAccumulator {
     /// its channel.  Called both at construction time and whenever `push()`
     /// detects that the previous worker exited (e.g. after a cubecl panic).
     fn spawn_worker(
-        skill_dir:    PathBuf,
-        config:       EegModelConfig,
-        status:       Arc<Mutex<EegModelStatus>>,
-        cancel:       Arc<std::sync::atomic::AtomicBool>,
-        logger:       Arc<SkillLogger>,
-        global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
+        skill_dir:        PathBuf,
+        config:           EegModelConfig,
+        status:           Arc<Mutex<EegModelStatus>>,
+        cancel:           Arc<std::sync::atomic::AtomicBool>,
+        reload_requested: Arc<std::sync::atomic::AtomicBool>,
+        logger:           Arc<SkillLogger>,
+        global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
     ) -> mpsc::SyncSender<EpochMsg> {
         let (tx, rx) = mpsc::sync_channel::<EpochMsg>(4);
         std::thread::Builder::new()
             .name("eeg-embed".into())
-            .spawn(move || embed_worker(rx, skill_dir, config, status, cancel, logger, global_index))
+            .spawn(move || embed_worker(rx, skill_dir, config, status, cancel, reload_requested, logger, global_index))
             .expect("[embed] failed to spawn background thread");
         tx
     }
 
-    /// Restart the background worker after it has exited unexpectedly.
+    /// Restart the background worker after it has exited unexpectedly (or
+    /// after a deliberate reload request from `trigger_weights_download`).
     fn restart_worker(&mut self) {
-        skill_log!(self.logger, "embedder", "restarting embed worker after unexpected exit");
+        skill_log!(self.logger, "embedder", "restarting embed worker");
         self.tx = Self::spawn_worker(
             self.skill_dir.clone(),
             self.config.clone(),
             self.status.clone(),
             self.cancel.clone(),
+            self.reload_requested.clone(),
             self.logger.clone(),
             self.global_index.clone(),
         );
@@ -960,14 +970,16 @@ impl EegAccumulator {
 
 // ── Background worker ─────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn embed_worker(
-    rx:           mpsc::Receiver<EpochMsg>,
-    skill_dir:    PathBuf,
-    config:       EegModelConfig,
-    status:       Arc<Mutex<EegModelStatus>>,
-    cancel:       Arc<std::sync::atomic::AtomicBool>,
-    logger:       Arc<SkillLogger>,
-    global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
+    rx:               mpsc::Receiver<EpochMsg>,
+    skill_dir:        PathBuf,
+    config:           EegModelConfig,
+    status:           Arc<Mutex<EegModelStatus>>,
+    cancel:           Arc<std::sync::atomic::AtomicBool>,
+    reload_requested: Arc<std::sync::atomic::AtomicBool>,
+    logger:           Arc<SkillLogger>,
+    global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
 ) {
     use burn::backend::{Wgpu, wgpu::WgpuDevice};
     use ndarray::Array2;
@@ -975,6 +987,9 @@ fn embed_worker(
     use zuna_rs::{ZunaEncoder, config::DataConfig, load_from_named_tensor};
 
     skill_log!(logger, "embedder", "worker started — skill_dir={}", skill_dir.display());
+    // Mark worker as active so the UI can distinguish "loading on GPU" from
+    // "weights found but no session yet".
+    status.lock_or_recover().embed_worker_active = true;
 
     // ── 1. Open today's DayStore immediately (files created before encoder) ───
     let mut current_date = yyyymmdd_utc();
@@ -1046,6 +1061,14 @@ fn embed_worker(
                     st.download_retry_in_secs = 0;
                     return None;
                 }
+                // A successful UI download set reload_requested — exit so the
+                // accumulator respawns a fresh worker that finds the new files.
+                if reload_requested.load(Ordering::Relaxed) {
+                    skill_log!(logger, "embedder", "reload requested during backoff wait — exiting for respawn");
+                    let mut st = status.lock_or_recover();
+                    st.download_retry_in_secs = 0;
+                    return None;
+                }
             }
             {
                 let mut st = status.lock_or_recover();
@@ -1079,7 +1102,17 @@ fn embed_worker(
         skill_log!(logger, "embedder",
             "wgpu device poisoned from a previous panic — \
              GPU embeddings disabled for this process; metrics-only mode");
-        for msg in rx { store_metrics_only(&msg, &mut store, &status, &logger, &skill_dir, &config); }
+        for msg in rx {
+            // Still honour reload requests even in metrics-only mode so the
+            // accumulator can respawn a worker after a process restart clears
+            // the poison flag.
+            if reload_requested.load(std::sync::atomic::Ordering::Relaxed) {
+                reload_requested.store(false, std::sync::atomic::Ordering::Relaxed);
+                break;
+            }
+            store_metrics_only(&msg, &mut store, &status, &logger, &skill_dir, &config);
+        }
+        status.lock_or_recover().embed_worker_active = false;
         // No embeddings were produced, so nothing to flush into the global index.
         return;
     }
@@ -1127,6 +1160,26 @@ fn embed_worker(
 
     // ── 4. Process epoch messages ─────────────────────────────────────────────
     for msg in rx {
+        // If a new download completed and the UI asked for an in-place reload,
+        // exit this worker cleanly.  EegAccumulator::push() detects the
+        // channel disconnect and immediately respawns a fresh worker that will
+        // call resolve_hf_weights (finding the newly downloaded files) and load
+        // the encoder — no full app restart needed.
+        if reload_requested.load(std::sync::atomic::Ordering::Relaxed) {
+            skill_log!(logger, "embedder", "reload requested — exiting for in-place encoder reload");
+            // Reset status so the UI shows the loading state while the new
+            // worker initialises.
+            {
+                let mut st = status.lock_or_recover();
+                st.encoder_loaded   = false;
+                st.encoder_describe = None;
+                st.download_needs_restart = false;
+            }
+            // Clear the flag so the respawned worker doesn't immediately exit too.
+            reload_requested.store(false, std::sync::atomic::Ordering::Relaxed);
+            break;
+        }
+
         // Midnight UTC rollover — rotate both HNSW and SQLite.
         let today = yyyymmdd_utc();
         if today != current_date {
@@ -1439,6 +1492,7 @@ fn embed_worker(
         }
     }
 
+    status.lock_or_recover().embed_worker_active = false;
     skill_log!(logger, "embedder", "worker exiting");
 }
 
@@ -1584,17 +1638,36 @@ pub fn yyyymmddhhmmss_utc() -> i64 {
         + (hour as i64)*10_000 + (min as i64)*100 + sec as i64
 }
 
+/// Public alias so `lib.rs` can call the weight probe at startup without
+/// starting a full embed worker.
+pub fn probe_hf_weights(hf_repo: &str) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    resolve_hf_weights(hf_repo)
+}
+
 /// Find ZUNA weights in the HuggingFace disk cache for the given `hf_repo`.
 fn resolve_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
-    // $HF_HOME overrides the default cache location; otherwise fall back to
-    // the platform home directory.  On Windows $HOME is typically unset —
-    // dirs::home_dir() reads USERPROFILE correctly on all platforms.
-    let hf_home = std::env::var("HF_HOME")
+    // Mirror the hf-hub crate's cache resolution so the lookup always agrees
+    // with where Api::new() / repo.get() actually writes files:
+    //
+    //   1. $HUGGINGFACE_HUB_CACHE  — full path to the hub cache dir
+    //   2. $HF_HOME/hub            — HF_HOME is the *parent*; hub is the subdir
+    //   3. ~/.cache/huggingface/hub — platform default (dirs::home_dir on all OS)
+    //
+    // Previously only $HF_HOME was checked (without /hub), and
+    // $HUGGINGFACE_HUB_CACHE was ignored entirely.  That caused a path mismatch
+    // whenever either variable was set: weights were downloaded to the correct
+    // location by hf-hub but never found by this lookup, so the app would
+    // re-download on every launch and always show "Not found in HuggingFace cache".
+    let hf_home = std::env::var("HUGGINGFACE_HUB_CACHE")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
-            dirs::home_dir()
-                .unwrap_or_else(std::env::temp_dir)
-                .join(".cache/huggingface/hub")
+            std::env::var("HF_HOME")
+                .map(|p| PathBuf::from(p).join("hub"))
+                .unwrap_or_else(|_| {
+                    dirs::home_dir()
+                        .unwrap_or_else(std::env::temp_dir)
+                        .join(".cache/huggingface/hub")
+                })
         });
     let snaps = hf_home
         .join(format!("models--{}", hf_repo.replace('/', "--")))

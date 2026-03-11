@@ -1,6 +1,6 @@
 [package]
 name = "skill"
-version = "0.0.15"
+version = "0.0.16"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -59,6 +59,16 @@ tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
 dirs = "6"
+
+# Cross-platform GPU detection (VRAM, unified memory, backend).
+# Used by gpu_stats.rs on Linux and Windows where IOKit is unavailable.
+# llmfit-core covers NVIDIA (nvidia-smi + sysfs), AMD (rocm-smi + sysfs),
+# Intel Arc (sysfs), Apple Silicon (system_profiler), and Windows WMI.
+llmfit-core = "0.6.6"
+# sysinfo is already compiled as an indirect dep via llmfit-core; listing it
+# directly gives gpu_stats.rs access to System::refresh_memory() for the
+# periodic free-RAM update on unified-memory Linux / Windows platforms.
+sysinfo = "0.38"
 
 # Cross-platform global keyboard / mouse event listener (input activity tracking).
 # macOS: CGEventTap (requires Accessibility permission — degrades gracefully if absent).
@@ -175,6 +185,11 @@ rusqlite  = { version = "0.37", features = ["bundled"] }
 # 0.4+ fixes "relative URL without a base" when the CDN returns a relative
 # Location header during the metadata redirect dance (hf-hub#issue/relative-url).
 hf-hub    = "0.5"
+
+# HTTP client used by the resumable LLM model downloader.
+# ureq 2.12.1 is already compiled transitively (hf-hub 0.4, openbci), so
+# adding it here costs zero extra compile time.
+ureq      = { version = "2", features = ["native-tls"] }
 
 # ndarray Array2<f32> is required by zuna_rs::load_from_named_tensor.
 ndarray   = "0.17"

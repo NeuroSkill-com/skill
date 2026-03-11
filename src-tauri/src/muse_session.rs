@@ -402,7 +402,6 @@ pub(crate) async fn handle_event(
                 let drowsiness = (tar_component + alpha_spindle).clamp(0.0, 100.0);
                 snap.drowsiness = Some((drowsiness * 10.0).round() / 10.0);
 
-                #[cfg(target_os = "macos")]
                 if let Some(gpu) = crate::gpu_stats::read() {
                     snap.gpu_overall = Some(gpu.overall as f64);
                     snap.gpu_render  = Some(gpu.render  as f64);

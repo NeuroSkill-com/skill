@@ -480,6 +480,10 @@ the Free Software Foundation, version 3 only. -->
     calibrated:      false,
     firstSession:    false,   // ≥5-min session completed
     goalSet:         false,
+    llmDownloaded:   false,   // at least one LLM model downloaded
+    searchRun:       false,   // similarity search executed at least once
+    dndConfigured:   false,   // DND auto-focus threshold enabled
+    apiVisited:      false,   // API status page opened at least once
   });
 
   function loadOnboarding() {
@@ -504,14 +508,48 @@ the Free Software Foundation, version 3 only. -->
     if (dailyGoalMin > 0 && !onboardDone.goalSet) {
       onboardDone.goalSet = true; saveOnboarding();
     }
+    // pick up flags written by other pages (search, api)
+    try {
+      const stored = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
+      let dirty = false;
+      if (stored.searchRun   && !onboardDone.searchRun)   { onboardDone.searchRun   = true; dirty = true; }
+      if (stored.apiVisited  && !onboardDone.apiVisited)  { onboardDone.apiVisited  = true; dirty = true; }
+      if (stored.llmDownloaded && !onboardDone.llmDownloaded) { onboardDone.llmDownloaded = true; dirty = true; }
+      if (stored.dndConfigured && !onboardDone.dndConfigured) { onboardDone.dndConfigured = true; dirty = true; }
+      if (dirty) saveOnboarding();
+    } catch (_) {}
+  }
+
+  /** One-shot async checks run at startup for steps that don't have live events. */
+  async function checkOnboardingAsync() {
+    // LLM: any model already downloaded?
+    if (!onboardDone.llmDownloaded) {
+      try {
+        const catalog = await invoke<{ entries: { state: string }[] }>("get_llm_catalog");
+        if (catalog.entries.some(e => e.state === "downloaded")) {
+          onboardDone.llmDownloaded = true; saveOnboarding();
+        }
+      } catch (_) {}
+    }
+    // DND: focus-threshold automation enabled by the user?
+    if (!onboardDone.dndConfigured) {
+      try {
+        const cfg = await invoke<{ enabled: boolean }>("get_dnd_config");
+        if (cfg.enabled) { onboardDone.dndConfigured = true; saveOnboarding(); }
+      } catch (_) {}
+    }
   }
 
   let onboardComplete = $derived(Object.values(onboardDone).every(Boolean));
   let onboardSteps = $derived([
-    { key: "devicePaired", label: t("dashboard.setupDevice"),   done: onboardDone.devicePaired },
-    { key: "calibrated",   label: t("dashboard.setupCalibrate"), done: onboardDone.calibrated },
-    { key: "firstSession", label: t("dashboard.setupSession"),  done: onboardDone.firstSession },
-    { key: "goalSet",      label: t("dashboard.setupGoal"),     done: onboardDone.goalSet },
+    { key: "devicePaired",  label: t("dashboard.setupDevice"),    done: onboardDone.devicePaired },
+    { key: "calibrated",    label: t("dashboard.setupCalibrate"),  done: onboardDone.calibrated },
+    { key: "firstSession",  label: t("dashboard.setupSession"),   done: onboardDone.firstSession },
+    { key: "goalSet",       label: t("dashboard.setupGoal"),      done: onboardDone.goalSet },
+    { key: "llmDownloaded", label: t("dashboard.setupLlm"),       done: onboardDone.llmDownloaded },
+    { key: "searchRun",     label: t("dashboard.setupSearch"),    done: onboardDone.searchRun },
+    { key: "dndConfigured", label: t("dashboard.setupDnd"),       done: onboardDone.dndConfigured },
+    { key: "apiVisited",    label: t("dashboard.setupApi"),       done: onboardDone.apiVisited },
   ]);
 
   // Track unpaired device IDs we've already toasted about so we don't spam.
@@ -553,6 +591,8 @@ the Free Software Foundation, version 3 only. -->
 
   onMount(async () => {
     loadOnboarding();
+    // Async checks for onboarding steps that need backend queries
+    checkOnboardingAsync();
     // Fetch today's prior recording time
     fetchTodayRecording();
 
@@ -696,6 +736,15 @@ the Free Software Foundation, version 3 only. -->
     unlisteners.push(await listen<{ query: string }>(
       "search-hit", (ev) => {
         pushMarkerToBoth(`🔍 ${ev.payload.query ?? "search"}`, "#38bdf8"); // sky
+      }
+    ));
+
+    // LLM model becomes available (server running = model downloaded & loaded).
+    unlisteners.push(await listen<{ status: string }>(
+      "llm:status", (ev) => {
+        if (ev.payload.status === "running" && !onboardDone.llmDownloaded) {
+          onboardDone.llmDownloaded = true; saveOnboarding();
+        }
       }
     ));
 
@@ -1419,7 +1468,7 @@ the Free Software Foundation, version 3 only. -->
                 </div>
               {/each}
             </div>
-            <button onclick={() => { onboardDone = { devicePaired: true, calibrated: true, firstSession: true, goalSet: true }; saveOnboarding(); }}
+            <button onclick={() => { onboardDone = { devicePaired: true, calibrated: true, firstSession: true, goalSet: true, llmDownloaded: true, searchRun: true, dndConfigured: true, apiVisited: true }; saveOnboarding(); }}
                     class="text-[0.55rem] text-muted-foreground/40 hover:text-muted-foreground/70 mt-0.5 self-end underline underline-offset-2">
               Dismiss
             </button>

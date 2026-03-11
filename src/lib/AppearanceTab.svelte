@@ -9,7 +9,10 @@ the Free Software Foundation, version 3 only. -->
   import { Card, CardContent } from "$lib/components/ui/card";
   import { t }                 from "$lib/i18n/index.svelte";
   import { getFontSize, setFontSize, FONT_SIZE_PRESETS } from "$lib/font-size-store.svelte";
-  import { getTheme, setTheme, getHighContrast, toggleHighContrast } from "$lib/theme-store.svelte";
+  import {
+    getTheme, setTheme, getHighContrast, toggleHighContrast,
+    getAccentId, setAccent, ACCENT_PRESETS,
+  } from "$lib/theme-store.svelte";
   import type { ThemeMode } from "$lib/theme-store.svelte";
   import { getChartScheme, setChartScheme, CHART_SCHEMES, type ChartScheme } from "$lib/chart-colors-store.svelte";
   import { EEG_CH } from "$lib/constants";
@@ -102,6 +105,56 @@ the Free Software Foundation, version 3 only. -->
         </button>
       </div>
 
+    </CardContent>
+  </Card>
+</section>
+
+<!-- ── Accent colour ──────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+    {t("appearance.accentColor")}
+  </span>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="px-4 py-4 flex flex-col gap-3">
+      <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
+        {t("appearance.accentColorDesc")}
+      </p>
+
+      <!-- Swatch grid -->
+      <div class="flex flex-wrap gap-2.5">
+        {#each ACCENT_PRESETS as preset}
+          {@const active = getAccentId() === preset.id}
+          <button
+            onclick={() => setAccent(preset.id)}
+            title={preset.label}
+            class="group relative flex flex-col items-center gap-1.5
+                   cursor-pointer select-none focus:outline-none">
+
+            <!-- Colour circle -->
+            <span class="relative flex items-center justify-center
+                          w-8 h-8 rounded-full transition-transform duration-150
+                          group-hover:scale-110
+                          {active ? 'ring-2 ring-offset-2 ring-offset-background' : ''}"
+                  style="background-color: {preset.swatch};
+                         {active ? `ring-color: ${preset.swatch};` : ''}">
+              {#if active}
+                <!-- Checkmark -->
+                <svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.2"
+                     stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
+                  <polyline points="1.5 6.5 4.5 9.5 10.5 2.5"/>
+                </svg>
+              {/if}
+            </span>
+
+            <!-- Label -->
+            <span class="text-[0.55rem] font-medium leading-none
+                         {active ? 'text-foreground' : 'text-muted-foreground/60'}">
+              {preset.label}
+            </span>
+          </button>
+        {/each}
+      </div>
     </CardContent>
   </Card>
 </section>
