@@ -44,7 +44,7 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "TAG=$TAG"         >> "$GITHUB_ENV"
-          echo "✓ Version verified: $VERSION"
+          echo "[OK] Version verified: $VERSION"
 
       # ── MSVC developer environment ────────────────────────────────────────────
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
@@ -67,7 +67,7 @@ jobs:
             Where-Object { $_ -notlike '*Git\usr\bin*' -and $_ -notlike '*Git/usr/bin*' }
           $newPath = $filtered -join ';'
           "PATH=$newPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "✓ Removed Git\usr\bin from PATH"
+          Write-Host "[OK] Removed Git\usr\bin from PATH"
 
       # ── Rust toolchain ────────────────────────────────────────────────────────
       - name: Install Rust stable
@@ -120,7 +120,7 @@ jobs:
             echo "::error::Secret 'TAURI_SIGNING_PRIVATE_KEY' is empty or not set."
             exit 1
           fi
-          echo "✓ TAURI_SIGNING_PRIVATE_KEY is present."
+          echo "[OK] TAURI_SIGNING_PRIVATE_KEY is present."
 
           # Windows code-signing certificate is optional.
           # Both variables must be set together or both must be absent.
@@ -134,7 +134,7 @@ jobs:
           fi
 
           if [ "$HAVE_CERT" = "true" ]; then
-            echo "✓ Windows code-signing certificate is present — installer will be signed."
+            echo "[OK] Windows code-signing certificate is present — installer will be signed."
           else
             echo "::warning::WINDOWS_CERTIFICATE is not set." \
                  "The NSIS installer will be built unsigned." \
@@ -194,7 +194,7 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           $expiry = $cert.NotAfter.ToString("yyyy-MM-dd")
-          Write-Host "✓ Certificate imported"
+          Write-Host "[OK] Certificate imported"
           Write-Host "  Thumbprint : $thumbprint"
           Write-Host "  Subject    : $($cert.Subject)"
           Write-Host "  Expires    : $expiry"
@@ -358,7 +358,7 @@ jobs:
           PYEOF
 
           gh release upload "$TAG" latest.json --clobber
-          echo "✓ latest.json uploaded to release $TAG"
+          echo "[OK] latest.json uploaded to release $TAG"
 
       # ── Remove the certificate from the runner's cert store ──────────────────
       - name: Remove signing certificate
