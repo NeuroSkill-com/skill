@@ -4,7 +4,7 @@
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
-<!-- Help window — tabbed reference for every part of Skill. -->
+<!-- Help window — sidebar navigation + search. -->
 
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
@@ -34,9 +34,20 @@ the Free Software Foundation, version 3 only. -->
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
   const modKey = isMac ? "⌘" : "Ctrl+";
 
+  // ── Icons per tab ─────────────────────────────────────────────────────────
+  const TAB_ICONS: Record<Tab, string> = {
+    dashboard:  `<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>`,
+    electrodes: `<circle cx="12" cy="8" r="4"/><path d="M12 12v4M8 16h8M6 20h12"/>`,
+    settings:   `<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>`,
+    windows:    `<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>`,
+    api:        `<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/><path d="m9 9 6 6M15 9l-6 6"/>`,
+    tts:        `<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>`,
+    privacy:    `<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>`,
+    references: `<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>`,
+    faq:        `<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,
+  };
+
   // ── Searchable help item registry ────────────────────────────────────────
-  // Each entry maps to one HelpItem across the help tabs.
-  // Electrodes (visual interactive) and References are excluded.
   type SearchEntry = { tab: Tab; titleKey: string; bodyKey: string };
 
   const searchIndex: SearchEntry[] = [
@@ -156,7 +167,7 @@ the Free Software Foundation, version 3 only. -->
     })),
   ];
 
-  // ── Derived search results (reactive to locale changes via t()) ───────────
+  // ── Derived search results (reactive to locale changes via t()) ──────────
   const searchResults = $derived.by(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [] as SearchEntry[];
@@ -172,33 +183,27 @@ the Free Software Foundation, version 3 only. -->
     searchQuery = "";
   }
 
-  // ── Search-result navigation: switch tab then scroll to the exact item ────
-  // Plain variable (not $state) so reads/writes don't trigger reactive tracking.
+  // ── Search-result navigation ──────────────────────────────────────────────
   let pendingScrollKey = "";
 
   function goToItem(targetTab: Tab, titleKey: string) {
     pendingScrollKey = titleKey;
-    tab = targetTab;      // triggers $effect below (subscribed to `tab`)
-    searchQuery = "";     // clears search overlay so the tab content renders
+    tab = targetTab;
+    searchQuery = "";
   }
 
-  // Runs after `tab` or `searchQuery` change (both are $state).
-  // When pendingScrollKey is set we defer two frames so Svelte has fully
-  // painted the new tab content before we query the DOM.
   $effect(() => {
     void tab;
     void searchQuery;
     const key = pendingScrollKey;
     if (!key) return;
-    pendingScrollKey = "";   // clear immediately (plain write, no reactivity)
+    pendingScrollKey = "";
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const el = document.getElementById(key);
         if (!el) return;
-        // Open <details> (FAQ) before scrolling so its height is correct.
         if (el instanceof HTMLDetailsElement) {
           el.open = true;
-          // Extra frame so the browser lays out the now-open details.
           requestAnimationFrame(() => {
             el.scrollIntoView({ behavior: "smooth", block: "start" });
             el.classList.add("help-highlight");
@@ -213,26 +218,16 @@ the Free Software Foundation, version 3 only. -->
     });
   });
 
-  /* ── Tab button refs — used to scroll the active tab into view ───── */
-  let tabBtnEls: HTMLButtonElement[] = $state([]);
+  /* ── Cmd/Ctrl + 1‥9 to switch tabs ────────────────────────────────────── */
+  // Only Cmd/Ctrl+1–9 are reachable as single keystrokes; don't register beyond that.
+  const SHORTCUT_TABS = TAB_IDS.slice(0, 9);
 
-  function scrollActiveTab() {
-    const idx = TAB_IDS.indexOf(tab);
-    tabBtnEls[idx]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-  }
-
-  $effect(() => {
-    void tab;
-    requestAnimationFrame(scrollActiveTab);
-  });
-
-  /* ── Cmd/Ctrl + 1‥9 to switch tabs ────────────────────────────────── */
   function onKeydown(e: KeyboardEvent) {
     if (!(e.metaKey || e.ctrlKey)) return;
     const n = parseInt(e.key, 10);
-    if (n >= 1 && n <= TAB_IDS.length) {
+    if (n >= 1 && n <= SHORTCUT_TABS.length) {
       e.preventDefault();
-      tab = TAB_IDS[n - 1];
+      tab = SHORTCUT_TABS[n - 1];
     }
   }
 
@@ -249,12 +244,15 @@ the Free Software Foundation, version 3 only. -->
 
 <main class="h-screen flex flex-col overflow-hidden">
 
-  <!-- ── Sticky header: search bar + tab bar ───────────────────────────── -->
-  <div class="shrink-0 px-4 pt-5 pb-0 flex flex-col gap-4">
+  <!-- ── Top bar: search + controls ──────────────────────────────────────── -->
+  <div class="shrink-0 flex items-center gap-3
+              px-3 py-2 border-b border-border dark:border-white/[0.07]
+              bg-muted/30 dark:bg-white/[0.02]">
 
-    <!-- Search bar -->
-    <div class="relative">
-      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50 pointer-events-none"
+    <!-- Search -->
+    <div class="relative flex-1 min-w-0">
+      <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3
+                  text-muted-foreground/50 pointer-events-none"
            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
       </svg>
@@ -262,149 +260,158 @@ the Free Software Foundation, version 3 only. -->
         type="search"
         bind:value={searchQuery}
         placeholder={t("help.searchPlaceholder")}
-        class="w-full rounded-lg border border-border dark:border-white/[0.07]
-               bg-muted/40 dark:bg-white/[0.04] pl-8 pr-3 py-2
-               text-[0.78rem] text-foreground placeholder:text-muted-foreground/50
+        class="w-full rounded-md border border-border dark:border-white/[0.07]
+               bg-background/60 dark:bg-white/[0.04] pl-7 pr-7 py-1.5
+               text-[0.75rem] text-foreground placeholder:text-muted-foreground/50
                focus:outline-none focus:ring-1 focus:ring-foreground/20
                transition-colors"
       />
       {#if searchQuery}
         <button
           onclick={() => searchQuery = ""}
-          class="absolute right-2.5 top-1/2 -translate-y-1/2
+          class="absolute right-2 top-1/2 -translate-y-1/2
                  text-muted-foreground/50 hover:text-muted-foreground transition-colors"
           aria-label="Clear search">
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M18 6 6 18M6 6l12 12"/>
           </svg>
         </button>
       {/if}
     </div>
 
-    <!-- Tab bar -->
-    <div class="flex items-end border-b border-border dark:border-white/[0.07] pb-0">
-      <div class="flex items-end gap-1 overflow-x-auto scrollbar-none min-w-0">
-        {#each TAB_IDS as id, i}
-          <button
-            bind:this={tabBtnEls[i]}
-            onclick={() => goToTab(id)}
-            class="px-3 py-2 text-[0.78rem] font-medium rounded-t-md transition-colors
-                   whitespace-nowrap shrink-0 flex items-center gap-1.5
-                   {tab === id && !searchQuery
-                     ? 'text-foreground border-b-2 border-foreground -mb-px'
-                     : 'text-muted-foreground hover:text-foreground'}"
-            title="{helpTabLabel(id)} ({modKey}{i + 1})">
-            {helpTabLabel(id)}
-            <kbd class="kbd-hint text-[0.56rem] font-mono leading-none px-1 py-0.5
-                        rounded border tabular-nums
-                        {tab === id && !searchQuery
-                          ? 'border-foreground/20 text-foreground/50'
-                          : 'border-transparent text-muted-foreground/40'}">{modKey}{i + 1}</kbd>
-          </button>
-        {/each}
-      </div>
-      <div class="ml-auto flex items-center gap-1 pb-1.5 shrink-0 pl-2">
-        <ThemeToggle />
-        <LanguagePicker />
-        <span class="text-[0.56rem] text-muted-foreground/40 tabular-nums pl-1">
-          v{appVersion}
-        </span>
-        <span class="text-[0.48rem] text-muted-foreground/30 pl-0.5 select-none"
-              title="GNU General Public License v3.0">
-          {t("settings.license")}
-        </span>
-      </div>
+    <!-- Right controls -->
+    <div class="flex items-center gap-1 shrink-0">
+      <ThemeToggle />
+      <LanguagePicker />
+      <span class="text-[0.52rem] text-muted-foreground/40 tabular-nums pl-1">
+        v{appVersion}
+      </span>
+      <span class="text-[0.48rem] text-muted-foreground/30 pl-0.5 select-none"
+            title="GNU General Public License v3.0">
+        {t("settings.license")}
+      </span>
     </div>
-
   </div>
 
-  <!-- ── Scrollable content ────────────────────────────────────────────── -->
-  <div class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+  <!-- ── Body: sidebar + content ──────────────────────────────────────────── -->
+  <div class="flex-1 flex overflow-hidden">
 
-    <!-- Search results OR active tab -->
-    {#if searchQuery.trim()}
-      <!-- Search results panel -->
-      {#if searchResults.length === 0}
-        <div class="flex flex-col items-center justify-center gap-2 py-12 text-center">
-          <svg class="w-8 h-8 text-muted-foreground/30" viewBox="0 0 24 24" fill="none"
-               stroke="currentColor" stroke-width="1.5">
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    <!-- Sidebar nav (always visible, dims when searching) -->
+    <nav class="w-40 shrink-0 border-r border-border dark:border-white/[0.07]
+                overflow-y-auto py-2 flex flex-col gap-0.5
+                bg-muted/20 dark:bg-white/[0.015]
+                transition-opacity {searchQuery ? 'opacity-40' : 'opacity-100'}"
+         aria-label="Help sections">
+      {#each TAB_IDS as id, i}
+        {@const active = tab === id && !searchQuery}
+        <button
+          onclick={() => goToTab(id)}
+          title="{helpTabLabel(id)}{i < 9 ? ` (${modKey}${i + 1})` : ''}"
+          class="group relative mx-2 flex items-center gap-2.5 px-2.5 py-2
+                 rounded-lg text-left transition-colors text-[0.75rem] font-medium
+                 {active
+                   ? 'bg-foreground/[0.08] dark:bg-white/[0.08] text-foreground'
+                   : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-white/[0.04]'}">
+
+          {#if active}
+            <span class="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5
+                         rounded-full bg-foreground/60 dark:bg-white/60"></span>
+          {/if}
+
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+               class="w-3.5 h-3.5 shrink-0 {active ? 'opacity-80' : 'opacity-40 group-hover:opacity-60'}">
+            {@html TAB_ICONS[id]}
           </svg>
-          <p class="text-[0.78rem] text-muted-foreground">
-            {t("help.searchNoResults").replace("{query}", searchQuery.trim())}
-          </p>
-        </div>
-      {:else}
-        <div class="flex flex-col gap-1.5 pb-6">
-          <p class="text-[0.65rem] uppercase tracking-widest font-semibold text-muted-foreground/60 pl-0.5 pb-1">
-            {searchResults.length} {searchResults.length === 1 ? "result" : "results"}
-          </p>
-          {#each searchResults as item}
-            {@const tabLabel = helpTabLabel(item.tab)}
-            {@const title    = t(item.titleKey as Parameters<typeof t>[0])}
-            {@const body     = t(item.bodyKey  as Parameters<typeof t>[0])}
-            <button
-              onclick={() => goToItem(item.tab, item.titleKey)}
-              class="group text-left rounded-xl border border-border dark:border-white/[0.06]
-                     bg-white dark:bg-[#14141e] px-4 py-3 flex flex-col gap-1.5
-                     hover:border-foreground/20 dark:hover:border-white/[0.12]
-                     transition-colors">
-              <!-- Tab badge -->
-              <span class="inline-flex items-center rounded-md
-                           bg-violet-50 dark:bg-violet-500/10
-                           px-2 py-0.5 text-[0.6rem] font-semibold
-                           text-violet-600 dark:text-violet-400 w-fit">
-                {tabLabel}
-              </span>
-              <!-- Title -->
-              <span class="text-[0.78rem] font-semibold text-foreground leading-snug">{title}</span>
-              <!-- Body snippet (first 160 chars) -->
-              <span class="text-[0.72rem] leading-relaxed text-muted-foreground line-clamp-2">
-                {body.length > 160 ? body.slice(0, 160) + "…" : body}
-              </span>
-            </button>
-          {/each}
-        </div>
-      {/if}
-    {:else}
-      <!-- Active tab content -->
-      {#if tab === "dashboard"}
-        <HelpDashboard />
-      {:else if tab === "electrodes"}
-        <HelpElectrodes />
-      {:else if tab === "settings"}
-        <HelpSettings />
-      {:else if tab === "windows"}
-        <HelpWindows />
-      {:else if tab === "api"}
-        <HelpApi />
-      {:else if tab === "tts"}
-        <HelpTts />
-      {:else if tab === "privacy"}
-        <HelpPrivacy />
-      {:else if tab === "references"}
-        <HelpReferences />
-      {:else}
-        <HelpFaqTab />
-      {/if}
-    {/if}
 
-    <DisclaimerFooter />
+          <span class="flex-1 leading-none">{helpTabLabel(id)}</span>
+
+          {#if i < 9}
+            <kbd class="text-[0.5rem] font-mono tabular-nums shrink-0
+                        {active ? 'text-foreground/35' : 'text-muted-foreground/25 group-hover:text-muted-foreground/40'}">
+              {modKey}{i + 1}
+            </kbd>
+          {/if}
+        </button>
+      {/each}
+    </nav>
+
+    <!-- Content / search results -->
+    <div class="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4">
+
+      {#if searchQuery.trim()}
+        <!-- ── Search results ──────────────────────────────────────────────── -->
+        {#if searchResults.length === 0}
+          <div class="flex flex-col items-center justify-center gap-2 py-12 text-center">
+            <svg class="w-8 h-8 text-muted-foreground/30" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="1.5">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <p class="text-[0.78rem] text-muted-foreground">
+              {t("help.searchNoResults").replace("{query}", searchQuery.trim())}
+            </p>
+          </div>
+        {:else}
+          <div class="flex flex-col gap-1.5 pb-6">
+            <p class="text-[0.65rem] uppercase tracking-widest font-semibold
+                      text-muted-foreground/60 pl-0.5 pb-1">
+              {searchResults.length} {searchResults.length === 1 ? "result" : "results"}
+            </p>
+            {#each searchResults as item}
+              {@const tLabel = helpTabLabel(item.tab)}
+              {@const title  = t(item.titleKey as Parameters<typeof t>[0])}
+              {@const body   = t(item.bodyKey  as Parameters<typeof t>[0])}
+              <button
+                onclick={() => goToItem(item.tab, item.titleKey)}
+                class="group text-left rounded-xl border border-border dark:border-white/[0.06]
+                       bg-white dark:bg-[#14141e] px-4 py-3 flex flex-col gap-1.5
+                       hover:border-foreground/20 dark:hover:border-white/[0.12]
+                       transition-colors">
+                <span class="inline-flex items-center rounded-md
+                             bg-violet-50 dark:bg-violet-500/10
+                             px-2 py-0.5 text-[0.6rem] font-semibold
+                             text-violet-600 dark:text-violet-400 w-fit">
+                  {tLabel}
+                </span>
+                <span class="text-[0.78rem] font-semibold text-foreground leading-snug">{title}</span>
+                <span class="text-[0.72rem] leading-relaxed text-muted-foreground line-clamp-2">
+                  {body.length > 160 ? body.slice(0, 160) + "…" : body}
+                </span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      {:else}
+        <!-- ── Active tab content ──────────────────────────────────────────── -->
+        {#if tab === "dashboard"}
+          <HelpDashboard />
+        {:else if tab === "electrodes"}
+          <HelpElectrodes />
+        {:else if tab === "settings"}
+          <HelpSettings />
+        {:else if tab === "windows"}
+          <HelpWindows />
+        {:else if tab === "api"}
+          <HelpApi />
+        {:else if tab === "tts"}
+          <HelpTts />
+        {:else if tab === "privacy"}
+          <HelpPrivacy />
+        {:else if tab === "references"}
+          <HelpReferences />
+        {:else}
+          <HelpFaqTab />
+        {/if}
+      {/if}
+
+      <DisclaimerFooter />
+    </div>
 
   </div>
 
 </main>
 
 <style>
-  /* Hide scrollbar but keep scroll functional */
-  .scrollbar-none {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-  .scrollbar-none::-webkit-scrollbar {
-    display: none;
-  }
-
   /* Flash ring shown on the target item after search navigation */
   :global(.help-highlight) {
     animation: help-flash 1.6s ease-out forwards;
