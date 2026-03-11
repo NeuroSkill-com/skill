@@ -218,23 +218,62 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
 
+      # ── Standalone LLVM for bindgen ─────────────────────────────────────────
+      # VS's bundled Clang 19 (added to PATH by ilammy/msvc-dev-cmd) is an
+      # MSVC-compat build that omits the __builtin_ia32_* intrinsics required
+      # by its own mmintrin.h, causing bindgen (used by llama-cpp-sys-4) to
+      # crash with "use of undeclared identifier '__builtin_ia32_vec_init_v2si'"
+      # and ~20 similar errors before giving up entirely.
+      # clang-sys checks LIBCLANG_PATH *before* PATH, so we point it at the
+      # standalone LLVM installation whose libclang.dll ships correct headers.
+      # Cache key is the LLVM version string; bump it to force a re-install.
+      - name: Cache LLVM
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files\LLVM
+          key: windows-llvm-18.1.8
+
+      - name: Install LLVM + export LIBCLANG_PATH
+        shell: powershell
+        run: |
+          if (-not (Test-Path "C:\Program Files\LLVM\bin")) {
+            Write-Host "Cache miss — installing LLVM 18.1.8 via Chocolatey..."
+            choco install llvm --version=18.1.8 --no-progress -y | Out-Null
+          } else {
+            Write-Host "Cache hit — LLVM already present at C:\Program Files\LLVM"
+          }
+
+          $found = @(
+            "C:\Program Files\LLVM\bin\libclang.dll",
+            "C:\Program Files\LLVM\lib\libclang.dll"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $found) {
+            $found = Get-ChildItem "C:\Program Files\LLVM" -Recurse -Filter "libclang.dll" `
+                       -ErrorAction SilentlyContinue |
+                       Select-Object -First 1 -ExpandProperty FullName
+          }
+
+          if (-not $found) {
+            Write-Error "libclang.dll not found under C:\Program Files\LLVM"
+            exit 1
+          }
+
+          $libclangDir = Split-Path $found
+          "LIBCLANG_PATH=$libclangDir" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] LIBCLANG_PATH=$libclangDir  (libclang.dll at $found)"
+
       # llm-vulkan is always injected on Windows (see scripts/tauri-build.js).
       # Check with the same feature set the actual build uses so compilation
       # errors aren't silently skipped.
-      # LIBCLANG_PATH must be set before cargo runs so that clang-sys (used by
-      # bindgen inside llama-cpp-sys-4's build.rs) picks up the runner's
-      # standalone LLVM instead of VS's bundled Clang 19.
-      # VS's Clang 19 (added to PATH first by ilammy/msvc-dev-cmd) is in
-      # MSVC-compat mode and lacks the __builtin_ia32_* MMX intrinsics that
-      # mmintrin.h requires, causing bindgen to emit hundreds of errors and
-      # abort before generating a single binding.
-      # clang-sys checks LIBCLANG_PATH before PATH, so this env var wins.
       - name: cargo check
         shell: bash
         working-directory: src-tauri
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
-          LIBCLANG_PATH: C:\Program Files\LLVM\bin
+          LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
         run: cargo check --target x86_64-pc-windows-msvc --features llm-vulkan
 
       - name: cargo clippy
@@ -242,7 +281,7 @@ jobs:
         working-directory: src-tauri
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
-          LIBCLANG_PATH: C:\Program Files\LLVM\bin
+          LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
         run: >
           cargo clippy
           --target x86_64-pc-windows-msvc
