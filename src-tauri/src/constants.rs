@@ -322,10 +322,16 @@ pub const APP_ACKNOWLEDGEMENTS: &str =
 
 // ── Skill data directory ──────────────────────────────────────────────────────
 
-/// The skill data directory name, always located at `~/.skill`.
+/// The skill data directory name used on macOS and Linux (`~/.skill`).
 ///
-/// This is **hardcoded** — the directory is never configurable at runtime.
-/// All files (settings, databases, model weights, logs) live under this path.
+/// On **Windows** the data directory is `%LOCALAPPDATA%\NeuroSkill`
+/// (`C:\Users\<user>\AppData\Local\NeuroSkill`) — see
+/// [`crate::settings::default_skill_dir`].  The dot-prefix convention is not
+/// idiomatic on Windows and `$HOME` is often unset there, so `AppData\Local`
+/// is used instead.
+///
+/// This constant is **not used on Windows** at runtime; it is kept for
+/// macOS / Linux builds and for tests that run on those platforms.
 pub const SKILL_DIR: &str = ".skill";
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

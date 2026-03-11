@@ -265,28 +265,67 @@ impl Default for CalibrationConfig {
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
-/// The skill data directory: always `$HOME/.skill` (fallback: `.skill`).
+/// The skill data directory.
 ///
-/// This path is **hardcoded** and never configurable at runtime.
-/// The directory name is defined by [`crate::constants::SKILL_DIR`].
+/// | Platform | Path |
+/// |---|---|
+/// | macOS / Linux | `~/.skill` |
+/// | Windows | `%LOCALAPPDATA%\NeuroSkill` |
+///
+/// Windows uses `%LOCALAPPDATA%` (e.g. `C:\Users\<user>\AppData\Local\NeuroSkill`)
+/// because the Unix convention of storing data in a hidden dot-folder in the
+/// home directory is not the Windows norm, and — critically — `$HOME` is often
+/// **unset** on Windows (the OS uses `USERPROFILE` / `APPDATA` instead).
+/// Without the `HOME` variable the old implementation fell back to
+/// `PathBuf::from(".skill")`, a *relative* path that resolves to the directory
+/// containing the executable, scattering user data next to the binary.
+///
+/// [`dirs::data_local_dir()`] returns `%LOCALAPPDATA%` on Windows and handles
+/// all the Windows-specific env-var resolution internally.
 pub fn default_skill_dir() -> PathBuf {
-    std::env::var("HOME")
-        .map(|h| PathBuf::from(h).join(crate::constants::SKILL_DIR))
-        .unwrap_or_else(|_| PathBuf::from(crate::constants::SKILL_DIR))
+    #[cfg(target_os = "windows")]
+    {
+        // %LOCALAPPDATA%\NeuroSkill  (e.g. C:\Users\Alice\AppData\Local\NeuroSkill)
+        dirs::data_local_dir()
+            .unwrap_or_else(|| {
+                // Last-resort fallback: APPDATA or temp dir — never the cwd.
+                std::env::var("APPDATA")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|_| std::env::temp_dir())
+            })
+            .join("NeuroSkill")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        // macOS / Linux: ~/.skill
+        dirs::home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join(crate::constants::SKILL_DIR)
+    }
 }
 
 pub(crate) fn settings_path(skill_dir: &Path) -> PathBuf {
     skill_dir.join(SETTINGS_FILE)
 }
 
-/// Collapse an absolute path back to `~/…` when it starts with `$HOME`.
+/// Collapse an absolute path back to a shorter human-readable form.
+///
+/// On Unix the home directory is abbreviated to `~`.
+/// On Windows `HOME` is typically unset; we fall back to `USERPROFILE`.
 pub(crate) fn tilde_path(p: &Path) -> String {
-    if let Ok(home) = std::env::var("HOME") {
-        let h = home.trim_end_matches('/');
+    // Try $HOME first (Unix), then $USERPROFILE (Windows).
+    let home_str = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    if !home_str.is_empty() {
+        let h = home_str.trim_end_matches(['/', '\\']);
         let s = p.to_string_lossy();
         if s == h { return "~".into(); }
+        // Accept both Unix '/' and Windows '\' as separators after the home prefix.
         if let Some(rest) = s.strip_prefix(h) {
-            if rest.starts_with('/') { return format!("~{rest}"); }
+            if rest.starts_with('/') || rest.starts_with('\\') {
+                return format!("~{rest}");
+            }
         }
     }
     p.to_string_lossy().to_string()

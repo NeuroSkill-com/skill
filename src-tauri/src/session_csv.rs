@@ -18,21 +18,27 @@ pub(crate) const PPG_SAMPLE_RATE: f64 = 64.0;
 
 // ── CSV path helpers ──────────────────────────────────────────────────────────
 
-/// Build the path for a new EEG CSV recording:
-/// `~/.{appname}/{YYYYMMDD}/muse_{unix}.csv`
+/// Build the path for a new EEG CSV recording inside the skill data directory.
+///
+/// | Platform | Example path |
+/// |---|---|
+/// | macOS / Linux | `~/.skill/YYYYMMDD/muse_<unix>.csv` |
+/// | Windows | `%LOCALAPPDATA%\NeuroSkill\YYYYMMDD\muse_<unix>.csv` |
+///
+/// Uses [`crate::settings::default_skill_dir`] so the CSV lands in the same
+/// root as every other data file, not next to the binary or in `~/.skill`
+/// on Windows (where `$HOME` is often unset and Tauri's `home_dir()` returns
+/// `C:\Users\<user>` — a valid path but inconsistent with AppData conventions).
 pub(crate) fn new_csv_path(app: &AppHandle) -> PathBuf {
-    let name = app.config()
-        .product_name
-        .as_deref()
-        .unwrap_or("skill")
-        .to_lowercase();
+    // Derive the base from AppState's skill_dir when available so that the
+    // directory is always consistent with the rest of the app's storage.
+    // Fall back to default_skill_dir() if the state lock is unavailable.
+    let skill_dir = app
+        .try_state::<std::sync::Mutex<crate::AppState>>()
+        .map(|s| s.lock_or_recover().skill_dir.clone())
+        .unwrap_or_else(crate::settings::default_skill_dir);
 
-    let base = app.path()
-        .home_dir()
-        .unwrap_or_else(|_| PathBuf::from("."))
-        .join(format!(".{name}"))
-        .join(yyyymmdd_utc());
-
+    let base = skill_dir.join(yyyymmdd_utc());
     let _ = std::fs::create_dir_all(&base);
     base.join(format!("muse_{}.csv", unix_secs()))
 }

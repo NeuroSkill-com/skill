@@ -146,43 +146,106 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
 
 #[cfg(target_os = "windows")]
 pub fn poll_active_window() -> Option<ActiveWindowInfo> {
-    let script = r#"
-Add-Type @"
-using System; using System.Runtime.InteropServices; using System.Text;
-public class WH {
-    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll", CharSet=CharSet.Unicode)]
-    public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
-    [DllImport("user32.dll")]
-    public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
-}
-"@
-$hwnd = [WH]::GetForegroundWindow()
-$sb = New-Object System.Text.StringBuilder 512
-[WH]::GetWindowText($hwnd, $sb, 512) | Out-Null
-$title = $sb.ToString()
-$pid = 0
-[WH]::GetWindowThreadProcessId($hwnd, [ref]$pid) | Out-Null
-$proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-$name = if ($proc) { $proc.ProcessName } else { "" }
-$path = try { $proc.MainModule.FileName } catch { "" }
-Write-Output "$name|||$path|||$title"
-"#;
-    let out = std::process::Command::new("powershell")
-        .args(["-NonInteractive", "-NoProfile", "-Command", script])
-        .output()
-        .ok()?;
-    if !out.status.success() { return None; }
+    // ── Pure Win32 FFI — no PowerShell, no subprocess, no .NET JIT ──────────
+    //
+    // The original implementation spawned `powershell -Command "Add-Type …"`
+    // every second.  PowerShell startup (~300 ms) plus C# JIT via `Add-Type`
+    // made this visibly expensive: Task Manager showed a new powershell.exe
+    // process every second, the poller stalled for ~500 ms per tick, and the
+    // constant process-creation noise broke the UX.
+    //
+    // Replacement: call the same Win32 APIs directly from Rust via FFI.
+    // Every function used here has been available since Windows XP/Vista and
+    // requires no elevated privileges.
+    //
+    //  user32  → GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId
+    //  kernel32 → OpenProcess, QueryFullProcessImageNameW, CloseHandle
 
-    let raw = String::from_utf8_lossy(&out.stdout);
-    let raw = raw.trim();
-    let mut parts = raw.splitn(3, "|||");
-    let app_name     = parts.next().unwrap_or("").trim().to_string();
-    let app_path     = parts.next().unwrap_or("").trim().to_string();
-    let window_title = parts.next().unwrap_or("").trim().to_string();
-    if app_name.is_empty() { return None; }
+    type HWND   = *mut core::ffi::c_void;
+    type HANDLE = *mut core::ffi::c_void;
+    type DWORD  = u32;
+    type BOOL   = i32;
+    type WCHAR  = u16;
 
-    Some(ActiveWindowInfo { app_name, app_path, window_title, activated_at: crate::unix_secs() })
+    // PROCESS_QUERY_LIMITED_INFORMATION — sufficient for QueryFullProcessImageNameW
+    // and available without elevation for most processes (Vista+).
+    const PROCESS_QUERY_LIMITED_INFORMATION: DWORD = 0x1000;
+
+    #[link(name = "user32")]
+    extern "system" {
+        fn GetForegroundWindow() -> HWND;
+        fn GetWindowTextW(hwnd: HWND, lp_string: *mut WCHAR, n_max_count: i32) -> i32;
+        fn GetWindowThreadProcessId(hwnd: HWND, lpdw_process_id: *mut DWORD) -> DWORD;
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn OpenProcess(
+            dw_desired_access: DWORD,
+            b_inherit_handle:  BOOL,
+            dw_process_id:     DWORD,
+        ) -> HANDLE;
+        fn QueryFullProcessImageNameW(
+            h_process:   HANDLE,
+            dw_flags:    DWORD,
+            lp_exe_name: *mut WCHAR,
+            lpdw_size:   *mut DWORD,
+        ) -> BOOL;
+        fn CloseHandle(h_object: HANDLE) -> BOOL;
+    }
+
+    unsafe {
+        // 1. Foreground window handle.
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() { return None; }
+
+        // 2. Window title (wide string).
+        let mut title_buf = [0u16; 512];
+        let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), title_buf.len() as i32);
+        let window_title = if title_len > 0 {
+            String::from_utf16_lossy(&title_buf[..title_len as usize])
+        } else {
+            String::new()
+        };
+
+        // 3. Process ID owning the foreground window.
+        let mut pid: DWORD = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == 0 { return None; }
+
+        // 4. Open the process with minimal rights to read its image path.
+        let hproc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        let (app_path, app_name) = if !hproc.is_null() {
+            let mut path_buf = [0u16; 1024];
+            let mut path_len = path_buf.len() as DWORD;
+            let app_path = if QueryFullProcessImageNameW(
+                hproc, 0, path_buf.as_mut_ptr(), &mut path_len,
+            ) != 0 && path_len > 0 {
+                String::from_utf16_lossy(&path_buf[..path_len as usize])
+            } else {
+                String::new()
+            };
+            CloseHandle(hproc);
+
+            // Derive a human-readable name from the exe filename (no extension).
+            let app_name = std::path::Path::new(&app_path)
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            (app_path, app_name)
+        } else {
+            (String::new(), String::new())
+        };
+
+        if app_name.is_empty() && window_title.is_empty() { return None; }
+
+        Some(ActiveWindowInfo {
+            app_name,
+            app_path,
+            window_title,
+            activated_at: crate::unix_secs(),
+        })
+    }
 }
 
 // ── Platform input-idle detection ─────────────────────────────────────────────

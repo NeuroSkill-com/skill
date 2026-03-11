@@ -47,11 +47,19 @@ pub(crate) fn init_neutts_samples_dir(path: PathBuf) {
     let _ = path;
 }
 
-/// Return the resolved skill directory (defaults to `~/.skill`).
+/// Return the resolved skill directory.
+///
+/// Uses the value set by [`init_tts_dirs`] (which is always called from
+/// `lib.rs::setup()` before TTS is used).  The fallback delegates to
+/// [`crate::settings::default_skill_dir`] so that Windows gets
+/// `%LOCALAPPDATA%\NeuroSkill` rather than a relative `.skill` path or a
+/// misplaced `~/.skill` (which `$HOME` / `dirs::home_dir()` can produce
+/// incorrectly on Windows when `USERPROFILE` is set but `HOME` is not).
 pub(super) fn skill_dir() -> PathBuf {
-    SKILL_DIR.get().cloned().unwrap_or_else(|| {
-        dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")).join(".skill")
-    })
+    SKILL_DIR
+        .get()
+        .cloned()
+        .unwrap_or_else(crate::settings::default_skill_dir)
 }
 
 // ─── Logging ──────────────────────────────────────────────────────────────────

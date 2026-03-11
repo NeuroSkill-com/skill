@@ -1544,10 +1544,16 @@ pub fn yyyymmddhhmmss_utc() -> i64 {
 
 /// Find ZUNA weights in the HuggingFace disk cache for the given `hf_repo`.
 fn resolve_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
-    let home = std::env::var("HOME").ok()?;
+    // $HF_HOME overrides the default cache location; otherwise fall back to
+    // the platform home directory.  On Windows $HOME is typically unset —
+    // dirs::home_dir() reads USERPROFILE correctly on all platforms.
     let hf_home = std::env::var("HF_HOME")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(&home).join(".cache/huggingface/hub"));
+        .unwrap_or_else(|_| {
+            dirs::home_dir()
+                .unwrap_or_else(std::env::temp_dir)
+                .join(".cache/huggingface/hub")
+        });
     let snaps = hf_home
         .join(format!("models--{}", hf_repo.replace('/', "--")))
         .join("snapshots");

@@ -1021,11 +1021,7 @@ pub fn umap_compute_inner(
             neg_sample_rate: ucfg.neg_sample_rate.clamp(1, 30),
             timeout: Some(ucfg.timeout_secs.clamp(10, 600)),
             cooldown_ms: ucfg.cooldown_ms.clamp(0, 10_000),
-            figures_dir: Some(
-                dirs::home_dir()
-                    .unwrap_or_else(std::env::temp_dir)
-                    .join(".skill/tmp/figures"),
-            ),
+            figures_dir: Some(skill_dir.join("tmp/figures")),
             ..Default::default()
         },
         ..Default::default()
