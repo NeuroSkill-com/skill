@@ -67,6 +67,13 @@ fn main() {
             .unwrap_or_else(|e| panic!("build.rs: create_dir_all(resources/espeak-ng-data): {e}"));
     }
 
+    // ── Vulkan SDK: setup on Windows and Linux ────────────────────────────────
+    #[cfg(target_os = "windows")]
+    setup_vulkan_sdk_windows();
+    
+    #[cfg(target_os = "linux")]
+    setup_vulkan_sdk_linux();
+
     tauri_build::build()
 }
 
@@ -731,6 +738,127 @@ fn clear_readonly(path: &Path) {
             #[allow(clippy::permissions_set_readonly_false)]
             perms.set_readonly(false);
             std::fs::set_permissions(path, perms).ok();
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn setup_vulkan_sdk_windows() {
+    use std::fs;
+    
+    let vulkan_sdk_path = "C:\\VulkanSDK";
+    
+    // Check if Vulkan SDK is already installed
+    if Path::new(vulkan_sdk_path).exists() {
+        println!("cargo:warning=Vulkan SDK already installed at {}", vulkan_sdk_path);
+        println!("cargo:rustc-link-search={}\\Lib", vulkan_sdk_path);
+        println!("cargo:rustc-link-lib=vulkan-1");
+        return;
+    }
+    
+    println!("cargo:warning=Vulkan SDK not found. Installing...");
+    
+    let vulkan_version = "1.3.280";
+    let installer_url = format!(
+        "https://sdk.lunarg.com/sdk/download/{}/windows/VulkanSDK-{}-Installer.exe",
+        vulkan_version, vulkan_version
+    );
+    
+    let temp_dir = std::env::temp_dir();
+    let installer_path = temp_dir.join("VulkanSDK-installer.exe");
+    
+    // Download Vulkan SDK installer
+    println!("cargo:warning=Downloading Vulkan SDK from {}", installer_url);
+    let download_status = Command::new("powershell.exe")
+        .args(&[
+            "-NoProfile",
+            "-Command",
+            &format!(
+                "Invoke-WebRequest -Uri '{}' -OutFile '{}'",
+                installer_url,
+                installer_path.display()
+            ),
+        ])
+        .status();
+    
+    match download_status {
+        Ok(status) if status.success() => {
+            println!("cargo:warning=Download successful");
+        }
+        _ => {
+            println!("cargo:warning=Failed to download Vulkan SDK. Please install manually from https://vulkan.lunarg.com/sdk/home");
+            return;
+        }
+    }
+    
+    // Run installer (silent mode)
+    println!("cargo:warning=Running Vulkan SDK installer...");
+    let install_status = Command::new(&installer_path)
+        .args(&["/S"])
+        .status();
+    
+    match install_status {
+        Ok(status) if status.success() => {
+            println!("cargo:warning=Vulkan SDK installed successfully");
+            println!("cargo:rustc-link-search={}\\Lib", vulkan_sdk_path);
+            println!("cargo:rustc-link-lib=vulkan-1");
+        }
+        _ => {
+            println!("cargo:warning=Failed to install Vulkan SDK. Please install manually from https://vulkan.lunarg.com/sdk/home");
+        }
+    }
+    
+    // Cleanup
+    let _ = std::fs::remove_file(&installer_path);
+}
+
+#[cfg(target_os = "linux")]
+fn setup_vulkan_sdk_linux() {
+    // First, try to use system package manager
+    println!("cargo:warning=Checking for Vulkan SDK...");
+    
+    let pkg_config_output = Command::new("pkg-config")
+        .args(&["--cflags", "--libs", "vulkan"])
+        .output();
+    
+    if let Ok(output) = pkg_config_output {
+        if output.status.success() {
+            println!("cargo:warning=Vulkan SDK found via pkg-config");
+            let libs_output = String::from_utf8_lossy(&output.stdout);
+            println!("cargo:rustc-link-lib=vulkan");
+            
+            // Parse pkg-config output for library paths
+            for token in libs_output.split_whitespace() {
+                if token.starts_with("-L") {
+                    let path = &token[2..];
+                    println!("cargo:rustc-link-search={}", path);
+                }
+            }
+            return;
+        }
+    }
+    
+    // Vulkan SDK not found via pkg-config, try to install it
+    println!("cargo:warning=Vulkan SDK not found. Attempting to install via apt...");
+    
+    let install_status = Command::new("sudo")
+        .args(&["apt-get", "install", "-y", "libvulkan-dev", "vulkan-tools"])
+        .status();
+    
+    match install_status {
+        Ok(status) if status.success() => {
+            println!("cargo:warning=Vulkan SDK installed successfully");
+            println!("cargo:rustc-link-search=/usr/lib");
+            println!("cargo:rustc-link-search=/usr/lib/x86_64-linux-gnu");
+            println!("cargo:rustc-link-lib=vulkan");
+        }
+        _ => {
+            println!("cargo:warning=Failed to install Vulkan SDK via apt.");
+            println!("cargo:warning=Please install manually:");
+            println!("cargo:warning=  Ubuntu/Debian: sudo apt-get install libvulkan-dev vulkan-tools");
+            println!("cargo:warning=  Fedora/RHEL:   sudo dnf install vulkan-loader-devel vulkan-tools");
+            println!("cargo:warning=  Arch:          sudo pacman -S vulkan-icd-loader vulkan-devel");
+            println!("cargo:rustc-link-lib=vulkan");
         }
     }
 }
