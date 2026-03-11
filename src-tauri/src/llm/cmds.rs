@@ -118,7 +118,7 @@ pub fn download_llm_model(
     app:      AppHandle,
     state:    tauri::State<'_, Mutex<AppState>>,
 ) {
-    let (repo, _skill_dir, prog_arc) = {
+    let (repo, _skill_dir, prog_arc, size_bytes) = {
         let mut s = state.lock_or_recover();
 
         // Find the entry.
@@ -142,6 +142,9 @@ pub fn download_llm_model(
             }
         }
 
+        // Catalog size in bytes — used by the progress monitor thread.
+        let size_bytes = (entry.size_gb * 1_073_741_824.0) as u64;
+
         // Mark as downloading in the catalog immediately so the UI updates.
         if let Some(e) = s.llm_catalog.entries.iter_mut().find(|e| e.filename == filename) {
             e.state      = DownloadState::Downloading;
@@ -160,14 +163,14 @@ pub fn download_llm_model(
 
         s.llm_downloads.insert(filename.clone(), prog.clone());
 
-        (entry.repo.clone(), s.skill_dir.clone(), prog)
+        (entry.repo.clone(), s.skill_dir.clone(), prog, size_bytes)
     };
 
     let filename2 = filename.clone();
     let app2      = app.clone();
 
-    tokio::task::spawn_blocking(move || {
-        let result = super::catalog::download_file(&repo, &filename2, &prog_arc);
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = super::catalog::download_file(&repo, &filename2, &prog_arc, size_bytes);
 
         // After completion / failure, refresh the catalog entry.
         if let Some(state_handle) = app2.try_state::<Mutex<AppState>>() {

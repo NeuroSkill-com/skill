@@ -2277,6 +2277,12 @@ const fr: Record<string, string> = {
   "chat.hint.running":                  "Entrée pour envoyer · Maj+Entrée pour retour à la ligne",
   "chat.hint.loading":                  "Chargement — vérifiez Paramètres → LLM pour la progression",
   "chat.hint.stopped":                  "Démarrez le serveur dans la barre supérieure ou Paramètres → LLM",
+
+  "chat.eeg.label":                     "EEG",
+  "chat.eeg.on":                        "Contexte EEG activé — l'état cérébral sera inclus dans chaque requête",
+  "chat.eeg.off":                       "Contexte EEG désactivé — cliquez pour activer l'injection",
+  "chat.eeg.noSignal":                  "Pas de signal EEG",
+  "chat.eeg.contextLabel":              "Injecter l'état cérébral EEG en direct",
 };
 
 export default fr;

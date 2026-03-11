@@ -295,12 +295,18 @@ pub struct DownloadProgress {
 ///
 /// Runs synchronously — call from `spawn_blocking`.  Updates `progress`
 /// in-place and checks `progress.cancelled` before I/O starts.
+///
+/// `size_bytes` is the expected file size (from the catalog's `size_gb`).
+/// It is used only for progress estimation; a wrong value produces an
+/// inaccurate bar but is otherwise harmless.
 pub fn download_file(
-    repo_id:  &str,
-    filename: &str,
-    progress: &Arc<Mutex<DownloadProgress>>,
+    repo_id:    &str,
+    filename:   &str,
+    progress:   &Arc<Mutex<DownloadProgress>>,
+    size_bytes: u64,
 ) -> Result<PathBuf, String> {
     use hf_hub::api::sync::Api;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     {
         let mut p = progress.lock().unwrap();
@@ -320,14 +326,88 @@ pub fn download_file(
         return Err("cancelled".into());
     }
 
+    // ── Progress monitor thread ───────────────────────────────────────────────
+    //
+    // hf_hub's sync API gives no progress callbacks — it just blocks until the
+    // file is fully written to the HF Hub disk cache.  To show real progress we
+    // watch the HF Hub *blobs* directory for whichever new file is growing
+    // during the download, and compare its size against the catalog's declared
+    // `size_bytes`.  The file ends up in the correct platform cache path
+    // (e.g. C:\Users\<user>\.cache\huggingface\hub on Windows) — we never
+    // touch or redirect that location.
+    //
+    // Blobs dir: {HF_HUB_CACHE}/models--{owner}--{name}/blobs/
+    // New blobs are named by their ETag; we don't need to know the name up
+    // front — we just find whichever new file is largest.
+
+    let blobs_dir: PathBuf = {
+        // models--owner--name  (repo_id slashes become "--")
+        let folder = format!("models--{}", repo_id.replace('/', "--"));
+        hf_hub::Cache::from_env().path().join(folder).join("blobs")
+    };
+
+    // Snapshot files already present so we only track new blobs.
+    let existing: std::collections::HashSet<std::ffi::OsString> = {
+        match std::fs::read_dir(&blobs_dir) {
+            Ok(rd) => rd.filter_map(|e| e.ok().map(|e| e.file_name())).collect(),
+            Err(_) => std::collections::HashSet::new(),
+        }
+    };
+
+    let done     = Arc::new(AtomicBool::new(false));
+    let done_m   = Arc::clone(&done);
+    let prog_m   = Arc::clone(progress);
+    let blobs_m  = blobs_dir.clone();
+    let total    = size_bytes.max(1); // avoid divide-by-zero
+
+    let monitor = std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            if done_m.load(Ordering::Relaxed) { break; }
+
+            // Find the largest *new* blob (the one being written right now).
+            let current: u64 = match std::fs::read_dir(&blobs_m) {
+                Ok(rd) => rd
+                    .filter_map(|e| e.ok())
+                    .filter(|e| !existing.contains(&e.file_name()))
+                    .filter_map(|e| e.metadata().ok().map(|m| m.len()))
+                    .max()
+                    .unwrap_or(0),
+                Err(_) => 0,
+            };
+
+            if current > 0 {
+                let prog = (current as f32 / total as f32).min(0.99);
+                let mut p = prog_m.lock().unwrap();
+                if p.state == DownloadState::Downloading {
+                    p.progress   = prog;
+                    p.status_msg = Some(format!(
+                        "{:.0} / {:.0} MB",
+                        current as f64 / 1_048_576.0,
+                        total   as f64 / 1_048_576.0,
+                    ));
+                }
+            }
+        }
+    });
+
+    // ── Actual download (blocking) ────────────────────────────────────────────
+
     {
         let mut p = progress.lock().unwrap();
         p.status_msg = Some(format!("Downloading {filename}…"));
-        p.progress   = 0.05;
+        // progress stays 0.0 → frontend shows the indeterminate pulse until
+        // the monitor thread detects the first bytes on disk.
     }
 
-    let local_path = repo.get(filename)
-        .map_err(|e| format!("Download failed: {e}"))?;
+    let result = repo.get(filename)
+        .map_err(|e| format!("Download failed: {e}"));
+
+    // Signal monitor to stop and wait for it to exit.
+    done.store(true, Ordering::Relaxed);
+    let _ = monitor.join();
+
+    let local_path = result?;
 
     {
         let mut p = progress.lock().unwrap();

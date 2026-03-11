@@ -110,6 +110,66 @@
     };
   }
 
+  // ── EEG band snapshot type (mirrors Rust BandSnapshot) ────────────────────
+
+  interface BandPowers {
+    channel:       string;
+    rel_delta:     number;
+    rel_theta:     number;
+    rel_alpha:     number;
+    rel_beta:      number;
+    rel_gamma:     number;
+    rel_high_gamma: number;
+    dominant:      string;
+    dominant_symbol: string;
+  }
+
+  interface BandSnapshot {
+    timestamp:     number;
+    channels:      BandPowers[];
+    faa:           number;
+    tar:           number;
+    bar:           number;
+    dtr:           number;
+    pse:           number;
+    apf:           number;
+    bps:           number;
+    snr:           number;
+    coherence:     number;
+    mu_suppression: number;
+    mood:          number;
+    tbr:           number;
+    sef95:         number;
+    hjorth_activity: number;
+    hjorth_mobility: number;
+    hjorth_complexity: number;
+    permutation_entropy: number;
+    higuchi_fd:    number;
+    dfa_exponent:  number;
+    sample_entropy: number;
+    pac_theta_gamma: number;
+    laterality_index: number;
+    headache_index: number;
+    migraine_index: number;
+    consciousness_lzc: number;
+    consciousness_wakefulness: number;
+    consciousness_integration: number;
+    hr?:           number;
+    rmssd?:        number;
+    sdnn?:         number;
+    pnn50?:        number;
+    lf_hf_ratio?:  number;
+    respiratory_rate?: number;
+    spo2_estimate?: number;
+    perfusion_index?: number;
+    stress_index?: number;
+    blink_count?:  number;
+    blink_rate?:   number;
+    meditation?:   number;
+    cognitive_load?: number;
+    drowsiness?:   number;
+  }
+
   // ── State ──────────────────────────────────────────────────────────────────
 
   let port           = $state(8375);
@@ -128,6 +188,57 @@
   let inputEl        = $state<HTMLTextAreaElement | null>(null);
   let fileInputEl    = $state<HTMLInputElement | null>(null);
   let attachments    = $state<Attachment[]>([]);
+
+  // ── EEG context injection ──────────────────────────────────────────────────
+
+  /** Latest EEG band snapshot from the `eeg-bands` Tauri event. */
+  let latestBands  = $state<BandSnapshot | null>(null);
+  /** Whether to prepend the live EEG brain state to each LLM system prompt. */
+  let eegContext   = $state(true);
+
+  /** Derived: EEG context is active (enabled AND signal available). */
+  const eegActive  = $derived(eegContext && latestBands !== null);
+
+  /**
+   * Build a compact EEG brain-state block suitable for injection into a
+   * system prompt.  Averages relative band powers across all 4 channels.
+   */
+  function buildEegBlock(b: BandSnapshot): string {
+    const n = b.channels.length || 1;
+    const avg = (key: keyof BandPowers) =>
+      b.channels.reduce((s, ch) => s + (ch[key] as number), 0) / n;
+
+    const pct = (v: number) => (v * 100).toFixed(0) + "%";
+    const f1  = (v: number) => v.toFixed(1);
+    const f2  = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(2);
+
+    const rD = avg("rel_delta");
+    const rT = avg("rel_theta");
+    const rA = avg("rel_alpha");
+    const rB = avg("rel_beta");
+    const rG = avg("rel_gamma");
+
+    const dominant = b.channels[0]?.dominant ?? "—";
+
+    const lines: string[] = [
+      "--- Live EEG Brain State (auto-updated) ---",
+      `Signal quality (SNR): ${f1(b.snr)} dB | Dominant band: ${dominant}`,
+      `Relative band powers: δ=${pct(rD)} θ=${pct(rT)} α=${pct(rA)} β=${pct(rB)} γ=${pct(rG)}`,
+      `Mood: ${b.mood.toFixed(0)}/100 | FAA (approach): ${f2(b.faa)}`,
+      `TAR (θ/α — drowsiness): ${f1(b.tar)} | BAR (β/α — focus/stress): ${f1(b.bar)}`,
+      `Coherence (α sync): ${(b.coherence * 100).toFixed(0)}% | Consciousness: wakefulness=${b.consciousness_wakefulness.toFixed(0)} integration=${b.consciousness_integration.toFixed(0)}`,
+    ];
+
+    if (b.meditation   != null) lines.push(`Meditation: ${b.meditation.toFixed(0)}/100`);
+    if (b.cognitive_load != null) lines.push(`Cognitive load: ${b.cognitive_load.toFixed(0)}/100`);
+    if (b.drowsiness   != null) lines.push(`Drowsiness: ${b.drowsiness.toFixed(0)}/100`);
+    if (b.hr           != null) lines.push(`Heart rate: ${b.hr.toFixed(0)} bpm${b.rmssd != null ? ` | HRV (RMSSD): ${b.rmssd.toFixed(1)} ms` : ""}`);
+    if (b.stress_index != null) lines.push(`Stress index: ${b.stress_index.toFixed(1)}`);
+    if (b.respiratory_rate != null) lines.push(`Respiratory rate: ${b.respiratory_rate.toFixed(1)} breaths/min`);
+
+    lines.push("--- End EEG State ---");
+    return lines.join("\n");
+  }
 
   // ── Input history navigation (↑ / ↓) ──────────────────────────────────────
   // histIdx = -1  →  showing the live draft
@@ -369,8 +480,13 @@
         return { role: m.role, content: m.content };
       });
 
+    // Build system message: base prompt + optional live EEG brain-state block.
+    const systemParts: string[] = [];
+    if (systemPrompt.trim()) systemParts.push(systemPrompt.trim());
+    if (eegActive && latestBands)  systemParts.push(buildEegBlock(latestBands));
+
     const apiMessages = [
-      ...(systemPrompt.trim() ? [{ role: "system", content: systemPrompt }] : []),
+      ...(systemParts.length ? [{ role: "system", content: systemParts.join("\n\n") }] : []),
       ...historyMsgs,
     ];
 
@@ -502,6 +618,7 @@
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   let unlistenStatus: (() => void) | undefined;
+  let unlistenBands:  (() => void) | undefined;
   let pollTimer:       ReturnType<typeof setInterval> | undefined;
 
   onMount(async () => {
@@ -539,6 +656,19 @@
       } catch {}
     }, 1500);
 
+    // Seed with latest bands if headset already connected
+    try {
+      const b = await invoke<BandSnapshot | null>("get_latest_bands");
+      if (b) latestBands = b;
+    } catch {}
+
+    // Live EEG band updates — keep latestBands fresh for context injection
+    try {
+      unlistenBands = await listen<BandSnapshot>("eeg-bands", ev => {
+        latestBands = ev.payload;
+      });
+    } catch {}
+
     // Load persisted chat history
     try {
       const resp = await invoke<ChatSessionResponse>("get_last_chat_session");
@@ -555,6 +685,7 @@
 
   onDestroy(() => {
     unlistenStatus?.();
+    unlistenBands?.();
     clearInterval(pollTimer);
     abortCtrl?.abort();
   });
@@ -585,6 +716,28 @@
                     :                       'bg-slate-400/50'}"></span>
       <span class="text-[0.72rem] font-semibold truncate {statusColor}">{statusLabel}</span>
     </div>
+
+    <!-- EEG context badge -->
+    {#if latestBands}
+      <button
+        onclick={() => eegContext = !eegContext}
+        title={eegContext ? t("chat.eeg.on") : t("chat.eeg.off")}
+        class="flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer
+               shrink-0 text-[0.6rem] font-semibold
+               {eegContext
+                 ? 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/25'
+                 : 'bg-muted text-muted-foreground/40 hover:bg-muted/80'}">
+        <!-- Brain-wave icon -->
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 shrink-0">
+          <path d="M2 10 Q4 6 6 10 Q8 14 10 10 Q12 6 14 10 Q16 14 18 10"/>
+        </svg>
+        <span>{t("chat.eeg.label")}</span>
+        {#if eegContext && latestBands}
+          <span class="tabular-nums opacity-70">{latestBands.snr.toFixed(1)}dB</span>
+        {/if}
+      </button>
+    {/if}
 
     <!-- Control buttons -->
     {#if canStart}
@@ -666,6 +819,64 @@
                  focus:ring-1 focus:ring-violet-500/50"
         ></textarea>
       </div>
+
+      <!-- EEG context injection toggle -->
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5">
+          <!-- Brain-wave icon -->
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round"
+               class="w-3 h-3 shrink-0 {latestBands ? 'text-cyan-500' : 'text-muted-foreground/30'}">
+            <path d="M2 10 Q4 6 6 10 Q8 14 10 10 Q12 6 14 10 Q16 14 18 10"/>
+          </svg>
+          <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
+            {t("chat.eeg.contextLabel")}
+          </span>
+        </div>
+        <button
+          onclick={() => eegContext = !eegContext}
+          disabled={!latestBands}
+          title={latestBands ? (eegContext ? t("chat.eeg.on") : t("chat.eeg.off")) : t("chat.eeg.noSignal")}
+          class="relative inline-flex h-4 w-7 shrink-0 cursor-pointer items-center
+                 rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed
+                 {eegContext && latestBands ? 'bg-cyan-500' : 'bg-muted-foreground/20'}">
+          <span class="inline-block h-3 w-3 rounded-full bg-white shadow
+                       transition-transform
+                       {eegContext && latestBands ? 'translate-x-3.5' : 'translate-x-0.5'}">
+          </span>
+        </button>
+      </div>
+
+      <!-- Live EEG stats preview (when context active) -->
+      {#if eegActive && latestBands}
+        {@const b = latestBands}
+        {@const n = b.channels.length || 1}
+        {@const rA = b.channels.reduce((s,c)=>s+c.rel_alpha,0)/n}
+        {@const rB = b.channels.reduce((s,c)=>s+c.rel_beta,0)/n}
+        {@const rT = b.channels.reduce((s,c)=>s+c.rel_theta,0)/n}
+        <div class="grid grid-cols-4 gap-1.5 rounded-lg border border-cyan-500/20
+                     bg-cyan-500/5 px-2 py-1.5">
+          {#each [
+            { label: "SNR",   val: b.snr.toFixed(1) + "dB" },
+            { label: "Mood",  val: b.mood.toFixed(0) + "/100" },
+            { label: "α",     val: (rA*100).toFixed(0) + "%" },
+            { label: "β/α",   val: b.bar.toFixed(2) },
+            { label: "θ/α",   val: b.tar.toFixed(2) },
+            { label: "FAA",   val: (b.faa>=0?"+":"")+b.faa.toFixed(2) },
+            ...(b.hr != null ? [{ label: "HR", val: b.hr.toFixed(0)+"bpm" }] : []),
+            ...(b.meditation != null ? [{ label: "Med", val: b.meditation.toFixed(0)+"/100" }] : []),
+          ] as s}
+            <div class="flex flex-col items-center gap-0">
+              <span class="text-[0.48rem] text-cyan-600/60 dark:text-cyan-400/60 font-medium uppercase">
+                {s.label}
+              </span>
+              <span class="text-[0.6rem] font-semibold tabular-nums text-cyan-700 dark:text-cyan-300">
+                {s.val}
+              </span>
+            </div>
+          {/each}
+        </div>
+      {/if}
 
       <!-- Thinking level -->
       <div class="flex flex-col gap-1">

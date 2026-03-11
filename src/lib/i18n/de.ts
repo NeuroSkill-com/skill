@@ -2277,6 +2277,12 @@ const de: Record<string, string> = {
   "chat.hint.running":                  "Enter zum Senden · Shift+Enter für Zeilenumbruch",
   "chat.hint.loading":                  "Lädt – Einstellungen → LLM für Fortschritt prüfen",
   "chat.hint.stopped":                  "Server in der Titelleiste oder Einstellungen → LLM starten",
+
+  "chat.eeg.label":                     "EEG",
+  "chat.eeg.on":                        "EEG-Kontext aktiv — Gehirnzustand wird in jede Anfrage eingefügt",
+  "chat.eeg.off":                       "EEG-Kontext inaktiv — klicken zum Aktivieren",
+  "chat.eeg.noSignal":                  "Kein EEG-Signal",
+  "chat.eeg.contextLabel":              "Aktuellen EEG-Gehirnzustand einfügen",
 };
 
 export default de;

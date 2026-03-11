@@ -484,14 +484,15 @@ pub fn search_embeddings_in_range(
 
     // ── Decide search backend ─────────────────────────────────────────────────
     //
-    // Prefer the global index when it is ready (non-empty Option inside the
-    // Mutex).  Fall back to loading individual per-day HNSW files otherwise.
+    // Lock the global index for the duration of this search call.
+    // `as_deref()` on `Option<MutexGuard<T>>` uses `Deref<Target=T>` to
+    // produce `Option<&T>` without moving the guard.
     let global_guard = global_index.as_ref().map(|arc| arc.lock_or_recover());
-    let global_ready = global_guard
-        .as_ref()
-        .and_then(|g| g.as_ref())
-        .map(|idx| !idx.is_empty())
-        .unwrap_or(false);
+    // `Option<&Option<LabeledIndex<...>>>` → flatten → `Option<&LabeledIndex<...>>`
+    let global_idx: Option<&LabeledIndex<Cosine, i64>> = global_guard
+        .as_deref()                     // Option<&Option<LabeledIndex<...>>>
+        .and_then(|opt| opt.as_ref());  // Option<&LabeledIndex<...>>
+    let global_ready = global_idx.map(|idx| !idx.is_empty()).unwrap_or(false);
 
     // Per-day indices — only loaded when the global index is not ready.
     let day_indices: Vec<DayIndex> = if global_ready {
@@ -521,17 +522,15 @@ pub fn search_embeddings_in_range(
         // Collect (date, dir, hnsw_id, neighbor_timestamp, distance) tuples.
         let mut candidates: Vec<(String, PathBuf, usize, i64, f32)> = Vec::new();
 
-        if global_ready {
+        if let Some(gidx) = global_idx {
             // ── Global index path ─────────────────────────────────────────────
-            // One search across the entire history.
-            if let Some(ref gidx) = *global_guard.as_ref().unwrap() {
-                let hits = gidx.search(&qemb.embedding, k, ef.max(k));
-                for hit in hits {
-                    let neighbor_ts  = *hit.payload;
-                    let date         = date_from_ts(neighbor_ts);
-                    let dir          = skill_dir.join(&date);
-                    candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
-                }
+            // Single cross-day search; no per-day file loading needed.
+            let hits = gidx.search(&qemb.embedding, k, ef.max(k));
+            for hit in hits {
+                let neighbor_ts = *hit.payload;
+                let date        = date_from_ts(neighbor_ts);
+                let dir         = skill_dir.join(&date);
+                candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
             }
         } else {
             // ── Per-day index path (fallback) ─────────────────────────────────
@@ -548,7 +547,7 @@ pub fn search_embeddings_in_range(
                     ));
                 }
             }
-            // When using per-day indices we must re-sort globally.
+            // Per-day hits are per-index sorted; re-sort globally and trim.
             candidates.sort_by(|a, b| a.4.partial_cmp(&b.4).unwrap_or(std::cmp::Ordering::Equal));
             candidates.truncate(k);
         }
@@ -560,13 +559,13 @@ pub fn search_embeddings_in_range(
             let db_path = dir.join(SQLITE_FILE);
 
             let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
-                if global_ready {
-                    // Look up by timestamp (the global index doesn't store per-day hnsw_id).
+                if global_idx.is_some() {
+                    // Global index: look up by timestamp (no per-day hnsw_id stored).
                     let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
                     let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
                     (hid as usize, did, dn, m)
                 } else {
-                    // Per-day path: the candidate hnsw_id already refers to this day's index.
+                    // Per-day path: candidate_hnsw_id refers to this day's index.
                     let (did, dn) = get_embedding_meta(&db_path, candidate_hnsw_id as i64);
                     let m = get_embedding_metrics(&db_path, candidate_hnsw_id as i64);
                     (candidate_hnsw_id, did, dn, m)
@@ -760,10 +759,8 @@ pub async fn stream_search_embeddings(
 
         // ── Decide backend ───────────────────────────────────────────────────
         let global_guard = global_arc.lock_or_recover();
-        let global_ready = global_guard
-            .as_ref()
-            .map(|idx| !idx.is_empty())
-            .unwrap_or(false);
+        let global_idx: Option<&LabeledIndex<Cosine, i64>> = global_guard.as_ref();
+        let global_ready = global_idx.map(|i| !i.is_empty()).unwrap_or(false);
 
         let day_indices: Vec<DayIndex> = if global_ready {
             Vec::new()
@@ -801,15 +798,13 @@ pub async fn stream_search_embeddings(
 
             let mut candidates: Vec<(String, PathBuf, usize, i64, f32)> = Vec::new();
 
-            if global_ready {
-                if let Some(ref gidx) = *global_guard {
-                    let hits = gidx.search(&qemb.embedding, k, ef.max(k));
-                    for hit in hits {
-                        let neighbor_ts = *hit.payload;
-                        let date = date_from_ts(neighbor_ts);
-                        let dir  = skill_dir.join(&date);
-                        candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
-                    }
+            if let Some(gidx) = global_idx {
+                let hits = gidx.search(&qemb.embedding, k, ef.max(k));
+                for hit in hits {
+                    let neighbor_ts = *hit.payload;
+                    let date = date_from_ts(neighbor_ts);
+                    let dir  = skill_dir.join(&date);
+                    candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
                 }
             } else {
                 for day in &day_indices {
@@ -829,7 +824,7 @@ pub async fn stream_search_embeddings(
                 let db_path = dir.join(crate::constants::SQLITE_FILE);
 
                 let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
-                    if global_ready {
+                    if global_idx.is_some() {
                         let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
                         let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
                         (hid as usize, did, dn, m)

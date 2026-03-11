@@ -2277,6 +2277,12 @@ const he: Record<string, string> = {
   "chat.hint.running":                  "Enter לשליחה · Shift+Enter לשורה חדשה",
   "chat.hint.loading":                  "טוען — בדוק הגדרות → LLM להתקדמות",
   "chat.hint.stopped":                  "הפעל את השרת בסרגל העליון או בהגדרות → LLM",
+
+  "chat.eeg.label":                     "EEG",
+  "chat.eeg.on":                        "הקשר EEG פעיל — מצב המוח ייכלל בכל בקשה",
+  "chat.eeg.off":                       "הקשר EEG כבוי — לחץ להפעלה",
+  "chat.eeg.noSignal":                  "אין אות EEG",
+  "chat.eeg.contextLabel":              "הזרק מצב מוח EEG בזמן אמת",
 };
 
 export default he;

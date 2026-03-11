@@ -2430,6 +2430,12 @@ const en: Record<string, string> = {
   "chat.hint.loading":                  "Loading — check Settings → LLM for progress",
   "chat.hint.stopped":                  "Start the server in the top bar or Settings → LLM",
 
+  "chat.eeg.label":                     "EEG",
+  "chat.eeg.on":                        "EEG context on — brain state will be included in each prompt",
+  "chat.eeg.off":                       "EEG context off — click to enable brain-state injection",
+  "chat.eeg.noSignal":                  "No EEG signal",
+  "chat.eeg.contextLabel":              "Inject live EEG brain state",
+
   "llm.noFeature":                      "LLM support is not compiled in.",
   "llm.noFeatureHint":                  "Rebuild with --features llm (and optionally llm-metal / llm-cuda / llm-mtmd) to enable the embedded OpenAI-compatible inference server.",
 

@@ -2276,6 +2276,12 @@ const uk: Record<string, string> = {
   "chat.hint.running":                  "Enter для надсилання · Shift+Enter для нового рядка",
   "chat.hint.loading":                  "Завантаження — перевірте Налаштування → LLM",
   "chat.hint.stopped":                  "Запустіть сервер у верхній панелі або Налаштування → LLM",
+
+  "chat.eeg.label":                     "ЕЕГ",
+  "chat.eeg.on":                        "Контекст ЕЕГ увімкнено — стан мозку буде включено в кожен запит",
+  "chat.eeg.off":                       "Контекст ЕЕГ вимкнено — натисніть для увімкнення",
+  "chat.eeg.noSignal":                  "Немає сигналу ЕЕГ",
+  "chat.eeg.contextLabel":              "Вставляти живий стан мозку ЕЕГ",
 };
 
 export default uk;
