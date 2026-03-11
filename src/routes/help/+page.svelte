@@ -247,147 +247,155 @@ the Free Software Foundation, version 3 only. -->
   useWindowTitle("window.title.help");
 </script>
 
-<main class="h-screen overflow-y-auto px-4 py-5 flex flex-col gap-4">
+<main class="h-screen flex flex-col overflow-hidden">
 
-  <!-- ── Search bar ─────────────────────────────────────────────────────── -->
-  <div class="relative">
-    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50 pointer-events-none"
-         viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-    </svg>
-    <input
-      type="search"
-      bind:value={searchQuery}
-      placeholder={t("help.searchPlaceholder")}
-      class="w-full rounded-lg border border-border dark:border-white/[0.07]
-             bg-muted/40 dark:bg-white/[0.04] pl-8 pr-3 py-2
-             text-[0.78rem] text-foreground placeholder:text-muted-foreground/50
-             focus:outline-none focus:ring-1 focus:ring-foreground/20
-             transition-colors"
-    />
-    {#if searchQuery}
-      <button
-        onclick={() => searchQuery = ""}
-        class="absolute right-2.5 top-1/2 -translate-y-1/2
-               text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-        aria-label="Clear search">
-        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <path d="M18 6 6 18M6 6l12 12"/>
-        </svg>
-      </button>
-    {/if}
-  </div>
+  <!-- ── Sticky header: search bar + tab bar ───────────────────────────── -->
+  <div class="shrink-0 px-4 pt-5 pb-0 flex flex-col gap-4">
 
-  <!-- ── Tab bar (scrollable) ──────────────────────────────────────────── -->
-  <div class="flex items-end border-b border-border dark:border-white/[0.07] pb-0">
-    <div class="flex items-end gap-1 overflow-x-auto scrollbar-none min-w-0">
-      {#each TAB_IDS as id, i}
+    <!-- Search bar -->
+    <div class="relative">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50 pointer-events-none"
+           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input
+        type="search"
+        bind:value={searchQuery}
+        placeholder={t("help.searchPlaceholder")}
+        class="w-full rounded-lg border border-border dark:border-white/[0.07]
+               bg-muted/40 dark:bg-white/[0.04] pl-8 pr-3 py-2
+               text-[0.78rem] text-foreground placeholder:text-muted-foreground/50
+               focus:outline-none focus:ring-1 focus:ring-foreground/20
+               transition-colors"
+      />
+      {#if searchQuery}
         <button
-          bind:this={tabBtnEls[i]}
-          onclick={() => goToTab(id)}
-          class="px-3 py-2 text-[0.78rem] font-medium rounded-t-md transition-colors
-                 whitespace-nowrap shrink-0 flex items-center gap-1.5
-                 {tab === id && !searchQuery
-                   ? 'text-foreground border-b-2 border-foreground -mb-px'
-                   : 'text-muted-foreground hover:text-foreground'}"
-          title="{helpTabLabel(id)} ({modKey}{i + 1})">
-          {helpTabLabel(id)}
-          <kbd class="kbd-hint text-[0.56rem] font-mono leading-none px-1 py-0.5
-                      rounded border tabular-nums
-                      {tab === id && !searchQuery
-                        ? 'border-foreground/20 text-foreground/50'
-                        : 'border-transparent text-muted-foreground/40'}">{modKey}{i + 1}</kbd>
+          onclick={() => searchQuery = ""}
+          class="absolute right-2.5 top-1/2 -translate-y-1/2
+                 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+          aria-label="Clear search">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M18 6 6 18M6 6l12 12"/>
+          </svg>
         </button>
-      {/each}
+      {/if}
     </div>
-    <div class="ml-auto flex items-center gap-1 pb-1.5 shrink-0 pl-2">
-      <ThemeToggle />
-      <LanguagePicker />
-      <span class="text-[0.56rem] text-muted-foreground/40 tabular-nums pl-1">
-        v{appVersion}
-      </span>
-      <span class="text-[0.48rem] text-muted-foreground/30 pl-0.5 select-none"
-            title="GNU General Public License v3.0">
-        {t("settings.license")}
-      </span>
-    </div>
-  </div>
 
-  <!-- ── Search results OR active tab ─────────────────────────────────── -->
-  {#if searchQuery.trim()}
-    <!-- Search results panel -->
-    {#if searchResults.length === 0}
-      <div class="flex flex-col items-center justify-center gap-2 py-12 text-center">
-        <svg class="w-8 h-8 text-muted-foreground/30" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="1.5">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-        </svg>
-        <p class="text-[0.78rem] text-muted-foreground">
-          {t("help.searchNoResults").replace("{query}", searchQuery.trim())}
-        </p>
-      </div>
-    {:else}
-      <div class="flex flex-col gap-1.5 pb-6">
-        <p class="text-[0.65rem] uppercase tracking-widest font-semibold text-muted-foreground/60 pl-0.5 pb-1">
-          {searchResults.length} {searchResults.length === 1 ? "result" : "results"}
-        </p>
-        {#each searchResults as item}
-          {@const tabLabel = helpTabLabel(item.tab)}
-          {@const title    = t(item.titleKey as Parameters<typeof t>[0])}
-          {@const body     = t(item.bodyKey  as Parameters<typeof t>[0])}
+    <!-- Tab bar -->
+    <div class="flex items-end border-b border-border dark:border-white/[0.07] pb-0">
+      <div class="flex items-end gap-1 overflow-x-auto scrollbar-none min-w-0">
+        {#each TAB_IDS as id, i}
           <button
-            onclick={() => goToItem(item.tab, item.titleKey)}
-            class="group text-left rounded-xl border border-border dark:border-white/[0.06]
-                   bg-white dark:bg-[#14141e] px-4 py-3 flex flex-col gap-1.5
-                   hover:border-foreground/20 dark:hover:border-white/[0.12]
-                   transition-colors">
-            <!-- Tab badge -->
-            <span class="inline-flex items-center rounded-md
-                         bg-violet-50 dark:bg-violet-500/10
-                         px-2 py-0.5 text-[0.6rem] font-semibold
-                         text-violet-600 dark:text-violet-400 w-fit">
-              {tabLabel}
-            </span>
-            <!-- Title -->
-            <span class="text-[0.78rem] font-semibold text-foreground leading-snug">{title}</span>
-            <!-- Body snippet (first 160 chars) -->
-            <span class="text-[0.72rem] leading-relaxed text-muted-foreground line-clamp-2">
-              {body.length > 160 ? body.slice(0, 160) + "…" : body}
-            </span>
+            bind:this={tabBtnEls[i]}
+            onclick={() => goToTab(id)}
+            class="px-3 py-2 text-[0.78rem] font-medium rounded-t-md transition-colors
+                   whitespace-nowrap shrink-0 flex items-center gap-1.5
+                   {tab === id && !searchQuery
+                     ? 'text-foreground border-b-2 border-foreground -mb-px'
+                     : 'text-muted-foreground hover:text-foreground'}"
+            title="{helpTabLabel(id)} ({modKey}{i + 1})">
+            {helpTabLabel(id)}
+            <kbd class="kbd-hint text-[0.56rem] font-mono leading-none px-1 py-0.5
+                        rounded border tabular-nums
+                        {tab === id && !searchQuery
+                          ? 'border-foreground/20 text-foreground/50'
+                          : 'border-transparent text-muted-foreground/40'}">{modKey}{i + 1}</kbd>
           </button>
         {/each}
       </div>
-    {/if}
-  {:else}
-    <!-- Active tab content -->
-    {#if tab === "dashboard"}
-      <HelpDashboard />
-    {:else if tab === "electrodes"}
-      <HelpElectrodes />
-    {:else if tab === "settings"}
-      <HelpSettings />
-    {:else if tab === "windows"}
-      <HelpWindows />
-    {:else if tab === "api"}
-      <HelpApi />
-    {:else if tab === "tts"}
-      <HelpTts />
-    {:else if tab === "privacy"}
-      <HelpPrivacy />
-    {:else if tab === "references"}
-      <HelpReferences />
-    {:else}
-      <HelpFaqTab />
-    {/if}
-  {/if}
+      <div class="ml-auto flex items-center gap-1 pb-1.5 shrink-0 pl-2">
+        <ThemeToggle />
+        <LanguagePicker />
+        <span class="text-[0.56rem] text-muted-foreground/40 tabular-nums pl-1">
+          v{appVersion}
+        </span>
+        <span class="text-[0.48rem] text-muted-foreground/30 pl-0.5 select-none"
+              title="GNU General Public License v3.0">
+          {t("settings.license")}
+        </span>
+      </div>
+    </div>
 
-  <DisclaimerFooter />
+  </div>
+
+  <!-- ── Scrollable content ────────────────────────────────────────────── -->
+  <div class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+
+    <!-- Search results OR active tab -->
+    {#if searchQuery.trim()}
+      <!-- Search results panel -->
+      {#if searchResults.length === 0}
+        <div class="flex flex-col items-center justify-center gap-2 py-12 text-center">
+          <svg class="w-8 h-8 text-muted-foreground/30" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="1.5">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          <p class="text-[0.78rem] text-muted-foreground">
+            {t("help.searchNoResults").replace("{query}", searchQuery.trim())}
+          </p>
+        </div>
+      {:else}
+        <div class="flex flex-col gap-1.5 pb-6">
+          <p class="text-[0.65rem] uppercase tracking-widest font-semibold text-muted-foreground/60 pl-0.5 pb-1">
+            {searchResults.length} {searchResults.length === 1 ? "result" : "results"}
+          </p>
+          {#each searchResults as item}
+            {@const tabLabel = helpTabLabel(item.tab)}
+            {@const title    = t(item.titleKey as Parameters<typeof t>[0])}
+            {@const body     = t(item.bodyKey  as Parameters<typeof t>[0])}
+            <button
+              onclick={() => goToItem(item.tab, item.titleKey)}
+              class="group text-left rounded-xl border border-border dark:border-white/[0.06]
+                     bg-white dark:bg-[#14141e] px-4 py-3 flex flex-col gap-1.5
+                     hover:border-foreground/20 dark:hover:border-white/[0.12]
+                     transition-colors">
+              <!-- Tab badge -->
+              <span class="inline-flex items-center rounded-md
+                           bg-violet-50 dark:bg-violet-500/10
+                           px-2 py-0.5 text-[0.6rem] font-semibold
+                           text-violet-600 dark:text-violet-400 w-fit">
+                {tabLabel}
+              </span>
+              <!-- Title -->
+              <span class="text-[0.78rem] font-semibold text-foreground leading-snug">{title}</span>
+              <!-- Body snippet (first 160 chars) -->
+              <span class="text-[0.72rem] leading-relaxed text-muted-foreground line-clamp-2">
+                {body.length > 160 ? body.slice(0, 160) + "…" : body}
+              </span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    {:else}
+      <!-- Active tab content -->
+      {#if tab === "dashboard"}
+        <HelpDashboard />
+      {:else if tab === "electrodes"}
+        <HelpElectrodes />
+      {:else if tab === "settings"}
+        <HelpSettings />
+      {:else if tab === "windows"}
+        <HelpWindows />
+      {:else if tab === "api"}
+        <HelpApi />
+      {:else if tab === "tts"}
+        <HelpTts />
+      {:else if tab === "privacy"}
+        <HelpPrivacy />
+      {:else if tab === "references"}
+        <HelpReferences />
+      {:else}
+        <HelpFaqTab />
+      {/if}
+    {/if}
+
+    <DisclaimerFooter />
+
+  </div>
 
 </main>
 
 <style>
-  :global(body) { overflow-y: auto; }
-
   /* Hide scrollbar but keep scroll functional */
   .scrollbar-none {
     -ms-overflow-style: none;
