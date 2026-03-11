@@ -414,6 +414,14 @@ pub struct LlmConfig {
     /// Default: `true`.
     #[serde(default = "default_autoload_mmproj")]
     pub autoload_mmproj: bool,
+
+    /// Enable verbose llama.cpp / clip_model_loader logging to stderr.
+    ///
+    /// When `false` (the default) all internal llama.cpp and clip/mtmd logs are
+    /// silenced so only skill's own `[llm]` lines appear.
+    /// Set to `true` to see raw tensor-load progress and other low-level detail.
+    #[serde(default)]
+    pub verbose: bool,
 }
 
 fn default_llm_parallel()      -> usize { 1 }
@@ -435,6 +443,7 @@ impl Default for LlmConfig {
             mmproj_n_threads: default_mmproj_n_threads(),
             no_mmproj_gpu:    false,
             autoload_mmproj:  default_autoload_mmproj(),
+            verbose:          false,
         }
     }
 }

@@ -859,7 +859,9 @@ fn run_actor(
             (std::mem::ManuallyDrop::new(unsafe { std::mem::zeroed::<LlamaBackend>() }), false)
         }
     };
-    backend_md.void_logs(); // silence llama.cpp's verbose stderr
+    if !config.verbose {
+        backend_md.void_logs(); // silence llama.cpp / ggml verbose stderr
+    }
     let backend: &LlamaBackend = &backend_md;
 
     // ── load model ──
@@ -891,9 +893,34 @@ fn run_actor(
     let _ = app.emit("llm:status", json!({"status":"loading","detail":"warming_up"}));
 
     // ── Multimodal projector (llm-mtmd feature) ───────────────────────────────
+    // mtmd_log_set is part of libmtmd (linked via llama-cpp-4) but not yet
+    // exposed in the llama-cpp-4 Rust wrapper — declare it directly.
+    #[cfg(feature = "llm-mtmd")]
+    extern "C" {
+        fn mtmd_log_set(
+            log_callback: Option<unsafe extern "C" fn(
+                level:     u32,
+                text:      *const std::os::raw::c_char,
+                user_data: *mut   std::os::raw::c_void,
+            )>,
+            user_data: *mut std::os::raw::c_void,
+        );
+    }
+
     #[cfg(feature = "llm-mtmd")]
     let mtmd_ctx: Option<llama_cpp_4::mtmd::MtmdContext> = mmproj_path.as_ref().and_then(|p| {
         use llama_cpp_4::mtmd::{MtmdContext, MtmdContextParams};
+        // Silence clip_model_loader tensor spam before loading the projector.
+        // clip.cpp maintains its own logger (separate from llama_log_set),
+        // so we must call mtmd_log_set explicitly.
+        if !config.verbose {
+            unsafe extern "C" fn noop(
+                _level: u32,
+                _text:  *const std::os::raw::c_char,
+                _ud:    *mut   std::os::raw::c_void,
+            ) {}
+            unsafe { mtmd_log_set(Some(noop), std::ptr::null_mut()) };
+        }
         match MtmdContext::init_from_file(p, &model, MtmdContextParams::default()) {
             Ok(mc) => {
                 llm_info!(&app, &log_buf, log_file,

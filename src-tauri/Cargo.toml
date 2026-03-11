@@ -239,12 +239,6 @@ btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "
 # #[cfg(unix)] is the complete fix.  Patched locally until upstream releases
 # a new version.
 fast-hnsw       = { path = "vendor/fast-hnsw" }
-# Use local llama-cpp-4 / llama-cpp-sys-4 so that the SIGILL fix (0.2.5
-# CMAKE_OSX_ARCHITECTURES / CMAKE_CROSSCOMPILING correction) is always active,
-# even before crates.io propagates the release.  Both our `llm` feature and
-# neutts's backbone resolve to the same local crate — no `links = "llama"` conflict.
-# llama-cpp-4     = { path = "../../../llama-cpp-rs/llama-cpp-4" }
-# llama-cpp-sys-4 = { path = "../../../llama-cpp-rs/llama-cpp-sys-4" }
 # Use local kittentts-rs so that ort is linked statically (no copy-dylibs).
 # The Pyke CDN tarball ships libonnxruntime.a; without copy-dylibs the provider
 # dylibs are not copied next to the binary, which is correct for a Tauri .app bundle.
