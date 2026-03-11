@@ -15,7 +15,7 @@
 
 **NeuroSkill™** is a desktop neurofeedback and brain-computer interface application for the BCI devices. It streams, analyses, embeds, and visualises EXG data in real time — all processing runs locally on-device.
 
-Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 frontend).
+Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 frontend). Runs on **macOS** (Apple Silicon) and **Windows** (x86-64 MSVC).
 
 ---
 
@@ -301,6 +301,52 @@ avahi-browse _skill._tcp
 | `sleep` | `start_utc`, `end_utc` | Sleep staging for a time range |
 | `umap` | `a_start_utc`, `a_end_utc`, `b_start_utc`, `b_end_utc` | Enqueue 3D UMAP projection (non-blocking) |
 | `umap_poll` | `job_id` | Poll for UMAP result |
+| `llm_status` | — | LLM server state, active model, context size, vision flag |
+| `llm_start` | — | Load the active model and start the inference server |
+| `llm_stop` | — | Stop the inference server and free GPU/CPU resources |
+| `llm_catalog` | — | Model catalog with per-entry download states |
+| `llm_download` | `filename` | Start a background model download |
+| `llm_cancel_download` | `filename` | Cancel an in-progress download |
+| `llm_delete` | `filename` | Delete a locally-cached model file |
+| `llm_logs` | — | Last 500 LLM server log lines |
+| `llm_chat` | `messages`, `images?`, `system?`, `temperature?`, `max_tokens?` | Streaming chat completion over WebSocket |
+
+### REST API shortcuts
+
+The same server also exposes HTTP endpoints for every command. The base URL is
+`http://localhost:<port>` where `<port>` matches the WebSocket port (visible in
+Settings → API).
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/status` | Status snapshot |
+| `GET` | `/sessions` | List sessions |
+| `POST` | `/label` | Create label |
+| `POST` | `/notify` | OS notification |
+| `POST` | `/say` | Speak text via TTS |
+| `POST` | `/calibrate` | Open calibration + auto-start |
+| `POST` | `/timer` | Open focus timer + auto-start |
+| `POST` | `/search` | EXG ANN search |
+| `POST` | `/compare` | A/B session comparison |
+| `POST` | `/sleep` | Sleep staging |
+| `POST` | `/umap` | Enqueue UMAP job |
+| `GET` | `/umap/{job_id}` | Poll UMAP result |
+| `GET` | `/calibrations` | List calibration profiles |
+| `POST` | `/calibrations` | Create profile |
+| `GET` | `/calibrations/{id}` | Get profile |
+| `PATCH` | `/calibrations/{id}` | Update profile |
+| `DELETE` | `/calibrations/{id}` | Delete profile |
+| `GET` | `/dnd` | DND automation config + live eligibility |
+| `POST` | `/dnd` | Force-enable/disable DND `{ "enabled": bool }` |
+| `GET` | `/llm/status` | LLM server status (stopped/loading/running) |
+| `POST` | `/llm/start` | Start LLM inference server (loads model) |
+| `POST` | `/llm/stop` | Stop LLM inference server (frees GPU memory) |
+| `GET` | `/llm/catalog` | Model catalog with download states |
+| `POST` | `/llm/download` | Start model download `{ "filename": "…" }` |
+| `POST` | `/llm/cancel_download` | Cancel download `{ "filename": "…" }` |
+| `POST` | `/llm/delete` | Delete cached model `{ "filename": "…" }` |
+| `GET` | `/llm/logs` | Last 500 LLM server log lines |
+| `POST` | `/llm/chat` | Non-streaming chat: `{ message, images?, system?, temperature?, max_tokens? }` → `{ text, finish_reason, tokens }` |
 
 ### Testing
 
@@ -349,6 +395,8 @@ All global shortcuts are fully **configurable** in **Settings → Shortcuts**.
 - [Node.js](https://nodejs.org/) ≥ 18
 - [Tauri CLI v2](https://v2.tauri.app/start/prerequisites/)
 - ZUNA weights from Hugging Face (see below)
+- **macOS** — Xcode Command Line Tools (`xcode-select --install`)
+- **Windows** — Visual Studio Build Tools 2022 with **Desktop development with C++** workload, LLVM, CMake, Git (see [`WINDOWS.md`](WINDOWS.md))
 
 ### Setup
 
@@ -359,14 +407,21 @@ npm install
 # Download ZUNA encoder weights
 python3 -c "from huggingface_hub import snapshot_download; snapshot_download('mariozechner/zuna-EXG-v1')"
 
-# Run in development mode
-cargo tauri dev
+# Run in development mode (builds espeak-ng static lib automatically on first run)
+npm run tauri dev
 ```
 
 ### Build
 
 ```bash
-cargo tauri build
+# macOS / Linux
+npm run tauri build
+
+# Windows
+npm run tauri build
+
+# With extra Tauri flags (e.g. debug bundle)
+npm run tauri build -- --debug
 ```
 
 ### Project Structure
