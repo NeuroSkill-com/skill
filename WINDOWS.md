@@ -65,6 +65,22 @@ winget install Kitware.CMake
 
 Make sure `cmake` is on your `PATH` (the installer offers this as an option).
 
+### 5a. Vulkan SDK (GPU support)
+
+The Windows build compiles llama.cpp with Vulkan GPU offloading (`llm-vulkan`
+feature), which enables LLM inference on NVIDIA, AMD, and Intel Arc GPUs
+without requiring vendor-specific SDKs (no CUDA toolkit, no ROCm).
+
+Download and install the **Vulkan SDK** from https://vulkan.lunarg.com  
+(choose the latest stable "SDK" installer, not just the runtime).
+
+The installer sets `VULKAN_SDK` and adds the SDK `bin\` to your `PATH`
+automatically.  CMake's `find_package(Vulkan)` inside llama.cpp picks this up.
+
+At **runtime** any Vulkan-capable GPU driver works; llama.cpp falls back to
+CPU automatically when no Vulkan device is found, so the binary runs on
+machines without a discrete GPU.
+
 ### 6. Git
 
 Required to clone the espeak-ng source when building the static library:

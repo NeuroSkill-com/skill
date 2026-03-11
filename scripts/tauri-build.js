@@ -93,6 +93,15 @@ if (isMingwTarget) {
 } else if (isWin) {
   // Native Windows — MSVC toolchain via PowerShell.
   // Must run from a Developer PowerShell for VS so lib.exe is on PATH.
+
+  // Ensure the Vulkan SDK is present before building (required by llm-vulkan).
+  // The script is a no-op when the SDK is already installed.
+  console.log("→ ensuring Vulkan SDK is installed …");
+  execSync(
+    "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\install-vulkan-sdk.ps1",
+    { cwd: root, stdio: "inherit" }
+  );
+
   console.log("→ building espeak-ng static library (MSVC) …");
   execSync(
     "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build-espeak-static.ps1",
@@ -137,6 +146,28 @@ if (isMingwTarget) {
     console.log(
       "→ Windows: injecting --no-bundle (skips post-build signing crash; " +
       "use release-windows.ps1 for full NSIS packaging)"
+    );
+  }
+
+  // ── Windows: enable Vulkan GPU offloading for LLM inference ────────────────
+  //
+  // Without an explicit GPU feature flag llama-cpp-4 compiles in CPU-only
+  // mode.  Vulkan is the broadest Windows GPU backend — it covers NVIDIA,
+  // AMD, and Intel Arc GPUs without requiring vendor-specific SDKs (no CUDA
+  // toolkit, no ROCm install needed at build time beyond the Vulkan SDK /
+  // headers that ship with the Windows SDK and most GPU driver packages).
+  //
+  // The Vulkan SDK (https://vulkan.lunarg.com) must be installed so that
+  // the CMake find-module inside llama.cpp can locate the Vulkan headers and
+  // the vulkan-1.lib import library.  At runtime, any Vulkan-capable GPU
+  // driver works; llama.cpp falls back to CPU automatically if no Vulkan
+  // device is found.
+  //
+  // Only inject the flag when the caller hasn't already passed --features.
+  if (!subArgs.includes("--features")) {
+    platformFlags = [...platformFlags, "--features", "llm-vulkan"];
+    console.log(
+      "→ Windows: injecting --features llm-vulkan (Vulkan GPU offloading for LLM)"
     );
   }
 
