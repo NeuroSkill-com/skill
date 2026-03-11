@@ -24,7 +24,6 @@
 //! ```
 
 use std::{
-    fs::OpenOptions,
     path::Path,
     sync::RwLock,
 };
@@ -141,6 +140,7 @@ macro_rules! skill_log {
 /// Not available on non-Unix targets (Windows stub below).
 #[cfg(unix)]
 pub fn tee_stderr_to_file(log_path: &Path) {
+    use std::fs::OpenOptions;
     use std::io::{Read, Write};
     use std::os::unix::io::FromRawFd;
     use std::sync::atomic::{AtomicBool, Ordering};
