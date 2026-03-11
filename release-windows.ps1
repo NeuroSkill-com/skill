@@ -275,8 +275,26 @@ Run "npm" @("ci", "--prefer-offline")
 Log "Building frontend…"
 Run "npm" @("run", "build")
 
-Log "Building Rust binary (target: $TAURI_TARGET)…"
-$cargoBuildArgs = @("build", "--release", "--target", $TAURI_TARGET)
+# ── Step 0: Ensure Vulkan SDK is installed ────────────────────────────────────
+#
+# The llm-vulkan feature requires the LunarG Vulkan SDK at build time.
+# install-vulkan-sdk.ps1 is a no-op when the SDK is already present; when it
+# is missing it downloads and silently installs the latest version (~200 MB).
+
+Log "Ensuring Vulkan SDK is installed…"
+if ($DryRun) {
+    Dry "powershell -NoProfile -ExecutionPolicy Bypass -File $REPO_ROOT\scripts\install-vulkan-sdk.ps1"
+} else {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File "$REPO_ROOT\scripts\install-vulkan-sdk.ps1"
+    if ($LASTEXITCODE -ne 0) { Fail "install-vulkan-sdk.ps1 failed (exit $LASTEXITCODE)" }
+}
+
+Log "Building Rust binary (target: $TAURI_TARGET, GPU: Vulkan)…"
+# llm-vulkan enables Vulkan GPU offloading for LLM inference (covers NVIDIA,
+# AMD, and Intel Arc without requiring the CUDA toolkit).  Requires the Vulkan
+# SDK (https://vulkan.lunarg.com) at build time; falls back to CPU at runtime
+# when no Vulkan-capable device is present.
+$cargoBuildArgs = @("build", "--release", "--target", $TAURI_TARGET, "--features", "llm-vulkan")
 if ($DryRun) {
     Dry "cargo $($cargoBuildArgs -join ' ')"
 } else {
@@ -298,7 +316,7 @@ Ok "Build complete"
 
 Log "Bundling NSIS installer…"
 
-$bundleArgs = @("tauri", "bundle", "--target", $TAURI_TARGET, "--bundle", "nsis", "--no-sign")
+$bundleArgs = @("tauri", "bundle", "--target", $TAURI_TARGET, "--bundle", "nsis", "--no-sign", "--features", "llm-vulkan")
 if ($DryRun) {
     Dry "npx $($bundleArgs -join ' ')"
 } else {
