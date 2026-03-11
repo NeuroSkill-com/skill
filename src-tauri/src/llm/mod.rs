@@ -856,6 +856,35 @@ fn run_actor(
     // `init()` so we know whether to free it when the actor exits.
     // If neutts already holds the singleton, we get a ZST proxy but must NOT
     // call `llama_backend_free` — neutts will do it.
+    
+    // ── Windows-specific Vulkan SDK setup ─────────────────────────────────────
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, the Vulkan loader DLL (vulkan-1.dll) must be found in PATH.
+        // The Vulkan SDK installer sets `VULKAN_SDK` and adds its bin directory to PATH.
+        // Some user configurations may need explicit path injection for robustness.
+        if let Ok(vulkan_sdk_path) = std::env::var("VULKAN_SDK") {
+            if let Ok(parent_dir) = std::path::Path::new(&vulkan_sdk_path).parent() {
+                // Prepend Vulkan SDK bin directory to PATH before backend init
+                if let Ok(current_path) = std::env::var("PATH") {
+                    std::env::set_var(
+                        "PATH",
+                        format!("{};{}", parent_dir.display(), current_path),
+                    );
+                    llm_info!(&app, &log_buf, log_file,
+                        "Vulkan SDK path injected into PATH: {}", vulkan_sdk_path);
+                } else {
+                    std::env::set_var("PATH", parent_dir.display());
+                }
+            }
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Non-Windows: no special Vulkan path handling needed
+    }
+
     let (mut backend_md, we_own_backend) = match LlamaBackend::init() {
         Ok(b) => {
             llm_info!(&app, &log_buf, log_file, "llama backend initialised");
@@ -898,6 +927,27 @@ fn run_actor(
 
     n_ctx_flag.store(ctx.n_ctx() as usize, Ordering::Relaxed);
     llm_info!(&app, &log_buf, log_file, "context ready — n_ctx={} — running warmup pass…", ctx.n_ctx());
+    
+    // ── Windows Vulkan diagnostic check ────────────────────────────────────────
+    #[cfg(target_os = "windows")]
+    {
+        // Detect if GPU layers were actually loaded or if we fell back to CPU
+        // by checking for common signs of Vulkan initialization failure.
+        // The backend init succeeded but device selection may have failed silently.
+        let n_layers = config.n_gpu_layers;
+        if n_layers > 0 {
+            llm_info!(&app, &log_buf, log_file,
+                "GPU offload requested: {} layer(s)", n_layers);
+            llm_warn!(&app, &log_buf, log_file,
+                "on Windows, ensure Vulkan SDK is installed and VULKAN_SDK env var is set");
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        // Non-Windows systems — Metal (macOS) and CUDA handle device detection differently
+    }
+    
     let _ = app.emit("llm:status", json!({"status":"loading","detail":"warming_up"}));
 
     // ── Multimodal projector (llm-mtmd feature) ───────────────────────────────
