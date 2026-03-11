@@ -244,6 +244,62 @@ jobs:
             exit 1
           }
 
+      # ── Standalone LLVM for bindgen ───────────────────────────────────────────
+      # ── Standalone LLVM for bindgen ───────────────────────────────────────────
+      # VS's bundled Clang 19 (added to PATH by ilammy/msvc-dev-cmd) is an
+      # MSVC-compat build that omits the __builtin_ia32_* intrinsics required
+      # by its own mmintrin.h, causing bindgen (used by llama-cpp-sys-4) to
+      # crash with "use of undeclared identifier '__builtin_ia32_vec_init_v2si'"
+      # and ~20 similar errors before giving up entirely.
+      #
+      # clang-sys checks LIBCLANG_PATH *before* PATH, so we point it at the
+      # standalone LLVM installation whose libclang.dll ships correct headers.
+      #
+      # The install tree (C:\Program Files\LLVM) is cached by version string.
+      # Cache hit:  install script detects the tree and skips Chocolatey entirely.
+      # Cache miss: choco installs LLVM (~200 MB, ~2 min), then the populated
+      #             tree is stored for future runs.
+      # To upgrade LLVM, bump LLVM_VERSION below — the new key busts the cache.
+      - name: Cache LLVM
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: C:\Program Files\LLVM
+          key: windows-llvm-18.1.8
+
+      - name: Install LLVM + export LIBCLANG_PATH
+        shell: powershell
+        run: |
+          # Install only on a cache miss (the directory is absent or empty).
+          if (-not (Test-Path "C:\Program Files\LLVM\bin")) {
+            Write-Host "Cache miss — installing LLVM 18.1.8 via Chocolatey..."
+            choco install llvm --version=18.1.8 --no-progress -y | Out-Null
+          } else {
+            Write-Host "Cache hit — LLVM already present at C:\Program Files\LLVM"
+          }
+
+          # Locate libclang.dll (bin\ on most builds, lib\ on some).
+          $found = @(
+            "C:\Program Files\LLVM\bin\libclang.dll",
+            "C:\Program Files\LLVM\lib\libclang.dll"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $found) {
+            $found = Get-ChildItem "C:\Program Files\LLVM" -Recurse -Filter "libclang.dll" `
+                       -ErrorAction SilentlyContinue |
+                       Select-Object -First 1 -ExpandProperty FullName
+          }
+
+          if (-not $found) {
+            Write-Error "libclang.dll not found under C:\Program Files\LLVM"
+            exit 1
+          }
+
+          $libclangDir = Split-Path $found
+          "LIBCLANG_PATH=$libclangDir" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] LIBCLANG_PATH=$libclangDir  (libclang.dll at $found)"
+
       # ── Build frontend ────────────────────────────────────────────────────────
       - name: Build frontend
         run: npm run build
@@ -267,14 +323,10 @@ jobs:
           # re-exposing it here makes it visible to CMake's FindVulkan module
           # and to llama.cpp's build system inside the cargo build invocation.
           VULKAN_SDK: ${{ env.VULKAN_SDK }}
-          # ilammy/msvc-dev-cmd prepends VS's bundled LLVM/Clang 19 to PATH.
-          # bindgen (used by llama-cpp-sys-4) calls clang-sys which picks up
-          # that libclang.dll — VS's Clang 19 in MSVC-compat mode does not
-          # implement the __builtin_ia32_* MMX intrinsics that mmintrin.h
-          # requires, causing bindgen to crash before generating any bindings.
-          # LIBCLANG_PATH is checked by clang-sys before PATH, so pointing it
-          # at the runner's standalone LLVM bypasses VS's broken copy entirely.
-          LIBCLANG_PATH: C:\Program Files\LLVM\bin
+          # Set by "Ensure standalone LLVM and export LIBCLANG_PATH" above.
+          # Points clang-sys at the standalone LLVM's libclang.dll, bypassing
+          # VS's bundled Clang 19 which lacks __builtin_ia32_* MMX intrinsics.
+          LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
         run: |
           # Build the Tauri --config JSON.
           # Include Windows signing fields only when a certificate is available.
