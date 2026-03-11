@@ -644,8 +644,7 @@ fn bundle_espeak_data_windows() {
             choco_share,
             msys_share,
         ])
-        .filter(|p| !p.is_empty() && Path::new(p.as_str()).is_dir())
-        .next()
+        .find(|p| !p.is_empty() && Path::new(p.as_str()).is_dir())
         .unwrap_or_else(|| {
             panic!(
                 "build.rs: espeak-ng-data/ not found.\n\
@@ -729,6 +728,7 @@ fn clear_readonly(path: &Path) {
     {
         if let Ok(meta) = std::fs::metadata(path) {
             let mut perms = meta.permissions();
+            #[allow(clippy::permissions_set_readonly_false)]
             perms.set_readonly(false);
             std::fs::set_permissions(path, perms).ok();
         }
