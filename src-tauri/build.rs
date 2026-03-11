@@ -770,7 +770,7 @@ fn setup_vulkan_sdk_windows() {
     // Download Vulkan SDK installer
     println!("cargo:warning=Downloading Vulkan SDK from {}", installer_url);
     let download_status = Command::new("powershell.exe")
-        .args(&[
+        .args([
             "-NoProfile",
             "-Command",
             &format!(
@@ -794,7 +794,7 @@ fn setup_vulkan_sdk_windows() {
     // Run installer (silent mode)
     println!("cargo:warning=Running Vulkan SDK installer...");
     let install_status = Command::new(&installer_path)
-        .args(&["/S"])
+        .args(["/S"])
         .status();
     
     match install_status {
@@ -818,7 +818,7 @@ fn setup_vulkan_sdk_linux() {
     println!("cargo:warning=Checking for Vulkan SDK...");
     
     let pkg_config_output = Command::new("pkg-config")
-        .args(&["--cflags", "--libs", "vulkan"])
+        .args(["--cflags", "--libs", "vulkan"])
         .output();
     
     if let Ok(output) = pkg_config_output {
@@ -829,8 +829,7 @@ fn setup_vulkan_sdk_linux() {
             
             // Parse pkg-config output for library paths
             for token in libs_output.split_whitespace() {
-                if token.starts_with("-L") {
-                    let path = &token[2..];
+                if let Some(path) = token.strip_prefix("-L") {
                     println!("cargo:rustc-link-search={}", path);
                 }
             }
@@ -842,7 +841,7 @@ fn setup_vulkan_sdk_linux() {
     println!("cargo:warning=Vulkan SDK not found. Attempting to install via apt...");
     
     let install_status = Command::new("sudo")
-        .args(&["apt-get", "install", "-y", "libvulkan-dev", "vulkan-tools"])
+        .args(["apt-get", "install", "-y", "libvulkan-dev", "vulkan-tools"])
         .status();
     
     match install_status {
