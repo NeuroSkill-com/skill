@@ -3,11 +3,11 @@
 # Ensures the LunarG Vulkan SDK is present on Windows before a build that
 # uses the `llm-vulkan` feature flag.
 #
-# Detection order (first hit wins — the script exits immediately if found):
+# Detection order (first hit wins -- the script exits immediately if found):
 #   1. VULKAN_SDK environment variable points to a directory that contains
 #      Include\vulkan\vulkan.h
 #   2. Registry key set by the LunarG installer
-#      HKLM:\SOFTWARE\LunarG\Vulkan SDK  →  InstallPath value
+#      HKLM:\SOFTWARE\LunarG\Vulkan SDK  ->  InstallPath value
 #   3. Default install root  C:\VulkanSDK\<version>\  (newest version picked)
 #
 # When none of those are found the script:
@@ -17,7 +17,7 @@
 #     current process so that cargo / CMake pick it up in the same shell.
 #
 # Output on success (either path):
-#   $env:VULKAN_SDK  — set to the SDK root for the current process
+#   $env:VULKAN_SDK  -- set to the SDK root for the current process
 #
 # Requirements:
 #   PowerShell 5.1+, internet access (first run only), admin rights
@@ -35,7 +35,7 @@ function Ok   ($msg) { Write-Host "   $msg"   -ForegroundColor Green }
 function Warn ($msg) { Write-Host "   $msg"   -ForegroundColor Yellow }
 function Die  ($msg) { Write-Host "`nERROR: $msg" -ForegroundColor Red; exit 1 }
 
-# ── Detection helpers ─────────────────────────────────────────────────────────
+# -- Detection helpers ---------------------------------------------------------
 
 # Returns the SDK root path if the directory looks like a valid Vulkan SDK
 # (contains Include\vulkan\vulkan.h), otherwise returns $null.
@@ -53,7 +53,7 @@ function Find-InstalledVulkanSdk {
     $candidate = Test-VulkanRoot $env:VULKAN_SDK
     if ($candidate) { return $candidate }
 
-    # 2. Registry — LunarG installer writes InstallPath here.
+    # 2. Registry -- LunarG installer writes InstallPath here.
     foreach ($reg in @(
         "HKLM:\SOFTWARE\LunarG\Vulkan SDK",
         "HKLM:\SOFTWARE\WOW6432Node\LunarG\Vulkan SDK"
@@ -65,7 +65,7 @@ function Find-InstalledVulkanSdk {
         }
     }
 
-    # 3. Default install root — pick the highest version number.
+    # 3. Default install root -- pick the highest version number.
     $vulkanBase = "C:\VulkanSDK"
     if (Test-Path $vulkanBase) {
         $latest = Get-ChildItem $vulkanBase -Directory |
@@ -80,7 +80,7 @@ function Find-InstalledVulkanSdk {
     return $null
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------------
 
 Step "Checking for Vulkan SDK"
 
@@ -95,9 +95,9 @@ if ($sdkRoot) {
     exit 0
 }
 
-# ── Download ──────────────────────────────────────────────────────────────────
+# -- Download ------------------------------------------------------------------
 
-Step "Vulkan SDK not found — downloading latest installer from sdk.lunarg.com"
+Step "Vulkan SDK not found -- downloading latest installer from sdk.lunarg.com"
 Warn "(This is a ~200 MB download; it only happens once.)"
 
 $downloadUrl  = "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-sdk.exe"
@@ -117,10 +117,10 @@ try {
 $sizeMB = [math]::Round((Get-Item $installerPath).Length / 1MB, 1)
 Ok "Downloaded $sizeMB MB"
 
-# ── Install ───────────────────────────────────────────────────────────────────
+# -- Install -------------------------------------------------------------------
 
 Step "Installing Vulkan SDK silently (/S)"
-Warn "(Requires administrator privileges — UAC may prompt.)"
+Warn "(Requires administrator privileges -- UAC may prompt.)"
 
 try {
     $proc = Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -PassThru
@@ -134,7 +134,7 @@ try {
 
 Ok "Installer finished"
 
-# ── Post-install: refresh env + verify ───────────────────────────────────────
+# -- Post-install: refresh env + verify ---------------------------------------
 #
 # The installer sets VULKAN_SDK as a machine-level environment variable, but
 # that only takes effect in NEW processes.  We probe the known install root
