@@ -4,6 +4,21 @@ All notable changes to NeuroSkill™ are documented here.
 
 ---
 
+## [Unreleased]
+
+### CI / Build
+
+- **Windows release — wrong `link.exe`** — the GitHub-hosted `windows-latest`
+  runner places `C:\Program Files\Git\usr\bin` (Git for Windows' Unix `link`
+  utility) before the MSVC toolchain in `PATH`; Rust's MSVC backend resolved
+  `link.exe` to that Unix binary, which rejected all MSVC linker flags with
+  an "extra operand" error; fixed by adding a PowerShell step immediately
+  after `ilammy/msvc-dev-cmd` in `release-windows.yml` that strips every
+  `Git\usr\bin`-like entry from `PATH` via `$GITHUB_ENV`, ensuring the MSVC
+  `link.exe` wins for all subsequent steps
+
+---
+
 ## [0.0.16] — 2026-03-11
 
 ### EEG / Embeddings

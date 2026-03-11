@@ -643,22 +643,23 @@ fn register_snapshot(
     //   snapshots/{commit}/{filename}  →  ../../blobs/{sha256}
     // For filenames with subdirs (depth > 1) each extra component needs
     // an additional `../`.
-    let blob_name = blob_path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("");
-    let depth = std::path::Path::new(filename).components().count(); // ≥ 1
-    let parents = "../".repeat(depth + 1); // +1 for the commit_sha dir level
-    let relative_target = format!("{parents}blobs/{blob_name}");
-
     // On Unix a relative symlink is the natural representation.
     // On Windows, symlinks require Developer Mode or admin privileges, so we
     // use a hardlink instead (both paths are on the same NTFS volume, which
     // is always true for files within the same HF Hub cache directory).
     // On other platforms we fall back to a file copy (WASM, etc.).
     #[cfg(unix)]
-    std::os::unix::fs::symlink(&relative_target, &snapshot_link)
-        .map_err(|e| format!("create symlink: {e}"))?;
+    {
+        let blob_name = blob_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        let depth = std::path::Path::new(filename).components().count(); // ≥ 1
+        let parents = "../".repeat(depth + 1); // +1 for the commit_sha dir level
+        let relative_target = format!("{parents}blobs/{blob_name}");
+        std::os::unix::fs::symlink(&relative_target, &snapshot_link)
+            .map_err(|e| format!("create symlink: {e}"))?;
+    }
 
     #[cfg(windows)]
     std::fs::hard_link(blob_path, &snapshot_link)

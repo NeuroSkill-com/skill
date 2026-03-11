@@ -1711,32 +1711,37 @@ pub(crate) fn download_hf_weights(
     logger:             &Arc<SkillLogger>,
 ) -> Option<(PathBuf, PathBuf)> {
     use hf_hub::api::sync::Api;
+    use std::io::{Read, Write};
     use std::sync::atomic::Ordering;
+
+    const ENDPOINT: &str = "https://huggingface.co";
 
     skill_log!(logger, "embedder", "ZUNA weights not in cache — downloading from HuggingFace: {hf_repo}");
 
     // ── Mark download in progress ────────────────────────────────────────────
     {
         let mut st = status.lock_or_recover();
-        st.downloading_weights  = true;
+        st.downloading_weights    = true;
         st.download_needs_restart = false;
-        st.download_status_msg  = Some(format!("Connecting to HuggingFace ({hf_repo})…"));
+        st.download_progress      = 0.0;
+        st.download_status_msg    = Some(format!("Connecting to HuggingFace ({hf_repo})…"));
     }
 
-    // ── Build the HF Hub API client ─────────────────────────────────────────
+    // ── Build the HF Hub API client (used only for config.json) ─────────────
     let api = match Api::new() {
         Ok(a)  => a,
         Err(e) => {
             skill_log!(logger, "embedder", "hf-hub Api::new() failed: {e}");
             let mut st = status.lock_or_recover();
             st.downloading_weights = false;
+            st.download_progress   = 0.0;
             st.download_status_msg = Some(format!("HF Hub init failed: {e}"));
             return None;
         }
     };
     let repo = api.model(hf_repo.to_string());
 
-    // ── Download config.json (small — comes first for quick feedback) ────────
+    // ── Download config.json (small — use hf_hub as normal) ─────────────────
     {
         let mut st = status.lock_or_recover();
         st.download_status_msg = Some(format!("Downloading {ZUNA_CONFIG_FILE}…"));
@@ -1747,6 +1752,7 @@ pub(crate) fn download_hf_weights(
             skill_log!(logger, "embedder", "failed to download {ZUNA_CONFIG_FILE}: {e}");
             let mut st = status.lock_or_recover();
             st.downloading_weights = false;
+            st.download_progress   = 0.0;
             st.download_status_msg = Some(format!("Download failed ({ZUNA_CONFIG_FILE}): {e}"));
             return None;
         }
@@ -1757,22 +1763,309 @@ pub(crate) fn download_hf_weights(
         skill_log!(logger, "embedder", "download cancelled by user after config.json");
         let mut st = status.lock_or_recover();
         st.downloading_weights = false;
+        st.download_progress   = 0.0;
         st.download_status_msg = Some("Download cancelled.".to_string());
         return None;
     }
 
-    // ── Download the weights safetensors (large — may take a while) ──────────
+    // ── Resolve the HF Hub cache root (same logic as resolve_hf_weights) ─────
+    let cache_root = hf_hub::Cache::from_env().path().to_path_buf();
+    let folder     = format!("models--{}", hf_repo.replace('/', "--"));
+    let model_dir  = cache_root.join(&folder);
+    let blobs_dir  = model_dir.join("blobs");
+    let refs_dir   = model_dir.join("refs");
+
+    if let Err(e) = std::fs::create_dir_all(&blobs_dir)
+        .and(std::fs::create_dir_all(&refs_dir))
     {
         let mut st = status.lock_or_recover();
-        st.download_status_msg = Some(format!("Downloading {ZUNA_WEIGHTS_FILE} (large file)…"));
+        st.downloading_weights = false;
+        st.download_progress   = 0.0;
+        st.download_status_msg = Some(format!("Failed to create cache dirs: {e}"));
+        return None;
     }
-    let weights_path = match repo.get(ZUNA_WEIGHTS_FILE) {
-        Ok(p)  => { skill_log!(logger, "embedder", "✓ {ZUNA_WEIGHTS_FILE} → {}", p.display()); p }
+
+    // ── Fetch HF metadata: commit SHA + blob SHA256 + file size ─────────────
+    {
+        let mut st = status.lock_or_recover();
+        st.download_status_msg = Some(format!("Fetching metadata for {ZUNA_WEIGHTS_FILE}…"));
+    }
+
+    let hf_token = std::env::var("HF_TOKEN").ok()
+        .or_else(|| std::env::var("HUGGING_FACE_HUB_TOKEN").ok());
+
+    let meta_agent = ureq::AgentBuilder::new()
+        .redirects(10)
+        .timeout(std::time::Duration::from_secs(30))
+        .build();
+    let dl_agent = ureq::AgentBuilder::new()
+        .redirects(10)
+        .timeout_connect(std::time::Duration::from_secs(30))
+        .timeout_read(std::time::Duration::from_secs(300))
+        .build();
+
+    let auth = |req: ureq::Request| -> ureq::Request {
+        match &hf_token {
+            Some(tok) => req.set("Authorization", &format!("Bearer {tok}")),
+            None      => req,
+        }
+    };
+
+    let api_url  = format!("{ENDPOINT}/api/models/{hf_repo}?blobs=1");
+    let api_resp = match auth(meta_agent.get(&api_url))
+        .set("User-Agent", "skill-app/1.0")
+        .call()
+    {
+        Ok(r)  => r,
         Err(e) => {
-            skill_log!(logger, "embedder", "failed to download {ZUNA_WEIGHTS_FILE}: {e}");
+            skill_log!(logger, "embedder", "HF metadata API error: {e}");
             let mut st = status.lock_or_recover();
             st.downloading_weights = false;
-            st.download_status_msg = Some(format!("Download failed ({ZUNA_WEIGHTS_FILE}): {e}"));
+            st.download_progress   = 0.0;
+            st.download_status_msg = Some(format!("Metadata fetch failed: {e}"));
+            return None;
+        }
+    };
+
+    let info: serde_json::Value = match api_resp.into_json() {
+        Ok(v)  => v,
+        Err(e) => {
+            skill_log!(logger, "embedder", "HF metadata JSON parse error: {e}");
+            let mut st = status.lock_or_recover();
+            st.downloading_weights = false;
+            st.download_progress   = 0.0;
+            st.download_status_msg = Some(format!("Metadata parse failed: {e}"));
+            return None;
+        }
+    };
+
+    let commit_sha = info["sha"].as_str().unwrap_or("main").to_string();
+
+    let file_meta = info["siblings"]
+        .as_array()
+        .and_then(|s| s.iter().find(|e| e["rfilename"].as_str() == Some(ZUNA_WEIGHTS_FILE)));
+
+    let (blob_sha, remote_size) = match file_meta {
+        Some(m) => {
+            let sha = m["lfs"]["sha256"]
+                .as_str()
+                .map(|s| s.trim_start_matches("sha256:").to_string());
+            let size = m["lfs"]["size"].as_u64().or_else(|| m["size"].as_u64());
+            match (sha, size) {
+                (Some(s), Some(n)) => (s, n),
+                _ => {
+                    // Non-LFS file or missing metadata — fall back to hf_hub
+                    skill_log!(logger, "embedder",
+                        "LFS metadata missing for {ZUNA_WEIGHTS_FILE}, falling back to hf_hub");
+                    {
+                        let mut st = status.lock_or_recover();
+                        st.download_status_msg =
+                            Some(format!("Downloading {ZUNA_WEIGHTS_FILE}…"));
+                    }
+                    let weights_path = match repo.get(ZUNA_WEIGHTS_FILE) {
+                        Ok(p)  => p,
+                        Err(e) => {
+                            let mut st = status.lock_or_recover();
+                            st.downloading_weights = false;
+                            st.download_progress   = 0.0;
+                            st.download_status_msg =
+                                Some(format!("Download failed ({ZUNA_WEIGHTS_FILE}): {e}"));
+                            return None;
+                        }
+                    };
+                    let mut st = status.lock_or_recover();
+                    st.downloading_weights    = false;
+                    st.download_progress      = 1.0;
+                    st.download_status_msg    = None;
+                    st.weights_found          = true;
+                    st.weights_path           = Some(weights_path.display().to_string());
+                    st.download_needs_restart = mark_needs_restart;
+                    return Some((weights_path, config_path));
+                }
+            }
+        }
+        None => {
+            let mut st = status.lock_or_recover();
+            st.downloading_weights = false;
+            st.download_progress   = 0.0;
+            st.download_status_msg = Some(
+                format!("{ZUNA_WEIGHTS_FILE}: not listed in {hf_repo} manifest")
+            );
+            return None;
+        }
+    };
+
+    // ── Determine resume offset ───────────────────────────────────────────────
+    let blob_path       = blobs_dir.join(&blob_sha);
+    let incomplete_path = blobs_dir.join(format!("{blob_sha}.incomplete"));
+
+    // Already fully downloaded by a previous run — just re-register and return.
+    if blob_path.exists() && blob_path.metadata().map(|m| m.len()).unwrap_or(0) >= remote_size {
+        skill_log!(logger, "embedder", "✓ {ZUNA_WEIGHTS_FILE} already in blob cache");
+        let weights_path = match register_hf_snapshot(
+            &model_dir, &refs_dir, &commit_sha, ZUNA_WEIGHTS_FILE, &blob_path,
+        ) {
+            Ok(p)  => p,
+            Err(e) => {
+                let mut st = status.lock_or_recover();
+                st.downloading_weights = false;
+                st.download_progress   = 0.0;
+                st.download_status_msg = Some(format!("Snapshot registration failed: {e}"));
+                return None;
+            }
+        };
+        let mut st = status.lock_or_recover();
+        st.downloading_weights    = false;
+        st.download_progress      = 1.0;
+        st.download_status_msg    = None;
+        st.weights_found          = true;
+        st.weights_path           = Some(weights_path.display().to_string());
+        st.download_needs_restart = mark_needs_restart;
+        return Some((weights_path, config_path));
+    }
+
+    let resume_from: u64 = incomplete_path.metadata().map(|m| m.len()).unwrap_or(0);
+
+    {
+        let mut st = status.lock_or_recover();
+        st.download_progress = (resume_from as f32 / remote_size.max(1) as f32).min(0.99);
+        st.download_status_msg = Some(if resume_from > 0 {
+            format!(
+                "Resuming {ZUNA_WEIGHTS_FILE} from {:.0} / {:.0} MB…",
+                resume_from as f64 / 1_048_576.0,
+                remote_size as f64 / 1_048_576.0,
+            )
+        } else {
+            format!(
+                "Downloading {ZUNA_WEIGHTS_FILE} ({:.0} MB)…",
+                remote_size as f64 / 1_048_576.0,
+            )
+        });
+    }
+
+    // ── Issue GET (with Range header when resuming) ──────────────────────────
+    let file_url = format!("{ENDPOINT}/{hf_repo}/resolve/main/{ZUNA_WEIGHTS_FILE}");
+    let mut get  = auth(dl_agent.get(&file_url)).set("User-Agent", "skill-app/1.0");
+    if resume_from > 0 {
+        get = get.set("Range", &format!("bytes={resume_from}-"));
+    }
+
+    let resp = match get.call() {
+        Ok(r)  => r,
+        Err(e) => {
+            skill_log!(logger, "embedder", "HTTP error downloading {ZUNA_WEIGHTS_FILE}: {e}");
+            let mut st = status.lock_or_recover();
+            st.downloading_weights = false;
+            st.download_progress   = 0.0;
+            st.download_status_msg = Some(format!("Download failed: {e}"));
+            return None;
+        }
+    };
+
+    let http_status  = resp.status();
+    let writing_from = if http_status == 206 { resume_from } else { 0 };
+
+    // ── Open (or create) the .incomplete file ────────────────────────────────
+    let mut file = match std::fs::OpenOptions::new()
+        .create(true).write(true)
+        .append(writing_from > 0)
+        .truncate(writing_from == 0)
+        .open(&incomplete_path)
+    {
+        Ok(f)  => f,
+        Err(e) => {
+            let mut st = status.lock_or_recover();
+            st.downloading_weights = false;
+            st.download_progress   = 0.0;
+            st.download_status_msg = Some(format!("Cannot open temp file: {e}"));
+            return None;
+        }
+    };
+
+    // ── Stream response → disk, updating progress each 128 KB chunk ─────────
+    let mut reader  = resp.into_reader();
+    let mut buf     = vec![0u8; 128 * 1024];
+    let mut written = writing_from;
+    let total       = remote_size.max(1);
+
+    loop {
+        let n = match reader.read(&mut buf) {
+            Ok(n)  => n,
+            Err(e) => {
+                skill_log!(logger, "embedder", "read error: {e}");
+                let mut st = status.lock_or_recover();
+                st.downloading_weights = false;
+                st.download_progress   = 0.0;
+                st.download_status_msg = Some(format!("Read error: {e}"));
+                return None;
+            }
+        };
+        if n == 0 { break; }
+
+        if let Err(e) = file.write_all(&buf[..n]) {
+            let mut st = status.lock_or_recover();
+            st.downloading_weights = false;
+            st.download_progress   = 0.0;
+            st.download_status_msg = Some(format!("Write error: {e}"));
+            return None;
+        }
+        written += n as u64;
+
+        {
+            let mut st = status.lock_or_recover();
+            st.download_progress   = (written as f32 / total as f32).min(0.99);
+            st.download_status_msg = Some(format!(
+                "{:.0} / {:.0} MB",
+                written  as f64 / 1_048_576.0,
+                total    as f64 / 1_048_576.0,
+            ));
+        }
+
+        if cancel.load(Ordering::Relaxed) {
+            skill_log!(logger, "embedder", "download cancelled by user");
+            let mut st = status.lock_or_recover();
+            st.downloading_weights = false;
+            st.download_progress   = 0.0;
+            st.download_status_msg = Some("Download cancelled.".to_string());
+            return None;
+        }
+    }
+    drop(file);
+
+    // ── Sanity-check size ────────────────────────────────────────────────────
+    let final_size = incomplete_path.metadata().map(|m| m.len()).unwrap_or(0);
+    if final_size < remote_size {
+        skill_log!(logger, "embedder",
+            "incomplete download: {final_size} < {remote_size} bytes");
+        let mut st = status.lock_or_recover();
+        st.downloading_weights = false;
+        st.download_progress   = final_size as f32 / remote_size as f32;
+        st.download_status_msg = Some(format!(
+            "Incomplete download ({final_size} / {remote_size} bytes) — retry to resume."
+        ));
+        return None;
+    }
+
+    // ── Promote .incomplete → blob ───────────────────────────────────────────
+    if let Err(e) = std::fs::rename(&incomplete_path, &blob_path) {
+        let mut st = status.lock_or_recover();
+        st.downloading_weights = false;
+        st.download_progress   = 0.0;
+        st.download_status_msg = Some(format!("Failed to finalise download: {e}"));
+        return None;
+    }
+
+    // ── Register in HF snapshot structure ────────────────────────────────────
+    let weights_path = match register_hf_snapshot(
+        &model_dir, &refs_dir, &commit_sha, ZUNA_WEIGHTS_FILE, &blob_path,
+    ) {
+        Ok(p)  => p,
+        Err(e) => {
+            skill_log!(logger, "embedder", "snapshot registration failed: {e}");
+            let mut st = status.lock_or_recover();
+            st.downloading_weights = false;
+            st.download_progress   = 0.0;
+            st.download_status_msg = Some(format!("Snapshot registration failed: {e}"));
             return None;
         }
     };
@@ -1781,11 +2074,63 @@ pub(crate) fn download_hf_weights(
     {
         let mut st = status.lock_or_recover();
         st.downloading_weights    = false;
+        st.download_progress      = 1.0;
         st.download_status_msg    = None;
         st.weights_found          = true;
         st.weights_path           = Some(weights_path.display().to_string());
         st.download_needs_restart = mark_needs_restart;
     }
-    skill_log!(logger, "embedder", "ZUNA weights downloaded successfully");
+    skill_log!(logger, "embedder", "ZUNA weights downloaded successfully → {}", weights_path.display());
     Some((weights_path, config_path))
+}
+
+/// Register a completed blob in the HF Hub snapshot directory structure so
+/// that `hf_hub::Cache::repo().get(filename)` and `resolve_hf_weights()`
+/// can both locate it through their normal offline-cache logic.
+///
+/// Creates or overwrites:
+/// - `{model_dir}/refs/main`                         ← `{commit_sha}`
+/// - `{model_dir}/snapshots/{commit_sha}/{filename}` ← symlink / hardlink / copy
+///   pointing to the blob
+///
+/// Returns the snapshot path (what `resolve_hf_weights` returns as the
+/// weights path).
+fn register_hf_snapshot(
+    model_dir:  &Path,
+    refs_dir:   &Path,
+    commit_sha: &str,
+    filename:   &str,
+    blob_path:  &Path,
+) -> Result<PathBuf, String> {
+    std::fs::write(refs_dir.join("main"), commit_sha)
+        .map_err(|e| format!("write refs/main: {e}"))?;
+
+    let snapshot_dir  = model_dir.join("snapshots").join(commit_sha);
+    std::fs::create_dir_all(&snapshot_dir)
+        .map_err(|e| format!("create snapshot dir: {e}"))?;
+
+    let snapshot_link = snapshot_dir.join(filename);
+    if snapshot_link.exists() || snapshot_link.symlink_metadata().is_ok() {
+        std::fs::remove_file(&snapshot_link).ok();
+    }
+
+    #[cfg(unix)]
+    {
+        let blob_name = blob_path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let depth     = std::path::Path::new(filename).components().count();
+        let parents   = "../".repeat(depth + 1);
+        let rel_target = format!("{parents}blobs/{blob_name}");
+        std::os::unix::fs::symlink(&rel_target, &snapshot_link)
+            .map_err(|e| format!("create symlink: {e}"))?;
+    }
+
+    #[cfg(windows)]
+    std::fs::hard_link(blob_path, &snapshot_link)
+        .map_err(|e| format!("create hardlink: {e}"))?;
+
+    #[cfg(not(any(unix, windows)))]
+    std::fs::copy(blob_path, &snapshot_link)
+        .map_err(|e| format!("copy blob to snapshot: {e}"))?;
+
+    Ok(snapshot_link)
 }

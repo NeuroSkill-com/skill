@@ -114,6 +114,11 @@ pub struct EegModelStatus {
     /// (whether successfully or not).
     pub downloading_weights: bool,
 
+    /// Download progress in [0.0, 1.0] for the current file being fetched.
+    /// 0.0 while connecting / fetching metadata; approaches 1.0 as bytes
+    /// arrive; reset to 0.0 when not downloading.
+    pub download_progress: f32,
+
     /// Human-readable description of the current download step, e.g.
     /// `"Downloading model-00001-of-00001.safetensors…"`.
     /// Set to `None` after a successful download; contains an error message

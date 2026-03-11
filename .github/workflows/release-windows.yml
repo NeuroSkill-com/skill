@@ -53,6 +53,22 @@ jobs:
       - name: Set up MSVC developer environment
         uses: ilammy/msvc-dev-cmd@v1
 
+      # ── Remove Git usr\bin from PATH ──────────────────────────────────────────
+      # Git for Windows ships its own Unix-style link.exe at
+      # C:\Program Files\Git\usr\bin\link.exe.  That directory is added to PATH
+      # by the runner before ilammy/msvc-dev-cmd runs, so it shadows the real
+      # MSVC link.exe and causes the Rust linker invocation to fail with
+      # "extra operand" errors (Unix link doesn't understand MSVC flags).
+      # Stripping Git\usr\bin from PATH here ensures the MSVC linker wins.
+      - name: Remove Git usr\bin from PATH
+        shell: powershell
+        run: |
+          $filtered = $env:PATH -split ';' |
+            Where-Object { $_ -notlike '*Git\usr\bin*' -and $_ -notlike '*Git/usr/bin*' }
+          $newPath = $filtered -join ';'
+          "PATH=$newPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "✓ Removed Git\usr\bin from PATH"
+
       # ── Rust toolchain ────────────────────────────────────────────────────────
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
