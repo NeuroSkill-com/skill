@@ -38,6 +38,19 @@ echo "STATIC_LIB = $STATIC_LIB"
 
 # ---------- cache check -------------------------------------------------------
 if [[ -f "$STATIC_LIB" ]]; then
+    # On macOS, verify the cached library is actually a Mach-O archive.
+    # A library cross-compiled on Linux (ELF) passes the nm symbol check but
+    # fails at link time with "not a mach-o file".  lipo -info prints the
+    # architecture(s) for valid Mach-O archives and errors out on ELF ones.
+    if [[ "$(uname)" == "Darwin" ]]; then
+        if ! lipo -info "$STATIC_LIB" 2>/dev/null | grep -qE "arm64|x86_64|i386"; then
+            echo "Found $STATIC_LIB but it is not a macOS Mach-O archive (wrong platform?) — rebuilding."
+            rm -rf "$STATIC_DIR"
+        fi
+    fi
+fi
+
+if [[ -f "$STATIC_LIB" ]]; then
     if nm "$STATIC_LIB" 2>/dev/null | grep -q "ucd_isalpha" \
     || ar -t "$STATIC_LIB" 2>/dev/null | grep -qE "ctype.*__c|categories.*__c"; then
         echo "espeak-ng static library already built (self-contained):"

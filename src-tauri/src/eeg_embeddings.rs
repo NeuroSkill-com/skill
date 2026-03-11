@@ -50,10 +50,11 @@ use crate::{
     constants::{
         CHANNEL_NAMES, EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_HOP_SAMPLES,
         EMBEDDING_OVERLAP_MAX_SECS, EMBEDDING_OVERLAP_MIN_SECS,
-        HNSW_INDEX_FILE, MUSE_SAMPLE_RATE, SQLITE_FILE,
+        GLOBAL_HNSW_SAVE_EVERY, HNSW_INDEX_FILE, MUSE_SAMPLE_RATE, SQLITE_FILE,
         ZUNA_CONFIG_FILE, ZUNA_WEIGHTS_FILE,
     },
     eeg_model_config::{EegModelConfig, EegModelStatus},
+    global_eeg_index,
 };
 
 // ── Message sent to the background worker ─────────────────────────────────────
@@ -761,23 +762,28 @@ pub struct EegAccumulator {
     // ── Worker-restart plumbing ───────────────────────────────────────────────
     // All fields below are cloned each time we (re)spawn the background worker.
     // They must be kept in sync with the parameters passed to `embed_worker`.
-    skill_dir: PathBuf,
-    config:    EegModelConfig,
-    status:    Arc<Mutex<EegModelStatus>>,
-    cancel:    Arc<std::sync::atomic::AtomicBool>,
+    skill_dir:    PathBuf,
+    config:       EegModelConfig,
+    status:       Arc<Mutex<EegModelStatus>>,
+    cancel:       Arc<std::sync::atomic::AtomicBool>,
+    /// Shared reference to the persistent cross-day global HNSW index.
+    /// `None` inside the Option while the startup build is still running.
+    global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
 }
 
 impl EegAccumulator {
     pub fn new(
-        skill_dir:   PathBuf,
-        config:      EegModelConfig,
-        status:      Arc<Mutex<EegModelStatus>>,
-        cancel:      Arc<std::sync::atomic::AtomicBool>,
-        logger:      Arc<SkillLogger>,
+        skill_dir:    PathBuf,
+        config:       EegModelConfig,
+        status:       Arc<Mutex<EegModelStatus>>,
+        cancel:       Arc<std::sync::atomic::AtomicBool>,
+        logger:       Arc<SkillLogger>,
+        global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
     ) -> Self {
         let tx = Self::spawn_worker(
             skill_dir.clone(), config.clone(),
             status.clone(), cancel.clone(), logger.clone(),
+            global_index.clone(),
         );
         Self {
             bufs:        std::array::from_fn(|_| VecDeque::new()),
@@ -796,6 +802,7 @@ impl EegAccumulator {
             config,
             status,
             cancel,
+            global_index,
         }
     }
 
@@ -803,16 +810,17 @@ impl EegAccumulator {
     /// its channel.  Called both at construction time and whenever `push()`
     /// detects that the previous worker exited (e.g. after a cubecl panic).
     fn spawn_worker(
-        skill_dir: PathBuf,
-        config:    EegModelConfig,
-        status:    Arc<Mutex<EegModelStatus>>,
-        cancel:    Arc<std::sync::atomic::AtomicBool>,
-        logger:    Arc<SkillLogger>,
+        skill_dir:    PathBuf,
+        config:       EegModelConfig,
+        status:       Arc<Mutex<EegModelStatus>>,
+        cancel:       Arc<std::sync::atomic::AtomicBool>,
+        logger:       Arc<SkillLogger>,
+        global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
     ) -> mpsc::SyncSender<EpochMsg> {
         let (tx, rx) = mpsc::sync_channel::<EpochMsg>(4);
         std::thread::Builder::new()
             .name("eeg-embed".into())
-            .spawn(move || embed_worker(rx, skill_dir, config, status, cancel, logger))
+            .spawn(move || embed_worker(rx, skill_dir, config, status, cancel, logger, global_index))
             .expect("[embed] failed to spawn background thread");
         tx
     }
@@ -826,6 +834,7 @@ impl EegAccumulator {
             self.status.clone(),
             self.cancel.clone(),
             self.logger.clone(),
+            self.global_index.clone(),
         );
     }
 
@@ -952,12 +961,13 @@ impl EegAccumulator {
 // ── Background worker ─────────────────────────────────────────────────────────
 
 fn embed_worker(
-    rx:        mpsc::Receiver<EpochMsg>,
-    skill_dir: PathBuf,
-    config:    EegModelConfig,
-    status:    Arc<Mutex<EegModelStatus>>,
-    cancel:    Arc<std::sync::atomic::AtomicBool>,
-    logger:    Arc<SkillLogger>,
+    rx:           mpsc::Receiver<EpochMsg>,
+    skill_dir:    PathBuf,
+    config:       EegModelConfig,
+    status:       Arc<Mutex<EegModelStatus>>,
+    cancel:       Arc<std::sync::atomic::AtomicBool>,
+    logger:       Arc<SkillLogger>,
+    global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
 ) {
     use burn::backend::{Wgpu, wgpu::WgpuDevice};
     use ndarray::Array2;
@@ -1070,6 +1080,7 @@ fn embed_worker(
             "wgpu device poisoned from a previous panic — \
              GPU embeddings disabled for this process; metrics-only mode");
         for msg in rx { store_metrics_only(&msg, &mut store, &status, &logger, &skill_dir, &config); }
+        // No embeddings were produced, so nothing to flush into the global index.
         return;
     }
 
@@ -1110,6 +1121,9 @@ fn embed_worker(
     let ch_names: Vec<&str>                     = CHANNEL_NAMES.to_vec();
     let data_cfg                                 = DataConfig::default();
     let pos_overrides: HashMap<String, [f32; 3]> = HashMap::new();
+
+    // Counter for periodic global index saves.
+    let mut global_save_counter: usize = 0;
 
     // ── 4. Process epoch messages ─────────────────────────────────────────────
     for msg in rx {
@@ -1254,7 +1268,7 @@ fn embed_worker(
         // and SQLite.  When it didn't (encoder unavailable / device poisoned),
         // fall through to metrics-only SQLite storage.
         let hnsw_id = if let Some(ref emb) = mean_emb {
-            s.insert(
+            let id = s.insert(
                 msg.timestamp,
                 msg.device_id.as_deref(),
                 msg.device_name.as_deref(),
@@ -1262,7 +1276,26 @@ fn embed_worker(
                 metrics.as_ref(),
                 msg.ppg_averages.as_ref(),
                 channels_json.as_deref(),
-            )
+            );
+
+            // ── Also insert into the persistent cross-day global HNSW ─────
+            // The global index accumulates every embedding across all days so
+            // that a single HNSW search can find near-neighbors from any date.
+            // The payload is the YYYYMMDDHHmmss timestamp; the date is derived
+            // from it during search result hydration.
+            {
+                let mut g = global_index.lock_or_recover();
+                if let Some(ref mut gidx) = *g {
+                    gidx.insert(emb.clone(), msg.timestamp);
+                    global_save_counter += 1;
+                    if global_save_counter >= GLOBAL_HNSW_SAVE_EVERY {
+                        global_save_counter = 0;
+                        global_eeg_index::save_index(gidx, &skill_dir);
+                    }
+                }
+            }
+
+            id
         } else {
             // Metrics-only path: write a SQLite row without an embedding or
             // HNSW entry so that band/sleep metrics are still persisted.
@@ -1394,6 +1427,15 @@ fn embed_worker(
                 msg.timestamp,
                 msg.device_name.as_deref().unwrap_or("?"),
             );
+        }
+    }
+
+    // Final flush: persist any unsaved insertions to the global index.
+    {
+        let g = global_index.lock_or_recover();
+        if let Some(ref gidx) = *g {
+            global_eeg_index::save_index(gidx, &skill_dir);
+            skill_log!(logger, "embedder", "global HNSW flushed on exit ({} entries)", gidx.len());
         }
     }
 

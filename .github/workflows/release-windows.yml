@@ -87,6 +87,8 @@ jobs:
       #                                  [Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx"))
       #
       # WINDOWS_CERTIFICATE_PASSWORD — password protecting the .pfx
+      #                                Optional — if omitted the installer is built
+      #                                unsigned (SmartScreen will warn on first run).
       #
       # TAURI_SIGNING_PRIVATE_KEY    — Ed25519 private key for signing Tauri
       #                                updater artifacts (same key as macOS/Linux)
@@ -97,19 +99,34 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           TAURI_SIGNING_PRIVATE_KEY:    ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
-          ok=true
-          for var in \
-            WINDOWS_CERTIFICATE \
-            WINDOWS_CERTIFICATE_PASSWORD \
-            TAURI_SIGNING_PRIVATE_KEY
-          do
-            if [ -z "${!var}" ]; then
-              echo "::error::Secret '$var' is empty or not set."
-              ok=false
-            fi
-          done
-          $ok || exit 1
-          echo "✓ All signing secrets are present."
+          # TAURI_SIGNING_PRIVATE_KEY is always required (updater artifact signing).
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Secret 'TAURI_SIGNING_PRIVATE_KEY' is empty or not set."
+            exit 1
+          fi
+          echo "✓ TAURI_SIGNING_PRIVATE_KEY is present."
+
+          # Windows code-signing certificate is optional.
+          # Both variables must be set together or both must be absent.
+          HAVE_CERT=false
+          if [ -n "$WINDOWS_CERTIFICATE" ] && [ -n "$WINDOWS_CERTIFICATE_PASSWORD" ]; then
+            HAVE_CERT=true
+          elif [ -n "$WINDOWS_CERTIFICATE" ] || [ -n "$WINDOWS_CERTIFICATE_PASSWORD" ]; then
+            echo "::error::WINDOWS_CERTIFICATE and WINDOWS_CERTIFICATE_PASSWORD" \
+                 "must both be set or both be absent."
+            exit 1
+          fi
+
+          if [ "$HAVE_CERT" = "true" ]; then
+            echo "✓ Windows code-signing certificate is present — installer will be signed."
+          else
+            echo "::warning::WINDOWS_CERTIFICATE is not set." \
+                 "The NSIS installer will be built unsigned." \
+                 "Windows SmartScreen may show a warning to end-users."
+          fi
+
+          # Expose for later steps.
+          echo "HAVE_WINDOWS_CERT=$HAVE_CERT" >> "$GITHUB_ENV"
 
       # ── espeak-ng MSVC static library ─────────────────────────────────────────
       # Cache keyed on the build script; a script change busts the cache.
@@ -127,16 +144,17 @@ jobs:
         shell: powershell
         run: .\scripts\build-espeak-static.ps1
 
-      # ── Import Windows code-signing certificate ───────────────────────────────
-      # Imports the .pfx into the Current User certificate store and captures
-      # the SHA-1 thumbprint so Tauri can pass it to signtool.exe.
-      # The .pfx bytes are never written to disk unencrypted; the temp file is
-      # deleted immediately after import.
+      # ── Import Windows code-signing certificate (optional) ───────────────────
+      # Skipped when WINDOWS_CERTIFICATE is not set (unsigned build).
+      # When present: imports the .pfx into the Current User certificate store,
+      # captures the SHA-1 thumbprint, and exposes it as CERTIFICATE_THUMBPRINT
+      # for the build step.  The temp .pfx file is deleted immediately after import.
       #
       # SmartScreen note: an OV (Organisation Validated) certificate will still
       # trigger SmartScreen warnings on first run until the binary accumulates
-      # reputation.  An EV (Extended Validation) certificate skips this.
+      # reputation.  An EV (Extended Validation) certificate skips this entirely.
       - name: Import Windows code-signing certificate
+        if: env.HAVE_WINDOWS_CERT == 'true'
         shell: powershell
         env:
           WINDOWS_CERTIFICATE:          ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -176,10 +194,11 @@ jobs:
 
       # ── Compile + bundle (frontend + Rust + NSIS installer) ──────────────────
       #
-      # Passes the certificate thumbprint via --config so Tauri's bundler calls
-      # signtool.exe to sign the NSIS installer.
-      # TAURI_SIGNING_PRIVATE_KEY causes Tauri to also produce the Ed25519-signed
-      # updater artifacts:
+      # When CERTIFICATE_THUMBPRINT is set (cert was imported above), the config
+      # override tells Tauri to call signtool.exe on the NSIS installer.
+      # When the cert is absent the installer is built unsigned.
+      # In both cases, TAURI_SIGNING_PRIVATE_KEY causes Tauri to produce the
+      # Ed25519-signed updater artifacts:
       #   *.nsis.zip      — NSIS installer wrapped in a zip (updater bundle)
       #   *.nsis.zip.sig  — Ed25519 signature consumed by the Tauri updater plugin
       - name: Build Tauri (Windows — NSIS)
@@ -189,20 +208,19 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          # Build the Tauri config override JSON (certificate thumbprint injected
-          # at runtime so it never touches tauri.conf.json in the repository).
+          # Build the Tauri --config JSON.
+          # Include Windows signing fields only when a certificate is available.
           CONFIG=$(python3 -c "
           import json, os
-          print(json.dumps({
-            'bundle': {
-              'targets': ['nsis'],
-              'windows': {
-                'certificateThumbprint': os.environ['CERTIFICATE_THUMBPRINT'],
-                'digestAlgorithm':       'sha256',
-                'timestampUrl':          'http://timestamp.digicert.com',
+          bundle = {'targets': ['nsis']}
+          thumbprint = os.environ.get('CERTIFICATE_THUMBPRINT', '')
+          if thumbprint:
+              bundle['windows'] = {
+                  'certificateThumbprint': thumbprint,
+                  'digestAlgorithm':       'sha256',
+                  'timestampUrl':          'http://timestamp.digicert.com',
               }
-            }
-          }))")
+          print(json.dumps({'bundle': bundle}))")
 
           npx tauri build \
             --target x86_64-pc-windows-msvc \
@@ -328,7 +346,7 @@ jobs:
 
       # ── Remove the certificate from the runner's cert store ──────────────────
       - name: Remove signing certificate
-        if: always()
+        if: always() && env.HAVE_WINDOWS_CERT == 'true'
         shell: powershell
         run: |
           if ($env:CERTIFICATE_THUMBPRINT) {

@@ -83,6 +83,33 @@
 
   interface Attachment { dataUrl: string; mimeType: string; name: string; }
 
+  // ── Stored-message type (mirrors Rust StoredMessage) ──────────────────────
+
+  interface StoredMessage {
+    id:         number;
+    session_id: number;
+    role:       string;
+    content:    string;
+    thinking:   string | null;
+    created_at: number;
+  }
+
+  interface ChatSessionResponse {
+    session_id: number;
+    messages:   StoredMessage[];
+  }
+
+  function storedToMessage(sm: StoredMessage): Message {
+    return {
+      id:        ++msgId,
+      role:      sm.role as Role,
+      content:   sm.content,
+      thinking:  sm.thinking ?? undefined,
+      thinkOpen: false,
+      pending:   false,
+    };
+  }
+
   // ── State ──────────────────────────────────────────────────────────────────
 
   let port           = $state(8375);
@@ -90,6 +117,7 @@
   let modelName      = $state("");
   let supportsVision = $state(false);
   let messages       = $state<Message[]>([]);
+  let sessionId      = $state(0);   // current chat_history.sqlite session id
   let input          = $state("");
   let systemPrompt   = $state("You are a helpful assistant.");
   let showSystem     = $state(false);
@@ -312,6 +340,13 @@
     };
     messages = [...messages, userMsg];
 
+    // Persist user message immediately (fire-and-forget)
+    if (sessionId > 0 && text) {
+      invoke("save_chat_message", {
+        session_id: sessionId, role: "user", content: text, thinking: null,
+      }).catch(() => {});
+    }
+
     const assistantMsg: Message = { id: ++msgId, role: "assistant", content: "", pending: true };
     messages = [...messages, assistantMsg];
     await scrollBottom(true);   // force — user just sent, must see response start
@@ -436,16 +471,32 @@
         );
       }
     } finally {
+      // Capture the finalized assistant message before any awaits.
+      const finalAssistant = messages.find(m => m.id === assistantMsg.id);
+
       generating = false;
       abortCtrl  = null;
       await scrollBottom();
       await tick();
       inputEl?.focus();
+
+      // Persist the completed assistant message (fire-and-forget).
+      if (sessionId > 0 && finalAssistant && !finalAssistant.pending && finalAssistant.content) {
+        invoke("save_chat_message", {
+          session_id: sessionId,
+          role:       "assistant",
+          content:    finalAssistant.content,
+          thinking:   finalAssistant.thinking ?? null,
+        }).catch(() => {});
+      }
     }
   }
 
-  function clearChat() {
+  async function clearChat() {
     messages = [];
+    try {
+      sessionId = await invoke<number>("new_chat_session");
+    } catch { /* store unavailable — continue without persistence */ }
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -487,6 +538,16 @@
         supportsVision = s.supports_vision ?? false;
       } catch {}
     }, 1500);
+
+    // Load persisted chat history
+    try {
+      const resp = await invoke<ChatSessionResponse>("get_last_chat_session");
+      sessionId = resp.session_id;
+      if (resp.messages.length > 0) {
+        messages = resp.messages.map(storedToMessage);
+        await scrollBottom(true);
+      }
+    } catch { /* store unavailable — start fresh */ }
 
     await tick();
     inputEl?.focus();

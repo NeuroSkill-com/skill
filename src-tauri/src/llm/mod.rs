@@ -46,6 +46,7 @@
 
 pub mod tools;
 pub mod catalog;
+pub mod chat_store;
 pub mod cmds;
 
 use std::{

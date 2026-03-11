@@ -30,7 +30,7 @@
 //! with the embed-worker's write transactions.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use crate::MutexExt;
 
 use fast_hnsw::{distance::Cosine, labeled::LabeledIndex};
@@ -39,6 +39,7 @@ use serde::Serialize;
 use tauri::Manager as _;
 
 use crate::constants::{HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE};
+use crate::global_eeg_index::GlobalEegIndex;
 
 // ── Timestamp helpers ─────────────────────────────────────────────────────────
 
@@ -336,6 +337,85 @@ fn get_embedding_metrics(db_path: &Path, hnsw_id: i64) -> Option<NeighborMetrics
     ).ok()
 }
 
+/// Derive the `YYYYMMDD` date string from a `YYYYMMDDHHmmss` timestamp integer.
+///
+/// ```
+/// assert_eq!(date_from_ts(20260223071047), "20260223");
+/// ```
+fn date_from_ts(ts: i64) -> String {
+    // YYYYMMDDHHmmss = YYYY*10^10 + MM*10^8 + DD*10^6 + HH*10^4 + mm*10^2 + ss
+    // Dividing by 10^6 drops the time part and yields the YYYYMMDD integer.
+    format!("{}", ts / 1_000_000)
+}
+
+/// Look up a row in `db_path` by its `YYYYMMDDHHmmss` timestamp.
+/// Returns `(hnsw_id, device_id, device_name)`.
+fn get_embedding_by_ts(
+    db_path:   &Path,
+    timestamp: i64,
+) -> (i64, Option<String>, Option<String>) {
+    let Ok(conn) = Connection::open_with_flags(
+        db_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ) else { return (0, None, None) };
+
+    conn.query_row(
+        "SELECT hnsw_id, device_id, device_name \
+         FROM embeddings WHERE timestamp = ?1 LIMIT 1",
+        params![timestamp],
+        |row| Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, Option<String>>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        )),
+    )
+    .unwrap_or((0, None, None))
+}
+
+/// Fetch key EEG metrics for a row identified by its `YYYYMMDDHHmmss` timestamp.
+fn get_embedding_metrics_by_ts(db_path: &Path, timestamp: i64) -> Option<NeighborMetrics> {
+    let conn = Connection::open_with_flags(
+        db_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ).ok()?;
+
+    conn.query_row(
+        "SELECT json_extract(metrics_json, '$.relaxation_score'),
+                json_extract(metrics_json, '$.engagement_score'),
+                json_extract(metrics_json, '$.faa'),
+                json_extract(metrics_json, '$.tar'),
+                json_extract(metrics_json, '$.mood'),
+                json_extract(metrics_json, '$.meditation'),
+                json_extract(metrics_json, '$.cognitive_load'),
+                json_extract(metrics_json, '$.drowsiness'),
+                json_extract(metrics_json, '$.hr'),
+                json_extract(metrics_json, '$.snr'),
+                json_extract(metrics_json, '$.rel_alpha'),
+                json_extract(metrics_json, '$.rel_beta'),
+                json_extract(metrics_json, '$.rel_theta'),
+                json_extract(metrics_json, '$.headache_index'),
+                json_extract(metrics_json, '$.migraine_index'),
+                json_extract(metrics_json, '$.consciousness_lzc'),
+                json_extract(metrics_json, '$.consciousness_wakefulness'),
+                json_extract(metrics_json, '$.consciousness_integration')
+         FROM embeddings WHERE timestamp = ?1 LIMIT 1",
+        params![timestamp],
+        |row| {
+            let g = |i: usize| -> Option<f64> { row.get::<_, Option<f64>>(i).unwrap_or(None) };
+            Ok(NeighborMetrics {
+                relaxation: g(0), engagement: g(1),
+                faa: g(2), tar: g(3), mood: g(4),
+                meditation: g(5), cognitive_load: g(6), drowsiness: g(7),
+                hr: g(8), snr: g(9),
+                rel_alpha: g(10), rel_beta: g(11), rel_theta: g(12),
+                headache_index: g(13), migraine_index: g(14),
+                consciousness_lzc: g(15), consciousness_wakefulness: g(16),
+                consciousness_integration: g(17),
+            })
+        },
+    ).ok()
+}
+
 /// Fetch all labels from `labels.sqlite` whose EEG window contains `ts_unix`.
 fn get_labels_for(labels_db: &Path, ts_unix: u64) -> Vec<LabelEntry> {
     let Ok(conn) = Connection::open_with_flags(
@@ -369,28 +449,25 @@ fn get_labels_for(labels_db: &Path, ts_unix: u64) -> Vec<LabelEntry> {
 /// Search for the `k` nearest EEG embeddings to every embedding recorded
 /// between `start_utc` and `end_utc`, then hydrate each hit with any
 /// overlapping user labels.
+///
+/// When `global_index` is `Some`, a single cross-day HNSW search is performed
+/// against the persistent global index (better recall, lower latency).  When
+/// `None`, all available per-day HNSW files are loaded and searched (fallback
+/// used while the global index is still being built on startup).
 pub fn search_embeddings_in_range(
-    skill_dir: &Path,
-    start_utc: u64,
-    end_utc:   u64,
-    k:         usize,
-    ef:        usize,
+    skill_dir:    &Path,
+    start_utc:    u64,
+    end_utc:      u64,
+    k:            usize,
+    ef:           usize,
+    global_index: Option<Arc<Mutex<Option<LabeledIndex<Cosine, i64>>>>>,
 ) -> SearchResult {
     let start_ts  = unix_to_ts(start_utc);
     let end_ts    = unix_to_ts(end_utc);
     let labels_db = skill_dir.join(LABELS_FILE);
-
-    // ── Load all available HNSW indices ──────────────────────────────────────
     let date_dirs = list_date_dirs(skill_dir);
-    let day_indices: Vec<DayIndex> = date_dirs
-        .iter()
-        .filter_map(|(date, dir)| load_day_index(date.clone(), dir.clone()))
-        .collect();
-    let searched_days: Vec<String> = day_indices.iter().map(|d| d.date.clone()).collect();
 
-    // ── Collect query embeddings from days that overlap the range ─────────────
-    //    We only need to query SQLite for the overlapping days, but searching
-    //    all HNSW indices ensures we find globally similar embeddings.
+    // ── Collect query embeddings from days that overlap [start_ts, end_ts] ────
     let mut query_embs: Vec<(String, PathBuf, RawEmb)> = Vec::new();
     for (date, dir) in &date_dirs {
         let db_path = dir.join(SQLITE_FILE);
@@ -405,48 +482,97 @@ pub fn search_embeddings_in_range(
     }
     let query_count = query_embs.len();
 
-    // ── For each query, search all indices and hydrate results ────────────────
+    // ── Decide search backend ─────────────────────────────────────────────────
+    //
+    // Prefer the global index when it is ready (non-empty Option inside the
+    // Mutex).  Fall back to loading individual per-day HNSW files otherwise.
+    let global_guard = global_index.as_ref().map(|arc| arc.lock_or_recover());
+    let global_ready = global_guard
+        .as_ref()
+        .and_then(|g| g.as_ref())
+        .map(|idx| !idx.is_empty())
+        .unwrap_or(false);
+
+    // Per-day indices — only loaded when the global index is not ready.
+    let day_indices: Vec<DayIndex> = if global_ready {
+        Vec::new()
+    } else {
+        eprintln!("[search] global index not ready — loading per-day HNSW files");
+        date_dirs
+            .iter()
+            .filter_map(|(date, dir)| load_day_index(date.clone(), dir.clone()))
+            .collect()
+    };
+
+    // `searched_days` = set of dates that could contribute results.
+    let searched_days: Vec<String> = if global_ready {
+        // All dates in the skill_dir are covered by the global index.
+        date_dirs.iter().map(|(d, _)| d.clone()).collect()
+    } else {
+        day_indices.iter().map(|d| d.date.clone()).collect()
+    };
+
+    // ── For each query embedding, search and hydrate ───────────────────────────
     let mut results: Vec<QueryEntry> = Vec::with_capacity(query_count);
 
     for (_qdate, _qdir, qemb) in &query_embs {
         let ts_unix = ts_to_unix(qemb.timestamp);
 
-        // Search every loaded index, gather all candidates
+        // Collect (date, dir, hnsw_id, neighbor_timestamp, distance) tuples.
         let mut candidates: Vec<(String, PathBuf, usize, i64, f32)> = Vec::new();
-        for day in &day_indices {
-            if day.index.is_empty() { continue; }
-            let hits = day.index.search(&qemb.embedding, k, ef.max(k));
-            for hit in hits {
-                candidates.push((
-                    day.date.clone(),
-                    day.dir.clone(),
-                    hit.id,           // hnsw_id in this day's index
-                    *hit.payload,     // YYYYMMDDHHmmss timestamp
-                    hit.distance,
-                ));
+
+        if global_ready {
+            // ── Global index path ─────────────────────────────────────────────
+            // One search across the entire history.
+            if let Some(ref gidx) = *global_guard.as_ref().unwrap() {
+                let hits = gidx.search(&qemb.embedding, k, ef.max(k));
+                for hit in hits {
+                    let neighbor_ts  = *hit.payload;
+                    let date         = date_from_ts(neighbor_ts);
+                    let dir          = skill_dir.join(&date);
+                    candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
+                }
             }
+        } else {
+            // ── Per-day index path (fallback) ─────────────────────────────────
+            for day in &day_indices {
+                if day.index.is_empty() { continue; }
+                let hits = day.index.search(&qemb.embedding, k, ef.max(k));
+                for hit in hits {
+                    candidates.push((
+                        day.date.clone(),
+                        day.dir.clone(),
+                        hit.id,       // hnsw_id within that day's index
+                        *hit.payload, // YYYYMMDDHHmmss timestamp
+                        hit.distance,
+                    ));
+                }
+            }
+            // When using per-day indices we must re-sort globally.
+            candidates.sort_by(|a, b| a.4.partial_cmp(&b.4).unwrap_or(std::cmp::Ordering::Equal));
+            candidates.truncate(k);
         }
 
-        // Sort globally by distance, keep top-k
-        candidates.sort_by(|a, b| a.4.partial_cmp(&b.4).unwrap_or(std::cmp::Ordering::Equal));
-        candidates.truncate(k);
-
-        // Hydrate each candidate with metadata and labels
+        // ── Hydrate each candidate ────────────────────────────────────────────
         let mut neighbors: Vec<NeighborEntry> = Vec::with_capacity(candidates.len());
-        for (date, dir, hnsw_id, neighbor_ts, distance) in candidates {
+        for (date, dir, candidate_hnsw_id, neighbor_ts, distance) in candidates {
             let neighbor_unix = ts_to_unix(neighbor_ts);
             let db_path = dir.join(SQLITE_FILE);
 
-            let (device_id, device_name) = if db_path.exists() {
-                get_embedding_meta(&db_path, hnsw_id as i64)
+            let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
+                if global_ready {
+                    // Look up by timestamp (the global index doesn't store per-day hnsw_id).
+                    let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
+                    let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
+                    (hid as usize, did, dn, m)
+                } else {
+                    // Per-day path: the candidate hnsw_id already refers to this day's index.
+                    let (did, dn) = get_embedding_meta(&db_path, candidate_hnsw_id as i64);
+                    let m = get_embedding_metrics(&db_path, candidate_hnsw_id as i64);
+                    (candidate_hnsw_id, did, dn, m)
+                }
             } else {
-                (None, None)
-            };
-
-            let metrics = if db_path.exists() {
-                get_embedding_metrics(&db_path, hnsw_id as i64)
-            } else {
-                None
+                (candidate_hnsw_id, None, None, None)
             };
 
             let labels = if labels_db.exists() {
@@ -457,7 +583,7 @@ pub fn search_embeddings_in_range(
 
             neighbors.push(NeighborEntry {
                 hnsw_id,
-                timestamp: neighbor_ts,
+                timestamp:      neighbor_ts,
                 timestamp_unix: neighbor_unix,
                 distance,
                 date,
@@ -541,11 +667,12 @@ pub fn search_embeddings(
     k:         Option<usize>,
     ef:        Option<usize>,
     state:     tauri::State<'_, Mutex<crate::AppState>>,
+    global:    tauri::State<'_, Arc<GlobalEegIndex>>,
 ) -> SearchResult {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     let k  = k.unwrap_or(10).clamp(1, 100);
     let ef = ef.unwrap_or(k.max(50));
-    search_embeddings_in_range(&skill_dir, start_utc, end_utc, k, ef)
+    search_embeddings_in_range(&skill_dir, start_utc, end_utc, k, ef, Some(global.arc()))
 }
 
 /// Enqueue search_embeddings as a background job.  Returns a JobTicket.
@@ -557,8 +684,10 @@ pub fn enqueue_search_embeddings(
     ef:        Option<usize>,
     state:     tauri::State<'_, Mutex<crate::AppState>>,
     queue:     tauri::State<'_, std::sync::Arc<crate::job_queue::JobQueue>>,
+    global:    tauri::State<'_, Arc<GlobalEegIndex>>,
 ) -> crate::job_queue::JobTicket {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir   = state.lock_or_recover().skill_dir.clone();
+    let global_arc  = global.arc();
     let k  = k.unwrap_or(10).clamp(1, 100);
     let ef = ef.unwrap_or(k.max(50));
 
@@ -567,7 +696,9 @@ pub fn enqueue_search_embeddings(
     let estimated_ms = (range_s * 2).max(2000); // minimum 2s
 
     queue.submit(estimated_ms, move || {
-        let result = search_embeddings_in_range(&skill_dir, start_utc, end_utc, k, ef);
+        let result = search_embeddings_in_range(
+            &skill_dir, start_utc, end_utc, k, ef, Some(global_arc),
+        );
         serde_json::to_value(&result).map_err(|e| e.to_string())
     })
 }
@@ -612,8 +743,10 @@ pub async fn stream_search_embeddings(
     ef:          Option<usize>,
     on_progress: tauri::ipc::Channel<SearchProgress>,
     state:       tauri::State<'_, Mutex<crate::AppState>>,
+    global:      tauri::State<'_, Arc<GlobalEegIndex>>,
 ) -> Result<(), String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir  = state.lock_or_recover().skill_dir.clone();
+    let global_arc = global.arc();
     let k  = k.unwrap_or(10).clamp(1, 100);
     let ef = ef.unwrap_or(k.max(50));
 
@@ -623,15 +756,30 @@ pub async fn stream_search_embeddings(
         let start_ts  = unix_to_ts(start_utc);
         let end_ts    = unix_to_ts(end_utc);
         let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
-
-        // Load all HNSW indices
         let date_dirs = list_date_dirs(&skill_dir);
-        let day_indices: Vec<DayIndex> = date_dirs.iter()
-            .filter_map(|(date, dir)| load_day_index(date.clone(), dir.clone()))
-            .collect();
-        let searched_days: Vec<String> = day_indices.iter().map(|d| d.date.clone()).collect();
 
-        // Collect query embeddings
+        // ── Decide backend ───────────────────────────────────────────────────
+        let global_guard = global_arc.lock_or_recover();
+        let global_ready = global_guard
+            .as_ref()
+            .map(|idx| !idx.is_empty())
+            .unwrap_or(false);
+
+        let day_indices: Vec<DayIndex> = if global_ready {
+            Vec::new()
+        } else {
+            date_dirs.iter()
+                .filter_map(|(date, dir)| load_day_index(date.clone(), dir.clone()))
+                .collect()
+        };
+
+        let searched_days: Vec<String> = if global_ready {
+            date_dirs.iter().map(|(d, _)| d.clone()).collect()
+        } else {
+            day_indices.iter().map(|d| d.date.clone()).collect()
+        };
+
+        // ── Collect query embeddings ─────────────────────────────────────────
         let mut query_embs: Vec<(String, PathBuf, RawEmb)> = Vec::new();
         for (date, dir) in &date_dirs {
             let db_path = dir.join(crate::constants::SQLITE_FILE);
@@ -652,23 +800,49 @@ pub async fn stream_search_embeddings(
             let ts_unix = ts_to_unix(qemb.timestamp);
 
             let mut candidates: Vec<(String, PathBuf, usize, i64, f32)> = Vec::new();
-            for day in &day_indices {
-                if day.index.is_empty() { continue; }
-                let hits = day.index.search(&qemb.embedding, k, ef.max(k));
-                for hit in hits {
-                    candidates.push((day.date.clone(), day.dir.clone(), hit.id, *hit.payload, hit.distance));
+
+            if global_ready {
+                if let Some(ref gidx) = *global_guard {
+                    let hits = gidx.search(&qemb.embedding, k, ef.max(k));
+                    for hit in hits {
+                        let neighbor_ts = *hit.payload;
+                        let date = date_from_ts(neighbor_ts);
+                        let dir  = skill_dir.join(&date);
+                        candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
+                    }
                 }
+            } else {
+                for day in &day_indices {
+                    if day.index.is_empty() { continue; }
+                    let hits = day.index.search(&qemb.embedding, k, ef.max(k));
+                    for hit in hits {
+                        candidates.push((day.date.clone(), day.dir.clone(), hit.id, *hit.payload, hit.distance));
+                    }
+                }
+                candidates.sort_by(|a, b| a.4.partial_cmp(&b.4).unwrap_or(std::cmp::Ordering::Equal));
+                candidates.truncate(k);
             }
-            candidates.sort_by(|a, b| a.4.partial_cmp(&b.4).unwrap_or(std::cmp::Ordering::Equal));
-            candidates.truncate(k);
 
             let mut neighbors: Vec<NeighborEntry> = Vec::with_capacity(candidates.len());
-            for (date, dir, hnsw_id, neighbor_ts, distance) in candidates {
+            for (date, dir, candidate_hnsw_id, neighbor_ts, distance) in candidates {
                 let neighbor_unix = ts_to_unix(neighbor_ts);
                 let db_path = dir.join(crate::constants::SQLITE_FILE);
-                let (device_id, device_name) = if db_path.exists() { get_embedding_meta(&db_path, hnsw_id as i64) } else { (None, None) };
-                let metrics = if db_path.exists() { get_embedding_metrics(&db_path, hnsw_id as i64) } else { None };
-                let labels  = if labels_db.exists() { get_labels_for(&labels_db, neighbor_unix) } else { vec![] };
+
+                let (hnsw_id, device_id, device_name, metrics) = if db_path.exists() {
+                    if global_ready {
+                        let (hid, did, dn) = get_embedding_by_ts(&db_path, neighbor_ts);
+                        let m = get_embedding_metrics_by_ts(&db_path, neighbor_ts);
+                        (hid as usize, did, dn, m)
+                    } else {
+                        let (did, dn) = get_embedding_meta(&db_path, candidate_hnsw_id as i64);
+                        let m = get_embedding_metrics(&db_path, candidate_hnsw_id as i64);
+                        (candidate_hnsw_id, did, dn, m)
+                    }
+                } else {
+                    (candidate_hnsw_id, None, None, None)
+                };
+
+                let labels = if labels_db.exists() { get_labels_for(&labels_db, neighbor_unix) } else { vec![] };
                 neighbors.push(NeighborEntry { hnsw_id, timestamp: neighbor_ts, timestamp_unix: neighbor_unix, distance, date, device_id, device_name, labels, metrics });
             }
 

@@ -406,6 +406,57 @@ pub fn get_llm_server_status(
     LlmServerStatusResponse { status, model_name, n_ctx, supports_vision }
 }
 
+// ── Chat history persistence ───────────────────────────────────────────────────
+
+/// Payload returned by `get_last_chat_session`.
+#[derive(serde::Serialize)]
+pub struct ChatSessionResponse {
+    pub session_id: i64,
+    pub messages:   Vec<super::chat_store::StoredMessage>,
+}
+
+/// Return the most recent chat session and all its messages.
+/// Creates a fresh empty session if none exists yet.
+/// Returns an empty response if the chat store is unavailable.
+#[tauri::command]
+pub fn get_last_chat_session(
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> ChatSessionResponse {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.chat_store.as_mut() else {
+        return ChatSessionResponse { session_id: 0, messages: vec![] };
+    };
+    let session_id = store.get_or_create_last_session();
+    let messages   = store.load_session(session_id);
+    ChatSessionResponse { session_id, messages }
+}
+
+/// Append a single message to a chat session.
+/// Returns the new message row id, or 0 if the store is unavailable.
+#[tauri::command]
+pub fn save_chat_message(
+    session_id: i64,
+    role:       String,
+    content:    String,
+    thinking:   Option<String>,
+    state:      tauri::State<'_, Mutex<AppState>>,
+) -> i64 {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.chat_store.as_mut() else { return 0; };
+    store.save_message(session_id, &role, &content, thinking.as_deref())
+}
+
+/// Create a fresh chat session and return its id.
+/// Called when the user clicks "New Chat".
+#[tauri::command]
+pub fn new_chat_session(
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> i64 {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.chat_store.as_mut() else { return 0; };
+    store.new_session()
+}
+
 // ── Chat window ───────────────────────────────────────────────────────────────
 
 /// Open (or focus) the floating Chat window.

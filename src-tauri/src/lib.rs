@@ -47,6 +47,8 @@ mod eeg_model_config;
 use eeg_model_config::{EegModelConfig, EegModelStatus, load_model_config};
 
 mod eeg_embeddings;
+mod global_eeg_index;
+use global_eeg_index::GlobalEegIndex;
 
 
 mod eeg_filter;
@@ -237,6 +239,7 @@ use llm::cmds::{
     delete_llm_model, refresh_llm_catalog, set_llm_active_model, set_llm_active_mmproj,
     set_llm_autoload_mmproj,
     get_llm_logs, start_llm_server, stop_llm_server, get_llm_server_status, open_chat_window,
+    get_last_chat_session, save_chat_message, new_chat_session,
 };
 
 // ── Imports ───────────────────────────────────────────────────────────────────
@@ -522,6 +525,11 @@ pub struct AppState {
     /// Shared with the axum router so HTTP handlers always see the current state.
     #[cfg(feature = "llm")]
     pub llm_state_cell: crate::llm::LlmStateCell,
+
+    /// Persistent chat history store — `~/.skill/chat_history.sqlite`.
+    /// `None` when the database could not be opened (degraded gracefully).
+    #[cfg(feature = "llm")]
+    pub chat_store: Option<crate::llm::chat_store::ChatStore>,
 }
 
 impl Default for AppState {
@@ -596,6 +604,8 @@ impl Default for AppState {
             activity_store:    ActivityStore::open(&skill_dir).map(std::sync::Arc::new),
             #[cfg(feature = "llm")]
             llm_catalog:        crate::llm::catalog::LlmCatalog::load(&skill_dir),
+            #[cfg(feature = "llm")]
+            chat_store:         crate::llm::chat_store::ChatStore::open(&skill_dir),
             skill_dir,
             model_config,
             model_status,
@@ -1014,6 +1024,7 @@ pub fn run() {
         .manage(job_queue::JobQueue::new())
         .manage(std::sync::Arc::new(EmbedderState(std::sync::Mutex::new(None))))
         .manage(std::sync::Arc::new(label_index::LabelIndexState::new()))
+        .manage(std::sync::Arc::new(GlobalEegIndex::new()))
         .setup(|app| {
             {
                 use tauri::Manager;
@@ -1171,6 +1182,27 @@ pub fn run() {
                 );
                 let sd = skill_dir.clone();
                 std::thread::spawn(move || label_idx.load(&sd));
+            }
+
+            // ── Global cross-day EEG HNSW index ──────────────────────────────
+            // Load from disk if ~/.skill/eeg_global.hnsw exists; otherwise
+            // scan all daily eeg.sqlite files and build it from scratch.
+            // The background thread populates the Option inside the Arc<Mutex>
+            // so commands that call search_embeddings_in_range automatically
+            // use the global index once it becomes ready.
+            {
+                let global_arc = std::sync::Arc::clone(
+                    &*app.state::<std::sync::Arc<GlobalEegIndex>>()
+                );
+                let sd = skill_dir.clone();
+                std::thread::Builder::new()
+                    .name("global-hnsw-build".into())
+                    .spawn(move || {
+                        let idx = global_eeg_index::load_or_build(&sd);
+                        *global_arc.0.lock_or_recover() = Some(idx);
+                        eprintln!("[global_idx] ready — embed worker will insert new epochs incrementally");
+                    })
+                    .expect("[global_idx] failed to spawn build thread");
             }
 
             if let Err(e) = apply_all_shortcuts(app.handle()) {
@@ -1645,6 +1677,12 @@ pub fn run() {
             #[cfg(feature = "llm")]
             open_chat_window,
             #[cfg(feature = "llm")]
+            get_last_chat_session,
+            #[cfg(feature = "llm")]
+            save_chat_message,
+            #[cfg(feature = "llm")]
+            new_chat_session,
+            #[cfg(feature = "llm")]
             get_chat_shortcut,
             #[cfg(feature = "llm")]
             set_chat_shortcut,
@@ -1655,6 +1693,8 @@ pub fn run() {
             get_whats_new_seen_version, dismiss_whats_new,
             open_onboarding_window, complete_onboarding, get_onboarding_complete,
             commands::search_embeddings,
+            global_eeg_index::get_global_index_stats,
+            global_eeg_index::rebuild_global_eeg_index,
             commands::enqueue_search_embeddings,
             commands::stream_search_embeddings,
             commands::find_session_for_timestamp,

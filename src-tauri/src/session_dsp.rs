@@ -83,8 +83,16 @@ impl SessionDsp {
             )
         }; // lock released here
 
+        // Obtain a cloned Arc to the global cross-day HNSW index so the embed
+        // worker can insert into it without going through Tauri's state system.
+        let global_index = app
+            .state::<std::sync::Arc<crate::global_eeg_index::GlobalEegIndex>>()
+            .inner()
+            .arc();
+
         let mut accumulator = EegAccumulator::new(
             skill_dir, model_config, model_status, download_cancel, logger,
+            global_index,
         );
         accumulator.set_overlap_secs(overlap_secs);
 

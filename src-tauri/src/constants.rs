@@ -220,6 +220,23 @@ pub const LOG_CONFIG_FILE: &str = "log_config.json";
 /// (`~/.skill/YYYYMMDD/eeg_embeddings.hnsw`).
 pub const HNSW_INDEX_FILE: &str = "eeg_embeddings.hnsw";
 
+/// Filename of the persistent cross-day HNSW index stored directly in the
+/// skill data directory (`~/.skill/eeg_global.hnsw`).
+///
+/// This index accumulates every EEG embedding from all recording days into a
+/// single flat file.  The HNSW payload is the `YYYYMMDDHHmmss` timestamp
+/// (i64), which encodes the date so the matching per-day SQLite can be found
+/// during result hydration.
+///
+/// The file is built from scratch at startup if absent, updated incrementally
+/// by the embed worker after each epoch, and saved every
+/// `GLOBAL_HNSW_SAVE_EVERY` insertions.
+pub const GLOBAL_HNSW_FILE: &str = "eeg_global.hnsw";
+
+/// Number of new embeddings added to the global index between periodic disk
+/// saves.  Balances write amplification against data loss on crash.
+pub const GLOBAL_HNSW_SAVE_EVERY: usize = 10;
+
 /// Filename of the SQLite database inside each daily folder
 /// (`~/.skill/YYYYMMDD/eeg.sqlite`).
 ///
@@ -330,8 +347,8 @@ pub const APP_ACKNOWLEDGEMENTS: &str =
 /// idiomatic on Windows and `$HOME` is often unset there, so `AppData\Local`
 /// is used instead.
 ///
-/// This constant is **not used on Windows** at runtime; it is kept for
-/// macOS / Linux builds and for tests that run on those platforms.
+/// Only used on macOS / Linux; excluded from Windows builds entirely.
+#[cfg(not(target_os = "windows"))]
 pub const SKILL_DIR: &str = ".skill";
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -439,6 +456,7 @@ mod tests {
 
     // ── Skill directory ───────────────────────────────────────────────────────
 
+    #[cfg(not(target_os = "windows"))]
     #[test]
     fn skill_dir_is_dot_skill() {
         assert_eq!(SKILL_DIR, ".skill");

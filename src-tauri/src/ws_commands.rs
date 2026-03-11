@@ -553,8 +553,16 @@ pub fn search(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let k  = k.unwrap_or(10).clamp(1, 100);
     let ef = ef.unwrap_or(k.max(50));
 
+    // Pull the global cross-day HNSW index from Tauri managed state so the
+    // WebSocket search path gets the same accelerated backend as the UI.
+    let global_arc = {
+        use tauri::Manager as _;
+        app.state::<std::sync::Arc<crate::global_eeg_index::GlobalEegIndex>>()
+           .inner()
+           .arc()
+    };
     let result = crate::commands::search_embeddings_in_range(
-        &skill_dir, start_utc, end_utc, k, ef,
+        &skill_dir, start_utc, end_utc, k, ef, Some(global_arc),
     );
 
     let analysis = crate::analyze_search_results(&result);
