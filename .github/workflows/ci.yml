@@ -47,6 +47,12 @@ jobs:
             libespeak-ng-dev libasound2-dev \
             cmake binutils
 
+      # Vulkan SDK — required by the llm-vulkan feature (llama.cpp Vulkan backend).
+      # We install directly from the LunarG apt repo (noble) so cargo check/clippy
+      # run against the same feature set used in the release build.
+      - name: Install Vulkan SDK
+        run: bash scripts/install-vulkan-sdk.sh
+
       - name: Cache espeak-ng static lib
         id: cache-espeak
         uses: actions/cache@v4
@@ -66,11 +72,15 @@ jobs:
 
       - name: cargo check
         working-directory: src-tauri
-        run: cargo check --locked --target x86_64-unknown-linux-gnu
+        env:
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+        run: cargo check --locked --target x86_64-unknown-linux-gnu --features llm-vulkan
 
       - name: cargo clippy
         working-directory: src-tauri
-        run: cargo clippy --locked --target x86_64-unknown-linux-gnu -- -D warnings
+        env:
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+        run: cargo clippy --locked --target x86_64-unknown-linux-gnu --features llm-vulkan -- -D warnings
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:
@@ -325,7 +335,7 @@ jobs:
                   {\"name\": \"Branch\",    \"value\": \"\`$REF\`\",          \"inline\": true},
                   {\"name\": \"Commit\",    \"value\": \"\`${SHA:0:8}\`\",    \"inline\": true},
                   {\"name\": \"Triggered\", \"value\": \"$EVENT by $ACTOR\", \"inline\": true},
-                  {\"name\": \"Rust (Linux)\",   \"value\": \"$EMOJI_RUST $RUST\",       \"inline\": true},
+                  {\"name\": \"Rust (Linux+Vulkan)\", \"value\": \"$EMOJI_RUST $RUST\",   \"inline\": true},
                   {\"name\": \"Rust (Windows)\", \"value\": \"$EMOJI_WINDOWS $WINDOWS\", \"inline\": true},
                   {\"name\": \"Frontend\",       \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
                   {\"name\": \"Audit\",          \"value\": \"$EMOJI_AUDIT $AUDIT\",       \"inline\": true}

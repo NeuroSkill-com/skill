@@ -22,9 +22,10 @@
  */
 
 import { execSync } from "child_process";
-import { platform } from "os";
+import { platform, cpus } from "os";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { readFileSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -173,12 +174,75 @@ if (isMingwTarget) {
 
 } else {
   // Linux native.
+
+  // Ensure the Vulkan SDK (headers + loader + glslc) is present before
+  // building.  The script is a no-op when the packages are already installed,
+  // so repeated `npm run tauri dev` calls are cheap.
+  console.log("→ ensuring Vulkan SDK is installed …");
+  execSync("bash scripts/install-vulkan-sdk.sh", {
+    cwd: root,
+    stdio: "inherit",
+  });
+
   console.log("→ building espeak-ng static library …");
   execSync("bash scripts/build-espeak-static.sh", {
     cwd: root,
     stdio: "inherit",
   });
   espeakLib = resolve(root, "src-tauri/espeak-static/lib");
+
+  // ── Linux: enable Vulkan GPU offloading for LLM inference ────────────────
+  //
+  // Vulkan is the broadest Linux GPU backend: it covers NVIDIA (via the
+  // official driver's Vulkan ICD), AMD (RADV in Mesa or the AMDVLK driver),
+  // and Intel Arc (ANV in Mesa) without requiring CUDA or ROCm at build time.
+  // llama.cpp falls back to CPU automatically if no Vulkan-capable device is
+  // found at runtime, so the binary is safe to ship on headless machines.
+  //
+  // cmake's FindVulkan module locates headers and the loader via pkg-config
+  // on Linux -- no VULKAN_SDK env var needs to be set (unlike Windows).
+  //
+  // Only inject the flag when the caller hasn't already passed --features.
+  if (!subArgs.includes("--features")) {
+    platformFlags = [...platformFlags, "--features", "llm-vulkan"];
+    console.log(
+      "→ Linux: injecting --features llm-vulkan (Vulkan GPU offloading for LLM)"
+    );
+  }
+}
+
+// ── Parallelism cap for Alpine / musl ─────────────────────────────────────────
+//
+// On Alpine Linux (musl libc), running many Cargo compilation jobs in parallel
+// can exhaust container memory.  When a crate compilation is killed by the OOM
+// reaper its artifact is never written, and every dependent crate then fails
+// with a cascading "E0463: can't find crate for X" error — the actual OOM kill
+// is not surfaced in the Rust error output, making the root cause invisible.
+//
+// Symptoms that point to this: errors like "can't find crate for `yoke`" inside
+// zerovec, or similar E0463 cascades for otherwise-pure-Rust crates that compile
+// fine in isolation (cargo build -p yoke succeeds; the full build does not).
+//
+// Capping jobs at the number of logical CPUs (or CARGO_BUILD_JOBS if already set
+// by the caller) keeps peak RSS manageable.  On well-resourced machines this has
+// no measurable effect; on memory-constrained Alpine CI containers it is the
+// difference between a clean build and a mysterious cascade failure.
+//
+// To override, set CARGO_BUILD_JOBS before calling npm run tauri build:
+//   CARGO_BUILD_JOBS=8 npm run tauri build
+if (!isWin && !isMac && !process.env.CARGO_BUILD_JOBS) {
+  let onAlpine = false;
+  try {
+    onAlpine = readFileSync("/etc/os-release", "utf8").includes("ID=alpine");
+  } catch { /* not on Alpine or /etc/os-release unreadable */ }
+
+  if (onAlpine) {
+    process.env.CARGO_BUILD_JOBS = String(cpus().length);
+    console.log(
+      `→ Alpine Linux detected: capping Cargo parallelism at ${process.env.CARGO_BUILD_JOBS} job(s)` +
+      ` to prevent OOM-induced cascade errors (set CARGO_BUILD_JOBS to override)`
+    );
+  }
 }
 
 // ── Run Tauri ─────────────────────────────────────────────────────────────────

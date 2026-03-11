@@ -12,9 +12,10 @@
 #
 # When none of those are found the script:
 #   - Downloads the latest Windows installer from sdk.lunarg.com (~200 MB)
-#   - Runs it silently  (/S)
+#   - Runs it headlessly via Qt Installer Framework (QIF) silent flags
 #   - Discovers the freshly installed path and exports VULKAN_SDK into the
-#     current process so that cargo / CMake pick it up in the same shell.
+#     current process AND into $GITHUB_ENV so subsequent Actions steps
+#     and cargo / CMake pick it up without a shell restart.
 #
 # Output on success (either path):
 #   $env:VULKAN_SDK  -- set to the SDK root for the current process
@@ -92,6 +93,11 @@ if ($sdkRoot) {
     # Ensure the env var is set for the remainder of this process so CMake
     # can find it even when the installer put it in a previous session.
     $env:VULKAN_SDK = $sdkRoot
+    # On GitHub Actions propagate to subsequent steps via $GITHUB_ENV.
+    if ($env:GITHUB_ENV) {
+        "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        Ok "  (VULKAN_SDK written to `$GITHUB_ENV for subsequent Actions steps)"
+    }
     exit 0
 }
 
@@ -119,13 +125,31 @@ Ok "Downloaded $sizeMB MB"
 
 # -- Install -------------------------------------------------------------------
 
-Step "Installing Vulkan SDK silently (/S)"
-Warn "(Requires administrator privileges -- UAC may prompt.)"
+Step "Installing Vulkan SDK silently"
+Warn "(Running headless -- no UAC prompt, no GUI)"
+
+# The LunarG SDK installer is Qt Installer Framework (QIF) based.
+# QIF's own --silent flag plus these acceptance flags give a fully
+# non-interactive install that works on headless CI runners.
+# Legacy NSIS builds would have used /S, but current LunarG SDKs are QIF.
+$installArgs = @(
+    "--accept-licenses",
+    "--accept-obligations",
+    "--confirm-command",
+    "--default-answer",
+    "--silent",
+    "install"
+)
+
+Write-Host "  Args: $installArgs"
 
 try {
-    $proc = Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -PassThru
+    $proc = Start-Process -FilePath $installerPath `
+                          -ArgumentList $installArgs `
+                          -Wait -PassThru -NoNewWindow
     if ($proc.ExitCode -ne 0) {
-        Die "Installer exited with code $($proc.ExitCode).`nTry running the installer manually: $installerPath"
+        Die ("Installer exited with code $($proc.ExitCode).`n" +
+             "Try running the installer manually: $installerPath")
     }
 } finally {
     # Clean up the downloaded installer regardless of success.
@@ -161,6 +185,14 @@ if (-not $sdkRoot) {
 
 # Export into the current process so cargo / CMake see it immediately.
 $env:VULKAN_SDK = $sdkRoot
+
+# On GitHub Actions each step runs in a fresh process, so process-level env
+# vars don't carry over.  Writing to $GITHUB_ENV makes the variable available
+# to every subsequent step in the same job.
+if ($env:GITHUB_ENV) {
+    "VULKAN_SDK=$sdkRoot" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+    Ok "  (VULKAN_SDK written to `$GITHUB_ENV for subsequent Actions steps)"
+}
 
 $header = Join-Path $sdkRoot "Include\vulkan\vulkan.h"
 Ok "Vulkan SDK installed and verified:"

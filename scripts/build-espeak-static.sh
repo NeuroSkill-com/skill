@@ -38,14 +38,36 @@ echo "STATIC_LIB = $STATIC_LIB"
 
 # ---------- cache check -------------------------------------------------------
 if [[ -f "$STATIC_LIB" ]]; then
-    # On macOS, verify the cached library is actually a Mach-O archive.
-    # A library cross-compiled on Linux (ELF) passes the nm symbol check but
-    # fails at link time with "not a mach-o file".  lipo -info prints the
-    # architecture(s) for valid Mach-O archives and errors out on ELF ones.
+    # Cross-platform format guard: reject a library built for a different OS.
+    #
+    # macOS: lipo -info prints the architecture(s) for valid Mach-O archives
+    #        and errors out on ELF ones.  This rejects a Linux ELF archive that
+    #        was cross-compiled and then committed to the repo.
+    #
+    # Linux: check the magic bytes of the first object inside the archive.
+    #        ELF magic is 7f 45 4c 46.  Mach-O LE magic is ce/cf fa ed fe.
+    #        `ar -t` can list objects from both ar formats, so we CANNOT rely
+    #        on `ar -t | grep ctype` alone — a macOS archive also has
+    #        ctype.c__c1.o and would pass that check even on Linux, causing the
+    #        macOS Mach-O library to be silently used, which then makes the
+    #        Linux linker fail with "undefined reference to espeak_*".
     if [[ "$(uname)" == "Darwin" ]]; then
         if ! lipo -info "$STATIC_LIB" 2>/dev/null | grep -qE "arm64|x86_64|i386"; then
             echo "Found $STATIC_LIB but it is not a macOS Mach-O archive (wrong platform?) — rebuilding."
             rm -rf "$STATIC_DIR"
+        fi
+    else
+        # Linux (and other ELF platforms): read the first 4 bytes of the first
+        # object to distinguish ELF from Mach-O.
+        _first_obj=$(ar -t "$STATIC_LIB" 2>/dev/null | head -1)
+        if [[ -n "$_first_obj" ]]; then
+            _magic=$(ar -p "$STATIC_LIB" "$_first_obj" 2>/dev/null \
+                     | od -An -N4 -tx1 2>/dev/null | tr -d ' \n')
+            if [[ "$_magic" != "7f454c46"* ]]; then
+                echo "Found $STATIC_LIB but it is not a Linux ELF archive" \
+                     "(magic bytes: $_magic — likely a macOS Mach-O committed from another platform) — rebuilding."
+                rm -rf "$STATIC_DIR"
+            fi
         fi
     fi
 fi

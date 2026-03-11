@@ -103,6 +103,13 @@ jobs:
           fi
           echo "✓ TAURI_SIGNING_PRIVATE_KEY is present."
 
+      # ── Vulkan SDK ────────────────────────────────────────────────────────────
+      # Required by the llm-vulkan feature (llama.cpp Vulkan GPU backend).
+      # Installed from the LunarG apt repository; cached by apt's package
+      # database so repeated runs are fast once the repo is configured.
+      - name: Install Vulkan SDK
+        run: bash scripts/install-vulkan-sdk.sh
+
       # ── espeak-ng static library ──────────────────────────────────────────────
       # Cache keyed on the build script; a script change busts the cache.
       - name: Cache espeak-ng static lib
@@ -123,6 +130,12 @@ jobs:
         run: npm run build
 
       # ── Compile + bundle (frontend + Rust + deb + AppImage) ──────────────────
+      #
+      # --features llm-vulkan enables the llama.cpp Vulkan GPU backend so the
+      # shipped binary can offload LLM inference to any Vulkan-capable GPU
+      # (NVIDIA, AMD, Intel Arc) without requiring CUDA or ROCm.  The Vulkan
+      # SDK was installed in the step above; at runtime any Vulkan 1.0+ driver
+      # works and llama.cpp falls back to CPU automatically when no GPU is found.
       #
       # Produces two bundle types:
       #   deb      — Debian/Ubuntu package (.deb)
@@ -149,7 +162,8 @@ jobs:
         run: |
           npx tauri build \
             --target x86_64-unknown-linux-gnu \
-            --bundles deb,appimage
+            --bundles deb,appimage           \
+            --features llm-vulkan
 
       # ── Locate build artifacts ────────────────────────────────────────────────
       - name: Collect artifact paths
