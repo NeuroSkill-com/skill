@@ -1,0 +1,380 @@
+name: Release — Windows
+
+# Triggered by the same semver tag as the macOS and Linux release workflows.
+# All three run in parallel; each uploads its own binaries and then merges
+# its platform entry into the shared latest.json updater manifest.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write   # create/update GitHub Releases and upload assets
+
+jobs:
+  release-windows:
+    name: Build & Release — x86_64-pc-windows-msvc
+    runs-on: windows-latest
+    environment: Release
+
+    steps:
+      # ── Checkout ──────────────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ── Verify tag matches tauri.conf.json version ────────────────────────────
+      - name: Verify version matches tag
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          CONF_VERSION=$(
+            grep '"version"' src-tauri/tauri.conf.json \
+            | head -1 \
+            | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
+          )
+          if [ "$VERSION" != "$CONF_VERSION" ]; then
+            echo "::error::Tag version ($VERSION) does not match" \
+                 "tauri.conf.json version ($CONF_VERSION)."
+            echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
+                 "src-tauri/Cargo.toml, then re-tag."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "TAG=$TAG"         >> "$GITHUB_ENV"
+          echo "✓ Version verified: $VERSION"
+
+      # ── MSVC developer environment ────────────────────────────────────────────
+      # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
+      # Required for the espeak-ng static library build (lib.exe) and for
+      # Tauri's Windows code-signing step (signtool.exe).
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # ── Rust toolchain ────────────────────────────────────────────────────────
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # ── Cargo cache ───────────────────────────────────────────────────────────
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # ── Node.js ───────────────────────────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # ── Pre-flight: verify every required secret is set ──────────────────────
+      # Fails fast (before the 15-min build) if any secret is missing.
+      # Values are never printed.
+      #
+      # WINDOWS_CERTIFICATE          — base64-encoded .pfx code-signing certificate
+      #                                (OV or EV cert from DigiCert, Sectigo, etc.)
+      #                                How to encode:
+      #                                  certutil -encode cert.pfx cert.b64
+      #                                  — or on PowerShell:
+      #                                  [Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx"))
+      #
+      # WINDOWS_CERTIFICATE_PASSWORD — password protecting the .pfx
+      #
+      # TAURI_SIGNING_PRIVATE_KEY    — Ed25519 private key for signing Tauri
+      #                                updater artifacts (same key as macOS/Linux)
+      - name: Verify signing secrets are present
+        shell: bash
+        env:
+          WINDOWS_CERTIFICATE:          ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY:    ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          ok=true
+          for var in \
+            WINDOWS_CERTIFICATE \
+            WINDOWS_CERTIFICATE_PASSWORD \
+            TAURI_SIGNING_PRIVATE_KEY
+          do
+            if [ -z "${!var}" ]; then
+              echo "::error::Secret '$var' is empty or not set."
+              ok=false
+            fi
+          done
+          $ok || exit 1
+          echo "✓ All signing secrets are present."
+
+      # ── espeak-ng MSVC static library ─────────────────────────────────────────
+      # Cache keyed on the build script; a script change busts the cache.
+      # The PS1 script requires MSVC tools (lib.exe) — set up above via
+      # ilammy/msvc-dev-cmd before this step runs.
+      - name: Cache espeak-ng static lib
+        id: cache-espeak
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/espeak-static
+          key: windows-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.ps1') }}
+
+      - name: Build espeak-ng static lib
+        if: steps.cache-espeak.outputs.cache-hit != 'true'
+        shell: powershell
+        run: .\scripts\build-espeak-static.ps1
+
+      # ── Import Windows code-signing certificate ───────────────────────────────
+      # Imports the .pfx into the Current User certificate store and captures
+      # the SHA-1 thumbprint so Tauri can pass it to signtool.exe.
+      # The .pfx bytes are never written to disk unencrypted; the temp file is
+      # deleted immediately after import.
+      #
+      # SmartScreen note: an OV (Organisation Validated) certificate will still
+      # trigger SmartScreen warnings on first run until the binary accumulates
+      # reputation.  An EV (Extended Validation) certificate skips this.
+      - name: Import Windows code-signing certificate
+        shell: powershell
+        env:
+          WINDOWS_CERTIFICATE:          ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $certBytes = [System.Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          $certPath  = Join-Path $env:RUNNER_TEMP "signing.pfx"
+          [IO.File]::WriteAllBytes($certPath, $certBytes)
+
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD `
+                        -AsPlainText -Force
+          $cert = Import-PfxCertificate `
+                    -FilePath          $certPath `
+                    -CertStoreLocation Cert:\CurrentUser\My `
+                    -Password          $password
+
+          Remove-Item $certPath -Force
+
+          $thumbprint = $cert.Thumbprint
+          "CERTIFICATE_THUMBPRINT=$thumbprint" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          $expiry = $cert.NotAfter.ToString("yyyy-MM-dd")
+          Write-Host "✓ Certificate imported"
+          Write-Host "  Thumbprint : $thumbprint"
+          Write-Host "  Subject    : $($cert.Subject)"
+          Write-Host "  Expires    : $expiry"
+
+          if ($cert.NotAfter -lt (Get-Date)) {
+            Write-Error "::error::Code-signing certificate has expired ($expiry). Renew it."
+            exit 1
+          }
+
+      # ── Build frontend ────────────────────────────────────────────────────────
+      - name: Build frontend
+        run: npm run build
+
+      # ── Compile + bundle (frontend + Rust + NSIS installer) ──────────────────
+      #
+      # Passes the certificate thumbprint via --config so Tauri's bundler calls
+      # signtool.exe to sign the NSIS installer.
+      # TAURI_SIGNING_PRIVATE_KEY causes Tauri to also produce the Ed25519-signed
+      # updater artifacts:
+      #   *.nsis.zip      — NSIS installer wrapped in a zip (updater bundle)
+      #   *.nsis.zip.sig  — Ed25519 signature consumed by the Tauri updater plugin
+      - name: Build Tauri (Windows — NSIS)
+        shell: bash
+        env:
+          ESPEAK_LIB_DIR:                     ${{ github.workspace }}/src-tauri/espeak-static/lib
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          # Build the Tauri config override JSON (certificate thumbprint injected
+          # at runtime so it never touches tauri.conf.json in the repository).
+          CONFIG=$(python3 -c "
+          import json, os
+          print(json.dumps({
+            'bundle': {
+              'targets': ['nsis'],
+              'windows': {
+                'certificateThumbprint': os.environ['CERTIFICATE_THUMBPRINT'],
+                'digestAlgorithm':       'sha256',
+                'timestampUrl':          'http://timestamp.digicert.com',
+              }
+            }
+          }))")
+
+          npx tauri build \
+            --target x86_64-pc-windows-msvc \
+            --config "$CONFIG"
+
+      # ── Locate build artifacts ────────────────────────────────────────────────
+      - name: Collect artifact paths
+        id: artifacts
+        shell: bash
+        run: |
+          BUNDLE_DIR="src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+
+          NSIS_EXE="$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.exe"              | head -1)"
+          NSIS_ZIP="$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.nsis.zip"  \
+                        ! -name "*.sig"                                    | head -1)"
+          NSIS_SIG="$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.nsis.zip.sig"    | head -1)"
+
+          if [ -z "$NSIS_EXE" ] || [ -z "$NSIS_ZIP" ] || [ -z "$NSIS_SIG" ]; then
+            echo "::error::One or more expected artifacts are missing."
+            echo "  EXE : ${NSIS_EXE:-(not found)}"
+            echo "  ZIP : ${NSIS_ZIP:-(not found)}"
+            echo "  SIG : ${NSIS_SIG:-(not found)}"
+            exit 1
+          fi
+
+          echo "nsis_exe=$NSIS_EXE"                          >> "$GITHUB_OUTPUT"
+          echo "nsis_zip=$NSIS_ZIP"                          >> "$GITHUB_OUTPUT"
+          echo "nsis_sig=$NSIS_SIG"                          >> "$GITHUB_OUTPUT"
+          echo "nsis_zip_name=$(basename "$NSIS_ZIP")"       >> "$GITHUB_OUTPUT"
+
+          echo "Artifacts found:"
+          echo "  EXE : $NSIS_EXE  ($(du -sh "$NSIS_EXE" | cut -f1))"
+          echo "  ZIP : $NSIS_ZIP  ($(du -sh "$NSIS_ZIP" | cut -f1))"
+          echo "  SIG : $NSIS_SIG"
+
+      # ── Create / update GitHub Release with Windows binaries ─────────────────
+      #
+      # softprops/action-gh-release creates the release if it doesn't exist yet,
+      # or adds files to it if it was already created by the macOS or Linux
+      # workflow.  latest.json is handled in the next step.
+      #
+      # Windows assets uploaded here:
+      #   *_x64-setup.exe          — NSIS installer (distribute to users)
+      #   *.nsis.zip               — Tauri updater bundle
+      #   *.nsis.zip.sig           — Ed25519 signature for the updater
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name:                ${{ env.TAG }}
+          name:                    Skill v${{ env.VERSION }}
+          generate_release_notes:  true
+          fail_on_unmatched_files: true
+          files: |
+            ${{ steps.artifacts.outputs.nsis_exe }}
+            ${{ steps.artifacts.outputs.nsis_zip }}
+            ${{ steps.artifacts.outputs.nsis_sig }}
+
+      # ── Update latest.json ────────────────────────────────────────────────────
+      #
+      # Downloads the current latest.json from the release (created by whichever
+      # platform workflow ran first), merges the windows-x86_64 entry, then
+      # re-uploads.  If no latest.json exists yet, creates one from scratch.
+      - name: Update latest.json
+        shell: bash
+        env:
+          GH_TOKEN:     ${{ github.token }}
+          GH_REPO:      ${{ github.repository }}
+          TAG:          ${{ env.TAG }}
+          VERSION:      ${{ env.VERSION }}
+          NSIS_ZIP_NAME: ${{ steps.artifacts.outputs.nsis_zip_name }}
+          NSIS_SIG_PATH: ${{ steps.artifacts.outputs.nsis_sig }}
+        run: |
+          python3 - <<'PYEOF'
+          import json, os, subprocess, datetime
+
+          version      = os.environ["VERSION"]
+          tag          = os.environ["TAG"]
+          repo         = os.environ["GH_REPO"]
+          zip_name     = os.environ["NSIS_ZIP_NAME"]
+          sig_path     = os.environ["NSIS_SIG_PATH"]
+
+          with open(sig_path) as fh:
+              signature = fh.read().strip()
+
+          download_url = (
+              f"https://github.com/{repo}/releases/download/{tag}/{zip_name}"
+          )
+
+          # Try to download the existing latest.json from the release.
+          dl = subprocess.run(
+              ["gh", "release", "download", tag,
+               "--pattern", "latest.json", "--output", "latest.json", "--clobber"],
+              capture_output=True, text=True,
+          )
+
+          if dl.returncode == 0:
+              with open("latest.json") as fh:
+                  manifest = json.load(fh)
+          else:
+              pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+              manifest = {
+                  "version":  version,
+                  "notes":    f"NeuroSkill™ v{version}",
+                  "pub_date": pub_date,
+                  "platforms": {},
+              }
+
+          manifest["platforms"]["windows-x86_64"] = {
+              "url":       download_url,
+              "signature": signature,
+          }
+
+          with open("latest.json", "w") as fh:
+              json.dump(manifest, fh, indent=2)
+              fh.write("\n")
+
+          print("Updated latest.json:")
+          print(json.dumps(manifest, indent=2))
+          PYEOF
+
+          gh release upload "$TAG" latest.json --clobber
+          echo "✓ latest.json uploaded to release $TAG"
+
+      # ── Remove the certificate from the runner's cert store ──────────────────
+      - name: Remove signing certificate
+        if: always()
+        shell: powershell
+        run: |
+          if ($env:CERTIFICATE_THUMBPRINT) {
+            Get-ChildItem Cert:\CurrentUser\My\$env:CERTIFICATE_THUMBPRINT `
+              -ErrorAction SilentlyContinue |
+              Remove-Item -Force
+            Write-Host "✓ Certificate removed from store."
+          }
+
+      # ── Discord notification ──────────────────────────────────────────────────
+      - name: Notify Discord of release
+        if: always()
+        shell: bash
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          JOB_STATUS:          ${{ job.status }}
+        run: |
+          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.TAG }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          if [[ "$JOB_STATUS" == "success" ]]; then
+            COLOR=3066993
+            TITLE="🚀 Release v${{ env.VERSION }} — Windows Published"
+            DESC="Windows build published and ready to download."
+            LINK_LINE="**[Download v${{ env.VERSION }}]($RELEASE_URL)**"
+          else
+            COLOR=15158332
+            TITLE="💥 Release v${{ env.VERSION }} — Windows Failed"
+            DESC="The Windows release build failed. Check the run for details."
+            LINK_LINE="**[View failed run]($RUN_URL)**"
+          fi
+
+          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"embeds\": [{
+                \"title\": \"$TITLE\",
+                \"description\": \"$DESC\n\n$LINK_LINE\",
+                \"url\": \"$RUN_URL\",
+                \"color\": $COLOR,
+                \"fields\": [
+                  {\"name\": \"Tag\",      \"value\": \"\`${{ env.TAG }}\`\",     \"inline\": true},
+                  {\"name\": \"Version\",  \"value\": \"\`${{ env.VERSION }}\`\", \"inline\": true},
+                  {\"name\": \"Platform\", \"value\": \"Windows x86_64\",          \"inline\": true},
+                  {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true}
+                ],
+                \"footer\": {\"text\": \"${{ github.repository }}\"}
+              }]
+            }"
