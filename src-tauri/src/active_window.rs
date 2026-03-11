@@ -161,37 +161,37 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
     //  user32  → GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId
     //  kernel32 → OpenProcess, QueryFullProcessImageNameW, CloseHandle
 
-    type HWND   = *mut core::ffi::c_void;
-    type HANDLE = *mut core::ffi::c_void;
-    type DWORD  = u32;
-    type BOOL   = i32;
-    type WCHAR  = u16;
+    type Hwnd    = *mut core::ffi::c_void;
+    type Handle  = *mut core::ffi::c_void;
+    type Dword   = u32;
+    type Bool    = i32;
+    type Wchar   = u16;
 
     // PROCESS_QUERY_LIMITED_INFORMATION — sufficient for QueryFullProcessImageNameW
     // and available without elevation for most processes (Vista+).
-    const PROCESS_QUERY_LIMITED_INFORMATION: DWORD = 0x1000;
+    const PROCESS_QUERY_LIMITED_INFORMATION: Dword = 0x1000;
 
     #[link(name = "user32")]
     extern "system" {
-        fn GetForegroundWindow() -> HWND;
-        fn GetWindowTextW(hwnd: HWND, lp_string: *mut WCHAR, n_max_count: i32) -> i32;
-        fn GetWindowThreadProcessId(hwnd: HWND, lpdw_process_id: *mut DWORD) -> DWORD;
+        fn GetForegroundWindow() -> Hwnd;
+        fn GetWindowTextW(hwnd: Hwnd, lp_string: *mut Wchar, n_max_count: i32) -> i32;
+        fn GetWindowThreadProcessId(hwnd: Hwnd, lpdw_process_id: *mut Dword) -> Dword;
     }
 
     #[link(name = "kernel32")]
     extern "system" {
         fn OpenProcess(
-            dw_desired_access: DWORD,
-            b_inherit_handle:  BOOL,
-            dw_process_id:     DWORD,
-        ) -> HANDLE;
+            dw_desired_access: Dword,
+            b_inherit_handle:  Bool,
+            dw_process_id:     Dword,
+        ) -> Handle;
         fn QueryFullProcessImageNameW(
-            h_process:   HANDLE,
-            dw_flags:    DWORD,
-            lp_exe_name: *mut WCHAR,
-            lpdw_size:   *mut DWORD,
-        ) -> BOOL;
-        fn CloseHandle(h_object: HANDLE) -> BOOL;
+            h_process:   Handle,
+            dw_flags:    Dword,
+            lp_exe_name: *mut Wchar,
+            lpdw_size:   *mut Dword,
+        ) -> Bool;
+        fn CloseHandle(h_object: Handle) -> Bool;
     }
 
     unsafe {
@@ -209,7 +209,7 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
         };
 
         // 3. Process ID owning the foreground window.
-        let mut pid: DWORD = 0;
+        let mut pid: Dword = 0;
         GetWindowThreadProcessId(hwnd, &mut pid);
         if pid == 0 { return None; }
 
@@ -217,7 +217,7 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
         let hproc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         let (app_path, app_name) = if !hproc.is_null() {
             let mut path_buf = [0u16; 1024];
-            let mut path_len = path_buf.len() as DWORD;
+            let mut path_len = path_buf.len() as Dword;
             let app_path = if QueryFullProcessImageNameW(
                 hproc, 0, path_buf.as_mut_ptr(), &mut path_len,
             ) != 0 && path_len > 0 {
@@ -330,20 +330,20 @@ fn poll_input_activity() -> (bool, bool) {
     use std::mem;
 
     #[repr(C)]
-    struct LASTINPUTINFO {
+    struct Lastinputinfo {
         cb_size: u32,
         dw_time: u32,
     }
 
     #[link(name = "user32")]
     extern "system" {
-        fn GetLastInputInfo(plii: *mut LASTINPUTINFO) -> i32;
+        fn GetLastInputInfo(plii: *mut Lastinputinfo) -> i32;
         fn GetTickCount() -> u32;
     }
 
     unsafe {
-        let mut info = LASTINPUTINFO {
-            cb_size: mem::size_of::<LASTINPUTINFO>() as u32,
+        let mut info = Lastinputinfo {
+            cb_size: mem::size_of::<Lastinputinfo>() as u32,
             dw_time: 0,
         };
         if GetLastInputInfo(&mut info) == 0 {
