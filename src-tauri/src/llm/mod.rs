@@ -867,15 +867,18 @@ fn run_actor(
             // .parent() returns Option<&Path>, not Result — use `Some` instead of `Ok`
             if let Some(parent_dir) = std::path::Path::new(&vulkan_sdk_path).parent() {
                 // Prepend Vulkan SDK bin directory to PATH before backend init
+                // `.to_string_lossy()` returns a `String` that implements `AsRef<OsStr>`
+                let parent_vpath = parent_dir.to_string_lossy().to_string();
+                
                 if let Ok(current_path) = std::env::var("PATH") {
                     std::env::set_var(
                         "PATH",
-                        format!("{};{}", parent_dir.display(), current_path),
+                        format!("{};{}", parent_vpath, current_path),
                     );
                     llm_info!(&app, &log_buf, log_file,
                         "Vulkan SDK path injected into PATH: {}", vulkan_sdk_path);
                 } else {
-                    std::env::set_var("PATH", parent_dir.display());
+                    std::env::set_var("PATH", parent_vpath);
                 }
             }
         }

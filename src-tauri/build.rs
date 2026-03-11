@@ -744,7 +744,7 @@ fn clear_readonly(path: &Path) {
 
 #[cfg(target_os = "windows")]
 fn setup_vulkan_sdk_windows() {
-    use std::fs;
+    // use std::fs;
     
     let vulkan_sdk_path = "C:\\VulkanSDK";
     
