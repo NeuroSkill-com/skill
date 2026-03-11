@@ -164,6 +164,42 @@ jobs:
         shell: powershell
         run: .\scripts\build-espeak-static.ps1
 
+      # ── Vulkan SDK ────────────────────────────────────────────────────────────
+      # The llm-vulkan feature (Vulkan GPU back-end for llama.cpp) is always
+      # enabled on Windows.  The Vulkan SDK is NOT pre-installed on GitHub
+      # Actions runners, so we download it here and cache the result.
+      #
+      # Cache key is the hash of the install script; changing the script
+      # (e.g. to pin a specific SDK version) automatically busts the cache.
+      #
+      # Cache hit:  install script detects C:\VulkanSDK via filesystem and exits
+      #             immediately — no network I/O, total overhead < 5 s.
+      # Cache miss: install script downloads the ~200 MB installer from
+      #             sdk.lunarg.com, runs it silently (/S), and the populated
+      #             C:\VulkanSDK tree is stored in the cache for future runs.
+      #
+      # After either path, VULKAN_SDK is written to $GITHUB_ENV so that
+      # subsequent steps (cargo / CMake FindVulkan) can locate the headers and
+      # vulkan-1.lib without relying on the machine-level env var that the
+      # installer would normally set — that var is not restored by cache restore.
+      - name: Cache Vulkan SDK
+        uses: actions/cache@v4
+        with:
+          path: C:\VulkanSDK
+          key: windows-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
+
+      - name: Install Vulkan SDK + export VULKAN_SDK
+        shell: powershell
+        run: |
+          .\scripts\install-vulkan-sdk.ps1
+          if (-not $env:VULKAN_SDK) {
+            Write-Error "VULKAN_SDK was not set by install-vulkan-sdk.ps1"
+            exit 1
+          }
+          "VULKAN_SDK=$env:VULKAN_SDK" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
+
       # ── Import Windows code-signing certificate (optional) ───────────────────
       # Skipped when WINDOWS_CERTIFICATE is not set (unsigned build).
       # When present: imports the .pfx into the Current User certificate store,
@@ -227,6 +263,18 @@ jobs:
           ESPEAK_LIB_DIR:                     ${{ github.workspace }}/src-tauri/espeak-static/lib
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # VULKAN_SDK was written to $GITHUB_ENV by the install step above;
+          # re-exposing it here makes it visible to CMake's FindVulkan module
+          # and to llama.cpp's build system inside the cargo build invocation.
+          VULKAN_SDK: ${{ env.VULKAN_SDK }}
+          # ilammy/msvc-dev-cmd prepends VS's bundled LLVM/Clang 19 to PATH.
+          # bindgen (used by llama-cpp-sys-4) calls clang-sys which picks up
+          # that libclang.dll — VS's Clang 19 in MSVC-compat mode does not
+          # implement the __builtin_ia32_* MMX intrinsics that mmintrin.h
+          # requires, causing bindgen to crash before generating any bindings.
+          # LIBCLANG_PATH is checked by clang-sys before PATH, so pointing it
+          # at the runner's standalone LLVM bypasses VS's broken copy entirely.
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
         run: |
           # Build the Tauri --config JSON.
           # Include Windows signing fields only when a certificate is available.
@@ -242,8 +290,12 @@ jobs:
               }
           print(json.dumps({'bundle': bundle}))")
 
+          # --features llm-vulkan enables the Vulkan GPU back-end for LLM
+          # inference (same flag tauri-build.js injects for local dev builds).
+          # Requires the Vulkan SDK installed and VULKAN_SDK set (above).
           npx tauri build \
             --target x86_64-pc-windows-msvc \
+            --features llm-vulkan \
             --config "$CONFIG"
 
       # ── Locate build artifacts ────────────────────────────────────────────────
@@ -389,12 +441,12 @@ jobs:
 
           if [[ "$JOB_STATUS" == "success" ]]; then
             COLOR=3066993
-            TITLE="[ok] Release v${{ env.VERSION }} - Windows Published"
+            TITLE="🚀 Release v${{ env.VERSION }} — Windows Published"
             DESC="Windows build published and ready to download."
             LINK_LINE="**[Download v${{ env.VERSION }}]($RELEASE_URL)**"
           else
             COLOR=15158332
-            TITLE="[fail] Release v${{ env.VERSION }} - Windows Failed"
+            TITLE="💥 Release v${{ env.VERSION }} — Windows Failed"
             DESC="The Windows release build failed. Check the run for details."
             LINK_LINE="**[View failed run]($RUN_URL)**"
           fi

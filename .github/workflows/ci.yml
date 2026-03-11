@@ -99,6 +99,146 @@ jobs:
       - name: Unit tests
         run: npm test
 
+  # ── Windows Rust backend ─────────────────────────────────────────────────────
+  windows-check:
+    name: Windows — cargo check + clippy
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
+      # Required for the espeak-ng static library build (lib.exe) and for
+      # the Vulkan SDK CMake integration used by the llm-vulkan feature.
+      - name: Set up MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # Git for Windows ships a Unix hard-link utility at
+      # C:\Program Files\Git\usr\bin\link.exe which $GITHUB_PATH prepends
+      # at every step, silently shadowing MSVC's linker.  Deleting it is the
+      # only reliable fix (PATH-filtering is undone each step).
+      - name: Remove Git's link.exe (shadows MSVC linker)
+        shell: powershell
+        run: |
+          $gitLink = "C:\Program Files\Git\usr\bin\link.exe"
+          if (Test-Path $gitLink) {
+            Remove-Item $gitLink -Force
+            Write-Host "[ok] Deleted $gitLink"
+          } else {
+            Write-Host "[skip] $gitLink not found - nothing to remove"
+          }
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      # Swatinem/rust-cache is used here (matching the release workflow) for
+      # smarter per-crate invalidation vs the manual actions/cache approach.
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # Catch PowerShell encoding bugs (e.g. UTF-8 multi-byte sequences that
+      # Windows-1252-reading PS5.1 misinterprets as string delimiters) before
+      # they break the build.  Uses the PS parser directly — no execution needed.
+      - name: Validate PowerShell scripts (syntax check)
+        shell: powershell
+        run: |
+          $failed = $false
+          Get-ChildItem scripts\*.ps1 | ForEach-Object {
+            $parseErrors = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              $_.FullName, [ref]$null, [ref]$parseErrors
+            )
+            if ($parseErrors.Count -gt 0) {
+              Write-Host "::error file=$($_.Name)::$($parseErrors.Count) parse error(s):"
+              $parseErrors | ForEach-Object { Write-Host "  $_" }
+              $failed = $true
+            } else {
+              Write-Host "[ok] $($_.Name)"
+            }
+          }
+          if ($failed) { exit 1 }
+          Write-Host "[ok] All PowerShell scripts parse cleanly."
+
+      - name: Cache espeak-ng static lib
+        id: cache-espeak
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/espeak-static
+          key: windows-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.ps1') }}
+
+      - name: Build espeak-ng static lib
+        if: steps.cache-espeak.outputs.cache-hit != 'true'
+        shell: powershell
+        run: .\scripts\build-espeak-static.ps1
+
+      # Cache the Vulkan SDK installation directory so the ~200 MB download
+      # only happens once per change to the install script.  On cache hit the
+      # install script detects the SDK via filesystem and skips the download.
+      - name: Cache Vulkan SDK
+        uses: actions/cache@v4
+        with:
+          path: C:\VulkanSDK
+          key: windows-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
+
+      # Run install script (no-op on cache hit) then propagate the SDK path
+      # to subsequent steps via GITHUB_ENV.  Without this, cargo/cmake can't
+      # find the Vulkan headers when the SDK was restored from cache rather
+      # than freshly installed (the machine-level env var isn't in the cache).
+      - name: Install Vulkan SDK + export VULKAN_SDK
+        shell: powershell
+        run: |
+          .\scripts\install-vulkan-sdk.ps1
+          if (-not $env:VULKAN_SDK) {
+            Write-Error "VULKAN_SDK was not set by install-vulkan-sdk.ps1"
+            exit 1
+          }
+          "VULKAN_SDK=$env:VULKAN_SDK" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "[ok] Exported VULKAN_SDK=$env:VULKAN_SDK"
+
+      # llm-vulkan is always injected on Windows (see scripts/tauri-build.js).
+      # Check with the same feature set the actual build uses so compilation
+      # errors aren't silently skipped.
+      # LIBCLANG_PATH must be set before cargo runs so that clang-sys (used by
+      # bindgen inside llama-cpp-sys-4's build.rs) picks up the runner's
+      # standalone LLVM instead of VS's bundled Clang 19.
+      # VS's Clang 19 (added to PATH first by ilammy/msvc-dev-cmd) is in
+      # MSVC-compat mode and lacks the __builtin_ia32_* MMX intrinsics that
+      # mmintrin.h requires, causing bindgen to emit hundreds of errors and
+      # abort before generating a single binding.
+      # clang-sys checks LIBCLANG_PATH before PATH, so this env var wins.
+      - name: cargo check
+        shell: bash
+        working-directory: src-tauri
+        env:
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
+        run: cargo check --target x86_64-pc-windows-msvc --features llm-vulkan
+
+      - name: cargo clippy
+        shell: bash
+        working-directory: src-tauri
+        env:
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+          LIBCLANG_PATH: C:\Program Files\LLVM\bin
+        run: >
+          cargo clippy
+          --target x86_64-pc-windows-msvc
+          --features llm-vulkan
+          -- -D warnings
+
   # ── Security audit ────────────────────────────────────────────────────────────
   audit:
     name: Security audit
@@ -141,7 +281,7 @@ jobs:
   notify:
     name: Discord notification
     runs-on: ubuntu-latest
-    needs: [rust-check, frontend-check, audit]
+    needs: [rust-check, windows-check, frontend-check, audit]
     if: always()
     steps:
       - name: Send CI result to Discord
@@ -149,11 +289,13 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           RUST="${{ needs.rust-check.result }}"
+          WINDOWS="${{ needs.windows-check.result }}"
           FRONTEND="${{ needs.frontend-check.result }}"
           AUDIT="${{ needs.audit.result }}"
 
-          # Determine overall status
-          if [[ "$RUST" == "success" && "$FRONTEND" == "success" ]]; then
+          # Determine overall status — Windows is a required gate alongside
+          # Rust (Linux) and Frontend; audit is advisory only.
+          if [[ "$RUST" == "success" && "$WINDOWS" == "success" && "$FRONTEND" == "success" ]]; then
             COLOR=3066993   # green
             STATUS="✅ Passed"
           else
@@ -162,6 +304,7 @@ jobs:
           fi
 
           EMOJI_RUST=$([ "$RUST" = "success" ] && echo "✅" || echo "❌")
+          EMOJI_WINDOWS=$([ "$WINDOWS" = "success" ] && echo "✅" || echo "❌")
           EMOJI_FRONTEND=$([ "$FRONTEND" = "success" ] && echo "✅" || echo "❌")
           EMOJI_AUDIT=$([ "$AUDIT" = "success" ] && echo "✅" || echo "⚠️")
 
@@ -182,9 +325,10 @@ jobs:
                   {\"name\": \"Branch\",    \"value\": \"\`$REF\`\",          \"inline\": true},
                   {\"name\": \"Commit\",    \"value\": \"\`${SHA:0:8}\`\",    \"inline\": true},
                   {\"name\": \"Triggered\", \"value\": \"$EVENT by $ACTOR\", \"inline\": true},
-                  {\"name\": \"Rust\",      \"value\": \"$EMOJI_RUST $RUST\",         \"inline\": true},
-                  {\"name\": \"Frontend\",  \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
-                  {\"name\": \"Audit\",     \"value\": \"$EMOJI_AUDIT $AUDIT\",       \"inline\": true}
+                  {\"name\": \"Rust (Linux)\",   \"value\": \"$EMOJI_RUST $RUST\",       \"inline\": true},
+                  {\"name\": \"Rust (Windows)\", \"value\": \"$EMOJI_WINDOWS $WINDOWS\", \"inline\": true},
+                  {\"name\": \"Frontend\",       \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
+                  {\"name\": \"Audit\",          \"value\": \"$EMOJI_AUDIT $AUDIT\",       \"inline\": true}
                 ],
                 \"footer\": {\"text\": \"${{ github.repository }}\"}
               }]

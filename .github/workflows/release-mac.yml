@@ -546,14 +546,14 @@ jobs:
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           if [[ "$JOB_STATUS" == "success" ]]; then
-            COLOR=3066993   # green
-            TITLE="🚀 Release v${{ env.VERSION }} — Published"
-            DESC="A new release has been published and is ready to download."
+            COLOR=3066993
+            TITLE="🚀 Release v${{ env.VERSION }} — macOS Published"
+            DESC="macOS build published and ready to download."
             LINK_LINE="**[Download v${{ env.VERSION }}]($RELEASE_URL)**"
           else
-            COLOR=15158332  # red
-            TITLE="💥 Release v${{ env.VERSION }} — Failed"
-            DESC="The release build failed. Check the run for details."
+            COLOR=15158332
+            TITLE="💥 Release v${{ env.VERSION }} — macOS Failed"
+            DESC="The macOS release build failed. Check the run for details."
             LINK_LINE="**[View failed run]($RUN_URL)**"
           fi
 
@@ -566,9 +566,10 @@ jobs:
                 \"url\": \"$RUN_URL\",
                 \"color\": $COLOR,
                 \"fields\": [
-                  {\"name\": \"Tag\",     \"value\": \"\`${{ env.TAG }}\`\",      \"inline\": true},
-                  {\"name\": \"Version\", \"value\": \"\`${{ env.VERSION }}\`\",  \"inline\": true},
-                  {\"name\": \"Actor\",   \"value\": \"${{ github.actor }}\",      \"inline\": true}
+                  {\"name\": \"Tag\",      \"value\": \"\`${{ env.TAG }}\`\",     \"inline\": true},
+                  {\"name\": \"Version\",  \"value\": \"\`${{ env.VERSION }}\`\", \"inline\": true},
+                  {\"name\": \"Platform\", \"value\": \"macOS aarch64\",           \"inline\": true},
+                  {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true}
                 ],
                 \"footer\": {\"text\": \"${{ github.repository }}\"}
               }]
