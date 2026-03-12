@@ -24,6 +24,7 @@ pub(crate) async fn open_history_window(app: AppHandle) -> Result<(), String> {
         .min_inner_size(700.0, 560.0)
         .resizable(true)
         .center()
+        .decorations(false)
         .build()
         .map(|_| ())
         .map_err(|e| e.to_string())

@@ -13,11 +13,14 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::{AppState, save_settings};
 use crate::tray::refresh_tray;
+use crate::history_cmds::open_history_window;
 use crate::window_cmds::{
     open_label_window, open_search_window, open_settings_window,
     open_calibration_window_inner, open_help_window,
     open_api_window, open_focus_timer_window,
 };
+#[cfg(feature = "llm")]
+use crate::llm::cmds::open_chat_window;
 
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -80,11 +83,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
 
     if let Err(e) = register_one(app, &history, |a| {
         tauri::async_runtime::spawn(async move {
-            if let Some(w) = a.get_webview_window("history") { let _ = w.show(); let _ = w.set_focus(); }
-            else { let _ = tauri::WebviewWindowBuilder::new(&a, "history",
-                tauri::WebviewUrl::App("history".into()))
-                .title("NeuroSkill™ – History").inner_size(920.0, 780.0)
-                .min_inner_size(700.0, 560.0).resizable(true).center().build(); }
+            let _ = open_history_window(a).await;
         });
     }) { eprintln!("[shortcut] history: {e}"); }
 
@@ -109,16 +108,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
         };
         if let Err(e) = register_one(app, &chat, |a| {
             tauri::async_runtime::spawn(async move {
-                if let Some(w) = a.get_webview_window("chat") {
-                    let _ = w.show(); let _ = w.set_focus();
-                } else {
-                    let _ = tauri::WebviewWindowBuilder::new(&a, "chat",
-                        tauri::WebviewUrl::App("chat".into()))
-                        .title("NeuroSkill™ – Chat")
-                        .inner_size(720.0, 900.0)
-                        .min_inner_size(480.0, 600.0)
-                        .resizable(true).center().build();
-                }
+                let _ = open_chat_window(a).await;
             });
         }) { eprintln!("[shortcut] chat: {e}"); }
     }

@@ -1375,6 +1375,10 @@ const he: Record<string, string> = {
   "onboarding.tray.open":         "לחץ על סמל המגש בכל עת להצגה או הסתרה של הלוח.",
   "onboarding.tray.menu":         "לחיצה ימנית (או שמאלית ב-Windows/Linux) פותחת תפריט מהיר — חיבור, תיוג, כיול ועוד.",
 
+  "onboarding.downloadsComplete":     "כל ההורדות הושלמו!",
+  "onboarding.downloadsCompleteBody": "המודלים המומלצים הורדו והם מוכנים לשימוש. כדי להוריד מודלים נוספים או להחליף לאחרים, פתח את",
+  "onboarding.downloadMoreSettings":  "הגדרות האפליקציה",
+
   "onboarding.doneTitle":         "הכל מוכן!",
   "onboarding.doneBody":          "{app} פועל בשורת התפריט שלך. הנה כמה דברים שכדאי לדעת:",
   "onboarding.doneTip.tray":      "{app} נמצא בשורת התפריט. לחץ על הסמל כדי להציג/להסתיר את לוח המחוונים.",

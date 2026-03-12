@@ -1374,6 +1374,10 @@ const uk: Record<string, string> = {
   "onboarding.tray.open":         "Натисніть на значок у треї будь-коли, щоб показати або приховати панель.",
   "onboarding.tray.menu":         "Клік правою кнопкою (або лівою на Windows/Linux) відкриває швидке меню — підключити, позначити, калібрувати тощо.",
 
+  "onboarding.downloadsComplete":     "Усі завантаження завершені!",
+  "onboarding.downloadsCompleteBody": "Рекомендовані моделі завантажені та готові до використання. Щоб завантажити більше моделей або перейти на інші, відкрийте",
+  "onboarding.downloadMoreSettings":  "параметри програми",
+
   "onboarding.doneTitle":         "Все готово!",
   "onboarding.doneBody":          "{app} працює у вашому меню. Ось кілька корисних порад:",
   "onboarding.doneTip.tray":      "{app} знаходиться в треї меню. Натисніть на іконку, щоб показати/сховати панель.",

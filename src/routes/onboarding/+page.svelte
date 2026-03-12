@@ -512,6 +512,7 @@ the Free Software Foundation, version 3 only. -->
   function prev() { const i = stepIdx; if (i > 0) step = STEPS[i - 1]; }
   async function startScan() { await invoke("retry_connect"); }
   async function finish()    { await invoke("complete_onboarding"); }
+  async function openSettings() { await invoke("open_settings_window"); }
 
   useWindowTitle("window.title.onboarding");
 </script>
@@ -956,11 +957,23 @@ the Free Software Foundation, version 3 only. -->
     <!-- ════ DONE ═════════════════════════════════════════════════════════════ -->
     {:else if step === "done"}
       <div class="flex flex-col items-center gap-3 pt-4 text-center" in:fly={{ x: 30, duration: 200 }}>
-        <span class="text-4xl">🎉</span>
-        <h2 class="text-[1.05rem] font-bold">{t("onboarding.doneTitle")}</h2>
-        <p class="text-[0.72rem] text-muted-foreground leading-relaxed max-w-[320px]">
-          {t("onboarding.doneBody")}
-        </p>
+        {#if allRecommendedReady}
+          <!-- Downloads Complete View -->
+          <div class="flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 mb-1">
+            <span class="text-5xl text-green-600 dark:text-green-400">✓</span>
+          </div>
+          <h2 class="text-[1.05rem] font-bold text-green-600 dark:text-green-400">{t("onboarding.downloadsComplete")}</h2>
+          <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[340px]">
+            {t("onboarding.downloadsCompleteBody")} <button onclick={openSettings} class="font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer">{t("onboarding.downloadMoreSettings")}</button>.
+          </p>
+        {:else}
+          <!-- Default Done View -->
+          <span class="text-4xl">🎉</span>
+          <h2 class="text-[1.05rem] font-bold">{t("onboarding.doneTitle")}</h2>
+          <p class="text-[0.72rem] text-muted-foreground leading-relaxed max-w-[320px]">
+            {t("onboarding.doneBody")}
+          </p>
+        {/if}
 
         <div class="flex flex-col gap-1.5 w-full max-w-[300px] mt-1">
           {#each ["tray", "shortcuts", "help"] as tip}

@@ -22,7 +22,7 @@
  */
 
 import { execSync } from "child_process";
-import { platform, cpus } from "os";
+import { platform, cpus, arch } from "os";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { readFileSync, writeFileSync, unlinkSync } from "fs";
@@ -41,6 +41,7 @@ function runMarkdownRendererGuard() {
 
 const isMac = platform() === "darwin";
 const isWin = platform() === "win32";
+const isLinux = platform() === "linux";
 
 // ── Parse arguments ───────────────────────────────────────────────────────────
 // argv: ["node", "tauri-build.js", subcommand?, ...rest]
@@ -74,6 +75,47 @@ for (let i = 0; i < subArgs.length; i++) {
 }
 
 const isMingwTarget = explicitTarget?.endsWith("-windows-gnu") ?? false;
+
+// ── Linux preflight: prevent accidental cross-target trap ───────────────────
+//
+// On Linux, forcing an x86_64 target from an ARM host (or vice versa) triggers
+// pkg-config based sys crates (glib-sys, gobject-sys, etc.) to fail unless a
+// full cross sysroot/toolchain is configured. Most local builds intend native
+// host output, so fail fast with an actionable message.
+if (
+  isLinux &&
+  explicitTarget &&
+  explicitTarget.endsWith("-unknown-linux-gnu") &&
+  process.env.ALLOW_LINUX_CROSS !== "1"
+) {
+  const hostArchMap = {
+    x64: "x86_64",
+    arm64: "aarch64",
+  };
+  const rustHostArch = hostArchMap[arch()];
+
+  if (rustHostArch) {
+    const nativeTarget = `${rustHostArch}-unknown-linux-gnu`;
+    if (explicitTarget !== nativeTarget) {
+      console.error(
+        [
+          "✖ Linux target mismatch detected.",
+          `  Host architecture target: ${nativeTarget}`,
+          `  Requested target:          ${explicitTarget}`,
+          "",
+          "This is a cross-compilation build and requires a configured target sysroot/pkg-config wrapper.",
+          "",
+          "Use native target for local builds:",
+          `  npm run tauri build -- --target ${nativeTarget}`,
+          "",
+          "If cross-compilation is intentional, set ALLOW_LINUX_CROSS=1 and configure",
+          "PKG_CONFIG / PKG_CONFIG_SYSROOT_DIR / PKG_CONFIG_PATH for the target toolchain.",
+        ].join("\n")
+      );
+      process.exit(1);
+    }
+  }
+}
 
 // ── Pre-build espeak-ng and resolve ESPEAK_LIB_DIR ───────────────────────────
 let espeakLib;

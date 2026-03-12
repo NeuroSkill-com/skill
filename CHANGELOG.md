@@ -4,6 +4,55 @@ All notable changes to NeuroSkill™ are documented here.
 
 ---
 
+## [Unreleased]
+
+## [0.0.23] — 2026-03-12
+
+### UI / Build
+
+- **Custom titlebar for all windows** — replaced native window decorations with a custom titlebar component (minimize, maximize, close buttons) for consistent cross-platform appearance on all windows including main, settings, help, search, history, calibration, chat, downloads, and more
+- **Unified window close behavior across all platforms** — on all platforms including Linux, closing the main window now hides it instead of exiting. Users must select "Quit" from the tray menu to exit, which shows a confirmation dialog
+- **Downloads window total size footer** — the standalone Downloads window now shows the combined size of all listed downloads in a bottom footer for quick storage visibility
+- **Downloads footer visibility improved** — clarified the footer label to “Total download size”, added item count, and increased footer emphasis so the summary is easier to notice
+- **Downloads status bar placement** — moved the total-size summary from the bottom footer to an always-visible status bar directly under the Downloads header
+- **Custom titlebar controls centralized** — titlebar minimize/maximize/close now use a single shared Svelte handler path (no per-window DOM-id listener wiring), improving consistency across windows
+- **All windows aligned to shared custom titlebar path** — added missing window-capability labels (`history`, `compare`, `downloads`, `whats-new`), routed shortcut-created Chat/History windows through shared open-window commands, and ensured recreated main window remains undecorated so custom drag/control behavior is uniform
+- **Main window titlebar consolidation** — moved language picker, theme toggle, label, and history buttons from the main card header to the titlebar for a cleaner, more accessible layout; buttons remain icon-only and responsive
+- **Titlebar spacing refinement** — action buttons (label, history, theme, language) now live on the left side with window controls (minimize, maximize, close) on the right side, utilizing flex layout for proper visual separation
+- **Linux cross-target preflight guard** — `scripts/tauri-build.js` now fails fast when a Linux host attempts a non-native `*-unknown-linux-gnu` target (for example ARM host → x86_64) without explicit opt-in, and prints actionable guidance; this avoids long builds ending in `glib-sys` / `gobject-sys` `pkg-config` cross-compilation failures
+- **Linux build docs updated for ARM hosts** — added `pkg-config` cross-compilation troubleshooting to `LINUX.md`, including native ARM build command guidance and recommended x86_64 release build strategy
+- **Native ARM64 Linux build shortcut** — added `npm run tauri:build:linux:arm64` to run the correct local aarch64 target build (`deb` + `AppImage`, `llm-vulkan`) in one command
+- **Explicit Linux x64 cross-build shortcut** — added `npm run tauri:build:linux:x64`, which sets `ALLOW_LINUX_CROSS=1` and then runs the x86_64 target build path; this keeps accidental cross-target builds blocked by default while allowing intentional ones
+- **CI Linux build command aligned with npm scripts** — `.github/workflows/ci.yml` now runs `npm run tauri:build:linux:x64` for the Linux release bundle smoke test instead of an inline `npx tauri build ...` command, keeping CI and local build entrypoints consistent
+- **Tagged Linux release workflow aligned with npm scripts** — `.github/workflows/release-linux.yml` now also runs `npm run tauri:build:linux:x64` (with existing signing/env vars), replacing the inline `npx tauri build ...` command so both CI and release workflows share the same build entrypoint
+- **Workflow intent comments added** — both `.github/workflows/ci.yml` and `.github/workflows/release-linux.yml` now include inline comments noting that `tauri:build:linux:x64` intentionally sets `ALLOW_LINUX_CROSS=1`, reducing accidental regressions to implicit cross-build behavior
+
+### Bug fixes (Linux)
+
+- **Main window close/minimize/maximize buttons unresponsive** — on Linux
+  (Wayland + GNOME/Mutter/KWin), window decoration buttons did nothing
+  after the window was created with `visible(false)` and later shown;
+  this is a known upstream issue (tauri-apps/tauri#11856); worked around
+  by toggling fullscreen briefly after every `show()` call on the main
+  window (`linux_fix_decorations()`), which forces the Wayland compositor
+  to re-evaluate decoration state; applied in initial setup show,
+  `show_and_recover_main()`, and `complete_onboarding()`
+- **Window event diagnostic logging** — added `[window-event]` and
+  `[run-event]` stderr logging for `CloseRequested`, `Destroyed`,
+  `Focused`, `Moved`, `Resized`, `ScaleFactorChanged`, and
+  `ExitRequested` events across all windows
+
+### Onboarding
+
+- **Downloads complete success screen** — when all recommended models
+  (Qwen3.5 4B, ZUNA encoder, NeuTTS, Kitten TTS) are downloaded, the
+  onboarding done step now displays a prominent **green checkmark** with
+  a success message and a clickable link to **settings** where users can
+  download additional models or switch to alternatives
+- **Downloads complete i18n** — added `onboarding.downloadsComplete`,
+  `onboarding.downloadsCompleteBody`, and `onboarding.downloadMoreSettings`
+  keys to all five locales (en, de, fr, he, uk)
+
 ## [0.0.17] — 2026-03-11
 
 ### UI / Build

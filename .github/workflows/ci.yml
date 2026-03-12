@@ -145,23 +145,9 @@ jobs:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           APPIMAGE_EXTRACT_AND_RUN: 1
           NO_STRIP: 1
-        run: |
-          npx tauri build \
-            --target x86_64-unknown-linux-gnu \
-            --bundles deb,appimage \
-            --features llm-vulkan
-
-      - name: Upload Linux release artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-release-bundles-${{ github.run_number }}
-          if-no-files-found: error
-          path: |
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.tar.gz
-            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.tar.gz.sig
+        # Uses package.json script so cross-target intent stays explicit:
+        # `tauri:build:linux:x64` sets ALLOW_LINUX_CROSS=1.
+        run: npm run tauri:build:linux:x64
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:

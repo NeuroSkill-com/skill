@@ -33,8 +33,6 @@ the Free Software Foundation, version 3 only. -->
   import { useWindowTitle } from "$lib/window-title.svelte";
   import { addToast } from "$lib/toast-store.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import LanguagePicker from "$lib/LanguagePicker.svelte";
-  import ThemeToggle    from "$lib/ThemeToggle.svelte";
 
   // ── Model download status (shown as a banner when downloading/retrying) ────
   interface ModelDownloadStatus {
@@ -879,29 +877,8 @@ the Free Software Foundation, version 3 only. -->
           {:else}
             <span class="flex-1"></span>
           {/if}
-          <!-- Right-side action buttons — share the same flex row, auto-centered -->
+          <!-- Chevron button for expand (label/history moved to titlebar) -->
           <div class="flex items-center gap-0.5 shrink-0">
-            <!-- Label -->
-            <button onclick={openLabel} title={t("dashboard.addLabel")}
-              class="flex items-center justify-center w-6 h-6 rounded-md
-                     text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-                <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
-                <line x1="7" y1="7" x2="7.01" y2="7"/>
-              </svg>
-            </button>
-            <!-- History -->
-            <button onclick={openHistory} title={t("history.title")}
-              class="flex items-center justify-center w-6 h-6 rounded-md
-                     text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
-              </svg>
-            </button>
-            <!-- Chevron — always outermost -->
             <button onclick={() => compact = false} title={t("common.expand")}
               class="flex items-center justify-center w-6 h-6 rounded-md
                      text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
@@ -914,10 +891,8 @@ the Free Software Foundation, version 3 only. -->
         </div>
 
       {:else}
-        <!-- Expanded: top-right action buttons — all w-6 h-6, chevron outermost -->
+        <!-- Expanded: chevron button outermost (theme/language moved to titlebar) -->
         <div class="absolute top-2 right-2 z-10 flex items-center gap-0.5">
-          <ThemeToggle />
-          <LanguagePicker />
           <!-- Chevron — always outermost -->
           <button onclick={() => compact = true} title={t("common.minimise")}
             class="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground
@@ -933,27 +908,7 @@ the Free Software Foundation, version 3 only. -->
         <!-- ── Expanded vertical hero ─────────────────────────────────────── -->
         <div class="flex flex-col items-center gap-2.5 w-full" transition:fade={{ duration: 150 }}>
 
-          <!-- Top-left action buttons (icon-only to save header space) -->
-          <div class="absolute top-2 left-2 z-10 flex items-center gap-0.5">
-            <button onclick={openLabel} title={t("dashboard.addLabel")}
-              class="flex items-center justify-center w-6 h-6 rounded-md
-                     text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-                <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
-                <line x1="7" y1="7" x2="7.01" y2="7"/>
-              </svg>
-            </button>
-            <button onclick={openHistory} title={t("history.title")}
-              class="flex items-center justify-center w-6 h-6 rounded-md
-                     text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
-              </svg>
-            </button>
-          </div>
+          <!-- Label and history buttons moved to titlebar -->
 
           <!-- Status ring -->
           <div class="status-ring bg-slate-100 dark:bg-[#1a1a28]" style="--rc:{sc.ring}">

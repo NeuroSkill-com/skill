@@ -137,6 +137,27 @@ The build wrapper automatically:
 
 ## Runtime warning troubleshooting
 
+### `pkg-config has not been configured to support cross-compilation`
+
+If you run on an ARM Linux host (for example `aarch64`) and force:
+
+```bash
+npx tauri build --target x86_64-unknown-linux-gnu
+```
+
+Cargo switches to cross-compilation mode. GTK/WebKit sys crates (`glib-sys`,
+`gobject-sys`) then require a full x86_64 sysroot + cross `pkg-config`
+configuration (`PKG_CONFIG_SYSROOT_DIR`, `PKG_CONFIG_PATH`, etc.).
+
+For normal local builds, use your native target instead:
+
+```bash
+npm run tauri build -- --target aarch64-unknown-linux-gnu
+```
+
+For x86_64 release artifacts, build on an x86_64 Linux runner (recommended),
+or set up a complete x86_64 cross toolchain + sysroot before invoking Tauri.
+
 ### `libEGL warning: egl: failed to create dri2 screen`
 
 These warnings usually come from Mesa/WebKit probing GPU backends. On some
