@@ -1379,7 +1379,7 @@ pub fn umap_compute_inner(
 
 /// `list_calibrations` — return all saved calibration profiles.
 pub fn list_calibrations(app: &AppHandle) -> Result<Value, String> {
-    let s = app.state::<Mutex<crate::AppState>>();
+    let s = app.state::<Mutex<Box<crate::AppState>>>();
     let guard = s.lock_or_recover();
     Ok(serde_json::json!({ "profiles": guard.calibration_profiles }))
 }
@@ -1388,7 +1388,7 @@ pub fn list_calibrations(app: &AppHandle) -> Result<Value, String> {
 pub fn get_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let id = msg.get("id").and_then(|v| v.as_str())
         .ok_or_else(|| "missing required field: \"id\" (string)".to_string())?;
-    let s = app.state::<Mutex<crate::AppState>>();
+    let s = app.state::<Mutex<Box<crate::AppState>>>();
     let guard = s.lock_or_recover();
     guard.calibration_profiles.iter().find(|p| p.id == id)
         .map(|p| serde_json::json!({ "profile": p }))
@@ -1421,7 +1421,7 @@ pub fn create_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String>
         last_calibration_utc: None,
     };
 
-    let st = app.state::<Mutex<crate::AppState>>();
+    let st = app.state::<Mutex<Box<crate::AppState>>>();
     {
         let mut s = st.lock_or_recover();
         s.calibration_profiles.push(profile.clone());
@@ -1435,7 +1435,7 @@ pub fn update_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String>
     let id = msg.get("id").and_then(|v| v.as_str())
         .ok_or_else(|| "missing required field: \"id\"".to_string())?;
 
-    let st = app.state::<Mutex<crate::AppState>>();
+    let st = app.state::<Mutex<Box<crate::AppState>>>();
     let mut s = st.lock_or_recover();
     let p = s.calibration_profiles.iter_mut().find(|p| p.id == id)
         .ok_or_else(|| format!("profile not found: {id}"))?;
@@ -1465,7 +1465,7 @@ pub fn update_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String>
 pub fn delete_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let id = msg.get("id").and_then(|v| v.as_str())
         .ok_or_else(|| "missing required field: \"id\"".to_string())?;
-    let st = app.state::<Mutex<crate::AppState>>();
+    let st = app.state::<Mutex<Box<crate::AppState>>>();
     {
         let mut s = st.lock_or_recover();
         if s.calibration_profiles.len() <= 1 {
@@ -1873,8 +1873,8 @@ fn llm_status(app: &AppHandle) -> Result<Value, String> {
     use std::sync::atomic::Ordering;
     let state = app.state::<Mutex<Box<AppState>>>();
     let s = state.lock_or_recover();
-    let (status, model_name) = crate::llm::cell_status(&s.llm_state_cell);
-    let (n_ctx, supports_vision) = s.llm_state_cell.lock().unwrap()
+    let (status, model_name) = crate::llm::cell_status(&s.llm.state_cell);
+    let (n_ctx, supports_vision) = s.llm.state_cell.lock().unwrap()
         .as_ref()
         .map(|srv| (
             srv.n_ctx.load(Ordering::Relaxed),
@@ -1904,10 +1904,10 @@ async fn llm_start(app: &AppHandle) -> Result<Value, String> {
         let st = app.state::<Mutex<Box<AppState>>>();
         let s = st.lock_or_recover();
         (
-            s.llm_config.clone(),
-            s.llm_catalog.clone(),
-            s.llm_logs.clone(),
-            s.llm_state_cell.clone(),
+            s.llm.config.clone(),
+            s.llm.catalog.clone(),
+            s.llm.logs.clone(),
+            s.llm.state_cell.clone(),
             s.skill_dir.clone(),
         )
     };
@@ -1951,7 +1951,7 @@ fn llm_stop(app: &AppHandle) -> Result<Value, String> {
     let (cell, log_buf) = {
         let st = app.state::<Mutex<Box<AppState>>>();
         let s = st.lock_or_recover();
-        (s.llm_state_cell.clone(), s.llm_logs.clone())
+        (s.llm.state_cell.clone(), s.llm.logs.clone())
     };
     let server_state = { cell.lock().unwrap().take() };
     if let Some(server_state) = server_state {
@@ -1979,10 +1979,10 @@ fn llm_catalog(app: &AppHandle) -> Result<Value, String> {
     let state = app.state::<Mutex<Box<AppState>>>();
     let mut s = state.lock_or_recover();
     // Sync in-flight downloads into the catalog so callers see live progress.
-    let downloads = s.llm_downloads.clone();
+    let downloads = s.llm.downloads.clone();
     for (filename, prog_arc) in &downloads {
         if let Ok(prog) = prog_arc.lock() {
-            if let Some(entry) = s.llm_catalog.entries
+            if let Some(entry) = s.llm.catalog.entries
                 .iter_mut()
                 .find(|e| &e.filename == filename)
             {
@@ -1992,7 +1992,7 @@ fn llm_catalog(app: &AppHandle) -> Result<Value, String> {
             }
         }
     }
-    serde_json::to_value(&s.llm_catalog).map_err(|e| e.to_string())
+    serde_json::to_value(&s.llm.catalog).map_err(|e| e.to_string())
 }
 
 /// `llm_download` — start downloading a GGUF model by filename (fire-and-forget).
@@ -2064,7 +2064,7 @@ fn llm_delete(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 fn llm_logs(app: &AppHandle) -> Result<Value, String> {
     let state = app.state::<Mutex<Box<AppState>>>();
     let s = state.lock_or_recover();
-    let log = s.llm_logs.lock().unwrap();
+    let log = s.llm.logs.lock().unwrap();
     let logs: Vec<&crate::llm::LlmLogEntry> = log.iter().collect();
     Ok(serde_json::json!({ "logs": logs, "count": logs.len() }))
 }

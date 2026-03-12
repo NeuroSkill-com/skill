@@ -1163,7 +1163,7 @@ pub async fn pick_ref_wav_file() -> Option<String> {
 pub fn get_llm_config(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> crate::settings::LlmConfig {
-    state.lock_or_recover().llm_config.clone()
+    state.lock_or_recover().llm.config.clone()
 }
 
 /// Update the LLM server configuration and persist it to `settings.json`.
@@ -1179,13 +1179,13 @@ pub fn set_llm_config(
     #[cfg(feature = "llm")]
     let cell = {
         let mut s = state.lock_or_recover();
-        s.llm_config = config.clone();
-        s.llm_state_cell.clone()
+        s.llm.config = config.clone();
+        s.llm.state_cell.clone()
     };
     #[cfg(not(feature = "llm"))]
     {
         let mut s = state.lock_or_recover();
-        s.llm_config = config.clone();
+        s.llm.config = config.clone();
     }
 
     #[cfg(feature = "llm")]

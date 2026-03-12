@@ -551,19 +551,28 @@ pub struct AppState {
     /// When this reaches ~240 (≈ 1 minute at 4 Hz), focus mode is dropped.
     pub dnd_snr_low_ticks:  u32,
 
+    /// All LLM-related runtime state, heap-allocated to keep `AppState` small.
+    pub llm: Box<LlmState>,
+}
+
+// ── LLM sub-state (heap-allocated) ────────────────────────────────────────────
+
+/// Groups every LLM-related field behind a single `Box` so that `AppState`
+/// itself stays small on the stack and LLM data lives on the heap.
+pub struct LlmState {
     /// Persisted LLM server configuration.  Loaded from settings.json at startup
     /// and passed to `llm::init()` before the axum router is built.
-    pub llm_config:         crate::settings::LlmConfig,
+    pub config:         crate::settings::LlmConfig,
 
     /// LLM model catalog — tracks which GGUF files are available / downloaded.
     /// Persisted to `~/.skill/llm_catalog.json`.
     #[cfg(feature = "llm")]
-    pub llm_catalog: crate::llm::catalog::LlmCatalog,
+    pub catalog: crate::llm::catalog::LlmCatalog,
 
     /// Per-file download progress (keyed by filename).
     /// Lives only in memory; lost on restart (state is re-probed from cache).
     #[cfg(feature = "llm")]
-    pub llm_downloads: std::collections::HashMap<
+    pub downloads: std::collections::HashMap<
         String,
         std::sync::Arc<std::sync::Mutex<crate::llm::catalog::DownloadProgress>>,
     >,
@@ -572,28 +581,28 @@ pub struct AppState {
     /// Populated by the inference actor; read by the `get_llm_logs` command
     /// and also pushed to the frontend via `llm:log` Tauri events.
     #[cfg(feature = "llm")]
-    pub llm_logs: crate::llm::LlmLogBuffer,
+    pub logs: crate::llm::LlmLogBuffer,
 
     /// Dynamic LLM server state cell.
     /// `None` = server stopped.  Swapped by start/stop Tauri commands.
     /// Shared with the axum router so HTTP handlers always see the current state.
     #[cfg(feature = "llm")]
-    pub llm_state_cell: crate::llm::LlmStateCell,
+    pub state_cell: crate::llm::LlmStateCell,
 
     /// this can be done simpler
     #[cfg(not(feature = "llm"))]
-    pub llm_state_cell: std::sync::Arc<Mutex<Option<std::sync::Arc<std::sync::atomic::AtomicBool>>>>,
+    pub state_cell: std::sync::Arc<Mutex<Option<std::sync::Arc<std::sync::atomic::AtomicBool>>>>,
 
     /// `true` while a background model-load initiated by `start_llm_server`
     /// is in progress.  Prevents double-starts and lets `get_llm_server_status`
     /// return `Loading` even before `llm_state_cell` is populated.
     #[cfg(feature = "llm")]
-    pub llm_loading: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub loading: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
     /// Last error produced by a background `start_llm_server` task.
     /// Cleared on each new start attempt; read by `get_llm_server_status`.
     #[cfg(feature = "llm")]
-    pub llm_start_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
+    pub start_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
 
     /// Persistent chat history store — `~/.skill/chat_history.sqlite`.
     /// `None` when the database could not be opened (degraded gracefully).
@@ -675,10 +684,25 @@ impl Default for AppState {
             kbd_event_count:   std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             mouse_event_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             activity_store:    ActivityStore::open(&skill_dir).map(std::sync::Arc::new),
-            #[cfg(feature = "llm")]
-            llm_catalog:        crate::llm::catalog::LlmCatalog::load(&skill_dir),
-            #[cfg(feature = "llm")]
-            chat_store:         crate::llm::chat_store::ChatStore::open(&skill_dir),
+            llm: Box::new(LlmState {
+                config:         crate::settings::LlmConfig::default(),
+                #[cfg(feature = "llm")]
+                downloads:      std::collections::HashMap::new(),
+                #[cfg(feature = "llm")]
+                logs:           crate::llm::new_log_buffer(),
+                #[cfg(feature = "llm")]
+                state_cell:     crate::llm::new_state_cell(),
+                #[cfg(not(feature = "llm"))]
+                state_cell:     std::sync::Arc::new(Mutex::new(None)),
+                #[cfg(feature = "llm")]
+                loading:        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                #[cfg(feature = "llm")]
+                start_error:    std::sync::Arc::new(std::sync::Mutex::new(None)),
+                #[cfg(feature = "llm")]
+                catalog:        crate::llm::catalog::LlmCatalog::load(&skill_dir),
+                #[cfg(feature = "llm")]
+                chat_store:     crate::llm::chat_store::ChatStore::open(&skill_dir),
+            }),
             skill_dir,
             model_config,
             model_status,
@@ -693,20 +717,23 @@ impl Default for AppState {
             dnd_below_ticks:    0,
             dnd_score_history:  std::collections::VecDeque::new(),
             dnd_snr_low_ticks:  0,
-            llm_config:         crate::settings::LlmConfig::default(),
-            #[cfg(feature = "llm")]
-            llm_downloads:      std::collections::HashMap::new(),
-            #[cfg(feature = "llm")]
-            llm_logs:           crate::llm::new_log_buffer(),
-            #[cfg(feature = "llm")]
-            llm_state_cell:     crate::llm::new_state_cell(),
-            #[cfg(not(feature = "llm"))]
-            llm_state_cell:     std::sync::Arc::new(Mutex::new(None)),
-            #[cfg(feature = "llm")]
-            llm_loading:        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            #[cfg(feature = "llm")]
-            llm_start_error:    std::sync::Arc::new(std::sync::Mutex::new(None)),
         }
+    }
+}
+
+impl AppState {
+    /// Construct a heap-allocated `AppState` on a dedicated thread with a
+    /// large stack so the oversized struct is never materialised on the
+    /// main thread's (often limited) stack.
+    pub fn new_boxed() -> Box<Self> {
+        // 32 MiB is generous; the struct + Default temporaries fit easily.
+        std::thread::Builder::new()
+            .name("appstate-init".into())
+            .stack_size(32 * 1024 * 1024)
+            .spawn(|| Box::new(Self::default()))
+            .expect("[appstate] failed to spawn init thread")
+            .join()
+            .expect("[appstate] init thread panicked")
     }
 }
 
@@ -757,7 +784,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         track_active_window:    s.track_active_window,
         track_input_activity:   s.track_input_activity,
         do_not_disturb:         s.dnd_config.clone(),
-        llm:                    s.llm_config.clone(),
+        llm:                    s.llm.config.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
@@ -1133,7 +1160,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
-        .manage(Mutex::new(Box::new(AppState::default())))
+        .manage(Mutex::new(AppState::new_boxed()))
         .manage(job_queue::JobQueue::new())
         .manage(std::sync::Arc::new(EmbedderState(std::sync::Mutex::new(None))))
         .manage(std::sync::Arc::new(label_index::LabelIndexState::new()))
@@ -1187,7 +1214,7 @@ pub fn run() {
                     let llm_cfg = load_settings(&dir).llm;
                     let guard = app.state::<Mutex<Box<AppState>>>();
                     let s = guard.lock().unwrap();
-                    (llm_cfg, s.llm_catalog.clone(), s.llm_logs.clone(), s.llm_state_cell.clone(), s.skill_dir.clone())
+                    (llm_cfg, s.llm.catalog.clone(), s.llm.logs.clone(), s.llm.state_cell.clone(), s.skill_dir.clone())
                 };
                 if llm_cfg.enabled {
                     let app_handle = app.handle().clone();
@@ -1210,7 +1237,7 @@ pub fn run() {
             #[cfg(feature = "llm")]
             {
                 let cell = app.state::<Mutex<Box<AppState>>>()
-                    .lock().unwrap().llm_state_cell.clone();
+                    .lock().unwrap().llm.state_cell.clone();
                 serve_handle.set_llm(cell);
             }
 
@@ -1278,7 +1305,7 @@ pub fn run() {
                 s.input_activity_enabled
                     .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
                 s.dnd_config  = data.do_not_disturb;
-                s.llm_config  = data.llm;
+                s.llm.config  = data.llm;
                 if let Some(os_active) = crate::dnd::query_os_active() {
                     if !os_active { s.dnd_active = false; }
                 }
@@ -2029,7 +2056,7 @@ pub fn run() {
                     {
                         let cell = app.state::<Mutex<Box<AppState>>>()
                             .lock().unwrap()
-                            .llm_state_cell.clone();
+                            .llm.state_cell.clone();
                         llm::shutdown_cell(&cell);
                     }
                     tts_shutdown();

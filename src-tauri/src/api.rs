@@ -677,7 +677,7 @@ async fn llm_chat_post(
         .unwrap_or_default();
 
     // ── Get server ────────────────────────────────────────────────────────────
-    let cell = state.app.state::<Mutex<crate::AppState>>().lock_or_recover().llm_state_cell.clone();
+    let cell = state.app.state::<Mutex<Box<crate::AppState>>>().lock_or_recover().llm.state_cell.clone();
     let server = { cell.lock().unwrap().as_ref().cloned() };
 
     let Some(server) = server else {
@@ -825,8 +825,8 @@ async fn handle_llm_chat_ws(
 
     // ── Get the running server ────────────────────────────────────────────────
     use tauri::Manager as _;
-    let app_state = state.app.state::<Mutex<crate::AppState>>();
-    let cell = app_state.lock_or_recover().llm_state_cell.clone();
+    let app_state = state.app.state::<Mutex<Box<crate::AppState>>>();
+    let cell = app_state.lock_or_recover().llm.state_cell.clone();
     let server = { cell.lock().unwrap().as_ref().cloned() };
 
     let Some(server) = server else {

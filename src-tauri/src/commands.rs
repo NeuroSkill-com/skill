@@ -673,7 +673,7 @@ pub fn search_embeddings(
     end_utc:   u64,
     k:         Option<usize>,
     ef:        Option<usize>,
-    state:     tauri::State<'_, Mutex<crate::AppState>>,
+    state:     tauri::State<'_, Mutex<Box<crate::AppState>>>,
     global:    tauri::State<'_, Arc<GlobalEegIndex>>,
 ) -> SearchResult {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
@@ -689,7 +689,7 @@ pub fn enqueue_search_embeddings(
     end_utc:   u64,
     k:         Option<usize>,
     ef:        Option<usize>,
-    state:     tauri::State<'_, Mutex<crate::AppState>>,
+    state:     tauri::State<'_, Mutex<Box<crate::AppState>>>,
     queue:     tauri::State<'_, std::sync::Arc<crate::job_queue::JobQueue>>,
     global:    tauri::State<'_, Arc<GlobalEegIndex>>,
 ) -> crate::job_queue::JobTicket {
@@ -749,7 +749,7 @@ pub async fn stream_search_embeddings(
     k:           Option<usize>,
     ef:          Option<usize>,
     on_progress: tauri::ipc::Channel<SearchProgress>,
-    state:       tauri::State<'_, Mutex<crate::AppState>>,
+    state:       tauri::State<'_, Mutex<Box<crate::AppState>>>,
     global:      tauri::State<'_, Arc<GlobalEegIndex>>,
 ) -> Result<(), String> {
     let skill_dir  = state.lock_or_recover().skill_dir.clone();
@@ -880,7 +880,7 @@ pub struct SessionRef {
 pub fn find_session_for_timestamp(
     timestamp_unix: u64,
     date: String,  // YYYYMMDD
-    state: tauri::State<'_, Mutex<crate::AppState>>,
+    state: tauri::State<'_, Mutex<Box<crate::AppState>>>,
 ) -> Option<SessionRef> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     let day_dir = skill_dir.join(&date);
@@ -2032,7 +2032,7 @@ pub async fn interactive_search(
     // When false: classic column-per-EEG-parent layout is used.
     use_pca:       bool,
     svg_labels:    SvgLabels,
-    state:         tauri::State<'_, Mutex<crate::AppState>>,
+    state:         tauri::State<'_, Mutex<Box<crate::AppState>>>,
     embedder:  tauri::State<'_, std::sync::Arc<crate::label_cmds::EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<InteractiveSearchResult, String> {

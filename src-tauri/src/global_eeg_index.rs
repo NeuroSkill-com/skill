@@ -229,7 +229,7 @@ pub struct GlobalIndexStats {
 /// `ready: false` while the background build is still running.
 #[tauri::command]
 pub fn get_global_index_stats(
-    state:  tauri::State<'_, std::sync::Mutex<crate::AppState>>,
+    state:  tauri::State<'_, std::sync::Mutex<Box<crate::AppState>>>,
     global: tauri::State<'_, std::sync::Arc<GlobalEegIndex>>,
 ) -> GlobalIndexStats {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
@@ -249,7 +249,7 @@ pub fn get_global_index_stats(
 /// file.  Runs on a blocking thread; may take a few seconds.
 #[tauri::command]
 pub async fn rebuild_global_eeg_index(
-    state:  tauri::State<'_, std::sync::Mutex<crate::AppState>>,
+    state:  tauri::State<'_, std::sync::Mutex<Box<crate::AppState>>>,
     global: tauri::State<'_, std::sync::Arc<GlobalEegIndex>>,
 ) -> Result<GlobalIndexStats, String> {
     let skill_dir  = state.lock_or_recover().skill_dir.clone();

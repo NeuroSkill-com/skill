@@ -8,7 +8,9 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Refactor
 
-- **Heap-allocate AppState**: changed `Mutex<AppState>` → `Mutex<Box<AppState>>` across all Rust source files (`lib.rs`, `tray.rs`, `shortcut_cmds.rs`, `muse_session.rs`, `ws_commands.rs`, `openbci_session.rs`, `active_window.rs`, `label_cmds.rs`, `session_csv.rs`, `session_analysis.rs`, `llm/cmds.rs`, `session_dsp.rs`, `ble_scanner.rs`, `window_cmds.rs`, `history_cmds.rs`, `settings_cmds.rs`) to move the large `AppState` struct onto the heap, reducing main-thread stack frame size and mitigating stack overflow risk on platforms with smaller default stacks.
+- **Heap-allocate AppState**: changed `Mutex<AppState>` → `Mutex<Box<AppState>>` across all Rust source files (`lib.rs`, `tray.rs`, `shortcut_cmds.rs`, `muse_session.rs`, `ws_commands.rs`, `openbci_session.rs`, `active_window.rs`, `label_cmds.rs`, `session_csv.rs`, `session_analysis.rs`, `llm/cmds.rs`, `session_dsp.rs`, `ble_scanner.rs`, `window_cmds.rs`, `history_cmds.rs`, `settings_cmds.rs`, `api.rs`, `commands.rs`, `global_eeg_index.rs`) to move the large `AppState` struct onto the heap, reducing main-thread stack frame size and mitigating stack overflow risk on platforms with smaller default stacks.
+- **Extract LLM state into `Box<LlmState>`**: moved all LLM-related fields (`llm_config`, `llm_catalog`, `llm_downloads`, `llm_logs`, `llm_state_cell`, `llm_loading`, `llm_start_error`, `chat_store`) out of `AppState` into a dedicated `LlmState` sub-struct stored as `Box<LlmState>`, accessed via `s.llm.config`, `s.llm.catalog`, etc.  This further reduces `AppState`'s on-stack footprint and groups all LLM concerns behind a single heap-allocated pointer.
+- **Construct AppState on a dedicated thread**: added `AppState::new_boxed()` that spawns a 32 MiB-stack thread to run `Box::new(AppState::default())`, avoiding the main-thread stack overflow that occurred on macOS when the large struct + `generate_handler!` frame exceeded the 16 MiB linker-set stack limit.
 
 ## [0.0.27]
 
