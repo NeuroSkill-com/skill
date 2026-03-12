@@ -200,9 +200,15 @@ jobs:
       # next step, bypassing the Tauri CLI bundler entirely.
       #
       # npm run build  → SvelteKit/Vite frontend (output: build/, embedded by
-      #                  tauri_build::build() called from src-tauri/build.rs)
+      #                  generate_context!() when custom-protocol is enabled)
       # cargo build    → Rust binary; build.rs also copies espeak-ng-data into
       #                  src-tauri/resources/ so it is ready for bundling.
+      #
+      # --features custom-protocol is required: without it Tauri compiles in
+      # dev mode and the binary tries to load the UI from localhost:1420
+      # instead of serving the embedded SvelteKit build output.  The Tauri
+      # CLI (`npx tauri build`) injects this feature automatically, but we
+      # bypass the CLI here to avoid its post-compilation SIGILL.
       - name: Compile (frontend + Rust)
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
@@ -210,7 +216,7 @@ jobs:
           npm run build
           npm run -s verify:tauri:frontend
           cd src-tauri
-          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin --features custom-protocol
 
       # ── Assemble .app bundle ──────────────────────────────────────────────
       #

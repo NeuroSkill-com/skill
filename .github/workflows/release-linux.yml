@@ -152,6 +152,12 @@ jobs:
       #
       # Like macOS, Linux release avoids Tauri bundling and performs packaging
       # with repository scripts after compile-only output is produced.
+      #
+      # --features custom-protocol is required: without it Tauri compiles in
+      # dev mode and the binary tries to load the UI from localhost:1420
+      # instead of serving the embedded SvelteKit build output.  The Tauri
+      # CLI (`npx tauri build`) injects this feature automatically, but we
+      # bypass the CLI here to avoid its post-compilation SIGILL/segfault.
       - name: Compile (frontend + Rust)
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
@@ -159,7 +165,7 @@ jobs:
         run: |
           set -euo pipefail
           cd src-tauri
-          cargo build --release --target x86_64-unknown-linux-gnu
+          cargo build --release --target x86_64-unknown-linux-gnu --features custom-protocol
 
       - name: Build Linux deb/rpm via system tools
         env:

@@ -6,8 +6,13 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [0.0.27]
 
+### Dependencies
+
+- **Bump `llama-cpp-4` from 0.2.9 → 0.2.10** (and `llama-cpp-sys-4` 0.2.9 → 0.2.10).
+
 ### Build / Tooling
 
+- **Fix CI release binaries missing embedded frontend**: release and preview workflows that bypass the Tauri CLI (`cargo build --release` directly) were producing dev-mode binaries that attempted to load the UI from `localhost:1420` instead of serving the embedded SvelteKit build output.  Root cause: the Tauri crate gates frontend embedding behind its `custom-protocol` Cargo feature, which `npx tauri build` activates automatically but raw `cargo build` does not.  Added a `custom-protocol` feature to `src-tauri/Cargo.toml` forwarding to `tauri/custom-protocol` and pass `--features custom-protocol` in `release-linux.yml`, `release-mac.yml`, `pr-build.yml`, and `release-windows.ps1`.
 - `npm run bump` now also rotates the changelog release header automatically: it preserves a fresh `## [Unreleased]` section and inserts `## [x.y.z] — YYYY-MM-DD` for the newly bumped version.
 - macOS local Tauri build stability: `scripts/tauri-build.js` now injects `--no-bundle` by default for `build` runs (while still forcing `--target aarch64-apple-darwin --no-sign`), unless the caller explicitly passes `--bundle`/`--bundles`/`--no-bundle`; this avoids post-compile bundle-phase crashes where `npx tauri build --target aarch64-apple-darwin --no-sign` fails but `--no-bundle` succeeds.
 

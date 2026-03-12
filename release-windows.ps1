@@ -294,7 +294,7 @@ Log "Building Rust binary (target: $TAURI_TARGET, GPU: Vulkan)…"
 # AMD, and Intel Arc without requiring the CUDA toolkit).  Requires the Vulkan
 # SDK (https://vulkan.lunarg.com) at build time; falls back to CPU at runtime
 # when no Vulkan-capable device is present.
-$cargoBuildArgs = @("build", "--release", "--target", $TAURI_TARGET, "--features", "llm-vulkan")
+$cargoBuildArgs = @("build", "--release", "--target", $TAURI_TARGET, "--features", "llm-vulkan,custom-protocol")
 if ($DryRun) {
     Dry "cargo $($cargoBuildArgs -join ' ')"
 } else {
