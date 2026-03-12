@@ -6,7 +6,13 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+## [0.0.32] — 2026-03-12
+### CI Runtime
+
+- Windows release workflow now auto-detects NSIS artifacts across both valid output layouts (`src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis` and `src-tauri/target/release/bundle/nsis`) in the build/sign step and artifact collection step, preventing false "bundle dir not found" / "installer not found" failures when Rust emits host-layout release outputs.
+
 ## [0.0.31] — 2026-03-12
+
 ### CI Runtime
 
 - Release CI contributor attribution now comes only from git commit authors in the tagged release range (`previous_tag..current_tag`), and release workflows no longer append GitHub auto-generated release-note contributors.

@@ -380,32 +380,63 @@ jobs:
           # VS's bundled Clang 19 which lacks __builtin_ia32_* MMX intrinsics.
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
         run: |
-          $bundleDir = Join-Path $PWD "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+          $bundleDirCandidates = @(
+            (Join-Path $PWD "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"),
+            (Join-Path $PWD "src-tauri/target/release/bundle/nsis")
+          )
           & npm run taur:build:win:nsis
           if ($LASTEXITCODE -ne 0) {
             Write-Host "[error] npm run taur:build:win:nsis failed with exit code $LASTEXITCODE"
-            if (Test-Path $bundleDir) {
-              Write-Host "[diag] bundle dir snapshot: $bundleDir"
-              Get-ChildItem -Path $bundleDir -File -ErrorAction SilentlyContinue |
-                Select-Object Name, Length |
-                Format-Table -AutoSize |
-                Out-String |
-                Write-Host
-            } else {
-              Write-Host "[diag] bundle dir not found: $bundleDir"
+            foreach ($candidate in $bundleDirCandidates) {
+              if (Test-Path $candidate) {
+                Write-Host "[diag] bundle dir snapshot: $candidate"
+                Get-ChildItem -Path $candidate -File -ErrorAction SilentlyContinue |
+                  Select-Object Name, Length |
+                  Format-Table -AutoSize |
+                  Out-String |
+                  Write-Host
+              } else {
+                Write-Host "[diag] bundle dir not found: $candidate"
+              }
             }
             exit $LASTEXITCODE
           }
 
-          $installer = Get-ChildItem -Path $bundleDir -File -Filter "*.exe" -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -notmatch "(?i)uninstall" } |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
+          $bundleDir = $null
+          $installer = $null
+          foreach ($candidate in $bundleDirCandidates) {
+            if (-not (Test-Path $candidate)) {
+              continue
+            }
+            $candidateInstaller = Get-ChildItem -Path $candidate -File -Filter "*.exe" -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -notmatch "(?i)uninstall" } |
+              Sort-Object LastWriteTime -Descending |
+              Select-Object -First 1
+            if ($candidateInstaller) {
+              $bundleDir = $candidate
+              $installer = $candidateInstaller
+              break
+            }
+          }
 
           if (-not $installer) {
-            Write-Host "[error] NSIS installer .exe not found in $bundleDir after taur:build:win:nsis"
+            Write-Host "[error] NSIS installer .exe not found in expected bundle directories after taur:build:win:nsis"
+            foreach ($candidate in $bundleDirCandidates) {
+              if (Test-Path $candidate) {
+                Write-Host "[diag] bundle dir snapshot: $candidate"
+                Get-ChildItem -Path $candidate -File -ErrorAction SilentlyContinue |
+                  Select-Object Name, Length |
+                  Format-Table -AutoSize |
+                  Out-String |
+                  Write-Host
+              } else {
+                Write-Host "[diag] bundle dir not found: $candidate"
+              }
+            }
             exit 1
           }
+
+          Write-Host "[ok] using bundle directory: $bundleDir"
 
           if ($env:CERTIFICATE_THUMBPRINT) {
             Write-Host "[ok] signing installer: $($installer.FullName)"
@@ -451,15 +482,42 @@ jobs:
         id: artifacts
         shell: bash
         run: |
-          BUNDLE_DIR="src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+          CANDIDATES=(
+            "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+            "src-tauri/target/release/bundle/nsis"
+          )
 
-          NSIS_EXE="$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.exe"              | head -1)"
-          NSIS_ZIP="$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.nsis.zip"  \
-                        ! -name "*.sig"                                    | head -1)"
-          NSIS_SIG="$(find "$BUNDLE_DIR" -maxdepth 1 -name "*.nsis.zip.sig"    | head -1)"
+          BUNDLE_DIR=""
+          NSIS_EXE=""
+          NSIS_ZIP=""
+          NSIS_SIG=""
+
+          for candidate in "${CANDIDATES[@]}"; do
+            [ -d "$candidate" ] || continue
+
+            candidate_exe="$(find "$candidate" -maxdepth 1 -name "*.exe" ! -iname "*uninstall*" | head -1)"
+            candidate_zip="$(find "$candidate" -maxdepth 1 -name "*.nsis.zip" ! -name "*.sig" | head -1)"
+            candidate_sig="$(find "$candidate" -maxdepth 1 -name "*.nsis.zip.sig" | head -1)"
+
+            if [ -n "$candidate_exe" ] && [ -n "$candidate_zip" ] && [ -n "$candidate_sig" ]; then
+              BUNDLE_DIR="$candidate"
+              NSIS_EXE="$candidate_exe"
+              NSIS_ZIP="$candidate_zip"
+              NSIS_SIG="$candidate_sig"
+              break
+            fi
+          done
 
           if [ -z "$NSIS_EXE" ] || [ -z "$NSIS_ZIP" ] || [ -z "$NSIS_SIG" ]; then
             echo "::error::One or more expected artifacts are missing."
+            for candidate in "${CANDIDATES[@]}"; do
+              if [ -d "$candidate" ]; then
+                echo "[diag] listing $candidate"
+                find "$candidate" -maxdepth 1 -type f | sort || true
+              else
+                echo "[diag] bundle dir not found: $candidate"
+              fi
+            done
             echo "  EXE : ${NSIS_EXE:-(not found)}"
             echo "  ZIP : ${NSIS_ZIP:-(not found)}"
             echo "  SIG : ${NSIS_SIG:-(not found)}"
