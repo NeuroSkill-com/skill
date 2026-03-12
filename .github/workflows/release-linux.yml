@@ -52,23 +52,24 @@ jobs:
       # Tauri on Linux requires WebKit2GTK and several supporting libraries.
       # squashfs-tools provides mksquashfs, used by appimagetool when building
       # the AppImage bundle.  libfuse2 is needed to run appimagetool itself.
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev  \
-            librsvg2-dev          \
-            patchelf              \
-            libssl-dev            \
-            libudev-dev           \
-            libdbus-1-dev         \
-            pkg-config            \
-            libasound2-dev        \
-            cmake                 \
-            binutils              \
-            squashfs-tools        \
+      - name: Cache + install system dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: >-
+            libwebkit2gtk-4.1-dev
+            libappindicator3-dev
+            librsvg2-dev
+            patchelf
+            libssl-dev
+            libudev-dev
+            libdbus-1-dev
+            pkg-config
+            libasound2-dev
+            cmake
+            binutils
+            squashfs-tools
             libfuse2
+          version: tauri-release-linux-v1
 
       # ── Rust toolchain ────────────────────────────────────────────────────────
       - name: Install Rust stable
@@ -108,8 +109,7 @@ jobs:
 
       # ── Vulkan SDK ────────────────────────────────────────────────────────────
       # Required by the llm-vulkan feature (llama.cpp Vulkan GPU backend).
-      # Installed from the LunarG apt repository; cached by apt's package
-      # database so repeated runs are fast once the repo is configured.
+      # Installed from the LunarG apt repository.
       - name: Install Vulkan SDK
         run: bash scripts/install-vulkan-sdk.sh
 

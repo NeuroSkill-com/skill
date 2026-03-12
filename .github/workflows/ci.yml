@@ -29,15 +29,16 @@ jobs:
           key: linux-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: linux-cargo-
 
-      - name: Install Tauri system deps
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libappindicator3-dev \
-            librsvg2-dev patchelf libssl-dev \
-            libudev-dev libdbus-1-dev pkg-config \
-            libespeak-ng-dev libasound2-dev \
+      - name: Cache + install Tauri system deps
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: >-
+            libwebkit2gtk-4.1-dev libappindicator3-dev
+            librsvg2-dev patchelf libssl-dev
+            libudev-dev libdbus-1-dev pkg-config
+            libespeak-ng-dev libasound2-dev
             cmake binutils
+          version: tauri-rust-check-v1
 
       # Vulkan SDK — required by the llm-vulkan feature (llama.cpp Vulkan backend).
       # We install directly from the LunarG apt repo (noble) so cargo check/clippy
@@ -100,15 +101,16 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
-      - name: Install Tauri Linux release deps
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libappindicator3-dev \
-            librsvg2-dev patchelf libssl-dev \
-            libudev-dev libdbus-1-dev pkg-config \
-            libasound2-dev cmake binutils \
+      - name: Cache + install Tauri Linux release deps
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: >-
+            libwebkit2gtk-4.1-dev libappindicator3-dev
+            librsvg2-dev patchelf libssl-dev
+            libudev-dev libdbus-1-dev pkg-config
+            libasound2-dev cmake binutils
             squashfs-tools libfuse2
+          version: tauri-linux-release-v1
 
       # Vulkan SDK — required by llm-vulkan in the release build path.
       - name: Install Vulkan SDK
