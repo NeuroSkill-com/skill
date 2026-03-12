@@ -49,6 +49,26 @@ CLEANUP_DIRS=()
 cleanup() { for d in "${CLEANUP_DIRS[@]}"; do rm -rf "$d"; done; }
 trap cleanup EXIT
 
+# ── hdiutil retry wrapper (Resource busy) ─────────────────────────────────
+# hdiutil create/detach can fail with "Resource busy" when Spotlight or
+# fsevents haven't released the volume yet.  Retry with exponential backoff.
+MAX_RETRIES=5
+hdiutil_retry() {
+  local attempt=0
+  while true; do
+    if hdiutil "$@" 2>&1; then
+      return 0
+    fi
+    local rc=$?
+    attempt=$((attempt + 1))
+    if (( attempt >= MAX_RETRIES )); then
+      return $rc
+    fi
+    echo "  ⏳ hdiutil Resource busy, retry $attempt/$MAX_RETRIES ..."
+    sleep $(( 1 * (2 ** attempt) ))
+  done
+}
+
 # ── Read config ───────────────────────────────────────────────────────────
 PRODUCT_NAME=$(python3 -c "import json; print(json.load(open('$CONF'))['productName'])")
 VERSION=$(python3 -c "import json; print(json.load(open('$CONF'))['version'])")
@@ -607,6 +627,10 @@ APPLESCRIPT
     echo "    Or: System Settings → Privacy & Security → Automation → Terminal → Finder"
   fi
 
+  # ── Fix permissions ──────────────────────────────────────────────────────
+  # Ensure nothing on the volume is world-writable (security best practice).
+  chmod -Rf go-w "$MOUNT_DIR" 2>/dev/null || true
+
   # ── Clean up macOS junk files ─────────────────────────────────────────────
   # macOS creates these automatically on mount; they add clutter and waste
   # space in the final DMG.  Remove before detaching.
@@ -631,13 +655,18 @@ APPLESCRIPT
 
   # ── Bless the folder so Finder auto-opens it on mount ───────────────────
   # --openfolder makes the volume window appear automatically when the user
-  # double-clicks the .dmg — no need to click into the volume icon.
-  bless --folder "$MOUNT_DIR" --openfolder "$MOUNT_DIR" 2>/dev/null || true
+  # double-clicks the .dmg.  On arm64 (Apple Silicon), bless does not
+  # support --openfolder (deprecated in macOS 12.3+).
+  if [[ "$(uname -m)" == "arm64" ]]; then
+    bless --folder "$MOUNT_DIR" 2>/dev/null || true
+  else
+    bless --folder "$MOUNT_DIR" --openfolder "$MOUNT_DIR" 2>/dev/null || true
+  fi
 
   sync
   sleep 1
 
-  hdiutil detach "$MOUNT_DIR" -quiet 2>/dev/null \
+  hdiutil_retry detach "$MOUNT_DIR" -quiet 2>/dev/null \
     || hdiutil detach "$MOUNT_DIR" -force 2>/dev/null \
     || true
 else
@@ -663,69 +692,114 @@ echo "  ✓ DMG created"
 
 # ── Embed license agreement (SLA) ─────────────────────────────────────────
 # Shows the LICENSE text in an "Agree / Disagree" dialog before the DMG can
-# be mounted.  Uses the resource-fork approach via hdiutil flatten/unflatten.
-# Requires Rez (from Xcode Command Line Tools); silently skipped if absent.
-# NOTE: Apple deprecated SLA resources in recent macOS — this is best-effort.
-if [[ -f "$ROOT/LICENSE" ]] && command -v Rez &>/dev/null; then
+# be mounted.  Uses hdiutil udifrez -xml (same approach as create-dmg).
+# Silently skipped if hdiutil udifrez is not available (removed in some macOS).
+if [[ -f "$ROOT/LICENSE" ]]; then
   SLA_DIR="$(mktemp -d)"; CLEANUP_DIRS+=("$SLA_DIR")
-  SLA_R="$SLA_DIR/sla.r"
+  SLA_XML="$SLA_DIR/sla-resources.xml"
 
-  # Generate the Rez source file from LICENSE
-  python3 - "$ROOT/LICENSE" "$SLA_R" <<'PYEOF' 2>/dev/null || true
-import sys
+  # Generate the SLA XML resource file
+  python3 - "$ROOT/LICENSE" "$SLA_XML" <<'PYEOF' 2>/dev/null || true
+import sys, base64
 
 license_path, output_path = sys.argv[1:3]
 
-with open(license_path, "r") as f:
-    text = f.read()
+with open(license_path, "rb") as f:
+    license_data = f.read()
 
-# Escape for Rez string literal: backslash and double-quote
-text = text.replace("\\", "\\\\").replace('"', '\\"')
-# Rez strings can't have raw newlines — use \n
-text = text.replace("\n", "\\n")
+# Base64-encode the license text, wrapped at 52 chars (Apple convention)
+b64 = base64.b64encode(license_data).decode("ascii")
+b64_lines = "\n".join(
+    "\t\t\t" + b64[i:i+52] for i in range(0, len(b64), 52)
+)
 
-rez = f'''
-data 'LPic' (5000) {{
-    $"0002 0000 0001 0000 0000 0000 0008 0000"
-}};
+# LPic data: default language = English, 0 languages listed (use default)
+# STR# data for English buttons: pre-encoded binary
+lpic_data = "AAAAAgAAAAAAAAAAAAQAAA=="
 
-data 'TEXT' (5000, "English") {{
-    "{text}"
-}};
+str_data = (
+    "AAYHRW5nbGlzaAVBZ3JlZQhEaXNhZ3JlZQVQcmludAdTYXZlLi4u"
+    "e0lmIHlvdSBhZ3JlZSB3aXRoIHRoZSB0ZXJtcyBvZiB0aGlzIGxp"
+    "Y2Vuc2UsIHByZXNzICJBZ3JlZSIgdG8gaW5zdGFsbCB0aGUgc29m"
+    "dHdhcmUuIElmIHlvdSBkbyBub3QgYWdyZWUsIGNsaWNrICJEaXNh"
+    "Z3JlZSIu"
+)
 
-data 'STR#' (5000, "English") {{
-    $"0006"             /* 6 strings */
-    $"07" "English"
-    $"05" "Agree"
-    $"08" "Disagree"
-    $"05" "Print"
-    $"07" "Save..."
-    $"6E" "If you agree with the terms of this license, "
-          "press \\"Agree\\" to install the software. "
-          "If you do not agree, press \\"Disagree\\"."
-}};
-'''
+xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+\t<key>LPic</key>
+\t<array>
+\t\t<dict>
+\t\t\t<key>Attributes</key>
+\t\t\t<string>0x0000</string>
+\t\t\t<key>Data</key>
+\t\t\t<data>
+\t\t\t{lpic_data}
+\t\t\t</data>
+\t\t\t<key>ID</key>
+\t\t\t<string>5000</string>
+\t\t\t<key>Name</key>
+\t\t\t<string></string>
+\t\t</dict>
+\t</array>
+\t<key>STR#</key>
+\t<array>
+\t\t<dict>
+\t\t\t<key>Attributes</key>
+\t\t\t<string>0x0000</string>
+\t\t\t<key>Data</key>
+\t\t\t<data>
+\t\t\t{str_data}
+\t\t\t</data>
+\t\t\t<key>ID</key>
+\t\t\t<string>5002</string>
+\t\t\t<key>Name</key>
+\t\t\t<string>English</string>
+\t\t</dict>
+\t</array>
+\t<key>TEXT</key>
+\t<array>
+\t\t<dict>
+\t\t\t<key>Attributes</key>
+\t\t\t<string>0x0000</string>
+\t\t\t<key>Data</key>
+\t\t\t<data>
+{b64_lines}
+\t\t\t</data>
+\t\t\t<key>ID</key>
+\t\t\t<string>5000</string>
+\t\t\t<key>Name</key>
+\t\t\t<string>English</string>
+\t\t</dict>
+\t</array>
+</dict>
+</plist>
+"""
 
 with open(output_path, "w") as f:
-    f.write(rez)
+    f.write(xml)
 PYEOF
 
-  if [[ -f "$SLA_R" ]]; then
-    (
-      hdiutil unflatten "$DMG_OUT" && \
-      Rez -a "$SLA_R" -o "$DMG_OUT" && \
-      hdiutil flatten "$DMG_OUT" && \
-      echo "  ✓ license agreement (SLA) embedded"
-    ) 2>/dev/null || echo "  ⊘ SLA embedding skipped (Rez/flatten not supported)"
+  if [[ -f "$SLA_XML" ]]; then
+    # hdiutil udifrez -xml is the modern approach (same as create-dmg)
+    hdiutil udifrez -xml "$SLA_XML" '' -quiet "$DMG_OUT" 2>/dev/null && \
+      echo "  ✓ license agreement (SLA) embedded" || \
+      echo "  ⊘ SLA embedding skipped (hdiutil udifrez not supported)"
   fi
 fi
 
 # ── Internet-enable the DMG ────────────────────────────────────────────────
 # When a user downloads an internet-enabled DMG via Safari and drags the app
 # to Applications, macOS automatically ejects the DMG and moves it to Trash.
-# This is the polished "download → drag → done" experience.
-hdiutil internet-enable -yes "$DMG_OUT" 2>/dev/null && \
-  echo "  ✓ internet-enabled (auto-eject after install)" || true
+# Support was removed in macOS 10.15; check before attempting.
+if hdiutil internet-enable -help &>/dev/null; then
+  hdiutil internet-enable -yes "$DMG_OUT" 2>/dev/null && \
+    echo "  ✓ internet-enabled (auto-eject after install)" || true
+else
+  echo "  ⊘ internet-enable not supported (macOS 10.15+)"
+fi
 
 # ── Sign the DMG ──────────────────────────────────────────────────────────
 if [[ "$SIGN_ID" != "-" ]]; then

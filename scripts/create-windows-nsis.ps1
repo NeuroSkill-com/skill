@@ -48,9 +48,11 @@ $Identifier = $Conf.identifier
 $BinaryName = "skill.exe"
 $TargetReleaseDir = Join-Path $TauriDir "target/$Target/release"
 $HostReleaseDir = Join-Path $TauriDir "target/release"
+$TargetBinary = Join-Path -Path $TargetReleaseDir -ChildPath $BinaryName
+$HostBinary = Join-Path -Path $HostReleaseDir -ChildPath $BinaryName
 $BinaryCandidates = @(
-    Join-Path $TargetReleaseDir $BinaryName,
-    Join-Path $HostReleaseDir $BinaryName
+    $TargetBinary,
+    $HostBinary
 )
 
 $Binary = $null
@@ -77,7 +79,7 @@ Run first:  npx tauri build --target $Target --no-bundle
     exit 1
 }
 
-if ($Binary -eq (Join-Path $HostReleaseDir $BinaryName)) {
+if ($Binary -eq $HostBinary) {
     Write-Warning "Using host release binary layout at target/release/$BinaryName (no explicit Rust target output path found)."
 }
 
