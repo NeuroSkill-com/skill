@@ -6,6 +6,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+## [0.0.31] — 2026-03-12
 ### CI Runtime
 
 - Release CI contributor attribution now comes only from git commit authors in the tagged release range (`previous_tag..current_tag`), and release workflows no longer append GitHub auto-generated release-note contributors.
