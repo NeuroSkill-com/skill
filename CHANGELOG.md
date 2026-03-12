@@ -37,6 +37,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Bug Fixes
 
+- **Single-instance runtime enforcement**: app startup now initializes `tauri-plugin-single-instance`, so opening NeuroSkill while it is already running no longer starts a second process; the existing `main` window is restored/focused instead.
+
 - **Windows CI Rust warning cleanup (`dead_code`)**: removed the non-Linux `linux_has_appindicator_runtime()` stub from `src-tauri/src/lib.rs` so only the Linux implementation is compiled; this eliminates the Windows-only `function is never used` warning while preserving the Linux tray-runtime guard behavior.
 
 ### Documentation
