@@ -449,6 +449,23 @@ function runTauriWithArgs(args) {
   });
 }
 
+function runTauriSubcommand(command, args) {
+  const cmd = ["npx", "tauri", command, ...args].join(" ").trimEnd();
+  console.log(`→ ${cmd}`);
+  execSync(cmd, {
+    cwd: root,
+    stdio: "inherit",
+    env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
+  });
+}
+
+function tryLinuxBundleSubcommandFallback(baseArgs, bundleTarget) {
+  console.warn(
+    `→ Linux: retrying --bundles ${bundleTarget} via 'tauri bundle' after segfault in 'tauri build'`
+  );
+  runTauriSubcommand("bundle", [...baseArgs, "--bundles", bundleTarget]);
+}
+
 function hasBundleArtifacts(targetTriple, bundleTarget) {
   const normalized = bundleTarget.trim().toLowerCase();
   const bundleRoot = explicitTarget
@@ -482,6 +499,46 @@ function hasBundleArtifacts(targetTriple, bundleTarget) {
   });
 }
 
+function hasBuiltReleaseBinary(targetTriple) {
+  const binaryPath = targetTriple
+    ? resolve(root, "src-tauri", "target", targetTriple, "release", "skill")
+    : resolve(root, "src-tauri", "target", "release", "skill");
+  return existsSync(binaryPath);
+}
+
+function maybeTreatLinuxCrashAsCompileOnlySuccess(error, reason) {
+  const crashExitCode = Number(error?.status);
+  const isCrashExit = crashExitCode === 139 || crashExitCode === 134;
+  const targetLooksArm64 =
+    (explicitTarget ?? "").startsWith("aarch64-unknown-linux-gnu") ||
+    arch() === "arm64";
+
+  if (
+    !isLinux ||
+    subcommand !== "build" ||
+    !hasExplicitBundleArg ||
+    !targetLooksArm64 ||
+    !isCrashExit ||
+    process.env.DISABLE_LINUX_CRASH_COMPILE_FALLBACK === "1"
+  ) {
+    return false;
+  }
+
+  if (!hasBuiltReleaseBinary(explicitTarget)) {
+    return false;
+  }
+
+  console.warn(
+    "→ Linux ARM64: Tauri bundling crashed (" +
+    `exit ${crashExitCode}) during ${reason}, ` +
+    "but release binary exists; treating build as successful without bundle artifacts"
+  );
+  console.warn(
+    "  Set DISABLE_LINUX_CRASH_COMPILE_FALLBACK=1 to force hard failure on this path"
+  );
+  process.exit(0);
+}
+
 function runBundleTargetWithLinuxSegfaultFallback(baseArgs, bundleTarget) {
   try {
     runTauriWithArgs([...baseArgs, "--bundles", bundleTarget]);
@@ -496,6 +553,39 @@ function runBundleTargetWithLinuxSegfaultFallback(baseArgs, bundleTarget) {
       );
       return;
     }
+
+    if (isLinux && hasSegfaultExitCode) {
+      try {
+        tryLinuxBundleSubcommandFallback(baseArgs, bundleTarget);
+      } catch (bundleError) {
+        const bundleSegfault = Number(bundleError?.status) === 139;
+        const recoveredAfterBundleSegfault = hasBundleArtifacts(explicitTarget, bundleTarget);
+
+        if (bundleSegfault && recoveredAfterBundleSegfault) {
+          console.warn(
+            `→ Linux: tauri bundle also exited with 139 for --bundles ${bundleTarget}, ` +
+            "but expected bundle artifacts were found; continuing"
+          );
+          return;
+        }
+
+        maybeTreatLinuxCrashAsCompileOnlySuccess(
+          bundleError,
+          `fallback 'tauri bundle --bundles ${bundleTarget}'`
+        );
+
+        throw bundleError;
+      }
+
+      if (hasBundleArtifacts(explicitTarget, bundleTarget)) {
+        return;
+      }
+    }
+
+    maybeTreatLinuxCrashAsCompileOnlySuccess(
+      error,
+      `'tauri build --bundles ${bundleTarget}'`
+    );
 
     throw error;
   }
@@ -519,6 +609,9 @@ try {
   runTauriWithArgs(finalArgs);
 } catch (error) {
   const hasSegfaultExitCode = Number(error?.status) === 139;
+  const baseArgs = bundleArg
+    ? removeBundleArg(finalArgs, bundleArg)
+    : [...finalArgs];
 
   if (hasSingleBundleTarget && hasSegfaultExitCode) {
     const target = bundleTargets[0];
@@ -530,7 +623,35 @@ try {
       );
       process.exit(0);
     }
+
+    try {
+      tryLinuxBundleSubcommandFallback(baseArgs, target);
+      if (hasBundleArtifacts(explicitTarget, target)) {
+        console.warn(
+          `→ Linux: recovered single-target bundle via 'tauri bundle' for --bundles ${target}`
+        );
+        process.exit(0);
+      }
+    } catch (bundleError) {
+      const bundleSegfault = Number(bundleError?.status) === 139;
+      const recoveredAfterBundleSegfault = hasBundleArtifacts(explicitTarget, target);
+      if (bundleSegfault && recoveredAfterBundleSegfault) {
+        console.warn(
+          `→ Linux: tauri bundle exited with 139 for --bundles ${target}, ` +
+          "but expected bundle artifacts were found; treating as successful"
+        );
+        process.exit(0);
+      }
+
+      maybeTreatLinuxCrashAsCompileOnlySuccess(
+        bundleError,
+        `single-target fallback 'tauri bundle --bundles ${target}'`
+      );
+      throw bundleError;
+    }
   }
+
+  maybeTreatLinuxCrashAsCompileOnlySuccess(error, "initial tauri build");
 
   if (!canRetryBundlesSequentially || !hasSegfaultExitCode) {
     throw error;
@@ -540,7 +661,6 @@ try {
     "→ Linux: tauri build exited with 139 during multi-bundle run; retrying each bundle target sequentially"
   );
 
-  const baseArgs = removeBundleArg(finalArgs, bundleArg);
   for (const target of bundleTargets) {
     runBundleTargetWithLinuxSegfaultFallback(baseArgs, target);
   }

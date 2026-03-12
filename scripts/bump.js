@@ -34,9 +34,40 @@ function runCheckStep(label, command) {
   console.log(`[preflight] ✓ ${label}`);
 }
 
+function hasPkgConfig(packageName) {
+  try {
+    execSync(`pkg-config --exists ${packageName}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ensureLinuxTauriDeps() {
+  if (process.platform !== "linux") return;
+
+  const requiredPackages = ["webkit2gtk-4.1", "javascriptcoregtk-4.1", "libsoup-3.0"];
+  const missingPackages = requiredPackages.filter((name) => !hasPkgConfig(name));
+
+  if (missingPackages.length === 0) return;
+
+  const missingList = missingPackages.join(", ");
+  throw new Error(
+    [
+      `Missing Linux Tauri system dependencies (${missingList}).`,
+      "Install required packages before running npm run bump:",
+      "  sudo apt install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev",
+      "If those are unavailable on your distro image, see LINUX.md for legacy alternatives.",
+    ].join("\n")
+  );
+}
+
 function runPreflightChecks() {
   console.log("Running preflight checks before bump...");
   runCheckStep("npm run check", "npm run check");
+  console.log("\n[preflight] linux tauri deps (pkg-config)");
+  ensureLinuxTauriDeps();
+  console.log("[preflight] ✓ linux tauri deps (pkg-config)");
   runCheckStep("cargo clippy (src-tauri)", "cargo clippy --manifest-path src-tauri/Cargo.toml");
   runCheckStep("npm run sync:i18n:check", "npm run sync:i18n:check");
 }

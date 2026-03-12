@@ -44,7 +44,7 @@ the Free Software Foundation, version 3 only. -->
             class="rounded-lg border px-3 py-1.5 text-[0.68rem] font-semibold
                    transition-all cursor-pointer select-none
                    {getFontSize() === preset.value
-                     ? 'border-blue-500/50 bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                     ? 'border-primary/50 bg-primary/10 text-primary'
                      : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
             {preset.label} · {preset.value}%
           </button>
@@ -73,15 +73,15 @@ the Free Software Foundation, version 3 only. -->
               class="flex flex-col items-center gap-1 rounded-xl border px-3 py-2.5 flex-1
                      transition-all cursor-pointer select-none
                      {getTheme() === opt.value
-                       ? 'border-blue-500/50 bg-blue-500/10 dark:bg-blue-500/15'
+                       ? 'border-primary/50 bg-primary/10'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               <span class="text-[1rem]">{opt.icon}</span>
               <span class="text-[0.7rem] font-semibold leading-tight
-                           {getTheme() === opt.value ? 'text-blue-600 dark:text-blue-400' : 'text-foreground'}">
+                           {getTheme() === opt.value ? 'text-primary' : 'text-foreground'}">
                 {t(opt.labelKey)}
               </span>
               {#if getTheme() === opt.value}
-                <span class="text-[0.52rem] font-bold tracking-widest uppercase text-blue-500 mt-0.5">{t("common.active")}</span>
+                <span class="text-[0.52rem] font-bold tracking-widest uppercase text-primary mt-0.5">{t("common.active")}</span>
               {/if}
             </button>
           {/each}
@@ -178,7 +178,7 @@ the Free Software Foundation, version 3 only. -->
             class="flex items-center gap-3 rounded-xl border px-3 py-3
                    transition-all cursor-pointer select-none
                    {getChartScheme() === scheme.id
-                     ? 'border-blue-500/50 bg-blue-500/10 dark:bg-blue-500/15'
+                     ? 'border-primary/50 bg-primary/10'
                      : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
 
             <!-- Color swatches -->
@@ -208,7 +208,7 @@ the Free Software Foundation, version 3 only. -->
             <!-- Label and description -->
             <div class="flex flex-col gap-0.5 min-w-0 flex-1">
               <span class="text-[0.72rem] font-semibold leading-tight
-                           {getChartScheme() === scheme.id ? 'text-blue-600 dark:text-blue-400' : 'text-foreground'}">
+                           {getChartScheme() === scheme.id ? 'text-primary' : 'text-foreground'}">
                 {t(scheme.labelKey)}
               </span>
               <span class="text-[0.58rem] text-muted-foreground leading-tight">
@@ -218,7 +218,7 @@ the Free Software Foundation, version 3 only. -->
 
             <!-- Active indicator -->
             {#if getChartScheme() === scheme.id}
-              <span class="text-[0.52rem] font-bold tracking-widest uppercase text-blue-500 shrink-0">
+              <span class="text-[0.52rem] font-bold tracking-widest uppercase text-primary shrink-0">
                 {t("common.active")}
               </span>
             {/if}

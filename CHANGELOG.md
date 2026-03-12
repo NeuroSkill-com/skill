@@ -6,18 +6,39 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Bug Fixes
+
+- **`npm run bump` Linux preflight dependency clarity**: added an explicit `pkg-config` guard before `cargo clippy` in `scripts/bump.js` that checks `webkit2gtk-4.1`, `javascriptcoregtk-4.1`, and `libsoup-3.0`; when missing, bump now fails fast with actionable `apt install` guidance instead of surfacing a lower-level `webkit2gtk-sys` build-script crash.
+- **Strictest non-status accent normalization (UMAP/Embeddings)**: removed remaining category-only orange/sky/emerald/violet highlight styling in UMAP and Embeddings controls (preset chips, pipeline badges, slider thumb/focus affordance, and dimension legend badges) in favor of semantic `primary` / `ring` tokens so generic interactive emphasis consistently follows Appearance accent settings.
+- **Strict accent policy completion for generic selectors**: updated the remaining non-status selected controls in Calibration profile editing (break-duration and iterations chips) to use semantic `primary` tokens instead of hardcoded `amber`/`emerald`, and clarified `AGENTS.md` guidance that semantic status colors remain allowed only for true status signaling.
+- **Follow-up accent normalization for non-status highlights**: converted remaining generic hardcoded `rose`/`emerald` selection and focus styles (UMAP timeout/cooldown controls, EEG overlap selector summary badges, and interactive search query focus ring) to semantic `primary` / `ring` tokens, while leaving semantic success/warning/error colors unchanged.
+- **Broader accent-token consistency sweep**: replaced numerous hardcoded interactive blue states (selected chips/buttons, focus rings, and status badges) with semantic `primary` / `ring` tokens across Appearance, Settings, Focus Timer, History, Labels, Calibration, API, Search, and related tabs so accent-like UI feedback consistently follows the Appearance accent mapping.
+- **Accent setting now applies to native form controls and remaining interactive toggles**: added a global `accent-color` base rule tied to the remapped accent palette so checkboxes/radios/ranges/progress controls follow the selected Appearance accent, and replaced remaining hardcoded non-remapped accent classes in interactive Search/UMAP controls.
+- **Updater fallback on install failure**: when automatic update download/install fails in the Updates tab, the UI now gives an explicit "download online" fallback and automatically opens the latest GitHub releases page (`https://github.com/NeuroSkill-com/skill/releases/latest`) so users can immediately fetch the newest installer manually.
+- **macOS white screen on first launch**: `win.show()` was called in Tauri's `setup` closure before WKWebView had loaded any content, producing a solid white frame until the next compositor cycle.  Fixed by removing the eager `setup` show and adding a new `show_main_window` Tauri command that is invoked from `+layout.svelte` `onMount`; the window now becomes visible only after the page has fully rendered.  Secondary windows (settings, help, calibration, etc.) and the new-user onboarding flow are unaffected — `show_main_window` is a no-op for any window whose label isn't `"main"` or whose onboarding flag is unset.
+- **What's New version picker theme mismatch**: the navigation dropdown in `/whats-new` used transparent/native select styling that could ignore app theme colors in the standalone window. The picker now uses explicit themed control styles (`appearance-none`, theme-aware background/border/text) plus a custom caret so light/dark appearance matches the rest of the UI.
+- **Appearance accent color not applied consistently across UI**: accent selection previously remapped only Tailwind `violet-*` variables, while many controls and gradients used `blue-*`, `indigo-*`, or `sky-*` classes and stayed on default hues. Accent application now remaps those accent-like families together so interactive highlights, rings, sliders, and accent gradients consistently follow the selected Appearance accent.
+
 ### CI Runtime
 
+- Linux CI/release workflow hardening: added native Linux x86_64 npm scripts (`tauri:build:linux:x64:native`, `package:linux:portable:x64:native`) and switched `.github/workflows/ci.yml` + `.github/workflows/release-linux.yml` to those scripts so hosted x86_64 runners no longer depend on `ALLOW_LINUX_CROSS` cross-mode execution paths.
+- Linux CI execution policy refinement: in `.github/workflows/ci.yml`, heavy Linux bundling jobs (`linux-release` and `linux-portable-package`) now run by default on `push`, and can be explicitly enabled for manual `workflow_dispatch` runs via `run_linux_bundles=true`, keeping pull-request CI focused on faster validation.
 - Updated GitHub Actions workflows to Node 24-ready action versions across CI and release workflows: `actions/checkout` → `v6`, `actions/setup-node` → `v6`, `actions/cache` → `v5`, and `Swatinem/rust-cache` → `v2.9.0`, removing the GitHub deprecation warnings about Node 20-based actions.
 - Removed the Linux Rust job's apt archive cache from `.github/workflows/ci.yml`; that cache was low-value on hosted runners and was the most likely source of the `/usr/bin/tar` post-job save failure that was making the Rust CI job noisy or red despite successful build steps.
 - Reintroduced Linux Tauri system dependency caching in CI and Linux release workflows via `awalsh128/cache-apt-pkgs-action` (`.github/workflows/ci.yml`, `.github/workflows/release-linux.yml`) so WebKit/GTK build dependencies are restored from cache instead of re-downloaded on every run.
 
 ### UI / Type Safety
 
+### What's New window
+
+- **Full changelog navigation**: the What's New window now parses the entire bundled `CHANGELOG.md` (via Vite `?raw` import) into individual version sections and renders each one with `MarkdownRenderer`; a compact navigation bar between the header and body provides "Newer ←" / "Older →" arrow buttons and a version-picker `<select>` dropdown so users can browse every release entry from a single window; scroll position resets to the top on each navigation step; a `1 / N` counter in the footer shows the current position; new i18n keys (`whatsNew.older`, `whatsNew.newer`, `whatsNew.unreleased`) added to all five locales (en, de, fr, he, uk)
+
+
 - Reduced the untyped `any` surface in the Three.js-heavy UI components by introducing explicit typed scene/object wrappers in `src/lib/UmapViewer3D.svelte` and `src/lib/InteractiveGraph3D.svelte`; removed broad `any` refs and `@ts-ignore`, and kept behavior unchanged while making future refactors compile-time safer.
 
-### i18n
+### i18n (0.0.4)
 
+- Localized updater fallback messaging across all shipped locales (`en`, `de`, `fr`, `he`, `uk`) by adding translated keys for: (1) automatic-update install failure with online download guidance, and (2) failure to auto-open the download page; `UpdatesTab.svelte` now uses i18n keys instead of hardcoded English strings for both paths.
 - Fixed a locale key-sync detection edge case for `de`, `fr`, `he`, and `uk`: normalized `llm.tools.locationDesc`, `llm.tools.webSearchDesc`, and `llm.tools.webFetchDesc` entries to standard `"key": "value"` formatting so `scripts/sync-i18n.ts --check` correctly counts them
 - Ran `scripts/sync-i18n.ts --fix` to auto-backfill 138 missing keys in `src/lib/i18n/he.ts` with English fallbacks, restoring locale key-count parity (`2237` keys) so `npm run sync:i18n:check` passes.
 - Completed German fallback translation coverage in [src/lib/i18n/de.ts](src/lib/i18n/de.ts) for the auto-synced OpenBCI/LLM/chat/help/downloads blocks and removed stale in-file TODO translation markers in that locale.
@@ -40,6 +61,14 @@ All notable changes to NeuroSkill™ are documented here.
 - `npm run bump` now runs mandatory preflight gates before mutating versions: `npm run check`, `cargo clippy --manifest-path src-tauri/Cargo.toml`, then `npm run sync:i18n:check`; if any step fails, bump exits immediately and does not update version fields.
 - Linux CI bundle stability: `scripts/tauri-build.js` now detects a Tauri CLI segfault (`exit 139`) during explicit multi-target bundle runs (for example `--bundles deb,appimage`) and automatically retries bundling sequentially per target so release jobs can still produce both `.deb` and `.AppImage` artifacts
 - Linux CI single-target bundle stability: when an explicit Linux bundle run (for example `--bundles deb`) exits with `139`, `scripts/tauri-build.js` now verifies the expected bundle output for that target and treats the run as successful only if artifacts are present; the same artifact-aware tolerance is also applied per-target during sequential retry after a multi-target segfault.
+- Linux CI per-target recovery hardened: when a Linux `tauri build --bundles <target>` run exits `139` before writing bundle artifacts, `scripts/tauri-build.js` now retries that target with `tauri bundle --bundles <target>` and only fails if expected artifacts are still missing after the fallback path.
+- Linux CI release-bundle smoke test now fails if no `.deb` package is produced: `.github/workflows/ci.yml` verifies at least one `.deb` exists after bundling and checks both the explicit target-triple bundle path and fallback non-target path to catch segfault-recovery path regressions.
+- Linux ARM64 build fallback (macOS-style crash isolation): for explicit bundle builds where Tauri crashes with `139`/`134` but the release binary already exists, `scripts/tauri-build.js` now exits successfully in compile-only mode and prints guidance; set `DISABLE_LINUX_CRASH_COMPILE_FALLBACK=1` to force hard failure.
+- Added standalone Linux distribution packaging script `scripts/package-linux-dist.sh` to avoid Tauri bundling: it builds with `--no-bundle`, assembles `NeuroSkill/` (binary, bundled resources, launcher, icon, desktop entry, docs), and emits a portable `tar.gz` archive under `dist/linux/<target>/`.
+- Added CI portable-package job in `.github/workflows/ci.yml`: `linux-portable-package` now runs `npm run package:linux:portable:x64`, verifies the generated `dist/linux/x86_64-unknown-linux-gnu/*.tar.gz`, and uploads it as a GitHub Actions artifact (`linux-portable-x86_64`).
+- Added Linux `.deb` artifact upload in CI: the `linux-release` job in `.github/workflows/ci.yml` now resolves the generated package from the target/fallback bundle paths and uploads it as `linux-deb-x86_64` for direct download from Actions runs.
+- Linux package matrix expanded to include `rpm`: Linux build scripts now request `--bundles deb,appimage,rpm`, and both CI/release workflows were updated to validate and publish `.rpm` alongside `.deb` and `.AppImage` artifacts.
+- Added Linux integrity sidecars: workflows now generate `SHA256SUMS` files for Linux bundle outputs and portable tarball outputs, and `release-linux` now also generates detached `.sig` signatures for Linux release artifacts.
 
 ## [0.0.24] — 2026-03-12
 
@@ -64,6 +93,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### LLM
 
+- Moved per-session LLM transcript files into a dedicated `~/.skill/llm_logs` directory (`skill_dir/llm_logs/llm_<unix-seconds>.txt`) so all LLM logs live in a standalone folder instead of the `skill_dir` root.
 - Added i18n translations for all LLM built-in tool toggle labels and descriptions across all five supported locales (en, de, fr, he, uk); `TOOL_ROWS` in `LlmTab.svelte` is now a reactive `$derived` so labels update instantly on language change
 - Added per-tool allow-list settings for LLM chat in Settings → LLM; `date`, `location`, `web_search`, and `web_fetch` can now be enabled or disabled individually, and running chat requests pick up the updated tool allow-list immediately
 - Multimodal projector selection now stays attached to a compatible downloaded text model instead of behaving like a standalone model; selecting an `mmproj` can auto-pair to a matching downloaded LLM, incompatible projector selections are cleared when the base model changes, and startup now honors the resolved projector path when autoload is enabled

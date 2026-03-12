@@ -187,13 +187,13 @@ the Free Software Foundation, version 3 only. -->
           <div class="flex items-center justify-between gap-2">
             <div class="flex flex-col gap-0.5 min-w-0">
               <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
-              <span class="text-[0.65rem] text-blue-500 dark:text-blue-400 truncate">
+              <span class="text-[0.65rem] text-primary truncate">
                 {modelStatus.download_status_msg ?? t("model.downloading")}
               </span>
             </div>
             <Badge variant="outline"
               class="shrink-0 text-[0.56rem] py-0 px-1.5
-                     bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                     bg-primary/10 text-primary border-primary/20">
               {t("model.downloading")}
             </Badge>
           </div>

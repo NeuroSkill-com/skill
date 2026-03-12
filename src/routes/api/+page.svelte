@@ -251,7 +251,7 @@ ws.on("message", (data) => {
       <div class="flex items-center gap-2 flex-wrap">
         <div class="w-2 h-2 rounded-full bg-green-500 shrink-0"></div>
         <span class="text-[0.72rem] font-semibold text-foreground">{t("apiStatus.serverRunning")}</span>
-        <Badge variant="outline" class="text-[0.55rem] py-0 px-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+        <Badge variant="outline" class="text-[0.55rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           WebSocket
         </Badge>
         <Badge variant="outline" class="text-[0.55rem] py-0 px-1.5 bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
@@ -309,7 +309,7 @@ ws.on("message", (data) => {
             onclick={() => activeTab = key}
             class="flex-1 py-1.5 text-[0.6rem] font-semibold transition-colors
                    {activeTab === key
-                     ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-b-2 border-blue-500'
+                     ? 'bg-primary/10 text-primary border-b-2 border-primary'
                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'}"
           >
             {label}

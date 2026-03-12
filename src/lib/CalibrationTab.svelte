@@ -326,7 +326,7 @@ the Free Software Foundation, version 3 only. -->
                  placeholder={t("calibration.profileNamePlaceholder")}
                  class="rounded-lg border border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28]
                         px-2.5 py-1.5 text-[0.72rem] text-foreground
-                        focus:outline-none focus:ring-1 focus:ring-blue-500/50" />
+                 focus:outline-none focus:ring-1 focus:ring-ring/50" />
         </div>
 
         <!-- Actions -->
@@ -334,8 +334,8 @@ the Free Software Foundation, version 3 only. -->
           <div class="flex items-center justify-between">
             <span class="text-[0.78rem] font-semibold text-foreground">{t("settings.actionLabels")}</span>
             <button onclick={addAction}
-                    class="flex items-center gap-1 text-[0.6rem] font-semibold text-blue-500
-                           hover:text-blue-600 transition-colors">
+                  class="flex items-center gap-1 text-[0.6rem] font-semibold text-primary
+                    hover:text-primary/80 transition-colors">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                    stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
                 <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -370,14 +370,14 @@ the Free Software Foundation, version 3 only. -->
                      placeholder={t("calibration.actionLabel")}
                      class="flex-1 rounded-lg border border-border dark:border-white/[0.08]
                             bg-muted dark:bg-[#1a1a28] px-2.5 py-1.5
-                            text-[0.72rem] text-foreground focus:outline-none focus:ring-1 focus:ring-blue-500/50" />
+                  text-[0.72rem] text-foreground focus:outline-none focus:ring-1 focus:ring-ring/50" />
               <!-- Duration -->
               <div class="flex items-center gap-1">
                 {#each [5,10,15,20,30] as secs}
                   <button onclick={() => action.duration_secs = secs}
                           class="rounded px-1.5 py-0.5 text-[0.55rem] font-semibold border transition-all
                                  {action.duration_secs === secs
-                                   ? 'border-blue-500/50 bg-blue-500/10 text-blue-500'
+                                   ? 'border-primary/50 bg-primary/10 text-primary'
                                    : 'border-border text-muted-foreground hover:text-foreground'}">
                     {secs}s
                   </button>
@@ -411,7 +411,7 @@ the Free Software Foundation, version 3 only. -->
                   <button onclick={() => editing!.break_duration_secs = secs}
                           class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all
                                  {editing.break_duration_secs === secs
-                                   ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                   ? 'border-primary/50 bg-primary/10 text-primary'
                                    : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
                     {secs}s
                   </button>
@@ -427,7 +427,7 @@ the Free Software Foundation, version 3 only. -->
                   <button onclick={() => editing!.loop_count = n}
                           class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all
                                  {editing.loop_count === n
-                                   ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                   ? 'border-primary/50 bg-primary/10 text-primary'
                                    : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
                     {n}×
                   </button>
@@ -459,7 +459,7 @@ the Free Software Foundation, version 3 only. -->
             {t("settings.summary")}
           </span>
           {#each editing.actions as action, i}
-            {@const colors = ["bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+            {@const colors = ["bg-primary/10 text-primary border-primary/20",
                               "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
                               "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
                               "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",

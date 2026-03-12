@@ -222,6 +222,13 @@
     user-select: none;
   }
 
+  input[type="checkbox"],
+  input[type="radio"],
+  input[type="range"],
+  progress {
+    accent-color: var(--color-violet-500);
+  }
+
   /* ── Focus-visible ring for keyboard navigation ──────────────────────────── */
   :focus-visible {
     outline: 2px solid var(--ring);

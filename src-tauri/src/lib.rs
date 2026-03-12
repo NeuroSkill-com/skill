@@ -198,6 +198,7 @@ use window_cmds::{
     open_bt_settings, open_settings_window, open_updates_window, open_model_tab, open_help_window,
     open_search_window, open_session_window, open_label_window, open_labels_window,
     open_focus_timer_window, open_api_window,
+    show_main_window,
     open_whats_new_window, get_whats_new_seen_version, dismiss_whats_new,
     open_onboarding_window, get_onboarding_model_download_order,
     complete_onboarding, get_onboarding_complete, close_label_window,
@@ -1511,11 +1512,12 @@ pub fn run() {
                 .on_tray_icon_event(|_tray, _event| {})
                 .build(app)?;
 
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.show();
-                let _ = win.set_focus();
-                linux_fix_decorations(&win);
-            }
+            // The main window is revealed by `show_main_window` (called from
+            // +layout.svelte onMount) once WKWebView has actually loaded the
+            // page.  Showing it here — before the web content is ready — causes
+            // the white-screen-on-macOS bug.  On Linux/Windows the command is
+            // still called from the frontend and the show() is a safe no-op on
+            // an already-visible window, so no platform-specific guard needed.
 
             let app_scan = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -1877,6 +1879,7 @@ pub fn run() {
             open_session_window,
             tts_init, tts_speak, tts_list_voices, tts_set_voice,
             get_about_info, open_about_window,
+            show_main_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -633,7 +633,7 @@ the Free Software Foundation, version 3 only. -->
           bind:value={labelSearchQuery}
           placeholder={t("common.search")}
           class="flex-1 h-6 text-[0.62rem] rounded border border-border dark:border-white/[0.08]
-                 bg-background px-2 outline-none focus:ring-1 focus:ring-blue-500/50" />
+                 bg-background px-2 outline-none focus:ring-1 focus:ring-ring/50" />
         <button onclick={() => showLabels = false}
                 class="text-[0.7rem] text-muted-foreground/60 hover:text-foreground">✕</button>
       </div>
@@ -880,7 +880,7 @@ the Free Software Foundation, version 3 only. -->
                     {@const isSelected = compareSelected.includes(session.csv_path)}
                     {@const atLimit = compareSelected.length >= 2 && !isSelected}
                     <div class="w-4 h-4 rounded flex items-center justify-center shrink-0 transition-colors
-                                {isSelected ? 'bg-blue-500' : atLimit ? 'border border-border/50 opacity-40' : 'border border-border dark:border-white/20'}">
+                                {isSelected ? 'bg-primary' : atLimit ? 'border border-border/50 opacity-40' : 'border border-border dark:border-white/20'}">
                       {#if isSelected}
                         <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"
                              stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5">
@@ -917,7 +917,7 @@ the Free Software Foundation, version 3 only. -->
                   {#if session.labels.length > 0}
                     <Badge variant="outline"
                       class="text-[0.46rem] font-semibold px-1 py-0 rounded-full shrink-0
-                             bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+                             bg-primary/10 text-primary border-primary/20">
                       {session.labels.length} {session.labels.length === 1 ? t("history.label") : t("history.labels")}
                     </Badge>
                   {/if}

@@ -1,6 +1,6 @@
 {
   "name": "neuroskill",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "description": "",
   "type": "module",
   "scripts": {
@@ -16,8 +16,13 @@
     "check:watch": "npm run -s dev:guard && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --ignore src-tauri --watch",
     "tauri": "node scripts/tauri-build.js",
     "tauri:build": "node scripts/tauri-build.js build",
-    "tauri:build:linux:arm64": "node scripts/tauri-build.js build --target aarch64-unknown-linux-gnu --bundles deb,appimage --features llm-vulkan",
-    "tauri:build:linux:x64": "ALLOW_LINUX_CROSS=1 node scripts/tauri-build.js build --target x86_64-unknown-linux-gnu --bundles deb,appimage --features llm-vulkan",
+    "tauri:build:linux:arm64": "node scripts/tauri-build.js build --target aarch64-unknown-linux-gnu --bundles deb,appimage,rpm --features llm-vulkan",
+    "tauri:build:linux:x64:native": "node scripts/tauri-build.js build --target x86_64-unknown-linux-gnu --bundles deb,appimage,rpm --features llm-vulkan",
+    "tauri:build:linux:x64": "ALLOW_LINUX_CROSS=1 node scripts/tauri-build.js build --target x86_64-unknown-linux-gnu --bundles deb,appimage,rpm --features llm-vulkan",
+    "package:linux:portable": "bash scripts/package-linux-dist.sh",
+    "package:linux:portable:arm64": "bash scripts/package-linux-dist.sh --target aarch64-unknown-linux-gnu",
+    "package:linux:portable:x64:native": "bash scripts/package-linux-dist.sh --target x86_64-unknown-linux-gnu",
+    "package:linux:portable:x64": "ALLOW_LINUX_CROSS=1 bash scripts/package-linux-dist.sh --target x86_64-unknown-linux-gnu",
     "tauri:build:mac": "node scripts/tauri-build.js build",
     "skill": "npx tsx cli.ts",
     "sync:i18n": "npx tsx scripts/sync-i18n.ts",

@@ -84,9 +84,7 @@ the Free Software Foundation, version 3 only. -->
 
   // Dim badge colour
   function dimColor(dim: number) {
-    if (dim <= 384)  return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
-    if (dim <= 768)  return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
-    return                  "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20";
+    return "bg-primary/10 text-primary border-primary/20";
   }
 </script>
 
@@ -109,7 +107,7 @@ the Free Software Foundation, version 3 only. -->
       class="w-full rounded-lg border border-border dark:border-white/[0.08]
              bg-white dark:bg-[#14141e] px-3 py-2
              text-[0.75rem] text-foreground
-             focus:outline-none focus:ring-1 focus:ring-blue-500/50">
+              focus:outline-none focus:ring-1 focus:ring-ring/50">
       {#each Object.entries(grouped) as [family, mods]}
         <optgroup label={family}>
           {#each mods as m}
@@ -142,16 +140,16 @@ the Free Software Foundation, version 3 only. -->
   </div>
 
   <!-- ── Info callout ────────────────────────────────────────────────────── -->
-  <div class="rounded-xl border border-blue-500/20 bg-blue-500/5
-              dark:bg-blue-500/10 px-4 py-3 flex gap-3">
+    <div class="rounded-xl border border-primary/20 bg-primary/5
+          dark:bg-primary/10 px-4 py-3 flex gap-3">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round"
-         class="w-4 h-4 shrink-0 text-blue-500 mt-0.5">
+        class="w-4 h-4 shrink-0 text-primary mt-0.5">
       <circle cx="12" cy="12" r="10"/>
       <line x1="12" y1="8" x2="12" y2="12"/>
       <line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
-    <p class="text-[0.65rem] text-blue-700 dark:text-blue-300 leading-relaxed">
+    <p class="text-[0.65rem] text-primary leading-relaxed">
       {t("embeddings.info")}
     </p>
   </div>
@@ -186,7 +184,7 @@ the Free Software Foundation, version 3 only. -->
       {@const pct = progress.total > 0 ? Math.round(progress.done / progress.total * 100) : 0}
       <div class="flex flex-col gap-1">
         <div class="h-1.5 rounded-full bg-muted dark:bg-white/[0.06] overflow-hidden">
-          <div class="h-full rounded-full bg-blue-500 transition-all duration-300"
+          <div class="h-full rounded-full bg-primary transition-all duration-300"
                style="width: {pct}%"></div>
         </div>
         <span class="text-[0.58rem] text-muted-foreground/60 tabular-nums">
@@ -201,11 +199,9 @@ the Free Software Foundation, version 3 only. -->
     <span class="text-[0.56rem] font-semibold uppercase tracking-wider text-muted-foreground/50 shrink-0">
       {t("embeddings.dimLegend")}
     </span>
-    {#each [[384,"≤384d","emerald"],[768,"≤768d","blue"],[1024,"≤1024d","violet"]] as [,label,color]}
+    {#each [[384,"≤384d"],[768,"≤768d"],[1024,"≤1024d"]] as [,label]}
       <span class="rounded border px-1.5 py-0 text-[0.56rem] font-semibold
-                   {color === 'emerald' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                   : color === 'blue'   ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-                   :                      'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20'}">
+                   bg-primary/10 text-primary border-primary/20">
         {label}
       </span>
     {/each}

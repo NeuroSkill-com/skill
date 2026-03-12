@@ -298,7 +298,7 @@ the Free Software Foundation, version 3 only. -->
                  focus:outline-none focus:ring-2 transition-all
                  {searchMode === 'semantic'
                    ? 'border-violet-400/40 dark:border-violet-500/30 focus:ring-violet-500/30'
-                   : 'border-border dark:border-white/[0.09] focus:ring-blue-500/30'}"
+                   : 'border-border dark:border-white/[0.09] focus:ring-ring/30'}"
         />
         {#if search}
           <button
@@ -324,7 +324,7 @@ the Free Software Foundation, version 3 only. -->
           title={t("labels.search.exactTitle")}
           class="px-2.5 py-1 transition-colors leading-none
                  {searchMode === 'exact'
-                   ? 'bg-blue-500 text-white'
+                   ? 'bg-primary text-primary-foreground'
                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}">
           {t("labels.search.exact")}
         </button>
@@ -415,9 +415,9 @@ the Free Software Foundation, version 3 only. -->
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveEdit(label.id);
                   }}
                   class="w-full px-2.5 py-1.5 text-[0.78rem] rounded-md
-                         border border-blue-500/40
+                        border border-primary/40
                          bg-background text-foreground
-                         focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        focus:outline-none focus:ring-2 focus:ring-ring/30"
                   use:focusOnMount
                 />
                 <textarea
@@ -430,7 +430,7 @@ the Free Software Foundation, version 3 only. -->
                   class="w-full px-2.5 py-1.5 text-[0.72rem] rounded-md
                          border border-border dark:border-white/[0.08]
                          bg-background text-foreground placeholder:text-muted-foreground/40
-                         focus:outline-none focus:ring-1 focus:ring-blue-500/30
+                        focus:outline-none focus:ring-1 focus:ring-ring/30
                          resize-y leading-relaxed"
                   style="min-height: 80px"
                 ></textarea>
