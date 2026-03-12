@@ -316,78 +316,25 @@ jobs:
           echo "Bundle contents:"
           find "$APP_BUNDLE" -maxdepth 3 | sort
 
-      # ── Sign the .app bundle ──────────────────────────────────────────────────
+      # ── Sign .app + create DMG (background, README, CHANGELOG, LICENSE) ─────
       #
-      # Replaces Tauri's built-in signing, which crashes on macOS 26.
-      # Notarization is intentionally deferred to the Create DMG step: when
-      # Apple processes the DMG it registers notarization tickets for all
-      # signed content inside it (including this .app), so only one
-      # notarytool submission is needed rather than two.
-      - name: Sign .app
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
-          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
+      # Uses the shared scripts/create-macos-dmg.sh which:
+      #   • Signs the .app (hardened runtime + timestamp when identity is set)
+      #   • Generates a @2x background image (icon + version) via Pillow
+      #   • Stages README.md, CHANGELOG.md, LICENSE, Applications symlink
+      #   • Creates a read-write DMG, applies Finder view settings, converts
+      #     to compressed UDZO
+      #   • Signs the DMG and notarizes with Apple (staples both DMG and .app)
+      - name: Install Pillow (for DMG background image)
+        run: pip3 install --quiet Pillow
 
-          codesign \
-            --deep --force --verify --verbose \
-            --timestamp --options runtime \
-            --entitlements "src-tauri/entitlements.plist" \
-            --sign "$APPLE_SIGNING_IDENTITY" \
-            "$APP_BUNDLE"
-          codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
-
-      # ── Create DMG from the signed .app ───────────────────────────────────────
-      #
-      # Tauri's bundled create-dmg script spawns bundle_dmg.sh as a subprocess
-      # which fails on macOS 26 (hdiutil API change), causing the CLI to
-      # propagate the failure as SIGILL.  We build the DMG directly with hdiutil
-      # instead — same result without the create-dmg dependency.
-      #
-      # Notarization is done here (DMG only).  Apple registers tickets for all
-      # signed binaries inside the DMG, so after this step both the DMG and the
-      # .app can be stapled without a second notarytool submission.
-      #
-      - name: Create DMG
+      - name: Sign .app + Create DMG
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID:               ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD:         ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:          ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
-          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
-          DMG_DIR="$BUNDLE_DIR/dmg"
-          DMG_OUT="$DMG_DIR/NeuroSkill_${VERSION}_aarch64.dmg"
-          mkdir -p "$DMG_DIR"
-
-          STAGING="$(mktemp -d)"
-          cp -R "$APP_BUNDLE" "$STAGING/"
-          ln -s /Applications "$STAGING/Applications"
-
-          hdiutil create \
-            -volname "NeuroSkill" \
-            -srcfolder "$STAGING" \
-            -ov -format UDZO \
-            "$DMG_OUT"
-          rm -rf "$STAGING"
-
-          codesign --force --timestamp \
-            --sign "$APPLE_SIGNING_IDENTITY" \
-            "$DMG_OUT"
-
-          # Single notarization submission — Apple registers tickets for both
-          # the DMG and the .app bundle embedded within it.
-          xcrun notarytool submit "$DMG_OUT" \
-            --apple-id  "$APPLE_ID"       \
-            --password  "$APPLE_PASSWORD"  \
-            --team-id   "$APPLE_TEAM_ID"   \
-            --wait --timeout 1800
-          xcrun stapler staple "$DMG_OUT"
-          xcrun stapler staple "$APP_BUNDLE"
-
-          echo "DMG: $DMG_OUT  ($(du -sh "$DMG_OUT" | cut -f1))"
+        run: bash scripts/create-macos-dmg.sh aarch64-apple-darwin
 
       # ── Create updater artifact from the signed + stapled .app ─────────────
       #

@@ -124,9 +124,12 @@ the Free Software Foundation, version 3 only. -->
   {#if osType === "Darwin"}
     <!-- macOS: controls on left, spacer, actions on right -->
     <div class="titlebar-controls">
-      <button type="button" title="minimize" aria-label="Minimize" onclick={minimizeWindow}>
+      <button type="button" title="close" aria-label="Close" onclick={closeWindow}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-          <path fill="currentColor" d="M19 13H5v-2h14z" />
+          <path
+            fill="currentColor"
+            d="M13.46 12L19 17.54V19h-1.46L12 13.46L6.46 19H5v-1.46L10.54 12L5 6.46V5h1.46L12 10.54L17.54 5H19v1.46z"
+          />
         </svg>
       </button>
       <button type="button" title="maximize" aria-label="Maximize" onclick={toggleMaximizeWindow}>
@@ -134,12 +137,9 @@ the Free Software Foundation, version 3 only. -->
           <path fill="currentColor" d="M4 4h16v16H4zm2 4v10h12V8z" />
         </svg>
       </button>
-      <button type="button" title="close" aria-label="Close" onclick={closeWindow}>
+      <button type="button" title="minimize" aria-label="Minimize" onclick={minimizeWindow}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-          <path
-            fill="currentColor"
-            d="M13.46 12L19 17.54V19h-1.46L12 13.46L6.46 19H5v-1.46L10.54 12L5 6.46V5h1.46L12 10.54L17.54 5H19v1.46z"
-          />
+          <path fill="currentColor" d="M19 13H5v-2h14z" />
         </svg>
       </button>
     </div>

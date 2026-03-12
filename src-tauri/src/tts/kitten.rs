@@ -46,9 +46,16 @@ pub(super) enum Cmd {
     Init  { cb: Box<dyn FnMut(LoadProgress) + Send + 'static>, done: oneshot::Sender<Result<(), String>> },
     Speak { text: String, voice: String, done: oneshot::Sender<()> },
     Unload { done: oneshot::Sender<()> },
+    Shutdown { done: std::sync::mpsc::SyncSender<()> },
 }
 
 static TX: OnceLock<std::sync::mpsc::SyncSender<Cmd>> = OnceLock::new();
+
+/// Send a blocking `Shutdown` command to the worker if it has been started.
+/// Returns `true` if the channel send succeeded (worker is running).
+pub(super) fn try_shutdown(done: std::sync::mpsc::SyncSender<()>) -> bool {
+    TX.get().map(|ch| ch.send(Cmd::Shutdown { done }).is_ok()).unwrap_or(false)
+}
 
 pub(super) fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
     TX.get_or_init(|| {
@@ -126,6 +133,16 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 LOADED.store(false, Ordering::Relaxed);
                 eprintln!("[tts] KittenTTS model unloaded");
                 done.send(()).ok();
+            }
+
+            Cmd::Shutdown { done } => {
+                // Explicitly drop resources before process static teardown.
+                drop(stream.take());
+                drop(model.take());
+                LOADED.store(false, Ordering::Relaxed);
+                eprintln!("[tts] KittenTTS shutdown complete");
+                done.send(()).ok();
+                return;
             }
         }
     }

@@ -84,6 +84,8 @@ injections = {
     "CFBundleShortVersionString": "$VERSION",
     "CFBundlePackageType": "APPL",
     "CFBundleInfoDictionaryVersion": "6.0",
+    "CFBundleIconFile": "icon",
+    "NSHighResolutionCapable": "true",
 }
 
 for key, value in injections.items():

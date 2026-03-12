@@ -241,6 +241,15 @@ fn use_neutts() -> bool { false }
 /// the llama.cpp/Metal `ggml_metal_device_free` assertion from firing during
 /// C++ static destructors after `exit()`.
 pub(crate) fn tts_shutdown() {
+    #[cfg(feature = "tts-kitten")]
+    {
+        let timeout = std::time::Duration::from_secs(8);
+        let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
+        if kitten::try_shutdown(tx) && rx.recv_timeout(timeout).is_err() {
+            eprintln!("[tts] KittenTTS shutdown timed out — forcing drop");
+        }
+    }
+
     #[cfg(feature = "tts-neutts")]
     {
         let timeout = std::time::Duration::from_secs(8);

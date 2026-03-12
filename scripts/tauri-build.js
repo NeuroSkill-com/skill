@@ -759,6 +759,8 @@ function assembleMacOsApp() {
       [`CFBundleVersion`, `<key>CFBundleVersion</key>\n  <string>${version}</string>`],
       [`CFBundleShortVersionString`, `<key>CFBundleShortVersionString</key>\n  <string>${version}</string>`],
       [`CFBundlePackageType`, `<key>CFBundlePackageType</key>\n  <string>APPL</string>`],
+      [`CFBundleIconFile`, `<key>CFBundleIconFile</key>\n  <string>icon</string>`],
+      [`NSHighResolutionCapable`, `<key>NSHighResolutionCapable</key>\n  <true/>`],
     ];
     for (const [key, xml] of injections) {
       if (!plistContent.includes(key)) {
@@ -782,6 +784,10 @@ function assembleMacOsApp() {
   <string>${version}</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
+  <key>CFBundleIconFile</key>
+  <string>icon</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
 </dict>
 </plist>`;
     writeFileSync(resolve(contentsDir, "Info.plist"), plist);

@@ -28,6 +28,7 @@
     "package:linux:system:x64:native": "bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu",
     "tauri:build:mac": "node scripts/tauri-build.js build",
     "tauri:build:mac:app": "node scripts/tauri-build.js build --no-bundle && bash scripts/assemble-macos-app.sh",
+    "tauri:build:mac:dmg": "node scripts/tauri-build.js build --no-bundle && bash scripts/assemble-macos-app.sh && bash scripts/create-macos-dmg.sh",
     "skill": "npx tsx cli.ts",
     "sync:i18n": "npx tsx scripts/sync-i18n.ts",
     "sync:i18n:fix": "npx tsx scripts/sync-i18n.ts --fix",

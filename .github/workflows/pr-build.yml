@@ -362,37 +362,25 @@ jobs:
           echo "Bundle contents:"
           find "$APP_BUNDLE" -maxdepth 3 | sort
 
-      # ── Sign and notarize the .app bundle ─────────────────────────────────
-      - name: Sign and notarize .app
+      # ── Sign .app + create DMG (background, README, CHANGELOG, LICENSE) ─────
+      #
+      # Uses the shared scripts/create-macos-dmg.sh which signs the .app,
+      # generates a @2x background image, stages docs, configures Finder
+      # layout, creates a compressed DMG, signs it, and notarizes with Apple.
+      # The .app is notarized + stapled via the DMG submission.
+      - name: Install Pillow (for DMG background image)
+        run: pip3 install --quiet Pillow
+
+      - name: Sign .app + Create DMG
         env:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_ID:               ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD:         ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID:          ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
-          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
-
-          codesign \
-            --deep --force --verify --verbose \
-            --timestamp --options runtime \
-            --entitlements "src-tauri/entitlements.plist" \
-            --sign "$APPLE_SIGNING_IDENTITY" \
-            "$APP_BUNDLE"
-          codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
-
-          NOTARIZE_ZIP="$(mktemp -d)/$(basename "$APP_BUNDLE" .app).zip"
-          ditto -c -k --keepParent "$APP_BUNDLE" "$NOTARIZE_ZIP"
-          xcrun notarytool submit "$NOTARIZE_ZIP" \
-            --apple-id "$APPLE_ID"      \
-            --password "$APPLE_PASSWORD" \
-            --team-id  "$APPLE_TEAM_ID"  \
-            --wait --timeout 1800
-          xcrun stapler staple "$APP_BUNDLE"
-          rm -f "$NOTARIZE_ZIP"
+        run: bash scripts/create-macos-dmg.sh aarch64-apple-darwin
 
       # ── Create updater artifact from the signed + stapled .app ─────────────
-      # See release.yml for full rationale.
+      # Runs after DMG so the .app is already notarized and stapled.
       - name: Recreate updater artifact from signed .app
         env:
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -409,46 +397,6 @@ jobs:
             -C "$(dirname "$APP_BUNDLE")" "$(basename "$APP_BUNDLE")"
 
           npx tauri signer sign -f "$TAR_PATH"
-
-      # ── Create DMG from the signed + notarized .app ───────────────────────────
-      # See release.yml for full rationale — Tauri's create-dmg script fails on
-      # macOS 26; we use hdiutil directly instead.
-      - name: Create DMG
-        env:
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID:               ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD:         ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID:          ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
-          APP_BUNDLE="$(find "$BUNDLE_DIR/macos" -name "*.app" -maxdepth 1 | head -1)"
-          DMG_DIR="$BUNDLE_DIR/dmg"
-          DMG_OUT="$DMG_DIR/NeuroSkill_${VERSION}_aarch64.dmg"
-          mkdir -p "$DMG_DIR"
-
-          STAGING="$(mktemp -d)"
-          cp -R "$APP_BUNDLE" "$STAGING/"
-          ln -s /Applications "$STAGING/Applications"
-
-          hdiutil create \
-            -volname "NeuroSkill" \
-            -srcfolder "$STAGING" \
-            -ov -format UDZO \
-            "$DMG_OUT"
-          rm -rf "$STAGING"
-
-          codesign --force --timestamp \
-            --sign "$APPLE_SIGNING_IDENTITY" \
-            "$DMG_OUT"
-
-          xcrun notarytool submit "$DMG_OUT" \
-            --apple-id  "$APPLE_ID"       \
-            --password  "$APPLE_PASSWORD"  \
-            --team-id   "$APPLE_TEAM_ID"   \
-            --wait --timeout 1800
-          xcrun stapler staple "$DMG_OUT"
-
-          echo "DMG: $DMG_OUT  ($(du -sh "$DMG_OUT" | cut -f1))"
 
       # ── Always delete the temporary keychain ─────────────────────────────────
       - name: Delete temporary keychain
