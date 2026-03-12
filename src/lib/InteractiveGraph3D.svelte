@@ -18,6 +18,8 @@ the Free Software Foundation, version 3 only. -->
 -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import type * as THREE_NS from "three";
+  import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
   import { t } from "$lib/i18n/index.svelte";
   import { getResolved } from "$lib/theme-store.svelte";
 
@@ -43,16 +45,21 @@ the Free Software Foundation, version 3 only. -->
     kind:     "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox";
   }
 
+  type ThreeModule = typeof import("three");
+  type NodeMesh = THREE_NS.Mesh<THREE_NS.SphereGeometry, THREE_NS.MeshPhongMaterial>;
+  type NodeSprite = THREE_NS.Sprite;
+  type EdgeLine = THREE_NS.Line<THREE_NS.BufferGeometry, THREE_NS.LineBasicMaterial>;
+
   // Internal scene-object records ──────────────────────────────────────────
   interface NodeEntry {
-    mesh:         any;       // THREE.Mesh
-    sprite:       any|null;  // THREE.Sprite (label, may be null)
+    mesh:         NodeMesh;
+    sprite:       NodeSprite | null;
     node:         GraphNode;
     baseColor:    number;    // original hex color
     baseEmissive: number;    // original emissiveIntensity
   }
   interface EdgeEntry {
-    line:        any;    // THREE.Line
+    line:        EdgeLine;
     fromId:      string;
     toId:        string;
     baseOpacity: number; // opacity at rest
@@ -137,11 +144,15 @@ the Free Software Foundation, version 3 only. -->
   });
 
   // ── Three.js refs ─────────────────────────────────────────────────────────
-  let THREE: any;
-  let scene: any, camera: any, renderer: any, controls: any;
+  let THREE!: ThreeModule;
+  let scene!: THREE_NS.Scene;
+  let camera!: THREE_NS.PerspectiveCamera;
+  let renderer!: THREE_NS.WebGLRenderer;
+  let controls!: OrbitControlsType;
   let animId    = 0;
   let resizeObs: ResizeObserver | null = null;
-  let raycaster: any, mouse: any;
+  let raycaster!: THREE_NS.Raycaster;
+  let mouse!: THREE_NS.Vector2;
   let canvasClickHandler: ((e: MouseEvent) => void) | null = null;
 
   // Richer scene-object records
@@ -250,8 +261,10 @@ the Free Software Foundation, version 3 only. -->
   // ── Scene init ────────────────────────────────────────────────────────────
   async function initScene() {
     THREE = await import("three");
-    // @ts-ignore
-    const { OrbitControls } = await import("three/addons/controls/OrbitControls.js");
+    const controlsMod = await import("three/addons/controls/OrbitControls.js") as {
+      OrbitControls: new (object: THREE_NS.Camera, domElement?: HTMLElement) => OrbitControlsType;
+    };
+    const OrbitControls = controlsMod.OrbitControls;
     if (!container) return;
 
     const w = container.clientWidth, h = container.clientHeight;
@@ -398,7 +411,7 @@ the Free Software Foundation, version 3 only. -->
       scene.add(mesh);
 
       // Label sprite
-      let sprite: any = null;
+      let sprite: NodeSprite | null = null;
       if (node.kind === "query" || node.kind === "text_label" || node.kind === "found_label") {
         sprite = makeTextSprite(node.text ?? "", color, node.kind);
         if (sprite) {
@@ -412,7 +425,7 @@ the Free Software Foundation, version 3 only. -->
   }
 
   // ── Text sprite ───────────────────────────────────────────────────────────
-  function makeTextSprite(text: string, hexColor: number, kind: GraphNode["kind"]): any {
+  function makeTextSprite(text: string, hexColor: number, kind: GraphNode["kind"]): NodeSprite | null {
     if (!text || !THREE) return null;
     const W = 1024, H = 128;
     const canvas = document.createElement("canvas");

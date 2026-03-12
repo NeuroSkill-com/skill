@@ -328,7 +328,7 @@ jobs:
           # All lines inside <<PYEOF are indented 10 spaces to stay inside the
           # YAML literal block scalar.  Python sees them at column 0 after YAML
           # strips the prefix — valid for top-level code.
-          python3 - "$APP_BUNDLE/Contents" "${{ env.VERSION }}" <<PYEOF
+            python3 - "$APP_BUNDLE/Contents" "${{ steps.label.outputs.conf_version }}" <<PYEOF
           import plistlib, sys, os
           contents, version = sys.argv[1], sys.argv[2]
           with open("src-tauri/Info.plist", "rb") as f:

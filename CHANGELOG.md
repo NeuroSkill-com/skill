@@ -6,13 +6,41 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### UI / Type Safety
+
+- Reduced the untyped `any` surface in the Three.js-heavy UI components by introducing explicit typed scene/object wrappers in `src/lib/UmapViewer3D.svelte` and `src/lib/InteractiveGraph3D.svelte`; removed broad `any` refs and `@ts-ignore`, and kept behavior unchanged while making future refactors compile-time safer.
+
+### i18n
+
+- Fixed a locale key-sync detection edge case for `de`, `fr`, `he`, and `uk`: normalized `llm.tools.locationDesc`, `llm.tools.webSearchDesc`, and `llm.tools.webFetchDesc` entries to standard `"key": "value"` formatting so `scripts/sync-i18n.ts --check` correctly counts them
+- Ran `scripts/sync-i18n.ts --fix` to auto-backfill 138 missing keys in `src/lib/i18n/he.ts` with English fallbacks, restoring locale key-count parity (`2237` keys) so `npm run sync:i18n:check` passes.
+- Completed German fallback translation coverage in [src/lib/i18n/de.ts](src/lib/i18n/de.ts) for the auto-synced OpenBCI/LLM/chat/help/downloads blocks and removed stale in-file TODO translation markers in that locale.
+- Completed French/Hebrew/Ukrainian fallback translation coverage in [src/lib/i18n/fr.ts](src/lib/i18n/fr.ts), [src/lib/i18n/he.ts](src/lib/i18n/he.ts), and [src/lib/i18n/uk.ts](src/lib/i18n/uk.ts) for the same auto-synced OpenBCI/LLM/chat/help/downloads blocks, and removed stale in-file TODO translation markers.
+- Fixed French placeholder consistency regression in [src/lib/i18n/fr.ts](src/lib/i18n/fr.ts) by restoring `llm.size` interpolation token to `{gb}` so runtime formatting and placeholder-consistency tests align.
+
+### Focus / DND
+
+- Linux Do Not Disturb automation support: implemented real Linux backend behavior in `src-tauri/src/dnd.rs` instead of non-macOS no-ops, with GNOME integration via `gsettings org.gnome.desktop.notifications show-banners` and KDE integration via `qdbus(6)` `org.kde.osdService.setDoNotDisturb`; OS-state polling now reports Linux DND state when detectable
+- Linux DND fallback path: when GNOME and KDE DND APIs are unavailable, the backend now falls back to `xdg-desktop-portal` inhibit requests (`gdbus` to `org.freedesktop.portal.Inhibit`) with tracked request-handle lifecycle so disable calls close previously created portal requests
+- Windows Do Not Disturb automation support: implemented a Windows backend in `src-tauri/src/dnd.rs` using the per-user notification banner toggle (`HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications\\ToastEnabled`) for enable/disable and OS-state query so focus automation works on Windows as well
+
+### Repo hygiene
+
+- Cleaned editor hygiene warnings by switching release workflows away from fragile cross-step `${{ env.* }}` references in expression contexts, and by normalizing historical changelog markdown structure so repo diagnostics stay quiet.
+- Fixed a Rust docs lint warning (`clippy::doc_lazy_continuation`) in [src-tauri/src/dnd.rs](src-tauri/src/dnd.rs) by splitting the Linux bullet list and the Windows support note into separate rustdoc paragraphs.
+
+### Build / CI (Unreleased)
+
+- `npm run bump` now runs mandatory preflight gates before mutating versions: `npm run check`, `cargo clippy --manifest-path src-tauri/Cargo.toml`, then `npm run sync:i18n:check`; if any step fails, bump exits immediately and does not update version fields.
+- Linux CI bundle stability: `scripts/tauri-build.js` now detects a Tauri CLI segfault (`exit 139`) during explicit multi-target bundle runs (for example `--bundles deb,appimage`) and automatically retries bundling sequentially per target so release jobs can still produce both `.deb` and `.AppImage` artifacts
+
 ## [0.0.24] — 2026-03-12
 
 ### UI
 
 - Label window titlebar spacing + vertical fit: moved the add-label window title back to the side, rendered the EEG timer as a padded centered capsule in the shared titlebar, and changed `/label` from `h-screen` to `h-full min-h-0` so the bottom action row no longer gets clipped under the custom titlebar layout
 - What's New window vertical fit fix: changed `/whats-new` root container from `h-screen` to `h-full min-h-0` and marked the changelog body as `min-h-0` so the shared custom titlebar no longer pushes the footer off-screen and the bottom `Got it` button remains visible
- - Window vertical-fit sweep: switched the remaining titlebar-hosted route roots (`/`, `/about`, `/api`, `/calibration`, `/chat`, `/compare`, `/downloads`, `/focus-timer`, `/help`, `/history`, `/labels`, `/onboarding`, `/session`, `/settings`) from viewport height to parent-constrained height, adding `min-h-0` to the key scroll containers where needed so shared custom-titlebar layouts no longer clip bottom content or footers
+- Window vertical-fit sweep: switched the remaining titlebar-hosted route roots (`/`, `/about`, `/api`, `/calibration`, `/chat`, `/compare`, `/downloads`, `/focus-timer`, `/help`, `/history`, `/labels`, `/onboarding`, `/session`, `/settings`) from viewport height to parent-constrained height, adding `min-h-0` to the key scroll containers where needed so shared custom-titlebar layouts no longer clip bottom content or footers
 - Search window titlebar center alignment: moved the mode segmented control to a true centered position in the shared titlebar (absolute center anchoring), increased control width budget, and tuned spacing/typography so all mode buttons render fully and stay visually aligned
 - Label window titlebar timer: moved the live EEG-window elapsed timer from the add-label page header into the shared `CustomTitleBar` center area via a new `label-titlebar.svelte.ts` reactive store, removing the duplicate in-content strip while keeping the timer live
 - Search window vertical fit fix: changed `/search` root container from `h-screen` to `h-full min-h-0` so it honors the `#main-content` constrained height under the custom 30px titlebar and no longer overflows/clips at the bottom
@@ -38,7 +66,7 @@ All notable changes to NeuroSkill™ are documented here.
 - Added tool schema injection and `[TOOL_CALL]...[/TOOL_CALL]` handling so models can call tools and continue generation with tool results
 - Added basic external fetch/search integrations (`ipwho.is`, DuckDuckGo instant answer API, and HTTP(S) page fetch) with bounded payload truncation for safe prompt context
 
-### Dependencies
+### Dependencies (0.0.17)
 
 - `llama-cpp-4` `0.2.7` → `0.2.9` (with matching `llama-cpp-sys-4` lockfile update)
 
@@ -51,7 +79,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [0.0.23] — 2026-03-12
 
-### UI / Build
+### UI / Build (0.0.23)
 
 - **Custom titlebar for all windows** — replaced native window decorations with a custom titlebar component (minimize, maximize, close buttons) for consistent cross-platform appearance on all windows including main, settings, help, search, history, calibration, chat, downloads, and more
 - **Unified window close behavior across all platforms** — on all platforms including Linux, closing the main window now hides it instead of exiting. Users must select "Quit" from the tray menu to exit, which shows a confirmation dialog
@@ -85,7 +113,7 @@ All notable changes to NeuroSkill™ are documented here.
   `Focused`, `Moved`, `Resized`, `ScaleFactorChanged`, and
   `ExitRequested` events across all windows
 
-### Onboarding
+### Onboarding (0.0.23)
 
 - **Downloads complete success screen** — when all recommended models
   (Qwen3.5 4B, ZUNA encoder, NeuTTS, Kitten TTS) are downloaded, the
@@ -98,7 +126,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [0.0.17] — 2026-03-11
 
-### UI / Build
+### UI / Build (0.0.17)
 
 - **Tailwind Vite parser crash in MarkdownRenderer fixed** — resolved
   `[plugin:@tailwindcss/vite:generate:serve] Invalid declaration: Marked`
@@ -120,7 +148,7 @@ All notable changes to NeuroSkill™ are documented here.
   **Open Folder** action that opens the fixed `~/.skill` directory in the
   system file manager
 
-### Onboarding
+### Onboarding (0.0.17)
 
 - **Recommended models quick setup** — onboarding now includes a one-click
   **Download Recommended Set** action that pulls the default local stack:
@@ -231,7 +259,7 @@ All notable changes to NeuroSkill™ are documented here.
   total focus time, and total break time; entries are labelled and persisted
   across restarts
 
-### Onboarding
+### Onboarding (0.0.16)
 
 - **Extended checklist** — onboarding now includes four additional steps:
   download an LLM model, run a similarity search, set a DND threshold, and
@@ -379,7 +407,7 @@ All notable changes to NeuroSkill™ are documented here.
   persisted settings; the skill directory is always `~/.skill` and is never
   configurable at runtime; `expand_tilde` helper and its tests removed
 
-### Dependencies
+### Dependencies (0.0.15)
 
 - `kittentts` `0.2.4` → `0.2.5`
 
@@ -387,8 +415,9 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [0.0.13] — 2026-03-10
 
-### Onboarding
+### Onboarding (0.0.13)
 
+- **Recommended models quick setup** — onboarding now starts staged
   background downloads automatically while the user proceeds through steps,
   in this order: ZUNA → KittenTTS → NeuTTS → Qwen 3.5 4B (`Q4_K_M` target)
 - **Persistent footer download status** — all onboarding views now show a
@@ -396,7 +425,7 @@ All notable changes to NeuroSkill™ are documented here.
   LLM), and the onboarding window size was increased to keep spacing readable
   with the always-visible footer indicator
 
-### Dependencies
+### Dependencies (0.0.13)
 
 - `llama-cpp-4` `0.2.3` → `0.2.5`
 - `kittentts` `0.2.2` → `0.2.4`
@@ -445,12 +474,12 @@ All notable changes to NeuroSkill™ are documented here.
   `**bold**`, `` `code` `` spans, multi-line bullet continuations, and
   numbered sub-lists were all rendered as plain text; replaced the
   hand-rolled `parseChangelog` parser (which dropped any line not starting
-  with `- `) and the manual `{#each sections}` template with
+  with `-` plus a trailing space) and the manual `{#each sections}` template with
   `MarkdownRenderer` (existing component backed by `marked` + GFM); scoped
   CSS overrides inside `.wn-body` preserve the compact window style without
   affecting the chat renderer
 
-### Build / CI
+### Build / CI (0.0.13)
 
 - **CI `cargo check --locked` failing on Linux** — `Cargo.lock` generated
   on macOS caused the Linux CI job to fail with "cannot update the lock file
@@ -507,7 +536,7 @@ All notable changes to NeuroSkill™ are documented here.
 - **i18n** — `llm.*` keys added to all five language files (en, de, fr,
   he, uk)
 
-### Build / CI
+### Build / CI (0.0.11)
 
 - **Bypass Tauri's built-in signing pipeline** in both `release.yml` and
   `pr-build.yml` — Tauri's `create-dmg` subprocess crashes with `SIGILL`
@@ -524,7 +553,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [0.0.9] — 2026-03-10
 
-### Dependencies
+### Dependencies (0.0.9)
 
 - Migrated `llama-cpp-4` and `llama-cpp-sys-4` to local path via
   `[patch.crates-io]` (`../../../llama-cpp-rs/llama-cpp-4` and
@@ -534,7 +563,7 @@ All notable changes to NeuroSkill™ are documented here.
   backbone resolve to the same local crate, preserving the `links = "llama"`
   deduplication
 
-### Build / CI
+### Build / CI (0.0.9)
 
 - macOS builds now target `aarch64-apple-darwin` (arm64) only — x86_64
   is no longer compiled

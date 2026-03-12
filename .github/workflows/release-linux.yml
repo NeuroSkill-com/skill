@@ -26,6 +26,7 @@ jobs:
 
       # ── Verify tag matches tauri.conf.json version ────────────────────────────
       - name: Verify version matches tag
+        id: version_meta
         run: |
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#v}"
@@ -41,6 +42,8 @@ jobs:
                  "src-tauri/Cargo.toml, then re-tag."
             exit 1
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "TAG=$TAG"         >> "$GITHUB_ENV"
           echo "✓ Version verified: $VERSION"
@@ -251,8 +254,8 @@ jobs:
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name:                ${{ env.TAG }}
-          name:                    Skill v${{ env.VERSION }}
+          tag_name:                ${{ steps.version_meta.outputs.tag }}
+          name:                    Skill v${{ steps.version_meta.outputs.version }}
           generate_release_notes:  true
           fail_on_unmatched_files: true
           files: |
@@ -270,8 +273,8 @@ jobs:
         env:
           GH_TOKEN:          ${{ github.token }}
           GH_REPO:           ${{ github.repository }}
-          TAG:               ${{ env.TAG }}
-          VERSION:           ${{ env.VERSION }}
+          TAG:               ${{ steps.version_meta.outputs.tag }}
+          VERSION:           ${{ steps.version_meta.outputs.version }}
           APPIMAGE_TAR_NAME: ${{ steps.artifacts.outputs.appimage_tar_name }}
           APPIMAGE_SIG_PATH: ${{ steps.artifacts.outputs.appimage_sig }}
         run: |
@@ -333,17 +336,17 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           JOB_STATUS:          ${{ job.status }}
         run: |
-          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.TAG }}"
+          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           if [[ "$JOB_STATUS" == "success" ]]; then
             COLOR=3066993
-            TITLE="🚀 Release v${{ env.VERSION }} — Linux Published"
+            TITLE="🚀 Release v${{ steps.version_meta.outputs.version }} — Linux Published"
             DESC="Linux build published and ready to download."
-            LINK_LINE="**[Download v${{ env.VERSION }}]($RELEASE_URL)**"
+            LINK_LINE="**[Download v${{ steps.version_meta.outputs.version }}]($RELEASE_URL)**"
           else
             COLOR=15158332
-            TITLE="💥 Release v${{ env.VERSION }} — Linux Failed"
+            TITLE="💥 Release v${{ steps.version_meta.outputs.version }} — Linux Failed"
             DESC="The Linux release build failed. Check the run for details."
             LINK_LINE="**[View failed run]($RUN_URL)**"
           fi
@@ -357,8 +360,8 @@ jobs:
                 \"url\": \"$RUN_URL\",
                 \"color\": $COLOR,
                 \"fields\": [
-                  {\"name\": \"Tag\",      \"value\": \"\`${{ env.TAG }}\`\",     \"inline\": true},
-                  {\"name\": \"Version\",  \"value\": \"\`${{ env.VERSION }}\`\", \"inline\": true},
+                  {\"name\": \"Tag\",      \"value\": \"\`${{ steps.version_meta.outputs.tag }}\`\",     \"inline\": true},
+                  {\"name\": \"Version\",  \"value\": \"\`${{ steps.version_meta.outputs.version }}\`\", \"inline\": true},
                   {\"name\": \"Platform\", \"value\": \"Linux x86_64\",            \"inline\": true},
                   {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true}
                 ],
