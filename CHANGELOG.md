@@ -65,6 +65,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### CI Runtime
 
+- CI Linux packaging scope reduced to tarball-only in `.github/workflows/ci.yml`: removed the `linux-release` job that produced `.deb`/`.rpm`/`.AppImage`, so Linux CI now only runs the portable package flow and publishes `.tar.gz` artifacts.
 - Tauri frontend bundling contract guard: added `scripts/verify-tauri-frontend-structure.js` and wired it into `npm run build` (`package.json`) so `tauri build` (via `beforeBuildCommand`) now fails fast unless the configured `src-tauri/tauri.conf.json` `build.frontendDist` path contains valid built assets (`index.html` + `_app/immutable` JS/CSS) rather than raw source files.
 - Linux/macOS/Windows bundling workflows now run an explicit `npm run -s verify:tauri:frontend` step before packaging (`.github/workflows/ci.yml`, `.github/workflows/release-linux.yml`, `.github/workflows/release-mac.yml`, `.github/workflows/release-windows.yml`) to enforce the same Tauri asset layout contract in CI.
 - Windows release Discord notifier fix: `.github/workflows/release-windows.yml` now sends the Discord payload from a PowerShell object serialized via `ConvertTo-Json` (instead of shell-escaped inline JSON), eliminating Discord API `50109` (`The request body contains invalid JSON`) failures after successful Windows builds.

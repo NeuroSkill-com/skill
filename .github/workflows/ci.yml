@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       run_linux_bundles:
-        description: "Run heavy Linux bundle jobs (deb/AppImage/rpm + portable tar.gz)"
+        description: "Run heavy Linux bundle jobs (portable tar.gz)"
         required: false
         default: false
         type: boolean
@@ -80,242 +80,6 @@ jobs:
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: cargo clippy --locked --target x86_64-unknown-linux-gnu --features llm-vulkan -- -D warnings
-
-  # ── Linux release bundle smoke test ─────────────────────────────────────────
-  linux-release:
-    name: Linux — release bundle build (deb + AppImage + rpm)
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.run_linux_bundles == 'true')
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-gnu
-
-      - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2.9.0
-        with:
-          workspaces: src-tauri
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install JS dependencies
-        run: npm ci
-
-      - name: Cache + install Tauri Linux release deps
-        uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: >-
-            libwebkit2gtk-4.1-dev libappindicator3-dev
-            librsvg2-dev patchelf libssl-dev
-            libudev-dev libdbus-1-dev pkg-config
-            libasound2-dev cmake binutils
-            rpm
-            squashfs-tools libfuse2
-          version: tauri-linux-release-v1
-
-      # Vulkan SDK — required by llm-vulkan in the release build path.
-      - name: Install Vulkan SDK
-        run: bash scripts/install-vulkan-sdk.sh
-
-      - name: Cache espeak-ng static lib
-        id: cache-espeak
-        uses: actions/cache@v5
-        with:
-          path: |
-            src-tauri/espeak-static
-            src-tauri/resources/espeak-ng-data
-          key: linux-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
-
-      - name: Build espeak-ng static lib
-        if: steps.cache-espeak.outputs.cache-hit != 'true'
-        run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
-
-      - name: Build frontend
-        run: npm run build
-
-      - name: Verify Tauri frontend bundle structure
-        run: npm run -s verify:tauri:frontend
-
-      # Guard against regressions where the Linux wrapper no longer accepts
-      # explicit --bundles arguments.
-      - name: Guard Linux bundle flags
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if ! grep -q 'arg === "--bundles"' scripts/tauri-build.js; then
-            echo "::error::scripts/tauri-build.js no longer recognizes --bundles as explicit bundling."
-            exit 1
-          fi
-
-          echo "✓ Linux bundle guard passed."
-
-      # Build AppImage only via Tauri; deb/rpm are generated manually below.
-      - name: Build Tauri AppImage bundle
-        env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
-          APPIMAGE_EXTRACT_AND_RUN: 1
-          NO_STRIP: 1
-        run: npm run tauri:build:linux:x64:native
-
-      - name: Build Linux deb/rpm via system tools
-        env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
-        run: bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu --skip-build
-
-      - name: Verify Linux bundle directories and artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARGET_DIR="src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
-          FALLBACK_DIR="src-tauri/target/release/bundle"
-
-          if [ ! -d "$TARGET_DIR/deb" ] || [ ! -d "$TARGET_DIR/appimage" ] || [ ! -d "$TARGET_DIR/rpm" ]; then
-            echo "::error::Expected Linux bundle directories are missing."
-            echo "Expected: $TARGET_DIR/deb, $TARGET_DIR/appimage, and $TARGET_DIR/rpm"
-            echo "Present under $TARGET_DIR:"
-            find "$TARGET_DIR" -maxdepth 2 -type d 2>/dev/null | sort || true
-            exit 1
-          fi
-
-          echo "✓ Bundle directories exist: deb/appimage/rpm"
-
-          DEB_FILE="$({
-            find "$TARGET_DIR/deb" -maxdepth 1 -type f -name "*.deb" 2>/dev/null;
-            find "$FALLBACK_DIR/deb" -maxdepth 1 -type f -name "*.deb" 2>/dev/null;
-          } | head -1 || true)"
-
-          RPM_FILE="$({
-            find "$TARGET_DIR/rpm" -maxdepth 1 -type f -name "*.rpm" 2>/dev/null;
-            find "$FALLBACK_DIR/rpm" -maxdepth 1 -type f -name "*.rpm" 2>/dev/null;
-          } | head -1 || true)"
-
-          APPIMAGE_FILE="$({
-            find "$TARGET_DIR/appimage" -maxdepth 1 -type f -name "*.AppImage" 2>/dev/null;
-            find "$FALLBACK_DIR/appimage" -maxdepth 1 -type f -name "*.AppImage" 2>/dev/null;
-          } | head -1 || true)"
-
-          if [ -z "$DEB_FILE" ]; then
-            echo "::error::Expected at least one .deb artifact after Linux bundle build, but none were found."
-            echo "Checked locations:"
-            echo "  - $TARGET_DIR/deb"
-            echo "  - $FALLBACK_DIR/deb"
-            echo "Directory listings:"
-            find "$TARGET_DIR" -maxdepth 2 -type f 2>/dev/null | sort || true
-            find "$FALLBACK_DIR" -maxdepth 2 -type f 2>/dev/null | sort || true
-            exit 1
-          fi
-
-          if [ -z "$RPM_FILE" ]; then
-            echo "::error::Expected at least one .rpm artifact after Linux bundle build, but none were found."
-            find "$TARGET_DIR" -maxdepth 2 -type f 2>/dev/null | sort || true
-            find "$FALLBACK_DIR" -maxdepth 2 -type f 2>/dev/null | sort || true
-            exit 1
-          fi
-
-          if [ -z "$APPIMAGE_FILE" ]; then
-            echo "::error::Expected an .AppImage artifact after Linux bundle build, but none was found."
-            find "$TARGET_DIR" -maxdepth 2 -type f 2>/dev/null | sort || true
-            find "$FALLBACK_DIR" -maxdepth 2 -type f 2>/dev/null | sort || true
-            exit 1
-          fi
-
-          echo "✓ Found .deb artifact: $DEB_FILE"
-          echo "✓ Found .rpm artifact: $RPM_FILE"
-          echo "✓ Found .AppImage artifact: $APPIMAGE_FILE"
-
-      - name: Resolve Linux bundle artifact paths
-        id: linux_artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARGET_DIR="src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
-          FALLBACK_DIR="src-tauri/target/release/bundle"
-
-          DEB_FILE="$({
-            find "$TARGET_DIR/deb" -maxdepth 1 -type f -name "*.deb" 2>/dev/null;
-            find "$FALLBACK_DIR/deb" -maxdepth 1 -type f -name "*.deb" 2>/dev/null;
-          } | head -1 || true)"
-
-          RPM_FILE="$({
-            find "$TARGET_DIR/rpm" -maxdepth 1 -type f -name "*.rpm" 2>/dev/null;
-            find "$FALLBACK_DIR/rpm" -maxdepth 1 -type f -name "*.rpm" 2>/dev/null;
-          } | head -1 || true)"
-
-          APPIMAGE_FILE="$({
-            find "$TARGET_DIR/appimage" -maxdepth 1 -type f -name "*.AppImage" 2>/dev/null;
-            find "$FALLBACK_DIR/appimage" -maxdepth 1 -type f -name "*.AppImage" 2>/dev/null;
-          } | head -1 || true)"
-
-          if [ -z "$DEB_FILE" ] || [ -z "$RPM_FILE" ] || [ -z "$APPIMAGE_FILE" ]; then
-            echo "::error::Missing one or more Linux bundle artifacts (deb/rpm/AppImage)."
-            exit 1
-          fi
-
-          echo "deb_path=$DEB_FILE" >> "$GITHUB_OUTPUT"
-          echo "deb_name=$(basename "$DEB_FILE")" >> "$GITHUB_OUTPUT"
-          echo "rpm_path=$RPM_FILE" >> "$GITHUB_OUTPUT"
-          echo "rpm_name=$(basename "$RPM_FILE")" >> "$GITHUB_OUTPUT"
-          echo "appimage_path=$APPIMAGE_FILE" >> "$GITHUB_OUTPUT"
-          echo "appimage_name=$(basename "$APPIMAGE_FILE")" >> "$GITHUB_OUTPUT"
-          echo "✓ Linux artifacts: $DEB_FILE | $RPM_FILE | $APPIMAGE_FILE"
-
-      - name: Generate Linux bundle checksums
-        id: linux_checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          OUT_DIR="dist/linux/x86_64-unknown-linux-gnu"
-          mkdir -p "$OUT_DIR"
-          CHECKSUMS="$OUT_DIR/SHA256SUMS-linux-x86_64.txt"
-
-          sha256sum \
-            "${{ steps.linux_artifacts.outputs.deb_path }}" \
-            "${{ steps.linux_artifacts.outputs.rpm_path }}" \
-            "${{ steps.linux_artifacts.outputs.appimage_path }}" \
-            > "$CHECKSUMS"
-
-          echo "checksums_path=$CHECKSUMS" >> "$GITHUB_OUTPUT"
-          echo "✓ Wrote checksums: $CHECKSUMS"
-
-      - name: Upload Linux .deb artifact
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        with:
-          name: linux-deb-x86_64
-          retention-days: 14
-          if-no-files-found: error
-          path: ${{ steps.linux_artifacts.outputs.deb_path }}
-
-      - name: Upload Linux .rpm artifact
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        with:
-          name: linux-rpm-x86_64
-          retention-days: 14
-          if-no-files-found: error
-          path: ${{ steps.linux_artifacts.outputs.rpm_path }}
-
-      - name: Upload Linux AppImage artifact
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        with:
-          name: linux-appimage-x86_64
-          retention-days: 14
-          if-no-files-found: error
-          path: ${{ steps.linux_artifacts.outputs.appimage_path }}
-
-      - name: Upload Linux checksums
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        with:
-          name: linux-checksums-x86_64
-          retention-days: 14
-          if-no-files-found: error
-          path: ${{ steps.linux_checksums.outputs.checksums_path }}
 
   # ── Linux portable package smoke test ──────────────────────────────────────
   linux-portable-package:
@@ -697,7 +461,7 @@ jobs:
   notify:
     name: Discord notification
     runs-on: ubuntu-latest
-    needs: [rust-check, linux-release, windows-check, frontend-check, audit]
+    needs: [rust-check, linux-portable-package, windows-check, frontend-check, audit]
     if: always()
     steps:
       - name: Send CI result to Discord
@@ -705,15 +469,15 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           RUST="${{ needs.rust-check.result }}"
-          LINUX_RELEASE="${{ needs.linux-release.result }}"
+          LINUX_PORTABLE="${{ needs.linux-portable-package.result }}"
           WINDOWS="${{ needs.windows-check.result }}"
           FRONTEND="${{ needs.frontend-check.result }}"
           AUDIT="${{ needs.audit.result }}"
 
           # Determine overall status — Windows is a required gate alongside
-          # Rust (Linux), Linux release bundle build, and Frontend;
-          # audit is advisory only.
-          if [[ "$RUST" == "success" && "$LINUX_RELEASE" == "success" && "$WINDOWS" == "success" && "$FRONTEND" == "success" ]]; then
+          # Rust (Linux), Frontend, and Linux portable packaging when that job runs.
+          # The Linux portable job is intentionally skipped on PR events.
+          if [[ "$RUST" == "success" && "$WINDOWS" == "success" && "$FRONTEND" == "success" && ( "$LINUX_PORTABLE" == "success" || "$LINUX_PORTABLE" == "skipped" ) ]]; then
             COLOR=3066993   # green
             STATUS="✅ Passed"
           else
@@ -722,7 +486,7 @@ jobs:
           fi
 
           EMOJI_RUST=$([ "$RUST" = "success" ] && echo "✅" || echo "❌")
-          EMOJI_LINUX_RELEASE=$([ "$LINUX_RELEASE" = "success" ] && echo "✅" || echo "❌")
+          EMOJI_LINUX_PORTABLE=$([ "$LINUX_PORTABLE" = "success" ] && echo "✅" || ([ "$LINUX_PORTABLE" = "skipped" ] && echo "⏭️" || echo "❌"))
           EMOJI_WINDOWS=$([ "$WINDOWS" = "success" ] && echo "✅" || echo "❌")
           EMOJI_FRONTEND=$([ "$FRONTEND" = "success" ] && echo "✅" || echo "❌")
           EMOJI_AUDIT=$([ "$AUDIT" = "success" ] && echo "✅" || echo "⚠️")
@@ -744,11 +508,11 @@ jobs:
                   {\"name\": \"Branch\",    \"value\": \"\`$REF\`\",          \"inline\": true},
                   {\"name\": \"Commit\",    \"value\": \"\`${SHA:0:8}\`\",    \"inline\": true},
                   {\"name\": \"Triggered\", \"value\": \"$EVENT by $ACTOR\", \"inline\": true},
-                  {\"name\": \"Rust (Linux+Vulkan)\", \"value\": \"$EMOJI_RUST $RUST\",   \"inline\": true},
-                  {\"name\": \"Linux Release Bundles\", \"value\": \"$EMOJI_LINUX_RELEASE $LINUX_RELEASE\", \"inline\": true},
+                  {\"name\": \"Rust (Linux+Vulkan)\", \"value\": \"$EMOJI_RUST $RUST\", \"inline\": true},
+                  {\"name\": \"Linux Portable (tar.gz)\", \"value\": \"$EMOJI_LINUX_PORTABLE $LINUX_PORTABLE\", \"inline\": true},
                   {\"name\": \"Rust (Windows)\", \"value\": \"$EMOJI_WINDOWS $WINDOWS\", \"inline\": true},
-                  {\"name\": \"Frontend\",       \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
-                  {\"name\": \"Audit\",          \"value\": \"$EMOJI_AUDIT $AUDIT\",       \"inline\": true}
+                  {\"name\": \"Frontend\", \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
+                  {\"name\": \"Audit\", \"value\": \"$EMOJI_AUDIT $AUDIT\", \"inline\": true}
                 ],
                 \"footer\": {\"text\": \"${{ github.repository }}\"}
               }]
