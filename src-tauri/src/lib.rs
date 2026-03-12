@@ -1119,6 +1119,29 @@ fn quit_dialog_strings(lang: &str) -> (&'static str, &'static str) {
     }
 }
 
+static EXIT_SHUTDOWN_STARTED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+fn run_blocking_exit_shutdown(app: &tauri::AppHandle) {
+    if EXIT_SHUTDOWN_STARTED.swap(true, std::sync::atomic::Ordering::AcqRel) {
+        return;
+    }
+
+    #[cfg(feature = "llm")]
+    {
+        let cell = app
+            .state::<Mutex<Box<AppState>>>()
+            .lock()
+            .unwrap()
+            .llm
+            .state_cell
+            .clone();
+        llm::shutdown_cell(&cell);
+    }
+
+    tts_shutdown();
+}
+
 // ── App setup (extracted to reduce `run()` stack frame) ───────────────────────
 
 /// Extracted from the `.setup()` closure so LLVM does not merge its locals
@@ -1952,6 +1975,9 @@ pub fn run() {
                         if let Some(win) = app.get_webview_window("main") {
                             let _ = win.hide();
                         }
+                    } else {
+                        eprintln!("[run-event] explicit exit requested — running blocking shutdown");
+                        run_blocking_exit_shutdown(app);
                     }
                     #[cfg(target_os = "linux")]
                     eprintln!("[run-event] allowing exit on Linux");
@@ -1979,19 +2005,7 @@ pub fn run() {
                     }
                 }
                 tauri::RunEvent::Exit => {
-                    // Stop the LLM actor *before* tts_shutdown() and before the
-                    // process begins static destruction (Metal device cleanup).
-                    // Joining the thread ensures LlamaContext → LlamaModel →
-                    // LlamaBackend are dropped in order, releasing all GPU
-                    // resources cleanly.
-                    #[cfg(feature = "llm")]
-                    {
-                        let cell = app.state::<Mutex<Box<AppState>>>()
-                            .lock().unwrap()
-                            .llm.state_cell.clone();
-                        llm::shutdown_cell(&cell);
-                    }
-                    tts_shutdown();
+                    run_blocking_exit_shutdown(app);
                 }
                 _ => {}
             }

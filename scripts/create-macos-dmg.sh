@@ -279,7 +279,7 @@ hdiutil create \
   -volname "NeuroSkill" \
   -fs HFS+ \
   -size "${DMG_SIZE_MB}m" \
-  -ov -format UDRW \
+  -ov \
   "$DMG_RW"
 
 # Mount, copy contents, apply Finder view, detach
@@ -343,12 +343,17 @@ APPLESCRIPT
     || true
   echo "  ✓ Finder view configured"
 else
-  # Fallback: if mount failed, create from srcfolder (no Finder settings)
+  # Fallback: if mount failed, create directly from srcfolder (no Finder settings)
   rm -f "$DMG_RW"
   hdiutil create \
     -volname "NeuroSkill" \
     -srcfolder "$STAGING" \
     -fs HFS+ \
+    -ov -format UDRW \
+    "$DMG_RW" || \
+  hdiutil create \
+    -volname "NeuroSkill" \
+    -srcfolder "$STAGING" \
     -ov -format UDRW \
     "$DMG_RW"
   echo "  ⊘ Could not mount RW DMG — Finder settings skipped"
