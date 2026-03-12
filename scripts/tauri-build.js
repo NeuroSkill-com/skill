@@ -43,6 +43,46 @@ const isMac = platform() === "darwin";
 const isWin = platform() === "win32";
 const isLinux = platform() === "linux";
 
+function parseExplicitBundleArg(args) {
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (
+      (arg === "--bundle" || arg === "--bundles") &&
+      i + 1 < args.length
+    ) {
+      return {
+        index: i,
+        consumesNext: true,
+        value: args[i + 1],
+      };
+    }
+    if (arg.startsWith("--bundle=") || arg.startsWith("--bundles=")) {
+      return {
+        index: i,
+        consumesNext: false,
+        value: arg.slice(arg.indexOf("=") + 1),
+      };
+    }
+  }
+  return null;
+}
+
+function splitBundleTargets(rawValue) {
+  if (!rawValue) return [];
+  return rawValue
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function removeBundleArg(args, parsedBundleArg) {
+  if (!parsedBundleArg) return [...args];
+  if (parsedBundleArg.consumesNext) {
+    return args.filter((_, idx) => idx !== parsedBundleArg.index && idx !== parsedBundleArg.index + 1);
+  }
+  return args.filter((_, idx) => idx !== parsedBundleArg.index);
+}
+
 // ── Parse arguments ───────────────────────────────────────────────────────────
 // argv: ["node", "tauri-build.js", subcommand?, ...rest]
 const [subcommand = "", ...subArgs] = process.argv.slice(2);
@@ -399,13 +439,40 @@ if (!isWin && !isMac && !process.env.CARGO_BUILD_JOBS) {
 }
 
 // ── Run Tauri ─────────────────────────────────────────────────────────────────
-const cmd = ["npx", "tauri", subcommand, ...platformFlags, ...subArgs]
-  .join(" ")
-  .trimEnd();
+function runTauriWithArgs(args) {
+  const cmd = ["npx", "tauri", subcommand, ...args].join(" ").trimEnd();
+  console.log(`→ ${cmd}`);
+  execSync(cmd, {
+    cwd: root,
+    stdio: "inherit",
+    env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
+  });
+}
 
-console.log(`→ ${cmd}`);
-execSync(cmd, {
-  cwd: root,
-  stdio: "inherit",
-  env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
-});
+const finalArgs = [...platformFlags, ...subArgs];
+const bundleArg = parseExplicitBundleArg(finalArgs);
+const bundleTargets = splitBundleTargets(bundleArg?.value);
+const canRetryBundlesSequentially =
+  isLinux &&
+  subcommand === "build" &&
+  bundleArg &&
+  bundleTargets.length > 1;
+
+try {
+  runTauriWithArgs(finalArgs);
+} catch (error) {
+  const hasSegfaultExitCode = Number(error?.status) === 139;
+
+  if (!canRetryBundlesSequentially || !hasSegfaultExitCode) {
+    throw error;
+  }
+
+  console.warn(
+    "→ Linux: tauri build exited with 139 during multi-bundle run; retrying each bundle target sequentially"
+  );
+
+  const baseArgs = removeBundleArg(finalArgs, bundleArg);
+  for (const target of bundleTargets) {
+    runTauriWithArgs([...baseArgs, "--bundles", target]);
+  }
+}

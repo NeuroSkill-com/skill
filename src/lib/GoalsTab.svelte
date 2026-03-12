@@ -173,7 +173,7 @@ the Free Software Foundation, version 3 only. -->
     } catch {}
     await refreshDndState();
 
-    // Load available Focus modes from the OS (macOS only; empty on other platforms)
+    // Load available Focus modes from the OS (macOS full list, Linux/Windows default DND option).
     try {
       focusModes = await invoke<FocusModeOption[]>("list_focus_modes");
     } catch {}

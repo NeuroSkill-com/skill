@@ -660,7 +660,7 @@ pub(crate) fn default_dnd_exit_notification() -> bool { true }
 /// Configuration for the "auto Do Not Disturb when focus is sustained" feature.
 ///
 /// When `enabled`, the app monitors the real-time cognitive-load / focus score
-/// and activates macOS Do Not Disturb after the score has stayed above
+/// and activates system Do Not Disturb after the score has stayed above
 /// `focus_threshold` (0–100) for at least `duration_secs` seconds.
 ///
 /// DND is **not** deactivated immediately when the score drops — it is only
@@ -668,8 +668,11 @@ pub(crate) fn default_dnd_exit_notification() -> bool { true }
 /// `exit_duration_secs` seconds (default 5 minutes), giving the user time to
 /// briefly lose focus without being constantly pulled out of DND.
 ///
-/// **macOS 12+ only.**  On earlier versions the legacy `defaults` approach is
-/// attempted; on non-macOS platforms the feature is a no-op.
+/// On macOS 12+ this uses Focus Mode APIs (`macos-focus`), with a legacy
+/// fallback for older versions. On Linux it uses desktop-specific integrations
+/// (GNOME `gsettings`, KDE `qdbus`). On Windows it uses the per-user
+/// `PushNotifications\\ToastEnabled` toggle. On unsupported platforms the
+/// feature is a no-op.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DoNotDisturbConfig {
@@ -700,13 +703,14 @@ pub struct DoNotDisturbConfig {
     #[serde(default = "default_dnd_focus_lookback_secs")]
     pub focus_lookback_secs: u32,
 
-    /// The macOS Focus mode to activate, stored as a `modeIdentifier` string.
+    /// The focus mode identifier to activate.
     ///
     /// Defaults to `"com.apple.donotdisturb.mode.default"` (Do Not Disturb).
     /// Any mode returned by `list_focus_modes` can be used here, including
     /// user-created custom modes (e.g. `"com.apple.focus.work"`).
     ///
-    /// The value is ignored on non-macOS platforms.
+    /// On Linux/Windows this value is currently advisory; desktop-specific
+    /// DND toggles are used directly.
     #[serde(default = "default_dnd_mode_identifier")]
     pub focus_mode_identifier: String,
 

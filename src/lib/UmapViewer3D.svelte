@@ -15,6 +15,8 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import type * as THREE_NS from "three";
+  import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
   import type { Vector3 as ThreeVector3, Color as ThreeColor } from "three";
   import { Spinner } from "$lib/components/ui/spinner";
   import { t } from "$lib/i18n/index.svelte";
@@ -39,6 +41,12 @@ the Free Software Foundation, version 3 only. -->
   }
 
   interface UmapProgress { epoch: number; total_epochs: number; loss: number; best_loss: number; elapsed_secs: number; epoch_ms: number; }
+
+  type ThreeModule = typeof import("three");
+  type LabelCloudGroup = THREE_NS.Group & { __updatePositions?: (pos: Float32Array) => void };
+  type LabelMesh = THREE_NS.Mesh<THREE_NS.BufferGeometry, THREE_NS.MeshBasicMaterial> & { _baseScale?: number };
+  type TraceLine = THREE_NS.Line<THREE_NS.BufferGeometry, THREE_NS.LineBasicMaterial>;
+  type TraceSphere = THREE_NS.Mesh<THREE_NS.SphereGeometry, THREE_NS.MeshBasicMaterial>;
 
   let {
     data,
@@ -133,7 +141,7 @@ the Free Software Foundation, version 3 only. -->
   let traceActive  = $state(false);
   let traceProgress = $state(0);   // how many segments drawn so far
   let traceTotal   = $state(0);   // total segments
-  let traceGroup: any = null;      // THREE.Group holding trace objects
+  let traceGroup: THREE_NS.Group | null = null;      // THREE.Group holding trace objects
   let traceSorted: number[] = [];  // indices into curPoints sorted by utc
   let traceTimer: ReturnType<typeof setInterval> | null = null;
   /** Time range of the trace for the gradient legend. */
@@ -169,7 +177,7 @@ the Free Software Foundation, version 3 only. -->
     traceTimeTicks = ticks;
   }
   // Per-segment grow animation
-  let traceGrowing: { line: any; sphere: any; edgeLine?: any; start: number; from: number[]; to: number[] }[] = [];
+  let traceGrowing: { line: TraceLine; sphere: TraceSphere; edgeLine?: TraceLine; start: number; from: number[]; to: number[] }[] = [];
 
   // ── Label sidebar ─────────────────────────────────────────────────────────
   let sidebarOpen     = $state(false);
@@ -211,14 +219,18 @@ the Free Software Foundation, version 3 only. -->
   });
 
   // ── Imperative refs ──────────────────────────────────────────────────────
-  let THREE: any;
-  let scene: any, camera: any, renderer: any, controls: any;
+  let THREE!: ThreeModule;
+  let scene!: THREE_NS.Scene;
+  let camera!: THREE_NS.PerspectiveCamera;
+  let renderer!: THREE_NS.WebGLRenderer;
+  let controls!: OrbitControlsType;
   let animId = 0;
   let resizeObs: ResizeObserver | null = null;
 
-  let mainCloud: any = null, labelCloud: any = null;
+  let mainCloud: THREE_NS.Points<THREE_NS.BufferGeometry, THREE_NS.PointsMaterial> | null = null;
+  let labelCloud: LabelCloudGroup | null = null;
   // Multi-label: map from label name → { group, colorIdx }
-  let linkGroups = new Map<string, { group: any; colorIdx: number }>();
+  let linkGroups = new Map<string, { group: THREE_NS.Group; colorIdx: number }>();
   let curPoints = $state<UmapPoint[]>([]);
   let labeledIdx: number[] = [];
   let curPositions   = new Float32Array(0);
@@ -226,7 +238,7 @@ the Free Software Foundation, version 3 only. -->
   /** Saved dot/ring base colors for each labeled point (index matches labeledIdx). */
   let labelCloudBase: { dc: number; rr: number; rg: number; rb: number }[] = [];
   /** Group of cylinder meshes drawn between selected and proximate labeled nodes. */
-  let highlightEdgesGroup: any = null;
+  let highlightEdgesGroup: THREE_NS.Group | null = null;
   let _onCmdDown: ((e: KeyboardEvent) => void) | null = null;
   let _onCmdUp:   ((e: KeyboardEvent) => void) | null = null;
 
@@ -234,7 +246,8 @@ the Free Software Foundation, version 3 only. -->
   let toPos: Float32Array | null = null;
   let animStart = 0;
 
-  let raycaster: any, mouse: any;
+  let raycaster!: THREE_NS.Raycaster;
+  let mouse!: THREE_NS.Vector2;
   let downPos = { x: 0, y: 0 };
 
   // Track data changes
@@ -285,13 +298,24 @@ the Free Software Foundation, version 3 only. -->
     return out;
   }
 
+  function disposeSceneObject(obj: THREE_NS.Object3D) {
+    const geometry = (obj as { geometry?: { dispose?: () => void } }).geometry;
+    geometry?.dispose?.();
+    const material = (obj as { material?: THREE_NS.Material | THREE_NS.Material[] }).material;
+    if (Array.isArray(material)) {
+      for (const mat of material) mat.dispose();
+    } else {
+      material?.dispose?.();
+    }
+  }
+
   // ── Label-connection lines (multi-label) ──────────────────────────────
   let nextColorIdx = 0;
 
   function removeLinkGroup(label: string) {
     const entry = linkGroups.get(label);
     if (!entry || !scene) return;
-    entry.group.traverse((o: any) => { o.geometry?.dispose(); o.material?.dispose(); });
+    entry.group.traverse(disposeSceneObject);
     scene.remove(entry.group);
     linkGroups.delete(label);
     activeLabels = activeLabels.filter(l => l !== label);
@@ -336,7 +360,7 @@ the Free Software Foundation, version 3 only. -->
   function clearHighlightEdges() {
     if (!highlightEdgesGroup || !scene) return;
     scene.remove(highlightEdgesGroup);
-    highlightEdgesGroup.traverse((o: any) => { o.geometry?.dispose(); o.material?.dispose(); });
+    highlightEdgesGroup.traverse(disposeSceneObject);
     highlightEdgesGroup = null;
   }
 
@@ -393,11 +417,11 @@ the Free Software Foundation, version 3 only. -->
     if (labelCloud && labeledIdx.length) {
       for (let li = 0; li < labeledIdx.length; li++) {
         const ptIdx = labeledIdx[li];
-        const dot  = (labelCloud as any).children[li * 2]     as any;
-        const ring = (labelCloud as any).children[li * 2 + 1] as any;
+        const dot  = labelCloud.children[li * 2]     as LabelMesh | undefined;
+        const ring = labelCloud.children[li * 2 + 1] as LabelMesh | undefined;
         if (!dot?.material || !ring?.material) continue;
 
-        const baseScale = (dot as any)._baseScale ?? 1;
+        const baseScale = dot._baseScale ?? 1;
 
         if (!selectedLabel) {
           const base = labelCloudBase[li];
@@ -568,7 +592,7 @@ the Free Software Foundation, version 3 only. -->
     if (traceTimer) { clearInterval(traceTimer); traceTimer = null; }
     traceGrowing = [];
     if (traceGroup && scene) {
-      traceGroup.traverse((o: any) => { o.geometry?.dispose(); o.material?.dispose(); });
+      traceGroup.traverse(disposeSceneObject);
       scene.remove(traceGroup);
     }
     traceGroup = null;
@@ -597,6 +621,7 @@ the Free Software Foundation, version 3 only. -->
 
     traceGroup = new THREE.Group();
     scene.add(traceGroup);
+    const activeTraceGroup = traceGroup;
 
     // Trace line edge color: white on dark, black on light
     const edgeColor = new THREE.Color(isDark ? 0xffffff : 0x000000);
@@ -608,7 +633,7 @@ the Free Software Foundation, version 3 only. -->
     const sphereMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(jr0, jg0, jb0), transparent: true, opacity: 1.0 });
     const firstSphere = new THREE.Mesh(sphereGeo, sphereMat);
     firstSphere.position.set(curPositions[firstIdx*3], curPositions[firstIdx*3+1], curPositions[firstIdx*3+2]);
-    traceGroup.add(firstSphere);
+    activeTraceGroup.add(firstSphere);
 
     let segIdx = 0;
 
@@ -631,7 +656,7 @@ the Free Software Foundation, version 3 only. -->
         color: edgeColor, transparent: true, opacity: isDark ? 0.5 : 0.3, linewidth: 3,
       });
       const edgeLine = new THREE.Line(edgeLineGeo, edgeLineMat);
-      traceGroup.add(edgeLine);
+      activeTraceGroup.add(edgeLine);
 
       // Jet-colored line on top
       const lineGeo = new THREE.BufferGeometry();
@@ -643,14 +668,14 @@ the Free Software Foundation, version 3 only. -->
         color: lineColor, transparent: true, opacity: 0.9, linewidth: 2,
       });
       const line = new THREE.Line(lineGeo, lineMat);
-      traceGroup.add(line);
+      activeTraceGroup.add(line);
 
       // Destination sphere — also jet-colored for continuity
       const sGeo = new THREE.SphereGeometry(UMAP_POINT_SIZE * pointScale * 0.6, 8, 8);
       const sMat = new THREE.MeshBasicMaterial({ color: lineColor, transparent: true, opacity: 0 });
       const sphere = new THREE.Mesh(sGeo, sMat);
       sphere.position.set(bx, by, bz);
-      traceGroup.add(sphere);
+      activeTraceGroup.add(sphere);
 
       traceGrowing.push({
         line, sphere, edgeLine,
@@ -709,9 +734,9 @@ the Free Software Foundation, version 3 only. -->
   }
 
   /** Build a date→color map using evenly spaced hues. */
-  function buildDatePalette(pts: UmapPoint[]): Map<string, any> {
+  function buildDatePalette(pts: UmapPoint[]): Map<string, ThreeColor> {
     const dates = [...new Set(pts.filter(p => p.utc > 0).map(p => utcToLocalDate(p.utc)))].sort();
-    const map = new Map<string, any>();
+    const map = new Map<string, ThreeColor>();
     for (let i = 0; i < dates.length; i++) {
       const hue = dates.length <= 1 ? 0.55 : i / dates.length;
       map.set(dates[i], new THREE.Color().setHSL(hue, UMAP_DATE_SAT, UMAP_DATE_LIT));
@@ -757,7 +782,7 @@ the Free Software Foundation, version 3 only. -->
     const colors = new Float32Array(n * 3);
     const lPos: number[] = [], lCol: number[] = [], lIdx: number[] = [];
     for (let i = 0; i < n; i++) {
-      let c: any;
+      let c: ThreeColor;
       if (gradSess) {
         const sessIdx = gradSess === "A" ? 0 : 1;
         if (pts[i].session === sessIdx && pts[i].utc > 0) {
@@ -778,12 +803,12 @@ the Free Software Foundation, version 3 only. -->
     if (mainCloud) { scene.remove(mainCloud); mainCloud.geometry.dispose(); mainCloud.material.dispose(); }
     if (labelCloud) {
       scene.remove(labelCloud);
-      labelCloud.traverse((o: any) => { o.geometry?.dispose(); o.material?.dispose(); });
+      labelCloud.traverse(disposeSceneObject);
       labelCloud = null;
     }
     clearAllLinks();
     const ps = UMAP_POINT_SIZE * pointScale;
-    raycaster.params.Points.threshold = ps * 0.6;
+    if (raycaster) raycaster.params.Points.threshold = ps * 0.6;
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(positions.slice(), 3));
     g.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
@@ -839,7 +864,7 @@ the Free Software Foundation, version 3 only. -->
         const dot = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: sessionCol }));
         dot.position.set(px, py, pz);
         dot.scale.setScalar(sizeMult);
-        (dot as any)._baseScale = sizeMult;
+        (dot as LabelMesh)._baseScale = sizeMult;
         labelGrp.add(dot);
 
         // Ring: smooth circle for A; 4-segment square rotated 45° → diamond for B.
@@ -853,7 +878,7 @@ the Free Software Foundation, version 3 only. -->
         ring.scale.setScalar(sizeMult);
         if (sess === 1) ring.rotation.z = Math.PI / 4; // square → diamond orientation
         ring.userData.billboard = true;
-        (ring as any)._baseScale = sizeMult;
+        (ring as LabelMesh)._baseScale = sizeMult;
         labelGrp.add(ring);
 
         // Save base colors so applyHighlight can restore them later.
@@ -861,11 +886,11 @@ the Free Software Foundation, version 3 only. -->
         labelCloudBase.push({ dc, rr: ringCol.r, rg: ringCol.g, rb: ringCol.b });
       }
 
-      labelCloud = labelGrp as any;
+      labelCloud = labelGrp as LabelCloudGroup;
       scene.add(labelCloud);
 
       // Store labeled geometry update function for animation
-      (labelCloud as any).__updatePositions = (pos: Float32Array) => {
+      labelCloud.__updatePositions = (pos: Float32Array) => {
         let ci = 0;
         for (let li = 0; li < lIdx.length; li++) {
           const i = lIdx[li];
@@ -886,9 +911,7 @@ the Free Software Foundation, version 3 only. -->
     if (!mainCloud) return;
     const a = mainCloud.geometry.getAttribute("position");
     a.array.set(pos); a.needsUpdate = true;
-    if (labelCloud && (labelCloud as any).__updatePositions) {
-      (labelCloud as any).__updatePositions(pos);
-    }
+    labelCloud?.__updatePositions?.(pos);
     curPositions = pos;
   }
 
@@ -1227,8 +1250,8 @@ the Free Software Foundation, version 3 only. -->
         updateTraceGrow();
         // Billboard rings — make them face the camera
         if (labelCloud) {
-          labelCloud.traverse((child: any) => {
-            if (child.userData?.billboard) {
+          labelCloud.traverse((child) => {
+            if (child.userData?.billboard && camera) {
               child.quaternion.copy(camera.quaternion);
             }
           });
@@ -1269,7 +1292,7 @@ the Free Software Foundation, version 3 only. -->
         prevDataRef = data;
         onDataChange(data);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("[UmapViewer3D] init error:", e);
       error = String(e);
     }

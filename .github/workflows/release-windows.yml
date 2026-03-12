@@ -26,6 +26,7 @@ jobs:
 
       # ── Verify tag matches tauri.conf.json version ────────────────────────────
       - name: Verify version matches tag
+        id: version_meta
         shell: bash
         run: |
           TAG="${{ github.ref_name }}"
@@ -42,6 +43,8 @@ jobs:
                  "src-tauri/Cargo.toml, then re-tag."
             exit 1
           fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "TAG=$TAG"         >> "$GITHUB_ENV"
           echo "[ok] Version verified: $VERSION"
@@ -113,6 +116,7 @@ jobs:
       # TAURI_SIGNING_PRIVATE_KEY    — Ed25519 private key for signing Tauri
       #                                updater artifacts (same key as macOS/Linux)
       - name: Verify signing secrets are present
+        id: signing_meta
         shell: bash
         env:
           WINDOWS_CERTIFICATE:          ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -146,6 +150,7 @@ jobs:
           fi
 
           # Expose for later steps.
+          echo "have_windows_cert=$HAVE_CERT" >> "$GITHUB_OUTPUT"
           echo "HAVE_WINDOWS_CERT=$HAVE_CERT" >> "$GITHUB_ENV"
 
       # ── espeak-ng MSVC static library ─────────────────────────────────────────
@@ -212,7 +217,7 @@ jobs:
       # trigger SmartScreen warnings on first run until the binary accumulates
       # reputation.  An EV (Extended Validation) certificate skips this entirely.
       - name: Import Windows code-signing certificate
-        if: env.HAVE_WINDOWS_CERT == 'true'
+        if: steps.signing_meta.outputs.have_windows_cert == 'true'
         shell: powershell
         env:
           WINDOWS_CERTIFICATE:          ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -405,8 +410,8 @@ jobs:
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name:                ${{ env.TAG }}
-          name:                    Skill v${{ env.VERSION }}
+          tag_name:                ${{ steps.version_meta.outputs.tag }}
+          name:                    Skill v${{ steps.version_meta.outputs.version }}
           generate_release_notes:  true
           fail_on_unmatched_files: true
           files: |
@@ -424,8 +429,8 @@ jobs:
         env:
           GH_TOKEN:     ${{ github.token }}
           GH_REPO:      ${{ github.repository }}
-          TAG:          ${{ env.TAG }}
-          VERSION:      ${{ env.VERSION }}
+          TAG:          ${{ steps.version_meta.outputs.tag }}
+          VERSION:      ${{ steps.version_meta.outputs.version }}
           NSIS_ZIP_NAME: ${{ steps.artifacts.outputs.nsis_zip_name }}
           NSIS_SIG_PATH: ${{ steps.artifacts.outputs.nsis_sig }}
         run: |
@@ -482,7 +487,7 @@ jobs:
 
       # ── Remove the certificate from the runner's cert store ──────────────────
       - name: Remove signing certificate
-        if: always() && env.HAVE_WINDOWS_CERT == 'true'
+        if: always() && steps.signing_meta.outputs.have_windows_cert == 'true'
         shell: powershell
         run: |
           if ($env:CERTIFICATE_THUMBPRINT) {
@@ -500,17 +505,17 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           JOB_STATUS:          ${{ job.status }}
         run: |
-          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.TAG }}"
+          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
           if [[ "$JOB_STATUS" == "success" ]]; then
             COLOR=3066993
-            TITLE="🚀 Release v${{ env.VERSION }} — Windows Published"
+            TITLE="🚀 Release v${{ steps.version_meta.outputs.version }} — Windows Published"
             DESC="Windows build published and ready to download."
-            LINK_LINE="**[Download v${{ env.VERSION }}]($RELEASE_URL)**"
+            LINK_LINE="**[Download v${{ steps.version_meta.outputs.version }}]($RELEASE_URL)**"
           else
             COLOR=15158332
-            TITLE="💥 Release v${{ env.VERSION }} — Windows Failed"
+            TITLE="💥 Release v${{ steps.version_meta.outputs.version }} — Windows Failed"
             DESC="The Windows release build failed. Check the run for details."
             LINK_LINE="**[View failed run]($RUN_URL)**"
           fi
@@ -524,8 +529,8 @@ jobs:
                 \"url\": \"$RUN_URL\",
                 \"color\": $COLOR,
                 \"fields\": [
-                  {\"name\": \"Tag\",      \"value\": \"\`${{ env.TAG }}\`\",     \"inline\": true},
-                  {\"name\": \"Version\",  \"value\": \"\`${{ env.VERSION }}\`\", \"inline\": true},
+                  {\"name\": \"Tag\",      \"value\": \"\`${{ steps.version_meta.outputs.tag }}\`\",     \"inline\": true},
+                  {\"name\": \"Version\",  \"value\": \"\`${{ steps.version_meta.outputs.version }}\`\", \"inline\": true},
                   {\"name\": \"Platform\", \"value\": \"Windows x86_64\",          \"inline\": true},
                   {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true}
                 ],

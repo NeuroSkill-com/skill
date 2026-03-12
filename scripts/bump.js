@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "fs";
+import { execSync } from "child_process";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,19 @@ function validateVersion(v) {
   return v;
 }
 
+function runCheckStep(label, command) {
+  console.log(`\n[preflight] ${label}`);
+  execSync(command, { stdio: "inherit" });
+  console.log(`[preflight] ✓ ${label}`);
+}
+
+function runPreflightChecks() {
+  console.log("Running preflight checks before bump...");
+  runCheckStep("npm run check", "npm run check");
+  runCheckStep("cargo clippy (src-tauri)", "cargo clippy --manifest-path src-tauri/Cargo.toml");
+  runCheckStep("npm run sync:i18n:check", "npm run sync:i18n:check");
+}
+
 // ── resolve new version ───────────────────────────────────────────────────────
 
 const pkg = JSON.parse(readText("package.json"));
@@ -36,6 +50,10 @@ const arg = process.argv[2];
 const newVersion = arg ? validateVersion(arg) : bumpPatch(currentVersion);
 
 console.log(`Bumping  ${currentVersion}  →  ${newVersion}`);
+
+// ── preflight checks (must pass before any file is modified) ────────────────
+
+runPreflightChecks();
 
 // ── package.json ──────────────────────────────────────────────────────────────
 
