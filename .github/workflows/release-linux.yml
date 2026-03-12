@@ -129,6 +129,29 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      # ── Guard bundle-flag contract ───────────────────────────────────────────
+      # Ensures the Linux release script keeps explicit deb/AppImage bundling
+      # and that the wrapper still recognizes `--bundles` as a bundle request.
+      - name: Guard Linux bundle flags
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SCRIPT="$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).scripts['tauri:build:linux:x64']")"
+          echo "tauri:build:linux:x64 => $SCRIPT"
+
+          if [[ "$SCRIPT" != *"--bundles deb,appimage"* ]]; then
+            echo "::error::package.json script tauri:build:linux:x64 must include '--bundles deb,appimage'."
+            exit 1
+          fi
+
+          if ! grep -q 'arg === "--bundles"' scripts/tauri-build.js; then
+            echo "::error::scripts/tauri-build.js no longer recognizes --bundles as explicit bundling."
+            exit 1
+          fi
+
+          echo "✓ Linux bundle guard passed."
+
       # ── Compile + bundle (frontend + Rust + deb + AppImage) ──────────────────
       #
       # --features llm-vulkan enables the llama.cpp Vulkan GPU backend so the

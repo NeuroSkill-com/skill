@@ -10,6 +10,11 @@ All notable changes to NeuroSkill™ are documented here.
 
 - `llama-cpp-4` `0.2.7` → `0.2.9` (with matching `llama-cpp-sys-4` lockfile update)
 
+### Build / CI
+
+- Linux release artifact generation fixed: `scripts/tauri-build.js` now treats both `--bundle` and `--bundles` (including `--flag=value`) as explicit bundling requests, preventing accidental `--no-bundle` injection that skipped `.deb`/`.AppImage` outputs in CI
+- Added explicit Linux bundle-flag guard steps in CI and release workflows to fail fast if `tauri:build:linux:x64` drops `--bundles deb,appimage` or if `scripts/tauri-build.js` stops recognizing `--bundles`
+
 ## [0.0.23] — 2026-03-12
 
 ### UI / Build

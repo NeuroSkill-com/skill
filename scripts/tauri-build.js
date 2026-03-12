@@ -76,6 +76,19 @@ for (let i = 0; i < subArgs.length; i++) {
 
 const isMingwTarget = explicitTarget?.endsWith("-windows-gnu") ?? false;
 
+// Detect whether caller explicitly requested bundling behavior.
+// Tauri accepts both:
+//   --bundle <targets>
+//   --bundles <targets>
+// and their --flag=value forms.
+const hasExplicitBundleArg = subArgs.some((arg) =>
+  arg === "--bundle" ||
+  arg === "--bundles" ||
+  arg === "--no-bundle" ||
+  arg.startsWith("--bundle=") ||
+  arg.startsWith("--bundles=")
+);
+
 // ── Linux preflight: prevent accidental cross-target trap ───────────────────
 //
 // On Linux, forcing an x86_64 target from an ARM host (or vice versa) triggers
@@ -244,8 +257,7 @@ if (isMingwTarget) {
   // a --bundle or --no-bundle argument themselves.
   if (
     subcommand === "build" &&
-    !subArgs.includes("--bundle") &&
-    !subArgs.includes("--no-bundle")
+    !hasExplicitBundleArg
   ) {
     platformFlags = ["--no-bundle"];
     console.log(
@@ -342,8 +354,7 @@ if (isMingwTarget) {
   // `--bundle ...` (or their own `--no-bundle`) themselves.
   if (
     subcommand === "build" &&
-    !subArgs.includes("--bundle") &&
-    !subArgs.includes("--no-bundle")
+    !hasExplicitBundleArg
   ) {
     platformFlags = [...platformFlags, "--no-bundle"];
     console.log(
