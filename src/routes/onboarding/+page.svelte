@@ -633,6 +633,3 @@ the Free Software Foundation, version 3 only. -->
 
   <DisclaimerFooter />
 </main>
-
-<style>
-</style>

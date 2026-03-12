@@ -82,6 +82,24 @@ fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
     format!("{state}|{name}|{batt_bucket}|{tgt}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}")
 }
 
+fn shortcut_suffix(shortcut: &str) -> String {
+    if shortcut.trim().is_empty() {
+        return String::new();
+    }
+
+    let mut s = shortcut.trim().replace("CmdOrCtrl", if cfg!(target_os = "macos") { "Cmd" } else { "Ctrl" });
+    s = s.replace("Command", "Cmd");
+    s = s.replace("Meta", "Cmd");
+    s = s.replace("Option", "Alt");
+    s = s.replace("Plus", "+");
+    s = s.replace("Arrow", "");
+    format!("  ({s})")
+}
+
+fn with_shortcut(label: &str, shortcut: &str) -> String {
+    format!("{label}{}", shortcut_suffix(shortcut))
+}
+
 // ── Embedded icons ────────────────────────────────────────────────────────────
 
 const ICON_CONNECTED:    &[u8] = include_bytes!("../icons/tray-connected.png");
@@ -120,7 +138,8 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
     };
 
     let menu = Menu::new(app)?;
-    menu.append(&MenuItem::with_id(app, "open_skill", "Open NeuroSkill™", true, Some("CmdOrCtrl+Shift+O"))?)?;
+    let open_skill_label = with_shortcut("Open NeuroSkill™", "CmdOrCtrl+Shift+O");
+    menu.append(&MenuItem::with_id(app, "open_skill", &open_skill_label, true, None::<&str>)?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
     match st.state.as_str() {
@@ -173,30 +192,20 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
         }
     }
 
-    let label_accel:       Option<&str> = if label_shortcut.is_empty()       { None } else { Some(&label_shortcut) };
-    let search_accel:      Option<&str> = if search_shortcut.is_empty()      { None } else { Some(&search_shortcut) };
-    let settings_accel:    Option<&str> = if settings_shortcut.is_empty()    { None } else { Some(&settings_shortcut) };
-    let calibration_accel: Option<&str> = if calibration_shortcut.is_empty() { None } else { Some(&calibration_shortcut) };
-    let help_accel:        Option<&str> = if help_shortcut.is_empty()        { None } else { Some(&help_shortcut) };
-    let history_accel:     Option<&str> = if history_shortcut.is_empty()     { None } else { Some(&history_shortcut) };
-    let api_accel:         Option<&str> = if api_shortcut.is_empty()         { None } else { Some(&api_shortcut) };
-    let focus_timer_accel: Option<&str> = if focus_timer_shortcut.is_empty() { None } else { Some(&focus_timer_shortcut) };
-
     let is_streaming = st.state == "connected";
     menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(app, "focus_timer", "Focus Timer…",        true, focus_timer_accel)?)?;
-    menu.append(&MenuItem::with_id(app, "calibrate",   "Calibrate…",          is_streaming, calibration_accel)?)?;
-    menu.append(&MenuItem::with_id(app, "search",      "Search…",  true, search_accel)?)?;
-    menu.append(&MenuItem::with_id(app, "label",       "Add Label…",          true, label_accel)?)?;
-    menu.append(&MenuItem::with_id(app, "history",     "History…",            true, history_accel)?)?;
-    menu.append(&MenuItem::with_id(app, "compare",     "Compare…",            true, Some("CmdOrCtrl+Shift+M"))?)?;
-    menu.append(&MenuItem::with_id(app, "settings",    "Settings…",           true, settings_accel)?)?;
-    menu.append(&MenuItem::with_id(app, "help",        "Help…",               true, help_accel)?)?;
-    menu.append(&MenuItem::with_id(app, "api",         "API Status…",         true, api_accel)?)?;
+    menu.append(&MenuItem::with_id(app, "focus_timer", &with_shortcut("Focus Timer…", &focus_timer_shortcut), true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "calibrate",   &with_shortcut("Calibrate…", &calibration_shortcut), is_streaming, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "search",      &with_shortcut("Search…", &search_shortcut), true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "label",       &with_shortcut("Add Label…", &label_shortcut), true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "history",     &with_shortcut("History…", &history_shortcut), true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "compare",     &with_shortcut("Compare…", "CmdOrCtrl+Shift+M"), true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "settings",    &with_shortcut("Settings…", &settings_shortcut), true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "help",        &with_shortcut("Help…", &help_shortcut), true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "api",         &with_shortcut("API Status…", &api_shortcut), true, None::<&str>)?)?;
     #[cfg(feature = "llm")]
     {
-        let chat_accel: Option<&str> = if chat_shortcut.is_empty() { None } else { Some(&chat_shortcut) };
-        menu.append(&MenuItem::with_id(app, "chat", "Chat…", true, chat_accel)?)?;
+        menu.append(&MenuItem::with_id(app, "chat", &with_shortcut("Chat…", &chat_shortcut), true, None::<&str>)?)?;
     }
 
     {
@@ -264,8 +273,10 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
         if *last != key {
             if let Ok(m) = build_menu(app, &st) {
                 let _ = tray.set_menu(Some(m));
+                *last = key;
+            } else {
+                eprintln!("[tray] menu rebuild failed; preserving previous native menu");
             }
-            *last = key;
         }
     }
 }

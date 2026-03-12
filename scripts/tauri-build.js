@@ -227,6 +227,22 @@ if (isMingwTarget) {
 } else {
   // Linux native.
 
+  if (
+    subcommand === "dev" &&
+    !process.env.WEBKIT_DISABLE_DMABUF_RENDERER
+  ) {
+    const inWayland =
+      (process.env.XDG_SESSION_TYPE || "").toLowerCase() === "wayland" ||
+      !!(process.env.WAYLAND_DISPLAY || "").trim();
+    if (inWayland) {
+      process.env.WEBKIT_DISABLE_DMABUF_RENDERER = "1";
+      console.log(
+        "→ Wayland detected: setting WEBKIT_DISABLE_DMABUF_RENDERER=1 " +
+        "(reduces WebKit/EGL DRI2 probe warnings)"
+      );
+    }
+  }
+
   // Ensure the Vulkan SDK (headers + loader + glslc) is present before
   // building.  The script is a no-op when the packages are already installed,
   // so repeated `npm run tauri dev` calls are cheap.

@@ -1799,8 +1799,23 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             match event {
+                tauri::RunEvent::WindowEvent { label, event, .. } => {
+                    if label == "main" {
+                        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                            api.prevent_close();
+                            if let Some(win) = app.get_webview_window("main") {
+                                let _ = win.hide();
+                            }
+                        }
+                    }
+                }
                 tauri::RunEvent::ExitRequested { api, code, .. } => {
-                    if code.is_none() { api.prevent_exit(); }
+                    if code.is_none() {
+                        api.prevent_exit();
+                        if let Some(win) = app.get_webview_window("main") {
+                            let _ = win.hide();
+                        }
+                    }
                 }
                 // macOS: user clicks the Dock icon while the app is running
                 // with no visible windows (all hidden in the tray).
