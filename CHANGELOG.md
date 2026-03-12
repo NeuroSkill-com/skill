@@ -6,6 +6,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+## [0.0.29] — 2026-03-12
 ### Refactor
 
 - macOS titlebar button order: switched the close and minimize button positions in the shared custom titlebar component so all macOS windows now use the requested control order.
