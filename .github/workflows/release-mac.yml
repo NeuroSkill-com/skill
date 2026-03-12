@@ -540,8 +540,8 @@ jobs:
           )
 
           if dl.returncode == 0:
-              with open("latest.json") as fh:
-                  manifest = json.load(fh)
+              with open("latest.json", encoding="utf-8-sig") as fh:
+                manifest = json.load(fh)
           else:
               pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
               manifest = {
@@ -556,7 +556,7 @@ jobs:
               "signature": signature,
           }
 
-          with open("latest.json", "w") as fh:
+          with open("latest.json", "w", encoding="utf-8") as fh:
               json.dump(manifest, fh, indent=2)
               fh.write("\n")
 

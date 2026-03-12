@@ -6,6 +6,11 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+## [0.0.35] — 2026-03-12
+### CI Runtime
+
+- Fixed cross-platform `latest.json` merge encoding in release workflows: Windows now writes `latest.json` as UTF-8 without BOM, and Linux/macOS loaders read with `utf-8-sig` to tolerate BOM-prefixed manifests and avoid `JSONDecodeError: Unexpected UTF-8 BOM`.
+
 ## [0.0.34] — 2026-03-12
 
 ### CI Runtime
