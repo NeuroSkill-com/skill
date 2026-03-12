@@ -782,11 +782,23 @@ with open(output_path, "w") as f:
     f.write(xml)
 PYEOF
 
-  if [[ -f "$SLA_XML" ]]; then
-    # hdiutil udifrez -xml is the modern approach (same as create-dmg)
-    hdiutil udifrez -xml "$SLA_XML" '' -quiet "$DMG_OUT" 2>/dev/null && \
-      echo "  ✓ license agreement (SLA) embedded" || \
+  if [[ -f "$SLA_XML" ]] && [[ "${SKIP_SLA:-0}" != "1" ]]; then
+    # hdiutil udifrez -xml is the modern approach (same as create-dmg).
+    # Verify the DMG is still valid after injection — if not, rebuild without SLA.
+    cp "$DMG_OUT" "$DMG_OUT.pre-sla"
+    if hdiutil udifrez -xml "$SLA_XML" '' -quiet "$DMG_OUT" 2>/dev/null; then
+      # Verify the DMG is still mountable
+      if hdiutil verify "$DMG_OUT" &>/dev/null; then
+        echo "  ✓ license agreement (SLA) embedded"
+        rm -f "$DMG_OUT.pre-sla"
+      else
+        echo "  ⚠ SLA corrupted DMG — reverting to pre-SLA version"
+        mv "$DMG_OUT.pre-sla" "$DMG_OUT"
+      fi
+    else
       echo "  ⊘ SLA embedding skipped (hdiutil udifrez not supported)"
+      mv "$DMG_OUT.pre-sla" "$DMG_OUT"
+    fi
   fi
 fi
 
