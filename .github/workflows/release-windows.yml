@@ -98,6 +98,49 @@ jobs:
       - name: Install JS dependencies
         run: npm ci
 
+      # ── NSIS (required by scripts/create-windows-nsis.ps1) ─────────────────
+      # GitHub's windows-latest image does not guarantee NSIS is preinstalled.
+      # Ensure makensis exists before running `npm run taur:build:win:nsis`.
+      - name: Install NSIS
+        shell: powershell
+        run: |
+          $makensis = Get-Command makensis -ErrorAction SilentlyContinue
+          if (-not $makensis) {
+            Write-Host "[info] NSIS not found on PATH; installing via Chocolatey"
+            choco install nsis -y --no-progress
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Failed to install NSIS via Chocolatey"
+              exit $LASTEXITCODE
+            }
+          }
+
+          $makensis = Get-Command makensis -ErrorAction SilentlyContinue
+          if ($makensis) {
+            $nsisDir = Split-Path -Parent $makensis.Source
+          } else {
+            $candidatePaths = @(
+              "C:\Program Files (x86)\NSIS",
+              "C:\Program Files\NSIS",
+              "$env:LOCALAPPDATA\NSIS"
+            )
+            $nsisDir = $null
+            foreach ($path in $candidatePaths) {
+              if (Test-Path (Join-Path $path "makensis.exe")) {
+                $nsisDir = $path
+                break
+              }
+            }
+          }
+
+          if (-not $nsisDir -or -not (Test-Path (Join-Path $nsisDir "makensis.exe"))) {
+            Write-Error "NSIS installation succeeded but makensis.exe is still not discoverable"
+            exit 1
+          }
+
+          "NSIS_DIR=$nsisDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $nsisDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Write-Host "[ok] NSIS_DIR=$nsisDir"
+
       # ── Pre-flight: verify every required secret is set ──────────────────────
       # Fails fast (before the 15-min build) if any secret is missing.
       # Values are never printed.
@@ -449,7 +492,15 @@ jobs:
           set -euo pipefail
 
           VERSION="${{ steps.version_meta.outputs.version }}"
+          CURRENT_TAG="${{ steps.version_meta.outputs.tag }}"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)"
+          COMMIT_RANGE="$CURRENT_TAG"
+          if [ -n "$PREV_TAG" ]; then
+            COMMIT_RANGE="$PREV_TAG..$CURRENT_TAG"
+          fi
+
           TMP_SECTION="release-changelog-section.md"
+          CONTRIBUTORS_FILE="release-contributors.md"
           RELEASE_BODY="release-notes.md"
 
           awk -v version="$VERSION" '
@@ -460,6 +511,12 @@ jobs:
             END { if (!found) exit 2 }
           ' CHANGELOG.md > "$TMP_SECTION" || true
 
+          git log --format='%aN' $COMMIT_RANGE \
+            | awk '
+                { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0) }
+                NF && !seen[$0]++ { print "- " $0 }
+              ' > "$CONTRIBUTORS_FILE"
+
           {
             echo "## Changelog"
             echo
@@ -468,16 +525,24 @@ jobs:
             else
               echo "_No changelog section found for version $VERSION in CHANGELOG.md._"
             fi
+            echo
+            echo "## Contributors"
+            echo
+            if [ -s "$CONTRIBUTORS_FILE" ]; then
+              cat "$CONTRIBUTORS_FILE"
+            else
+              echo "_No commit contributors found in range $COMMIT_RANGE._"
+            fi
           } > "$RELEASE_BODY"
 
-          rm -f "$TMP_SECTION"
+          rm -f "$TMP_SECTION" "$CONTRIBUTORS_FILE"
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name:                ${{ steps.version_meta.outputs.tag }}
           name:                    Skill v${{ steps.version_meta.outputs.version }}
-          generate_release_notes:  true
+          generate_release_notes:  false
           body_path:               release-notes.md
           fail_on_unmatched_files: true
           files: |

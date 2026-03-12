@@ -275,7 +275,15 @@ jobs:
           set -euo pipefail
 
           VERSION="${{ steps.version_meta.outputs.version }}"
+          CURRENT_TAG="${{ steps.version_meta.outputs.tag }}"
+          PREV_TAG="$(git describe --tags --abbrev=0 "${CURRENT_TAG}^" 2>/dev/null || true)"
+          COMMIT_RANGE="$CURRENT_TAG"
+          if [ -n "$PREV_TAG" ]; then
+            COMMIT_RANGE="$PREV_TAG..$CURRENT_TAG"
+          fi
+
           TMP_SECTION="release-changelog-section.md"
+          CONTRIBUTORS_FILE="release-contributors.md"
           RELEASE_BODY="release-notes.md"
 
           awk -v version="$VERSION" '
@@ -286,6 +294,12 @@ jobs:
             END { if (!found) exit 2 }
           ' CHANGELOG.md > "$TMP_SECTION" || true
 
+          git log --format='%aN' $COMMIT_RANGE \
+            | awk '
+                { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0) }
+                NF && !seen[$0]++ { print "- " $0 }
+              ' > "$CONTRIBUTORS_FILE"
+
           {
             echo "## Changelog"
             echo
@@ -294,16 +308,24 @@ jobs:
             else
               echo "_No changelog section found for version $VERSION in CHANGELOG.md._"
             fi
+            echo
+            echo "## Contributors"
+            echo
+            if [ -s "$CONTRIBUTORS_FILE" ]; then
+              cat "$CONTRIBUTORS_FILE"
+            else
+              echo "_No commit contributors found in range $COMMIT_RANGE._"
+            fi
           } > "$RELEASE_BODY"
 
-          rm -f "$TMP_SECTION"
+          rm -f "$TMP_SECTION" "$CONTRIBUTORS_FILE"
 
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name:                ${{ steps.version_meta.outputs.tag }}
           name:                    Skill v${{ steps.version_meta.outputs.version }}
-          generate_release_notes:  true
+          generate_release_notes:  false
           body_path:               release-notes.md
           fail_on_unmatched_files: true
           files: |

@@ -8,9 +8,11 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### CI Runtime
 
+- Release CI contributor attribution now comes only from git commit authors in the tagged release range (`previous_tag..current_tag`), and release workflows no longer append GitHub auto-generated release-note contributors.
 - Windows release CI fallback for post-compile Tauri crash: `.github/workflows/release-windows.yml` now detects `npx tauri build` failure after the Rust binary is already produced (for example exit `-1073741571`/stack-overflow path), then recovers by running `npx tauri bundle --bundles nsis --no-sign`, recreating the updater zip (`*.nsis.zip`) from the generated installer, and signing that updater artifact via `npx tauri signer sign` so release publishing can continue.
 - Windows release CI now uses the same primary packaging path that works locally (`npm run tauri:build:win:nsis`) instead of direct `npx tauri build` bundling, then signs the generated installer (when a cert is present) and creates/signs updater artifacts (`*.nsis.zip` + `*.nsis.zip.sig`) in workflow.
 - Added npm script alias `taur:build:win:nsis` and switched Windows release CI to run `npm run taur:build:win:nsis` exactly.
+- Windows release CI now installs NSIS explicitly before packaging (`choco install nsis` when `makensis` is missing), validates `makensis.exe` discovery, and exports `NSIS_DIR`/PATH so `scripts/create-windows-nsis.ps1` runs reliably on `windows-latest` runners.
 
 ## [0.0.30] — 2026-03-12
 
