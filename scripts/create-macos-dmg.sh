@@ -17,8 +17,14 @@
 #   • The signed .app bundle (drag to Applications)
 #   • Applications symlink for drag-to-install
 #   • README.md, CHANGELOG.md, and LICENSE
-#   • A background image with the app logo and version
+#   • A background image with the app logo and version (@1x + @2x Retina)
+#   • Custom volume icon (app icon + version badge)
 #   • Finder view settings: icon positions, window size, background
+#   • License agreement (SLA) shown before mounting (requires Rez)
+#   • Internet-enabled (auto-eject after drag-install in Safari)
+#   • Auto-open on mount (bless --openfolder)
+#   • Cleaned of .fseventsd/.Trashes/.Spotlight-V100 junk
+#   • HFS+ filesystem (required for .DS_Store background support)
 #
 # Options (via environment variables):
 #   APPLE_SIGNING_IDENTITY  — codesign identity for .app and DMG
@@ -149,7 +155,13 @@ try:
               fill=DIM_COLOR, font=font_small)
 
     bg.save(output_path, "PNG")
-    print(f"  ✓ background image (Pillow, {W}x{H})")
+
+    # Also save a 1x version for non-Retina displays
+    bg_1x = bg.resize((W // SCALE, H // SCALE), Image.LANCZOS)
+    output_1x = output_path.replace(".png", "@1x.png")
+    bg_1x.save(output_1x, "PNG")
+
+    print(f"  ✓ background image (Pillow, {W}x{H} @2x + {W//SCALE}x{H//SCALE} @1x)")
     sys.exit(0)
 
 except ImportError:
@@ -237,6 +249,123 @@ PYEOF
   fi
 fi
 
+# ── Generate volume icon (.VolumeIcon.icns) ────────────────────────────────
+# App icon with a version badge overlay in the bottom-right corner.
+# Requires Pillow for rendering and sips (macOS built-in) for ICNS conversion.
+VOL_ICNS=""
+if [[ "${SKIP_BACKGROUND:-0}" != "1" ]]; then
+  ICON_PNG="$TAURI_DIR/icons/icon.png"
+  VOL_DIR="$(mktemp -d)"; CLEANUP_DIRS+=("$VOL_DIR")
+
+  if [[ -f "$ICON_PNG" ]]; then
+    python3 - "$ICON_PNG" "$VERSION" "$VOL_DIR" <<'PYEOF' && true || true
+import sys, os, subprocess
+
+icon_path, version, out_dir = sys.argv[1:4]
+
+# Sizes required for .icns: 16, 32, 128, 256, 512 (+ @2x variants)
+# We generate the key sizes; sips/iconutil handles the rest.
+SIZES = [16, 32, 64, 128, 256, 512, 1024]
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    print("  ⊘ Pillow not available for volume icon", file=sys.stderr)
+    sys.exit(1)
+
+icon = Image.open(icon_path).convert("RGBA")
+
+# Load a font for the version badge
+badge_text = f"v{version}"
+font = None
+for fp in [
+    "/System/Library/Fonts/Helvetica.ttc",
+    "/System/Library/Fonts/SFNSDisplay.ttf",
+    "/System/Library/Fonts/SFNS.ttf",
+    "/Library/Fonts/Arial.ttf",
+]:
+    try:
+        font = ImageFont.truetype(fp, 10)
+        break
+    except (OSError, IOError):
+        continue
+
+# Create iconset directory
+iconset = os.path.join(out_dir, "VolumeIcon.iconset")
+os.makedirs(iconset, exist_ok=True)
+
+for sz in SIZES:
+    img = icon.resize((sz, sz), Image.LANCZOS)
+    draw = ImageDraw.Draw(img)
+
+    # Scale font relative to icon size
+    font_size = max(8, sz // 8)
+    try:
+        badge_font = ImageFont.truetype(font._font.path if hasattr(font, '_font') else fp, font_size)
+    except Exception:
+        badge_font = ImageFont.load_default()
+
+    # Measure badge text
+    bbox = draw.textbbox((0, 0), badge_text, font=badge_font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+
+    if sz >= 64:  # Only add badge on sizes large enough to read
+        pad_x = max(2, sz // 64)
+        pad_y = max(1, sz // 128)
+        badge_w = tw + pad_x * 2
+        badge_h = th + pad_y * 2
+
+        # Position: bottom-right corner
+        bx = sz - badge_w - max(1, sz // 32)
+        by = sz - badge_h - max(1, sz // 32)
+
+        # Draw rounded badge background
+        badge_rect = [bx, by, bx + badge_w, by + badge_h]
+        radius = max(2, sz // 64)
+        draw.rounded_rectangle(badge_rect, radius=radius,
+                               fill=(0, 0, 0, 180))
+
+        # Draw version text
+        draw.text((bx + pad_x, by + pad_y - 1), badge_text,
+                  fill=(255, 255, 255, 230), font=badge_font)
+
+    # Save in iconset with Apple naming convention
+    # icon_16x16.png, icon_16x16@2x.png (= 32px), icon_32x32.png, etc.
+    if sz <= 512:
+        img.save(os.path.join(iconset, f"icon_{sz}x{sz}.png"), "PNG")
+    if sz >= 32 and sz // 2 in [16, 32, 128, 256, 512]:
+        # This size is the @2x variant of a smaller size
+        half = sz // 2
+        img.save(os.path.join(iconset, f"icon_{half}x{half}@2x.png"), "PNG")
+
+# Convert iconset → icns using iconutil (macOS built-in)
+icns_path = os.path.join(out_dir, "VolumeIcon.icns")
+result = subprocess.run(
+    ["iconutil", "--convert", "icns", "--output", icns_path, iconset],
+    capture_output=True, text=True
+)
+if result.returncode == 0:
+    print(f"  ✓ volume icon (icon + v{version} badge)")
+else:
+    # Fallback: just use the original .icns without badge
+    print(f"  ⚠ iconutil failed: {result.stderr.strip()}")
+    sys.exit(1)
+PYEOF
+
+    VOL_ICNS="$VOL_DIR/VolumeIcon.icns"
+    if [[ ! -f "$VOL_ICNS" ]]; then
+      # Fallback: use the app icon as-is
+      if [[ -f "$TAURI_DIR/icons/icon.icns" ]]; then
+        VOL_ICNS="$TAURI_DIR/icons/icon.icns"
+        echo "  ✓ volume icon (fallback: app icon without badge)"
+      else
+        VOL_ICNS=""
+      fi
+    fi
+  fi
+fi
+
 # ── Prepare staging directory ─────────────────────────────────────────────
 DMG_DIR="$BUNDLE_DIR/dmg"
 ARCH=$(echo "$TARGET" | cut -d- -f1)
@@ -258,10 +387,18 @@ for doc in README.md CHANGELOG.md LICENSE; do
 done
 
 # Background image (hidden directory — referenced by Finder .DS_Store)
+# Finder uses background.png for @1x and background@2x.png for Retina.
 if $HAS_BG; then
   mkdir -p "$STAGING/.background"
-  cp "$BG_TEMP" "$STAGING/.background/background.png"
-  echo "  ✓ .background/background.png"
+  BG_1X="${BG_TEMP%.png}@1x.png"
+  if [[ -f "$BG_1X" ]]; then
+    cp "$BG_1X"   "$STAGING/.background/background.png"
+    cp "$BG_TEMP"  "$STAGING/.background/background@2x.png"
+    echo "  ✓ .background/background.png + background@2x.png"
+  else
+    cp "$BG_TEMP" "$STAGING/.background/background.png"
+    echo "  ✓ .background/background.png"
+  fi
 fi
 
 # ── Create read-write HFS+ DMG (needed to apply Finder view settings) ────
@@ -290,15 +427,138 @@ if [[ -n "${MOUNT_DIR:-}" ]] && [[ -d "$MOUNT_DIR" ]]; then
   # Copy staged contents into the mounted volume
   ditto "$STAGING" "$MOUNT_DIR"
 
-  # ── Apply Finder view settings ──────────────────────────────────────────
-  # AppleScript sets icon view, background image, icon positions, and window
-  # chrome.  The open→delay→close cycle ensures Finder writes .DS_Store.
-  BG_LINE=""
-  if $HAS_BG; then
-    BG_LINE='set background picture of viewOptions to file ".background:background.png"'
+  # Set volume icon (.VolumeIcon.icns + custom icon attribute)
+  if [[ -n "$VOL_ICNS" ]] && [[ -f "$VOL_ICNS" ]]; then
+    cp "$VOL_ICNS" "$MOUNT_DIR/.VolumeIcon.icns"
+    # Set the "has custom icon" flag (kHasCustomIcon = 0x0400) on the volume root.
+    # SetFile is part of Xcode Command Line Tools.
+    if command -v SetFile &>/dev/null; then
+      SetFile -a C "$MOUNT_DIR"
+    else
+      # Fallback: set the flag via extended attribute (com.apple.FinderInfo)
+      # Byte 8 of FinderInfo (32 bytes total) contains the flags; bit 10 = custom icon
+      python3 -c "
+import xattr, struct
+fi = bytearray(32)
+fi[8] = 0x04  # kHasCustomIcon in upper byte of Finder flags
+xattr.setxattr('$MOUNT_DIR', 'com.apple.FinderInfo', bytes(fi))
+" 2>/dev/null || true
+    fi
+    echo "  ✓ .VolumeIcon.icns"
   fi
 
-  osascript <<APPLESCRIPT || true
+  # ── Apply Finder view settings ──────────────────────────────────────────
+  # Method 1 (preferred): Generate .DS_Store directly with Python.
+  #   No Finder automation permission required.  Uses the ds_store + mac_alias
+  #   packages to write the binary .DS_Store that Finder reads on open.
+  #
+  # Method 2 (fallback): AppleScript via osascript.
+  #   Requires Terminal → Finder automation permission in
+  #   System Settings → Privacy & Security → Automation.
+  #
+  # Method 3: neither works — DMG still functions, just looks generic.
+
+  FINDER_OK=false
+
+  # ── Method 1: Python .DS_Store generation ───────────────────────────────
+  python3 - "$MOUNT_DIR" "$PRODUCT_NAME" "$HAS_BG" <<'PYEOF' 2>&1 && FINDER_OK=true || true
+import sys, os, plistlib, struct
+
+mount_dir = sys.argv[1]
+product_name = sys.argv[2]
+has_bg = sys.argv[3] == "true"
+
+try:
+    from ds_store import DSStore
+    from mac_alias import Alias
+except ImportError:
+    print("  ds_store/mac_alias not installed, trying: pip install ds_store mac_alias")
+    import subprocess
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "--quiet", "ds_store", "mac_alias"],
+        stdout=subprocess.DEVNULL
+    )
+    from ds_store import DSStore
+    from mac_alias import Alias
+
+# ── Icon view properties (icvp) ────────────────────────────────────────
+icvp = {
+    "viewOptionsVersion": 1,
+    "backgroundType": 0,        # 0 = default (will be overridden if bg exists)
+    "iconSize": 80.0,
+    "textSize": 12.0,
+    "gridSpacing": 100.0,
+    "gridOffsetX": 0.0,
+    "gridOffsetY": 0.0,
+    "arrangeBy": "none",
+    "showIconPreview": True,
+    "showItemInfo": False,
+    "labelOnBottom": True,
+}
+
+# Background image alias (Finder uses the alias to locate the background file)
+if has_bg:
+    bg_file = os.path.join(mount_dir, ".background", "background.png")
+    bg_2x   = os.path.join(mount_dir, ".background", "background@2x.png")
+    if os.path.isfile(bg_file):
+        alias = Alias.for_file(bg_file)
+        icvp["backgroundType"] = 2       # 2 = picture
+        icvp["backgroundImageAlias"] = bytes(alias)
+    # Finder automatically looks for <name>@2x.png alongside <name>.png
+    # for Retina displays — no extra alias needed in .DS_Store.
+
+icvp_blob = plistlib.dumps(icvp, fmt=plistlib.FMT_BINARY)
+
+# ── Window settings (bwsp) ─────────────────────────────────────────────
+# Bounds format: "{{left, top}, {width, height}}" (Cocoa NSStringFromRect)
+bwsp = {
+    "WindowBounds": "{{100, 100}, {660, 440}}",
+    "ContainerShowSidebar": False,
+    "ShowPathbar": False,
+    "ShowSidebar": False,
+    "ShowStatusBar": False,
+    "ShowTabView": False,
+    "ShowToolbar": False,
+    "SidebarWidth": 0,
+    "PreviewPaneVisibility": False,
+}
+bwsp_blob = plistlib.dumps(bwsp, fmt=plistlib.FMT_BINARY)
+
+# ── Icon positions ─────────────────────────────────────────────────────
+positions = {
+    f"{product_name}.app": (160, 180),
+    "Applications":        (500, 180),
+    "README.md":           (160, 340),
+    "LICENSE":             (330, 340),
+    "CHANGELOG.md":        (500, 340),
+}
+
+# ── Write .DS_Store ────────────────────────────────────────────────────
+ds_path = os.path.join(mount_dir, ".DS_Store")
+with DSStore.open(ds_path, "w+") as d:
+    d["."]["bwsp"] = bwsp_blob
+    d["."]["icvp"] = icvp_blob
+    d["."]["vSrn"] = ("long", 1)
+    d["."]["vstl"] = ("type", b"icnv")
+
+    for name, (x, y) in positions.items():
+        item_path = os.path.join(mount_dir, name)
+        if os.path.exists(item_path):
+            d[name]["Iloc"] = (x, y)
+
+print("  ✓ Finder view configured (Python .DS_Store)")
+PYEOF
+
+  # ── Method 2: AppleScript fallback ──────────────────────────────────────
+  if ! $FINDER_OK; then
+    echo "  Trying AppleScript fallback ..."
+
+    BG_LINE=""
+    if $HAS_BG; then
+      BG_LINE='set background picture of viewOptions to file ".background:background.png"'
+    fi
+
+    osascript <<APPLESCRIPT 2>&1 && FINDER_OK=true || true
 tell application "Finder"
   tell disk "NeuroSkill"
     open
@@ -312,11 +572,8 @@ tell application "Finder"
     set icon size of viewOptions to 80
     set text size of viewOptions to 12
     ${BG_LINE}
-    -- App: left-center
     set position of item "${PRODUCT_NAME}.app" of container window to {160, 180}
-    -- Applications: right-center
     set position of item "Applications" of container window to {500, 180}
-    -- Docs: bottom row
     try
       set position of item "README.md" of container window to {160, 340}
     end try
@@ -334,14 +591,50 @@ tell application "Finder"
 end tell
 APPLESCRIPT
 
-  # Give Finder time to flush .DS_Store
+    if $FINDER_OK; then
+      echo "  ✓ Finder view configured (AppleScript)"
+    fi
+  fi
+
+  if ! $FINDER_OK; then
+    echo "  ⚠ Could not configure Finder view (DMG still works, just looks generic)"
+    echo "    To fix: pip install ds_store mac_alias"
+    echo "    Or: System Settings → Privacy & Security → Automation → Terminal → Finder"
+  fi
+
+  # ── Clean up macOS junk files ─────────────────────────────────────────────
+  # macOS creates these automatically on mount; they add clutter and waste
+  # space in the final DMG.  Remove before detaching.
+  rm -rf "$MOUNT_DIR/.fseventsd" \
+         "$MOUNT_DIR/.Trashes" \
+         "$MOUNT_DIR/.Spotlight-V100" \
+         "$MOUNT_DIR/.TemporaryItems" 2>/dev/null || true
+
+  # Remove ._* resource fork files (AppleDouble) created by ditto/cp
+  dot_clean "$MOUNT_DIR" 2>/dev/null || true
+
+  # ── Hide dotfiles from Finder ───────────────────────────────────────────
+  # SetFile -a V sets the "invisible" flag so .background, .DS_Store,
+  # .VolumeIcon.icns don't show up if the user toggles "Show hidden files".
+  if command -v SetFile &>/dev/null; then
+    for hidden in "$MOUNT_DIR/.background" \
+                  "$MOUNT_DIR/.DS_Store" \
+                  "$MOUNT_DIR/.VolumeIcon.icns"; do
+      [[ -e "$hidden" ]] && SetFile -a V "$hidden" 2>/dev/null || true
+    done
+  fi
+
+  # ── Bless the folder so Finder auto-opens it on mount ───────────────────
+  # --openfolder makes the volume window appear automatically when the user
+  # double-clicks the .dmg — no need to click into the volume icon.
+  bless --folder "$MOUNT_DIR" --openfolder "$MOUNT_DIR" 2>/dev/null || true
+
   sync
-  sleep 2
+  sleep 1
 
   hdiutil detach "$MOUNT_DIR" -quiet 2>/dev/null \
     || hdiutil detach "$MOUNT_DIR" -force 2>/dev/null \
     || true
-  echo "  ✓ Finder view configured"
 else
   # Fallback: if mount failed, create directly from srcfolder (no Finder settings)
   rm -f "$DMG_RW"
@@ -362,6 +655,72 @@ fi
 # ── Convert to compressed read-only DMG ───────────────────────────────────
 hdiutil convert "$DMG_RW" -format UDZO -imagekey zlib-level=9 -o "$DMG_OUT" -ov
 echo "  ✓ DMG created"
+
+# ── Embed license agreement (SLA) ─────────────────────────────────────────
+# Shows the LICENSE text in an "Agree / Disagree" dialog before the DMG can
+# be mounted.  Uses the resource-fork approach via hdiutil flatten/unflatten.
+# Requires Rez (from Xcode Command Line Tools); silently skipped if absent.
+# NOTE: Apple deprecated SLA resources in recent macOS — this is best-effort.
+if [[ -f "$ROOT/LICENSE" ]] && command -v Rez &>/dev/null; then
+  SLA_DIR="$(mktemp -d)"; CLEANUP_DIRS+=("$SLA_DIR")
+  SLA_R="$SLA_DIR/sla.r"
+
+  # Generate the Rez source file from LICENSE
+  python3 - "$ROOT/LICENSE" "$SLA_R" <<'PYEOF' 2>/dev/null || true
+import sys
+
+license_path, output_path = sys.argv[1:3]
+
+with open(license_path, "r") as f:
+    text = f.read()
+
+# Escape for Rez string literal: backslash and double-quote
+text = text.replace("\\", "\\\\").replace('"', '\\"')
+# Rez strings can't have raw newlines — use \n
+text = text.replace("\n", "\\n")
+
+rez = f'''
+data 'LPic' (5000) {{
+    $"0002 0000 0001 0000 0000 0000 0008 0000"
+}};
+
+data 'TEXT' (5000, "English") {{
+    "{text}"
+}};
+
+data 'STR#' (5000, "English") {{
+    $"0006"             /* 6 strings */
+    $"07" "English"
+    $"05" "Agree"
+    $"08" "Disagree"
+    $"05" "Print"
+    $"07" "Save..."
+    $"6E" "If you agree with the terms of this license, "
+          "press \\"Agree\\" to install the software. "
+          "If you do not agree, press \\"Disagree\\"."
+}};
+'''
+
+with open(output_path, "w") as f:
+    f.write(rez)
+PYEOF
+
+  if [[ -f "$SLA_R" ]]; then
+    (
+      hdiutil unflatten "$DMG_OUT" && \
+      Rez -a "$SLA_R" -o "$DMG_OUT" && \
+      hdiutil flatten "$DMG_OUT" && \
+      echo "  ✓ license agreement (SLA) embedded"
+    ) 2>/dev/null || echo "  ⊘ SLA embedding skipped (Rez/flatten not supported)"
+  fi
+fi
+
+# ── Internet-enable the DMG ────────────────────────────────────────────────
+# When a user downloads an internet-enabled DMG via Safari and drags the app
+# to Applications, macOS automatically ejects the DMG and moves it to Trash.
+# This is the polished "download → drag → done" experience.
+hdiutil internet-enable -yes "$DMG_OUT" 2>/dev/null && \
+  echo "  ✓ internet-enabled (auto-eject after install)" || true
 
 # ── Sign the DMG ──────────────────────────────────────────────────────────
 if [[ "$SIGN_ID" != "-" ]]; then
@@ -401,7 +760,8 @@ echo "  • Applications → /Applications"
 [[ -f "$ROOT/README.md" ]]    && echo "  • README.md"
 [[ -f "$ROOT/CHANGELOG.md" ]] && echo "  • CHANGELOG.md"
 [[ -f "$ROOT/LICENSE" ]]      && echo "  • LICENSE"
-$HAS_BG && echo "  • Background image (logo + v$VERSION)"
+[[ -n "$VOL_ICNS" ]] && echo "  • Volume icon (logo + v$VERSION badge)"
+$HAS_BG && echo "  • Background image (logo + v$VERSION, @1x + @2x Retina)"
 echo ""
 echo "To open:    open '$DMG_OUT'"
 echo "To install: drag $PRODUCT_NAME to Applications"
