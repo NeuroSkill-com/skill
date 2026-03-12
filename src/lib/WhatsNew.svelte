@@ -18,9 +18,11 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
   import { onMount } from "svelte";
   import { invoke }  from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
 
   onMount(async () => {
     try {
+      if (getCurrentWindow().label !== "main") return;
       const [appVersion, seenVersion] = await Promise.all([
         invoke<string>("get_app_version"),
         invoke<string>("get_whats_new_seen_version"),

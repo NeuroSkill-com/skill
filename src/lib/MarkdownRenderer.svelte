@@ -1,15 +1,5 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
-<!--
-  Renders an LLM response as markdown.
-
-  • Uses a local `Marked` instance (no global state pollution).
-  • Custom renderer wraps code blocks with a language label and Copy button.
-  • Copy button is handled via event delegation on the wrapper div.
-  • All injected HTML elements are styled via :global() rules that respect
-    the app's CSS variable theme (light / dark / high-contrast).
-  • Safe for streaming: `marked.parse()` tolerates unclosed fences.
--->
 <script lang="ts">
   import { Marked }   from "marked";
   import type { Tokens } from "marked";

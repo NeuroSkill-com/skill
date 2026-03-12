@@ -82,6 +82,87 @@ jobs:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: cargo clippy --locked --target x86_64-unknown-linux-gnu --features llm-vulkan -- -D warnings
 
+  # ── Linux release bundle smoke test ─────────────────────────────────────────
+  linux-release:
+    name: Linux — release bundle build (deb + AppImage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Install Tauri Linux release deps
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libssl-dev \
+            libudev-dev libdbus-1-dev pkg-config \
+            libasound2-dev cmake binutils \
+            squashfs-tools libfuse2
+
+      # Vulkan SDK — required by llm-vulkan in the release build path.
+      - name: Install Vulkan SDK
+        run: bash scripts/install-vulkan-sdk.sh
+
+      - name: Cache espeak-ng static lib
+        id: cache-espeak
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/espeak-static
+            src-tauri/resources/espeak-ng-data
+          key: linux-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
+
+      - name: Build espeak-ng static lib
+        if: steps.cache-espeak.outputs.cache-hit != 'true'
+        run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
+
+      - name: Build frontend
+        run: npm run build
+
+      # CI release smoke test: validates Linux release bundling path without
+      # requiring updater signing secrets.
+      - name: Build Tauri release bundles
+        env:
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+          APPIMAGE_EXTRACT_AND_RUN: 1
+          NO_STRIP: 1
+        run: |
+          npx tauri build \
+            --target x86_64-unknown-linux-gnu \
+            --bundles deb,appimage \
+            --features llm-vulkan
+
+      - name: Upload Linux release artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release-bundles-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.tar.gz
+            src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.tar.gz.sig
+
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:
     name: Frontend — check + i18n + tests
@@ -185,7 +266,9 @@ jobs:
         id: cache-espeak
         uses: actions/cache@v4
         with:
-          path: src-tauri/espeak-static
+          path: |
+            src-tauri/espeak-static
+            src-tauri/resources/espeak-ng-data
           key: windows-x86_64-espeak-${{ hashFiles('scripts/build-espeak-static.ps1') }}
 
       - name: Build espeak-ng static lib
@@ -349,7 +432,7 @@ jobs:
   notify:
     name: Discord notification
     runs-on: ubuntu-latest
-    needs: [rust-check, windows-check, frontend-check, audit]
+    needs: [rust-check, linux-release, windows-check, frontend-check, audit]
     if: always()
     steps:
       - name: Send CI result to Discord
@@ -357,13 +440,15 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           RUST="${{ needs.rust-check.result }}"
+          LINUX_RELEASE="${{ needs.linux-release.result }}"
           WINDOWS="${{ needs.windows-check.result }}"
           FRONTEND="${{ needs.frontend-check.result }}"
           AUDIT="${{ needs.audit.result }}"
 
           # Determine overall status — Windows is a required gate alongside
-          # Rust (Linux) and Frontend; audit is advisory only.
-          if [[ "$RUST" == "success" && "$WINDOWS" == "success" && "$FRONTEND" == "success" ]]; then
+          # Rust (Linux), Linux release bundle build, and Frontend;
+          # audit is advisory only.
+          if [[ "$RUST" == "success" && "$LINUX_RELEASE" == "success" && "$WINDOWS" == "success" && "$FRONTEND" == "success" ]]; then
             COLOR=3066993   # green
             STATUS="✅ Passed"
           else
@@ -372,6 +457,7 @@ jobs:
           fi
 
           EMOJI_RUST=$([ "$RUST" = "success" ] && echo "✅" || echo "❌")
+          EMOJI_LINUX_RELEASE=$([ "$LINUX_RELEASE" = "success" ] && echo "✅" || echo "❌")
           EMOJI_WINDOWS=$([ "$WINDOWS" = "success" ] && echo "✅" || echo "❌")
           EMOJI_FRONTEND=$([ "$FRONTEND" = "success" ] && echo "✅" || echo "❌")
           EMOJI_AUDIT=$([ "$AUDIT" = "success" ] && echo "✅" || echo "⚠️")
@@ -394,6 +480,7 @@ jobs:
                   {\"name\": \"Commit\",    \"value\": \"\`${SHA:0:8}\`\",    \"inline\": true},
                   {\"name\": \"Triggered\", \"value\": \"$EVENT by $ACTOR\", \"inline\": true},
                   {\"name\": \"Rust (Linux+Vulkan)\", \"value\": \"$EMOJI_RUST $RUST\",   \"inline\": true},
+                  {\"name\": \"Linux Release Bundles\", \"value\": \"$EMOJI_LINUX_RELEASE $LINUX_RELEASE\", \"inline\": true},
                   {\"name\": \"Rust (Windows)\", \"value\": \"$EMOJI_WINDOWS $WINDOWS\", \"inline\": true},
                   {\"name\": \"Frontend\",       \"value\": \"$EMOJI_FRONTEND $FRONTEND\", \"inline\": true},
                   {\"name\": \"Audit\",          \"value\": \"$EMOJI_AUDIT $AUDIT\",       \"inline\": true}

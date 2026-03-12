@@ -1336,7 +1336,21 @@ pub fn run() {
             //      WKWebView to spawn a fresh renderer and reload the URL.
             //      This handles "renderer process terminated".
             fn show_and_recover_main(app: &AppHandle) {
-                let Some(win) = app.get_webview_window("main") else { return };
+                let win = if let Some(win) = app.get_webview_window("main") {
+                    win
+                } else {
+                    match tauri::WebviewWindowBuilder::new(
+                        app,
+                        "main",
+                        tauri::WebviewUrl::App("".into()),
+                    )
+                    .title(constants::APP_DISPLAY_NAME)
+                    .build()
+                    {
+                        Ok(win) => win,
+                        Err(_) => return,
+                    }
+                };
                 let _ = win.show();
                 let _ = win.set_focus();
                 if win
@@ -1427,17 +1441,6 @@ pub fn run() {
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.show();
                 let _ = win.set_focus();
-                let w = win.clone();
-                win.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        // Hide instead of close so the app stays alive in the
-                        // tray.  The window (and its WebView) are preserved;
-                        // show_and_recover_main() handles blank-page recovery
-                        // when it is made visible again.
-                        api.prevent_close();
-                        let _ = w.hide();
-                    }
-                });
             }
 
             let app_scan = app.handle().clone();
