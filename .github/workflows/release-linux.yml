@@ -49,9 +49,9 @@ jobs:
           echo "✓ Version verified: $VERSION"
 
       # ── System dependencies ───────────────────────────────────────────────────
-      # Tauri on Linux requires WebKit2GTK and several supporting libraries.
-      # squashfs-tools provides mksquashfs, used by appimagetool when building
-      # the AppImage bundle.  libfuse2 is needed to run appimagetool itself.
+      # Linux compile + system package flow requires WebKit2GTK and supporting
+      # libraries for tauri/wry compilation. We intentionally do not run Tauri
+      # bundling in this workflow.
       - name: Cache + install system dependencies
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
@@ -68,8 +68,6 @@ jobs:
             cmake
             binutils
             rpm
-            squashfs-tools
-            libfuse2
           version: tauri-release-linux-v1
 
       # ── Rust toolchain ────────────────────────────────────────────────────────
@@ -136,55 +134,42 @@ jobs:
       - name: Verify Tauri frontend bundle structure
         run: npm run -s verify:tauri:frontend
 
-      # ── Guard bundle-flag contract ───────────────────────────────────────────
-      # Ensures the wrapper still recognizes `--bundles` as a bundle request.
-      - name: Guard Linux bundle flags
+      # ── Clean cached outputs that can mask stale release artifacts ──────────
+      # rust-cache restores target/dist directories between runs. If a previous
+      # job left bundle outputs behind, later fallback checks can accidentally
+      # pick stale artifacts.
+      - name: Clean stale Linux release outputs
         shell: bash
         run: |
           set -euo pipefail
+          TARGET_ROOT="src-tauri/target/x86_64-unknown-linux-gnu/release"
+          rm -rf "$TARGET_ROOT/bundle"
+          rm -f "$TARGET_ROOT/skill"
+          rm -rf "dist/linux/x86_64-unknown-linux-gnu"
+          echo "✓ Cleared stale target/dist outputs before Linux release build"
 
-          if ! grep -q 'arg === "--bundles"' scripts/tauri-build.js; then
-            echo "::error::scripts/tauri-build.js no longer recognizes --bundles as explicit bundling."
-            exit 1
-          fi
-
-          echo "✓ Linux bundle guard passed."
-
-      # ── Compile + bundle (frontend + Rust + AppImage) ───────────────────────
+      # ── Compile only (frontend + Rust) ───────────────────────────────────────
       #
-      # --features llm-vulkan enables the llama.cpp Vulkan GPU backend so the
-      # shipped binary can offload LLM inference to any Vulkan-capable GPU
-      # (NVIDIA, AMD, Intel Arc) without requiring CUDA or ROCm.  The Vulkan
-      # SDK was installed in the step above; at runtime any Vulkan 1.0+ driver
-      # works and llama.cpp falls back to CPU automatically when no GPU is found.
-      #
-      # Tauri produces AppImage artifacts only in this workflow:
-      #   appimage — portable self-contained executable (.AppImage)
-      #
-      # With createUpdaterArtifacts: true in tauri.conf.json and
-      # TAURI_SIGNING_PRIVATE_KEY set, Tauri also produces:
-      #   *.AppImage.tar.gz      — AppImage wrapped in tar.gz (updater bundle)
-      #   *.AppImage.tar.gz.sig  — Ed25519 signature for the updater plugin
-      #
-      # APPIMAGE_EXTRACT_AND_RUN=1 tells appimagetool to extract itself rather
-      # than trying to mount via FUSE, which avoids kernel-level FUSE issues in
-      # the GitHub Actions sandbox.
-      - name: Build Tauri (Linux — AppImage)
+      # Like macOS, Linux release avoids Tauri bundling and performs packaging
+      # with repository scripts after compile-only output is produced.
+      - name: Compile (frontend + Rust)
         env:
-          ESPEAK_LIB_DIR:                     ${{ github.workspace }}/src-tauri/espeak-static/lib
-          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          APPIMAGE_EXTRACT_AND_RUN:           1
-          # linuxdeploy's strip pass segfaults on ubuntu-22.04 with large Rust
-          # binaries (glibc/binutils incompatibility with DWARF debug sections).
-          # NO_STRIP=1 skips that step; the binary is already release-optimised.
-          NO_STRIP:                           1
-        run: npm run tauri:build:linux:x64:native
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd src-tauri
+          cargo build --release --target x86_64-unknown-linux-gnu
 
       - name: Build Linux deb/rpm via system tools
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu --skip-build
+
+      - name: Build Linux portable tarball
+        env:
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+        run: bash scripts/package-linux-dist.sh --target x86_64-unknown-linux-gnu --skip-build
 
       # ── Post-build sanity check ─────────────────────────────────────────────
       - name: Verify Linux bundle directories
@@ -192,54 +177,48 @@ jobs:
         run: |
           set -euo pipefail
           TARGET_DIR="src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          PORTABLE_DIR="dist/linux/x86_64-unknown-linux-gnu"
+          PORTABLE_TAR_COUNT="$(find "$PORTABLE_DIR" -maxdepth 1 -name "*.tar.gz" | wc -l | tr -d ' ')"
 
-          if [ ! -d "$TARGET_DIR/deb" ] || [ ! -d "$TARGET_DIR/appimage" ] || [ ! -d "$TARGET_DIR/rpm" ]; then
+          if [ ! -d "$TARGET_DIR/deb" ] || [ ! -d "$TARGET_DIR/rpm" ] || [ "$PORTABLE_TAR_COUNT" -eq 0 ]; then
             echo "::error::Expected Linux bundle directories are missing."
-            echo "Expected: $TARGET_DIR/deb, $TARGET_DIR/appimage, and $TARGET_DIR/rpm"
-            echo "Present under $TARGET_DIR:"
+            echo "Expected: $TARGET_DIR/deb, $TARGET_DIR/rpm, and at least one tar.gz in $PORTABLE_DIR"
+            echo "Present under $TARGET_DIR and $PORTABLE_DIR:"
             find "$TARGET_DIR" -maxdepth 2 -type d 2>/dev/null | sort || true
+            find "$PORTABLE_DIR" -maxdepth 2 2>/dev/null | sort || true
             exit 1
           fi
 
-          echo "✓ Bundle directories exist: $TARGET_DIR/deb, $TARGET_DIR/appimage, $TARGET_DIR/rpm"
+          echo "✓ Artifacts exist: $TARGET_DIR/deb, $TARGET_DIR/rpm, $PORTABLE_DIR/*.tar.gz"
 
       # ── Locate build artifacts ────────────────────────────────────────────────
       - name: Collect artifact paths
         id: artifacts
         run: |
           TARGET_DIR="src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+          PORTABLE_DIR="dist/linux/x86_64-unknown-linux-gnu"
 
           DEB="$(find "$TARGET_DIR/deb"      -maxdepth 1 -name "*.deb"               | head -1)"
           RPM="$(find "$TARGET_DIR/rpm"      -maxdepth 1 -name "*.rpm"               | head -1)"
-          IMG="$(find "$TARGET_DIR/appimage" -maxdepth 1 -name "*.AppImage" \
-                   ! -name "*.tar.gz"                                                 | head -1)"
-          TAR="$(find "$TARGET_DIR/appimage" -maxdepth 1 -name "*.AppImage.tar.gz" \
-                   ! -name "*.sig"                                                    | head -1)"
-          SIG="$(find "$TARGET_DIR/appimage" -maxdepth 1 -name "*.AppImage.tar.gz.sig" | head -1)"
+          TAR="$(find "$PORTABLE_DIR" -maxdepth 1 -name "*.tar.gz" | head -1)"
 
-          if [ -z "$DEB" ] || [ -z "$RPM" ] || [ -z "$IMG" ] || [ -z "$TAR" ] || [ -z "$SIG" ]; then
+          if [ -z "$DEB" ] || [ -z "$RPM" ] || [ -z "$TAR" ]; then
             echo "::error::One or more expected artifacts are missing."
             echo "  DEB : ${DEB:-(not found)}"
             echo "  RPM : ${RPM:-(not found)}"
-            echo "  IMG : ${IMG:-(not found)}"
             echo "  TAR : ${TAR:-(not found)}"
-            echo "  SIG : ${SIG:-(not found)}"
             exit 1
           fi
 
           echo "deb=$DEB"                         >> "$GITHUB_OUTPUT"
           echo "rpm=$RPM"                         >> "$GITHUB_OUTPUT"
-          echo "appimage=$IMG"                    >> "$GITHUB_OUTPUT"
-          echo "appimage_tar=$TAR"               >> "$GITHUB_OUTPUT"
-          echo "appimage_sig=$SIG"               >> "$GITHUB_OUTPUT"
-          echo "appimage_tar_name=$(basename "$TAR")" >> "$GITHUB_OUTPUT"
+          echo "portable_tar=$TAR"               >> "$GITHUB_OUTPUT"
+          echo "portable_tar_name=$(basename "$TAR")" >> "$GITHUB_OUTPUT"
 
           echo "Artifacts found:"
           echo "  DEB : $DEB  ($(du -sh "$DEB" | cut -f1))"
           echo "  RPM : $RPM  ($(du -sh "$RPM" | cut -f1))"
-          echo "  IMG : $IMG  ($(du -sh "$IMG" | cut -f1))"
           echo "  TAR : $TAR  ($(du -sh "$TAR" | cut -f1))"
-          echo "  SIG : $SIG"
 
       - name: Generate checksums + detached signatures
         id: integrity
@@ -254,25 +233,23 @@ jobs:
           sha256sum \
             "${{ steps.artifacts.outputs.deb }}" \
             "${{ steps.artifacts.outputs.rpm }}" \
-            "${{ steps.artifacts.outputs.appimage }}" \
-            "${{ steps.artifacts.outputs.appimage_tar }}" \
-            "${{ steps.artifacts.outputs.appimage_sig }}" \
+            "${{ steps.artifacts.outputs.portable_tar }}" \
             > "$CHECKSUMS"
 
           npx tauri signer sign "${{ steps.artifacts.outputs.deb }}"
           npx tauri signer sign "${{ steps.artifacts.outputs.rpm }}"
-          npx tauri signer sign "${{ steps.artifacts.outputs.appimage }}"
+          npx tauri signer sign "${{ steps.artifacts.outputs.portable_tar }}"
 
           echo "checksums=$CHECKSUMS" >> "$GITHUB_OUTPUT"
           echo "deb_sig=${{ steps.artifacts.outputs.deb }}.sig" >> "$GITHUB_OUTPUT"
           echo "rpm_sig=${{ steps.artifacts.outputs.rpm }}.sig" >> "$GITHUB_OUTPUT"
-          echo "appimage_raw_sig=${{ steps.artifacts.outputs.appimage }}.sig" >> "$GITHUB_OUTPUT"
+          echo "portable_tar_sig=${{ steps.artifacts.outputs.portable_tar }}.sig" >> "$GITHUB_OUTPUT"
 
           echo "Integrity artifacts:"
           echo "  SHA256SUMS : $CHECKSUMS"
           echo "  DEB SIG    : ${{ steps.artifacts.outputs.deb }}.sig"
           echo "  RPM SIG    : ${{ steps.artifacts.outputs.rpm }}.sig"
-          echo "  IMG SIG    : ${{ steps.artifacts.outputs.appimage }}.sig"
+          echo "  TAR SIG    : ${{ steps.artifacts.outputs.portable_tar }}.sig"
 
       # ── Create / update GitHub Release with Linux binaries ───────────────────
       #
@@ -283,11 +260,9 @@ jobs:
       # Linux assets uploaded here:
       #   *.deb                  — Debian/Ubuntu package
       #   *.rpm                  — Fedora/RHEL/openSUSE package
-      #   *.AppImage             — portable Linux executable
-      #   *.AppImage.tar.gz      — Tauri updater bundle
-      #   *.AppImage.tar.gz.sig  — Ed25519 signature for the updater
+      #   *linux-portable.tar.gz — standalone Linux portable package
       #   SHA256SUMS-linux-x86_64.txt — checksums for Linux artifacts
-      #   *.deb.sig / *.rpm.sig / *.AppImage.sig — detached signatures
+      #   *.deb.sig / *.rpm.sig / *.tar.gz.sig — detached signatures
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -298,13 +273,11 @@ jobs:
           files: |
             ${{ steps.artifacts.outputs.deb }}
             ${{ steps.artifacts.outputs.rpm }}
-            ${{ steps.artifacts.outputs.appimage }}
-            ${{ steps.artifacts.outputs.appimage_tar }}
-            ${{ steps.artifacts.outputs.appimage_sig }}
+            ${{ steps.artifacts.outputs.portable_tar }}
             ${{ steps.integrity.outputs.checksums }}
             ${{ steps.integrity.outputs.deb_sig }}
             ${{ steps.integrity.outputs.rpm_sig }}
-            ${{ steps.integrity.outputs.appimage_raw_sig }}
+            ${{ steps.integrity.outputs.portable_tar_sig }}
 
       # ── Update latest.json ────────────────────────────────────────────────────
       #
@@ -317,8 +290,8 @@ jobs:
           GH_REPO:           ${{ github.repository }}
           TAG:               ${{ steps.version_meta.outputs.tag }}
           VERSION:           ${{ steps.version_meta.outputs.version }}
-          APPIMAGE_TAR_NAME: ${{ steps.artifacts.outputs.appimage_tar_name }}
-          APPIMAGE_SIG_PATH: ${{ steps.artifacts.outputs.appimage_sig }}
+          PORTABLE_TAR_NAME: ${{ steps.artifacts.outputs.portable_tar_name }}
+          PORTABLE_SIG_PATH: ${{ steps.integrity.outputs.portable_tar_sig }}
         run: |
           python3 - <<'PYEOF'
           import json, os, subprocess, datetime
@@ -326,8 +299,8 @@ jobs:
           version      = os.environ["VERSION"]
           tag          = os.environ["TAG"]
           repo         = os.environ["GH_REPO"]
-          tar_name     = os.environ["APPIMAGE_TAR_NAME"]
-          sig_path     = os.environ["APPIMAGE_SIG_PATH"]
+          tar_name     = os.environ["PORTABLE_TAR_NAME"]
+          sig_path     = os.environ["PORTABLE_SIG_PATH"]
 
           with open(sig_path) as fh:
               signature = fh.read().strip()

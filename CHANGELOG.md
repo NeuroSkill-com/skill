@@ -67,6 +67,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### CI Runtime
 
+- Linux release workflow now bypasses Tauri bundling entirely (macOS-style): it compiles frontend + Rust only, builds `.deb`/`.rpm` via `scripts/package-linux-system-bundles.sh`, builds the portable Linux tarball via `scripts/package-linux-dist.sh`, signs those outputs with `tauri signer`, and publishes updater metadata from the signed portable tarball instead of AppImage bundle artifacts.
 - CI Linux packaging scope reduced to tarball-only in `.github/workflows/ci.yml`: removed the `linux-release` job that produced `.deb`/`.rpm`/`.AppImage`, so Linux CI now only runs the portable package flow and publishes `.tar.gz` artifacts.
 - Tauri frontend bundling contract guard: added `scripts/verify-tauri-frontend-structure.js` and wired it into `npm run build` (`package.json`) so `tauri build` (via `beforeBuildCommand`) now fails fast unless the configured `src-tauri/tauri.conf.json` `build.frontendDist` path contains valid built assets (`index.html` + `_app/immutable` JS/CSS) rather than raw source files.
 - Linux/macOS/Windows bundling workflows now run an explicit `npm run -s verify:tauri:frontend` step before packaging (`.github/workflows/ci.yml`, `.github/workflows/release-linux.yml`, `.github/workflows/release-mac.yml`, `.github/workflows/release-windows.yml`) to enforce the same Tauri asset layout contract in CI.
@@ -114,6 +115,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Build / CI (Unreleased)
 
+- macOS `aarch64-apple-darwin` Tauri build fix: moved `MACOSX_DEPLOYMENT_TARGET` and `CMAKE_OSX_DEPLOYMENT_TARGET` into top-level Cargo `[env]` scope in `src-tauri/.cargo/config.toml` (they were accidentally nested under `[target.i686-pc-windows-gnu.env]`), so `llama-cpp-sys` now receives a 10.15 deployment target and avoids `std::filesystem` availability errors (`'path' is unavailable: introduced in macOS 10.15`) during CMake/C++ compilation.
 - `npm run bump` now runs mandatory preflight gates before mutating versions: `npm run check`, `cargo clippy --manifest-path src-tauri/Cargo.toml`, then `npm run sync:i18n:check`; if any step fails, bump exits immediately and does not update version fields.
 - Linux CI bundle stability: `scripts/tauri-build.js` now detects a Tauri CLI segfault (`exit 139`) during explicit multi-target bundle runs (for example `--bundles deb,appimage`) and automatically retries bundling sequentially per target so release jobs can still produce both `.deb` and `.AppImage` artifacts
 - Linux CI single-target bundle stability: when an explicit Linux bundle run (for example `--bundles deb`) exits with `139`, `scripts/tauri-build.js` now verifies the expected bundle output for that target and treats the run as successful only if artifacts are present; the same artifact-aware tolerance is also applied per-target during sequential retry after a multi-target segfault.
@@ -125,6 +127,7 @@ All notable changes to NeuroSkill™ are documented here.
 - Added Linux `.deb` artifact upload in CI: the `linux-release` job in `.github/workflows/ci.yml` now resolves the generated package from the target/fallback bundle paths and uploads it as `linux-deb-x86_64` for direct download from Actions runs.
 - Linux package matrix expanded to include `rpm`: Linux build scripts now request `--bundles deb,appimage,rpm`, and both CI/release workflows were updated to validate and publish `.rpm` alongside `.deb` and `.AppImage` artifacts.
 - Added Linux integrity sidecars: workflows now generate `SHA256SUMS` files for Linux bundle outputs and portable tarball outputs, and `release-linux` now also generates detached `.sig` signatures for Linux release artifacts.
+- Linux release stale-artifact guard: `.github/workflows/release-linux.yml` now removes cached `src-tauri/target/x86_64-unknown-linux-gnu/release/{bundle,skill}` and `dist/linux/x86_64-unknown-linux-gnu` before compile/package steps so rust-cache leftovers cannot be mistaken for fresh artifacts when assembling release outputs.
 
 ## [0.0.24] — 2026-03-12
 
