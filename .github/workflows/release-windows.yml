@@ -313,15 +313,15 @@ jobs:
       - name: Verify Tauri frontend bundle structure
         run: npm run -s verify:tauri:frontend
 
-      # ── Compile + bundle (frontend + Rust + NSIS installer) ──────────────────
+      # ── Build + package (local-proven Windows NSIS path) ─────────────────────
       #
-      # When CERTIFICATE_THUMBPRINT is set (cert was imported above), the config
-      # override tells Tauri to call signtool.exe on the NSIS installer.
-      # When the cert is absent the installer is built unsigned.
-      # In both cases, TAURI_SIGNING_PRIVATE_KEY causes Tauri to produce the
-      # Ed25519-signed updater artifacts:
-      #   *.nsis.zip      — NSIS installer wrapped in a zip (updater bundle)
-      #   *.nsis.zip.sig  — Ed25519 signature consumed by the Tauri updater plugin
+      # Use the same command path that is stable on local Windows:
+      #   npm run taur:build:win:nsis
+      #
+      # That path compiles with --no-bundle and then runs scripts/create-windows-
+      # nsis.ps1.  After installer generation, CI optionally signs the installer
+      # (when CERTIFICATE_THUMBPRINT exists), then creates/signs updater artifacts
+      # (.nsis.zip + .nsis.zip.sig) for latest.json.
       - name: Build Tauri (Windows — NSIS)
         shell: powershell
         env:
@@ -337,39 +337,10 @@ jobs:
           # VS's bundled Clang 19 which lacks __builtin_ia32_* MMX intrinsics.
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
         run: |
-          # Build the Tauri --config JSON natively in PowerShell.
-          # Include Windows signing fields only when a certificate is available.
-          $bundle = @{
-            targets = @("nsis")
-          }
-
-          if ($env:CERTIFICATE_THUMBPRINT) {
-            $bundle.windows = @{
-              certificateThumbprint = $env:CERTIFICATE_THUMBPRINT
-              digestAlgorithm       = "sha256"
-              timestampUrl          = "http://timestamp.digicert.com"
-            }
-          }
-
-          $configPath = Join-Path $env:RUNNER_TEMP "tauri-win-config.json"
-          @{ bundle = $bundle } |
-            ConvertTo-Json -Depth 10 -Compress |
-            Out-File -FilePath $configPath -Encoding utf8
-
-          Write-Host "[ok] Generated Tauri config at $configPath"
-
-          # --features llm-vulkan enables the Vulkan GPU back-end for LLM
-          # inference (same flag tauri-build.js injects for local dev builds).
-          # Requires the Vulkan SDK installed and VULKAN_SDK set (above).
-          & npx tauri build `
-            --target x86_64-pc-windows-msvc `
-            --features llm-vulkan `
-            --verbose `
-            --config $configPath
-
+          $bundleDir = Join-Path $PWD "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+          & npm run taur:build:win:nsis
           if ($LASTEXITCODE -ne 0) {
-            $bundleDir = Join-Path $PWD "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
-            Write-Host "[error] tauri build failed with exit code $LASTEXITCODE"
+            Write-Host "[error] npm run taur:build:win:nsis failed with exit code $LASTEXITCODE"
             if (Test-Path $bundleDir) {
               Write-Host "[diag] bundle dir snapshot: $bundleDir"
               Get-ChildItem -Path $bundleDir -File -ErrorAction SilentlyContinue |
@@ -382,6 +353,55 @@ jobs:
             }
             exit $LASTEXITCODE
           }
+
+          $installer = Get-ChildItem -Path $bundleDir -File -Filter "*.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -notmatch "(?i)uninstall" } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $installer) {
+            Write-Host "[error] NSIS installer .exe not found in $bundleDir after taur:build:win:nsis"
+            exit 1
+          }
+
+          if ($env:CERTIFICATE_THUMBPRINT) {
+            Write-Host "[ok] signing installer: $($installer.FullName)"
+            & signtool sign `
+              /sha1 $env:CERTIFICATE_THUMBPRINT `
+              /fd sha256 `
+              /tr http://timestamp.digicert.com `
+              /td sha256 `
+              /v `
+              $installer.FullName
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "[error] signtool failed while signing installer"
+              exit $LASTEXITCODE
+            }
+          } else {
+            Write-Host "[warn] CERTIFICATE_THUMBPRINT is not set; installer remains unsigned"
+          }
+
+          $zipPath = Join-Path $bundleDir ("$($installer.BaseName).nsis.zip")
+          $sigPath = "$zipPath.sig"
+
+          if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+          if (Test-Path $sigPath) { Remove-Item $sigPath -Force }
+
+          Compress-Archive -Path $installer.FullName -DestinationPath $zipPath -Force
+          Write-Host "[ok] created updater zip: $zipPath"
+
+          & npx tauri signer sign $zipPath
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "[error] tauri signer failed for updater zip"
+            exit $LASTEXITCODE
+          }
+
+          if (-not (Test-Path $sigPath)) {
+            Write-Host "[error] expected updater signature not found: $sigPath"
+            exit 1
+          }
+
+          Write-Host "[ok] updater artifacts created (.nsis.zip + .sig)"
 
       # ── Locate build artifacts ────────────────────────────────────────────────
       - name: Collect artifact paths

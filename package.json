@@ -1,6 +1,6 @@
 {
   "name": "neuroskill",
-  "version": "0.0.29",
+  "version": "0.0.30",
   "description": "",
   "type": "module",
   "scripts": {
@@ -29,6 +29,7 @@
     "tauri:build:mac": "node scripts/tauri-build.js build",
     "tauri:build:mac:app": "node scripts/tauri-build.js build --no-bundle && bash scripts/assemble-macos-app.sh",
     "tauri:build:mac:dmg": "node scripts/tauri-build.js build --no-bundle && bash scripts/assemble-macos-app.sh && bash scripts/create-macos-dmg.sh",
+    "taur:build:win:nsis": "npm run tauri:build:win:nsis",
     "tauri:build:win:nsis": "node scripts/tauri-build.js build --no-bundle && powershell -ExecutionPolicy Bypass -File scripts/create-windows-nsis.ps1",
     "skill": "npx tsx cli.ts",
     "sync:i18n": "npx tsx scripts/sync-i18n.ts",

@@ -6,11 +6,20 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### CI Runtime
+
+- Windows release CI fallback for post-compile Tauri crash: `.github/workflows/release-windows.yml` now detects `npx tauri build` failure after the Rust binary is already produced (for example exit `-1073741571`/stack-overflow path), then recovers by running `npx tauri bundle --bundles nsis --no-sign`, recreating the updater zip (`*.nsis.zip`) from the generated installer, and signing that updater artifact via `npx tauri signer sign` so release publishing can continue.
+- Windows release CI now uses the same primary packaging path that works locally (`npm run tauri:build:win:nsis`) instead of direct `npx tauri build` bundling, then signs the generated installer (when a cert is present) and creates/signs updater artifacts (`*.nsis.zip` + `*.nsis.zip.sig`) in workflow.
+- Added npm script alias `taur:build:win:nsis` and switched Windows release CI to run `npm run taur:build:win:nsis` exactly.
+
+## [0.0.30] — 2026-03-12
+
 ### Build / Tooling
 
 - **Fix macOS release CI Pillow install**: added `--break-system-packages` to the `pip3 install Pillow` command in `.github/workflows/release-mac.yml` to resolve PEP 668 externally-managed-environment error on the `macos-26` runner.
 
 ## [0.0.29] — 2026-03-12
+
 ### Refactor
 
 - macOS titlebar button order: switched the close and minimize button positions in the shared custom titlebar component so all macOS windows now use the requested control order.
