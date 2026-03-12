@@ -45,10 +45,10 @@ pub fn get_llm_catalog(
     let mut s = state.lock_or_recover();
     // Sync in-flight download progress into the catalog entries before
     // returning so the UI always sees the latest state.
-    let downloads = s.llm_downloads.clone();
+    let downloads = s.llm.downloads.clone();
     for (filename, prog_arc) in &downloads {
         if let Ok(prog) = prog_arc.lock() {
-            if let Some(entry) = s.llm_catalog.entries
+            if let Some(entry) = s.llm.catalog.entries
                 .iter_mut()
                 .find(|e| &e.filename == filename)
             {
@@ -61,7 +61,7 @@ pub fn get_llm_catalog(
             }
         }
     }
-    s.llm_catalog.clone()
+    s.llm.catalog.clone()
 }
 
 #[tauri::command]
@@ -70,10 +70,10 @@ pub fn get_llm_downloads(
 ) -> Vec<LlmDownloadItem> {
     let mut s = state.lock_or_recover();
 
-    let downloads = s.llm_downloads.clone();
+    let downloads = s.llm.downloads.clone();
     for (filename, prog_arc) in &downloads {
         if let Ok(prog) = prog_arc.lock() {
-            if let Some(entry) = s.llm_catalog.entries
+            if let Some(entry) = s.llm.catalog.entries
                 .iter_mut()
                 .find(|e| &e.filename == filename)
             {
@@ -87,7 +87,7 @@ pub fn get_llm_downloads(
         }
     }
 
-    let mut items: Vec<LlmDownloadItem> = s.llm_catalog.entries.iter()
+    let mut items: Vec<LlmDownloadItem> = s.llm.catalog.entries.iter()
         .filter(|e| {
             e.state == DownloadState::Downloading
                 || e.state == DownloadState::Paused
@@ -116,7 +116,7 @@ pub fn get_llm_downloads(
 
 /// Persist the catalog to disk (called after state changes).
 fn save_catalog(app: &AppHandle, state: &AppState) {
-    state.llm_catalog.save(&state.skill_dir);
+    state.llm.catalog.save(&state.skill_dir);
     let _ = app; // suppress unused warning
 }
 
@@ -131,13 +131,13 @@ pub fn set_llm_active_model(
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
-    s.llm_catalog.active_model = filename;
-    if !s.llm_catalog.active_mmproj_matches_active_model() {
-        s.llm_catalog.active_mmproj.clear();
+    s.llm.catalog.active_model = filename;
+    if !s.llm.catalog.active_mmproj_matches_active_model() {
+        s.llm.catalog.active_mmproj.clear();
     }
     // Mirror into LlmConfig so the server picks the updated pair up on restart.
-    s.llm_config.model_path = s.llm_catalog.active_model_path();
-    s.llm_config.mmproj     = s.llm_catalog.active_mmproj_path();
+    s.llm.config.model_path = s.llm.catalog.active_model_path();
+    s.llm.config.mmproj     = s.llm.catalog.active_mmproj_path();
     save_catalog(&app, &s);
     drop(s);
     crate::save_settings_handle(&app);
@@ -151,7 +151,7 @@ pub fn set_llm_autoload_mmproj(
     state:   tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
-    s.llm_config.autoload_mmproj = enabled;
+    s.llm.config.autoload_mmproj = enabled;
     drop(s);
     crate::save_settings_handle(&app);
 }
@@ -165,33 +165,33 @@ pub fn set_llm_active_mmproj(
 ) {
     let mut s = state.lock_or_recover();
     if filename.is_empty() {
-        s.llm_catalog.active_mmproj.clear();
+        s.llm.catalog.active_mmproj.clear();
     } else {
-        let current_matches = s.llm_catalog.active_model_entry()
-            .zip(s.llm_catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
+        let current_matches = s.llm.catalog.active_model_entry()
+            .zip(s.llm.catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
             .is_some_and(|(model, mmproj)| model.repo == mmproj.repo);
 
         if !current_matches {
-            if let Some(model_filename) = s.llm_catalog
+            if let Some(model_filename) = s.llm.catalog
                 .best_model_for_mmproj(&filename)
                 .map(|entry| entry.filename.clone())
             {
-                s.llm_catalog.active_model = model_filename;
+                s.llm.catalog.active_model = model_filename;
             }
         }
 
-        if s.llm_catalog.active_model_entry()
-            .zip(s.llm_catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
+        if s.llm.catalog.active_model_entry()
+            .zip(s.llm.catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
             .is_some_and(|(model, mmproj)| model.repo == mmproj.repo)
         {
-            s.llm_catalog.active_mmproj = filename;
+            s.llm.catalog.active_mmproj = filename;
         } else {
-            s.llm_catalog.active_mmproj.clear();
+            s.llm.catalog.active_mmproj.clear();
         }
     }
 
-    s.llm_config.model_path = s.llm_catalog.active_model_path();
-    s.llm_config.mmproj     = s.llm_catalog.active_mmproj_path();
+    s.llm.config.model_path = s.llm.catalog.active_model_path();
+    s.llm.config.mmproj     = s.llm.catalog.active_mmproj_path();
     save_catalog(&app, &s);
     drop(s);
     crate::save_settings_handle(&app);
@@ -215,7 +215,7 @@ pub fn download_llm_model(
         let mut s = state.lock_or_recover();
 
         // Find the entry.
-        let entry = match s.llm_catalog.entries
+        let entry = match s.llm.catalog.entries
             .iter()
             .find(|e| e.filename == filename)
         {
@@ -227,8 +227,8 @@ pub fn download_llm_model(
         };
 
         // Skip if already downloading.
-        if s.llm_downloads.contains_key(&filename) {
-            if let Some(prog) = s.llm_downloads.get(&filename) {
+        if s.llm.downloads.contains_key(&filename) {
+            if let Some(prog) = s.llm.downloads.get(&filename) {
                 if prog.lock().is_ok_and(|p| p.state == DownloadState::Downloading) {
                     return;
                 }
@@ -239,7 +239,7 @@ pub fn download_llm_model(
         let size_bytes = (entry.size_gb * 1_073_741_824.0) as u64;
 
         // Mark as downloading in the catalog immediately so the UI updates.
-        if let Some(e) = s.llm_catalog.entries.iter_mut().find(|e| e.filename == filename) {
+        if let Some(e) = s.llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
             e.state      = DownloadState::Downloading;
             e.status_msg = Some(format!("Queued: {}…", filename));
             e.progress   = 0.0;
@@ -258,7 +258,7 @@ pub fn download_llm_model(
             pause_requested: false,
         }));
 
-        s.llm_downloads.insert(filename.clone(), prog.clone());
+        s.llm.downloads.insert(filename.clone(), prog.clone());
 
         (entry.repo.clone(), s.skill_dir.clone(), prog, size_bytes)
     };
@@ -301,7 +301,7 @@ pub fn download_llm_model(
         // After completion / failure, refresh the catalog entry.
         if let Some(state_handle) = app2.try_state::<Mutex<Box<AppState>>>() {
             let mut s = state_handle.lock_or_recover();
-            if let Some(entry) = s.llm_catalog.entries
+            if let Some(entry) = s.llm.catalog.entries
                 .iter_mut()
                 .find(|e| e.filename == filename2)
             {
@@ -312,8 +312,8 @@ pub fn download_llm_model(
                         entry.status_msg = None;
                         entry.progress   = 1.0;
                         // Auto-select if this is the first downloaded main model.
-                        if !entry.is_mmproj && s.llm_catalog.active_model.is_empty() {
-                            s.llm_catalog.active_model = filename2.clone();
+                        if !entry.is_mmproj && s.llm.catalog.active_model.is_empty() {
+                            s.llm.catalog.active_model = filename2.clone();
                         }
                     }
                     Err(ref e) if e == "cancelled" => {
@@ -333,19 +333,19 @@ pub fn download_llm_model(
                 }
             }
             // Mirror active model path to LlmConfig.
-            let model_path  = s.llm_catalog.active_model_path();
-            let mmproj_path = s.llm_catalog.active_mmproj_path();
-            s.llm_config.model_path = model_path;
-            s.llm_config.mmproj     = mmproj_path;
+            let model_path  = s.llm.catalog.active_model_path();
+            let mmproj_path = s.llm.catalog.active_mmproj_path();
+            s.llm.config.model_path = model_path;
+            s.llm.config.mmproj     = mmproj_path;
             // Remove the in-flight progress entry when finished (not paused).
             if !matches!(
-                s.llm_catalog.entries
+                s.llm.catalog.entries
                     .iter()
                     .find(|e| e.filename == filename2)
                     .map(|e| e.state.clone()),
                 Some(DownloadState::Paused)
             ) {
-                s.llm_downloads.remove(&filename2);
+                s.llm.downloads.remove(&filename2);
             }
             save_catalog(&app2, &s);
             drop(s);
@@ -362,7 +362,7 @@ fn cancel_llm_download_inner(
 ) {
     let mut s = state.lock_or_recover();
     let mut was_paused = false;
-    if let Some(prog) = s.llm_downloads.get(&filename) {
+    if let Some(prog) = s.llm.downloads.get(&filename) {
         if let Ok(mut p) = prog.lock() {
             if p.state == DownloadState::Paused {
                 was_paused = true;
@@ -375,8 +375,8 @@ fn cancel_llm_download_inner(
         }
     }
     if was_paused {
-        s.llm_downloads.remove(&filename);
-        if let Some(entry) = s.llm_catalog.entries.iter_mut().find(|e| e.filename == filename) {
+        s.llm.downloads.remove(&filename);
+        if let Some(entry) = s.llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
             entry.state = DownloadState::Cancelled;
             entry.status_msg = Some("Cancelled.".into());
             entry.progress = 0.0;
@@ -406,14 +406,14 @@ pub fn pause_llm_download(
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
-    if let Some(prog) = s.llm_downloads.get(&filename) {
+    if let Some(prog) = s.llm.downloads.get(&filename) {
         if let Ok(mut p) = prog.lock() {
             p.cancelled = true;
             p.pause_requested = true;
             p.status_msg = Some("Pausing…".into());
         }
     }
-    if let Some(entry) = s.llm_catalog.entries.iter_mut().find(|e| e.filename == filename) {
+    if let Some(entry) = s.llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
         entry.state = DownloadState::Paused;
         entry.status_msg = Some("Pausing…".into());
     }
@@ -427,11 +427,11 @@ pub fn resume_llm_download(
 ) {
     {
         let mut s = state.lock_or_recover();
-        if let Some(entry) = s.llm_catalog.entries.iter_mut().find(|e| e.filename == filename) {
+        if let Some(entry) = s.llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
             entry.state = DownloadState::NotDownloaded;
             entry.status_msg = None;
         }
-        s.llm_downloads.remove(&filename);
+        s.llm.downloads.remove(&filename);
         save_catalog(&app, &s);
     }
     download_llm_model(filename, app, state);
@@ -455,7 +455,7 @@ pub fn delete_llm_model(
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
-    if let Some(entry) = s.llm_catalog.entries
+    if let Some(entry) = s.llm.catalog.entries
         .iter_mut()
         .find(|e| e.filename == filename)
     {
@@ -472,13 +472,13 @@ pub fn delete_llm_model(
         entry.initiated_at_unix = None;
 
         // Clear active selection if this was the active model/mmproj.
-        if s.llm_catalog.active_model == filename {
-            s.llm_catalog.active_model = String::new();
-            s.llm_config.model_path    = None;
+        if s.llm.catalog.active_model == filename {
+            s.llm.catalog.active_model = String::new();
+            s.llm.config.model_path    = None;
         }
-        if s.llm_catalog.active_mmproj == filename {
-            s.llm_catalog.active_mmproj = String::new();
-            s.llm_config.mmproj         = None;
+        if s.llm.catalog.active_mmproj == filename {
+            s.llm.catalog.active_mmproj = String::new();
+            s.llm.config.mmproj         = None;
         }
     }
     save_catalog(&app, &s);
@@ -518,12 +518,12 @@ pub fn refresh_llm_catalog(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
-    s.llm_catalog.refresh_cache();
-    s.llm_catalog.auto_select();
-    let model_path  = s.llm_catalog.active_model_path();
-    let mmproj_path = s.llm_catalog.active_mmproj_path();
-    s.llm_config.model_path = model_path;
-    s.llm_config.mmproj     = mmproj_path;
+    s.llm.catalog.refresh_cache();
+    s.llm.catalog.auto_select();
+    let model_path  = s.llm.catalog.active_model_path();
+    let mmproj_path = s.llm.catalog.active_mmproj_path();
+    s.llm.config.model_path = model_path;
+    s.llm.config.mmproj     = mmproj_path;
     save_catalog(&app, &s);
     drop(s);
     crate::save_settings_handle(&app);
@@ -534,7 +534,7 @@ pub fn refresh_llm_catalog(
 #[tauri::command]
 pub fn get_llm_logs(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<LlmLogEntry> {
     let s      = state.lock_or_recover();
-    let log    = s.llm_logs.lock().unwrap();
+    let log    = s.llm.logs.lock().unwrap();
     let result: Vec<LlmLogEntry> = log.iter().cloned().collect();
     result
 }
@@ -561,13 +561,13 @@ pub fn start_llm_server(
     let (mut config, catalog, log_buf, cell, skill_dir, loading, start_error) = {
         let s = state.lock_or_recover();
         (
-            s.llm_config.clone(),
-            s.llm_catalog.clone(),
-            s.llm_logs.clone(),
-            s.llm_state_cell.clone(),
+            s.llm.config.clone(),
+            s.llm.catalog.clone(),
+            s.llm.logs.clone(),
+            s.llm.state_cell.clone(),
             s.skill_dir.clone(),
-            s.llm_loading.clone(),
-            s.llm_start_error.clone(),
+            s.llm.loading.clone(),
+            s.llm.start_error.clone(),
         )
     };
 
@@ -632,10 +632,10 @@ pub fn stop_llm_server(
     let (cell, log_buf, loading, start_error) = {
         let s = state.lock_or_recover();
         (
-            s.llm_state_cell.clone(),
-            s.llm_logs.clone(),
-            s.llm_loading.clone(),
-            s.llm_start_error.clone(),
+            s.llm.state_cell.clone(),
+            s.llm.logs.clone(),
+            s.llm.loading.clone(),
+            s.llm.start_error.clone(),
         )
     };
 
@@ -683,18 +683,18 @@ pub fn get_llm_server_status(
     use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
     // If the background task is loading but the cell is still empty, report Loading.
-    let (mut status, model_name) = cell_status(&s.llm_state_cell);
-    if matches!(status, LlmStatus::Stopped) && s.llm_loading.load(Ordering::Relaxed) {
+    let (mut status, model_name) = cell_status(&s.llm.state_cell);
+    if matches!(status, LlmStatus::Stopped) && s.llm.loading.load(Ordering::Relaxed) {
         status = LlmStatus::Loading;
     }
-    let (n_ctx, supports_vision) = s.llm_state_cell.lock().unwrap()
+    let (n_ctx, supports_vision) = s.llm.state_cell.lock().unwrap()
         .as_ref()
         .map(|srv| (
             srv.n_ctx.load(Ordering::Relaxed),
             srv.vision_ready.load(Ordering::Relaxed),
         ))
         .unwrap_or((0, false));
-    let start_error = s.llm_start_error.lock().unwrap().clone();
+    let start_error = s.llm.start_error.lock().unwrap().clone();
     LlmServerStatusResponse { status, model_name, n_ctx, supports_vision, start_error }
 }
 
@@ -715,7 +715,7 @@ pub fn get_last_chat_session(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> ChatSessionResponse {
     let mut s = state.lock_or_recover();
-    let Some(store) = s.chat_store.as_mut() else {
+    let Some(store) = s.llm.chat_store.as_mut() else {
         return ChatSessionResponse { session_id: 0, messages: vec![] };
     };
     let session_id = store.get_or_create_last_session();
@@ -730,7 +730,7 @@ pub fn load_chat_session(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> ChatSessionResponse {
     let mut s = state.lock_or_recover();
-    let Some(store) = s.chat_store.as_mut() else {
+    let Some(store) = s.llm.chat_store.as_mut() else {
         return ChatSessionResponse { session_id: id, messages: vec![] };
     };
     let messages = store.load_session(id);
@@ -743,7 +743,7 @@ pub fn list_chat_sessions(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<super::chat_store::SessionSummary> {
     let mut s = state.lock_or_recover();
-    let Some(store) = s.chat_store.as_mut() else { return vec![]; };
+    let Some(store) = s.llm.chat_store.as_mut() else { return vec![]; };
     store.list_sessions()
 }
 
@@ -755,7 +755,7 @@ pub fn rename_chat_session(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
-    let Some(store) = s.chat_store.as_mut() else { return; };
+    let Some(store) = s.llm.chat_store.as_mut() else { return; };
     store.rename_session(id, &title);
 }
 
@@ -766,7 +766,7 @@ pub fn delete_chat_session(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
-    let Some(store) = s.chat_store.as_mut() else { return; };
+    let Some(store) = s.llm.chat_store.as_mut() else { return; };
     store.delete_session(id);
 }
 
@@ -781,7 +781,7 @@ pub fn save_chat_message(
     state:      tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> i64 {
     let mut s = state.lock_or_recover();
-    let Some(store) = s.chat_store.as_mut() else { return 0; };
+    let Some(store) = s.llm.chat_store.as_mut() else { return 0; };
     store.save_message(session_id, &role, &content, thinking.as_deref())
 }
 
@@ -792,7 +792,7 @@ pub fn new_chat_session(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> i64 {
     let mut s = state.lock_or_recover();
-    let Some(store) = s.chat_store.as_mut() else { return 0; };
+    let Some(store) = s.llm.chat_store.as_mut() else { return 0; };
     store.new_session()
 }
 
@@ -833,7 +833,7 @@ pub async fn chat_completions_ipc(
     channel:  tauri::ipc::Channel<ChatChunk>,
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let cell = state.lock_or_recover().llm_state_cell.clone();
+    let cell = state.lock_or_recover().llm.state_cell.clone();
     let srv  = cell.lock().unwrap().clone()
         .ok_or_else(|| "LLM server not running — start it in Settings → LLM".to_string())?;
 
@@ -888,7 +888,7 @@ pub async fn chat_completions_ipc(
 /// the server is stopped or idle.
 #[tauri::command]
 pub fn abort_llm_stream(state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    let cell = { let g = state.lock_or_recover(); g.llm_state_cell.clone() };
+    let cell = { let g = state.lock_or_recover(); g.llm.state_cell.clone() };
     let guard = cell.lock().unwrap();
     if let Some(srv) = guard.as_ref() {
         srv.abort_tx.send_modify(|v| *v = v.wrapping_add(1));

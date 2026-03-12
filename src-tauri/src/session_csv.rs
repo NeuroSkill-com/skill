@@ -34,7 +34,7 @@ pub(crate) fn new_csv_path(app: &AppHandle) -> PathBuf {
     // directory is always consistent with the rest of the app's storage.
     // Fall back to default_skill_dir() if the state lock is unavailable.
     let skill_dir = app
-        .try_state::<std::sync::Mutex<crate::AppState>>()
+        .try_state::<std::sync::Mutex<Box<crate::AppState>>>()
         .map(|s| s.lock_or_recover().skill_dir.clone())
         .unwrap_or_else(crate::settings::default_skill_dir);
 
