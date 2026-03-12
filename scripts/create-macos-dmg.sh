@@ -28,7 +28,7 @@ CONF="$TAURI_DIR/tauri.conf.json"
 
 # ── Cleanup tracking ─────────────────────────────────────────────────────
 CLEANUP_DIRS=()
-cleanup() { for d in "${CLEANUP_DIRS[@]}"; do rm -rf "$d"; done; rm -f "$ROOT/license.txt" 2>/dev/null || true; }
+cleanup() { for d in "${CLEANUP_DIRS[@]}"; do rm -rf "$d"; done; }
 trap cleanup EXIT
 
 # ── Read config ───────────────────────────────────────────────────────────
@@ -78,10 +78,10 @@ if $NEED_INSTALL; then
   npm install --global create-dmg@latest
 fi
 
-# ── Prepare license.txt for create-dmg SLA ────────────────────────────────
-if [[ -f "$ROOT/LICENSE" ]] && [[ ! -f "$ROOT/license.txt" ]]; then
-  cp "$ROOT/LICENSE" "$ROOT/license.txt"
-fi
+# NOTE: We intentionally do NOT create license.txt here.
+# create-dmg's SLA (via hdiutil udifrez) gets lost when we re-compress the
+# DMG in Phase 2, and re-embedding it corrupts the DMG on macOS 14+.
+# The LICENSE file is included as a visible file inside the DMG instead.
 
 # ── Prepare output directory ──────────────────────────────────────────────
 DMG_DIR="$BUNDLE_DIR/dmg"
@@ -356,95 +356,12 @@ hdiutil convert "$DMG_RW" -format ULFO -o "$DMG_OUT" -ov -quiet
 echo "  ✓ DMG re-compressed (ULFO)"
 
 # ══════════════════════════════════════════════════════════════════════════
-# Phase 3: Re-embed SLA + sign
-#   hdiutil convert creates a new file, losing the SLA resource fork.
-#   Re-embed using the same approach as create-dmg (hdiutil udifrez).
+# Phase 3: Sign (SLA intentionally skipped)
+#   hdiutil convert creates a new file, losing the SLA resource fork from
+#   Phase 1.  Re-embedding via hdiutil udifrez corrupts the DMG on macOS
+#   14+ (Finder blacks out and crashes on open).  The LICENSE file is
+#   included inside the DMG as a visible file instead.
 # ══════════════════════════════════════════════════════════════════════════
-if [[ -f "$ROOT/LICENSE" ]]; then
-  node - "$ROOT/LICENSE" "$DMG_OUT" <<'NODEJS' 2>/dev/null && echo "  ✓ SLA re-embedded" || echo "  ⊘ SLA re-embedding skipped"
-const fs = require('fs');
-const { execSync } = require('child_process');
-const path = require('path');
-const os = require('os');
-
-const [licensePath, dmgPath] = process.argv.slice(2);
-const plainText = fs.readFileSync(licensePath, 'utf8');
-const textData = Buffer.from(plainText, 'utf8');
-
-// Convert plain text to basic RTF
-let escaped = '';
-for (const char of plainText) {
-  if (char === '\\' || char === '{' || char === '}') escaped += '\\' + char;
-  else if (char === '\n') escaped += '\\par\n';
-  else if (char === '\r') { /* skip */ }
-  else if (char.codePointAt(0) <= 0x7f) escaped += char;
-  else escaped += '\\u' + char.codePointAt(0) + '?';
-}
-const rtfData = Buffer.from(
-  '{\\rtf1\\ansi\\ansicpg1252\\cocoartf1504\\cocoasubrtf830\n' +
-  '{\\fonttbl\\f0\\fswiss\\fcharset0 Helvetica;}\n' +
-  '{\\colortbl;\\red255\\green255\\blue255;}\n' +
-  '\\pard\\tx560\\tx1120\\tx1680\\tx2240\\tx2800\\tx3360\\tx3920\\tx4480\\tx5040\\tx5600\\tx6160\\txal\\partightenfactor0\n\n' +
-  '\\f0\\fs24 \\cf0 ' + escaped + '}'
-);
-
-// LPic resource
-const lpicData = Buffer.from([0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x00,0x00,0x00]);
-
-// STR# resource (English buttons)
-const strParts = ['English','Agree','Disagree','Print','Save...',
-  'If you agree with the terms of this license, press "Agree" to install the software.  If you do not agree, press "Disagree".'];
-const strBufs = strParts.map(s => { const b = Buffer.from(s); return Buffer.concat([Buffer.from([b.length]), b]); });
-const strData = Buffer.concat([Buffer.from([0x00, 0x06]), ...strBufs]);
-
-// styl resource
-const stylData = Buffer.from([0,1,0,0,0,0,0,14,0,17,0,21,0,0,0,12,0,0,0,0,0,0]);
-
-function makeRes(id, name, data) {
-  return { Attributes: '0x0000', Data: data.toString('base64'), ID: String(id), Name: name };
-}
-
-// Build plist XML
-const resources = {
-  LPic:   [makeRes(5000, 'English', lpicData)],
-  'RTF ': [makeRes(5000, 'English SLA', rtfData)],
-  'STR#': [makeRes(5000, 'English', strData)],
-  TEXT:   [makeRes(5000, 'English SLA', textData)],
-  styl:   [makeRes(5000, 'English', stylData)],
-};
-
-// Simple plist builder (avoid npm dependency)
-function toPlist(obj) {
-  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-  xml += '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n';
-  xml += '<plist version="1.0">\n<dict>\n';
-  for (const [key, arr] of Object.entries(obj)) {
-    xml += `\t<key>${key}</key>\n\t<array>\n`;
-    for (const item of arr) {
-      xml += '\t\t<dict>\n';
-      for (const [k, v] of Object.entries(item)) {
-        xml += `\t\t\t<key>${k}</key>\n`;
-        if (k === 'Data') xml += `\t\t\t<data>\n\t\t\t${v}\n\t\t\t</data>\n`;
-        else xml += `\t\t\t<string>${v}</string>\n`;
-      }
-      xml += '\t\t</dict>\n';
-    }
-    xml += '\t</array>\n';
-  }
-  xml += '</dict>\n</plist>\n';
-  return xml;
-}
-
-const tmpFile = path.join(os.tmpdir(), `sla-${Date.now()}.plist`);
-fs.writeFileSync(tmpFile, toPlist(resources));
-
-try {
-  execSync(`/usr/bin/hdiutil udifrez "${dmgPath}" -xml "${tmpFile}"`, { stdio: 'pipe' });
-} finally {
-  fs.rmSync(tmpFile, { force: true });
-}
-NODEJS
-fi
 
 # ── Sign the DMG ──────────────────────────────────────────────────────────
 if [[ "$SIGN_ID" != "-" ]]; then
@@ -485,8 +402,7 @@ echo "  • Applications → /Applications"
 [[ -f "$ROOT/CHANGELOG.md" ]] && echo "  • CHANGELOG.md"
 [[ -f "$ROOT/LICENSE" ]]      && echo "  • LICENSE"
 echo "  • Composed volume icon (app icon on disk)"
-echo "  • Background image (Retina @2x + version stamp)"
-[[ -f "$ROOT/LICENSE" ]] && echo "  • License agreement (SLA)"
+echo "  • Background image (logo + version, Retina @2x)"
 echo ""
 echo "To open:    open '$DMG_OUT'"
 echo "To install: drag $PRODUCT_NAME to Applications"
