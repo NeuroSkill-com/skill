@@ -46,15 +46,39 @@ $ProductName = $Conf.productName
 $Version = $Conf.version
 $Identifier = $Conf.identifier
 $BinaryName = "skill.exe"
-$Binary = Join-Path $TauriDir "target/$Target/release/$BinaryName"
+$TargetReleaseDir = Join-Path $TauriDir "target/$Target/release"
+$HostReleaseDir = Join-Path $TauriDir "target/release"
+$BinaryCandidates = @(
+    Join-Path $TargetReleaseDir $BinaryName,
+    Join-Path $HostReleaseDir $BinaryName
+)
 
-if (-not (Test-Path $Binary)) {
+$Binary = $null
+$ReleaseDir = $null
+foreach ($candidate in $BinaryCandidates) {
+    if (Test-Path $candidate) {
+        $Binary = $candidate
+        $ReleaseDir = Split-Path -Parent $candidate
+        break
+    }
+}
+
+if (-not $Binary) {
     Write-Error @"
-Release binary not found at $Binary
+Release binary not found.
+Checked:
+  - $($BinaryCandidates[0])
+  - $($BinaryCandidates[1])
+
 Run first:  npx tauri build --target $Target --no-bundle
+  -or-  npx tauri build --no-bundle
   -or-  cargo build --release --target $Target --features custom-protocol
 "@
     exit 1
+}
+
+if ($Binary -eq (Join-Path $HostReleaseDir $BinaryName)) {
+    Write-Warning "Using host release binary layout at target/release/$BinaryName (no explicit Rust target output path found)."
 }
 
 Write-Host "-> Creating NSIS installer for $ProductName v$Version ($Target)"
@@ -92,7 +116,7 @@ $MakeNsis = Join-Path $NsisDir "makensis.exe"
 Write-Host "  NSIS: $MakeNsis"
 
 # ── Prepare staging directory ───────────────────────────────────────────────
-$BundleDir = Join-Path $TauriDir "target/$Target/release/bundle"
+$BundleDir = Join-Path $ReleaseDir "bundle"
 $NsisOutDir = Join-Path $BundleDir "nsis"
 $Staging = Join-Path $env:TEMP "neuroskill-nsis-staging-$(Get-Random)"
 
