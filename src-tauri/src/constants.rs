@@ -10,6 +10,19 @@
 //! All signal-processing constants here must stay in sync with their
 //! TypeScript mirrors in `src/lib/constants.ts`.
 
+// ── Onboarding ───────────────────────────────────────────────────────────────
+
+/// Canonical staged model-download order used by onboarding.
+///
+/// The frontend queries this at runtime so the sequence is configured from one
+/// backend source of truth.
+pub const ONBOARDING_MODEL_DOWNLOAD_ORDER: [&str; 4] = [
+    "zuna",
+    "kitten",
+    "neutts",
+    "llm",
+];
+
 // ── Hardware ──────────────────────────────────────────────────────────────────
 
 /// Number of EEG channels in the primary pipeline (matches Muse and Ganglion).

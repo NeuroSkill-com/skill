@@ -47,6 +47,7 @@ pub enum DownloadState {
     #[default]
     NotDownloaded,
     Downloading,
+    Paused,
     Downloaded,
     Failed,
     Cancelled,
@@ -84,6 +85,8 @@ pub struct LlmModelEntry {
     pub status_msg:  Option<String>,
     #[serde(default)]
     pub progress:    f32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub initiated_at_unix: Option<u64>,
 }
 
 impl LlmModelEntry {
@@ -289,6 +292,7 @@ pub struct DownloadProgress {
     pub status_msg: Option<String>,
     pub progress:   f32,
     pub cancelled:  bool,
+    pub pause_requested: bool,
 }
 
 // ── Resumable model downloader ────────────────────────────────────────────────
@@ -349,6 +353,7 @@ pub fn download_file(
         p.status_msg = Some(format!("Connecting to HuggingFace ({repo_id})…"));
         p.progress   = 0.0;
         p.cancelled  = false;
+        p.pause_requested = false;
     }
     if progress.lock().unwrap().cancelled {
         let mut p = progress.lock().unwrap();
@@ -565,6 +570,11 @@ pub fn download_file(
         ));
         if p.cancelled {
             // Leave .incomplete on disk — it is the resume point.
+            if p.pause_requested {
+                p.state      = DownloadState::Paused;
+                p.status_msg = Some("Paused — resume to continue.".into());
+                return Err("paused".into());
+            }
             p.state      = DownloadState::Cancelled;
             p.status_msg = Some("Cancelled — will resume next time.".into());
             return Err("cancelled".into());

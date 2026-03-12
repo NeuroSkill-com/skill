@@ -286,9 +286,17 @@ pub async fn open_onboarding_window(app: AppHandle) -> Result<(), String> {
     tauri::WebviewWindowBuilder::new(&app, "onboarding",
         tauri::WebviewUrl::App("onboarding".into()))
         .title("NeuroSkill™ – Welcome")
-        .inner_size(620.0, 700.0).min_inner_size(520.0, 580.0)
+        .inner_size(680.0, 760.0).min_inner_size(560.0, 620.0)
         .resizable(true).center().build().map(|_| ()).map_err(|e| e.to_string())
 }
+
+    #[tauri::command]
+    pub fn get_onboarding_model_download_order() -> Vec<String> {
+        crate::constants::ONBOARDING_MODEL_DOWNLOAD_ORDER
+        .iter()
+        .map(|item| (*item).to_string())
+        .collect()
+    }
 
 #[tauri::command]
 pub fn complete_onboarding(app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
@@ -512,6 +520,25 @@ pub fn get_data_dir(_state: tauri::State<'_, Mutex<AppState>>) -> (String, Strin
 pub fn set_data_dir(_path: String, _app: AppHandle) -> Result<(), String> {
     // skill_dir is always ~/.skill — this command is intentionally a no-op
     Ok(())
+}
+
+#[tauri::command]
+pub fn open_skill_dir() {
+    let dir = default_skill_dir();
+    #[cfg(target_os = "macos")]
+    { let _ = std::process::Command::new("open").arg(&dir).spawn(); }
+    #[cfg(target_os = "linux")]
+    {
+        let mut launched = false;
+        if std::process::Command::new("xdg-open").arg(&dir).spawn().is_ok() {
+            launched = true;
+        }
+        if !launched {
+            let _ = std::process::Command::new("gio").arg("open").arg(&dir).spawn();
+        }
+    }
+    #[cfg(target_os = "windows")]
+    { let _ = std::process::Command::new("explorer").arg(&dir).spawn(); }
 }
 
 // ── WebSocket API status ───────────────────────────────────────────────────────

@@ -121,6 +121,12 @@ the Free Software Foundation, version 3 only. -->
         action: () => invoke("open_focus_timer_window"),
       },
       {
+        id: "open-downloads", icon: "⬇", section: t("cmdK.sectionNavigation"),
+        label: t("downloads.windowTitle"),
+        keywords: "downloads download manager llm models pause resume cancel delete progress",
+        action: () => invoke("open_downloads_window"),
+      },
+      {
         id: "open-onboarding", icon: "🧭", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openOnboarding"),
         keywords: t("cmdK.kw.onboarding"),

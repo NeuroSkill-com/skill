@@ -6,11 +6,73 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [0.0.17] — 2026-03-11
 
+### UI / Build
+
+- **Tailwind Vite parser crash in MarkdownRenderer fixed** — resolved
+  `[plugin:@tailwindcss/vite:generate:serve] Invalid declaration: Marked`
+  by refactoring `src/lib/MarkdownRenderer.svelte` to use `marked.parse(...)`
+  with a local renderer object and removing an empty local `<style>` block
+- **MarkdownRenderer regression guard** — added
+  `scripts/check-markdown-renderer.js` and wired it into `npm run check`
+  so CI/local checks fail if `MarkdownRenderer.svelte` reintroduces
+  `new Marked(...)` or a local `<style>` block
+- **MarkdownRenderer guard now runs before dev startup** — `npm run dev`,
+  `npm run build`, `npm run check:watch`, and `npm run tauri dev` now execute
+  the MarkdownRenderer guard before Vite / SvelteKit startup so Tailwind
+  parser regressions fail immediately instead of surfacing later from the
+  Tailwind Vite pipeline
+
+### Settings
+
+- **Open `skill_dir` from Settings** — Data Directory now includes an
+  **Open Folder** action that opens the fixed `~/.skill` directory in the
+  system file manager
+
+### Onboarding
+
+- **Recommended models quick setup** — onboarding now includes a one-click
+  **Download Recommended Set** action that pulls the default local stack:
+  **Qwen3.5 4B (Q4_K_M)**, **ZUNA encoder**, **NeuTTS**, and **Kitten TTS**
+- **Qwen quant preference tightened** — when selecting the onboarding LLM
+  target, the wizard now explicitly prefers **Q4_K_M** for Qwen3.5 4B
+- **Staged background downloads** — onboarding now starts the recommended
+  model downloads in sequence while the user continues setup: ZUNA →
+  KittenTTS → NeuTTS → Qwen3.5 4B (`Q4_K_M` target)
+- **Persistent footer model status** — all onboarding views now show a subtle
+  footer line with staged model setup progress, and the onboarding window was
+  enlarged slightly to keep spacing readable
+- **Download order configured in Rust constants** — the onboarding queue no
+  longer hardcodes download order in Svelte; it now reads the canonical
+  sequence from `src-tauri/src/constants.rs`
+
+### Tray / Downloads
+
+- **LLM download progress in tray icon + menu** — while model files are
+  downloading, the system tray now shows progress in the icon itself (a
+  prominent circular ring around the tray icon) and in the tray menu
+  (active download rows with filename, percent and live status text)
+- **Standalone Downloads window** — added a dedicated downloads manager
+  window (`/downloads`) that lists all model downloads at any time with
+  per-item actions: pause, resume, cancel, and delete
+- **Download initiated timestamp** — each download row now includes when it
+  was started so long-running and resumed transfers are easier to track
+- **Downloads i18n** — new downloads-window labels/status strings added to
+  all shipped locales
+- **Tray menu shortcut to Downloads** — added a direct **Downloads…** menu
+  action in the tray, opening the standalone downloads window in one click
+
 ### Dependencies
 
 - `llama-cpp-4` `0.2.6` → `0.2.7`
 
 ### CI / Build
+
+- **Linux local `tauri build` segfault avoided** — `scripts/tauri-build.js`
+  now injects `--no-bundle` by default for Linux `build` runs when the caller
+  does not explicitly pass `--bundle` / `--no-bundle`; this avoids a native
+  post-compile crash (status 139) in the Tauri CLI bundling/updater phase
+  while still producing the release binary at
+  `src-tauri/target/release/skill`
 
 - **Windows release — wrong `link.exe`** — the GitHub-hosted `windows-latest`
   runner places `C:\Program Files\Git\usr\bin` (Git for Windows' Unix `link`
@@ -228,6 +290,15 @@ All notable changes to NeuroSkill™ are documented here.
 ---
 
 ## [0.0.13] — 2026-03-10
+
+### Onboarding
+
+  background downloads automatically while the user proceeds through steps,
+  in this order: ZUNA → KittenTTS → NeuTTS → Qwen 3.5 4B (`Q4_K_M` target)
+- **Persistent footer download status** — all onboarding views now show a
+  subtle footer line with staged model setup progress (ZUNA, Kitten, NeuTTS,
+  LLM), and the onboarding window size was increased to keep spacing readable
+  with the always-visible footer indicator
 
 ### Dependencies
 

@@ -56,6 +56,7 @@
     name:        string;
     desc:        string;
     tags:        string[];
+    vendors:     string[];
     entries:     LlmModelEntry[];   // non-mmproj, in catalog order
     mmproj:      LlmModelEntry[];
     recommended: LlmModelEntry | undefined;
@@ -79,9 +80,11 @@
   let serverStatus    = $state<"stopped"|"loading"|"running">("stopped");
   let startError      = $state("");
   let showAdvanced    = $state(false);
+  let showAllQuants   = $state(false);
 
   /** The family currently shown in the detail panel. */
   let selectedFamilyId = $state<string>("");
+  let previousFamilyId = $state<string>("");
 
   let logs          = $state<LlmLogEntry[]>([]);
   let logAutoScroll = $state(true);
@@ -99,13 +102,15 @@
       if (!map.has(e.family_id)) {
         map.set(e.family_id, {
           id: e.family_id, name: e.family_name || e.family_id,
-          desc: e.family_desc || "", tags: [],
+          desc: e.family_desc || "", tags: [], vendors: [],
           entries: [], mmproj: [],
           recommended: undefined, downloaded: [],
         });
       }
       const f = map.get(e.family_id)!;
       for (const tag of e.tags) { if (!f.tags.includes(tag)) f.tags.push(tag); }
+      const vendor = vendorLabel(e.repo);
+      if (!f.vendors.includes(vendor)) f.vendors.push(vendor);
       if (e.is_mmproj) {
         f.mmproj.push(e);
       } else {
@@ -114,13 +119,23 @@
         if (e.state === "downloaded") f.downloaded.push(e);
       }
     }
-    // Downloaded families first, then alphabetical
-    return Array.from(map.values()).sort((a, b) => {
-      const aDl = a.downloaded.length > 0 ? 0 : 1;
-      const bDl = b.downloaded.length > 0 ? 0 : 1;
-      if (aDl !== bDl) return aDl - bDl;
-      return a.name.localeCompare(b.name);
-    });
+    // Sort dropdown families by model name, then by size.
+    return Array.from(map.values())
+      .filter(f => f.entries.length > 0)
+      .sort((a, b) => {
+      const byName = a.name.localeCompare(b.name);
+      if (byName !== 0) return byName;
+
+      const aSize = familyPrimarySize(a.entries);
+      const bSize = familyPrimarySize(b.entries);
+      if (aSize !== bSize) return aSize - bSize;
+
+      const aTagSize = familySizeRank(a.tags);
+      const bTagSize = familySizeRank(b.tags);
+      if (aTagSize !== bTagSize) return aTagSize - bTagSize;
+
+        return a.id.localeCompare(b.id);
+      });
   });
 
   /** Auto-select a family when the list first loads or active model changes. */
@@ -139,6 +154,38 @@
     families.find(f => f.id === selectedFamilyId) ?? families[0] ?? null
   );
 
+  const selectedFamilyHasMultipleVendors = $derived((selectedFamily?.vendors.length ?? 0) > 1);
+
+  const orderedSelectedEntries = $derived.by<LlmModelEntry[]>(() => {
+    if (!selectedFamily) return [];
+    return [...selectedFamily.entries].sort(compareModelEntries);
+  });
+
+  const selectedEntryGroups = $derived.by(() => {
+    const pinned = new Set<string>();
+    for (const entry of orderedSelectedEntries) {
+      if (
+        entry.filename === catalog.active_model ||
+        entry.recommended ||
+        entry.state === "downloaded" ||
+        entry.state === "downloading" ||
+        !entry.advanced
+      ) {
+        pinned.add(entry.filename);
+      }
+    }
+
+    return {
+      primary: orderedSelectedEntries.filter(entry => pinned.has(entry.filename)),
+      extra: orderedSelectedEntries.filter(entry => !pinned.has(entry.filename)),
+    };
+  });
+
+  const orderedSelectedMmproj = $derived.by<LlmModelEntry[]>(() => {
+    if (!selectedFamily) return [];
+    return [...selectedFamily.mmproj].sort(compareModelEntries);
+  });
+
   const hasActive = $derived(
     catalog.entries.some(e => !e.is_mmproj && e.filename === catalog.active_model && e.state === "downloaded")
   );
@@ -147,11 +194,87 @@
     catalog.entries.find(e => !e.is_mmproj && e.filename === catalog.active_model) ?? null
   );
 
+  $effect(() => {
+    if (selectedFamilyId !== previousFamilyId) {
+      showAllQuants = false;
+      previousFamilyId = selectedFamilyId;
+    }
+  });
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   function fmtSize(gb: number): string {
     if (gb < 1) return `${(gb * 1024).toFixed(0)} MB`;
     return `${gb.toFixed(1)} GB`;
+  }
+
+  function vendorLabel(repo: string): string {
+    const owner = repo.split("/")[0] ?? repo;
+    const labels: Record<string, string> = {
+      bartowski: "Bartowski",
+      unsloth: "Unsloth",
+      HauhauCS: "HauhauCS",
+    };
+    return labels[owner] ?? owner;
+  }
+
+  function familySizeRank(tags: string[]): number {
+    if (tags.includes("tiny")) return 0;
+    if (tags.includes("small")) return 1;
+    if (tags.includes("medium")) return 2;
+    if (tags.includes("large")) return 3;
+    return 4;
+  }
+
+  function familyPrimarySize(entries: LlmModelEntry[]): number {
+    const recommended = entries.find(entry => entry.recommended);
+    if (recommended) return recommended.size_gb;
+
+    const standard = entries.find(entry => !entry.advanced);
+    if (standard) return standard.size_gb;
+
+    return entries.reduce((smallest, entry) => Math.min(smallest, entry.size_gb), Number.POSITIVE_INFINITY);
+  }
+
+  function quantRank(quant: string): number {
+    const order = [
+      "Q4_K_M", "Q4_0", "Q4_K_S", "Q4_K_L", "Q4_1",
+      "Q5_K_M", "Q5_K_S", "Q5_K_L",
+      "Q6_K", "Q6_K_L",
+      "Q8_0",
+      "IQ4_XS", "IQ4_NL",
+      "Q3_K_M", "Q3_K_L", "Q3_K_XL", "Q3_K_S",
+      "IQ3_M", "IQ3_XS", "IQ3_XXS",
+      "Q2_K", "Q2_K_L",
+      "IQ2_M", "IQ2_S", "IQ2_XS", "IQ2_XXS",
+      "BF16", "F16", "F32",
+    ];
+    const index = order.indexOf(quant.toUpperCase());
+    return index === -1 ? order.length : index;
+  }
+
+  function compareModelEntries(a: LlmModelEntry, b: LlmModelEntry): number {
+    const aPin =
+      a.filename === catalog.active_model ? 0 :
+      a.state === "downloading" ? 1 :
+      a.state === "downloaded" ? 2 :
+      a.recommended ? 3 :
+      !a.advanced ? 4 : 5;
+    const bPin =
+      b.filename === catalog.active_model ? 0 :
+      b.state === "downloading" ? 1 :
+      b.state === "downloaded" ? 2 :
+      b.recommended ? 3 :
+      !b.advanced ? 4 : 5;
+
+    if (aPin !== bPin) return aPin - bPin;
+
+    const aQuant = quantRank(a.quant);
+    const bQuant = quantRank(b.quant);
+    if (aQuant !== bQuant) return aQuant - bQuant;
+
+    if (a.size_gb !== b.size_gb) return a.size_gb - b.size_gb;
+    return a.quant.localeCompare(b.quant) || a.filename.localeCompare(b.filename);
   }
 
   function tagColor(tag: string): string {
@@ -276,6 +399,10 @@
 
   async function openChat() {
     try { await invoke("open_chat_window"); } catch {}
+  }
+
+  async function openDownloads() {
+    try { await invoke("open_downloads_window"); } catch {}
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -456,8 +583,13 @@
     <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
       {t("llm.section.models")}
     </span>
-    <button onclick={refreshCache}
+    <button onclick={openDownloads}
       class="ml-auto text-[0.56rem] text-muted-foreground/60 hover:text-foreground
+             transition-colors cursor-pointer select-none">
+      {t("downloads.windowTitle")}
+    </button>
+    <button onclick={refreshCache}
+      class="text-[0.56rem] text-muted-foreground/60 hover:text-foreground
              transition-colors cursor-pointer select-none">
       {t("llm.btn.refresh")}
     </button>
@@ -510,9 +642,30 @@
                   {tagLabel(tag)}
                 </Badge>
               {/each}
-              <span class="text-[0.55rem] font-mono text-muted-foreground/40 ml-auto truncate">
-                {selectedFamily.entries[0]?.repo ?? ""}
-              </span>
+              <div class="ml-auto flex items-center gap-1 flex-wrap justify-end">
+                {#each selectedFamily.vendors as vendor}
+                  <Badge variant="outline"
+                    class="text-[0.5rem] py-0 px-1.5 border-slate-500/20 bg-slate-500/10 text-slate-600 dark:text-slate-300">
+                    {vendor}
+                  </Badge>
+                {/each}
+              </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap text-[0.58rem] text-muted-foreground/70">
+              <span>{selectedFamily.entries.length} quants</span>
+              {#if selectedFamily.downloaded.length > 0}
+                <span>{selectedFamily.downloaded.length} downloaded</span>
+              {/if}
+              {#if selectedEntryGroups.extra.length > 0}
+                <button
+                  onclick={() => showAllQuants = !showAllQuants}
+                  class="rounded-full border border-border/70 dark:border-white/[0.08] px-2 py-0.5
+                         hover:text-foreground hover:border-border transition-colors cursor-pointer">
+                  {showAllQuants
+                    ? `Hide ${selectedEntryGroups.extra.length} extra quants`
+                    : `Show ${selectedEntryGroups.extra.length} extra quants`}
+                </button>
+              {/if}
             </div>
           </div>
 
@@ -528,7 +681,7 @@
 
           <!-- Quant rows -->
           <div class="flex flex-col divide-y divide-border/40 dark:divide-white/[0.04]">
-            {#each selectedFamily.entries as entry (entry.filename)}
+            {#each [...selectedEntryGroups.primary, ...(showAllQuants ? selectedEntryGroups.extra : [])] as entry (entry.filename)}
               {@const isActive    = catalog.active_model === entry.filename}
               {@const downloading = entry.state === "downloading"}
               {@const downloaded  = entry.state === "downloaded"}
@@ -556,12 +709,21 @@
 
                   <!-- Description + status badges -->
                   <div class="flex items-center gap-1.5 min-w-0">
+                    {#if selectedFamilyHasMultipleVendors}
+                      <span class="shrink-0 rounded-full border border-slate-500/20 bg-slate-500/10
+                                   px-1.5 py-0.5 text-[0.5rem] font-semibold text-slate-600 dark:text-slate-300">
+                        {vendorLabel(entry.repo)}
+                      </span>
+                    {/if}
                     <span class="text-[0.63rem] text-muted-foreground/70 truncate">
                       {entry.description}
                     </span>
                     {#if isActive}
                       <span class="shrink-0 text-[0.52rem] font-semibold
                                    text-emerald-600 dark:text-emerald-400">✓ active</span>
+                    {:else if downloaded}
+                      <span class="shrink-0 text-[0.52rem] font-semibold
+                                   text-sky-600 dark:text-sky-400">downloaded</span>
                     {/if}
                     {#if downloading}
                       <span class="shrink-0 text-[0.52rem] text-blue-500 animate-pulse">downloading…</span>
@@ -650,7 +812,7 @@
                 Vision projector (required for image input)
               </p>
               <div class="flex flex-col gap-1.5">
-                {#each selectedFamily.mmproj as mp (mp.filename)}
+                {#each orderedSelectedMmproj as mp (mp.filename)}
                   {@const isActiveMm  = catalog.active_mmproj === mp.filename}
                   {@const mpDl        = mp.state === "downloading"}
                   {@const mpDownloaded = mp.state === "downloaded"}
@@ -658,6 +820,12 @@
                   <div class="flex flex-col gap-1">
                     <div class="flex items-center gap-2">
                       <div class="flex-1 min-w-0 flex items-center gap-1.5">
+                          {#if selectedFamilyHasMultipleVendors}
+                            <span class="shrink-0 rounded-full border border-slate-500/20 bg-slate-500/10
+                                         px-1.5 py-0.5 text-[0.5rem] font-semibold text-slate-600 dark:text-slate-300">
+                              {vendorLabel(mp.repo)}
+                            </span>
+                          {/if}
                         <span class="text-[0.68rem] font-mono text-foreground truncate">{mp.filename}</span>
                         <span class="text-[0.62rem] text-muted-foreground shrink-0">{fmtSize(mp.size_gb)}</span>
                         {#if mp.recommended}

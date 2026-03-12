@@ -1763,7 +1763,7 @@ fn llm_cancel_download(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .as_str()
         .ok_or_else(|| "llm_cancel_download: 'filename' field required".to_string())?
         .to_string();
-    crate::llm::cmds::cancel_llm_download(filename.clone(), app.state::<Mutex<AppState>>());
+    crate::llm::cmds::cancel_llm_download_with_app(filename.clone(), app, app.state::<Mutex<AppState>>());
     Ok(serde_json::json!({ "filename": filename }))
 }
 

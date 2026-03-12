@@ -1,41 +1,38 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
-  import { Marked }   from "marked";
+  import { marked, Renderer } from "marked";
   import type { Tokens } from "marked";
 
   let { content = "", pending = false }: { content: string; pending?: boolean } = $props();
 
-  // ── Local Marked instance ─────────────────────────────────────────────────
+  const renderer = new Renderer();
 
-  const md = new Marked({
-    breaks: true,
-    gfm:    true,
-    renderer: {
-      // ── Fenced code block ──────────────────────────────────────────────
-      code({ text, lang }: Tokens.Code): string {
-        const escaped = text
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
-        const label = lang
-          ? `<span class="mdr-lang">${lang}</span>`
-          : `<span></span>`;
-        return `<div class="mdr-pre">`
-          + `<div class="mdr-bar">${label}`
-          + `<button class="mdr-copy" data-copy>Copy</button></div>`
-          + `<pre><code>${escaped}</code></pre></div>`;
-      },
-      // ── Inline code ────────────────────────────────────────────────────
-      codespan({ text }: Tokens.Codespan): string {
-        return `<code class="mdr-code">${text}</code>`;
-      },
-    },
-  });
+  renderer.code = ({ text, lang }: Tokens.Code): string => {
+      const escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      const label = lang
+        ? `<span class="mdr-lang">${lang}</span>`
+        : `<span></span>`;
+      return `<div class="mdr-pre">`
+        + `<div class="mdr-bar">${label}`
+        + `<button class="mdr-copy" data-copy>Copy</button></div>`
+        + `<pre><code>${escaped}</code></pre></div>`;
+  };
+
+  renderer.codespan = ({ text }: Tokens.Codespan): string => {
+    return `<code class="mdr-code">${text}</code>`;
+  };
 
   // ── Derived HTML ──────────────────────────────────────────────────────────
 
-  const html = $derived(md.parse(content) as string);
+  const html = $derived(marked.parse(content, {
+    breaks: true,
+    gfm: true,
+    renderer,
+  }) as string);
 
   // ── Copy handler (event delegation) ──────────────────────────────────────
 
@@ -56,6 +53,3 @@
     class="inline-block w-0.5 h-[1em] bg-foreground/70 animate-pulse ml-0.5 align-middle"
   ></span>{/if}
 </div>
-
-<style>
-</style>

@@ -31,6 +31,14 @@ import { tmpdir } from "os";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 
+function runMarkdownRendererGuard() {
+  console.log("→ checking MarkdownRenderer.svelte guard …");
+  execSync("node scripts/check-markdown-renderer.js", {
+    cwd: root,
+    stdio: "inherit",
+  });
+}
+
 const isMac = platform() === "darwin";
 const isWin = platform() === "win32";
 
@@ -49,6 +57,8 @@ if (!needsEspeak) {
   execSync(cmd, { cwd: root, stdio: "inherit" });
   process.exit(0);
 }
+
+runMarkdownRendererGuard();
 
 // ── Parse --target from subArgs ───────────────────────────────────────────────
 let explicitTarget = null;
@@ -275,6 +285,28 @@ if (isMingwTarget) {
     platformFlags = [...platformFlags, "--features", "llm-vulkan"];
     console.log(
       "→ Linux: injecting --features llm-vulkan (Vulkan GPU offloading for LLM)"
+    );
+  }
+
+  // ── Linux: skip Tauri bundling for default local builds ───────────────────
+  //
+  // This project ships with `bundle.targets: ["app"]`, which is macOS-only.
+  // On Linux, `tauri build` still compiles successfully, then enters the
+  // post-build bundle/updater-artifact path and can crash the Tauri CLI with a
+  // native segmentation fault right after printing "Built application at:".
+  //
+  // `--no-bundle` keeps local Linux builds stable by stopping after the Rust
+  // binary is produced. Callers can still opt into explicit bundling by passing
+  // `--bundle ...` (or their own `--no-bundle`) themselves.
+  if (
+    subcommand === "build" &&
+    !subArgs.includes("--bundle") &&
+    !subArgs.includes("--no-bundle")
+  ) {
+    platformFlags = [...platformFlags, "--no-bundle"];
+    console.log(
+      "→ Linux: injecting --no-bundle (avoids post-build bundling segfault; " +
+      "binary still produced under src-tauri/target/release)"
     );
   }
 }

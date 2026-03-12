@@ -510,6 +510,7 @@ const en: Record<string, string> = {
   "settings.dataDirDesc":             "Where all EEG data, embeddings, labels, and logs are stored.",
   "settings.dataDirCurrent":          "Current: {path}",
   "settings.dataDirDefault":          "Default: {path}",
+  "settings.dataDirOpen":             "Open Folder",
   "settings.dataDirChoose":           "Change…",
   "settings.dataDirReset":            "Reset to Default",
   "settings.dataDirRestart":          "Restart required for changes to take effect.",
@@ -601,6 +602,8 @@ const en: Record<string, string> = {
   "label.contextLabel":       "Context",
   "label.contextHint":        "optional — paste any notes, text, or context",
   "label.contextPlaceholder": "Paste any relevant context here — article text, notes, task description, environment…",
+  "label.previousLabels":  "Previous labels",
+  "label.previousHint":    "↑/↓ to cycle",
   "label.saveLabel":      "Save Label",
 
   // ── Search ───────────────────────────────────────────────────────────────
@@ -1752,6 +1755,7 @@ const en: Record<string, string> = {
   "onboarding.step.bluetooth":    "Bluetooth",
   "onboarding.step.fit":          "Fit Check",
   "onboarding.step.calibration":  "Calibration",
+  "onboarding.step.models":       "Models",
   "onboarding.step.tray":         "Tray",
   "onboarding.step.done":         "Done",
 
@@ -1760,6 +1764,7 @@ const en: Record<string, string> = {
   "onboarding.bluetoothHint":     "Connect your BCI device",
   "onboarding.fitHint":           "Check sensor contact quality",
   "onboarding.calibrationHint":   "Run a quick calibration session",
+  "onboarding.modelsHint":        "Download recommended local AI models",
 
   "onboarding.bluetoothTitle":    "Connect Your BCI Device",
   "onboarding.bluetoothBody":     "Turn on your BCI device (Muse or OpenBCI) and wear it. {app} will scan for nearby devices and connect automatically.",
@@ -1792,6 +1797,21 @@ const en: Record<string, string> = {
   "onboarding.openCalibration":   "Open Calibration",
   "onboarding.calibrationNeedsBt": "Connect your headset first to run calibration.",
   "onboarding.calibrationSkip":   "You can skip this and calibrate later from the tray menu or settings.",
+
+  "onboarding.modelsTitle":       "Download Recommended Models",
+  "onboarding.modelsBody":        "For the best local experience, download these defaults now: Qwen3.5 4B (Q4_K_M), ZUNA encoder, NeuTTS, and Kitten TTS.",
+  "onboarding.models.downloadAll": "Download Recommended Set",
+  "onboarding.models.download":   "Download",
+  "onboarding.models.downloading": "Downloading…",
+  "onboarding.models.downloaded": "Downloaded",
+  "onboarding.models.qwenTitle":  "Qwen3.5 4B (Q4_K_M)",
+  "onboarding.models.qwenDesc":   "Recommended chat model. Uses Q4_K_M for the best quality/speed balance on most laptops.",
+  "onboarding.models.zunaTitle":  "ZUNA EEG Encoder",
+  "onboarding.models.zunaDesc":   "Needed for EEG embeddings, semantic history, and downstream brain-state analytics.",
+  "onboarding.models.neuttsTitle": "NeuTTS (Nano Q4)",
+  "onboarding.models.neuttsDesc": "Recommended multilingual voice engine with better quality and cloning support.",
+  "onboarding.models.kittenTitle": "Kitten TTS",
+  "onboarding.models.kittenDesc": "Lightweight fast voice backend, useful as a quick fallback and for low-resource systems.",
 
   "onboarding.trayTitle":         "Find the App in Your Tray",
   "onboarding.trayBody":          "{app} runs quietly in the background. After setup, the icon in your menu bar (macOS) or system tray (Windows/Linux) is your entry point back into the app.",
@@ -2499,6 +2519,24 @@ const en: Record<string, string> = {
 
   "llm.endpoints.title":                "OpenAI-compatible endpoints",
   "llm.endpoints.hint":                 "All endpoints are served on the same port as the WebSocket / REST API.",
+
+  // ── Downloads window ─────────────────────────────────────────────────────
+  "downloads.windowTitle":              "Downloads",
+  "downloads.subtitle":                 "Manage active and completed model downloads.",
+  "downloads.loading":                  "Loading downloads…",
+  "downloads.empty":                    "No downloads yet.",
+  "downloads.initiatedAt":              "Initiated",
+  "downloads.initiatedUnknown":         "Unknown",
+  "downloads.pause":                    "Pause",
+  "downloads.resume":                   "Resume",
+  "downloads.cancel":                   "Cancel",
+  "downloads.delete":                   "Delete",
+  "downloads.status.notDownloaded":     "Not downloaded",
+  "downloads.status.downloading":       "Downloading…",
+  "downloads.status.paused":            "Paused",
+  "downloads.status.downloaded":        "Downloaded",
+  "downloads.status.failed":            "Failed",
+  "downloads.status.cancelled":         "Cancelled",
 
   // ── Help: Permissions FAQ entries ─────────────────────────────────────────
   "helpFaq.q51":  "Why does {app} ask for Accessibility permission on macOS?",

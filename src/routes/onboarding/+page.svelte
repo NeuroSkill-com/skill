@@ -37,12 +37,42 @@ the Free Software Foundation, version 3 only. -->
     auto_start: boolean;
     last_calibration_utc: number | null;
   }
+  type DownloadState = "not_downloaded"|"downloading"|"downloaded"|"failed"|"cancelled";
+  interface LlmModelEntry {
+    filename: string;
+    quant: string;
+    family_id: string;
+    family_name: string;
+    is_mmproj: boolean;
+    state: DownloadState;
+    progress: number;
+  }
+  interface LlmCatalogLite {
+    entries: LlmModelEntry[];
+    active_model: string;
+    active_mmproj: string;
+  }
+  interface EegModelStatusLite {
+    weights_found: boolean;
+    downloading_weights: boolean;
+    download_progress: number;
+    download_status_msg: string | null;
+  }
+  interface NeuttsConfig {
+    enabled: boolean;
+    backbone_repo: string;
+    gguf_file: string;
+    voice_preset: string;
+    ref_wav_path: string;
+    ref_text: string;
+  }
+  type OnboardingModelKey = "zuna" | "kitten" | "neutts" | "llm";
   type CalPhase = "idle" | "action" | "break" | "done";
   interface Phase { kind: CalPhase; actionIndex: number; loop: number; }
 
   // ── Steps ──────────────────────────────────────────────────────────────────
-  type Step = "welcome" | "bluetooth" | "fit" | "calibration" | "tray" | "done";
-  const STEPS: Step[] = ["welcome", "bluetooth", "fit", "calibration", "tray", "done"];
+  type Step = "welcome" | "bluetooth" | "fit" | "calibration" | "models" | "tray" | "done";
+  const STEPS: Step[] = ["welcome", "bluetooth", "fit", "calibration", "models", "tray", "done"];
 
   let step    = $state<Step>("welcome");
   let stepIdx = $derived(STEPS.indexOf(step));
@@ -73,6 +103,56 @@ the Free Software Foundation, version 3 only. -->
   let ttsReady     = $state(false);
   let ttsDlLabel   = $state("");
   let unlistenTts: UnlistenFn | null = null;
+  let modelsTimer: ReturnType<typeof setInterval> | null = null;
+
+  // ── Model download step state ─────────────────────────────────────────────
+  let qwenTarget      = $state<LlmModelEntry | null>(null);
+  let zunaStatus      = $state<EegModelStatusLite | null>(null);
+  let modelLoadError  = $state("");
+  let ttsActionBusy   = $state(false);
+  let neuttsDlState   = $state<"idle"|"downloading"|"ready"|"error">("idle");
+  let kittenDlState   = $state<"idle"|"downloading"|"ready"|"error">("idle");
+  let neuttsDlError   = $state("");
+  let kittenDlError   = $state("");
+  let bundleBusy      = $state(false);
+  let onboardingDownloadOrder = $state<OnboardingModelKey[]>(["zuna", "kitten", "neutts", "llm"]);
+  type AutoModelStage = OnboardingModelKey | "done";
+  let autoModelStage      = $state<AutoModelStage>("zuna");
+  let autoModelInFlight   = $state(false);
+  let autoModelsStarted   = $state(false);
+
+  const qwenIsDownloading = $derived(qwenTarget?.state === "downloading");
+  const qwenIsDownloaded  = $derived(qwenTarget?.state === "downloaded");
+  const qwenProgressPct   = $derived(((qwenTarget?.progress ?? 0) * 100));
+  const zunaIsDownloading = $derived(zunaStatus?.downloading_weights ?? false);
+  const zunaIsDownloaded  = $derived(zunaStatus?.weights_found ?? false);
+  const zunaProgressPct   = $derived(((zunaStatus?.download_progress ?? 0) * 100));
+  const allRecommendedReady = $derived(
+    qwenIsDownloaded && zunaIsDownloaded &&
+    neuttsDlState === "ready" && kittenDlState === "ready"
+  );
+
+  const footerModelStatus = $derived.by(() => {
+    const fmt = (name: string, ready: boolean, downloading: boolean, pct: number, hasError: boolean) => {
+      if (ready) return `${name} ✓`;
+      if (hasError) return `${name} ⚠`;
+      if (downloading) return `${name} ${Math.round(Math.max(0, Math.min(100, pct)))}%`;
+      return `${name} ○`;
+    };
+
+    const stagePart = (stage: OnboardingModelKey) => {
+      if (stage === "zuna") return fmt("ZUNA", zunaIsDownloaded, zunaIsDownloading, zunaProgressPct, false);
+      if (stage === "kitten") return fmt("Kitten", kittenDlState === "ready", kittenDlState === "downloading", 0, kittenDlState === "error");
+      if (stage === "neutts") return fmt("NeuTTS", neuttsDlState === "ready", neuttsDlState === "downloading", 0, neuttsDlState === "error");
+      return fmt("LLM", qwenIsDownloaded, qwenIsDownloading, qwenProgressPct, false);
+    };
+    const parts = onboardingDownloadOrder.map(stagePart);
+
+    if (allRecommendedReady) {
+      return `Model setup complete • ${parts.join(" • ")}`;
+    }
+    return `Model setup • ${parts.join(" • ")}`;
+  });
 
   const calProgressPct = $derived(
     calTotal > 0 ? ((calTotal - calCountdown) / calTotal) * 100 : 0
@@ -116,6 +196,173 @@ the Free Software Foundation, version 3 only. -->
   }
   function ttsSpeak(text: string): void {
     invoke("tts_speak", { text }).catch(() => {});
+  }
+
+  // ── Model download helpers ────────────────────────────────────────────────
+  function pickQwenTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
+    const family = entries.filter((entry) =>
+      !entry.is_mmproj && (
+        entry.family_id === "qwen35-4b" || /qwen3\.5\s*4b/i.test(entry.family_name)
+      )
+    );
+    if (!family.length) return null;
+
+    const byQuant = (q: string) =>
+      family.find((entry) => entry.quant.toUpperCase() === q);
+
+    return (
+      byQuant("Q4_K_M") ??
+      byQuant("Q4_0") ??
+      family.find((entry) => entry.quant.toUpperCase().startsWith("Q4")) ??
+      family.find((entry) => entry.state === "downloaded") ??
+      family[0]
+    );
+  }
+
+  async function refreshModelDownloads() {
+    try {
+      const [catalog, eeg] = await Promise.all([
+        invoke<LlmCatalogLite>("get_llm_catalog"),
+        invoke<EegModelStatusLite>("get_eeg_model_status"),
+      ]);
+      qwenTarget = pickQwenTarget(catalog.entries);
+      zunaStatus = eeg;
+      modelLoadError = "";
+    } catch (e) {
+      modelLoadError = String(e);
+    }
+  }
+
+  async function downloadQwen() {
+    if (!qwenTarget || qwenTarget.state === "downloading" || qwenTarget.state === "downloaded") return;
+    await invoke("download_llm_model", { filename: qwenTarget.filename });
+    await refreshModelDownloads();
+  }
+
+  async function downloadZuna() {
+    if (zunaStatus?.downloading_weights || zunaStatus?.weights_found) return;
+    await invoke("trigger_weights_download");
+    await refreshModelDownloads();
+  }
+
+  async function downloadTtsBackend(target: "neutts" | "kitten") {
+    if (ttsActionBusy) return;
+    ttsActionBusy = true;
+    if (target === "neutts") {
+      neuttsDlState = "downloading";
+      neuttsDlError = "";
+    } else {
+      kittenDlState = "downloading";
+      kittenDlError = "";
+    }
+
+    let previous: NeuttsConfig | null = null;
+    try {
+      previous = await invoke<NeuttsConfig>("get_neutts_config");
+      const nextCfg: NeuttsConfig = target === "neutts"
+        ? {
+            ...previous,
+            enabled: true,
+            backbone_repo: "neuphonic/neutts-nano-q4-gguf",
+            gguf_file: "",
+            voice_preset: previous.voice_preset || "jo",
+          }
+        : { ...previous, enabled: false };
+
+      await invoke("set_neutts_config", { config: nextCfg });
+      await invoke("tts_init");
+
+      if (target === "neutts") neuttsDlState = "ready";
+      else kittenDlState = "ready";
+    } catch (e) {
+      if (target === "neutts") {
+        neuttsDlState = "error";
+        neuttsDlError = String(e);
+      } else {
+        kittenDlState = "error";
+        kittenDlError = String(e);
+      }
+    } finally {
+      if (previous) {
+        invoke("set_neutts_config", { config: previous }).catch(() => {});
+      }
+      ttsActionBusy = false;
+    }
+  }
+
+  async function downloadRecommendedBundle() {
+    if (bundleBusy) return;
+    bundleBusy = true;
+    modelLoadError = "";
+    try {
+      await refreshModelDownloads();
+      for (const stage of onboardingDownloadOrder) {
+        if (stage === "zuna") {
+          if (!zunaIsDownloaded && !zunaIsDownloading) await downloadZuna();
+        } else if (stage === "kitten") {
+          if (kittenDlState !== "ready") await downloadTtsBackend("kitten");
+        } else if (stage === "neutts") {
+          if (neuttsDlState !== "ready") await downloadTtsBackend("neutts");
+        } else if (!qwenIsDownloaded && !qwenIsDownloading) {
+          await downloadQwen();
+        }
+      }
+      await refreshModelDownloads();
+    } catch (e) {
+      modelLoadError = String(e);
+    } finally {
+      bundleBusy = false;
+    }
+  }
+
+  function isStageReady(stage: OnboardingModelKey): boolean {
+    if (stage === "zuna") return zunaIsDownloaded;
+    if (stage === "kitten") return kittenDlState === "ready";
+    if (stage === "neutts") return neuttsDlState === "ready";
+    return qwenIsDownloaded;
+  }
+
+  function isStageDownloading(stage: OnboardingModelKey): boolean {
+    if (stage === "zuna") return zunaIsDownloading;
+    if (stage === "kitten") return kittenDlState === "downloading" || (ttsActionBusy && autoModelStage === "kitten");
+    if (stage === "neutts") return neuttsDlState === "downloading" || (ttsActionBusy && autoModelStage === "neutts");
+    return qwenIsDownloading;
+  }
+
+  function advanceAutoModelStage() {
+    const nextStage = onboardingDownloadOrder.find((stage) => !isStageReady(stage));
+    if (nextStage) {
+      autoModelStage = nextStage;
+    } else {
+      autoModelStage = "done";
+    }
+  }
+
+  async function driveAutoModelQueue() {
+    if (!autoModelsStarted || autoModelInFlight || autoModelStage === "done") return;
+
+    advanceAutoModelStage();
+
+    // Wait while current stage is already actively downloading.
+    if (isStageDownloading(autoModelStage)) return;
+
+    autoModelInFlight = true;
+    try {
+      if (autoModelStage === "zuna" && !zunaIsDownloaded) {
+        await downloadZuna();
+      } else if (autoModelStage === "kitten" && kittenDlState !== "ready") {
+        await downloadTtsBackend("kitten");
+      } else if (autoModelStage === "neutts" && neuttsDlState !== "ready") {
+        await downloadTtsBackend("neutts");
+      } else if (autoModelStage === "llm" && !qwenIsDownloaded && !qwenIsDownloading) {
+        await downloadQwen();
+      }
+    } catch (e) {
+      modelLoadError = String(e);
+    } finally {
+      autoModelInFlight = false;
+      advanceAutoModelStage();
+    }
   }
 
   // ── Calibration helpers ────────────────────────────────────────────────────
@@ -208,6 +455,14 @@ the Free Software Foundation, version 3 only. -->
 
     // Load default calibration profile for inline calibration
     try {
+      const order = await invoke<string[]>("get_onboarding_model_download_order");
+      const valid = order.filter((stage): stage is OnboardingModelKey =>
+        stage === "zuna" || stage === "kitten" || stage === "neutts" || stage === "llm"
+      );
+      if (valid.length) onboardingDownloadOrder = valid;
+    } catch {}
+
+    try {
       calProfile = await invoke<CalibrationProfile | null>("get_active_calibration");
       if (!calProfile) {
         const profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
@@ -223,6 +478,11 @@ the Free Software Foundation, version 3 only. -->
       }
     );
     invoke("tts_init").catch(() => {});
+
+    await refreshModelDownloads();
+    autoModelsStarted = true;
+    void driveAutoModelQueue();
+    modelsTimer = setInterval(() => { refreshModelDownloads(); }, 2000);
   });
   onDestroy(async () => {
     unsubs.forEach((u) => u());
@@ -231,6 +491,20 @@ the Free Software Foundation, version 3 only. -->
       calRunning = false;
       await emitCalEvent("calibration-cancelled", { loop: calPhase.loop });
     }
+    if (modelsTimer) clearInterval(modelsTimer);
+  });
+
+  $effect(() => {
+    zunaStatus;
+    qwenTarget;
+    kittenDlState;
+    neuttsDlState;
+    ttsActionBusy;
+    autoModelsStarted;
+    autoModelStage;
+
+    if (!autoModelsStarted) return;
+    void driveAutoModelQueue();
   });
 
   // ── Navigation ─────────────────────────────────────────────────────────────
@@ -293,10 +567,10 @@ the Free Software Foundation, version 3 only. -->
           {t("onboarding.welcomeBody")}
         </p>
         <div class="flex flex-col gap-1.5 w-full max-w-[300px] mt-1">
-          {#each ["bluetooth", "fit", "calibration"] as s}
+          {#each ["bluetooth", "fit", "calibration", "models"] as s}
             <div class="flex items-center gap-2.5 rounded-lg border border-border dark:border-white/[0.06]
                         bg-muted dark:bg-[#1a1a28] px-3 py-2">
-              <span class="text-base">{s === "bluetooth" ? "📡" : s === "fit" ? "🎧" : "🎯"}</span>
+              <span class="text-base">{s === "bluetooth" ? "📡" : s === "fit" ? "🎧" : s === "calibration" ? "🎯" : "⬇️"}</span>
               <div class="flex flex-col text-left">
                 <span class="text-[0.68rem] font-semibold">{t(`onboarding.step.${s}`)}</span>
                 <span class="text-[0.55rem] text-muted-foreground">{t(`onboarding.${s}Hint`)}</span>
@@ -523,6 +797,111 @@ the Free Software Foundation, version 3 only. -->
         {/if}
       </div>
 
+    <!-- ════ MODELS ══════════════════════════════════════════════════════════ -->
+    {:else if step === "models"}
+      <div class="flex flex-col items-center gap-3 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
+        <span class="text-3xl">⬇️</span>
+        <h2 class="text-[0.95rem] font-bold">{t("onboarding.modelsTitle")}</h2>
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[340px]">
+          {t("onboarding.modelsBody")}
+        </p>
+
+        <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+          <CardContent class="px-3 py-3 flex flex-col gap-3">
+            <div class="flex justify-end">
+              <Button size="sm" class="h-7 text-[0.62rem] px-3"
+                      onclick={downloadRecommendedBundle}
+                      disabled={bundleBusy || allRecommendedReady || ttsActionBusy}>
+                {allRecommendedReady
+                  ? t("onboarding.models.downloaded")
+                  : bundleBusy
+                    ? t("onboarding.models.downloading")
+                    : t("onboarding.models.downloadAll")}
+              </Button>
+            </div>
+
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">🤖</span>
+                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.qwenTitle")}</span>
+                <span class="text-[0.56rem] text-emerald-600 dark:text-emerald-400 ml-auto">
+                  {qwenTarget ? qwenTarget.quant : "Q4"}
+                </span>
+              </div>
+              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.qwenDesc")}</p>
+              {#if qwenIsDownloading}
+                <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300" style="width:{qwenProgressPct.toFixed(1)}%"></div>
+                </div>
+              {/if}
+              <div class="flex justify-end">
+                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={downloadQwen}
+                        disabled={qwenIsDownloaded || qwenIsDownloading || !qwenTarget}>
+                  {qwenIsDownloaded ? t("onboarding.models.downloaded") : qwenIsDownloading ? t("onboarding.models.downloading") : t("onboarding.models.download")}
+                </Button>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">🧠</span>
+                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.zunaTitle")}</span>
+              </div>
+              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.zunaDesc")}</p>
+              {#if zunaIsDownloading}
+                <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                  <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300" style="width:{zunaProgressPct.toFixed(1)}%"></div>
+                </div>
+              {/if}
+              <div class="flex justify-end">
+                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={downloadZuna}
+                        disabled={zunaIsDownloaded || zunaIsDownloading}>
+                  {zunaIsDownloaded ? t("onboarding.models.downloaded") : zunaIsDownloading ? t("onboarding.models.downloading") : t("onboarding.models.download")}
+                </Button>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">🗣️</span>
+                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.neuttsTitle")}</span>
+              </div>
+              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.neuttsDesc")}</p>
+              {#if neuttsDlState === "error" && neuttsDlError}
+                <p class="text-[0.55rem] text-destructive leading-relaxed">{neuttsDlError}</p>
+              {/if}
+              <div class="flex justify-end">
+                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={() => downloadTtsBackend("neutts")}
+                        disabled={ttsActionBusy || neuttsDlState === "ready"}>
+                  {neuttsDlState === "ready" ? t("onboarding.models.downloaded") : neuttsDlState === "downloading" ? (ttsDlLabel || t("onboarding.models.downloading")) : t("onboarding.models.download")}
+                </Button>
+              </div>
+            </div>
+
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">🐱</span>
+                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.kittenTitle")}</span>
+              </div>
+              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.kittenDesc")}</p>
+              {#if kittenDlState === "error" && kittenDlError}
+                <p class="text-[0.55rem] text-destructive leading-relaxed">{kittenDlError}</p>
+              {/if}
+              <div class="flex justify-end">
+                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={() => downloadTtsBackend("kitten")}
+                        disabled={ttsActionBusy || kittenDlState === "ready"}>
+                  {kittenDlState === "ready" ? t("onboarding.models.downloaded") : kittenDlState === "downloading" ? (ttsDlLabel || t("onboarding.models.downloading")) : t("onboarding.models.download")}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {#if modelLoadError}
+          <p class="text-[0.56rem] text-destructive/90 max-w-[340px] leading-relaxed">{modelLoadError}</p>
+        {/if}
+      </div>
+
     <!-- ════ TRAY ════════════════════════════════════════════════════════════ -->
     {:else if step === "tray"}
       <div class="flex flex-col items-center gap-4 pt-3 text-center" in:fly={{ x: 30, duration: 200 }}>
@@ -629,6 +1008,13 @@ the Free Software Foundation, version 3 only. -->
         {step === "welcome" ? t("onboarding.getStarted") : t("onboarding.next")} →
       </Button>
     {/if}
+  </div>
+
+  <div class="px-4 pb-1.5 shrink-0">
+    <p class="text-[0.52rem] text-muted-foreground/75 text-center leading-tight truncate"
+       title={footerModelStatus}>
+      {footerModelStatus}
+    </p>
   </div>
 
   <DisclaimerFooter />
