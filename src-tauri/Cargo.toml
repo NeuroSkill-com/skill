@@ -33,6 +33,22 @@ default    = ["tts-kitten", "tts-neutts", "llm"]
 tts-kitten = ["dep:kittentts", "dep:rodio"]
 tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound"]
 
+# ── Frontend asset embedding ──────────────────────────────────────────────────
+#
+# `custom-protocol` tells Tauri to embed the SvelteKit build output
+# (frontendDist) into the binary and serve it via the custom:// protocol
+# at runtime.  Without this feature the binary starts in *dev mode* and
+# tries to connect to devUrl (http://localhost:1420), which is not running
+# in production.
+#
+# `npx tauri build` activates this feature automatically.  It must be
+# passed explicitly when compiling with raw `cargo build --release`
+# (as the release workflows do to sidestep Tauri CLI crashes):
+#
+#   cargo build --release --features custom-protocol
+#
+custom-protocol = ["tauri/custom-protocol"]
+
 # ── LLM feature tree ──────────────────────────────────────────────────────────
 #
 # neutts 0.0.7 migrated its backbone from llama-cpp-2 to llama-cpp-4.

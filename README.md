@@ -548,9 +548,11 @@ Pick **Medium** image (`catthehacker/ubuntu:act-latest`) on first run.
 # Dry-run: prints every command without executing anything destructive
 bash release.sh --dry-run
 
-# Build only (no signing, no upload)
-ESPEAK_LIB_DIR="$(pwd)/src-tauri/espeak-static/lib" \
-  npx tauri build --target aarch64-apple-darwin --bundles app
+# Build only (no signing, no upload; compile-only local path)
+npm run tauri:build:mac
+
+# If you explicitly need bundle artifacts on macOS, request them directly:
+# npx tauri build --target aarch64-apple-darwin --no-sign --bundles app
 
 # Full local release with real Apple credentials (skips upload)
 SKIP_UPLOAD=1 bash release.sh        # reads credentials from env.txt

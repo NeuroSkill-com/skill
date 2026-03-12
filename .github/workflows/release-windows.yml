@@ -364,9 +364,22 @@ jobs:
           & npx tauri build `
             --target x86_64-pc-windows-msvc `
             --features llm-vulkan `
+            --verbose `
             --config $configPath
 
           if ($LASTEXITCODE -ne 0) {
+            $bundleDir = Join-Path $PWD "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
+            Write-Host "[error] tauri build failed with exit code $LASTEXITCODE"
+            if (Test-Path $bundleDir) {
+              Write-Host "[diag] bundle dir snapshot: $bundleDir"
+              Get-ChildItem -Path $bundleDir -File -ErrorAction SilentlyContinue |
+                Select-Object Name, Length |
+                Format-Table -AutoSize |
+                Out-String |
+                Write-Host
+            } else {
+              Write-Host "[diag] bundle dir not found: $bundleDir"
+            }
             exit $LASTEXITCODE
           }
 
@@ -509,12 +522,12 @@ jobs:
 
           if ($env:JOB_STATUS -eq "success") {
             $color = 3066993
-            $title = "🚀 Release v${{ steps.version_meta.outputs.version }} — Windows Published"
+            $title = "Release v${{ steps.version_meta.outputs.version }} - Windows Published"
             $desc  = "Windows build published and ready to download."
             $linkLine = "**[Download v${{ steps.version_meta.outputs.version }}]($releaseUrl)**"
           } else {
             $color = 15158332
-            $title = "💥 Release v${{ steps.version_meta.outputs.version }} — Windows Failed"
+            $title = "Release v${{ steps.version_meta.outputs.version }} - Windows Failed"
             $desc  = "The Windows release build failed. Check the run for details."
             $linkLine = "**[View failed run]($runUrl)**"
           }

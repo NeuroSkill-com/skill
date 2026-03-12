@@ -14,7 +14,8 @@
  *
  * Platform behaviour for `dev` and `build`:
  *   macOS         → bash scripts/build-espeak-static.sh
- *                   `build` also adds --target aarch64-apple-darwin --no-sign
+ *                   `build` adds --target aarch64-apple-darwin --no-sign and
+ *                   defaults to --no-bundle unless caller passed bundle flags
  *   Windows MSVC  → PowerShell scripts\build-espeak-static.ps1
  *   Linux         → bash scripts/build-espeak-static.sh
  *   *-windows-gnu → bash scripts/build-espeak-static-mingw.sh
@@ -259,6 +260,26 @@ if (isMingwTarget) {
   // Release builds target Apple Silicon; dev builds use the host triple.
   if (subcommand === "build" && !explicitTarget) {
     platformFlags = ["--target", "aarch64-apple-darwin", "--no-sign"];
+  }
+
+  // ── macOS: skip Tauri bundling for default local builds ──────────────────
+  //
+  // On recent macOS runners/hosts, the Tauri CLI can crash in the
+  // post-compilation bundle/updater-artifact phase even when Rust compilation
+  // succeeds. `--no-bundle` keeps local builds reliable by stopping after the
+  // release binary is produced.
+  //
+  // Callers can still opt into explicit bundling by passing --bundle/
+  // --bundles (or their own --no-bundle) themselves.
+  if (
+    subcommand === "build" &&
+    !hasExplicitBundleArg
+  ) {
+    platformFlags = [...platformFlags, "--no-bundle"];
+    console.log(
+      "→ macOS: injecting --no-bundle (avoids post-build bundling crash; " +
+      "binary still produced under src-tauri/target)"
+    );
   }
 
 } else if (isWin) {

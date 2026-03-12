@@ -9,6 +9,7 @@ All notable changes to NeuroSkill™ are documented here.
 ### Build / Tooling
 
 - `npm run bump` now also rotates the changelog release header automatically: it preserves a fresh `## [Unreleased]` section and inserts `## [x.y.z] — YYYY-MM-DD` for the newly bumped version.
+- macOS local Tauri build stability: `scripts/tauri-build.js` now injects `--no-bundle` by default for `build` runs (while still forcing `--target aarch64-apple-darwin --no-sign`), unless the caller explicitly passes `--bundle`/`--bundles`/`--no-bundle`; this avoids post-compile bundle-phase crashes where `npx tauri build --target aarch64-apple-darwin --no-sign` fails but `--no-bundle` succeeds.
 
 ### Features
 
@@ -67,6 +68,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### CI Runtime
 
+- Windows release workflow reliability fix: `.github/workflows/release-windows.yml` now uses ASCII-safe Discord title strings in the notify step to avoid Windows PowerShell parser/encoding failures, and the Tauri build step now runs with `--verbose` plus bundle-directory diagnostics when `npx tauri build` exits non-zero (so packaging failures surface actionable logs instead of a bare exit code).
 - Linux release workflow now bypasses Tauri bundling entirely (macOS-style): it compiles frontend + Rust only, builds `.deb`/`.rpm` via `scripts/package-linux-system-bundles.sh`, builds the portable Linux tarball via `scripts/package-linux-dist.sh`, signs those outputs with `tauri signer`, and publishes updater metadata from the signed portable tarball instead of AppImage bundle artifacts.
 - CI Linux packaging scope reduced to tarball-only in `.github/workflows/ci.yml`: removed the `linux-release` job that produced `.deb`/`.rpm`/`.AppImage`, so Linux CI now only runs the portable package flow and publishes `.tar.gz` artifacts.
 - Tauri frontend bundling contract guard: added `scripts/verify-tauri-frontend-structure.js` and wired it into `npm run build` (`package.json`) so `tauri build` (via `beforeBuildCommand`) now fails fast unless the configured `src-tauri/tauri.conf.json` `build.frontendDist` path contains valid built assets (`index.html` + `_app/immutable` JS/CSS) rather than raw source files.
