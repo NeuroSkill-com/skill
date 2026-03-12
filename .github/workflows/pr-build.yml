@@ -367,8 +367,10 @@ jobs:
       # Uses sindresorhus/create-dmg via scripts/create-macos-dmg.sh which
       # signs .app, creates DMG with composed icon + Retina background + SLA,
       # signs the DMG, and notarizes with Apple.
-      - name: Install create-dmg
-        run: npm install --global create-dmg
+      - name: Install DMG dependencies
+        run: |
+          npm install --global create-dmg
+          pip3 install --quiet Pillow
 
       - name: Sign .app + Create DMG
         env:
@@ -435,6 +437,35 @@ jobs:
           echo "  TAR : $APP_TAR  ($(du -sh "$APP_TAR" | cut -f1))"
           echo "  SIG : $APP_SIG"
 
+      - name: Prepare changelog notes for preview artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.label.outputs.conf_version }}"
+          TMP_SECTION="preview-changelog-section.md"
+          PREVIEW_NOTES="preview-notes.md"
+
+          awk -v version="$VERSION" '
+            BEGIN { in_section = 0; found = 0 }
+            $0 ~ ("^## \\[" version "\\]") { in_section = 1; found = 1; next }
+            in_section && $0 ~ /^## \[/ { exit }
+            in_section { print }
+            END { if (!found) exit 2 }
+          ' CHANGELOG.md > "$TMP_SECTION" || true
+
+          {
+            echo "## Changelog"
+            echo
+            if [ -s "$TMP_SECTION" ]; then
+              cat "$TMP_SECTION"
+            else
+              echo "_No changelog section found for version $VERSION in CHANGELOG.md._"
+            fi
+          } > "$PREVIEW_NOTES"
+
+          rm -f "$TMP_SECTION"
+
       # ── Upload to GitHub Actions artifacts (14-day retention) ────────────────
       #
       # Download from:
@@ -455,6 +486,7 @@ jobs:
             ${{ steps.artifacts.outputs.dmg }}
             ${{ steps.artifacts.outputs.app_tar }}
             ${{ steps.artifacts.outputs.app_sig }}
+            preview-notes.md
 
       # ── Notify Discord of preview build result ───────────────────────────────
       - name: Notify Discord of preview build

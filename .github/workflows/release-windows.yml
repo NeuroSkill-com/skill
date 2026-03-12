@@ -423,12 +423,42 @@ jobs:
       #   *_x64-setup.exe          — NSIS installer (distribute to users)
       #   *.nsis.zip               — Tauri updater bundle
       #   *.nsis.zip.sig           — Ed25519 signature for the updater
+      - name: Prepare changelog notes for release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version_meta.outputs.version }}"
+          TMP_SECTION="release-changelog-section.md"
+          RELEASE_BODY="release-notes.md"
+
+          awk -v version="$VERSION" '
+            BEGIN { in_section = 0; found = 0 }
+            $0 ~ ("^## \\[" version "\\]") { in_section = 1; found = 1; next }
+            in_section && $0 ~ /^## \[/ { exit }
+            in_section { print }
+            END { if (!found) exit 2 }
+          ' CHANGELOG.md > "$TMP_SECTION" || true
+
+          {
+            echo "## Changelog"
+            echo
+            if [ -s "$TMP_SECTION" ]; then
+              cat "$TMP_SECTION"
+            else
+              echo "_No changelog section found for version $VERSION in CHANGELOG.md._"
+            fi
+          } > "$RELEASE_BODY"
+
+          rm -f "$TMP_SECTION"
+
       - name: Create / update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name:                ${{ steps.version_meta.outputs.tag }}
           name:                    Skill v${{ steps.version_meta.outputs.version }}
           generate_release_notes:  true
+          body_path:               release-notes.md
           fail_on_unmatched_files: true
           files: |
             ${{ steps.artifacts.outputs.nsis_exe }}
