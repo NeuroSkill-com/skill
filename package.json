@@ -29,6 +29,7 @@
     "tauri:build:mac": "node scripts/tauri-build.js build",
     "tauri:build:mac:app": "node scripts/tauri-build.js build --no-bundle && bash scripts/assemble-macos-app.sh",
     "tauri:build:mac:dmg": "node scripts/tauri-build.js build --no-bundle && bash scripts/assemble-macos-app.sh && bash scripts/create-macos-dmg.sh",
+    "tauri:build:win:nsis": "node scripts/tauri-build.js build --no-bundle && powershell -ExecutionPolicy Bypass -File scripts/create-windows-nsis.ps1",
     "skill": "npx tsx cli.ts",
     "sync:i18n": "npx tsx scripts/sync-i18n.ts",
     "sync:i18n:fix": "npx tsx scripts/sync-i18n.ts --fix",
