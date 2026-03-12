@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Build / Tooling
+
+- **Fix macOS release CI Pillow install**: added `--break-system-packages` to the `pip3 install Pillow` command in `.github/workflows/release-mac.yml` to resolve PEP 668 externally-managed-environment error on the `macos-26` runner.
+
 ## [0.0.29] — 2026-03-12
 ### Refactor
 

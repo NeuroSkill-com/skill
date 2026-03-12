@@ -325,7 +325,7 @@ jobs:
       - name: Install DMG dependencies
         run: |
           npm install --global appdmg
-          pip3 install --quiet Pillow
+          pip3 install --quiet --break-system-packages Pillow
 
       - name: Sign .app + Create DMG
         env:
