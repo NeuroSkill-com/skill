@@ -14,13 +14,13 @@ jobs:
     name: Rust — cargo check + clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -28,14 +28,6 @@ jobs:
             src-tauri/target
           key: linux-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
           restore-keys: linux-cargo-
-
-      - name: Cache apt packages
-        uses: actions/cache@v4
-        with:
-          path: /var/cache/apt/archives
-          # Bust the cache when the package list changes (workflow file edit).
-          key: apt-${{ runner.os }}-tauri-${{ hashFiles('.github/workflows/ci.yml') }}
-          restore-keys: apt-${{ runner.os }}-tauri-
 
       - name: Install Tauri system deps
         run: |
@@ -55,7 +47,7 @@ jobs:
 
       - name: Cache espeak-ng static lib
         id: cache-espeak
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             src-tauri/espeak-static
@@ -87,7 +79,7 @@ jobs:
     name: Linux — release bundle build (deb + AppImage)
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -95,12 +87,12 @@ jobs:
           targets: x86_64-unknown-linux-gnu
 
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: src-tauri
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -124,7 +116,7 @@ jobs:
 
       - name: Cache espeak-ng static lib
         id: cache-espeak
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             src-tauri/espeak-static
@@ -192,10 +184,10 @@ jobs:
     name: Frontend — check + i18n + tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -219,7 +211,7 @@ jobs:
     name: Windows — cargo check + clippy
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
       # Required for the espeak-ng static library build (lib.exe) and for
@@ -250,12 +242,12 @@ jobs:
       # Swatinem/rust-cache is used here (matching the release workflow) for
       # smarter per-crate invalidation vs the manual actions/cache approach.
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: src-tauri
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -288,7 +280,7 @@ jobs:
 
       - name: Cache espeak-ng static lib
         id: cache-espeak
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             src-tauri/espeak-static
@@ -304,7 +296,7 @@ jobs:
       # only happens once per change to the install script.  On cache hit the
       # install script detects the SDK via filesystem and skips the download.
       - name: Cache Vulkan SDK
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: C:\VulkanSDK
           key: windows-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}
@@ -419,10 +411,10 @@ jobs:
     name: Security audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -435,7 +427,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache Cargo (audit)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry

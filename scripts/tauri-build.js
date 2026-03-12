@@ -25,7 +25,7 @@ import { execSync } from "child_process";
 import { platform, cpus, arch } from "os";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { readFileSync, writeFileSync, unlinkSync } from "fs";
+import { readFileSync, writeFileSync, unlinkSync, existsSync, readdirSync } from "fs";
 import { tmpdir } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -449,9 +449,66 @@ function runTauriWithArgs(args) {
   });
 }
 
+function hasBundleArtifacts(targetTriple, bundleTarget) {
+  const normalized = bundleTarget.trim().toLowerCase();
+  const bundleRoot = explicitTarget
+    ? resolve(root, "src-tauri", "target", targetTriple, "release", "bundle")
+    : resolve(root, "src-tauri", "target", "release", "bundle");
+
+  const targetDirName = normalized;
+  const targetDir = resolve(bundleRoot, targetDirName);
+  if (!existsSync(targetDir)) return false;
+
+  const expectedPatternsByTarget = {
+    deb: [".deb"],
+    appimage: [".appimage", ".appimage.tar.gz"],
+    rpm: [".rpm"],
+    msi: [".msi"],
+    nsis: [".exe"],
+    app: [".app"],
+    dmg: [".dmg"],
+  };
+
+  const expectedSuffixes = expectedPatternsByTarget[normalized];
+  if (!expectedSuffixes) {
+    return readdirSync(targetDir).length > 0;
+  }
+
+  const entries = readdirSync(targetDir, { withFileTypes: true });
+  return entries.some((entry) => {
+    if (!entry.isFile()) return false;
+    const name = entry.name.toLowerCase();
+    return expectedSuffixes.some((suffix) => name.endsWith(suffix));
+  });
+}
+
+function runBundleTargetWithLinuxSegfaultFallback(baseArgs, bundleTarget) {
+  try {
+    runTauriWithArgs([...baseArgs, "--bundles", bundleTarget]);
+  } catch (error) {
+    const hasSegfaultExitCode = Number(error?.status) === 139;
+    const hasArtifacts = hasBundleArtifacts(explicitTarget, bundleTarget);
+
+    if (isLinux && hasSegfaultExitCode && hasArtifacts) {
+      console.warn(
+        `→ Linux: tauri build exited with 139 for --bundles ${bundleTarget}, ` +
+        "but expected bundle artifacts were found; continuing"
+      );
+      return;
+    }
+
+    throw error;
+  }
+}
+
 const finalArgs = [...platformFlags, ...subArgs];
 const bundleArg = parseExplicitBundleArg(finalArgs);
 const bundleTargets = splitBundleTargets(bundleArg?.value);
+const hasSingleBundleTarget =
+  isLinux &&
+  subcommand === "build" &&
+  bundleArg &&
+  bundleTargets.length === 1;
 const canRetryBundlesSequentially =
   isLinux &&
   subcommand === "build" &&
@@ -463,6 +520,18 @@ try {
 } catch (error) {
   const hasSegfaultExitCode = Number(error?.status) === 139;
 
+  if (hasSingleBundleTarget && hasSegfaultExitCode) {
+    const target = bundleTargets[0];
+    const hasArtifacts = hasBundleArtifacts(explicitTarget, target);
+    if (hasArtifacts) {
+      console.warn(
+        `→ Linux: tauri build exited with 139 for --bundles ${target}, ` +
+        "but expected bundle artifacts were found; treating as successful"
+      );
+      process.exit(0);
+    }
+  }
+
   if (!canRetryBundlesSequentially || !hasSegfaultExitCode) {
     throw error;
   }
@@ -473,6 +542,6 @@ try {
 
   const baseArgs = removeBundleArg(finalArgs, bundleArg);
   for (const target of bundleTargets) {
-    runTauriWithArgs([...baseArgs, "--bundles", target]);
+    runBundleTargetWithLinuxSegfaultFallback(baseArgs, target);
   }
 }

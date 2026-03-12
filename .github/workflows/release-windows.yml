@@ -20,7 +20,7 @@ jobs:
     steps:
       # ── Checkout ──────────────────────────────────────────────────────────────
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -84,13 +84,13 @@ jobs:
 
       # ── Cargo cache ───────────────────────────────────────────────────────────
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: src-tauri
 
       # ── Node.js ───────────────────────────────────────────────────────────────
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -159,7 +159,7 @@ jobs:
       # ilammy/msvc-dev-cmd before this step runs.
       - name: Cache espeak-ng static lib
         id: cache-espeak
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             src-tauri/espeak-static
@@ -190,7 +190,7 @@ jobs:
       # vulkan-1.lib without relying on the machine-level env var that the
       # installer would normally set — that var is not restored by cache restore.
       - name: Cache Vulkan SDK
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: C:\VulkanSDK
           key: windows-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.ps1') }}

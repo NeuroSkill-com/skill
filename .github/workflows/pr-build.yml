@@ -170,7 +170,7 @@ jobs:
       # ── Checkout ────────────────────────────────────────────────────────────
       # Reached only after all three security gates above have passed.
       - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@v6
         with:
           ref:         ${{ steps.meta.outputs.ref }}
           fetch-depth: 0
@@ -216,13 +216,13 @@ jobs:
           targets: aarch64-apple-darwin
 
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: src-tauri
 
       # ── Node.js ─────────────────────────────────────────────────────────────
       - name: Setup Node.js
-        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -233,7 +233,7 @@ jobs:
       # ── espeak-ng static library ─────────────────────────────────────────────
       - name: Cache espeak-ng static lib
         id: cache-espeak
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: src-tauri/espeak-static
           key: macos-arm64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
