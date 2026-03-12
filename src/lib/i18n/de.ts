@@ -2124,6 +2124,18 @@ const de: Record<string, string> = {
   "llm.inference.apiKey":            "API key (optional)",
   "llm.inference.apiKeyDesc":        "Require this Bearer token on every /v1/* request.",
   "llm.inference.apiKeyPlaceholder": "sk-…",
+
+  "llm.tools.section":     "Integrierte Tools",
+  "llm.tools.sectionDesc": "Wähle, welche lokalen Tools der LLM-Chat aufrufen darf.",
+  "llm.tools.date":        "Datum",
+  "llm.tools.dateDesc":    "Ermöglicht dem Modell, das aktuelle lokale Datum und die Uhrzeit abzurufen.",
+  "llm.tools.location":    "Standort",
+  "llm.tools.locationDesc":"Erlaubt eine ungefähre IP-basierte Abfrage von Land, Region, Stadt und Zeitzone.",
+  "llm.tools.webSearch":   "Websuche",
+  "llm.tools.webSearchDesc":"Erlaubt einfache DuckDuckGo-Sofortantwort-Suchanfragen.",
+  "llm.tools.webFetch":    "Web-Abruf",
+  "llm.tools.webFetchDesc":"Erlaubt das Abrufen des Rohtexts einer öffentlichen HTTP(S)-Seite.",
+
   "llm.mmproj.nThreads":             "Encoder threads",
   "llm.mmproj.nThreadsDesc":         "CPU threads for the vision/audio encoder.",
   "llm.mmproj.noGpu":                "CPU-only mmproj",

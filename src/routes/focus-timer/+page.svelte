@@ -14,8 +14,6 @@ the Free Software Foundation, version 3 only. -->
   import { t }           from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import { Button }             from "$lib/components/ui/button";
-  import LanguagePicker from "$lib/LanguagePicker.svelte";
-  import ThemeToggle    from "$lib/ThemeToggle.svelte";
 
   // ── Presets ────────────────────────────────────────────────────────────────
   type Preset = "pomodoro" | "deepWork" | "shortFocus" | "custom";
@@ -359,28 +357,10 @@ the Free Software Foundation, version 3 only. -->
   useWindowTitle("window.title.focusTimer");
 </script>
 
-<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden">
-
-  <!-- ── Title bar ────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2.5 px-4 pt-4 pb-3
-              border-b border-border dark:border-white/[0.07] shrink-0"
-       data-tauri-drag-region>
-    <span class="text-base pointer-events-none select-none">⏱</span>
-    <span class="text-[0.82rem] font-semibold tracking-tight select-none">
-      {t("focusTimer.title")}
-    </span>
-    {#if sessionsDone > 0}
-      <span class="ml-1 text-[0.62rem] text-muted-foreground/60 select-none">
-        {t("focusTimer.sessionCount", { n: sessionsDone })}
-      </span>
-    {/if}
-    <span class="flex-1"></span>
-    <ThemeToggle />
-    <LanguagePicker />
-  </div>
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">
 
   <!-- ── Main content ─────────────────────────────────────────────────────── -->
-  <div class="flex-1 flex flex-col items-center justify-start overflow-y-auto px-5 py-4 gap-5">
+  <div class="min-h-0 flex-1 flex flex-col items-center justify-start overflow-y-auto px-5 py-4 gap-5">
 
     <!-- Phase label -->
     <div class="text-[0.68rem] font-semibold tracking-widest uppercase

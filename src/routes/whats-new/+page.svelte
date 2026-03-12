@@ -9,7 +9,6 @@ the Free Software Foundation, version 3 only. -->
   import { invoke }         from "@tauri-apps/api/core";
   import { t }              from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
-  import ThemeToggle        from "$lib/ThemeToggle.svelte";
   import MarkdownRenderer   from "$lib/MarkdownRenderer.svelte";
   import changelogRaw       from "../../../CHANGELOG.md?raw";
 
@@ -64,26 +63,7 @@ the Free Software Foundation, version 3 only. -->
   }
 </script>
 
-<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
-
-  <!-- ── Title bar ──────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2.5 px-4 pt-4 pb-3
-              border-b border-border dark:border-white/[0.07] shrink-0"
-       data-tauri-drag-region>
-    <!-- Sparkle icon -->
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
-         class="w-3.5 h-3.5 text-violet-500 pointer-events-none shrink-0"
-         aria-hidden="true">
-      <path d="M12 3l1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5z"/>
-      <path d="M5 3l.75 2.25L8 6l-2.25.75L5 9l-.75-2.25L2 6l2.25-.75z" stroke-width="1.5"/>
-    </svg>
-    <span class="text-[0.82rem] font-semibold tracking-tight pointer-events-none">
-      {t("whatsNew.title")}
-    </span>
-    <span class="flex-1" data-tauri-drag-region></span>
-    <ThemeToggle />
-  </div>
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden select-none">
 
   {#if latest}
     <!-- ── Gradient header ──────────────────────────────────────────────────── -->
@@ -117,7 +97,7 @@ the Free Software Foundation, version 3 only. -->
     </div>
 
     <!-- ── Scrollable changelog body ──────────────────────────────────────── -->
-    <div class="wn-body flex-1 overflow-y-auto overscroll-contain px-6 py-5 text-[0.78rem]">
+    <div class="wn-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5 text-[0.78rem]">
       <MarkdownRenderer content={latest.body} />
     </div>
 

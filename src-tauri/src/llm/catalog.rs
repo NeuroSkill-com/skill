@@ -215,6 +215,20 @@ impl LlmCatalog {
         }
     }
 
+    /// Active text model entry, regardless of download state.
+    pub fn active_model_entry(&self) -> Option<&LlmModelEntry> {
+        if self.active_model.is_empty() { return None; }
+        self.entries.iter()
+            .find(|e| !e.is_mmproj && e.filename == self.active_model)
+    }
+
+    /// Active mmproj entry, regardless of download state.
+    pub fn active_mmproj_entry(&self) -> Option<&LlmModelEntry> {
+        if self.active_mmproj.is_empty() { return None; }
+        self.entries.iter()
+            .find(|e| e.is_mmproj && e.filename == self.active_mmproj)
+    }
+
     /// Local path of the active model if it is downloaded.
     pub fn active_model_path(&self) -> Option<PathBuf> {
         self.entries.iter()
@@ -232,6 +246,59 @@ impl LlmCatalog {
             .and_then(|e| e.local_path.clone())
     }
 
+    /// Whether the explicit mmproj selection matches the active text model.
+    pub fn active_mmproj_matches_active_model(&self) -> bool {
+        match (self.active_model_entry(), self.active_mmproj_entry()) {
+            (Some(model), Some(mmproj)) => model.repo == mmproj.repo,
+            _ => true,
+        }
+    }
+
+    /// Best downloaded text model for a specific repo.
+    pub fn best_downloaded_model_for_repo(&self, repo: &str) -> Option<&LlmModelEntry> {
+        fn quant_rank(quant: &str) -> usize {
+            let order = [
+                "Q4_K_M", "Q4_0", "Q4_K_S", "Q4_K_L", "Q4_1",
+                "Q5_K_M", "Q5_K_S", "Q5_K_L",
+                "Q6_K", "Q6_K_L",
+                "Q8_0",
+                "IQ4_XS", "IQ4_NL",
+                "Q3_K_M", "Q3_K_L", "Q3_K_XL", "Q3_K_S",
+                "IQ3_M", "IQ3_XS", "IQ3_XXS",
+                "Q2_K", "Q2_K_L",
+                "IQ2_M", "IQ2_S", "IQ2_XS", "IQ2_XXS",
+                "BF16", "F16", "F32",
+            ];
+            order.iter()
+                .position(|candidate| candidate.eq_ignore_ascii_case(quant))
+                .unwrap_or(order.len())
+        }
+
+        self.entries.iter()
+            .filter(|e| {
+                !e.is_mmproj
+                    && e.repo == repo
+                    && e.state == DownloadState::Downloaded
+            })
+            .min_by(|a, b| {
+                (!a.recommended)
+                    .cmp(&!b.recommended)
+                    .then_with(|| a.advanced.cmp(&b.advanced))
+                    .then_with(|| quant_rank(&a.quant).cmp(&quant_rank(&b.quant)))
+                    .then_with(|| a.size_gb.total_cmp(&b.size_gb))
+                    .then_with(|| a.filename.cmp(&b.filename))
+            })
+    }
+
+    /// Best downloaded text model that can pair with a specific mmproj file.
+    pub fn best_model_for_mmproj(&self, mmproj_filename: &str) -> Option<&LlmModelEntry> {
+        let repo = self.entries.iter()
+            .find(|e| e.is_mmproj && e.filename == mmproj_filename)?
+            .repo
+            .clone();
+        self.best_downloaded_model_for_repo(&repo)
+    }
+
     /// Find the best downloaded mmproj for the currently active model.
     ///
     /// Matches by repo (same HuggingFace repo as the active model entry).
@@ -239,9 +306,7 @@ impl LlmCatalog {
     /// Returns `None` if no compatible mmproj is downloaded.
     pub fn best_mmproj_for_active_model(&self) -> Option<&LlmModelEntry> {
         // Find the repo of the active model.
-        let active_repo = self.entries.iter()
-            .find(|e| !e.is_mmproj && e.filename == self.active_model)?
-            .repo.as_str();
+        let active_repo = self.active_model_entry()?.repo.as_str();
 
         fn quant_rank(quant: &str) -> u8 {
             match quant.to_uppercase().as_str() {

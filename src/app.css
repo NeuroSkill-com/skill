@@ -66,6 +66,11 @@
   --chart-grid:     rgba(0, 0, 0, 0.07);
   --chart-baseline: rgba(0, 0, 0, 0.12);
   --chart-label:    rgba(0, 0, 0, 0.38);
+
+  --scrollbar-thumb:       color-mix(in oklab, var(--foreground) 24%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 36%, transparent);
+  --scrollbar-track:       color-mix(in oklab, var(--background) 82%, var(--foreground) 4%);
+  --scrollbar-corner:      transparent;
 }
 
 /* ── Dark theme (night) ────────────────────────────────────────────────────── */
@@ -95,6 +100,10 @@
   --chart-grid:     rgba(255, 255, 255, 0.07);
   --chart-baseline: rgba(255, 255, 255, 0.10);
   --chart-label:    rgba(255, 255, 255, 0.25);
+
+  --scrollbar-thumb:       color-mix(in oklab, var(--foreground) 28%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklab, var(--foreground) 42%, transparent);
+  --scrollbar-track:       color-mix(in oklab, var(--background) 90%, white 6%);
 }
 
 /* ── High-contrast theme ────────────────────────────────────────────────────── */
@@ -123,6 +132,11 @@
   --chart-grid:     rgba(0, 0, 0, 0.25);
   --chart-baseline: rgba(0, 0, 0, 0.40);
   --chart-label:    rgba(0, 0, 0, 0.70);
+
+  --scrollbar-thumb:       #000000;
+  --scrollbar-thumb-hover: #000000;
+  --scrollbar-track:       #ffffff;
+  --scrollbar-corner:      #ffffff;
 }
 
 .high-contrast.dark {
@@ -150,6 +164,11 @@
   --chart-grid:     rgba(255, 255, 255, 0.30);
   --chart-baseline: rgba(255, 255, 255, 0.45);
   --chart-label:    rgba(255, 255, 255, 0.75);
+
+  --scrollbar-thumb:       #ffffff;
+  --scrollbar-thumb-hover: #ffffff;
+  --scrollbar-track:       #000000;
+  --scrollbar-corner:      #000000;
 }
 
 /* ── Indeterminate progress bar animation ───────────────────────────────────── */
@@ -161,6 +180,40 @@
 
 @layer base {
   * { @apply border-border outline-ring/50; }
+  html {
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    scrollbar-width: thin;
+  }
+
+  * {
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    scrollbar-width: thin;
+  }
+
+  *::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border: 3px solid var(--scrollbar-track);
+    border-radius: 999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: var(--scrollbar-corner);
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: "Absans", sans-serif;
@@ -215,6 +268,27 @@
   .high-contrast [class*="border-border"],
   .high-contrast [class*="divide-border"] {
     border-color: var(--border) !important;
+  }
+}
+
+@media (forced-colors: active) {
+  html,
+  * {
+    scrollbar-color: auto;
+    scrollbar-width: auto;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: Canvas;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: ButtonText;
+    border: 2px solid Canvas;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: Canvas;
   }
 }
 
@@ -410,7 +484,10 @@
   margin: 0;
 }
 
-/* Adjust main content top padding for custom titlebar (30px) */
+/* Adjust main content for custom titlebar (30px): keep total height at 100vh so
+   nothing bleeds off the bottom. */
 #main-content {
   padding-top: 30px;
+  height: 100vh;
+  box-sizing: border-box;
 }

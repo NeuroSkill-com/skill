@@ -4,8 +4,6 @@
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { Button } from "$lib/components/ui/button";
-  import ThemeToggle from "$lib/ThemeToggle.svelte";
-  import LanguagePicker from "$lib/LanguagePicker.svelte";
   import { t } from "$lib/i18n/index.svelte";
 
   type DownloadState = "not_downloaded" | "downloading" | "paused" | "downloaded" | "failed" | "cancelled";
@@ -89,18 +87,7 @@
   });
 </script>
 
-<main class="h-screen flex flex-col overflow-hidden bg-background">
-  <header class="shrink-0 px-3 py-2 border-b border-border dark:border-white/[0.07] bg-muted/30 dark:bg-white/[0.02] flex items-center justify-between">
-    <div class="flex flex-col">
-      <span class="text-[0.78rem] font-semibold text-foreground">{t("downloads.windowTitle")}</span>
-      <span class="text-[0.62rem] text-muted-foreground">{t("downloads.subtitle")}</span>
-    </div>
-    <div class="flex items-center gap-1">
-      <ThemeToggle />
-      <LanguagePicker />
-    </div>
-  </header>
-
+<main class="h-full min-h-0 flex flex-col overflow-hidden bg-background">
   <div class="shrink-0 px-3 py-2 border-b border-border dark:border-white/[0.07] bg-card">
     <div class="flex items-center justify-between text-[0.72rem]">
       <span class="font-semibold text-foreground/90">
@@ -112,7 +99,7 @@
     </div>
   </div>
 
-  <section class="flex-1 overflow-y-auto p-3">
+  <section class="min-h-0 flex-1 overflow-y-auto p-3">
     {#if loading}
       <p class="text-[0.72rem] text-muted-foreground">{t("downloads.loading")}</p>
     {:else if items.length === 0}

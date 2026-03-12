@@ -774,7 +774,7 @@ the Free Software Foundation, version 3 only. -->
   useWindowTitle("window.title.main");
 </script>
 
-<main class="h-screen overflow-y-auto p-2 flex flex-col items-center" onscroll={handleScroll}
+<main class="h-full min-h-0 overflow-y-auto p-2 flex flex-col items-center" onscroll={handleScroll}
       aria-label="Dashboard">
   <!-- GPU utilisation chart — always visible when GPU stats are available -->
   <div class="w-full max-w-[460px]">

@@ -15,8 +15,6 @@ the Free Software Foundation, version 3 only. -->
   import { t }                   from "$lib/i18n/index.svelte";
   import { useWindowTitle }      from "$lib/window-title.svelte";
   import DisclaimerFooter        from "$lib/DisclaimerFooter.svelte";
-  import LanguagePicker          from "$lib/LanguagePicker.svelte";
-  import ThemeToggle             from "$lib/ThemeToggle.svelte";
 
   // ── Electrode quality ──────────────────────────────────────────────────────
   interface MuseStatus {
@@ -368,19 +366,11 @@ the Free Software Foundation, version 3 only. -->
 
 <svelte:window onkeydown={(e) => { if (e.key === "Escape") closeWindow(); }} />
 
-<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden select-none">
 
   <!-- ── Title bar ─────────────────────────────────────────────────────────── -->
   <div class="flex items-center gap-2.5 px-4 pt-4 pb-3
-              border-b border-border dark:border-white/[0.07] shrink-0"
-       data-tauri-drag-region>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-         class="w-4 h-4 shrink-0 text-muted-foreground pointer-events-none">
-      <circle cx="12" cy="12" r="10"/>
-      <polyline points="12 6 12 12 16 14"/>
-    </svg>
-    <span class="text-[0.82rem] font-semibold tracking-tight">{t("calibration.title")}</span>
+              border-b border-border dark:border-white/[0.07] shrink-0">
     {#if running}
       <Badge variant="outline"
         class="text-[0.52rem] tracking-wide uppercase py-0 px-1.5
@@ -415,8 +405,6 @@ the Free Software Foundation, version 3 only. -->
         {t("calibration.neverCalibrated")}
       {/if}
     </span>
-    <ThemeToggle />
-    <LanguagePicker />
   </div>
 
   <!-- ── Profile selector (when idle and multiple profiles exist) ───────────── -->

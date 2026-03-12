@@ -6,14 +6,48 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+## [0.0.24] — 2026-03-12
+
+### UI
+
+- Label window titlebar spacing + vertical fit: moved the add-label window title back to the side, rendered the EEG timer as a padded centered capsule in the shared titlebar, and changed `/label` from `h-screen` to `h-full min-h-0` so the bottom action row no longer gets clipped under the custom titlebar layout
+- What's New window vertical fit fix: changed `/whats-new` root container from `h-screen` to `h-full min-h-0` and marked the changelog body as `min-h-0` so the shared custom titlebar no longer pushes the footer off-screen and the bottom `Got it` button remains visible
+ - Window vertical-fit sweep: switched the remaining titlebar-hosted route roots (`/`, `/about`, `/api`, `/calibration`, `/chat`, `/compare`, `/downloads`, `/focus-timer`, `/help`, `/history`, `/labels`, `/onboarding`, `/session`, `/settings`) from viewport height to parent-constrained height, adding `min-h-0` to the key scroll containers where needed so shared custom-titlebar layouts no longer clip bottom content or footers
+- Search window titlebar center alignment: moved the mode segmented control to a true centered position in the shared titlebar (absolute center anchoring), increased control width budget, and tuned spacing/typography so all mode buttons render fully and stay visually aligned
+- Label window titlebar timer: moved the live EEG-window elapsed timer from the add-label page header into the shared `CustomTitleBar` center area via a new `label-titlebar.svelte.ts` reactive store, removing the duplicate in-content strip while keeping the timer live
+- Search window vertical fit fix: changed `/search` root container from `h-screen` to `h-full min-h-0` so it honors the `#main-content` constrained height under the custom 30px titlebar and no longer overflows/clips at the bottom
+- Search window titlebar button rendering fix: updated the shared `CustomTitleBar` search layout to be shrink-safe (`search-window-head` + `search-mode-switch` now flex responsively, title truncates with ellipsis, and mode buttons use equal-width flex sizing) so all search mode buttons render reliably instead of clipping on narrower windows/locales
+- History window titlebar consolidation: moved clock icon, title text, day pagination (prev/next + label + position indicator), compare toggle, labels toggle, and reload button from the in-page header into the shared custom titlebar via a new `history-titlebar.svelte.ts` reactive store and callbacks; the in-page header strip is removed and the history page retains only the labels browser panel and scroll content
+- Help window titlebar consolidation: moved the search input, version badge, license label, ThemeToggle, and LanguagePicker from the in-page top bar into the shared custom titlebar via a new `help-search-state.svelte.ts` reactive store; the redundant in-page header strip is removed and the search state is shared between the help page and the titlebar seamlessly
+- Fixed all windows being clipped at the bottom by exactly the custom titlebar height (30 px): `#main-content` now uses `box-sizing: border-box; height: 100vh` so the `padding-top: 30px` offset is contained within the viewport height rather than overflowing beneath the body's `overflow: hidden` boundary
+- Settings window titlebar consolidation: moved the Settings title label, Help button, ThemeToggle, and LanguagePicker from the in-page top bar into the shared custom titlebar; the redundant in-page header strip is removed and the Help button is shown in the titlebar actions whenever the settings window is active
+- API Status window: moved title and Refresh button from the in-page header into the shared custom titlebar; the title bar now shows the window title on all platforms, with a refresh icon button next to ThemeToggle and LanguagePicker; the in-page header section is removed
+- Search window titlebar alignment: moved Search title and mode toggle buttons (EEG/Text/Interactive) from the in-content header into the shared custom titlebar, with mode switching synchronized between the titlebar and `/search` content
+- Updated the shared custom titlebar to show each non-main window title in the titlebar itself and to scope main-only titlebar actions (label/history) to the main window; non-main windows now keep lightweight titlebar controls (theme/language + window controls)
+- Removed duplicate in-content title bars from all secondary windows (about, compare, whats-new, focus-timer, session, labels, search, history, calibration, label, onboarding, chat); functional header controls (mode buttons, day pagination, compare toggle, recording badge, elapsed timer, TTS indicator) are preserved in-place while redundant title text, drag regions, and theme/language buttons are removed
+- Added global themed scrollbar styling for app scroll containers so Windows windows no longer show default system scrollbars; includes light/dark variants and automatic fallback to system colors in forced-colors mode
+
+### LLM
+
+- Added i18n translations for all LLM built-in tool toggle labels and descriptions across all five supported locales (en, de, fr, he, uk); `TOOL_ROWS` in `LlmTab.svelte` is now a reactive `$derived` so labels update instantly on language change
+- Added per-tool allow-list settings for LLM chat in Settings → LLM; `date`, `location`, `web_search`, and `web_fetch` can now be enabled or disabled individually, and running chat requests pick up the updated tool allow-list immediately
+- Multimodal projector selection now stays attached to a compatible downloaded text model instead of behaving like a standalone model; selecting an `mmproj` can auto-pair to a matching downloaded LLM, incompatible projector selections are cleared when the base model changes, and startup now honors the resolved projector path when autoload is enabled
+- Added simple built-in tool-calling support in `POST /v1/chat/completions` with a bounded execution loop for `date`, `location`, `web_search`, and `web_fetch`
+- Wired Tauri IPC chat streaming (`chat_completions_ipc`) to the same tool-calling loop so the in-app chat window supports the same built-in tools
+- IPC chat now emits incremental visible `delta` chunks while tool-calling runs, using a stream sanitizer that suppresses `[TOOL_CALL]...[/TOOL_CALL]` blocks from the UI
+- Added tool schema injection and `[TOOL_CALL]...[/TOOL_CALL]` handling so models can call tools and continue generation with tool results
+- Added basic external fetch/search integrations (`ipwho.is`, DuckDuckGo instant answer API, and HTTP(S) page fetch) with bounded payload truncation for safe prompt context
+
 ### Dependencies
 
 - `llama-cpp-4` `0.2.7` → `0.2.9` (with matching `llama-cpp-sys-4` lockfile update)
 
 ### Build / CI
 
+- Windows release workflow stability fix: `.github/workflows/release-windows.yml` now generates the temporary Tauri `--config` JSON via PowerShell (`ConvertTo-Json`) instead of `bash` + `python3`, removing a fragile command-path dependency that could fail the post-compile build step with exit `127` on `windows-latest`
 - Linux release artifact generation fixed: `scripts/tauri-build.js` now treats both `--bundle` and `--bundles` (including `--flag=value`) as explicit bundling requests, preventing accidental `--no-bundle` injection that skipped `.deb`/`.AppImage` outputs in CI
 - Added explicit Linux bundle-flag guard steps in CI and release workflows to fail fast if `tauri:build:linux:x64` drops `--bundles deb,appimage` or if `scripts/tauri-build.js` stops recognizing `--bundles`
+- Added post-build Linux bundle directory sanity checks in CI and release workflows to fail early when `bundle/deb` or `bundle/appimage` is missing
 
 ## [0.0.23] — 2026-03-12
 

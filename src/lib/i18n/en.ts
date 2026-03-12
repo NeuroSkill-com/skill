@@ -2429,6 +2429,17 @@ const en: Record<string, string> = {
   "llm.inference.apiKeyDesc":           "Require this Bearer token on every /v1/* request. Leave empty for open access.",
   "llm.inference.apiKeyPlaceholder":    "sk-…",
 
+  "llm.tools.section":                  "Built-in tools",
+  "llm.tools.sectionDesc":              "Choose which local tools the LLM chat is allowed to call.",
+  "llm.tools.date":                     "Date",
+  "llm.tools.dateDesc":                 "Allow the chat model to read the current local date/time metadata.",
+  "llm.tools.location":                 "Location",
+  "llm.tools.locationDesc":             "Allow approximate IP-based country, region, city, and timezone lookup.",
+  "llm.tools.webSearch":                "Web search",
+  "llm.tools.webSearchDesc":            "Allow simple DuckDuckGo instant-answer web search queries.",
+  "llm.tools.webFetch":                 "Web fetch",
+  "llm.tools.webFetchDesc":             "Allow fetching the raw text body of a public HTTP(S) page.",
+
   "llm.mmproj.nThreads":                "Encoder threads",
   "llm.mmproj.nThreadsDesc":            "CPU threads for the vision/audio encoder.",
   "llm.mmproj.autoload":                "Auto-load vision encoder",

@@ -2124,6 +2124,18 @@ const he: Record<string, string> = {
   "llm.inference.apiKey":            "API key (optional)",
   "llm.inference.apiKeyDesc":        "Require this Bearer token on every /v1/* request.",
   "llm.inference.apiKeyPlaceholder": "sk-…",
+
+  "llm.tools.section":     "כלים מובנים",
+  "llm.tools.sectionDesc": "בחר אילו כלים מקומיים צ'אט ה-LLM רשאי לקרוא.",
+  "llm.tools.date":        "תאריך",
+  "llm.tools.dateDesc":    "מאפשר למודל לקרוא את התאריך והשעה המקומיים הנוכחיים.",
+  "llm.tools.location":    "מיקום",
+  "llm.tools.locationDesc":"מאפשר חיפוש מדינה, אזור, עיר ואזור זמן בהתאם לכתובת IP.",
+  "llm.tools.webSearch":   "חיפוש ברשת",
+  "llm.tools.webSearchDesc":"מאפשר שאילתות תשובה מיידית של DuckDuckGo.",
+  "llm.tools.webFetch":    "אחזור דף",
+  "llm.tools.webFetchDesc":"מאפשר אחזור גוף הטקסט הגולמי של דף HTTP(S) ציבורי.",
+
   "llm.mmproj.nThreads":             "Encoder threads",
   "llm.mmproj.nThreadsDesc":         "CPU threads for the vision/audio encoder.",
   "llm.mmproj.noGpu":                "CPU-only mmproj",

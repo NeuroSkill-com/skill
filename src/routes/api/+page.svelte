@@ -9,14 +9,10 @@ the Free Software Foundation, version 3 only. -->
   import { onMount, onDestroy } from "svelte";
   import { invoke }             from "@tauri-apps/api/core";
   import { Badge }              from "$lib/components/ui/badge";
-  import { Button }             from "$lib/components/ui/button";
   import { Card, CardContent }  from "$lib/components/ui/card";
-  import { Separator }          from "$lib/components/ui/separator";
   import { t }                  from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import ThemeToggle            from "$lib/ThemeToggle.svelte";
-  import LanguagePicker         from "$lib/LanguagePicker.svelte";
 
   // ── Types ──────────────────────────────────────────────────────────────────
   interface WsClient {
@@ -35,7 +31,6 @@ the Free Software Foundation, version 3 only. -->
   let clients  = $state<WsClient[]>([]);
   let requests = $state<WsRequestLog[]>([]);
   let now      = $state(Math.floor(Date.now() / 1000));
-  let appVersion = $state("…");
   let copied   = $state("");
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -80,7 +75,6 @@ the Free Software Foundation, version 3 only. -->
   let nowTimer:  ReturnType<typeof setInterval>;
 
   onMount(async () => {
-    appVersion = await invoke<string>("get_app_version");
     await refresh();
     // Mark "try the API" onboarding step as done.
     try {
@@ -89,10 +83,12 @@ the Free Software Foundation, version 3 only. -->
     } catch (_) {}
     pollTimer = setInterval(refresh, 2000);
     nowTimer  = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
+    window.addEventListener("skill:api-refresh", refresh);
   });
   onDestroy(() => {
     clearInterval(pollTimer);
     clearInterval(nowTimer);
+    window.removeEventListener("skill:api-refresh", refresh);
   });
 
   let wsUrl = $derived(`ws://localhost:${port}`);
@@ -246,21 +242,8 @@ ws.on("message", (data) => {
   useWindowTitle("window.title.api");
 </script>
 
-<main class="h-screen overflow-y-auto px-4 py-4 flex flex-col gap-3"
+<main class="h-full min-h-0 overflow-y-auto px-4 py-4 flex flex-col gap-3"
       aria-label={t("apiStatus.title")}>
-
-  <!-- ── Header ────────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2 shrink-0">
-    <h1 class="text-[0.9rem] font-bold tracking-tight text-foreground flex-1 truncate">
-      {t("apiStatus.title")}
-    </h1>
-    <Button size="sm" variant="outline" class="text-[0.65rem] h-6 px-2" onclick={refresh}>
-      {t("apiStatus.refresh")}
-    </Button>
-    <ThemeToggle />
-    <LanguagePicker />
-    <span class="text-[0.5rem] text-muted-foreground/40 tabular-nums">v{appVersion}</span>
-  </div>
 
   <!-- ── Server info (compact 2-row grid) ──────────────────────────────────── -->
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden shrink-0">

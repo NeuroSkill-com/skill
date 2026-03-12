@@ -11,8 +11,6 @@ the Free Software Foundation, version 3 only. -->
   import { t }             from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import LanguagePicker    from "$lib/LanguagePicker.svelte";
-  import ThemeToggle       from "$lib/ThemeToggle.svelte";
   import { SessionDetail } from "$lib/dashboard";
   import { Spinner }       from "$lib/components/ui/spinner";
   import Hypnogram         from "$lib/Hypnogram.svelte";
@@ -143,38 +141,7 @@ the Free Software Foundation, version 3 only. -->
   useWindowTitle("window.title.session");
 </script>
 
-<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden">
-
-  <!-- ── Title bar ────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2.5 px-4 pt-4 pb-3 shrink-0
-              border-b border-border dark:border-white/[0.07]"
-       data-tauri-drag-region>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-         class="w-4 h-4 shrink-0 text-muted-foreground pointer-events-none">
-      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-      <line x1="3" y1="9" x2="21" y2="9"/>
-    </svg>
-    <span class="text-[0.82rem] font-semibold tracking-tight select-none">
-      {t("session.title")}
-    </span>
-    {#if sessionMeta}
-      <span class="text-[0.6rem] text-muted-foreground/60 tabular-nums">
-        {#if sessionMeta.device_name}
-          {sessionMeta.device_name} ·
-        {/if}
-        {#if sessionMeta.session_start_utc}
-          {fmtDate(sessionMeta.session_start_utc)} {fmtTime(sessionMeta.session_start_utc)}
-          {#if sessionMeta.session_duration_s}
-            · {fmtDuration(sessionMeta.session_duration_s)}
-          {/if}
-        {/if}
-      </span>
-    {/if}
-    <span class="flex-1"></span>
-    <LanguagePicker />
-    <ThemeToggle />
-  </div>
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">
 
   <!-- ── Content ──────────────────────────────────────────────────────────── -->
   <div class="flex-1 overflow-y-auto min-h-0 p-4">

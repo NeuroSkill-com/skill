@@ -43,13 +43,22 @@
   }
 
   interface LlmCatalog { entries: LlmModelEntry[]; active_model: string; active_mmproj: string; }
+  interface LlmToolsConfig {
+    date: boolean;
+    location: boolean;
+    web_search: boolean;
+    web_fetch: boolean;
+  }
 
   interface LlmConfig {
     enabled: boolean; model_path: string | null; n_gpu_layers: number;
     ctx_size: number | null; parallel: number; api_key: string | null;
+    tools: LlmToolsConfig;
     mmproj: string | null; mmproj_n_threads: number; no_mmproj_gpu: boolean;
     autoload_mmproj: boolean; verbose: boolean;
   }
+
+  type LlmToolKey = keyof LlmToolsConfig;
 
   interface ModelFamily {
     id:          string;
@@ -69,6 +78,7 @@
   let config  = $state<LlmConfig>({
     enabled: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
+    tools: { date: true, location: true, web_search: true, web_fetch: true },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
   });
@@ -93,6 +103,15 @@
   let pollTimer:      ReturnType<typeof setInterval> | undefined;
   let unlistenLog:    (() => void) | undefined;
   let unlistenStatus: (() => void) | undefined;
+
+  let TOOL_ROWS = $derived<Array<{ key: LlmToolKey; label: string; desc: string }>>(
+    [
+      { key: "date",       label: t("llm.tools.date"),      desc: t("llm.tools.dateDesc") },
+      { key: "location",   label: t("llm.tools.location"),  desc: t("llm.tools.locationDesc") },
+      { key: "web_search", label: t("llm.tools.webSearch"), desc: t("llm.tools.webSearchDesc") },
+      { key: "web_fetch",  label: t("llm.tools.webFetch"),  desc: t("llm.tools.webFetchDesc") },
+    ]
+  );
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
@@ -811,6 +830,9 @@
               <p class="text-[0.6rem] font-semibold text-amber-700 dark:text-amber-400 mb-2">
                 Vision projector (required for image input)
               </p>
+              <p class="text-[0.58rem] text-amber-700/80 dark:text-amber-300/80 mb-2 leading-snug">
+                Multimodal projectors extend the active LLM. They are loaded with a compatible text model, not used as standalone models.
+              </p>
               <div class="flex flex-col gap-1.5">
                 {#each orderedSelectedMmproj as mp (mp.filename)}
                   {@const isActiveMm  = catalog.active_mmproj === mp.filename}
@@ -1000,6 +1022,39 @@
               clear
             </button>
           {/if}
+        </div>
+      </div>
+
+      <!-- Built-in chat tools -->
+      <div class="flex flex-col gap-3 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.tools.section")}</span>
+          <span class="text-[0.65rem] text-muted-foreground">
+            {t("llm.tools.sectionDesc")}
+          </span>
+        </div>
+
+        <div class="flex flex-col gap-2">
+          {#each TOOL_ROWS as tool}
+            <div class="flex items-center justify-between gap-4 rounded-xl border border-border/60 dark:border-white/[0.06] bg-slate-50/60 dark:bg-[#111118] px-3 py-2.5">
+              <div class="flex flex-col gap-0.5">
+                <span class="text-[0.74rem] font-semibold text-foreground">{tool.label}</span>
+                <span class="text-[0.62rem] text-muted-foreground leading-relaxed">{tool.desc}</span>
+              </div>
+              <button role="switch" aria-checked={config.tools[tool.key]} aria-label={tool.label}
+                onclick={async () => {
+                  config = { ...config, tools: { ...config.tools, [tool.key]: !config.tools[tool.key] } };
+                  await saveConfig();
+                }}
+                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
+                       border-transparent transition-colors duration-200
+                       {config.tools[tool.key] ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
+                <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
+                              transform transition-transform duration-200
+                              {config.tools[tool.key] ? 'translate-x-4' : 'translate-x-0'}"></span>
+              </button>
+            </div>
+          {/each}
         </div>
       </div>
 

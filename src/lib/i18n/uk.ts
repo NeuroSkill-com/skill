@@ -2123,6 +2123,18 @@ const uk: Record<string, string> = {
   "llm.inference.apiKey":            "API key (optional)",
   "llm.inference.apiKeyDesc":        "Require this Bearer token on every /v1/* request.",
   "llm.inference.apiKeyPlaceholder": "sk-…",
+
+  "llm.tools.section":     "Вбудовані інструменти",
+  "llm.tools.sectionDesc": "Оберіть, які локальні інструменти чат LLM може використовувати.",
+  "llm.tools.date":        "Дата",
+  "llm.tools.dateDesc":    "Дозволяє моделі читати поточну місцеву дату та час.",
+  "llm.tools.location":    "Місцезнаходження",
+  "llm.tools.locationDesc":"Дозволяє приблизний пошук країни, регіону, міста та часового поясу за IP.",
+  "llm.tools.webSearch":   "Вебпошук",
+  "llm.tools.webSearchDesc":"Дозволяє прості миттєві відповіді DuckDuckGo.",
+  "llm.tools.webFetch":    "Завантаження сторінки",
+  "llm.tools.webFetchDesc":"Дозволяє завантажувати текстовий вміст публічної HTTP(S) сторінки.",
+
   "llm.mmproj.nThreads":             "Encoder threads",
   "llm.mmproj.nThreadsDesc":         "CPU threads for the vision/audio encoder.",
   "llm.mmproj.noGpu":                "CPU-only mmproj",

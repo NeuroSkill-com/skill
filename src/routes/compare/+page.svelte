@@ -14,8 +14,6 @@ the Free Software Foundation, version 3 only. -->
   import { t }             from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter  from "$lib/DisclaimerFooter.svelte";
-  import LanguagePicker    from "$lib/LanguagePicker.svelte";
-  import ThemeToggle       from "$lib/ThemeToggle.svelte";
   import Hypnogram         from "$lib/Hypnogram.svelte";
   import { BANDS }         from "$lib/constants";
   import UmapViewer3D      from "$lib/UmapViewer3D.svelte";
@@ -1567,29 +1565,11 @@ the Free Software Foundation, version 3 only. -->
   useWindowTitle("window.title.compare");
 </script>
 
-<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden">
-
-  <!-- ── Title bar ────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2.5 px-4 pt-4 pb-3 shrink-0
-              border-b border-border dark:border-white/[0.07]"
-       data-tauri-drag-region>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-         class="w-4 h-4 shrink-0 text-muted-foreground pointer-events-none">
-      <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
-      <line x1="6" y1="20" x2="6" y2="14"/>
-    </svg>
-    <span class="text-[0.82rem] font-semibold tracking-tight select-none">
-      {t("compare.title")}
-    </span>
-    <span class="flex-1"></span>
-    <ThemeToggle />
-    <LanguagePicker />
-  </div>
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">
 
   <!-- ── Content ──────────────────────────────────────────────────────────── -->
-  <div bind:this={scrollContainer}
-       class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+    <div bind:this={scrollContainer}
+      class="min-h-0 flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
 
     {#if loading}
       <div class="flex flex-col items-center justify-center gap-3 py-12">

@@ -393,6 +393,26 @@ impl Default for NeuttsConfig {
 /// Requires the `llm` Cargo feature to have any effect at runtime.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
+pub struct LlmToolConfig {
+    pub date:       bool,
+    pub location:   bool,
+    pub web_search: bool,
+    pub web_fetch:  bool,
+}
+
+impl Default for LlmToolConfig {
+    fn default() -> Self {
+        Self {
+            date:       true,
+            location:   true,
+            web_search: true,
+            web_fetch:  true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LlmConfig {
     /// Enable the LLM server.  When `false` (the default) no model is loaded
     /// and all `/v1/*` endpoints return HTTP 503.
@@ -428,6 +448,10 @@ pub struct LlmConfig {
     /// When `None` (the default) the API is open to any local caller.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
+
+    /// Allow-list for built-in chat tools exposed to the local LLM chat.
+    #[serde(default)]
+    pub tools: LlmToolConfig,
 
     // ── Multimodal (requires `llm-mtmd` feature) ──────────────────────────────
 
@@ -478,6 +502,7 @@ impl Default for LlmConfig {
             ctx_size:         None,
             parallel:         default_llm_parallel(),
             api_key:          None,
+            tools:            LlmToolConfig::default(),
             mmproj:           None,
             mmproj_n_threads: default_mmproj_n_threads(),
             no_mmproj_gpu:    false,

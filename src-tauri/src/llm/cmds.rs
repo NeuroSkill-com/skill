@@ -132,9 +132,12 @@ pub fn set_llm_active_model(
 ) {
     let mut s = state.lock_or_recover();
     s.llm_catalog.active_model = filename;
-    // Mirror into LlmConfig.model_path so the server picks it up on restart.
-    let path = s.llm_catalog.active_model_path();
-    s.llm_config.model_path = path;
+    if !s.llm_catalog.active_mmproj_matches_active_model() {
+        s.llm_catalog.active_mmproj.clear();
+    }
+    // Mirror into LlmConfig so the server picks the updated pair up on restart.
+    s.llm_config.model_path = s.llm_catalog.active_model_path();
+    s.llm_config.mmproj     = s.llm_catalog.active_mmproj_path();
     save_catalog(&app, &s);
     drop(s);
     crate::save_settings_handle(&app);
@@ -161,14 +164,34 @@ pub fn set_llm_active_mmproj(
     state:    tauri::State<'_, Mutex<AppState>>,
 ) {
     let mut s = state.lock_or_recover();
-    s.llm_catalog.active_mmproj = filename.clone();
-    // Mirror into LlmConfig.mmproj
-    let path = if filename.is_empty() {
-        None
+    if filename.is_empty() {
+        s.llm_catalog.active_mmproj.clear();
     } else {
-        s.llm_catalog.active_mmproj_path()
-    };
-    s.llm_config.mmproj = path;
+        let current_matches = s.llm_catalog.active_model_entry()
+            .zip(s.llm_catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
+            .is_some_and(|(model, mmproj)| model.repo == mmproj.repo);
+
+        if !current_matches {
+            if let Some(model_filename) = s.llm_catalog
+                .best_model_for_mmproj(&filename)
+                .map(|entry| entry.filename.clone())
+            {
+                s.llm_catalog.active_model = model_filename;
+            }
+        }
+
+        if s.llm_catalog.active_model_entry()
+            .zip(s.llm_catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
+            .is_some_and(|(model, mmproj)| model.repo == mmproj.repo)
+        {
+            s.llm_catalog.active_mmproj = filename;
+        } else {
+            s.llm_catalog.active_mmproj.clear();
+        }
+    }
+
+    s.llm_config.model_path = s.llm_catalog.active_model_path();
+    s.llm_config.mmproj     = s.llm_catalog.active_mmproj_path();
     save_catalog(&app, &s);
     drop(s);
     crate::save_settings_handle(&app);
@@ -819,56 +842,39 @@ pub async fn chat_completions_ipc(
     let mut abort_rx = srv.abort_tx.subscribe();
     abort_rx.borrow_and_update();
 
-    let images     = super::extract_images_from_messages(&messages);
-    let mut tok_rx = srv.chat(messages, images, params)?;
+    let gen_fut = super::run_chat_with_builtin_tools(&srv, messages, params, Vec::new(), |delta| {
+        let _ = channel.send(ChatChunk::Delta { content: delta.to_string() });
+    });
+    tokio::pin!(gen_fut);
 
-    loop {
-        tokio::select! {
-            biased;
+    tokio::select! {
+        biased;
 
-            // Abort signal — higher priority than new tokens so we stop fast.
-            Ok(()) = abort_rx.changed() => {
-                // Send the partial-result sentinel so the frontend can
-                // finalise its accumulated text rather than showing an error.
-                let _ = channel.send(ChatChunk::Error { message: "aborted".into() });
-                break;
-            }
+        // Abort signal — higher priority than completion so we stop fast.
+        Ok(()) = abort_rx.changed() => {
+            let _ = channel.send(ChatChunk::Error { message: "aborted".into() });
+        }
 
-            tok = tok_rx.recv() => {
-                match tok {
-                    // Actor closed the channel without sending Done — treat as done.
-                    None => break,
-
-                    Some(super::InferToken::Delta(text)) => {
-                        // If the JS side has closed the channel (e.g. window closed),
-                        // send() returns Err — stop gracefully.
-                        if channel.send(ChatChunk::Delta { content: text }).is_err() {
-                            break;
-                        }
-                    }
-
-                    Some(super::InferToken::Done {
-                        finish_reason, prompt_tokens, completion_tokens, n_ctx
-                    }) => {
-                        let _ = channel.send(ChatChunk::Done {
-                            finish_reason, prompt_tokens, completion_tokens, n_ctx,
-                        });
-                        break;
-                    }
-
-                    Some(super::InferToken::Error(msg)) => {
-                        let _ = channel.send(ChatChunk::Error { message: msg });
-                        break;
-                    }
+        result = &mut gen_fut => {
+            match result {
+                Ok((_text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => {
+                    let _ = channel.send(ChatChunk::Done {
+                        finish_reason,
+                        prompt_tokens,
+                        completion_tokens,
+                        n_ctx,
+                    });
+                }
+                Err(msg) => {
+                    let _ = channel.send(ChatChunk::Error { message: msg });
                 }
             }
         }
     }
 
-    // Dropping `tok_rx` here closes the receiver side of the actor's unbounded
-    // channel.  The sampling loop in `run_sampling_loop` detects the broken
-    // pipe on its next `token_tx.send()` and exits cleanly — no manual signal
-    // to the actor thread is needed.
+    // If this command is aborted or dropped while generation is in-flight,
+    // dropping the pinned future releases its internal token receiver; the
+    // actor observes the closed channel on the next send and exits that request.
     Ok(())
 }
 

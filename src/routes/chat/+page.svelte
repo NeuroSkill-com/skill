@@ -14,9 +14,7 @@
   import { onMount, onDestroy, tick } from "svelte";
   import { invoke, Channel }          from "@tauri-apps/api/core";
   import { listen }                   from "@tauri-apps/api/event";
-  import ThemeToggle                  from "$lib/ThemeToggle.svelte";
   import MarkdownRenderer             from "$lib/MarkdownRenderer.svelte";
-  import LanguagePicker               from "$lib/LanguagePicker.svelte";
   import ChatSidebar                  from "$lib/ChatSidebar.svelte";
   import PromptLibrary                from "$lib/PromptLibrary.svelte";
   import { t }                        from "$lib/i18n/index.svelte";
@@ -869,7 +867,7 @@
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Root container (full window height, dark/light theme-aware)                -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
-<div class="flex h-screen bg-background text-foreground overflow-hidden">
+<div class="flex h-full min-h-0 bg-background text-foreground overflow-hidden">
 
   <!-- ── Conversation sidebar ───────────────────────────────────────────── -->
   {#if sidebarOpen}
@@ -887,7 +885,7 @@
   {/if}
 
   <!-- ── Main chat column ───────────────────────────────────────────────── -->
-  <div class="flex flex-col flex-1 min-w-0 overflow-hidden">
+  <div class="min-h-0 flex flex-col flex-1 min-w-0 overflow-hidden">
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
   <header class="flex items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
@@ -977,12 +975,6 @@
         <path d="M12 5v14M5 12h14"/>
       </svg>
     </button>
-
-    <!-- Language picker -->
-    <LanguagePicker />
-
-    <!-- Theme toggle -->
-    <ThemeToggle />
 
     <!-- Settings toggle -->
     <button

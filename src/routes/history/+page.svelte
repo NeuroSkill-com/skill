@@ -8,6 +8,7 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
   import { onMount }       from "svelte";
+  import { onDestroy }     from "svelte";
   import { fade }          from "svelte/transition";
   import { invoke }        from "@tauri-apps/api/core";
   import { Button }        from "$lib/components/ui/button";
@@ -17,12 +18,11 @@ the Free Software Foundation, version 3 only. -->
   import { useWindowTitle } from "$lib/window-title.svelte";
   import { getResolved }   from "$lib/theme-store.svelte";
   import DisclaimerFooter  from "$lib/DisclaimerFooter.svelte";
-  import LanguagePicker    from "$lib/LanguagePicker.svelte";
-  import ThemeToggle       from "$lib/ThemeToggle.svelte";
   import Hypnogram         from "$lib/Hypnogram.svelte";
   import { SessionDetail } from "$lib/dashboard";
   import type { SessionMetrics, EpochRow, CsvMetricsResult } from "$lib/dashboard/SessionDetail.svelte";
   import { Spinner }       from "$lib/components/ui/spinner";
+  import { hBar, hCbs }    from "$lib/history-titlebar.svelte";
 
   // ── Types ───────────────────────────────────────────────────────────────
   interface LabelRow {
@@ -582,6 +582,15 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Mount ────────────────────────────────────────────────────────────────
   onMount(async () => {
+    // Wire up titlebar store
+    hBar.active = true;
+    hCbs.prev          = () => loadDay(currentDayIdx - 1);
+    hCbs.next          = () => loadDay(currentDayIdx + 1);
+    hCbs.toggleCompare = () => { if (compareMode) exitCompareMode(); else compareMode = true; };
+    hCbs.openCompare   = openQuickCompare;
+    hCbs.toggleLabels  = () => { showLabels = !showLabels; if (showLabels && allLabels.length === 0) loadLabels(); };
+    hCbs.reload        = () => loadDay(currentDayIdx);
+
     try {
       allUtcDays = await invoke<string[]>("list_session_days");
     } catch (e) {
@@ -595,127 +604,24 @@ the Free Software Foundation, version 3 only. -->
       .catch(() => {});
   });
 
+  onDestroy(() => { hBar.active = false; });
+
+  // Keep titlebar store in sync with local reactive state
+  $effect(() => {
+    hBar.daysLoading     = daysLoading;
+    hBar.dayCount        = localDays.length;
+    hBar.currentDayIdx   = currentDayIdx;
+    hBar.currentDayLabel = currentLocalKey ? fmtDayKey(currentLocalKey) : "";
+    hBar.compareMode     = compareMode;
+    hBar.compareCount    = compareSelected.length;
+    hBar.showLabels      = showLabels;
+  });
+
   useWindowTitle("window.title.history");
 </script>
 
-<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden">
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">
 <div class="contents" onkeydown={handleKeydown} tabindex="-1" role="presentation">
-
-  <!-- ── Title bar ────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2 px-4 pt-4 pb-3 shrink-0
-              border-b border-border dark:border-white/[0.07]"
-       data-tauri-drag-region>
-    <!-- Clock icon -->
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-         class="w-4 h-4 shrink-0 text-muted-foreground pointer-events-none">
-      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-    </svg>
-    <span class="text-[0.82rem] font-semibold tracking-tight select-none">{t("history.title")}</span>
-    <Badge variant="outline"
-      class="text-[0.52rem] tracking-wide uppercase py-0 px-1.5
-             bg-muted text-muted-foreground border-border">
-      {localDays.length} {t("history.days")}
-    </Badge>
-
-    <!-- ── Day pagination ─────────────────────────────────── -->
-    {#if !daysLoading && localDays.length > 0}
-      <div class="flex items-center gap-0.5 ml-1">
-        <!-- ← newer -->
-        <button
-          class="w-5 h-5 rounded flex items-center justify-center
-                 text-muted-foreground hover:text-foreground hover:bg-muted/60
-                 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-          disabled={currentDayIdx === 0}
-          onclick={() => loadDay(currentDayIdx - 1)}
-          title="Newer day (←)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-               stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-            <polyline points="15 18 9 12 15 6"/>
-          </svg>
-        </button>
-
-        <!-- Day label -->
-        <span class="text-[0.68rem] font-medium tabular-nums text-foreground/80 px-1 min-w-[7rem] text-center">
-          {#if currentLocalKey}
-            {fmtDayKey(currentLocalKey)}
-          {:else}
-            <span class="text-muted-foreground/40">—</span>
-          {/if}
-        </span>
-
-        <!-- → older -->
-        <button
-          class="w-5 h-5 rounded flex items-center justify-center
-                 text-muted-foreground hover:text-foreground hover:bg-muted/60
-                 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-          disabled={currentDayIdx >= localDays.length - 1}
-          onclick={() => loadDay(currentDayIdx + 1)}
-          title="Older day (→)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-               stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-        </button>
-
-        <!-- Position indicator -->
-        <span class="text-[0.52rem] text-muted-foreground/40 tabular-nums ml-0.5">
-          {currentDayIdx + 1}/{localDays.length}
-        </span>
-      </div>
-    {/if}
-
-    <span class="flex-1" data-tauri-drag-region></span>
-
-    <!-- Quick-compare toggle -->
-    <Button size="sm" variant={compareMode ? "default" : "ghost"}
-            class="text-[0.68rem] h-7 px-2.5 gap-1 {compareMode ? '' : 'text-muted-foreground hover:text-foreground'}"
-            onclick={() => { if (compareMode) exitCompareMode(); else compareMode = true; }}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-        <polyline points="22 7 13 7 13 2 22 7"/><polyline points="2 17 11 17 11 22 2 17"/>
-        <line x1="22" y1="17" x2="11" y2="17"/><line x1="13" y1="7" x2="2" y2="7"/>
-        <line x1="2" y1="12" x2="22" y2="12"/>
-      </svg>
-      {compareMode ? t("history.exitCompare") : t("history.compare")}
-    </Button>
-
-    <!-- Compare action (visible only in compare mode) -->
-    {#if compareMode}
-      <Button size="sm" variant="default"
-              class="text-[0.68rem] h-7 px-2.5 gap-1 bg-blue-600 hover:bg-blue-700"
-              disabled={compareSelected.length < 2}
-              onclick={openQuickCompare}>
-        {t("history.compareSelected")} ({compareSelected.length}/2)
-      </Button>
-    {/if}
-
-    <!-- Labels browser button -->
-    <Button size="sm" variant="ghost"
-            class="text-[0.68rem] h-7 px-2.5 text-muted-foreground hover:text-foreground gap-1"
-            onclick={() => { showLabels = !showLabels; if (showLabels && allLabels.length === 0) loadLabels(); }}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-        <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
-        <line x1="7" y1="7" x2="7.01" y2="7"/>
-      </svg>
-      {t("history.labels")}
-    </Button>
-
-    <!-- Reload -->
-    <Button size="sm" variant="ghost"
-            class="text-[0.68rem] h-7 px-2.5 text-muted-foreground hover:text-foreground"
-            onclick={() => loadDay(currentDayIdx)}>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-        <polyline points="23 4 23 10 17 10"/>
-        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-      </svg>
-    </Button>
-
-    <ThemeToggle />
-    <LanguagePicker />
-  </div>
 
   <!-- ── Labels browser panel ─────────────────────────────────────────────── -->
   {#if showLabels}

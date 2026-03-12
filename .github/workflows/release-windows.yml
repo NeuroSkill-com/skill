@@ -315,7 +315,7 @@ jobs:
       #   *.nsis.zip      — NSIS installer wrapped in a zip (updater bundle)
       #   *.nsis.zip.sig  — Ed25519 signature consumed by the Tauri updater plugin
       - name: Build Tauri (Windows — NSIS)
-        shell: bash
+        shell: powershell
         env:
           ESPEAK_LIB_DIR:                     ${{ github.workspace }}/src-tauri/espeak-static/lib
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -329,27 +329,38 @@ jobs:
           # VS's bundled Clang 19 which lacks __builtin_ia32_* MMX intrinsics.
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
         run: |
-          # Build the Tauri --config JSON.
+          # Build the Tauri --config JSON natively in PowerShell.
           # Include Windows signing fields only when a certificate is available.
-          CONFIG=$(python3 -c "
-          import json, os
-          bundle = {'targets': ['nsis']}
-          thumbprint = os.environ.get('CERTIFICATE_THUMBPRINT', '')
-          if thumbprint:
-              bundle['windows'] = {
-                  'certificateThumbprint': thumbprint,
-                  'digestAlgorithm':       'sha256',
-                  'timestampUrl':          'http://timestamp.digicert.com',
-              }
-          print(json.dumps({'bundle': bundle}))")
+          $bundle = @{
+            targets = @("nsis")
+          }
+
+          if ($env:CERTIFICATE_THUMBPRINT) {
+            $bundle.windows = @{
+              certificateThumbprint = $env:CERTIFICATE_THUMBPRINT
+              digestAlgorithm       = "sha256"
+              timestampUrl          = "http://timestamp.digicert.com"
+            }
+          }
+
+          $configPath = Join-Path $env:RUNNER_TEMP "tauri-win-config.json"
+          @{ bundle = $bundle } |
+            ConvertTo-Json -Depth 10 -Compress |
+            Out-File -FilePath $configPath -Encoding utf8
+
+          Write-Host "[ok] Generated Tauri config at $configPath"
 
           # --features llm-vulkan enables the Vulkan GPU back-end for LLM
           # inference (same flag tauri-build.js injects for local dev builds).
           # Requires the Vulkan SDK installed and VULKAN_SDK set (above).
-          npx tauri build \
-            --target x86_64-pc-windows-msvc \
-            --features llm-vulkan \
-            --config "$CONFIG"
+          & npx tauri build `
+            --target x86_64-pc-windows-msvc `
+            --features llm-vulkan `
+            --config $configPath
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
       # ── Locate build artifacts ────────────────────────────────────────────────
       - name: Collect artifact paths

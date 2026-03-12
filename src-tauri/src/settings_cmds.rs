@@ -947,15 +947,24 @@ pub fn get_llm_config(
 
 /// Update the LLM server configuration and persist it to `settings.json`.
 ///
-/// A full app restart is required for changes to take effect (model loading
-/// happens during Tauri setup, before the event loop starts).
+/// Most model/runtime changes still require restart, but the built-in tool
+/// allow-list is pushed into the running LLM chat state immediately.
 #[tauri::command]
 pub fn set_llm_config(
     config: crate::settings::LlmConfig,
     app:    AppHandle,
     state:  tauri::State<'_, Mutex<AppState>>,
 ) {
-    state.lock_or_recover().llm_config = config;
+    let cell = {
+        let mut s = state.lock_or_recover();
+        s.llm_config = config.clone();
+        s.llm_state_cell.clone()
+    };
+
+    if let Some(server) = cell.lock().unwrap().clone() {
+        *server.allowed_tools.lock().unwrap() = config.tools.clone();
+    }
+
     save_settings(&app);
 }
 

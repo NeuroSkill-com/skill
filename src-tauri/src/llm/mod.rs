@@ -77,7 +77,7 @@ use llama_cpp_4::{
     sampling::LlamaSampler,
 };
 
-use crate::settings::LlmConfig;
+use crate::settings::{LlmConfig, LlmToolConfig};
 use catalog::LlmCatalog;
 
 // ── Log buffer ────────────────────────────────────────────────────────────────
@@ -241,6 +241,10 @@ impl Default for GenParams {
 struct ChatRequest {
     messages: Vec<Value>,
     #[serde(default)]
+    tools:    Vec<tools::Tool>,
+    #[serde(default)]
+    tool_choice: Option<Value>,
+    #[serde(default)]
     stream:   bool,
     #[serde(flatten)]
     gen:      GenParams,
@@ -271,6 +275,8 @@ pub struct LlmServerState {
     model_name:       String,
     /// Optional Bearer token required on every request.
     pub api_key:      Option<String>,
+    /// Built-in tools currently allowed for chat requests.
+    pub allowed_tools: Arc<Mutex<LlmToolConfig>>,
     /// Set to `true` by the actor once the model + context are fully loaded.
     pub ready:        Arc<AtomicBool>,
     /// Context window size in tokens; set by the actor after context creation.
@@ -291,6 +297,10 @@ pub struct LlmServerState {
 impl LlmServerState {
     /// Whether the actor has finished loading the model.
     pub fn is_ready(&self) -> bool { self.ready.load(Ordering::Relaxed) }
+
+    pub fn set_allowed_tools(&self, tools: LlmToolConfig) {
+        *self.allowed_tools.lock().unwrap() = tools;
+    }
 
     /// Stop the actor and **block until the thread has fully exited**.
     ///
@@ -510,6 +520,359 @@ fn extract_images_from_content(content: &Value) -> Vec<Vec<u8>> {
             decode_image_url(url)
         })
         .collect()
+}
+
+fn builtin_llm_tools() -> Vec<tools::Tool> {
+    vec![
+        tools::Tool {
+            tool_type: "function".into(),
+            function: tools::ToolFunction {
+                name: "date".into(),
+                description: Some("Get the current date/time metadata (Unix timestamps, timezone environment, and local/UTC placeholders).".into()),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                })),
+            },
+        },
+        tools::Tool {
+            tool_type: "function".into(),
+            function: tools::ToolFunction {
+                name: "location".into(),
+                description: Some("Get an approximate public-IP location snapshot (country/region/city/timezone).".into()),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false
+                })),
+            },
+        },
+        tools::Tool {
+            tool_type: "function".into(),
+            function: tools::ToolFunction {
+                name: "web_search".into(),
+                description: Some("Search the web for a query and return concise results.".into()),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string" }
+                    },
+                    "required": ["query"],
+                    "additionalProperties": false
+                })),
+            },
+        },
+        tools::Tool {
+            tool_type: "function".into(),
+            function: tools::ToolFunction {
+                name: "web_fetch".into(),
+                description: Some("Fetch the raw text body of a public HTTP(S) URL.".into()),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "url": { "type": "string" }
+                    },
+                    "required": ["url"],
+                    "additionalProperties": false
+                })),
+            },
+        },
+    ]
+}
+
+fn is_builtin_tool_enabled(config: &LlmToolConfig, name: &str) -> bool {
+    match name {
+        "date"       => config.date,
+        "location"   => config.location,
+        "web_search" => config.web_search,
+        "web_fetch"  => config.web_fetch,
+        _            => false,
+    }
+}
+
+fn enabled_builtin_llm_tools(config: &LlmToolConfig) -> Vec<tools::Tool> {
+    builtin_llm_tools()
+        .into_iter()
+        .filter(|tool| is_builtin_tool_enabled(config, &tool.function.name))
+        .collect()
+}
+
+fn filter_allowed_tool_defs(tool_defs: Vec<tools::Tool>, config: &LlmToolConfig) -> Vec<tools::Tool> {
+    tool_defs
+        .into_iter()
+        .filter(|tool| is_builtin_tool_enabled(config, &tool.function.name))
+        .collect()
+}
+
+fn truncate_text(s: &str, max_chars: usize) -> String {
+    s.chars().take(max_chars).collect()
+}
+
+struct ToolCallStreamSanitizer {
+    raw:                 String,
+    emitted_visible_len: usize,
+}
+
+impl ToolCallStreamSanitizer {
+    fn new() -> Self {
+        Self { raw: String::new(), emitted_visible_len: 0 }
+    }
+
+    fn push(&mut self, piece: &str) -> String {
+        self.raw.push_str(piece);
+        let visible = tools::strip_tool_call_blocks_preserve(&self.raw);
+        if visible.len() <= self.emitted_visible_len {
+            return String::new();
+        }
+        if !visible.is_char_boundary(self.emitted_visible_len) {
+            return String::new();
+        }
+
+        let delta = visible[self.emitted_visible_len..].to_string();
+        self.emitted_visible_len = visible.len();
+        delta
+    }
+}
+
+async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmToolConfig) -> Value {
+    let args: Value = serde_json::from_str(&call.function.arguments).unwrap_or_else(|_| json!({}));
+
+    if !is_builtin_tool_enabled(allowed_tools, &call.function.name) {
+        return json!({ "ok": false, "tool": call.function.name, "error": "tool disabled in settings" });
+    }
+
+    match call.function.name.as_str() {
+        "date" => {
+            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+            json!({
+                "ok": true,
+                "tool": "date",
+                "unix": now.as_secs(),
+                "unix_ms": now.as_millis() as u64,
+                "tz_env": std::env::var("TZ").ok(),
+                "lang_env": std::env::var("LANG").ok(),
+            })
+        }
+
+        "location" => {
+            tokio::task::spawn_blocking(|| {
+                let agent = ureq::AgentBuilder::new()
+                    .timeout_connect(std::time::Duration::from_secs(2))
+                    .timeout_read(std::time::Duration::from_secs(3))
+                    .build();
+                let resp = agent.get("https://ipwho.is/").call();
+                match resp {
+                    Ok(r) => {
+                        let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+                        json!({
+                            "ok": v.get("success").and_then(|x| x.as_bool()).unwrap_or(true),
+                            "tool": "location",
+                            "country": v.get("country").cloned().unwrap_or(Value::Null),
+                            "region": v.get("region").cloned().unwrap_or(Value::Null),
+                            "city": v.get("city").cloned().unwrap_or(Value::Null),
+                            "timezone": v.get("timezone").and_then(|z| z.get("id")).cloned().unwrap_or(Value::Null),
+                            "lat": v.get("latitude").cloned().unwrap_or(Value::Null),
+                            "lon": v.get("longitude").cloned().unwrap_or(Value::Null),
+                            "ip": v.get("ip").cloned().unwrap_or(Value::Null),
+                        })
+                    }
+                    Err(e) => json!({ "ok": false, "tool": "location", "error": e.to_string() }),
+                }
+            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "location", "error": e.to_string() }))
+        }
+
+        "web_search" => {
+            let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if query.is_empty() {
+                return json!({ "ok": false, "tool": "web_search", "error": "missing query" });
+            }
+
+            tokio::task::spawn_blocking(move || {
+                let agent = ureq::AgentBuilder::new()
+                    .timeout_connect(std::time::Duration::from_secs(3))
+                    .timeout_read(std::time::Duration::from_secs(5))
+                    .build();
+                let resp = agent
+                    .get("https://api.duckduckgo.com/")
+                    .query("q", &query)
+                    .query("format", "json")
+                    .query("no_html", "1")
+                    .query("no_redirect", "1")
+                    .call();
+
+                match resp {
+                    Ok(r) => {
+                        let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+                        let mut results = Vec::new();
+
+                        if let Some(abs) = v.get("AbstractText").and_then(|x| x.as_str()) {
+                            if !abs.trim().is_empty() {
+                                results.push(json!({
+                                    "title": v.get("Heading").cloned().unwrap_or(Value::String("DuckDuckGo".into())),
+                                    "url": v.get("AbstractURL").cloned().unwrap_or(Value::Null),
+                                    "snippet": truncate_text(abs, 500),
+                                }));
+                            }
+                        }
+
+                        if let Some(topics) = v.get("RelatedTopics").and_then(|x| x.as_array()) {
+                            for t in topics.iter().take(5) {
+                                if let (Some(text), Some(url)) = (t.get("Text").and_then(|x| x.as_str()), t.get("FirstURL").and_then(|x| x.as_str())) {
+                                    results.push(json!({
+                                        "title": text.split(" - ").next().unwrap_or("result"),
+                                        "url": url,
+                                        "snippet": truncate_text(text, 500),
+                                    }));
+                                }
+                            }
+                        }
+
+                        json!({ "ok": true, "tool": "web_search", "query": query, "results": results })
+                    }
+                    Err(e) => json!({ "ok": false, "tool": "web_search", "error": e.to_string() }),
+                }
+            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_search", "error": e.to_string() }))
+        }
+
+        "web_fetch" => {
+            let url = args.get("url").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if !(url.starts_with("http://") || url.starts_with("https://")) {
+                return json!({ "ok": false, "tool": "web_fetch", "error": "url must start with http:// or https://" });
+            }
+
+            let url_for_fetch = url.clone();
+            tokio::task::spawn_blocking(move || {
+                let agent = ureq::AgentBuilder::new()
+                    .timeout_connect(std::time::Duration::from_secs(3))
+                    .timeout_read(std::time::Duration::from_secs(8))
+                    .build();
+                let resp = agent
+                    .get(&url_for_fetch)
+                    .set("User-Agent", "NeuroSkill-LLM-Tool/1.0")
+                    .call();
+
+                match resp {
+                    Ok(r) => {
+                        let status = r.status();
+                        let content_type = r.header("Content-Type").unwrap_or("").to_string();
+                        let body = r.into_string().unwrap_or_default();
+                        json!({
+                            "ok": true,
+                            "tool": "web_fetch",
+                            "url": url_for_fetch,
+                            "status": status,
+                            "content_type": content_type,
+                            "content": truncate_text(&body, 12_000),
+                            "truncated": body.chars().count() > 12_000,
+                        })
+                    }
+                    Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_for_fetch, "error": e.to_string() }),
+                }
+            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }))
+        }
+
+        other => json!({ "ok": false, "tool": other, "error": "unsupported tool" }),
+    }
+}
+
+async fn collect_infer_output<F>(
+    mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
+    mut on_visible_delta: F,
+) -> Result<(String, String, usize, usize, usize), String>
+where
+    F: FnMut(&str),
+{
+    let mut text              = String::new();
+    let mut finish_reason     = "stop".to_string();
+    let mut prompt_tokens     = 0usize;
+    let mut completion_tokens = 0usize;
+    let mut n_ctx             = 0usize;
+    let mut sanitizer         = ToolCallStreamSanitizer::new();
+
+    while let Some(tok) = tok_rx.recv().await {
+        match tok {
+            InferToken::Delta(t) => {
+                text.push_str(&t);
+                let visible = sanitizer.push(&t);
+                if !visible.is_empty() {
+                    on_visible_delta(&visible);
+                }
+            }
+            InferToken::Done { finish_reason: fr, prompt_tokens: pt, completion_tokens: ct, n_ctx: nc } => {
+                finish_reason = fr;
+                prompt_tokens = pt;
+                completion_tokens = ct;
+                n_ctx = nc;
+                break;
+            }
+            InferToken::Error(e) => return Err(e),
+        }
+    }
+
+    Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx))
+}
+
+async fn run_chat_with_builtin_tools<F>(
+    state: &LlmServerState,
+    base_messages: Vec<Value>,
+    params: GenParams,
+    mut tools_from_req: Vec<tools::Tool>,
+    mut on_visible_delta: F,
+) -> Result<(String, String, usize, usize, usize), String>
+where
+    F: FnMut(&str),
+{
+    const MAX_TOOL_ROUNDS: usize = 3;
+    const MAX_TOOL_CALLS: usize = 4;
+
+    let mut messages = base_messages;
+    let allowed_tools = state.allowed_tools.lock().unwrap().clone();
+    if tools_from_req.is_empty() {
+        tools_from_req = enabled_builtin_llm_tools(&allowed_tools);
+    } else {
+        tools_from_req = filter_allowed_tool_defs(tools_from_req, &allowed_tools);
+    }
+    tools::inject_tools_into_system_prompt(&mut messages, &tools_from_req);
+
+    for _ in 0..=MAX_TOOL_ROUNDS {
+        let images = extract_images_from_messages(&messages);
+        let (tok_tx, tok_rx) = mpsc::unbounded_channel();
+        state.req_tx
+            .send(InferRequest::Generate {
+                messages: messages.clone(),
+                images,
+                params: params.clone(),
+                token_tx: tok_tx,
+            })
+            .map_err(|_| "LLM actor has exited".to_string())?;
+
+        let (assistant_text, finish_reason, prompt_tokens, completion_tokens, n_ctx) = collect_infer_output(tok_rx, |delta| {
+            on_visible_delta(delta);
+        }).await?;
+        let tool_calls = tools::extract_tool_calls(&assistant_text);
+        if tool_calls.is_empty() {
+            let cleaned = tools::strip_tool_call_blocks(&assistant_text);
+            return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+        }
+
+        let cleaned = tools::strip_tool_call_blocks(&assistant_text);
+        messages.push(json!({
+            "role": "assistant",
+            "content": cleaned,
+        }));
+
+        for tc in tool_calls.into_iter().take(MAX_TOOL_CALLS) {
+            let tool_result = execute_builtin_tool_call(&tc, &allowed_tools).await;
+            messages.push(json!({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": tool_result.to_string(),
+            }));
+        }
+    }
+
+    Err("tool-calling round limit reached".to_string())
 }
 
 // ── Shared sampling loop ───────────────────────────────────────────────────────
@@ -1254,7 +1617,7 @@ pub fn init(
         return None;
     }
 
-    let mmproj_path = catalog.active_mmproj_path();
+    let mmproj_path = catalog.active_mmproj_path().or_else(|| config.mmproj.clone());
     let model_name  = model_path
         .file_stem()
         .and_then(|s| s.to_str())
@@ -1277,6 +1640,7 @@ pub fn init(
     let ready_flag  = Arc::new(AtomicBool::new(false));
     let n_ctx_flag  = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let vision_flag = Arc::new(AtomicBool::new(false));
+    let allowed_tools = Arc::new(Mutex::new(config.tools.clone()));
     let (abort_tx, _) = tokio::sync::watch::channel(0u64);
 
     let config2     = config.clone();
@@ -1301,6 +1665,7 @@ pub fn init(
         req_tx,
         model_name,
         api_key:      config.api_key.clone(),
+        allowed_tools,
         ready:        ready_flag,
         n_ctx:        n_ctx_flag,
         vision_ready: vision_flag,
@@ -1387,34 +1752,74 @@ async fn chat_completions(
 ) -> Response {
     let state = get_state!(cell);
     require_auth!(state, headers);
+    let _ = &req.tool_choice;
 
     if !state.is_ready() {
         return (StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
     }
 
-    // Extract images from all messages in document order.
-    // Only base64 data-URLs are supported (plain HTTP URLs are skipped).
-    let images: Vec<Vec<u8>> = req.messages.iter()
-        .flat_map(|m| {
-            m.get("content")
-                .map(extract_images_from_content)
-                .unwrap_or_default()
-        })
-        .collect();
+    match run_chat_with_builtin_tools(&state, req.messages.clone(), req.gen.clone(), req.tools.clone(), |_| {}).await {
+        Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => {
+            if req.stream {
+                let model_name = state.model_name.clone();
+                let id = format!("chatcmpl-{}", short_id());
+                let ts = unix_ts();
+                let stream = async_stream::stream! {
+                    if !text.is_empty() {
+                        let data = serde_json::to_string(&json!({
+                            "id": id,
+                            "object": "chat.completion.chunk",
+                            "created": ts,
+                            "model": model_name,
+                            "choices": [{"index":0,"delta":{"content":text},"finish_reason":null}],
+                        })).unwrap_or_default();
+                        yield Ok::<sse::Event, String>(sse::Event::default().data(data));
+                    }
 
-    let (tok_tx, tok_rx) = mpsc::unbounded_channel();
-    let _ = state.req_tx.send(InferRequest::Generate {
-        messages: req.messages.clone(),
-        images,
-        params:   req.gen.clone(),
-        token_tx: tok_tx,
-    });
+                    let done = serde_json::to_string(&json!({
+                        "id": id,
+                        "object": "chat.completion.chunk",
+                        "created": ts,
+                        "model": model_name,
+                        "choices": [{"index":0,"delta":{},"finish_reason":finish_reason}],
+                        "usage": {
+                            "prompt_tokens": prompt_tokens,
+                            "completion_tokens": completion_tokens,
+                            "total_tokens": prompt_tokens + completion_tokens,
+                            "n_ctx": n_ctx,
+                        }
+                    })).unwrap_or_default();
+                    yield Ok(sse::Event::default().data(done));
+                    yield Ok(sse::Event::default().data("[DONE]"));
+                };
 
-    if req.stream {
-        stream_chat_response(tok_rx, &state.model_name).await
-    } else {
-        collect_chat_response(tok_rx, &state.model_name).await
+                sse::Sse::new(stream)
+                    .keep_alive(sse::KeepAlive::default())
+                    .into_response()
+            } else {
+                let id = format!("chatcmpl-{}", short_id());
+                let ts = unix_ts();
+                Json(json!({
+                    "id": id,
+                    "object": "chat.completion",
+                    "created": ts,
+                    "model": state.model_name,
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": text},
+                        "finish_reason": finish_reason,
+                    }],
+                    "usage": {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": prompt_tokens + completion_tokens,
+                        "n_ctx": n_ctx,
+                    },
+                })).into_response()
+            }
+        }
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":e}))).into_response(),
     }
 }
 
@@ -1488,6 +1893,7 @@ async fn embeddings(
 
 // ── Streaming helpers ─────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 async fn stream_chat_response(
     mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
     model_name: &str,
@@ -1537,6 +1943,7 @@ async fn stream_chat_response(
         .into_response()
 }
 
+#[allow(dead_code)]
 async fn collect_chat_response(
     mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
     model_name: &str,

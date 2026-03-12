@@ -16,8 +16,6 @@ the Free Software Foundation, version 3 only. -->
   import { t }                  from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import ThemeToggle            from "$lib/ThemeToggle.svelte";
-  import LanguagePicker         from "$lib/LanguagePicker.svelte";
   import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
 
   // ── Types ──────────────────────────────────────────────────────────────────
@@ -517,7 +515,7 @@ the Free Software Foundation, version 3 only. -->
   useWindowTitle("window.title.onboarding");
 </script>
 
-<main class="h-screen flex flex-col overflow-hidden select-none bg-background text-foreground"
+<main class="h-full min-h-0 flex flex-col overflow-hidden select-none bg-background text-foreground"
       aria-label={t("onboarding.title")}>
 
   <!-- ── Top bar ───────────────────────────────────────────────────────────── -->
@@ -536,8 +534,6 @@ the Free Software Foundation, version 3 only. -->
         {ttsDlLabel || "Voice loading…"}
       </span>
     {/if}
-    <ThemeToggle />
-    <LanguagePicker />
   </div>
 
   <!-- ── Progress ──────────────────────────────────────────────────────────── -->

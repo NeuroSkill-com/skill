@@ -6,7 +6,6 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { invoke }    from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import SettingsTab      from "$lib/SettingsTab.svelte";
   import AppearanceTab    from "$lib/AppearanceTab.svelte";
@@ -20,16 +19,12 @@ the Free Software Foundation, version 3 only. -->
   import TtsTab           from "$lib/TtsTab.svelte";
   import PermissionsTab   from "$lib/PermissionsTab.svelte";
   import LlmTab           from "$lib/LlmTab.svelte";
-  import { Button }       from "$lib/components/ui/button";
   import { t }            from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import LanguagePicker   from "$lib/LanguagePicker.svelte";
-  import ThemeToggle      from "$lib/ThemeToggle.svelte";
 
   type Tab = "goals" | "calibration" | "embeddings" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions" | "llm";
   let tab = $state<Tab>("goals");
-  let appVersion = $state("…");
 
   const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "llm", "model", "embeddings", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
   const TAB_LABELS: Record<Tab, () => string> = {
@@ -80,12 +75,9 @@ the Free Software Foundation, version 3 only. -->
     }
   }
 
-  async function openHelp() { await invoke("open_help_window"); }
-
   let unlisten: UnlistenFn | null = null;
 
   onMount(async () => {
-    appVersion = await invoke<string>("get_app_version");
     window.addEventListener("keydown", onKeydown);
 
     // Support ?tab=updates query param (used by open_updates_window)
@@ -110,43 +102,11 @@ the Free Software Foundation, version 3 only. -->
   useWindowTitle("window.title.settings");
 </script>
 
-<main class="h-screen flex flex-col overflow-hidden"
+<main class="h-full min-h-0 flex flex-col overflow-hidden"
       aria-label={t("settingsTabs.settings")}>
 
-  <!-- ── Top bar ──────────────────────────────────────────────────────────── -->
-  <div class="shrink-0 flex items-center justify-between
-              px-3 py-2 border-b border-border dark:border-white/[0.07]
-              bg-muted/30 dark:bg-white/[0.02]">
-    <span class="text-[0.7rem] font-semibold text-foreground/70 tracking-wide uppercase select-none">
-      {t("settingsTabs.settings")}
-    </span>
-    <div class="flex items-center gap-1">
-      <Button size="sm" variant="ghost"
-              class="text-[0.68rem] h-6 px-2 text-muted-foreground hover:text-foreground gap-1"
-              onclick={openHelp}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             class="w-3 h-3 shrink-0">
-          <circle cx="12" cy="12" r="10"/>
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-          <line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-        {t("settingsTabs.help")}
-      </Button>
-      <ThemeToggle />
-      <LanguagePicker />
-      <span class="text-[0.52rem] text-muted-foreground/40 tabular-nums pl-1">
-        v{appVersion}
-      </span>
-      <span class="text-[0.48rem] text-muted-foreground/30 pl-0.5 select-none"
-            title="GNU General Public License v3.0">
-        {t("settings.license")}
-      </span>
-    </div>
-  </div>
-
   <!-- ── Body: sidebar + content ──────────────────────────────────────────── -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="min-h-0 flex-1 flex overflow-hidden">
 
     <!-- Sidebar nav -->
     <nav class="w-44 shrink-0 border-r border-border dark:border-white/[0.07]

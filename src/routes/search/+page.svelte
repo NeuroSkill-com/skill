@@ -5,6 +5,7 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
+  import { onMount }    from "svelte";
   import { invoke }     from "@tauri-apps/api/core";
   import { Button }     from "$lib/components/ui/button";
   import { Badge }      from "$lib/components/ui/badge";
@@ -12,8 +13,6 @@ the Free Software Foundation, version 3 only. -->
   import { getAppName } from "$lib/app-name-store.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter   from "$lib/DisclaimerFooter.svelte";
-  import LanguagePicker     from "$lib/LanguagePicker.svelte";
-  import ThemeToggle        from "$lib/ThemeToggle.svelte";
   import { Spinner }        from "$lib/components/ui/spinner";
   import UmapViewer3D       from "$lib/UmapViewer3D.svelte";
   import InteractiveGraph3D from "$lib/InteractiveGraph3D.svelte";
@@ -149,7 +148,48 @@ the Free Software Foundation, version 3 only. -->
   // ── Mode ─────────────────────────────────────────────────────────────────
   type SearchMode = "eeg" | "text" | "interactive";
   let mode = $state<SearchMode>("interactive");
+  const SEARCH_MODE_EVENT = "skill:search-mode";
+  const SEARCH_SET_MODE_EVENT = "skill:search-set-mode";
+
+  function normalizeSearchMode(value: unknown): SearchMode {
+    return value === "eeg" || value === "text" || value === "interactive"
+      ? value
+      : "interactive";
+  }
+
+  function emitSearchMode(value: SearchMode) {
+    window.dispatchEvent(new CustomEvent(SEARCH_MODE_EVENT, { detail: { mode: value } }));
+  }
+
   function switchMode(m: SearchMode) { mode = m; error = ""; page = 0; }
+
+  onMount(() => {
+    const onTitlebarSetMode = (event: Event) => {
+      const next = normalizeSearchMode((event as CustomEvent<{ mode?: unknown }>).detail?.mode);
+      switchMode(next);
+    };
+
+    window.addEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
+
+    const initialMode = normalizeSearchMode(new URLSearchParams(window.location.search).get("mode"));
+    switchMode(initialMode);
+    emitSearchMode(initialMode);
+
+    return () => {
+      window.removeEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
+    };
+  });
+
+  $effect(() => {
+    const currentMode = mode;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("mode") !== currentMode) {
+      params.set("mode", currentMode);
+      const next = `${window.location.pathname}?${params.toString()}${window.location.hash}`;
+      history.replaceState(history.state, "", next);
+    }
+    emitSearchMode(currentMode);
+  });
 
   // ── Shared ───────────────────────────────────────────────────────────────
   let kVal  = $state(10);
@@ -664,49 +704,12 @@ the Free Software Foundation, version 3 only. -->
   useWindowTitle("window.title.search");
 </script>
 
-<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden">
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">
 
-  <!-- ── Title bar ────────────────────────────────────────────────────── -->
-  <div class="relative flex items-center gap-2 px-4 pt-4 pb-3 shrink-0
-              border-b border-border dark:border-white/[0.07]" data-tauri-drag-region>
-
-    <!-- Icon + title -->
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-         stroke-linecap="round" stroke-linejoin="round"
-         class="w-4 h-4 shrink-0 text-muted-foreground pointer-events-none">
-      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-    </svg>
-    <span class="text-[0.82rem] font-semibold tracking-tight select-none">{t("search.title")}</span>
-
-    <!-- Mode segmented control -->
-    <div class="flex rounded-md border border-border dark:border-white/[0.1] overflow-hidden text-[0.65rem] ml-3 shrink-0">
-      <button onclick={() => switchMode("eeg")}
-              class="px-3.5 py-1 font-semibold transition-colors leading-none
-                     {mode === 'eeg'
-                        ? 'bg-blue-500 text-white shadow-inner'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}">
-        {t("search.modeEeg")}
-      </button>
-      <div class="w-px bg-border dark:bg-white/[0.1]"></div>
-      <button onclick={() => switchMode("text")}
-              class="px-3.5 py-1 font-semibold transition-colors leading-none
-                     {mode === 'text'
-                        ? 'bg-violet-600 text-white shadow-inner'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}">
-        {t("search.modeText")}
-      </button>
-      <div class="w-px bg-border dark:bg-white/[0.1]"></div>
-      <button onclick={() => switchMode("interactive")}
-              class="px-3.5 py-1 font-semibold transition-colors leading-none
-                     {mode === 'interactive'
-                        ? 'bg-emerald-600 text-white shadow-inner'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/40'}">
-        {t("search.modeInteractive")}
-      </button>
-    </div>
-
-    <!-- Status / summary -->
-    <div class="flex-1 min-w-0 flex items-center justify-end">
+  <!-- ── Status strip ─────────────────────────────────────────────────── -->
+  <div class="relative flex items-center justify-end px-4 py-1.5 shrink-0
+              border-b border-border dark:border-white/[0.07]">
+    <div class="min-w-0 flex items-center justify-end">
       {#if mode === "eeg" && result}
         <span class="text-[0.6rem] text-muted-foreground/55 select-none tabular-nums truncate">
           {t("search.resultSummary", { queries: result.query_count, k: result.k, days: result.searched_days.length })}
@@ -721,9 +724,6 @@ the Free Software Foundation, version 3 only. -->
         </span>
       {/if}
     </div>
-
-    <ThemeToggle />
-    <LanguagePicker />
 
     <!-- Streaming progress line -->
     {#if mode === "eeg" && searching && streamTotal > 0}

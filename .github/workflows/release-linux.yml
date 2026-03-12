@@ -186,6 +186,23 @@ jobs:
         # `tauri:build:linux:x64` sets ALLOW_LINUX_CROSS=1.
         run: npm run tauri:build:linux:x64
 
+      # ── Post-build sanity check ─────────────────────────────────────────────
+      - name: Verify Linux bundle directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_DIR="src-tauri/target/x86_64-unknown-linux-gnu/release/bundle"
+
+          if [ ! -d "$TARGET_DIR/deb" ] || [ ! -d "$TARGET_DIR/appimage" ]; then
+            echo "::error::Expected Linux bundle directories are missing."
+            echo "Expected: $TARGET_DIR/deb and $TARGET_DIR/appimage"
+            echo "Present under $TARGET_DIR:"
+            find "$TARGET_DIR" -maxdepth 2 -type d 2>/dev/null | sort || true
+            exit 1
+          fi
+
+          echo "✓ Bundle directories exist: $TARGET_DIR/deb and $TARGET_DIR/appimage"
+
       # ── Locate build artifacts ────────────────────────────────────────────────
       - name: Collect artifact paths
         id: artifacts

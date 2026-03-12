@@ -10,9 +10,8 @@ the Free Software Foundation, version 3 only. -->
   import { Button }   from "$lib/components/ui/button";
   import { Textarea } from "$lib/components/ui/textarea";
   import { t }        from "$lib/i18n/index.svelte";
+  import { labelTitlebarState } from "$lib/label-titlebar.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
-  import LanguagePicker from "$lib/LanguagePicker.svelte";
-  import ThemeToggle    from "$lib/ThemeToggle.svelte";
 
   // ── State ──────────────────────────────────────────────────────────────────
   let text          = $state("");
@@ -129,11 +128,20 @@ the Free Software Foundation, version 3 only. -->
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   onMount(() => {
     labelStartUtc = Math.floor(Date.now() / 1000);
+    labelTitlebarState.active = true;
     timer = setInterval(() => elapsed++, 1000);
     setTimeout(() => textareaEl?.focus(), 60);
     loadRecentLabels();
   });
-  onDestroy(() => { if (timer) clearInterval(timer); });
+  onDestroy(() => {
+    if (timer) clearInterval(timer);
+    labelTitlebarState.active = false;
+    labelTitlebarState.elapsed = "0s";
+  });
+
+  $effect(() => {
+    labelTitlebarState.elapsed = fmtElapsed(elapsed);
+  });
 
   const MAX_CHARS        = 1000;
   const MAX_CONTEXT_CHARS = 20_000;
@@ -146,25 +154,7 @@ the Free Software Foundation, version 3 only. -->
 
 <svelte:window onkeydown={onKeydown} />
 
-<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden">
-
-  <!-- ── Title bar ────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2.5 px-4 pt-4 pb-3
-              border-b border-border dark:border-white/[0.07] shrink-0"
-       data-tauri-drag-region>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-         class="w-4 h-4 shrink-0 text-muted-foreground pointer-events-none">
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
-      <line x1="7" y1="7" x2="7.01" y2="7"/>
-    </svg>
-    <span class="text-[0.82rem] font-semibold tracking-tight select-none">{t("label.addLabel")}</span>
-    <span class="ml-auto text-[0.62rem] text-muted-foreground/60 tabular-nums select-none">
-      {t("label.eegWindow", { elapsed: fmtElapsed(elapsed) })}
-    </span>
-    <ThemeToggle />
-    <LanguagePicker />
-  </div>
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">
 
   <!-- ── Body: label + context stacked, both flex-grow ───────────────────── -->
   <div class="flex flex-col px-4 pt-3 pb-1 gap-2 min-h-0 flex-1">

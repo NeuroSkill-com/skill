@@ -14,8 +14,6 @@ the Free Software Foundation, version 3 only. -->
   import { Spinner }    from "$lib/components/ui/spinner";
   import { t }          from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
-  import LanguagePicker from "$lib/LanguagePicker.svelte";
-  import ThemeToggle    from "$lib/ThemeToggle.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -257,31 +255,7 @@ the Free Software Foundation, version 3 only. -->
   useWindowTitle("window.title.labels");
 </script>
 
-<main class="min-h-screen bg-background text-foreground flex flex-col overflow-hidden">
-
-  <!-- ── Title bar ──────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2.5 px-4 pt-4 pb-3
-              border-b border-border dark:border-white/[0.07] shrink-0"
-       data-tauri-drag-region>
-    <!-- Icon -->
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-         class="w-4 h-4 shrink-0 text-muted-foreground pointer-events-none">
-      <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
-      <line x1="7" y1="7" x2="7.01" y2="7"/>
-    </svg>
-    <span class="text-[0.82rem] font-semibold tracking-tight select-none">
-      {t("labels.title")}
-    </span>
-    {#if !loading}
-      <Badge variant="secondary" class="text-[0.6rem] px-1.5 py-0">
-        {t("labels.totalLabels", { n: activeLabels.length })}{totalPages > 1 ? ` — ${t("labels.page", { page: page + 1, total: totalPages })}` : ""}
-      </Badge>
-    {/if}
-    <span class="flex-1"></span>
-    <ThemeToggle />
-    <LanguagePicker />
-  </div>
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">
 
   <!-- ── Search bar ─────────────────────────────────────────────────────────── -->
   <div class="px-4 py-2.5 border-b border-border dark:border-white/[0.06] flex flex-col gap-1.5">

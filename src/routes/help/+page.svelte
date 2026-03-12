@@ -20,14 +20,12 @@ the Free Software Foundation, version 3 only. -->
   import HelpTts                from "$lib/help/HelpTts.svelte";
   import { t }                  from "$lib/i18n/index.svelte";
   import { useWindowTitle }     from "$lib/window-title.svelte";
+  import { helpTitlebarState }  from "$lib/help-search-state.svelte";
   import DisclaimerFooter       from "$lib/DisclaimerFooter.svelte";
-  import LanguagePicker         from "$lib/LanguagePicker.svelte";
-  import ThemeToggle            from "$lib/ThemeToggle.svelte";
 
   type Tab = "dashboard" | "electrodes" | "settings" | "windows" | "api" | "tts" | "privacy" | "references" | "faq";
   let tab = $state<Tab>("dashboard");
-  let appVersion = $state("…");
-  let searchQuery = $state("");
+  let searchQuery = $derived(helpTitlebarState.query);
 
   const TAB_IDS: Tab[] = ["dashboard", "electrodes", "settings", "windows", "api", "tts", "privacy", "references", "faq"];
   const helpTabLabel = (id: Tab) => t(`helpTabs.${id}`);
@@ -180,7 +178,7 @@ the Free Software Foundation, version 3 only. -->
 
   function goToTab(id: Tab) {
     tab = id;
-    searchQuery = "";
+    helpTitlebarState.query = "";
   }
 
   // ── Search-result navigation ──────────────────────────────────────────────
@@ -189,12 +187,12 @@ the Free Software Foundation, version 3 only. -->
   function goToItem(targetTab: Tab, titleKey: string) {
     pendingScrollKey = titleKey;
     tab = targetTab;
-    searchQuery = "";
+    helpTitlebarState.query = "";
   }
 
   $effect(() => {
     void tab;
-    void searchQuery;
+    void helpTitlebarState.query;
     const key = pendingScrollKey;
     if (!key) return;
     pendingScrollKey = "";
@@ -232,69 +230,21 @@ the Free Software Foundation, version 3 only. -->
   }
 
   onMount(async () => {
-    appVersion = await invoke<string>("get_app_version");
+    helpTitlebarState.version = await invoke<string>("get_app_version");
     window.addEventListener("keydown", onKeydown);
   });
   onDestroy(() => {
+    helpTitlebarState.query = "";
     if (typeof window !== "undefined") window.removeEventListener("keydown", onKeydown);
   });
 
   useWindowTitle("window.title.help");
 </script>
 
-<main class="h-screen flex flex-col overflow-hidden">
-
-  <!-- ── Top bar: search + controls ──────────────────────────────────────── -->
-  <div class="shrink-0 flex items-center gap-3
-              px-3 py-2 border-b border-border dark:border-white/[0.07]
-              bg-muted/30 dark:bg-white/[0.02]">
-
-    <!-- Search -->
-    <div class="relative flex-1 min-w-0">
-      <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3
-                  text-muted-foreground/50 pointer-events-none"
-           viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-      </svg>
-      <input
-        type="search"
-        bind:value={searchQuery}
-        placeholder={t("help.searchPlaceholder")}
-        class="w-full rounded-md border border-border dark:border-white/[0.07]
-               bg-background/60 dark:bg-white/[0.04] pl-7 pr-7 py-1.5
-               text-[0.75rem] text-foreground placeholder:text-muted-foreground/50
-               focus:outline-none focus:ring-1 focus:ring-foreground/20
-               transition-colors"
-      />
-      {#if searchQuery}
-        <button
-          onclick={() => searchQuery = ""}
-          class="absolute right-2 top-1/2 -translate-y-1/2
-                 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-          aria-label="Clear search">
-          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M18 6 6 18M6 6l12 12"/>
-          </svg>
-        </button>
-      {/if}
-    </div>
-
-    <!-- Right controls -->
-    <div class="flex items-center gap-1 shrink-0">
-      <ThemeToggle />
-      <LanguagePicker />
-      <span class="text-[0.52rem] text-muted-foreground/40 tabular-nums pl-1">
-        v{appVersion}
-      </span>
-      <span class="text-[0.48rem] text-muted-foreground/30 pl-0.5 select-none"
-            title="GNU General Public License v3.0">
-        {t("settings.license")}
-      </span>
-    </div>
-  </div>
+<main class="h-full min-h-0 flex flex-col overflow-hidden">
 
   <!-- ── Body: sidebar + content ──────────────────────────────────────────── -->
-  <div class="flex-1 flex overflow-hidden">
+  <div class="min-h-0 flex-1 flex overflow-hidden">
 
     <!-- Sidebar nav (always visible, dims when searching) -->
     <nav class="w-40 shrink-0 border-r border-border dark:border-white/[0.07]

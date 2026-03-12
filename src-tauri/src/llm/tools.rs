@@ -179,7 +179,7 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
 }
 
 /// Remove `[TOOL_CALL]…[/TOOL_CALL]` markers from assistant message content.
-pub fn strip_tool_call_blocks(content: &str) -> String {
+pub fn strip_tool_call_blocks_preserve(content: &str) -> String {
     const START: &str = "[TOOL_CALL]";
     const END:   &str = "[/TOOL_CALL]";
 
@@ -202,7 +202,11 @@ pub fn strip_tool_call_blocks(content: &str) -> String {
         }
     }
 
-    out.trim().to_string()
+    out
+}
+
+pub fn strip_tool_call_blocks(content: &str) -> String {
+    strip_tool_call_blocks_preserve(content).trim().to_string()
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

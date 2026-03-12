@@ -10,8 +10,6 @@ the Free Software Foundation, version 3 only. -->
   import { invoke }         from "@tauri-apps/api/core";
   import { t }              from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
-  import ThemeToggle        from "$lib/ThemeToggle.svelte";
-  import LanguagePicker     from "$lib/LanguagePicker.svelte";
 
   useWindowTitle("window.title.about");
 
@@ -40,24 +38,11 @@ the Free Software Foundation, version 3 only. -->
   });
 </script>
 
-<main class="h-screen bg-background text-foreground flex flex-col overflow-hidden select-none">
-
-  <!-- ── Title bar ─────────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-2.5 px-4 pt-4 pb-3
-              border-b border-border dark:border-white/[0.07] shrink-0"
-       data-tauri-drag-region>
-    <span class="text-base pointer-events-none">ℹ️</span>
-    <span class="text-[0.82rem] font-semibold tracking-tight">
-      {t("about.title")}
-    </span>
-    <span class="flex-1"></span>
-    <ThemeToggle />
-    <LanguagePicker />
-  </div>
+<main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden select-none">
 
   <!-- ── Content ───────────────────────────────────────────────────────────── -->
   {#if info}
-    <div class="flex-1 overflow-y-auto px-7 py-5 flex flex-col gap-4">
+    <div class="min-h-0 flex-1 overflow-y-auto px-7 py-5 flex flex-col gap-4">
 
       <!-- Hero ---------------------------------------------------------------->
       <div class="flex flex-col items-center gap-2 text-center">
