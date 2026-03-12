@@ -85,6 +85,26 @@ ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static.sh",  relative =
 MACOSX_DEPLOYMENT_TARGET    = { value = "10.15", force = true }
 CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 
+# ── macOS: increase main-thread stack size ────────────────────────────────────
+#
+# macOS defaults to an 8 MB main-thread stack.  The Tauri `run()` function
+# has an enormous frame because `generate_handler!` expands ~150 command
+# handlers inline, plus the setup/run closures, `AppState::default()`, and
+# deep generics from serde / HNSW / llama.cpp.  8 MB is not enough.
+#
+# -Wl,-stack_size,0x2000000  →  32 MB (0x2000000 = 33 554 432).
+# The macOS linker (ld64) sets LC_MAIN.stacksize in the Mach-O header.
+# Only the main thread is affected; worker threads use their own stack_size.
+#
+# If you still see "thread 'main' has overflowed its stack" after this, bump
+# the value further (e.g. 0x4000000 = 64 MB) — macOS lazily commits pages so
+# the resident cost is proportional to actual usage, not the reservation.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-args=-Wl,-stack_size,0x2000000"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-args=-Wl,-stack_size,0x2000000"]
+
 # ── Windows MSVC: increase main-thread stack size ────────────────────────────
 #
 # Windows allocates only 1 MB of stack to the main thread by default (vs 8 MB

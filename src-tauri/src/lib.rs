@@ -1119,6 +1119,597 @@ fn quit_dialog_strings(lang: &str) -> (&'static str, &'static str) {
     }
 }
 
+// ── App setup (extracted to reduce `run()` stack frame) ───────────────────────
+
+/// Extracted from the `.setup()` closure so LLVM does not merge its locals
+/// into the already-huge `run()` stack frame produced by `generate_handler!`.
+#[inline(never)]
+fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    {
+        use tauri::Manager;
+        let resource_dir = app.path().resource_dir()
+            .unwrap_or_else(|_| std::path::PathBuf::from("resources"));
+        init_espeak_bundled_data_path(&resource_dir);
+        let samples_dir = resource_dir.join("neutts-samples");
+        init_neutts_samples_dir(samples_dir);
+    }
+
+    // ── Linux: fix main-window property overrides ─────────────────────
+    #[cfg(target_os = "linux")]
+    {
+        use tauri::Manager;
+        if let Some(win) = app.get_webview_window("main") {
+            let _ = win.set_skip_taskbar(false);
+            let _ = win.set_resizable(true);
+            let _ = win.set_closable(true);
+            let _ = win.set_minimizable(true);
+            let size = tauri::LogicalSize::new(480.0_f64, 800.0_f64);
+            let _ = win.set_min_size(Some(tauri::Size::Logical(size)));
+            let _ = win.set_max_size(Some(tauri::Size::Logical(size)));
+        }
+    }
+
+    let app_name = app.package_info().name.to_lowercase();
+    let ws_cfg = {
+        let dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
+        let s   = load_settings(&dir);
+        (s.ws_host, s.ws_port)
+    };
+
+    // ── LLM server (optional, same port) ──────────────────────────────
+    #[cfg(feature = "llm")]
+    {
+        let (llm_cfg, catalog, log_buf, cell, skill_dir) = {
+            let dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
+            let llm_cfg = load_settings(&dir).llm;
+            let guard = app.state::<Mutex<Box<AppState>>>();
+            let s = guard.lock().unwrap();
+            (llm_cfg, s.llm.catalog.clone(), s.llm.logs.clone(), s.llm.state_cell.clone(), s.skill_dir.clone())
+        };
+        if llm_cfg.enabled {
+            let app_handle = app.handle().clone();
+            let cell2 = cell.clone();
+            std::thread::spawn(move || {
+                if let Some(state) = llm::init(&llm_cfg, &catalog, app_handle, log_buf, &skill_dir) {
+                    *cell2.lock().unwrap() = Some(state);
+                }
+            });
+        }
+    }
+
+    #[allow(unused_mut)]
+    let (broadcaster, mut serve_handle) = ws_server::bind_with(ws_cfg.0, ws_cfg.1);
+    ws_server::register_mdns(&app_name, serve_handle.port);
+    let ws_app = app.handle().clone();
+
+    #[cfg(feature = "llm")]
+    {
+        let cell = app.state::<Mutex<Box<AppState>>>()
+            .lock().unwrap().llm.state_cell.clone();
+        serve_handle.set_llm(cell);
+    }
+
+    tauri::async_runtime::spawn(async move { serve_handle.serve(ws_app).await; });
+    app.manage(broadcaster);
+
+    let logger_arc = {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let g = r.lock_or_recover();
+        g.logger.clone()
+    };
+    app.manage(logger_arc);
+
+    let skill_dir = {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let g = r.lock_or_recover();
+        g.skill_dir.clone()
+    };
+    let data = load_settings(&skill_dir);
+    {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let mut s = r.lock_or_recover();
+        s.status.paired_devices         = data.paired.clone();
+        s.preferred_id                  = data.preferred_id.clone();
+        s.status.filter_config          = data.filter_config;
+        s.status.embedding_overlap_secs = data.embedding_overlap_secs;
+        s.label_shortcut                = data.label_shortcut;
+        s.search_shortcut               = data.search_shortcut;
+        s.settings_shortcut             = data.settings_shortcut;
+        s.calibration_shortcut          = data.calibration_shortcut;
+        s.help_shortcut                 = data.help_shortcut;
+        s.history_shortcut              = data.history_shortcut;
+        s.api_shortcut                  = data.api_shortcut;
+        s.theme_shortcut                = data.theme_shortcut;
+        s.focus_timer_shortcut          = data.focus_timer_shortcut;
+        let mut profiles = data.calibration_profiles;
+        if profiles.is_empty() {
+            profiles.push(CalibrationProfile::from_legacy(&data.calibration));
+        }
+        s.calibration_profiles = profiles;
+        s.active_calibration_id = if data.active_calibration_id.is_empty() {
+            s.calibration_profiles.first().map(|p| p.id.clone()).unwrap_or_default()
+        } else {
+            data.active_calibration_id
+        };
+        s.onboarding_complete                = data.onboarding_complete;
+        s.last_seen_whats_new_version        = data.last_seen_whats_new_version;
+        s.theme                        = data.theme;
+        s.language                     = data.language;
+        s.daily_goal_min               = data.daily_goal_min;
+        s.goal_notified_date           = data.goal_notified_date;
+        s.text_embedding_model         = data.text_embedding_model.clone();
+        s.hooks                        = data.hooks;
+        s.ws_host                      = data.ws_host.clone();
+        s.ws_port                      = data.ws_port;
+        s.update_check_interval_secs   = data.update_check_interval_secs;
+        s.openbci_config               = data.openbci;
+        s.neutts_config                = data.neutts.clone();
+        s.tts_preload                  = data.tts_preload;
+        s.track_active_window          = data.track_active_window;
+        s.track_input_activity         = data.track_input_activity;
+        s.input_activity_enabled
+            .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
+        s.dnd_config  = data.do_not_disturb;
+        s.llm.config  = data.llm;
+        if let Some(os_active) = crate::dnd::query_os_active() {
+            if !os_active { s.dnd_active = false; }
+        }
+        neutts_apply_config(&data.neutts);
+        for pd in &data.paired {
+            s.discovered.push(DiscoveredDevice {
+                id: pd.id.clone(), name: pd.name.clone(),
+                last_seen: pd.last_seen, last_rssi: 0,
+                is_paired: true,
+                is_preferred: data.preferred_id.as_deref() == Some(&pd.id),
+            });
+        }
+    }
+
+    if data.tts_preload {
+        let app_handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+            crate::tts::tts_init(app_handle).await.ok();
+        });
+    }
+
+    {
+        let model_code = {
+            let r = app.state::<Mutex<Box<AppState>>>();
+            let g = r.lock_or_recover();
+            g.text_embedding_model.clone()
+        };
+        let skill_dir_emb = skill_dir.clone();
+        let embedder_arc  = std::sync::Arc::clone(
+            &*app.state::<std::sync::Arc<EmbedderState>>()
+        );
+        let logger_emb = app.state::<std::sync::Arc<SkillLogger>>().inner().clone();
+        std::thread::spawn(move || {
+            init_embedder(&embedder_arc, &model_code, &skill_dir_emb, &logger_emb);
+        });
+    }
+
+    {
+        let label_idx = std::sync::Arc::clone(
+            &*app.state::<std::sync::Arc<label_index::LabelIndexState>>()
+        );
+        let sd = skill_dir.clone();
+        std::thread::spawn(move || label_idx.load(&sd));
+    }
+
+    // ── Startup weights probe ─────────────────────────────────────────
+    {
+        let model_status = {
+            let r = app.state::<Mutex<Box<AppState>>>();
+            let g = r.lock_or_recover();
+            g.model_status.clone()
+        };
+        let hf_repo = {
+            let r = app.state::<Mutex<Box<AppState>>>();
+            let g = r.lock_or_recover();
+            g.model_config.hf_repo.clone()
+        };
+        std::thread::Builder::new()
+            .name("weights-probe".into())
+            .spawn(move || {
+                if let Some((w, _c)) = crate::eeg_embeddings::probe_hf_weights(&hf_repo) {
+                    let mut st = model_status.lock_or_recover();
+                    st.weights_found  = true;
+                    st.weights_path   = Some(w.display().to_string());
+                    eprintln!("[embedder] startup probe: weights found at {}", w.display());
+                } else {
+                    eprintln!("[embedder] startup probe: weights not found in HuggingFace cache");
+                }
+            })
+            .expect("[weights-probe] failed to spawn");
+    }
+
+    // ── Global cross-day EEG HNSW index ──────────────────────────────
+    {
+        let global_arc = std::sync::Arc::clone(
+            &*app.state::<std::sync::Arc<GlobalEegIndex>>()
+        );
+        let sd = skill_dir.clone();
+        std::thread::Builder::new()
+            .name("global-hnsw-build".into())
+            .spawn(move || {
+                let idx = global_eeg_index::load_or_build(&sd);
+                *global_arc.0.lock_or_recover() = Some(idx);
+                eprintln!("[global_idx] ready — embed worker will insert new epochs incrementally");
+            })
+            .expect("[global_idx] failed to spawn build thread");
+    }
+
+    if let Err(e) = apply_all_shortcuts(app.handle()) {
+        eprintln!("[shortcut] failed to register shortcuts: {e}");
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItem, PredefinedMenuItem};
+        let app_submenu = SubmenuBuilder::new(app, constants::APP_DISPLAY_NAME)
+            .item(&MenuItem::with_id(
+                app, "about",
+                format!("About {}", constants::APP_DISPLAY_NAME),
+                true, None::<&str>,
+            )?)
+            .separator()
+            .item(&PredefinedMenuItem::hide(app, None)?)
+            .item(&PredefinedMenuItem::hide_others(app, None)?)
+            .item(&PredefinedMenuItem::show_all(app, None)?)
+            .separator()
+            .item(&MenuItem::with_id(
+                app, "macos_quit",
+                format!("Quit {}", constants::APP_DISPLAY_NAME),
+                true, Some("Cmd+Q"),
+            )?)
+            .build()?;
+        let window_submenu = SubmenuBuilder::new(app, "Window")
+            .item(&PredefinedMenuItem::minimize(app, None)?)
+            .item(&PredefinedMenuItem::maximize(app, None)?)
+            .separator()
+            .item(&PredefinedMenuItem::close_window(app, None)?)
+            .build()?;
+        let app_menu = MenuBuilder::new(app)
+            .item(&app_submenu)
+            .item(&window_submenu)
+            .build()?;
+        app.set_menu(app_menu).ok();
+    }
+
+    app.on_menu_event(|app, event| {
+        if event.id().as_ref() == "about" {
+            let a = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = open_about_window(a).await;
+            });
+        } else if event.id().as_ref() == "macos_quit" {
+            confirm_and_quit(app.clone());
+        }
+    });
+
+    let init_status = {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let g = r.lock_or_recover();
+        g.status.clone()
+    };
+    let init_menu = build_menu(app.handle(), &init_status)?;
+
+    /// Main-window recovery helper.
+    fn show_and_recover_main(app: &AppHandle) {
+        let win = if let Some(win) = app.get_webview_window("main") {
+            win
+        } else {
+            match tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("".into()),
+            )
+            .title(constants::APP_DISPLAY_NAME)
+            .decorations(false)
+            .build()
+            {
+                Ok(win) => win,
+                Err(_) => return,
+            }
+        };
+        let _ = win.show();
+        let _ = win.set_focus();
+        linux_fix_decorations(&win);
+        if win
+            .eval("window.__skill_loaded||(window.location.reload(),false)")
+            .is_err()
+        {
+            if let Ok(url) = "tauri://localhost".parse() {
+                let _ = win.navigate(url);
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    if !linux_has_appindicator_runtime() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "System tray is required but Linux appindicator runtime is missing. \
+             Install libayatana-appindicator3 or libappindicator3.",
+        )
+        .into());
+    }
+
+    TrayIconBuilder::with_id("main")
+        .icon(icon_disconnected())
+        .tooltip("NeuroSkill™ – Disconnected")
+        .menu(&init_menu)
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app, event| {
+            let id = event.id.as_ref();
+            if id == "open_skill" {
+                show_and_recover_main(app);
+            } else if id == "disconnect" || id == "cancel" {
+                {
+                    let r = app.state::<Mutex<Box<AppState>>>();
+                    let mut s = r.lock_or_recover();
+                    s.pending_reconnect = false;
+                    s.retry_attempt = 0;
+                }
+                cancel_session(app);
+            } else if id == "scan" || id == "retry" {
+                start_session(app, None);
+            } else if id == "open_bt" {
+                open_bt_settings();
+            } else if id == "calibrate" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_calibration_window_inner(&a, None, false).await;
+                });
+            } else if id == "search" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move { let _ = open_search_window(a).await; });
+            } else if id == "label" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move { let _ = open_label_window(a).await; });
+            } else if id == "history" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move { let _ = open_history_window(a).await; });
+            } else if id == "compare" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move { let _ = open_compare_window(a).await; });
+            } else if id == "settings" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move { let _ = open_settings_window(a).await; });
+            } else if id == "help" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move { let _ = open_help_window(a).await; });
+            } else if id == "api" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move { let _ = open_api_window(a).await; });
+            } else if id == "chat" {
+                #[cfg(feature = "llm")] {
+                    let a = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = open_chat_window(a).await;
+                    });
+                }
+            } else if id == "downloads" {
+                #[cfg(feature = "llm")] {
+                    let a = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = open_downloads_window(a).await;
+                    });
+                }
+            } else if id == "focus_timer" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = open_focus_timer_window(a).await;
+                });
+            } else if id == "check_update" {
+                let a = app.clone();
+                tauri::async_runtime::spawn(async move { let _ = open_updates_window(a).await; });
+            } else if id == "quit" {
+                confirm_and_quit(app.app_handle().clone());
+            } else if let Some(dev_id) = id.strip_prefix("connect:") {
+                start_session(app, Some(dev_id.to_owned()));
+            } else if let Some(dev_id) = id.strip_prefix("forget:") {
+                let dev_id = dev_id.to_owned();
+                forget_device(dev_id, app.clone());
+            }
+        })
+        .on_tray_icon_event(|_tray, _event| {})
+        .build(app)?;
+
+    let app_scan = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        start_background_scanner(&app_scan);
+    });
+
+    let app_auto = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(900)).await;
+        let preferred = {
+            let r = app_auto.state::<Mutex<Box<AppState>>>();
+            let mut s = r.lock_or_recover();
+            let pref = s.preferred_id.clone()
+                .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()));
+            if pref.is_some() { s.pending_reconnect = true; }
+            pref
+        };
+        start_session(&app_auto, preferred);
+    });
+
+    let app_cal = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+        let auto_start_id: Option<String> = {
+            let r = app_cal.state::<Mutex<Box<AppState>>>();
+            let s = r.lock_or_recover();
+            let active_id = &s.active_calibration_id;
+            s.calibration_profiles.iter()
+                .find(|p| &p.id == active_id)
+                .filter(|p| p.auto_start)
+                .map(|p| p.id.clone())
+        };
+        if let Some(id) = auto_start_id {
+            let _ = open_calibration_window_inner(&app_cal, Some(id), false).await;
+        }
+    });
+
+    let app_onboard = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let done = {
+            let r = app_onboard.state::<Mutex<Box<AppState>>>();
+            let g = r.lock_or_recover();
+            g.onboarding_complete
+        };
+        if !done { let _ = open_onboarding_window(app_onboard).await; }
+    });
+
+    {
+        let (act_store, kbd_ts, mouse_ts, input_flag, kbd_cnt, mouse_cnt) = {
+            let state_ref = app.state::<Mutex<Box<AppState>>>();
+            let s = state_ref.lock_or_recover();
+            (
+                s.activity_store.clone(),
+                s.last_keyboard_ts.clone(),
+                s.last_mouse_ts.clone(),
+                s.input_activity_enabled.clone(),
+                s.kbd_event_count.clone(),
+                s.mouse_event_count.clone(),
+            )
+        };
+        if let Some(store) = act_store.clone() {
+            let app_win = app.handle().clone();
+            std::thread::Builder::new()
+                .name("active-window-poll".into())
+                .spawn(move || active_window::run_poller(app_win, store))
+                .expect("[active-window] failed to spawn poll thread");
+        }
+        if let Some(store) = act_store {
+            let app_inp = app.handle().clone();
+            std::thread::Builder::new()
+                .name("input-monitor".into())
+                .spawn(move || {
+                    active_window::run_input_monitor(
+                        app_inp, input_flag, kbd_ts, mouse_ts,
+                        kbd_cnt, mouse_cnt, store,
+                    );
+                })
+                .expect("[input-monitor] failed to spawn thread");
+        }
+    }
+
+    setup_background_tasks(app);
+    Ok(())
+}
+
+/// Long-running background async tasks (updater poll, DND OS poll).
+/// Extracted into its own `#[inline(never)]` function to keep `setup_app`
+/// frame smaller.
+#[inline(never)]
+fn setup_background_tasks(app: &mut tauri::App) {
+    let app_upd = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        use tauri_plugin_updater::UpdaterExt;
+        let mut updater_platform_unsupported = false;
+        tokio::time::sleep(Duration::from_secs(30)).await;
+        loop {
+            if updater_platform_unsupported { break; }
+            eprintln!("[updater] running background update check");
+            match app_upd.updater() {
+                Err(e) => eprintln!("[updater] cannot get updater: {e}"),
+                Ok(updater) => {
+                    let result = tokio::time::timeout(
+                        Duration::from_secs(30), updater.check(),
+                    ).await;
+                    match result {
+                        Err(_) => eprintln!("[updater] check timed out after 30 s"),
+                        Ok(Ok(Some(update))) => {
+                            eprintln!("[updater] update available: {}", update.version);
+                            let payload = serde_json::json!({
+                                "version": update.version,
+                                "date":    update.date,
+                                "body":    update.body,
+                            });
+                            let _ = app_upd.emit("update-available", payload);
+                        }
+                        Ok(Ok(None)) => {
+                            eprintln!("[updater] up to date");
+                            let _ = app_upd.emit("update-checked", ());
+                        }
+                        Ok(Err(e)) => {
+                            let msg = e.to_string();
+                            if msg.contains("None of the fallback platforms")
+                                || msg.contains("were found in the response `platforms` object")
+                            {
+                                eprintln!(
+                                    "[updater] no release artifacts for this platform; \
+                                     disabling background update checks"
+                                );
+                                updater_platform_unsupported = true;
+                            } else {
+                                eprintln!("[updater] check failed: {e}");
+                            }
+                        }
+                    }
+                }
+            }
+
+            let interval_secs = {
+                let r = app_upd.state::<Mutex<Box<AppState>>>();
+                let g = r.lock_or_recover();
+                g.update_check_interval_secs
+            };
+            let sleep_secs = if interval_secs == 0 { 60 } else { interval_secs };
+            tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
+        }
+    });
+
+    // ── Background OS DND poll ────────────────────────────────────────
+    let app_dnd = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        loop {
+            let os_now = crate::dnd::query_os_active();
+
+            let (prev, app_active) = {
+                let r = app_dnd.state::<Mutex<Box<AppState>>>();
+                let g = r.lock_or_recover();
+                (g.dnd_os_active, g.dnd_active)
+            };
+
+            if os_now != prev {
+                {
+                    let r = app_dnd.state::<Mutex<Box<AppState>>>();
+                    r.lock_or_recover().dnd_os_active = os_now;
+                }
+
+                let payload = serde_json::json!({ "os_active": os_now });
+                let _ = app_dnd.emit("dnd-os-changed", &payload);
+                app_dnd.state::<WsBroadcaster>().send("dnd-os-changed", &payload);
+
+                if os_now == Some(false) && app_active {
+                    eprintln!(
+                        "[dnd] OS DND was externally cleared while \
+                         app believed it was active — reconciling"
+                    );
+                    {
+                        let r = app_dnd.state::<Mutex<Box<AppState>>>();
+                        let mut g = r.lock_or_recover();
+                        g.dnd_active      = false;
+                        g.dnd_below_ticks = 0;
+                        g.dnd_focus_samples.clear();
+                    }
+                    let _ = app_dnd.emit("dnd-state-changed", false);
+                    app_dnd.state::<WsBroadcaster>()
+                        .send("dnd-state-changed", &false);
+                }
+            }
+
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
+    });
+}
+
 // ── App entry-point ───────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1165,666 +1756,7 @@ pub fn run() {
         .manage(std::sync::Arc::new(EmbedderState(std::sync::Mutex::new(None))))
         .manage(std::sync::Arc::new(label_index::LabelIndexState::new()))
         .manage(std::sync::Arc::new(GlobalEegIndex::new()))
-        .setup(|app| {
-            {
-                use tauri::Manager;
-                let resource_dir = app.path().resource_dir()
-                    .unwrap_or_else(|_| std::path::PathBuf::from("resources"));
-                init_espeak_bundled_data_path(&resource_dir);
-                let samples_dir = resource_dir.join("neutts-samples");
-                init_neutts_samples_dir(samples_dir);
-            }
-
-            // ── Linux: fix main-window property overrides ─────────────────
-            // tauri.conf.json sets skipTaskbar=true (for the tray-centric
-            // macOS/Windows UX) and resizable=false (fixed 480×800 layout).
-            //
-            // On Ubuntu/GNOME (Mutter), this combination causes the WM to
-            // strip the minimize and close buttons from the title bar.
-            // Set the correct properties here *before* the window is shown.
-            // The decoration-responsiveness fix happens *after* show() —
-            // see `linux_fix_decorations()` below.
-            #[cfg(target_os = "linux")]
-            {
-                use tauri::Manager;
-                if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.set_skip_taskbar(false);
-                    let _ = win.set_resizable(true);
-                    let _ = win.set_closable(true);
-                    let _ = win.set_minimizable(true);
-                    let size = tauri::LogicalSize::new(480.0_f64, 800.0_f64);
-                    let _ = win.set_min_size(Some(tauri::Size::Logical(size)));
-                    let _ = win.set_max_size(Some(tauri::Size::Logical(size)));
-                }
-            }
-
-            let app_name = app.package_info().name.to_lowercase();
-            let ws_cfg = {
-                let dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
-                let s   = load_settings(&dir);
-                (s.ws_host, s.ws_port)
-            };
-
-            // ── LLM server (optional, same port) ──────────────────────────
-            // Routes are always mounted; cell holds None until started.
-            #[cfg(feature = "llm")]
-            {
-                let (llm_cfg, catalog, log_buf, cell, skill_dir) = {
-                    let dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
-                    let llm_cfg = load_settings(&dir).llm;
-                    let guard = app.state::<Mutex<Box<AppState>>>();
-                    let s = guard.lock().unwrap();
-                    (llm_cfg, s.llm.catalog.clone(), s.llm.logs.clone(), s.llm.state_cell.clone(), s.skill_dir.clone())
-                };
-                if llm_cfg.enabled {
-                    let app_handle = app.handle().clone();
-                    let cell2 = cell.clone();
-                    std::thread::spawn(move || {
-                        if let Some(state) = llm::init(&llm_cfg, &catalog, app_handle, log_buf, &skill_dir) {
-                            *cell2.lock().unwrap() = Some(state);
-                        }
-                    });
-                }
-            }
-
-            #[allow(unused_mut)]
-            let (broadcaster, mut serve_handle) = ws_server::bind_with(ws_cfg.0, ws_cfg.1);
-            ws_server::register_mdns(&app_name, serve_handle.port);
-            let ws_app = app.handle().clone();
-
-            // Pass the cell into the serve handle — LLM routes are always
-            // mounted; they return 503 when cell is None (server not running).
-            #[cfg(feature = "llm")]
-            {
-                let cell = app.state::<Mutex<Box<AppState>>>()
-                    .lock().unwrap().llm.state_cell.clone();
-                serve_handle.set_llm(cell);
-            }
-
-            tauri::async_runtime::spawn(async move { serve_handle.serve(ws_app).await; });
-            app.manage(broadcaster);
-
-            let logger_arc = {
-                let r = app.state::<Mutex<Box<AppState>>>();
-                let g = r.lock_or_recover();
-                g.logger.clone()
-            };
-            app.manage(logger_arc);
-
-            let skill_dir = {
-                let r = app.state::<Mutex<Box<AppState>>>();
-                let g = r.lock_or_recover();
-                g.skill_dir.clone()
-            };
-            let data = load_settings(&skill_dir);
-            {
-                let r = app.state::<Mutex<Box<AppState>>>();
-                let mut s = r.lock_or_recover();
-                s.status.paired_devices         = data.paired.clone();
-                s.preferred_id                  = data.preferred_id.clone();
-                s.status.filter_config          = data.filter_config;
-                // s.filter / s.accumulator no longer live in AppState —
-                // SessionDsp::new() picks up filter_config and overlap_secs
-                // from status at session-start time.
-                s.status.embedding_overlap_secs = data.embedding_overlap_secs;
-                s.label_shortcut                = data.label_shortcut;
-                s.search_shortcut               = data.search_shortcut;
-                s.settings_shortcut             = data.settings_shortcut;
-                s.calibration_shortcut          = data.calibration_shortcut;
-                s.help_shortcut                 = data.help_shortcut;
-                s.history_shortcut              = data.history_shortcut;
-                s.api_shortcut                  = data.api_shortcut;
-                s.theme_shortcut                = data.theme_shortcut;
-                s.focus_timer_shortcut          = data.focus_timer_shortcut;
-                let mut profiles = data.calibration_profiles;
-                if profiles.is_empty() {
-                    profiles.push(CalibrationProfile::from_legacy(&data.calibration));
-                }
-                s.calibration_profiles = profiles;
-                s.active_calibration_id = if data.active_calibration_id.is_empty() {
-                    s.calibration_profiles.first().map(|p| p.id.clone()).unwrap_or_default()
-                } else {
-                    data.active_calibration_id
-                };
-                s.onboarding_complete                = data.onboarding_complete;
-                s.last_seen_whats_new_version        = data.last_seen_whats_new_version;
-                s.theme                        = data.theme;
-                s.language                     = data.language;
-                s.daily_goal_min               = data.daily_goal_min;
-                s.goal_notified_date           = data.goal_notified_date;
-                s.text_embedding_model         = data.text_embedding_model.clone();
-                s.hooks                        = data.hooks;
-                s.ws_host                      = data.ws_host.clone();
-                s.ws_port                      = data.ws_port;
-                s.update_check_interval_secs   = data.update_check_interval_secs;
-                s.openbci_config               = data.openbci;
-                s.neutts_config                = data.neutts.clone();
-                s.tts_preload                  = data.tts_preload;
-                s.track_active_window          = data.track_active_window;
-                s.track_input_activity         = data.track_input_activity;
-                s.input_activity_enabled
-                    .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
-                s.dnd_config  = data.do_not_disturb;
-                s.llm.config  = data.llm;
-                if let Some(os_active) = crate::dnd::query_os_active() {
-                    if !os_active { s.dnd_active = false; }
-                }
-                neutts_apply_config(&data.neutts);
-                for pd in &data.paired {
-                    s.discovered.push(DiscoveredDevice {
-                        id: pd.id.clone(), name: pd.name.clone(),
-                        last_seen: pd.last_seen, last_rssi: 0,
-                        is_paired: true,
-                        is_preferred: data.preferred_id.as_deref() == Some(&pd.id),
-                    });
-                }
-            }
-
-            if data.tts_preload {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    crate::tts::tts_init(app_handle).await.ok();
-                });
-            }
-
-            {
-                let model_code = {
-                    let r = app.state::<Mutex<Box<AppState>>>();
-                    let g = r.lock_or_recover();
-                    g.text_embedding_model.clone()
-                };
-                let skill_dir_emb = skill_dir.clone();
-                let embedder_arc  = std::sync::Arc::clone(
-                    &*app.state::<std::sync::Arc<EmbedderState>>()
-                );
-                let logger_emb = app.state::<std::sync::Arc<SkillLogger>>().inner().clone();
-                std::thread::spawn(move || {
-                    init_embedder(&embedder_arc, &model_code, &skill_dir_emb, &logger_emb);
-                });
-            }
-
-            {
-                let label_idx = std::sync::Arc::clone(
-                    &*app.state::<std::sync::Arc<label_index::LabelIndexState>>()
-                );
-                let sd = skill_dir.clone();
-                std::thread::spawn(move || label_idx.load(&sd));
-            }
-
-            // ── Startup weights probe ─────────────────────────────────────────
-            // Check whether ZUNA weights are already in the HuggingFace cache
-            // without waiting for a BLE session to start.  This ensures the UI
-            // shows the correct "weights ready" state immediately after restart,
-            // rather than always showing "Download weights" until the first
-            // session begins.
-            {
-                let model_status = {
-                    let r = app.state::<Mutex<Box<AppState>>>();
-                    let g = r.lock_or_recover();
-                    g.model_status.clone()
-                };
-                let hf_repo = {
-                    let r = app.state::<Mutex<Box<AppState>>>();
-                    let g = r.lock_or_recover();
-                    g.model_config.hf_repo.clone()
-                };
-                std::thread::Builder::new()
-                    .name("weights-probe".into())
-                    .spawn(move || {
-                        if let Some((w, _c)) = crate::eeg_embeddings::probe_hf_weights(&hf_repo) {
-                            let mut st = model_status.lock_or_recover();
-                            st.weights_found  = true;
-                            st.weights_path   = Some(w.display().to_string());
-                            eprintln!("[embedder] startup probe: weights found at {}", w.display());
-                        } else {
-                            eprintln!("[embedder] startup probe: weights not found in HuggingFace cache");
-                        }
-                    })
-                    .expect("[weights-probe] failed to spawn");
-            }
-
-            // ── Global cross-day EEG HNSW index ──────────────────────────────
-            // Load from disk if ~/.skill/eeg_global.hnsw exists; otherwise
-            // scan all daily eeg.sqlite files and build it from scratch.
-            // The background thread populates the Option inside the Arc<Mutex>
-            // so commands that call search_embeddings_in_range automatically
-            // use the global index once it becomes ready.
-            {
-                let global_arc = std::sync::Arc::clone(
-                    &*app.state::<std::sync::Arc<GlobalEegIndex>>()
-                );
-                let sd = skill_dir.clone();
-                std::thread::Builder::new()
-                    .name("global-hnsw-build".into())
-                    .spawn(move || {
-                        let idx = global_eeg_index::load_or_build(&sd);
-                        *global_arc.0.lock_or_recover() = Some(idx);
-                        eprintln!("[global_idx] ready — embed worker will insert new epochs incrementally");
-                    })
-                    .expect("[global_idx] failed to spawn build thread");
-            }
-
-            if let Err(e) = apply_all_shortcuts(app.handle()) {
-                eprintln!("[shortcut] failed to register shortcuts: {e}");
-            }
-
-            #[cfg(target_os = "macos")]
-            {
-                use tauri::menu::{MenuBuilder, SubmenuBuilder, MenuItem, PredefinedMenuItem};
-                let app_submenu = SubmenuBuilder::new(app, constants::APP_DISPLAY_NAME)
-                    .item(&MenuItem::with_id(
-                        app, "about",
-                        format!("About {}", constants::APP_DISPLAY_NAME),
-                        true, None::<&str>,
-                    )?)
-                    .separator()
-                    .item(&PredefinedMenuItem::hide(app, None)?)
-                    .item(&PredefinedMenuItem::hide_others(app, None)?)
-                    .item(&PredefinedMenuItem::show_all(app, None)?)
-                    .separator()
-                    .item(&MenuItem::with_id(
-                        app, "macos_quit",
-                        format!("Quit {}", constants::APP_DISPLAY_NAME),
-                        true, Some("Cmd+Q"),
-                    )?)
-                    .build()?;
-                let window_submenu = SubmenuBuilder::new(app, "Window")
-                    .item(&PredefinedMenuItem::minimize(app, None)?)
-                    .item(&PredefinedMenuItem::maximize(app, None)?)
-                    .separator()
-                    .item(&PredefinedMenuItem::close_window(app, None)?)
-                    .build()?;
-                let app_menu = MenuBuilder::new(app)
-                    .item(&app_submenu)
-                    .item(&window_submenu)
-                    .build()?;
-                app.set_menu(app_menu).ok();
-            }
-
-            app.on_menu_event(|app, event| {
-                if event.id().as_ref() == "about" {
-                    let a = app.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let _ = open_about_window(a).await;
-                    });
-                } else if event.id().as_ref() == "macos_quit" {
-                    confirm_and_quit(app.clone());
-                }
-            });
-
-            let init_status = {
-                let r = app.state::<Mutex<Box<AppState>>>();
-                let g = r.lock_or_recover();
-                g.status.clone()
-            };
-            let init_menu = build_menu(app.handle(), &init_status)?;
-
-            // ── Main-window recovery helper ───────────────────────────────────
-            //
-            // After a full day in the system tray with the window hidden,
-            // macOS can silently kill WKWebView's web-content process under
-            // memory pressure.  The host process stays alive and
-            // `get_webview_window("main")` still returns `Some`, but calling
-            // `win.show()` reveals a blank white page.  Only a full app
-            // restart normally recovers — but we can do better:
-            //
-            // Recovery (two layers, tried in order):
-            //   1. eval() checks `window.__skill_loaded` (set in +layout.svelte
-            //      onMount).  Absent sentinel → page is blank → reload().
-            //      This handles "renderer alive but content gone".
-            //   2. If eval() itself returns Err the renderer process is fully
-            //      dead and cannot accept JS at all.  navigate() forces
-            //      WKWebView to spawn a fresh renderer and reload the URL.
-            //      This handles "renderer process terminated".
-            fn show_and_recover_main(app: &AppHandle) {
-                let win = if let Some(win) = app.get_webview_window("main") {
-                    win
-                } else {
-                    match tauri::WebviewWindowBuilder::new(
-                        app,
-                        "main",
-                        tauri::WebviewUrl::App("".into()),
-                    )
-                    .title(constants::APP_DISPLAY_NAME)
-                    .decorations(false)
-                    .build()
-                    {
-                        Ok(win) => win,
-                        Err(_) => return,
-                    }
-                };
-                let _ = win.show();
-                let _ = win.set_focus();
-                linux_fix_decorations(&win);
-                if win
-                    .eval("window.__skill_loaded||(window.location.reload(),false)")
-                    .is_err()
-                {
-                    // eval failed — renderer dead; navigate() restarts it.
-                    if let Ok(url) = "tauri://localhost".parse() {
-                        let _ = win.navigate(url);
-                    }
-                }
-            }
-
-            #[cfg(target_os = "linux")]
-            if !linux_has_appindicator_runtime() {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "System tray is required but Linux appindicator runtime is missing. Install libayatana-appindicator3 or libappindicator3.",
-                )
-                .into());
-            }
-
-            TrayIconBuilder::with_id("main")
-                .icon(icon_disconnected())
-                .tooltip("NeuroSkill™ – Disconnected")
-                .menu(&init_menu)
-                .show_menu_on_left_click(true)
-                .on_menu_event(|app, event| {
-                    let id = event.id.as_ref();
-                    if id == "open_skill" {
-                        show_and_recover_main(app);
-                    } else if id == "disconnect" || id == "cancel" {
-                        {
-                            let r = app.state::<Mutex<Box<AppState>>>();
-                            let mut s = r.lock_or_recover();
-                            s.pending_reconnect = false;
-                            s.retry_attempt = 0;
-                        }
-                        cancel_session(app);
-                    } else if id == "scan" || id == "retry" {
-                        start_session(app, None);
-                    } else if id == "open_bt" {
-                        open_bt_settings();
-                    } else if id == "calibrate" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let _ = open_calibration_window_inner(&a, None, false).await;
-                        });
-                    } else if id == "search" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move { let _ = open_search_window(a).await; });
-                    } else if id == "label" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move { let _ = open_label_window(a).await; });
-                    } else if id == "history" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move { let _ = open_history_window(a).await; });
-                    } else if id == "compare" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move { let _ = open_compare_window(a).await; });
-                    } else if id == "settings" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move { let _ = open_settings_window(a).await; });
-                    } else if id == "help" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move { let _ = open_help_window(a).await; });
-                    } else if id == "api" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move { let _ = open_api_window(a).await; });
-                    } else if id == "chat" {
-                        #[cfg(feature = "llm")] {
-                            let a = app.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let _ = open_chat_window(a).await;
-                            });
-                        }
-                    } else if id == "downloads" {
-                        #[cfg(feature = "llm")] {
-                            let a = app.clone();
-                            tauri::async_runtime::spawn(async move {
-                                let _ = open_downloads_window(a).await;
-                            });
-                        }
-                    } else if id == "focus_timer" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let _ = open_focus_timer_window(a).await;
-                        });
-                    } else if id == "check_update" {
-                        let a = app.clone();
-                        tauri::async_runtime::spawn(async move { let _ = open_updates_window(a).await; });
-                    } else if id == "quit" {
-                        confirm_and_quit(app.app_handle().clone());
-                    } else if let Some(dev_id) = id.strip_prefix("connect:") {
-                        start_session(app, Some(dev_id.to_owned()));
-                    } else if let Some(dev_id) = id.strip_prefix("forget:") {
-                        let dev_id = dev_id.to_owned();
-                        forget_device(dev_id, app.clone());
-                    }
-                })
-                .on_tray_icon_event(|_tray, _event| {})
-                .build(app)?;
-
-            // The main window is revealed by `show_main_window` (called from
-            // +layout.svelte onMount) once WKWebView has actually loaded the
-            // page.  Showing it here — before the web content is ready — causes
-            // the white-screen-on-macOS bug.  On Linux/Windows the command is
-            // still called from the frontend and the show() is a safe no-op on
-            // an already-visible window, so no platform-specific guard needed.
-
-            let app_scan = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(500)).await;
-                start_background_scanner(&app_scan);
-            });
-
-            let app_auto = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(900)).await;
-                let preferred = {
-                    let r = app_auto.state::<Mutex<Box<AppState>>>();
-                    let mut s = r.lock_or_recover();
-                    let pref = s.preferred_id.clone()
-                        .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()));
-                    if pref.is_some() { s.pending_reconnect = true; }
-                    pref
-                };
-                start_session(&app_auto, preferred);
-            });
-
-            let app_cal = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(1200)).await;
-                let auto_start_id: Option<String> = {
-                    let r = app_cal.state::<Mutex<Box<AppState>>>();
-                    let s = r.lock_or_recover();
-                    let active_id = &s.active_calibration_id;
-                    s.calibration_profiles.iter()
-                        .find(|p| &p.id == active_id)
-                        .filter(|p| p.auto_start)
-                        .map(|p| p.id.clone())
-                };
-                if let Some(id) = auto_start_id {
-                    let _ = open_calibration_window_inner(&app_cal, Some(id), false).await;
-                }
-            });
-
-            let app_onboard = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(600)).await;
-                let done = {
-                    let r = app_onboard.state::<Mutex<Box<AppState>>>();
-                    let g = r.lock_or_recover();
-                    g.onboarding_complete
-                };
-                if !done { let _ = open_onboarding_window(app_onboard).await; }
-            });
-
-            {
-                let (act_store, kbd_ts, mouse_ts, input_flag, kbd_cnt, mouse_cnt) = {
-                    let state_ref = app.state::<Mutex<Box<AppState>>>();
-                    let s = state_ref.lock_or_recover();
-                    (
-                        s.activity_store.clone(),
-                        s.last_keyboard_ts.clone(),
-                        s.last_mouse_ts.clone(),
-                        s.input_activity_enabled.clone(),
-                        s.kbd_event_count.clone(),
-                        s.mouse_event_count.clone(),
-                    )
-                };
-                if let Some(store) = act_store.clone() {
-                    let app_win = app.handle().clone();
-                    std::thread::Builder::new()
-                        .name("active-window-poll".into())
-                        .spawn(move || active_window::run_poller(app_win, store))
-                        .expect("[active-window] failed to spawn poll thread");
-                }
-                if let Some(store) = act_store {
-                    let app_inp = app.handle().clone();
-                    std::thread::Builder::new()
-                        .name("input-monitor".into())
-                        .spawn(move || {
-                            active_window::run_input_monitor(
-                                app_inp, input_flag, kbd_ts, mouse_ts,
-                                kbd_cnt, mouse_cnt, store,
-                            );
-                        })
-                        .expect("[input-monitor] failed to spawn thread");
-                }
-            }
-
-            let app_upd = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                use tauri_plugin_updater::UpdaterExt;
-                let mut updater_platform_unsupported = false;
-                // Short startup delay so the rest of the app is fully
-                // initialised before we hit the network.
-                tokio::time::sleep(Duration::from_secs(30)).await;
-                loop {
-                    if updater_platform_unsupported {
-                        break;
-                    }
-                    // ── Check first, then sleep ───────────────────────────────
-                    // Previous pattern was sleep→check, which meant the first
-                    // background check fired at startup_delay + interval_secs
-                    // (up to 61 minutes with the default 1-hour interval).
-                    // Now we check immediately after the startup delay, then
-                    // wait interval_secs before the next one.
-                    eprintln!("[updater] running background update check");
-                    match app_upd.updater() {
-                        Err(e) => eprintln!("[updater] cannot get updater: {e}"),
-                        Ok(updater) => {
-                            let result = tokio::time::timeout(
-                                Duration::from_secs(30), updater.check(),
-                            ).await;
-                            match result {
-                                Err(_) => eprintln!("[updater] check timed out after 30 s"),
-                                Ok(Ok(Some(update))) => {
-                                    eprintln!("[updater] update available: {}", update.version);
-                                    let payload = serde_json::json!({
-                                        "version": update.version,
-                                        "date":    update.date,
-                                        "body":    update.body,
-                                    });
-                                    let _ = app_upd.emit("update-available", payload);
-                                }
-                                Ok(Ok(None)) => {
-                                    eprintln!("[updater] up to date");
-                                    let _ = app_upd.emit("update-checked", ());
-                                }
-                                Ok(Err(e)) => {
-                                    let msg = e.to_string();
-                                    if msg.contains("None of the fallback platforms")
-                                        || msg.contains("were found in the response `platforms` object")
-                                    {
-                                        eprintln!(
-                                            "[updater] no release artifacts for this platform; disabling background update checks"
-                                        );
-                                        updater_platform_unsupported = true;
-                                    } else {
-                                        eprintln!("[updater] check failed: {e}");
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // ── Sleep after check ─────────────────────────────────────
-                    let interval_secs = {
-                        let r = app_upd.state::<Mutex<Box<AppState>>>();
-                        let g = r.lock_or_recover();
-                        g.update_check_interval_secs
-                    };
-                    // When auto-check is disabled (0), poll every 60 s so the
-                    // loop wakes up promptly when the user re-enables it.
-                    let sleep_secs = if interval_secs == 0 { 60 } else { interval_secs };
-                    tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
-                }
-            });
-
-            // ── Background OS DND poll ────────────────────────────────────────
-            // macOS Focus / DND state can change at any time without the app
-            // being notified (user toggles in System Settings, Shortcuts
-            // automation, another app, screen-lock, etc.).
-            //
-            // Every 5 s we read the authoritative OS state and:
-            //   1. Cache it in `AppState::dnd_os_active`.
-            //   2. If it changed, emit `dnd-os-changed` so the UI can reflect
-            //      the real system state even while the Settings window is open
-            //      and no Muse device is connected.
-            //   3. If the OS turned DND *off* but our `dnd_active` flag still
-            //      says it's on (user manually overrode what the app set),
-            //      clear `dnd_active` and emit `dnd-state-changed: false` so
-            //      the automation doesn't try to disable it again.
-            {
-                let app_dnd = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    // Stagger slightly so other startup tasks settle first.
-                    tokio::time::sleep(Duration::from_secs(3)).await;
-                    loop {
-                        let os_now = crate::dnd::query_os_active();
-
-                        let (prev, app_active) = {
-                            let r = app_dnd.state::<Mutex<Box<AppState>>>();
-                            let g = r.lock_or_recover();
-                            (g.dnd_os_active, g.dnd_active)
-                        };
-
-                        // Only act when the OS result has actually changed.
-                        if os_now != prev {
-                            // Update cache.
-                            {
-                                let r = app_dnd.state::<Mutex<Box<AppState>>>();
-                                r.lock_or_recover().dnd_os_active = os_now;
-                            }
-
-                            // Notify the UI about the OS-level change.
-                            let payload = serde_json::json!({ "os_active": os_now });
-                            let _ = app_dnd.emit("dnd-os-changed", &payload);
-                            app_dnd.state::<WsBroadcaster>().send("dnd-os-changed", &payload);
-
-                            // Reconcile: if the OS no longer has DND active but
-                            // we think we set it, the user overrode it externally.
-                            // Clear our flag so we re-enter the activation window
-                            // cleanly on the next focus window.
-                            if os_now == Some(false) && app_active {
-                                eprintln!(
-                                    "[dnd] OS DND was externally cleared while \
-                                     app believed it was active — reconciling"
-                                );
-                                {
-                                    let r = app_dnd.state::<Mutex<Box<AppState>>>();
-                                    let mut g = r.lock_or_recover();
-                                    g.dnd_active      = false;
-                                    g.dnd_below_ticks = 0;
-                                    g.dnd_focus_samples.clear();
-                                }
-                                let _ = app_dnd.emit("dnd-state-changed", false);
-                                app_dnd.state::<WsBroadcaster>()
-                                    .send("dnd-state-changed", &false);
-                            }
-                        }
-
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                    }
-                });
-            }
-
-            Ok(())
-        })
+        .setup(|app| { setup_app(app) })
         .invoke_handler(tauri::generate_handler![
             subscribe_eeg, subscribe_ppg, subscribe_imu,
             get_status, get_devices,
