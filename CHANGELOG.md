@@ -128,6 +128,7 @@ All notable changes to NeuroSkill™ are documented here.
 - Linux package matrix expanded to include `rpm`: Linux build scripts now request `--bundles deb,appimage,rpm`, and both CI/release workflows were updated to validate and publish `.rpm` alongside `.deb` and `.AppImage` artifacts.
 - Added Linux integrity sidecars: workflows now generate `SHA256SUMS` files for Linux bundle outputs and portable tarball outputs, and `release-linux` now also generates detached `.sig` signatures for Linux release artifacts.
 - Linux release stale-artifact guard: `.github/workflows/release-linux.yml` now removes cached `src-tauri/target/x86_64-unknown-linux-gnu/release/{bundle,skill}` and `dist/linux/x86_64-unknown-linux-gnu` before compile/package steps so rust-cache leftovers cannot be mistaken for fresh artifacts when assembling release outputs.
+- Linux CI parity stale-artifact guard: `.github/workflows/ci.yml` now performs the same pre-build cleanup in the `linux-portable-package` job, clearing cached `target`/`dist` Linux output paths before packaging so uploaded CI tarballs always come from the current run.
 
 ## [0.0.24] — 2026-03-12
 

@@ -134,6 +134,18 @@ jobs:
         if: steps.cache-espeak-portable.outputs.cache-hit != 'true'
         run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
 
+      # rust-cache can restore stale target/dist outputs from earlier runs.
+      # Clear Linux package output paths so this job only publishes fresh artifacts.
+      - name: Clean stale Linux portable outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET_ROOT="src-tauri/target/x86_64-unknown-linux-gnu/release"
+          rm -rf "$TARGET_ROOT/bundle"
+          rm -f "$TARGET_ROOT/skill"
+          rm -rf "dist/linux/x86_64-unknown-linux-gnu"
+          echo "✓ Cleared stale target/dist outputs before CI portable packaging"
+
       - name: Build portable Linux package
         run: npm run package:linux:portable:x64:native
 
