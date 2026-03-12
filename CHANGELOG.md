@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [0.0.27]
 
+### Bug Fixes
+
+- **Feature-gated compilation for `--no-default-features` builds**: added `#[cfg(feature = "llm")]` / `#[cfg(not(feature = "llm"))]` guards in `lib.rs` (stub `llm_state_cell` field + Default impl), `api.rs` (conditional `Mutex` import), `settings_cmds.rs` (split `set_llm_config` into feature-gated paths), `tray.rs` (`ellipsize_middle` helper), and `llm/mod.rs` (`allowed_tools` field); added `#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]` guards in `tts/mod.rs` for imports, helpers, constants, and `impl` blocks so the crate compiles cleanly when built with `--no-default-features` or any subset of feature flags.
+
 ### Dependencies
 
 - **Auto-enable GPU backend for LLM by platform**: `llama-cpp-4` now receives `metal` on macOS and `vulkan` on Linux/Windows via target-specific dependency feature merging in `Cargo.toml`, so the `llm` feature automatically uses the correct GPU backend without requiring manual `--features llm-metal` / `--features llm-vulkan` flags.

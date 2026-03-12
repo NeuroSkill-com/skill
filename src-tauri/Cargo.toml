@@ -1,6 +1,6 @@
 [package]
 name = "skill"
-version = "0.0.27"
+version = "0.0.28"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -32,7 +32,7 @@ license = "GPL-3.0-only"
 #                conflict; both features can be active simultaneously.
 #
 [features]
-default    = ["tts-kitten", "tts-neutts", "llm"]
+default    = ["tts-kitten", "tts-neutts"] #, "llm"
 tts-kitten = ["dep:kittentts", "dep:rodio"]
 tts-neutts  = ["dep:neutts",    "dep:rodio", "dep:sha2", "dep:hound"]
 
