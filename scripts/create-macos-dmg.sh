@@ -63,10 +63,22 @@ fi
 codesign "${SIGN_ARGS[@]}" "$APP_DIR"
 echo "  ✓ .app signed"
 
-# ── Ensure create-dmg is installed ────────────────────────────────────────
+# ── Ensure create-dmg v8+ is installed ────────────────────────────────────
+NEED_INSTALL=false
 if ! command -v create-dmg &>/dev/null; then
-  echo "  Installing create-dmg …"
-  npm install --global create-dmg
+  NEED_INSTALL=true
+else
+  # Check version — we need v8+ for --overwrite and --no-code-sign flags
+  CDM_VER=$(create-dmg --version 2>/dev/null || echo "0")
+  CDM_MAJOR=$(echo "$CDM_VER" | cut -d. -f1)
+  if [[ "$CDM_MAJOR" -lt 8 ]] 2>/dev/null; then
+    NEED_INSTALL=true
+    echo "  create-dmg v$CDM_VER found, upgrading to v8+ …"
+  fi
+fi
+if $NEED_INSTALL; then
+  echo "  Installing create-dmg@latest …"
+  npm install --global create-dmg@latest
 fi
 
 # ── Prepare license file for SLA ──────────────────────────────────────────

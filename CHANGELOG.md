@@ -23,6 +23,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Build / Tooling
 
+- **Windows NSIS discovery false-negative fix**: corrected `scripts/create-windows-nsis.ps1` NSIS lookup when `makensis` is already on PATH. The script previously used `Split-Path` twice on `Get-Command makensis`, which resolved to the parent of the NSIS directory and could incorrectly fail `makensis.exe` checks. It now uses the direct parent folder and also accepts `NSIS_DIR` set to either the NSIS directory or a full `makensis.exe` path.
+
 - **Windows NSIS PowerShell argument parsing fix**: corrected `scripts/create-windows-nsis.ps1` candidate-path construction to precompute `$TargetBinary`/`$HostBinary` and then build `$BinaryCandidates` from variables. This avoids a PowerShell parse/invocation edge case where comma-separated inline `Join-Path` calls inside `@(...)` could be interpreted as an array passed to `-ChildPath`, causing `Cannot convert 'System.Object[]' to the type 'System.String'`.
 
 - **Windows NSIS standalone packaging path fallback**: `scripts/create-windows-nsis.ps1` now auto-detects the prebuilt release binary from either `src-tauri/target/x86_64-pc-windows-msvc/release/skill.exe` (explicit target build) or `src-tauri/target/release/skill.exe` (default host-target build). This fixes `npm run tauri:build:win:nsis` failing after a successful `tauri build --no-bundle` when Rust outputs the host-layout path; the script now also places NSIS output under the detected release directory's `bundle/nsis` folder.

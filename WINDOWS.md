@@ -55,6 +55,31 @@ Unable to find libclang: couldn't find any valid shared libraries matching:
 
 Install from https://nodejs.org (LTS recommended).
 
+### 4a. NSIS (for installer packaging)
+
+Required for `npm run tauri:build:win:nsis`:
+
+```powershell
+winget install NSIS.NSIS
+# or
+choco install nsis
+```
+
+Verify discovery:
+
+```powershell
+Get-Command makensis -ErrorAction SilentlyContinue
+```
+
+If `makensis` is not on `PATH`, set `NSIS_DIR` to either the NSIS folder or
+the full `makensis.exe` path:
+
+```powershell
+$env:NSIS_DIR = "C:\Program Files (x86)\NSIS"
+# also valid:
+$env:NSIS_DIR = "C:\Program Files (x86)\NSIS\makensis.exe"
+```
+
 ### 5. CMake
 
 Required by llama.cpp **and** espeak-ng's build systems:
@@ -64,6 +89,14 @@ winget install Kitware.CMake
 ```
 
 Make sure `cmake` is on your `PATH` (the installer offers this as an option).
+
+### 5b. Python + Pillow (installer branding images)
+
+The standalone NSIS script generates header/welcome images from the app icon.
+
+```powershell
+py -m pip install Pillow
+```
 
 ### 5a. Vulkan SDK (GPU support)
 
@@ -115,6 +148,27 @@ The build script (`scripts/tauri-build.js`) detects Windows automatically,
 runs `scripts\build-espeak-static.ps1` to produce
 `src-tauri\espeak-static\lib\espeak-ng.lib` (a no-op on subsequent runs), then
 invokes `npx tauri build` for the host triple.
+
+### Build standalone NSIS installer (recommended on Windows)
+
+```powershell
+npm run tauri:build:win:nsis
+```
+
+What this does:
+
+1. Compiles the app with `--no-bundle` (avoids the Tauri Windows bundling crash
+  path on some CPUs)
+2. Runs `scripts\create-windows-nsis.ps1` to create a standalone NSIS installer
+
+The script accepts either Rust output layout automatically:
+
+- `src-tauri\target\x86_64-pc-windows-msvc\release\skill.exe`
+- `src-tauri\target\release\skill.exe`
+
+Generated installer output:
+
+- `src-tauri\target\...\release\bundle\nsis\`
 
 ### Building espeak-ng manually
 
@@ -233,5 +287,24 @@ crashing bundling/signing step.  The compiled binary is still produced at
 `src-tauri\target\release\skill.exe`.
 
 If you need a full NSIS installer (e.g. for a release), use
-`release-windows.ps1` which calls `cargo build` and `npx tauri bundle`
-separately and never hits this code path.
+`npm run tauri:build:win:nsis` for local packaging, or `release-windows.ps1`
+for signed release automation.
+
+## Troubleshooting NSIS packaging
+
+### `NSIS not found`
+
+If `scripts\create-windows-nsis.ps1` reports `NSIS not found`:
+
+1. Install NSIS (`winget install NSIS.NSIS`)
+2. Open a new terminal and run:
+  ```powershell
+  Get-Command makensis -ErrorAction SilentlyContinue
+  ```
+3. If still missing, set `NSIS_DIR` explicitly (folder or full exe path)
+
+### `WARNING: Using host release binary layout at target/release/skill.exe`
+
+This warning is informational. It means the prebuild step wrote
+`src-tauri\target\release\skill.exe` instead of the target-triple subfolder.
+The NSIS script supports both layouts and will continue packaging.

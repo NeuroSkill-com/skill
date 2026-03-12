@@ -87,10 +87,17 @@ Write-Host "-> Creating NSIS installer for $ProductName v$Version ($Target)"
 
 # ── Locate NSIS ─────────────────────────────────────────────────────────────
 $NsisDir = $env:NSIS_DIR
-if (-not $NsisDir) {
+if ($NsisDir -and (Test-Path $NsisDir) -and -not (Test-Path (Join-Path $NsisDir "makensis.exe"))) {
+    $item = Get-Item $NsisDir -ErrorAction SilentlyContinue
+    if ($item -and -not $item.PSIsContainer -and $item.Name -ieq "makensis.exe") {
+        $NsisDir = Split-Path -Parent $item.FullName
+    }
+}
+
+if (-not $NsisDir -or -not (Test-Path (Join-Path $NsisDir "makensis.exe"))) {
     $makensis = Get-Command makensis -ErrorAction SilentlyContinue
     if ($makensis) {
-        $NsisDir = Split-Path (Split-Path $makensis.Source)
+        $NsisDir = Split-Path -Parent $makensis.Source
     } else {
         # Common install locations
         foreach ($path in @(
