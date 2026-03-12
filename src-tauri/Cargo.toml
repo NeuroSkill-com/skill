@@ -179,7 +179,7 @@ async-stream      = "0.3"
 # neutts 0.0.7 migrated from llama-cpp-2 → llama-cpp-4 so there is no longer
 # a `links = "llama"` conflict when both `tts-neutts` and `llm` are enabled.
 # Cargo deduplicates both into a single llama-cpp-4 package.
-llama-cpp-4 = { version = "0.2.9", optional = true }
+llama-cpp-4 = { version = "0.2.10", optional = true }
 
 # mDNS / Bonjour service discovery
 mdns-sd = "0.18"

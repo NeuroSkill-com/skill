@@ -294,14 +294,17 @@ jobs:
             -s "$KEYCHAIN_PATH" login.keychain
 
       # ── Compile: frontend + Rust binary ──────────────────────────────────────
-      # Identical rationale to release.yml — see that file for full details.
+      # Identical rationale to release-mac.yml — see that file for full details.
+      # --features custom-protocol tells Tauri to embed the SvelteKit build
+      # output and serve it via the custom:// protocol instead of connecting
+      # to the dev server (localhost:1420).
       - name: Compile (frontend + Rust)
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: |
           npm run build
           cd src-tauri
-          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin --features custom-protocol
 
       # ── Assemble .app bundle ──────────────────────────────────────────────
       - name: Create .app bundle
