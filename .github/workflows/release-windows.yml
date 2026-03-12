@@ -640,7 +640,7 @@ jobs:
           } else {
             $manifest = [ordered]@{
               version = $version
-              notes = "NeuroSkill™ v$version"
+              notes = "NeuroSkill v$version"
               pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
               platforms = [ordered]@{}
             }
@@ -713,8 +713,8 @@ jobs:
                 url = $runUrl
                 color = $color
                 fields = @(
-                  @{ name = "Tag";      value = "`${{ steps.version_meta.outputs.tag }}`";     inline = $true },
-                  @{ name = "Version";  value = "`${{ steps.version_meta.outputs.version }}`"; inline = $true },
+                  @{ name = "Tag";      value = "${{ steps.version_meta.outputs.tag }}";     inline = $true },
+                  @{ name = "Version";  value = "${{ steps.version_meta.outputs.version }}"; inline = $true },
                   @{ name = "Platform"; value = "Windows x86_64";                              inline = $true },
                   @{ name = "Actor";    value = "${{ github.actor }}";                         inline = $true }
                 )
