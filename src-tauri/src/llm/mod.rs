@@ -278,7 +278,9 @@ pub struct LlmServerState {
     /// Optional Bearer token required on every request.
     pub api_key:      Option<String>,
     /// Built-in tools currently allowed for chat requests.
+    #[cfg(feature = "llm")]
     pub allowed_tools: Arc<Mutex<LlmToolConfig>>,
+
     /// Set to `true` by the actor once the model + context are fully loaded.
     pub ready:        Arc<AtomicBool>,
     /// Context window size in tokens; set by the actor after context creation.

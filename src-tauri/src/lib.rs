@@ -580,6 +580,10 @@ pub struct AppState {
     #[cfg(feature = "llm")]
     pub llm_state_cell: crate::llm::LlmStateCell,
 
+    /// this can be done simpler
+    #[cfg(not(feature = "llm"))]
+    pub llm_state_cell: std::sync::Arc<Mutex<Option<std::sync::Arc<std::sync::atomic::AtomicBool>>>>,
+
     /// `true` while a background model-load initiated by `start_llm_server`
     /// is in progress.  Prevents double-starts and lets `get_llm_server_status`
     /// return `Loading` even before `llm_state_cell` is populated.
@@ -696,6 +700,8 @@ impl Default for AppState {
             llm_logs:           crate::llm::new_log_buffer(),
             #[cfg(feature = "llm")]
             llm_state_cell:     crate::llm::new_state_cell(),
+            #[cfg(not(feature = "llm"))]
+            llm_state_cell:     std::sync::Arc::new(Mutex::new(None)),
             #[cfg(feature = "llm")]
             llm_loading:        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             #[cfg(feature = "llm")]

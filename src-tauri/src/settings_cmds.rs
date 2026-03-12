@@ -1182,6 +1182,7 @@ pub fn set_llm_config(
         s.llm_state_cell.clone()
     };
 
+    #[cfg(feature = "llm")]
     if let Some(server) = cell.lock().unwrap().clone() {
         *server.allowed_tools.lock().unwrap() = config.tools.clone();
     }
