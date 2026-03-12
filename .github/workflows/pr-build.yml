@@ -94,7 +94,7 @@ jobs:
       # maintainer.
       - name: Verify labeler has write access
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@60a0d83039f74a4aee543508d474c4c82a9f1b84 # v7.0.1
+        uses: actions/github-script@v7
         with:
           script: |
             const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
@@ -211,12 +211,12 @@ jobs:
 
       # ── Rust toolchain ──────────────────────────────────────────────────────
       - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@4305c38b25c5dd5af9c4cfe7dd25e3c5c7ba2e58 # stable (2025-02)
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
 
       - name: Cache Cargo registry + build artifacts
-        uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34b5c520640 # v2.7.8
+        uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
 
@@ -233,7 +233,7 @@ jobs:
       # ── espeak-ng static library ─────────────────────────────────────────────
       - name: Cache espeak-ng static lib
         id: cache-espeak
-        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c6158d # v4.2.0
+        uses: actions/cache@v4
         with:
           path: src-tauri/espeak-static
           key: macos-arm64-espeak-${{ hashFiles('scripts/build-espeak-static.sh') }}
@@ -325,10 +325,10 @@ jobs:
           cp -R "src-tauri/resources/neutts-samples" \
                 "$APP_BUNDLE/Contents/Resources/"
 
-          # All lines inside <<'PYEOF' are indented 10 spaces to stay inside the
+          # All lines inside <<PYEOF are indented 10 spaces to stay inside the
           # YAML literal block scalar.  Python sees them at column 0 after YAML
           # strips the prefix — valid for top-level code.
-          python3 - "$APP_BUNDLE/Contents" "${{ env.VERSION }}" <<'PYEOF'
+          python3 - "$APP_BUNDLE/Contents" "${{ env.VERSION }}" <<PYEOF
           import plistlib, sys, os
           contents, version = sys.argv[1], sys.argv[2]
           with open("src-tauri/Info.plist", "rb") as f:
@@ -561,7 +561,7 @@ jobs:
       # rather than creating a new one — keeps the PR thread tidy.
       - name: Comment on PR with download link
         if: steps.meta.outputs.pr != ''
-        uses: actions/github-script@60a0d83039f74a4aee543508d474c4c82a9f1b84 # v7.0.1
+        uses: actions/github-script@v7
         with:
           script: |
             const pr      = Number('${{ steps.meta.outputs.pr }}');
