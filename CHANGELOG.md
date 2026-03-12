@@ -6,8 +6,15 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Documentation
+
+- **Linux setup docs now include tray runtime dependency guidance**: updated `LINUX.md` with a dedicated runtime prerequisite for `tauri dev` (`libayatana-appindicator3-1`, with `libappindicator3-1` fallback) and added troubleshooting steps for the startup error `Failed to load ayatana-appindicator3 or appindicator3 dynamic library`.
+- **Linux docs cross-link clarity pass**: added a reciprocal pointer in `LINUX.md` back to `README.md` Development prerequisites and explicit wording that missing appindicator runtime packages can break `npm run tauri dev` at startup.
+
 ### Bug Fixes
 
+- **Linux tray is now mandatory with fail-fast startup guard**: before tray initialization, startup probes for loadable appindicator shared objects; when `libayatana-appindicator3` / `libappindicator3` is missing, startup aborts immediately with a clear prerequisite error instead of panicking inside `libappindicator-sys` or running without tray.
+- **Linux `tauri dev` tray-runtime preflight**: `scripts/tauri-build.js` now checks for a loadable appindicator runtime (`libayatana-appindicator3.so*` or `libappindicator3.so*`) before launching `npx tauri dev`; when missing, it exits early with distro-aware install guidance (`apt`/`dnf`/`pacman`/`zypper`) instead of letting the app crash at startup with a `libappindicator-sys` panic.
 - **`npm run bump` Linux preflight dependency clarity**: added an explicit `pkg-config` guard before `cargo clippy` in `scripts/bump.js` that checks `webkit2gtk-4.1`, `javascriptcoregtk-4.1`, and `libsoup-3.0`; when missing, bump now fails fast with actionable `apt install` guidance instead of surfacing a lower-level `webkit2gtk-sys` build-script crash.
 - **Strictest non-status accent normalization (UMAP/Embeddings)**: removed remaining category-only orange/sky/emerald/violet highlight styling in UMAP and Embeddings controls (preset chips, pipeline badges, slider thumb/focus affordance, and dimension legend badges) in favor of semantic `primary` / `ring` tokens so generic interactive emphasis consistently follows Appearance accent settings.
 - **Strict accent policy completion for generic selectors**: updated the remaining non-status selected controls in Calibration profile editing (break-duration and iterations chips) to use semantic `primary` tokens instead of hardcoded `amber`/`emerald`, and clarified `AGENTS.md` guidance that semantic status colors remain allowed only for true status signaling.

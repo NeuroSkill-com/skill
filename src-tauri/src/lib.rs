@@ -166,6 +166,34 @@ pub(crate) fn linux_fix_decorations(win: &tauri::WebviewWindow) {
 #[cfg(not(target_os = "linux"))]
 pub(crate) fn linux_fix_decorations(_win: &tauri::WebviewWindow) {}
 
+#[cfg(target_os = "linux")]
+fn linux_has_appindicator_runtime() -> bool {
+    let candidates = [
+        "libayatana-appindicator3.so.1",
+        "libappindicator3.so.1",
+        "libayatana-appindicator3.so",
+        "libappindicator3.so",
+    ];
+
+    for name in candidates {
+        let Ok(c_name) = std::ffi::CString::new(name) else {
+            continue;
+        };
+        let handle = unsafe { libc::dlopen(c_name.as_ptr(), libc::RTLD_LAZY | libc::RTLD_LOCAL) };
+        if !handle.is_null() {
+            let _ = unsafe { libc::dlclose(handle) };
+            return true;
+        }
+    }
+
+    false
+}
+
+#[cfg(not(target_os = "linux"))]
+fn linux_has_appindicator_runtime() -> bool {
+    true
+}
+
 mod shortcut_cmds;
 pub(crate) use shortcut_cmds::apply_all_shortcuts;
 use shortcut_cmds::{
@@ -1429,6 +1457,15 @@ pub fn run() {
                         let _ = win.navigate(url);
                     }
                 }
+            }
+
+            #[cfg(target_os = "linux")]
+            if !linux_has_appindicator_runtime() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "System tray is required but Linux appindicator runtime is missing. Install libayatana-appindicator3 or libappindicator3.",
+                )
+                .into());
             }
 
             TrayIconBuilder::with_id("main")

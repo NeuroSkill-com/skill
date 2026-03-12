@@ -397,6 +397,7 @@ All global shortcuts are fully **configurable** in **Settings → Shortcuts**.
 - ZUNA weights from Hugging Face (see below)
 - **macOS** — Xcode Command Line Tools (`xcode-select --install`)
 - **Windows** — Visual Studio Build Tools 2022 with **Desktop development with C++** workload, LLVM, CMake, Git (see [`WINDOWS.md`](WINDOWS.md))
+- **Linux** — follow [`LINUX.md`](LINUX.md), including the tray runtime dependency (`libayatana-appindicator3-1` or fallback `libappindicator3-1`) before running `npm run tauri dev` (see [Tray runtime dependency](LINUX.md#41-tray-runtime-dependency-required-for-tauri-dev))
 
 ### Setup
 

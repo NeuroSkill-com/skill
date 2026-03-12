@@ -6,6 +6,9 @@
 
 This guide lists what you should install **before** running a build on Ubuntu.
 
+If you are starting from the main docs, see the Linux prerequisite callout in
+the Development section of [`README.md`](README.md).
+
 ## Supported Ubuntu versions
 
 - Ubuntu 24.04 LTS (noble)
@@ -31,7 +34,7 @@ sudo apt install -y \
 
 ## 2) Node.js (LTS) + npm
 
-Install from https://nodejs.org (LTS recommended), then verify:
+Install from [https://nodejs.org](https://nodejs.org) (LTS recommended), then verify:
 
 ```bash
 node -v
@@ -79,6 +82,20 @@ sudo apt install -y \
   libjavascriptcoregtk-4.0-dev \
   libsoup2.4-dev
 ```
+
+## 4.1) Tray runtime dependency (required for `tauri dev`)
+
+NeuroSkill's tray integration needs a runtime appindicator library at launch.
+Install one of these before running `npm run tauri dev`:
+
+```bash
+sudo apt install -y libayatana-appindicator3-1
+# fallback package on some Ubuntu images:
+# sudo apt install -y libappindicator3-1
+```
+
+Without one of these runtime packages, `npm run tauri dev` can fail at startup
+with `Failed to load ayatana-appindicator3 or appindicator3 dynamic library`.
 
 ## 5) Bluetooth / device communication deps
 
@@ -170,6 +187,17 @@ To force a software-rendering fallback in dev:
 
 ```bash
 WEBKIT_DISABLE_DMABUF_RENDERER=1 LIBGL_ALWAYS_SOFTWARE=1 npm run tauri dev
+```
+
+### `Failed to load ayatana-appindicator3 or appindicator3 dynamic library`
+
+Install the tray runtime dependency and retry:
+
+```bash
+sudo apt install -y libayatana-appindicator3-1
+# fallback package on some Ubuntu images:
+# sudo apt install -y libappindicator3-1
+npm run tauri dev
 ```
 
 ### `[input-monitor] xprintidle not found`

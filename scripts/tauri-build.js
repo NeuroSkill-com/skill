@@ -43,6 +43,70 @@ const isMac = platform() === "darwin";
 const isWin = platform() === "win32";
 const isLinux = platform() === "linux";
 
+function commandExists(cmd) {
+  try {
+    execSync(`command -v ${cmd}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function linuxTrayRuntimeLooksPresent() {
+  if (!commandExists("ldconfig")) return true;
+  try {
+    const out = execSync("ldconfig -p", { encoding: "utf8" });
+    const hasAyatana = /libayatana-appindicator3\.so(?:\.1)?\b/.test(out);
+    const hasLegacy = /libappindicator3\.so(?:\.1)?\b/.test(out);
+    return hasAyatana || hasLegacy;
+  } catch {
+    return true;
+  }
+}
+
+function linuxInstallHintForTrayRuntime() {
+  if (commandExists("apt-get")) {
+    return [
+      "  sudo apt update",
+      "  sudo apt install -y libayatana-appindicator3-1",
+      "  # fallback package on some distros:",
+      "  # sudo apt install -y libappindicator3-1",
+    ].join("\n");
+  }
+  if (commandExists("dnf")) {
+    return [
+      "  sudo dnf install -y libappindicator-gtk3",
+      "  # fallback on some distros:",
+      "  # sudo dnf install -y libayatana-appindicator-gtk3",
+    ].join("\n");
+  }
+  if (commandExists("pacman")) {
+    return "  sudo pacman -S --needed libayatana-appindicator";
+  }
+  if (commandExists("zypper")) {
+    return "  sudo zypper install -y libayatana-appindicator3-1";
+  }
+  return "  Install a package that provides libayatana-appindicator3.so.1 (or libappindicator3.so.1)";
+}
+
+function ensureLinuxTrayRuntimeForDev() {
+  if (!isLinux || subcommand !== "dev") return;
+  if (linuxTrayRuntimeLooksPresent()) return;
+
+  console.error(
+    [
+      "✖ Missing Linux tray runtime dependency: appindicator library.",
+      "",
+      "Tauri can panic at startup with:",
+      "  Failed to load ayatana-appindicator3 or appindicator3 dynamic library",
+      "",
+      "Install one of these runtime libraries, then run `npm run tauri dev` again:",
+      linuxInstallHintForTrayRuntime(),
+    ].join("\n")
+  );
+  process.exit(1);
+}
+
 function parseExplicitBundleArg(args) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -330,6 +394,8 @@ if (isMingwTarget) {
 
 } else {
   // Linux native.
+
+  ensureLinuxTrayRuntimeForDev();
 
   if (
     subcommand === "dev" &&
