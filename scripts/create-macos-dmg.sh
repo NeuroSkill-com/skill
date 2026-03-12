@@ -61,10 +61,16 @@ codesign "${SIGN_ARGS[@]}" "$APP_DIR"
 echo "  ✓ .app signed"
 
 # ── Ensure appdmg is available ────────────────────────────────────────────
-# appdmg is installed as a dependency of create-dmg, or standalone.
-if ! npm ls -g appdmg &>/dev/null && ! npm ls -g create-dmg &>/dev/null; then
+if ! node -e "require('appdmg')" 2>/dev/null; then
   echo "  Installing appdmg …"
   npm install --global appdmg
+fi
+# Resolve the global node_modules path so [stdin] can find it
+APPDMG_PATH="$(node -e "console.log(require.resolve('appdmg'))" 2>/dev/null || true)"
+if [[ -z "$APPDMG_PATH" ]]; then
+  # Add global prefix to NODE_PATH
+  GLOBAL_PREFIX="$(npm prefix -g)/lib/node_modules"
+  export NODE_PATH="${NODE_PATH:+$NODE_PATH:}$GLOBAL_PREFIX"
 fi
 
 # ── Prepare staging area ─────────────────────────────────────────────────
