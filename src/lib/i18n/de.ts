@@ -1380,6 +1380,10 @@ const de: Record<string, string> = {
   "onboarding.tray.open":         "Klicke jederzeit auf das Tray-Symbol, um das Dashboard ein- oder auszublenden.",
   "onboarding.tray.menu":         "Rechtsklick (oder Linksklick unter Windows/Linux) öffnet das Schnellmenü — verbinden, beschriften, kalibrieren und mehr.",
 
+  "onboarding.downloadsComplete":     "Alle Downloads abgeschlossen!",
+  "onboarding.downloadsCompleteBody": "Die empfohlenen Modelle sind heruntergeladen und einsatzbereit. Um mehr Modelle herunterzuladen oder zu anderen zu wechseln, öffnen Sie",
+  "onboarding.downloadMoreSettings":  "App-Einstellungen",
+
   "onboarding.doneTitle":         "Alles bereit!",
   "onboarding.doneBody":          "{app} läuft in deiner Menüleiste. Hier sind ein paar Hinweise:",
   "onboarding.doneTip.tray":      "{app} lebt in deinem Menüleisten-Tray. Klicke auf das Symbol, um das Dashboard ein-/auszublenden.",

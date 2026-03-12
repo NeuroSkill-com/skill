@@ -116,6 +116,7 @@ pub async fn open_about_window(app: AppHandle) -> Result<(), String> {
     .inner_size(520.0, 740.0)
     .resizable(false)
     .center()
+    .decorations(false)
     .build()
     .map(|_| ())
     .map_err(|e| e.to_string())

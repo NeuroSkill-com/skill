@@ -1823,6 +1823,10 @@ const en: Record<string, string> = {
   "onboarding.tray.open":         "Click the tray icon anytime to show or hide the main dashboard.",
   "onboarding.tray.menu":         "Right-click the icon (or left-click on Windows/Linux) for quick actions — connect, label, calibrate, and more.",
 
+  "onboarding.downloadsComplete":     "All Downloads Complete!",
+  "onboarding.downloadsCompleteBody": "The recommended models are downloaded and ready to use. To download more models or switch to different ones, open",
+  "onboarding.downloadMoreSettings":  "app settings",
+
   "onboarding.doneTitle":         "You're All Set!",
   "onboarding.doneBody":          "{app} is running in your menu bar. Here are a few things to know:",
   "onboarding.doneTip.tray":      "{app} lives in your menu bar tray. Click the icon to show/hide the dashboard.",

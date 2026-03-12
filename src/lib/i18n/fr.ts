@@ -1375,6 +1375,10 @@ const fr: Record<string, string> = {
   "onboarding.tray.open":         "Cliquez sur l'icône à tout moment pour afficher ou masquer le tableau de bord.",
   "onboarding.tray.menu":         "Clic droit (ou clic gauche sous Windows/Linux) pour les actions rapides — connecter, étiqueter, calibrer, et plus.",
 
+  "onboarding.downloadsComplete":     "Tous les téléchargements terminés !",
+  "onboarding.downloadsCompleteBody": "Les modèles recommandés sont téléchargés et prêts à l'emploi. Pour télécharger d'autres modèles ou en utiliser d'autres, ouvrez",
+  "onboarding.downloadMoreSettings":  "les paramètres de l'application",
+
   "onboarding.doneTitle":         "Tout est prêt !",
   "onboarding.doneBody":          "{app} fonctionne dans votre barre de menus. Voici quelques informations utiles :",
   "onboarding.doneTip.tray":      "{app} réside dans le tray de votre barre de menus. Cliquez sur l'icône pour afficher/masquer le tableau de bord.",

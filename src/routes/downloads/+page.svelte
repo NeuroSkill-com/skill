@@ -28,6 +28,10 @@
   let loading = $state(true);
   let timer: ReturnType<typeof setInterval> | undefined;
 
+  const totalDownloadsSizeGb = $derived.by(() =>
+    items.reduce((sum, item) => sum + (Number.isFinite(item.size_gb) ? item.size_gb : 0), 0)
+  );
+
   async function load() {
     try {
       items = await invoke<DownloadItem[]>("get_llm_downloads");
@@ -97,6 +101,17 @@
     </div>
   </header>
 
+  <div class="shrink-0 px-3 py-2 border-b border-border dark:border-white/[0.07] bg-card">
+    <div class="flex items-center justify-between text-[0.72rem]">
+      <span class="font-semibold text-foreground/90">
+        Total download size · {items.length} {items.length === 1 ? "item" : "items"}
+      </span>
+      <span class="tabular-nums font-bold text-foreground">
+        {loading ? t("downloads.loading") : fmtSize(totalDownloadsSizeGb)}
+      </span>
+    </div>
+  </div>
+
   <section class="flex-1 overflow-y-auto p-3">
     {#if loading}
       <p class="text-[0.72rem] text-muted-foreground">{t("downloads.loading")}</p>
@@ -152,4 +167,5 @@
       </div>
     {/if}
   </section>
+
 </main>

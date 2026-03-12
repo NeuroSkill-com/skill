@@ -150,6 +150,22 @@ pub(crate) use settings::default_chat_shortcut;
 mod tray;
 pub(crate) use tray::{refresh_tray, build_menu, icon_disconnected};
 
+// ── Linux decoration workaround (tauri-apps/tauri#11856) ─────────────────────
+// On Linux (Wayland + GNOME/Mutter/KWin), window decorations (close /
+// minimize / maximize buttons) become completely unresponsive when a window
+// is created with `visible(false)` and later shown, or after any hide→show
+// cycle.  Briefly toggling fullscreen after `show()` forces the compositor
+// to re-evaluate the decoration state.  The toggle is near-instantaneous
+// and visually imperceptible.  Must be called *after* `win.show()`.
+#[cfg(target_os = "linux")]
+pub(crate) fn linux_fix_decorations(win: &tauri::WebviewWindow) {
+    eprintln!("[linux] applying decoration fix (fullscreen toggle) for {}", win.label());
+    let _ = win.set_fullscreen(true);
+    let _ = win.set_fullscreen(false);
+}
+#[cfg(not(target_os = "linux"))]
+pub(crate) fn linux_fix_decorations(_win: &tauri::WebviewWindow) {}
+
 mod shortcut_cmds;
 pub(crate) use shortcut_cmds::apply_all_shortcuts;
 use shortcut_cmds::{
@@ -1086,27 +1102,15 @@ pub fn run() {
                 init_neutts_samples_dir(samples_dir);
             }
 
-            // ── Linux: fix main-window decorations ────────────────────────
+            // ── Linux: fix main-window property overrides ─────────────────
             // tauri.conf.json sets skipTaskbar=true (for the tray-centric
             // macOS/Windows UX) and resizable=false (fixed 480×800 layout).
             //
             // On Ubuntu/GNOME (Mutter), this combination causes the WM to
-            // strip the minimize and close buttons from the title bar:
-            //   • skipTaskbar → _NET_WM_STATE_SKIP_TASKBAR → no taskbar
-            //     entry to click, so the WM hides the minimize button.
-            //   • resizable=false → GtkWindow min==max size hints → Mutter
-            //     treats the window as dialog-like and removes minimize.
-            //
-            // Fix at runtime:
-            //   1. Clear the skip-taskbar hint so the window appears in the
-            //      panel/taskbar and can be minimised/restored normally.
-            //   2. Mark the window as "resizable" (so Mutter keeps all
-            //      decoration buttons) but lock the min and max sizes to the
-            //      same value so the user cannot actually resize it.
-            //   3. Explicitly set closable=true so GTK sets the
-            //      `deletable` property (shows the close button).
-            //   4. Toggle decorations off→on to force the WM to re-evaluate
-            //      its decoration decisions with the updated hints.
+            // strip the minimize and close buttons from the title bar.
+            // Set the correct properties here *before* the window is shown.
+            // The decoration-responsiveness fix happens *after* show() —
+            // see `linux_fix_decorations()` below.
             #[cfg(target_os = "linux")]
             {
                 use tauri::Manager;
@@ -1118,12 +1122,6 @@ pub fn run() {
                     let size = tauri::LogicalSize::new(480.0_f64, 800.0_f64);
                     let _ = win.set_min_size(Some(tauri::Size::Logical(size)));
                     let _ = win.set_max_size(Some(tauri::Size::Logical(size)));
-                    // Force the WM to refresh decoration buttons by toggling
-                    // decorations off and back on.  Without this, some WMs
-                    // (Mutter / KWin) cache the initial hint set and ignore
-                    // the property changes above.
-                    let _ = win.set_decorations(false);
-                    let _ = win.set_decorations(true);
                 }
             }
 
@@ -1411,6 +1409,7 @@ pub fn run() {
                         tauri::WebviewUrl::App("".into()),
                     )
                     .title(constants::APP_DISPLAY_NAME)
+                    .decorations(false)
                     .build()
                     {
                         Ok(win) => win,
@@ -1419,6 +1418,7 @@ pub fn run() {
                 };
                 let _ = win.show();
                 let _ = win.set_focus();
+                linux_fix_decorations(&win);
                 if win
                     .eval("window.__skill_loaded||(window.location.reload(),false)")
                     .is_err()
@@ -1514,6 +1514,7 @@ pub fn run() {
             if let Some(win) = app.get_webview_window("main") {
                 let _ = win.show();
                 let _ = win.set_focus();
+                linux_fix_decorations(&win);
             }
 
             let app_scan = app.handle().clone();
@@ -1905,20 +1906,12 @@ pub fn run() {
                     }
                     if label == "main" {
                         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                            // On Linux, let the close proceed — the app will
-                            // exit via the ExitRequested path.
-                            #[cfg(not(target_os = "linux"))]
-                            {
-                                eprintln!("[window-event] main: preventing close, hiding window");
-                                api.prevent_close();
-                                if let Some(win) = app.get_webview_window("main") {
-                                    let _ = win.hide();
-                                }
-                            }
-                            #[cfg(target_os = "linux")]
-                            {
-                                eprintln!("[window-event] main: allowing close on Linux");
-                                let _ = &api;
+                            // Always prevent close and hide the window instead.
+                            // User must click "Quit" in the tray menu to exit the app.
+                            eprintln!("[window-event] main: preventing close, hiding window");
+                            api.prevent_close();
+                            if let Some(win) = app.get_webview_window("main") {
+                                let _ = win.hide();
                             }
                         }
                     }

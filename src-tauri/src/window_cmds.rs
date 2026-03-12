@@ -86,7 +86,7 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App("settings".into()))
         .title("NeuroSkill™ – Settings")
         .inner_size(680.0, 720.0).min_inner_size(580.0, 560.0)
-        .center().build().map(|_| ()).map_err(|e| e.to_string())
+        .center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -100,7 +100,7 @@ pub async fn open_model_tab(app: AppHandle) -> Result<(), String> {
         tauri::WebviewUrl::App("settings?tab=model".into()))
         .title("NeuroSkill™ – Model")
         .inner_size(680.0, 720.0).min_inner_size(580.0, 560.0)
-        .center().build().map(|_| ()).map_err(|e| e.to_string())
+        .center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -114,7 +114,7 @@ pub async fn open_updates_window(app: AppHandle) -> Result<(), String> {
         tauri::WebviewUrl::App("settings?tab=updates".into()))
         .title("NeuroSkill™ – Updates")
         .inner_size(680.0, 720.0).min_inner_size(580.0, 560.0)
-        .center().build().map(|_| ()).map_err(|e| e.to_string())
+        .center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -125,7 +125,7 @@ pub async fn open_help_window(app: AppHandle) -> Result<(), String> {
     tauri::WebviewWindowBuilder::new(&app, "help", tauri::WebviewUrl::App("help".into()))
         .title("NeuroSkill™ – Help")
         .inner_size(680.0, 720.0).min_inner_size(600.0, 520.0)
-        .center().build().map(|_| ()).map_err(|e| e.to_string())
+        .center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 // NOTE: open_history_window, open_compare_window, open_compare_window_with_sessions
@@ -150,7 +150,7 @@ pub async fn open_session_window(app: AppHandle, csv_path: String) -> Result<(),
         tauri::WebviewUrl::App(format!("session?csv_path={encoded}").into()))
         .title("NeuroSkill™ – Session Detail")
         .inner_size(680.0, 700.0).min_inner_size(480.0, 400.0)
-        .resizable(true).center().build().map(|_| ()).map_err(|e| e.to_string())
+        .resizable(true).center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -161,7 +161,7 @@ pub async fn open_search_window(app: AppHandle) -> Result<(), String> {
     tauri::WebviewWindowBuilder::new(&app, "search", tauri::WebviewUrl::App("search".into()))
         .title("EEG Search")
         .inner_size(1100.0, 820.0).min_inner_size(700.0, 560.0)
-        .resizable(true).maximized(true).center().build().map(|_| ()).map_err(|e| e.to_string())
+        .resizable(true).maximized(true).center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -182,7 +182,7 @@ pub(crate) async fn open_focus_timer_window_inner(
         tauri::WebviewUrl::App(url.into()))
         .title("Focus Timer")
         .inner_size(420.0, 660.0).resizable(false).always_on_top(false)
-        .center().build().map(|_| ()).map_err(|e| e.to_string())
+        .center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -198,7 +198,7 @@ pub async fn open_labels_window(app: AppHandle) -> Result<(), String> {
     tauri::WebviewWindowBuilder::new(&app, "labels", tauri::WebviewUrl::App("labels".into()))
         .title("All Labels")
         .inner_size(680.0, 600.0).min_inner_size(480.0, 400.0)
-        .resizable(true).center().build().map(|_| ()).map_err(|e| e.to_string())
+        .resizable(true).center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -210,7 +210,7 @@ pub async fn open_label_window(app: AppHandle) -> Result<(), String> {
         .title("Add Label")
         .inner_size(520.0, 560.0).min_inner_size(420.0, 380.0)
         .resizable(true).always_on_top(true)
-        .center().build().map(|_| ()).map_err(|e| e.to_string())
+        .center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -226,7 +226,7 @@ pub async fn open_api_window(app: AppHandle) -> Result<(), String> {
     tauri::WebviewWindowBuilder::new(&app, "api", tauri::WebviewUrl::App("api".into()))
         .title("NeuroSkill™ – API Status")
         .inner_size(620.0, 560.0).min_inner_size(480.0, 400.0)
-        .resizable(true).center().build().map(|_| ()).map_err(|e| e.to_string())
+        .resizable(true).center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// Return the last app version for which the What's New window was dismissed.
@@ -273,6 +273,7 @@ pub async fn open_whats_new_window(app: AppHandle) -> Result<(), String> {
     .inner_size(520.0, 620.0)
     .resizable(false)
     .center()
+    .decorations(false)
     .build()
     .map(|_| ())
     .map_err(|e| e.to_string())
@@ -287,7 +288,7 @@ pub async fn open_onboarding_window(app: AppHandle) -> Result<(), String> {
         tauri::WebviewUrl::App("onboarding".into()))
         .title("NeuroSkill™ – Welcome")
         .inner_size(680.0, 760.0).min_inner_size(560.0, 620.0)
-        .resizable(true).center().build().map(|_| ()).map_err(|e| e.to_string())
+        .resizable(true).center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
     #[tauri::command]
@@ -305,6 +306,7 @@ pub fn complete_onboarding(app: AppHandle, state: tauri::State<'_, Mutex<AppStat
     if let Some(win) = app.get_webview_window("onboarding") { let _ = win.close(); }
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show(); let _ = win.set_focus();
+        crate::linux_fix_decorations(&win);
     }
 }
 
@@ -347,7 +349,7 @@ pub(crate) async fn open_calibration_window_inner(
     tauri::WebviewWindowBuilder::new(app, "calibration", tauri::WebviewUrl::App(url.into()))
         .title("NeuroSkill™ – Calibration")
         .inner_size(600.0, 700.0).min_inner_size(520.0, 600.0)
-        .resizable(true).center().build().map(|_| ()).map_err(|e| e.to_string())
+        .resizable(true).center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

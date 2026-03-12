@@ -409,3 +409,8 @@
 .wn-body .mdr li > p {
   margin: 0;
 }
+
+/* Adjust main content top padding for custom titlebar (30px) */
+#main-content {
+  padding-top: 30px;
+}

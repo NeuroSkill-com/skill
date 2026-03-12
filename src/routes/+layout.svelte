@@ -26,6 +26,7 @@ the Free Software Foundation, version 3 only. -->
   import KeyboardShortcuts from "$lib/KeyboardShortcuts.svelte";
   import CommandPalette    from "$lib/CommandPalette.svelte";
   import WhatsNew          from "$lib/WhatsNew.svelte";
+  import CustomTitleBar    from "$lib/CustomTitleBar.svelte";
 
   let { children }: { children: Snippet } = $props();
 
@@ -58,6 +59,7 @@ the Free Software Foundation, version 3 only. -->
 
 <a href="#main-content" class="skip-link">Skip to content</a>
 <div aria-live="polite" class="sr-only" id="a11y-announcer"></div>
+<CustomTitleBar />
 <ToastContainer />
 <KeyboardShortcuts />
 <CommandPalette />
