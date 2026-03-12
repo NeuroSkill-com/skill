@@ -1882,35 +1882,64 @@ pub fn run() {
         .run(|app, event| {
             match event {
                 tauri::RunEvent::WindowEvent { label, event, .. } => {
+                    match &event {
+                        tauri::WindowEvent::CloseRequested { .. } => {
+                            eprintln!("[window-event] label={label} CloseRequested");
+                        }
+                        tauri::WindowEvent::Destroyed => {
+                            eprintln!("[window-event] label={label} Destroyed");
+                        }
+                        tauri::WindowEvent::Focused(focused) => {
+                            eprintln!("[window-event] label={label} Focused({focused})");
+                        }
+                        tauri::WindowEvent::Moved(pos) => {
+                            eprintln!("[window-event] label={label} Moved({},{})", pos.x, pos.y);
+                        }
+                        tauri::WindowEvent::Resized(size) => {
+                            eprintln!("[window-event] label={label} Resized({}x{})", size.width, size.height);
+                        }
+                        tauri::WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                            eprintln!("[window-event] label={label} ScaleFactorChanged({scale_factor})");
+                        }
+                        _ => {}
+                    }
                     if label == "main" {
                         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                             // On Linux, let the close proceed — the app will
                             // exit via the ExitRequested path.
                             #[cfg(not(target_os = "linux"))]
                             {
+                                eprintln!("[window-event] main: preventing close, hiding window");
                                 api.prevent_close();
                                 if let Some(win) = app.get_webview_window("main") {
                                     let _ = win.hide();
                                 }
                             }
                             #[cfg(target_os = "linux")]
-                            { let _ = &api; }
+                            {
+                                eprintln!("[window-event] main: allowing close on Linux");
+                                let _ = &api;
+                            }
                         }
                     }
                 }
                 #[allow(unused_variables)]
                 tauri::RunEvent::ExitRequested { api, code, .. } => {
+                    eprintln!("[run-event] ExitRequested code={code:?}");
                     // On macOS / Windows, prevent implicit exit so the app
                     // stays alive in the system tray when the last window is
                     // closed.  On Linux, allow the exit so the app actually
                     // terminates when the user closes the main window.
                     #[cfg(not(target_os = "linux"))]
                     if code.is_none() {
+                        eprintln!("[run-event] preventing exit, hiding main window");
                         api.prevent_exit();
                         if let Some(win) = app.get_webview_window("main") {
                             let _ = win.hide();
                         }
                     }
+                    #[cfg(target_os = "linux")]
+                    eprintln!("[run-event] allowing exit on Linux");
                 }
                 // macOS: user clicks the Dock icon while the app is running
                 // with no visible windows (all hidden in the tray).

@@ -44,6 +44,10 @@ All notable changes to NeuroSkill™ are documented here.
 - **Download order configured in Rust constants** — the onboarding queue no
   longer hardcodes download order in Svelte; it now reads the canonical
   sequence from `src-tauri/src/constants.rs`
+- **Onboarding models i18n complete** — added the 16 missing
+  `onboarding.step.models`, `onboarding.modelsHint`, `onboarding.modelsTitle`,
+  `onboarding.modelsBody`, and `onboarding.models.*` keys to all four
+  non-English locales (de, fr, he, uk)
 
 ### Tray / Downloads
 

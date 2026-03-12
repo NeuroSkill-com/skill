@@ -1306,6 +1306,7 @@ const uk: Record<string, string> = {
   "onboarding.step.bluetooth":    "Bluetooth",
   "onboarding.step.fit":          "Перевірка посадки",
   "onboarding.step.calibration":  "Калібрування",
+  "onboarding.step.models":       "Моделі",
   "onboarding.step.tray":         "Трей",
   "onboarding.step.done":         "Готово",
 
@@ -1314,6 +1315,7 @@ const uk: Record<string, string> = {
   "onboarding.bluetoothHint":     "Підключити пристрій BCI",
   "onboarding.fitHint":           "Перевірити якість контакту датчиків",
   "onboarding.calibrationHint":   "Провести швидке калібрування",
+  "onboarding.modelsHint":        "Завантажити рекомендовані локальні моделі ШІ",
 
   "onboarding.bluetoothTitle":    "Підключіть ваш пристрій BCI",
   "onboarding.bluetoothBody":     "Увімкніть пристрій BCI (Muse або OpenBCI) та надіньте його. {app} автоматично знайде пристрої поблизу та підключиться.",
@@ -1346,6 +1348,21 @@ const uk: Record<string, string> = {
   "onboarding.openCalibration":   "Відкрити калібрування",
   "onboarding.calibrationNeedsBt": "Спочатку підключіть пристрій для запуску калібрування.",
   "onboarding.calibrationSkip":   "Можна пропустити і калібрувати пізніше з меню трею або налаштувань.",
+
+  "onboarding.modelsTitle":       "Завантаження рекомендованих моделей",
+  "onboarding.modelsBody":        "Для найкращого локального досвіду завантажте зараз ці стандартні моделі: Qwen3.5 4B (Q4_K_M), кодер ZUNA, NeuTTS та Kitten TTS.",
+  "onboarding.models.downloadAll": "Завантажити рекомендований набір",
+  "onboarding.models.download":   "Завантажити",
+  "onboarding.models.downloading": "Завантаження…",
+  "onboarding.models.downloaded": "Завантажено",
+  "onboarding.models.qwenTitle":  "Qwen3.5 4B (Q4_K_M)",
+  "onboarding.models.qwenDesc":   "Рекомендована модель чату. Використовує Q4_K_M для найкращого балансу якості та швидкості на більшості ноутбуків.",
+  "onboarding.models.zunaTitle":  "Кодер EEG ZUNA",
+  "onboarding.models.zunaDesc":   "Потрібен для ембедингів EEG, семантичної історії та аналітики станів мозку.",
+  "onboarding.models.neuttsTitle": "NeuTTS (Nano Q4)",
+  "onboarding.models.neuttsDesc": "Рекомендований багатомовний голосовий рушій з кращою якістю та підтримкою клонування.",
+  "onboarding.models.kittenTitle": "Kitten TTS",
+  "onboarding.models.kittenDesc": "Легкий швидкий голосовий бекенд, корисний як запасний варіант та для систем з обмеженими ресурсами.",
 
   "onboarding.trayTitle":         "Знайдіть застосунок у треї",
   "onboarding.trayBody":          "{app} працює у фоновому режимі. Після налаштування значок у рядку меню (macOS) або в треї системи (Windows/Linux) — ваша точка доступу до застосунку.",

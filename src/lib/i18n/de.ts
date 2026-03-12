@@ -1312,6 +1312,7 @@ const de: Record<string, string> = {
   "onboarding.step.bluetooth":    "Bluetooth",
   "onboarding.step.fit":          "Sitz prüfen",
   "onboarding.step.calibration":  "Kalibrierung",
+  "onboarding.step.models":       "Modelle",
   "onboarding.step.tray":         "Tray",
   "onboarding.step.done":         "Fertig",
 
@@ -1320,6 +1321,7 @@ const de: Record<string, string> = {
   "onboarding.bluetoothHint":     "BCI-Gerät verbinden",
   "onboarding.fitHint":           "Sensorkontakt prüfen",
   "onboarding.calibrationHint":   "Schnelle Kalibrierung durchführen",
+  "onboarding.modelsHint":        "Empfohlene lokale KI-Modelle herunterladen",
 
   "onboarding.bluetoothTitle":    "BCI-Gerät verbinden",
   "onboarding.bluetoothBody":     "Schalte dein BCI-Gerät (Muse oder OpenBCI) ein und setze es auf. {app} sucht automatisch nach Geräten in der Nähe.",
@@ -1352,6 +1354,21 @@ const de: Record<string, string> = {
   "onboarding.openCalibration":   "Kalibrierung öffnen",
   "onboarding.calibrationNeedsBt": "Verbinde zuerst dein Headset, um die Kalibrierung zu starten.",
   "onboarding.calibrationSkip":   "Du kannst dies überspringen und später über das Tray-Menü oder die Einstellungen kalibrieren.",
+
+  "onboarding.modelsTitle":       "Empfohlene Modelle herunterladen",
+  "onboarding.modelsBody":        "Für die beste lokale Erfahrung lade jetzt diese Standardmodelle herunter: Qwen3.5 4B (Q4_K_M), ZUNA-Encoder, NeuTTS und Kitten TTS.",
+  "onboarding.models.downloadAll": "Empfohlenes Set herunterladen",
+  "onboarding.models.download":   "Herunterladen",
+  "onboarding.models.downloading": "Wird heruntergeladen…",
+  "onboarding.models.downloaded": "Heruntergeladen",
+  "onboarding.models.qwenTitle":  "Qwen3.5 4B (Q4_K_M)",
+  "onboarding.models.qwenDesc":   "Empfohlenes Chat-Modell. Verwendet Q4_K_M für die beste Qualitäts-/Geschwindigkeitsbalance auf den meisten Laptops.",
+  "onboarding.models.zunaTitle":  "ZUNA-EEG-Encoder",
+  "onboarding.models.zunaDesc":   "Benötigt für EEG-Embeddings, semantische Historie und nachgeschaltete Gehirnzustands-Analytik.",
+  "onboarding.models.neuttsTitle": "NeuTTS (Nano Q4)",
+  "onboarding.models.neuttsDesc": "Empfohlene mehrsprachige Sprachengine mit besserer Qualität und Klon-Unterstützung.",
+  "onboarding.models.kittenTitle": "Kitten TTS",
+  "onboarding.models.kittenDesc": "Leichtgewichtiges schnelles Sprach-Backend, nützlich als schneller Fallback und für ressourcenarme Systeme.",
 
   "onboarding.trayTitle":         "Die App im Tray finden",
   "onboarding.trayBody":          "{app} läuft im Hintergrund. Nach dem Setup ist das Symbol in deiner Menüleiste (macOS) bzw. im Infobereich (Windows/Linux) dein Einstiegspunkt.",

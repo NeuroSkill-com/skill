@@ -1307,6 +1307,7 @@ const he: Record<string, string> = {
   "onboarding.step.bluetooth":    "בלוטות'",
   "onboarding.step.fit":          "בדיקת התאמה",
   "onboarding.step.calibration":  "כיול",
+  "onboarding.step.models":       "מודלים",
   "onboarding.step.tray":         "מגש",
   "onboarding.step.done":         "סיום",
 
@@ -1315,6 +1316,7 @@ const he: Record<string, string> = {
   "onboarding.bluetoothHint":     "חבר את מכשיר ה-BCI",
   "onboarding.fitHint":           "בדוק את איכות מגע החיישנים",
   "onboarding.calibrationHint":   "הפעל כיול מהיר",
+  "onboarding.modelsHint":        "הורד מודלי AI מקומיים מומלצים",
 
   "onboarding.bluetoothTitle":    "חבר את מכשיר ה-BCI",
   "onboarding.bluetoothBody":     "הפעל את מכשיר ה-BCI (Muse או OpenBCI) והנח אותו על הראש. {app} יחפש מכשירים בקרבת מקום ויתחבר אוטומטית.",
@@ -1347,6 +1349,21 @@ const he: Record<string, string> = {
   "onboarding.openCalibration":   "פתח כיול",
   "onboarding.calibrationNeedsBt": "חבר את המכשיר קודם כדי להפעיל כיול.",
   "onboarding.calibrationSkip":   "אפשר לדלג ולכייל מאוחר יותר מתפריט המגש או ההגדרות.",
+
+  "onboarding.modelsTitle":       "הורדת מודלים מומלצים",
+  "onboarding.modelsBody":        "לחוויה המקומית הטובה ביותר, הורד עכשיו את ברירות המחדל הבאות: Qwen3.5 4B (Q4_K_M), מקודד ZUNA, NeuTTS ו-Kitten TTS.",
+  "onboarding.models.downloadAll": "הורד את הסט המומלץ",
+  "onboarding.models.download":   "הורד",
+  "onboarding.models.downloading": "מוריד…",
+  "onboarding.models.downloaded": "הורד",
+  "onboarding.models.qwenTitle":  "Qwen3.5 4B (Q4_K_M)",
+  "onboarding.models.qwenDesc":   "מודל צ'אט מומלץ. משתמש ב-Q4_K_M לאיזון הטוב ביותר בין איכות למהירות ברוב המחשבים הניידים.",
+  "onboarding.models.zunaTitle":  "מקודד EEG של ZUNA",
+  "onboarding.models.zunaDesc":   "נדרש להטמעות EEG, היסטוריה סמנטית ואנליטיקת מצבי מוח.",
+  "onboarding.models.neuttsTitle": "NeuTTS (Nano Q4)",
+  "onboarding.models.neuttsDesc": "מנוע קול רב-לשוני מומלץ עם איכות טובה יותר ותמיכה בשכפול.",
+  "onboarding.models.kittenTitle": "Kitten TTS",
+  "onboarding.models.kittenDesc": "מנוע קול קליל ומהיר, שימושי כגיבוי מהיר ולמערכות עם משאבים מוגבלים.",
 
   "onboarding.trayTitle":         "מצא את האפליקציה במגש",
   "onboarding.trayBody":          "{app} פועלת ברקע. לאחר ההגדרה, הסמל בשורת התפריטים (macOS) או במגש המערכת (Windows/Linux) הוא הדרך לחזור לאפליקציה.",

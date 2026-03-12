@@ -1307,6 +1307,7 @@ const fr: Record<string, string> = {
   "onboarding.step.bluetooth":    "Bluetooth",
   "onboarding.step.fit":          "Ajustement",
   "onboarding.step.calibration":  "Calibration",
+  "onboarding.step.models":       "Modèles",
   "onboarding.step.tray":         "Icône",
   "onboarding.step.done":         "Terminé",
 
@@ -1315,6 +1316,7 @@ const fr: Record<string, string> = {
   "onboarding.bluetoothHint":     "Connecter votre appareil BCI",
   "onboarding.fitHint":           "Vérifier la qualité du contact des capteurs",
   "onboarding.calibrationHint":   "Lancer une session de calibration rapide",
+  "onboarding.modelsHint":        "Télécharger les modèles d'IA locaux recommandés",
 
   "onboarding.bluetoothTitle":    "Connecter votre appareil BCI",
   "onboarding.bluetoothBody":     "Allumez votre appareil BCI (Muse ou OpenBCI) et portez-le. {app} recherchera automatiquement les appareils à proximité.",
@@ -1347,6 +1349,21 @@ const fr: Record<string, string> = {
   "onboarding.openCalibration":   "Ouvrir la calibration",
   "onboarding.calibrationNeedsBt": "Connectez d'abord votre casque pour lancer la calibration.",
   "onboarding.calibrationSkip":   "Vous pouvez sauter cette étape et calibrer plus tard depuis le menu ou les paramètres.",
+
+  "onboarding.modelsTitle":       "Télécharger les modèles recommandés",
+  "onboarding.modelsBody":        "Pour la meilleure expérience locale, téléchargez maintenant ces modèles par défaut : Qwen3.5 4B (Q4_K_M), encodeur ZUNA, NeuTTS et Kitten TTS.",
+  "onboarding.models.downloadAll": "Télécharger le lot recommandé",
+  "onboarding.models.download":   "Télécharger",
+  "onboarding.models.downloading": "Téléchargement…",
+  "onboarding.models.downloaded": "Téléchargé",
+  "onboarding.models.qwenTitle":  "Qwen3.5 4B (Q4_K_M)",
+  "onboarding.models.qwenDesc":   "Modèle de chat recommandé. Utilise Q4_K_M pour le meilleur équilibre qualité/vitesse sur la plupart des ordinateurs portables.",
+  "onboarding.models.zunaTitle":  "Encodeur EEG ZUNA",
+  "onboarding.models.zunaDesc":   "Nécessaire pour les embeddings EEG, l'historique sémantique et l'analyse en aval des états cérébraux.",
+  "onboarding.models.neuttsTitle": "NeuTTS (Nano Q4)",
+  "onboarding.models.neuttsDesc": "Moteur vocal multilingue recommandé avec une meilleure qualité et prise en charge du clonage.",
+  "onboarding.models.kittenTitle": "Kitten TTS",
+  "onboarding.models.kittenDesc": "Backend vocal léger et rapide, utile comme solution de repli et pour les systèmes à faibles ressources.",
 
   "onboarding.trayTitle":         "Retrouver l'app dans la barre",
   "onboarding.trayBody":          "{app} fonctionne en arrière-plan. Après l'installation, l'icône dans la barre de menu (macOS) ou la zone de notification (Windows/Linux) est votre point d'accès.",
