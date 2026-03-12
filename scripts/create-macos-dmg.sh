@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # ── Create a macOS DMG from a pre-built .app bundle ───────────────────────
 #
-# Uses sindresorhus/create-dmg for the base DMG (composed icon, Retina
-# background, ULFO+APFS), then post-processes to add README, CHANGELOG,
-# LICENSE and uses AppleScript to position them in the Finder window.
+# Uses appdmg (via create-dmg's dependency) to build the DMG in a single
+# pass — no convert round-trips that corrupt APFS volumes.
 #
 # Usage:
 #   bash scripts/create-macos-dmg.sh [target-triple]
@@ -61,21 +60,94 @@ fi
 codesign "${SIGN_ARGS[@]}" "$APP_DIR"
 echo "  ✓ .app signed"
 
-# ── Ensure create-dmg v8+ is installed ────────────────────────────────────
-NEED_INSTALL=false
-if ! command -v create-dmg &>/dev/null; then
-  NEED_INSTALL=true
-else
-  CDM_VER=$(create-dmg --version 2>/dev/null || echo "0")
-  CDM_MAJOR=$(echo "$CDM_VER" | cut -d. -f1)
-  if [[ "$CDM_MAJOR" -lt 8 ]] 2>/dev/null; then
-    NEED_INSTALL=true
-    echo "  create-dmg v$CDM_VER found, upgrading to v8+ …"
-  fi
+# ── Ensure appdmg is available ────────────────────────────────────────────
+# appdmg is installed as a dependency of create-dmg, or standalone.
+if ! npm ls -g appdmg &>/dev/null && ! npm ls -g create-dmg &>/dev/null; then
+  echo "  Installing appdmg …"
+  npm install --global appdmg
 fi
-if $NEED_INSTALL; then
-  echo "  Installing create-dmg@latest …"
-  npm install --global create-dmg@latest
+
+# ── Prepare staging area ─────────────────────────────────────────────────
+STAGE="$(mktemp -d)"; CLEANUP_DIRS+=("$STAGE")
+
+# ── Generate background image (logo + version) ───────────────────────────
+ICON_PNG="$TAURI_DIR/icons/icon.png"
+BG_1X="$STAGE/background.png"
+BG_2X="$STAGE/background@2x.png"
+HAS_BG=false
+
+if [[ -f "$ICON_PNG" ]]; then
+  python3 - "$ICON_PNG" "$VERSION" "$PRODUCT_NAME" "$STAGE" <<'PYEOF' && HAS_BG=true || true
+import sys, os
+
+icon_path, version, product_name, out_dir = sys.argv[1:5]
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    print("  ⊘ Pillow not available — using default background")
+    sys.exit(1)
+
+BG_COLOR  = (30, 30, 30, 255)
+TXT_COLOR = (200, 200, 200, 255)
+DIM_COLOR = (120, 120, 120, 255)
+
+def load_font(size):
+    for fp in [
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/SFNSDisplay.ttf",
+        "/System/Library/Fonts/SFNS.ttf",
+        "/Library/Fonts/Arial.ttf",
+    ]:
+        try:
+            return ImageFont.truetype(fp, size)
+        except (OSError, IOError):
+            continue
+    return ImageFont.load_default()
+
+icon_orig = Image.open(icon_path).convert("RGBA")
+
+for scale, filename in [(1, "background.png"), (2, "background@2x.png")]:
+    W = 660 * scale
+    H = 520 * scale
+
+    bg = Image.new("RGBA", (W, H), BG_COLOR)
+    draw = ImageDraw.Draw(bg)
+
+    # Icon (centered, upper area)
+    icon_sz = 128 * scale
+    icon = icon_orig.resize((icon_sz, icon_sz), Image.LANCZOS)
+    ix = (W - icon_sz) // 2
+    iy = 28 * scale
+    bg.paste(icon, (ix, iy), icon)
+
+    # Product name
+    font_name = load_font(20 * scale)
+    nbox = draw.textbbox((0, 0), product_name, font=font_name)
+    nw = nbox[2] - nbox[0]
+    draw.text(((W - nw) // 2, iy + icon_sz + 10 * scale),
+              product_name, fill=TXT_COLOR, font=font_name)
+
+    # Version
+    font_ver = load_font(14 * scale)
+    vtxt = f"v{version}"
+    vbox = draw.textbbox((0, 0), vtxt, font=font_ver)
+    vw = vbox[2] - vbox[0]
+    draw.text(((W - vw) // 2, iy + icon_sz + 40 * scale),
+              vtxt, fill=DIM_COLOR, font=font_ver)
+
+    # Install hint (bottom)
+    font_hint = load_font(12 * scale)
+    hint = "Drag to Applications to install"
+    hbox = draw.textbbox((0, 0), hint, font=font_hint)
+    hw = hbox[2] - hbox[0]
+    draw.text(((W - hw) // 2, H - 24 * scale),
+              hint, fill=DIM_COLOR, font=font_hint)
+
+    bg.save(os.path.join(out_dir, filename), "PNG")
+
+print(f"  ✓ background image (logo + v{version}, 660×520 @1x + @2x)")
+PYEOF
 fi
 
 # ── Prepare output directory ──────────────────────────────────────────────
@@ -84,137 +156,90 @@ mkdir -p "$DMG_DIR"
 ARCH=$(echo "$TARGET" | cut -d- -f1)
 DMG_FILENAME="NeuroSkill_${VERSION}_${ARCH}.dmg"
 DMG_OUT="$DMG_DIR/$DMG_FILENAME"
-
 rm -f "$DMG_OUT"
-rm -f "$DMG_DIR/${PRODUCT_NAME} ${VERSION}.dmg"
 
-# ══════════════════════════════════════════════════════════════════════════
-# Phase 1: create-dmg produces the base DMG
-#   → composed volume icon, Retina background, app + Applications
-#   → ULFO format, APFS filesystem
-#   → No SLA (hdiutil udifrez corrupts DMGs on macOS 14+)
-# ══════════════════════════════════════════════════════════════════════════
-echo "  Phase 1: create-dmg (base DMG) …"
-CREATE_DMG_ARGS=(--overwrite --dmg-title "NeuroSkill" --no-code-sign)
-(cd "$ROOT" && create-dmg "${CREATE_DMG_ARGS[@]}" "$APP_DIR" "$DMG_DIR") || true
+# ── Build appdmg spec + run ──────────────────────────────────────────────
+# appdmg handles everything in one pass: creates DMG, copies files,
+# sets Finder view via AppleScript, compresses. No convert round-trip.
+ICON_ICNS="$TAURI_DIR/icons/icon.icns"
 
-# Rename to our convention
-CREATED_DMG="$DMG_DIR/${PRODUCT_NAME} ${VERSION}.dmg"
-if [[ -f "$CREATED_DMG" ]]; then
-  mv "$CREATED_DMG" "$DMG_OUT"
-elif [[ ! -f "$DMG_OUT" ]]; then
-  echo "ERROR: create-dmg did not produce a DMG"
+node - <<NODEJS
+const appdmg = require('appdmg');
+const path = require('path');
+
+const spec = {
+  title: 'NeuroSkill',
+  format: 'ULFO',
+  window: {
+    size: { width: 660, height: 520 }
+  },
+  'icon-size': 80,
+  'text-size': 12,
+  contents: [
+    { x: 180, y: 190, type: 'file', path: '${APP_DIR}' },
+    { x: 480, y: 190, type: 'link', path: '/Applications' },
+  ]
+};
+
+// Icon
+const icnsPath = '${ICON_ICNS}';
+try { require('fs').accessSync(icnsPath); spec.icon = icnsPath; } catch {}
+
+// Background
+const bgPath = '${BG_2X}';
+const bg1xPath = '${BG_1X}';
+try {
+  require('fs').accessSync(bgPath);
+  spec.background = bg1xPath;
+  spec['background-color'] = '#1e1e1e';
+} catch {}
+
+// Extra files (docs)
+const root = '${ROOT}';
+const docs = [
+  { name: 'README.md',    x: 140, y: 390 },
+  { name: 'LICENSE',       x: 330, y: 390 },
+  { name: 'CHANGELOG.md',  x: 520, y: 390 },
+];
+for (const doc of docs) {
+  const p = path.join(root, doc.name);
+  try {
+    require('fs').accessSync(p);
+    spec.contents.push({ x: doc.x, y: doc.y, type: 'file', path: p });
+  } catch {}
+}
+
+console.log('  appdmg spec:', JSON.stringify(spec, null, 2));
+
+const ee = appdmg({
+  target: '${DMG_OUT}',
+  basepath: root,
+  specification: spec,
+});
+
+ee.on('progress', info => {
+  if (info.type === 'step-begin') {
+    process.stdout.write('  ' + info.title + ' …\\n');
+  }
+});
+
+ee.on('finish', () => {
+  console.log('  ✓ DMG created via appdmg');
+  process.exit(0);
+});
+
+ee.on('error', err => {
+  console.error('  ✖ appdmg error:', err);
+  process.exit(1);
+});
+NODEJS
+
+if [[ ! -f "$DMG_OUT" ]]; then
+  echo "ERROR: appdmg did not produce a DMG at $DMG_OUT"
   exit 1
 fi
 
-echo "  ✓ base DMG created"
-
-# ══════════════════════════════════════════════════════════════════════════
-# Phase 2: Post-process — add extra files
-#   Convert to read-write, mount, copy docs, use AppleScript to position
-#   icons (only reliable method on APFS), re-compress.
-#
-#   IMPORTANT: Do NOT rewrite .DS_Store with Python ds_store/mac_alias.
-#   Those libraries produce HFS+-style entries that crash Finder on APFS.
-#   AppleScript (via osascript) is what appdmg itself uses and is the
-#   only reliable way to set Finder view properties on APFS volumes.
-# ══════════════════════════════════════════════════════════════════════════
-echo "  Phase 2: post-processing (adding docs) …"
-
-WORK_DIR="$(mktemp -d)"; CLEANUP_DIRS+=("$WORK_DIR")
-DMG_RW="$WORK_DIR/rw.dmg"
-
-# Convert to read-write
-hdiutil convert "$DMG_OUT" -format UDRW -o "$DMG_RW" -quiet
-
-# Resize to accommodate extra files (+5 MB headroom)
-hdiutil resize -size +5m "$DMG_RW" 2>/dev/null || true
-
-# Mount
-MOUNT_DIR=""
-MOUNT_DIR=$(hdiutil attach -readwrite -noverify -noautoopen "$DMG_RW" \
-  | grep '/Volumes/' | sed 's/.*\/Volumes/\/Volumes/') || true
-
-if [[ -z "${MOUNT_DIR:-}" ]] || [[ ! -d "$MOUNT_DIR" ]]; then
-  echo "  ⚠ Could not mount RW DMG for post-processing — using base DMG as-is"
-else
-  # ── Add extra files ───────────────────────────────────────────────────
-  for doc in README.md CHANGELOG.md LICENSE; do
-    if [[ -f "$ROOT/$doc" ]]; then
-      cp "$ROOT/$doc" "$MOUNT_DIR/$doc"
-      echo "  ✓ $doc added"
-    fi
-  done
-
-  # ── Use AppleScript to resize window + position all icons ─────────────
-  # This is the same technique appdmg uses internally. It works reliably
-  # on both HFS+ and APFS because Finder writes the .DS_Store itself.
-  VOL_NAME=$(basename "$MOUNT_DIR")
-  osascript <<APPLESCRIPT 2>/dev/null && echo "  ✓ Finder layout configured" || echo "  ⊘ AppleScript layout skipped (no Finder permission)"
-tell application "Finder"
-  tell disk "${VOL_NAME}"
-    open
-    delay 1
-    set current view of container window to icon view
-    set toolbar visible of container window to false
-    set statusbar visible of container window to false
-    set the bounds of container window to {100, 100, 760, 620}
-    set viewOptions to the icon view options of container window
-    set arrangement of viewOptions to not arranged
-    set icon size of viewOptions to 80
-    set text size of viewOptions to 12
-    -- Top row: app + Applications
-    set position of item "${PRODUCT_NAME}.app" of container window to {180, 170}
-    set position of item "Applications" of container window to {480, 170}
-    -- Bottom row: docs
-    try
-      set position of item "README.md" of container window to {140, 370}
-    end try
-    try
-      set position of item "LICENSE" of container window to {330, 370}
-    end try
-    try
-      set position of item "CHANGELOG.md" of container window to {520, 370}
-    end try
-    close
-    open
-    -- Give Finder time to write .DS_Store
-    delay 3
-    close
-  end tell
-end tell
-APPLESCRIPT
-
-  # ── Cleanup ─────────────────────────────────────────────────────────────
-  chmod -Rf go-w "$MOUNT_DIR" 2>/dev/null || true
-  rm -rf "$MOUNT_DIR/.fseventsd" \
-         "$MOUNT_DIR/.Trashes" \
-         "$MOUNT_DIR/.Spotlight-V100" \
-         "$MOUNT_DIR/.TemporaryItems" 2>/dev/null || true
-  dot_clean "$MOUNT_DIR" 2>/dev/null || true
-
-  if command -v SetFile &>/dev/null; then
-    for hidden in "$MOUNT_DIR/.background" \
-                  "$MOUNT_DIR/.DS_Store" \
-                  "$MOUNT_DIR/.VolumeIcon.icns" \
-                  "$MOUNT_DIR/.fseventsd"; do
-      [[ -e "$hidden" ]] && SetFile -a V "$hidden" 2>/dev/null || true
-    done
-  fi
-
-  sync; sleep 1
-  hdiutil detach "$MOUNT_DIR" -quiet 2>/dev/null \
-    || hdiutil detach "$MOUNT_DIR" -force 2>/dev/null \
-    || true
-fi
-
-# ── Re-compress ─────────────────────────────────────────────────────────
-hdiutil convert "$DMG_RW" -format ULFO -o "$DMG_OUT" -ov -quiet
-echo "  ✓ DMG re-compressed (ULFO)"
-
-# ══════════════════════════════════════════════════════════════════════════
-# Phase 3: Sign
-# ══════════════════════════════════════════════════════════════════════════
+# ── Sign the DMG ──────────────────────────────────────────────────────────
 if [[ "$SIGN_ID" != "-" ]]; then
   codesign --force --timestamp --sign "$SIGN_ID" "$DMG_OUT"
   echo "  ✓ DMG signed"
@@ -252,8 +277,8 @@ echo "  • Applications → /Applications"
 [[ -f "$ROOT/README.md" ]]    && echo "  • README.md"
 [[ -f "$ROOT/CHANGELOG.md" ]] && echo "  • CHANGELOG.md"
 [[ -f "$ROOT/LICENSE" ]]      && echo "  • LICENSE"
-echo "  • Composed volume icon (app icon on disk)"
-echo "  • Background image (Retina @2x)"
+echo "  • Volume icon"
+$HAS_BG && echo "  • Background (logo + v$VERSION, Retina @2x)"
 echo ""
 echo "To open:    open '$DMG_OUT'"
 echo "To install: drag $PRODUCT_NAME to Applications"

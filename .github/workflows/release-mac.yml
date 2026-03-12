@@ -324,7 +324,7 @@ jobs:
       #   • Signs the DMG and notarizes with Apple (staples both DMG and .app)
       - name: Install DMG dependencies
         run: |
-          npm install --global create-dmg
+          npm install --global appdmg
           pip3 install --quiet Pillow
 
       - name: Sign .app + Create DMG
