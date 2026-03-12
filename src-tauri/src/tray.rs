@@ -56,18 +56,30 @@ fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
     let chat = String::new();
     drop(g);
 
-    let pairs = st.paired_devices
+    let mut pair_parts = st.paired_devices
         .iter()
         .map(|d| format!("{}:{}", d.id, d.name))
-        .collect::<Vec<_>>()
-        .join(",");
+        .collect::<Vec<_>>();
+    pair_parts.sort_unstable();
+    let pairs = pair_parts.join(",");
 
-    let batt  = st.battery as u32;
+    // Battery can jitter between frequent telemetry samples.
+    // Bucket to 10% steps so tiny fluctuations do not constantly invalidate
+    // the tray menu fingerprint.
+    let batt_bucket = if st.battery <= 0.0 {
+        0u32
+    } else {
+        (((st.battery as u32) / 10) * 10).min(100)
+    };
     let state = st.state.as_str();
     let name  = st.device_name.as_deref().unwrap_or("");
-    let tgt   = st.target_name.as_deref().unwrap_or("");
+    let tgt   = if state == "scanning" {
+        st.target_name.as_deref().unwrap_or("")
+    } else {
+        ""
+    };
 
-    format!("{state}|{name}|{batt}|{tgt}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}")
+    format!("{state}|{name}|{batt_bucket}|{tgt}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}")
 }
 
 // ── Embedded icons ────────────────────────────────────────────────────────────
@@ -141,7 +153,10 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
             if st.paired_devices.is_empty() {
                 menu.append(&MenuItem::with_id(app, "scan", "Scan for BCI Device", true, None::<&str>)?)?;
             } else {
-                for dev in &st.paired_devices {
+                let mut paired = st.paired_devices.clone();
+                paired.sort_unstable_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id)));
+
+                for dev in &paired {
                     menu.append(&MenuItem::with_id(app, format!("connect:{}", dev.id),
                         format!("Connect to {}", dev.name), true, None::<&str>)?)?;
                 }
@@ -149,7 +164,7 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
                 menu.append(&MenuItem::with_id(app, "scan", "Scan for New Device", true, None::<&str>)?)?;
                 menu.append(&PredefinedMenuItem::separator(app)?)?;
                 let fsub = Submenu::with_id(app, "forget_sub", "Forget Device", true)?;
-                for dev in &st.paired_devices {
+                for dev in &paired {
                     fsub.append(&MenuItem::with_id(app, format!("forget:{}", dev.id),
                         format!("Forget {}", dev.name), true, None::<&str>)?)?;
                 }

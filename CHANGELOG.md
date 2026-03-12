@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [0.0.17] — 2026-03-11
 
+### Dependencies
+
+- `llama-cpp-4` `0.2.6` → `0.2.7`
+
 ### CI / Build
 
 - **Windows release — wrong `link.exe`** — the GitHub-hosted `windows-latest`

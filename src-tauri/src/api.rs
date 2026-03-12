@@ -201,7 +201,6 @@ pub fn router(state: SharedState) -> Router {
         .route("/v1/dnd",            get(dnd_get).post(dnd_post))
 
         // ── LLM REST shortcuts (non-/v1/ — /v1/ routes are in llm::router)
-        .route("/llm/status",           get(llm_status_get))
         .route("/llm/start",            post(llm_start_post))
         .route("/llm/stop",             post(llm_stop_post))
         .route("/llm/catalog",          get(llm_catalog_get))
@@ -528,12 +527,6 @@ async fn delete_calibration_delete(
 }
 
 // ── LLM REST shortcut handlers ────────────────────────────────────────────────
-
-async fn llm_status_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
-) -> Response {
-    cmd(&s, &peer_str(addr), "llm_status", json!({})).await
-}
 
 async fn llm_start_post(
     State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,

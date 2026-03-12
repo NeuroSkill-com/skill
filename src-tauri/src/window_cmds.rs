@@ -261,7 +261,8 @@ pub fn dismiss_whats_new(version: String, app: AppHandle) {
 #[tauri::command]
 pub async fn open_whats_new_window(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("whats-new") {
-        let _ = win.show(); let _ = win.set_focus(); return Ok(());
+        let _ = win;
+        return Ok(());
     }
     tauri::WebviewWindowBuilder::new(
         &app,
