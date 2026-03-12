@@ -650,9 +650,18 @@ jobs:
             $manifest | Add-Member -NotePropertyName platforms -NotePropertyValue ([ordered]@{}) -Force
           }
 
-          $manifest.platforms."windows-x86_64" = [ordered]@{
-            url = $downloadUrl
+          # ConvertFrom-Json returns PSCustomObjects; dot-assignment of a new
+          # hyphenated property on a PSCustomObject fails.  Use Add-Member for
+          # PSCustomObjects and bracket-notation for hashtables/ordered dicts.
+          $platformEntry = [ordered]@{
+            url       = $downloadUrl
             signature = $signature
+          }
+          if ($manifest.platforms -is [System.Collections.IDictionary]) {
+            $manifest.platforms["windows-x86_64"] = $platformEntry
+          } else {
+            $manifest.platforms | Add-Member -NotePropertyName "windows-x86_64" `
+              -NotePropertyValue $platformEntry -Force
           }
 
           $manifest | ConvertTo-Json -Depth 20 | Out-File -FilePath "latest.json" -Encoding utf8

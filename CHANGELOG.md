@@ -6,6 +6,12 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+## [0.0.34] — 2026-03-12
+
+### CI Runtime
+
+- Fixed Windows release CI `Update latest.json` step crashing with "The property 'windows-x86_64' cannot be found" when `latest.json` already exists: `ConvertFrom-Json` returns a `PSCustomObject` whose properties cannot be set by dot-notation for new hyphenated names; the workflow now uses bracket-notation for hashtable/ordered-dict platforms and `Add-Member -Force` for PSCustomObject platforms.
+
 ## [0.0.33] — 2026-03-12
 ### CI Runtime
 
