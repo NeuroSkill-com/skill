@@ -79,6 +79,26 @@ fn main() {
         println!("cargo:warning=Using Windows build configuration");
     }
 
+    // ── macOS / Linux: increase main-thread stack size (binary only) ─────────
+    //
+    // The Tauri `run()` function has an enormous stack frame because
+    // `generate_handler!` expands ~150 command handlers inline.  macOS
+    // defaults to 8 MB which is insufficient.
+    //
+    // `cargo:rustc-link-arg-bins` applies the flag ONLY when linking the
+    // final executable, not the lib crate — ld64 rejects `-stack_size` on
+    // dylibs.  The value 0x2000000 = 32 MB.
+    //
+    // Linux default is also 8 MB (via `ulimit -s`); explicitly embedding
+    // a 32 MB GNU_STACK note ensures the binary works even in containers
+    // with restrictive limits.
+    let t_os = target_os();
+    if t_os == "macos" {
+        println!("cargo:rustc-link-arg-bins=-Wl,-stack_size,0x2000000");
+    } else if t_os == "linux" {
+        println!("cargo:rustc-link-arg-bins=-Wl,-z,stacksize=33554432");
+    }
+
     tauri_build::build()
 }
 

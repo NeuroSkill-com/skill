@@ -92,18 +92,13 @@ CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 # handlers inline, plus the setup/run closures, `AppState::default()`, and
 # deep generics from serde / HNSW / llama.cpp.  8 MB is not enough.
 #
-# -Wl,-stack_size,0x2000000  →  32 MB (0x2000000 = 33 554 432).
-# The macOS linker (ld64) sets LC_MAIN.stacksize in the Mach-O header.
-# Only the main thread is affected; worker threads use their own stack_size.
+# The stack-size flag is emitted from build.rs via `cargo:rustc-link-arg-bins`
+# so it only applies to the final executable, NOT to the lib crate (ld64
+# rejects `-stack_size` on dylibs).  See build.rs for the actual value.
 #
-# If you still see "thread 'main' has overflowed its stack" after this, bump
-# the value further (e.g. 0x4000000 = 64 MB) — macOS lazily commits pages so
-# the resident cost is proportional to actual usage, not the reservation.
-[target.aarch64-apple-darwin]
-rustflags = ["-C", "link-args=-Wl,-stack_size,0x2000000"]
-
-[target.x86_64-apple-darwin]
-rustflags = ["-C", "link-args=-Wl,-stack_size,0x2000000"]
+# NOTE: [target.aarch64-apple-darwin] and [target.x86_64-apple-darwin]
+# sections are intentionally absent here because macOS needs no target-wide
+# rustflags.  The stack size is handled exclusively by build.rs.
 
 # ── Windows MSVC: increase main-thread stack size ────────────────────────────
 #
