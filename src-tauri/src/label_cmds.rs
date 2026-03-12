@@ -58,6 +58,48 @@ pub fn query_annotations(
 }
 
 #[tauri::command]
+pub fn get_recent_labels(
+    limit: Option<usize>,
+    state: tauri::State<'_, Mutex<AppState>>,
+) -> Vec<String> {
+    let s = state.lock_or_recover();
+    let skill_dir = s.skill_dir.clone();
+    drop(s);
+
+    let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
+    if !labels_db.exists() { return vec![]; }
+
+    let conn = match rusqlite::Connection::open_with_flags(
+        &labels_db,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    ) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+
+    let max_rows = limit.unwrap_or(12).clamp(1, 100) as i64;
+    let mut stmt = match conn.prepare(
+        "SELECT text FROM labels
+         WHERE length(trim(text)) > 0
+         GROUP BY text
+         ORDER BY MAX(created_at) DESC
+         LIMIT ?1",
+    ) {
+        Ok(s) => s,
+        Err(_) => return vec![],
+    };
+
+    stmt.query_map(rusqlite::params![max_rows], |row| row.get::<_, String>(0))
+        .map(|rows| {
+            rows.flatten()
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[tauri::command]
 pub fn delete_label(label_id: i64, state: tauri::State<'_, Mutex<AppState>>) -> Result<(), String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     let labels_db = skill_dir.join(crate::constants::LABELS_FILE);

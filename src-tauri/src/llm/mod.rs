@@ -864,22 +864,21 @@ fn run_actor(
         // The Vulkan SDK installer sets `VULKAN_SDK` and adds its bin directory to PATH.
         // Some user configurations may need explicit path injection for robustness.
         if let Ok(vulkan_sdk_path) = std::env::var("VULKAN_SDK") {
-            // .parent() returns Option<&Path>, not Result — use `Some` instead of `Ok`
-            if let Some(parent_dir) = std::path::Path::new(&vulkan_sdk_path).parent() {
-                // Prepend Vulkan SDK bin directory to PATH before backend init
-                // `.to_string_lossy()` returns a `String` that implements `AsRef<OsStr>`
-                let parent_vpath = parent_dir.to_string_lossy().to_string();
-                
-                if let Ok(current_path) = std::env::var("PATH") {
-                    std::env::set_var(
-                        "PATH",
-                        format!("{};{}", parent_vpath, current_path),
-                    );
-                    llm_info!(&app, &log_buf, log_file,
-                        "Vulkan SDK path injected into PATH: {}", vulkan_sdk_path);
-                } else {
-                    std::env::set_var("PATH", parent_vpath);
-                }
+            // VULKAN_SDK is typically e.g. "C:\VulkanSDK\1.3.290.0".
+            // The Vulkan loader DLL (vulkan-1.dll) lives in the Bin
+            // subdirectory, so we need to add "{VULKAN_SDK}\Bin" to PATH.
+            let vulkan_bin = std::path::Path::new(&vulkan_sdk_path).join("Bin");
+            let vulkan_bin_str = vulkan_bin.to_string_lossy().to_string();
+
+            if let Ok(current_path) = std::env::var("PATH") {
+                std::env::set_var(
+                    "PATH",
+                    format!("{};{}", vulkan_bin_str, current_path),
+                );
+                llm_info!(&app, &log_buf, log_file,
+                    "Vulkan SDK Bin directory injected into PATH: {}", vulkan_bin_str);
+            } else {
+                std::env::set_var("PATH", &vulkan_bin_str);
             }
         }
     }

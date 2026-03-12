@@ -183,7 +183,7 @@ use window_cmds::{
     open_search_window, open_session_window, open_label_window, open_labels_window,
     open_focus_timer_window, open_api_window,
     open_whats_new_window, get_whats_new_seen_version, dismiss_whats_new,
-    open_onboarding_window,
+    open_onboarding_window, get_onboarding_model_download_order,
     complete_onboarding, get_onboarding_complete, close_label_window,
     check_accessibility_permission, open_accessibility_settings, open_notifications_settings,
     open_calibration_window, open_and_start_calibration, close_calibration_window,
@@ -192,13 +192,13 @@ use window_cmds::{
     delete_calibration_profile, record_calibration_completed,
     get_calibration_config, set_calibration_config,
     emit_calibration_event, quit_app, get_app_version, get_app_name,
-    get_data_dir, set_data_dir, get_ws_clients, get_ws_request_log, get_ws_port,
+    get_data_dir, set_data_dir, open_skill_dir, get_ws_clients, get_ws_request_log, get_ws_port,
 };
 
 mod label_cmds;
 pub(crate) use label_cmds::{EmbedderState, init_embedder};
 use label_cmds::{
-    query_annotations, delete_label, update_label, get_queue_stats, submit_label,
+    query_annotations, get_recent_labels, delete_label, update_label, get_queue_stats, submit_label,
     list_embedding_models, get_embedding_model, set_embedding_model,
     reembed_all_labels, get_stale_label_count,
     rebuild_label_index, search_labels_by_text, search_labels_by_eeg,
@@ -236,9 +236,11 @@ use settings_cmds::{
 #[cfg(feature = "llm")]
 use llm::cmds::{
     get_llm_catalog, download_llm_model, cancel_llm_download,
+    pause_llm_download, resume_llm_download, get_llm_downloads,
     delete_llm_model, refresh_llm_catalog, set_llm_active_model, set_llm_active_mmproj,
     set_llm_autoload_mmproj,
     get_llm_logs, start_llm_server, stop_llm_server, get_llm_server_status, open_chat_window,
+    open_downloads_window,
     chat_completions_ipc, abort_llm_stream,
     get_last_chat_session, save_chat_message, new_chat_session,
     load_chat_session, list_chat_sessions, rename_chat_session, delete_chat_session,
@@ -1040,6 +1042,29 @@ fn quit_dialog_strings(lang: &str) -> (&'static str, &'static str) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // ── Linux: suppress noisy libEGL / DRI2 warnings ──────────────────────
+    // WebKitGTK probes for DRI2/DMABuf GPU rendering at startup.  On systems
+    // without full DRI2 support (VMs, Wayland-only, missing Mesa drivers)
+    // this produces harmless but noisy warnings on stderr:
+    //   "libEGL warning: egl: failed to create dri2 screen"
+    //   "libEGL warning: DRI2: failed to create screen"
+    // WebKit falls back to software rendering automatically; the warnings
+    // are purely cosmetic.  Suppress them:
+    //   • WEBKIT_DISABLE_DMABUF_RENDERER — skip the DMABuf/DRI2 probe path
+    //     entirely so the warnings are never emitted.
+    //   • EGL_LOG_LEVEL=fatal — tell Mesa's EGL loader to only print fatal
+    //     errors, not warnings.
+    // Both must be set before Tauri/GTK creates the WebView.
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var("WEBKIT_DISABLE_DMABUF_RENDERER").is_err() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+        if std::env::var("EGL_LOG_LEVEL").is_err() {
+            std::env::set_var("EGL_LOG_LEVEL", "fatal");
+        }
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -1059,6 +1084,47 @@ pub fn run() {
                 init_espeak_bundled_data_path(&resource_dir);
                 let samples_dir = resource_dir.join("neutts-samples");
                 init_neutts_samples_dir(samples_dir);
+            }
+
+            // ── Linux: fix main-window decorations ────────────────────────
+            // tauri.conf.json sets skipTaskbar=true (for the tray-centric
+            // macOS/Windows UX) and resizable=false (fixed 480×800 layout).
+            //
+            // On Ubuntu/GNOME (Mutter), this combination causes the WM to
+            // strip the minimize and close buttons from the title bar:
+            //   • skipTaskbar → _NET_WM_STATE_SKIP_TASKBAR → no taskbar
+            //     entry to click, so the WM hides the minimize button.
+            //   • resizable=false → GtkWindow min==max size hints → Mutter
+            //     treats the window as dialog-like and removes minimize.
+            //
+            // Fix at runtime:
+            //   1. Clear the skip-taskbar hint so the window appears in the
+            //      panel/taskbar and can be minimised/restored normally.
+            //   2. Mark the window as "resizable" (so Mutter keeps all
+            //      decoration buttons) but lock the min and max sizes to the
+            //      same value so the user cannot actually resize it.
+            //   3. Explicitly set closable=true so GTK sets the
+            //      `deletable` property (shows the close button).
+            //   4. Toggle decorations off→on to force the WM to re-evaluate
+            //      its decoration decisions with the updated hints.
+            #[cfg(target_os = "linux")]
+            {
+                use tauri::Manager;
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.set_skip_taskbar(false);
+                    let _ = win.set_resizable(true);
+                    let _ = win.set_closable(true);
+                    let _ = win.set_minimizable(true);
+                    let size = tauri::LogicalSize::new(480.0_f64, 800.0_f64);
+                    let _ = win.set_min_size(Some(tauri::Size::Logical(size)));
+                    let _ = win.set_max_size(Some(tauri::Size::Logical(size)));
+                    // Force the WM to refresh decoration buttons by toggling
+                    // decorations off and back on.  Without this, some WMs
+                    // (Mutter / KWin) cache the initial hint set and ignore
+                    // the property changes above.
+                    let _ = win.set_decorations(false);
+                    let _ = win.set_decorations(true);
+                }
             }
 
             let app_name = app.package_info().name.to_lowercase();
@@ -1418,6 +1484,13 @@ pub fn run() {
                                 let _ = open_chat_window(a).await;
                             });
                         }
+                    } else if id == "downloads" {
+                        #[cfg(feature = "llm")] {
+                            let a = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                let _ = open_downloads_window(a).await;
+                            });
+                        }
                     } else if id == "focus_timer" {
                         let a = app.clone();
                         tauri::async_runtime::spawn(async move {
@@ -1685,7 +1758,7 @@ pub fn run() {
             get_daily_recording_mins,
             quit_app, open_label_window, open_labels_window, open_focus_timer_window,
             submit_label, close_label_window,
-            query_annotations, delete_label, update_label, get_queue_stats,
+            query_annotations, get_recent_labels, delete_label, update_label, get_queue_stats,
             list_embedding_models, get_embedding_model, set_embedding_model,
             reembed_all_labels, get_stale_label_count,
             rebuild_label_index, search_labels_by_text, search_labels_by_eeg,
@@ -1712,7 +1785,7 @@ pub fn run() {
             get_calibration_config, set_calibration_config,
             emit_calibration_event,
             get_app_version, get_app_name,
-            get_data_dir, set_data_dir,
+            get_data_dir, set_data_dir, open_skill_dir,
             get_ws_clients, get_ws_request_log, get_ws_port,
             get_ws_config, set_ws_config,
             get_autostart_enabled, set_autostart_enabled,
@@ -1735,6 +1808,12 @@ pub fn run() {
             #[cfg(feature = "llm")]
             cancel_llm_download,
             #[cfg(feature = "llm")]
+            pause_llm_download,
+            #[cfg(feature = "llm")]
+            resume_llm_download,
+            #[cfg(feature = "llm")]
+            get_llm_downloads,
+            #[cfg(feature = "llm")]
             delete_llm_model,
             #[cfg(feature = "llm")]
             refresh_llm_catalog,
@@ -1754,6 +1833,8 @@ pub fn run() {
             get_llm_server_status,
             #[cfg(feature = "llm")]
             open_chat_window,
+            #[cfg(feature = "llm")]
+            open_downloads_window,
             #[cfg(feature = "llm")]
             get_last_chat_session,
             #[cfg(feature = "llm")]
@@ -1781,7 +1862,8 @@ pub fn run() {
             open_api_window,
             open_whats_new_window,
             get_whats_new_seen_version, dismiss_whats_new,
-            open_onboarding_window, complete_onboarding, get_onboarding_complete,
+            open_onboarding_window, get_onboarding_model_download_order,
+            complete_onboarding, get_onboarding_complete,
             commands::search_embeddings,
             global_eeg_index::get_global_index_stats,
             global_eeg_index::rebuild_global_eeg_index,
@@ -1802,14 +1884,27 @@ pub fn run() {
                 tauri::RunEvent::WindowEvent { label, event, .. } => {
                     if label == "main" {
                         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                            api.prevent_close();
-                            if let Some(win) = app.get_webview_window("main") {
-                                let _ = win.hide();
+                            // On Linux, let the close proceed — the app will
+                            // exit via the ExitRequested path.
+                            #[cfg(not(target_os = "linux"))]
+                            {
+                                api.prevent_close();
+                                if let Some(win) = app.get_webview_window("main") {
+                                    let _ = win.hide();
+                                }
                             }
+                            #[cfg(target_os = "linux")]
+                            { let _ = &api; }
                         }
                     }
                 }
+                #[allow(unused_variables)]
                 tauri::RunEvent::ExitRequested { api, code, .. } => {
+                    // On macOS / Windows, prevent implicit exit so the app
+                    // stays alive in the system tray when the last window is
+                    // closed.  On Linux, allow the exit so the app actually
+                    // terminates when the user closes the main window.
+                    #[cfg(not(target_os = "linux"))]
                     if code.is_none() {
                         api.prevent_exit();
                         if let Some(win) = app.get_webview_window("main") {
