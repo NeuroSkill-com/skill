@@ -151,37 +151,30 @@ else
     fi
   done
 
-  # ── Generate version-stamped background ───────────────────────────────
-  # create-dmg places its background at .background/background.png (and @2x).
-  # We overlay the version text onto the existing background.
+  # ── Replace background with branded logo + version ─────────────────────
+  # create-dmg generates a generic 660×400 background. We replace it with
+  # a custom dark canvas showing the app icon, version, and install hint.
+  # Window is 660×520 to fit the docs bottom row with breathing room.
+  # Backgrounds: 660×520 @1x + 1320×1040 @2x (Retina).
+  ICON_PNG="$TAURI_DIR/icons/icon.png"
   BG_DIR="$MOUNT_DIR/.background"
-  if [[ -d "$BG_DIR" ]]; then
-    python3 - "$BG_DIR" "$VERSION" "$PRODUCT_NAME" <<'PYEOF' 2>/dev/null && true || true
-import sys, os, glob
+  if [[ -d "$BG_DIR" ]] && [[ -f "$ICON_PNG" ]]; then
+    python3 - "$BG_DIR" "$ICON_PNG" "$VERSION" "$PRODUCT_NAME" <<'PYEOF' 2>/dev/null && true || true
+import sys, os
 
-bg_dir, version, product_name = sys.argv[1:4]
+bg_dir, icon_path, version, product_name = sys.argv[1:5]
 
 try:
     from PIL import Image, ImageDraw, ImageFont
 except ImportError:
-    print("  ⊘ Pillow not available — skipping version stamp")
+    print("  ⊘ Pillow not available — keeping default background")
     sys.exit(0)
 
-# Find background files (create-dmg puts background.png and background@2x.png)
-for bg_file in sorted(glob.glob(os.path.join(bg_dir, "*.png"))):
-    img = Image.open(bg_file).convert("RGBA")
-    draw = ImageDraw.Draw(img)
-    W, H = img.size
+BG_COLOR  = (30, 30, 30, 255)
+TXT_COLOR = (200, 200, 200, 255)
+DIM_COLOR = (120, 120, 120, 255)
 
-    # Scale font based on image dimensions (create-dmg uses 660x400 @1x, 1320x800 @2x)
-    is_retina = W > 800
-    scale = 2 if is_retina else 1
-
-    # Load font
-    font_size = 18 * scale
-    font_small = 12 * scale
-    font = None
-    font_sm = None
+def load_font(size):
     for fp in [
         "/System/Library/Fonts/Helvetica.ttc",
         "/System/Library/Fonts/SFNSDisplay.ttf",
@@ -189,75 +182,149 @@ for bg_file in sorted(glob.glob(os.path.join(bg_dir, "*.png"))):
         "/Library/Fonts/Arial.ttf",
     ]:
         try:
-            font = ImageFont.truetype(fp, font_size)
-            font_sm = ImageFont.truetype(fp, font_small)
-            break
+            return ImageFont.truetype(fp, size)
         except (OSError, IOError):
             continue
+    return ImageFont.load_default()
 
-    if font is None:
-        font = ImageFont.load_default()
-        font_sm = font
+icon_orig = Image.open(icon_path).convert("RGBA")
 
-    # Draw version text centered, above the bottom edge
+for scale, suffix in [(1, "background.png"), (2, "background@2x.png")]:
+    W = 660 * scale
+    H = 520 * scale
+
+    bg = Image.new("RGBA", (W, H), BG_COLOR)
+    draw = ImageDraw.Draw(bg)
+
+    # ── Icon (centered horizontally, in the upper third) ──────────────
+    icon_sz = 128 * scale
+    icon = icon_orig.resize((icon_sz, icon_sz), Image.LANCZOS)
+    ix = (W - icon_sz) // 2
+    iy = 40 * scale
+    bg.paste(icon, (ix, iy), icon)
+
+    # ── Product name ──────────────────────────────────────────────────
+    font_name = load_font(20 * scale)
+    nbox = draw.textbbox((0, 0), product_name, font=font_name)
+    nw = nbox[2] - nbox[0]
+    draw.text(((W - nw) // 2, iy + icon_sz + 12 * scale),
+              product_name, fill=TXT_COLOR, font=font_name)
+
+    # ── Version ───────────────────────────────────────────────────────
+    font_ver = load_font(14 * scale)
     vtxt = f"v{version}"
-    vbox = draw.textbbox((0, 0), vtxt, font=font)
+    vbox = draw.textbbox((0, 0), vtxt, font=font_ver)
     vw = vbox[2] - vbox[0]
-    vy = H - 60 * scale
-    draw.text(((W - vw) // 2, vy), vtxt, fill=(200, 200, 200, 220), font=font)
+    draw.text(((W - vw) // 2, iy + icon_sz + 44 * scale),
+              vtxt, fill=DIM_COLOR, font=font_ver)
 
-    # Draw hint text at the very bottom
+    # ── Install hint (bottom) ─────────────────────────────────────────
+    font_hint = load_font(12 * scale)
     hint = "Drag to Applications to install"
-    hbox = draw.textbbox((0, 0), hint, font=font_sm)
+    hbox = draw.textbbox((0, 0), hint, font=font_hint)
     hw = hbox[2] - hbox[0]
-    hy = H - 30 * scale
-    draw.text(((W - hw) // 2, hy), hint, fill=(120, 120, 120, 200), font=font_sm)
+    draw.text(((W - hw) // 2, H - 30 * scale),
+              hint, fill=DIM_COLOR, font=font_hint)
 
-    img.save(bg_file, "PNG")
+    out = os.path.join(bg_dir, suffix)
+    bg.save(out, "PNG")
 
-print(f"  ✓ version stamp (v{version}) added to background")
+# Remove any other background files create-dmg may have left
+for f in os.listdir(bg_dir):
+    if f not in ("background.png", "background@2x.png"):
+        os.remove(os.path.join(bg_dir, f))
+
+print(f"  ✓ background replaced (logo + v{version}, 660×520 @1x + @2x)")
 PYEOF
   fi
 
-  # ── Update .DS_Store with positions for extra files ─────────────────────
-  # create-dmg places the app at (180, 170) and Applications at (480, 170).
-  # We add positions for the docs along the bottom row.
+  # ── Rewrite .DS_Store with taller window + all icon positions ───────────
+  # create-dmg wrote a 660×400 window. We rewrite it for 660×520 with
+  # updated positions: app row at y=220, docs row at y=400.
   python3 - "$MOUNT_DIR" "$PRODUCT_NAME" <<'PYEOF' 2>/dev/null && true || true
-import sys, os
+import sys, os, plistlib
 
 mount_dir = sys.argv[1]
 product_name = sys.argv[2]
 
 try:
     from ds_store import DSStore
+    from mac_alias import Alias
 except ImportError:
-    # Try installing
     import subprocess
     subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "--quiet", "ds_store"],
+        [sys.executable, "-m", "pip", "install", "--quiet", "ds_store", "mac_alias"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     from ds_store import DSStore
+    from mac_alias import Alias
 
 ds_path = os.path.join(mount_dir, ".DS_Store")
-if not os.path.exists(ds_path):
-    print("  ⊘ no .DS_Store to update")
-    sys.exit(0)
 
-# Positions for extra files (bottom row, centered)
-extra_positions = {
-    "README.md":    (160, 340),
-    "LICENSE":      (330, 340),
-    "CHANGELOG.md": (500, 340),
+# ── Icon-view properties (icvp) ────────────────────────────────────────
+icvp = {
+    "viewOptionsVersion": 1,
+    "backgroundType": 0,
+    "iconSize": 80.0,
+    "textSize": 12.0,
+    "gridSpacing": 100.0,
+    "gridOffsetX": 0.0,
+    "gridOffsetY": 0.0,
+    "arrangeBy": "none",
+    "showIconPreview": True,
+    "showItemInfo": False,
+    "labelOnBottom": True,
 }
 
-with DSStore.open(ds_path, "r+") as d:
-    for name, (x, y) in extra_positions.items():
-        item_path = os.path.join(mount_dir, name)
-        if os.path.exists(item_path):
+# Background alias
+bg_file = os.path.join(mount_dir, ".background", "background.png")
+if os.path.isfile(bg_file):
+    alias = Alias.for_file(bg_file)
+    icvp["backgroundType"] = 2
+    try:
+        icvp["backgroundImageAlias"] = alias.to_bytes()
+    except AttributeError:
+        icvp["backgroundImageAlias"] = bytes(alias)
+
+icvp_blob = plistlib.dumps(icvp, fmt=plistlib.FMT_BINARY)
+
+# ── Window bounds: 660 wide × 520 tall ─────────────────────────────────
+bwsp = {
+    "WindowBounds": "{{100, 100}, {660, 520}}",
+    "ContainerShowSidebar": False,
+    "ShowPathbar": False,
+    "ShowSidebar": False,
+    "ShowStatusBar": False,
+    "ShowTabView": False,
+    "ShowToolbar": False,
+    "SidebarWidth": 0,
+    "PreviewPaneVisibility": False,
+}
+bwsp_blob = plistlib.dumps(bwsp, fmt=plistlib.FMT_BINARY)
+
+# ── Icon positions ──────────────────────────────────────────────────────
+#   Top row (y=220):  app + Applications
+#   Bottom row (y=400): README, LICENSE, CHANGELOG
+positions = {
+    f"{product_name}.app": (180, 220),
+    "Applications":        (480, 220),
+    "README.md":           (140, 400),
+    "LICENSE":             (330, 400),
+    "CHANGELOG.md":        (520, 400),
+}
+
+# ── Write .DS_Store ─────────────────────────────────────────────────────
+with DSStore.open(ds_path, "w+") as d:
+    d["."]["bwsp"] = bwsp_blob
+    d["."]["icvp"] = icvp_blob
+    d["."]["vSrn"] = ("long", 1)
+    d["."]["vstl"] = ("type", b"icnv")
+
+    for name, (x, y) in positions.items():
+        if os.path.exists(os.path.join(mount_dir, name)):
             d[name]["Iloc"] = (x, y)
 
-print("  ✓ .DS_Store updated (extra file positions)")
+print("  ✓ .DS_Store rewritten (660×520 window, 2-row layout)")
 PYEOF
 
   # ── Hide dotfiles ───────────────────────────────────────────────────────
