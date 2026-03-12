@@ -664,7 +664,9 @@ jobs:
               -NotePropertyValue $platformEntry -Force
           }
 
-          $manifest | ConvertTo-Json -Depth 20 | Out-File -FilePath "latest.json" -Encoding utf8
+          $json = $manifest | ConvertTo-Json -Depth 20
+          $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+          [System.IO.File]::WriteAllText("latest.json", $json, $utf8NoBom)
           Write-Host "Updated latest.json:"
           Get-Content "latest.json"
 
