@@ -850,7 +850,7 @@ the Free Software Foundation, version 3 only. -->
                       class="w-full rounded-md border border-border dark:border-white/[0.1]
                              bg-background px-3 py-2 text-[0.8rem] leading-relaxed
                              placeholder:text-muted-foreground/30 resize-none
-                             focus:outline-none focus:ring-1 focus:ring-emerald-500/50
+                         focus:outline-none focus:ring-1 focus:ring-ring/50
                              transition-shadow">
             </textarea>
           </div>
@@ -1184,7 +1184,7 @@ the Free Software Foundation, version 3 only. -->
                         </span>
                         {#each sa.topDays as td}
                           <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded
-                                       bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[0.52rem] font-medium">
+                                       bg-primary/10 text-primary text-[0.52rem] font-medium">
                             {td.day} <span class="opacity-55">({td.count})</span>
                           </span>
                         {/each}
@@ -1523,14 +1523,14 @@ the Free Software Foundation, version 3 only. -->
           <!-- Deduplicate toggle -->
           <label class="flex items-center gap-1 cursor-pointer select-none shrink-0 ml-1">
             <input type="checkbox" bind:checked={ixDedupeLabels}
-                   class="rounded border-border h-2.5 w-2.5 accent-emerald-600" />
+                   class="rounded border-border h-2.5 w-2.5 accent-violet-500" />
             <span class="text-[0.48rem] text-muted-foreground/50">{t("search.interactiveDedupe")}</span>
           </label>
 
           <!-- PCA cluster toggle -->
           <label class="flex items-center gap-1 cursor-pointer select-none shrink-0">
             <input type="checkbox" bind:checked={ixUsePca}
-                   class="rounded border-border h-2.5 w-2.5 accent-emerald-600" />
+                   class="rounded border-border h-2.5 w-2.5 accent-violet-500" />
             <span class="text-[0.48rem] text-muted-foreground/50">PCA cluster</span>
           </label>
 

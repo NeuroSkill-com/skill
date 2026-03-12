@@ -361,7 +361,7 @@ the Free Software Foundation, version 3 only. -->
         <input type="range" min="5" max="480" step="5"
                bind:value={dailyGoalMin}
                oninput={save}
-               class="w-full accent-blue-500 h-2" />
+           class="w-full accent-violet-500 h-2" />
         <div class="flex justify-between text-[0.42rem] text-muted-foreground/40 tabular-nums px-0.5">
           <span>5m</span>
           <span>1h</span>
@@ -383,7 +383,7 @@ the Free Software Foundation, version 3 only. -->
               class="rounded-lg border px-3 py-1.5 text-[0.66rem] font-semibold
                      transition-all cursor-pointer select-none
                      {dailyGoalMin === val
-                       ? 'border-blue-500/50 bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                       ? 'border-primary/50 bg-primary/10 text-primary'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               {label}
             </button>

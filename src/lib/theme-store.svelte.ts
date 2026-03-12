@@ -16,10 +16,10 @@ export type ThemeMode = "system" | "light" | "dark";
 
 // ── Accent colour presets ─────────────────────────────────────────────────────
 //
-// Each preset carries a full `--color-violet-*` palette.  At runtime we
-// override those Tailwind CSS custom properties on <html> so every
-// `bg-violet-*`, `text-violet-*`, `border-violet-*`, etc. class
-// automatically adopts the new hue — no template changes required.
+// Each preset carries a full `--color-violet-*` palette. At runtime we
+// override Tailwind CSS custom properties on <html> so accent-like utility
+// classes across the app (`violet-*`, `blue-*`, `indigo-*`, `sky-*`) all
+// adopt the selected hue — no template-wide refactor required.
 //
 // Values are taken directly from Tailwind v4's built-in color palette so
 // each preset is a perfectly balanced, perceptually-uniform ramp.
@@ -255,8 +255,13 @@ export function applyAccent(id: string) {
   }
   if (typeof document === "undefined") return;
   const style = document.documentElement.style;
+  const accentFamilies = ["violet", "blue", "indigo", "sky"] as const;
   for (const [prop, val] of Object.entries(preset.palette)) {
     style.setProperty(prop, val);
+    for (const family of accentFamilies) {
+      if (family === "violet") continue;
+      style.setProperty(prop.replace("--color-violet-", `--color-${family}-`), val);
+    }
   }
 }
 

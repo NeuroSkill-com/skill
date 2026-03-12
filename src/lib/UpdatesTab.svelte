@@ -10,6 +10,7 @@ the Free Software Foundation, version 3 only. -->
   import { invoke }             from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { check, type Update } from "@tauri-apps/plugin-updater";
+  import { openUrl }            from "@tauri-apps/plugin-opener";
   import { relaunch }           from "@tauri-apps/plugin-process";
   import { Button }             from "$lib/components/ui/button";
   import { Card, CardContent }  from "$lib/components/ui/card";
@@ -52,6 +53,8 @@ the Free Software Foundation, version 3 only. -->
     [0,     "updates.intervalOff"],
   ];
 
+  const RELEASES_DOWNLOAD_URL = "https://github.com/NeuroSkill-com/skill/releases/latest";
+
   // ── Countdown timer ───────────────────────────────────────────────────────
   let countdownTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -84,6 +87,15 @@ the Free Software Foundation, version 3 only. -->
   function saveLastChecked() {
     lastCheckedUtc = Math.floor(Date.now() / 1000);
     try { localStorage.setItem(LAST_KEY, String(lastCheckedUtc)); } catch {}
+  }
+
+  async function openOnlineDownload() {
+    try {
+      await openUrl(RELEASES_DOWNLOAD_URL);
+    } catch (e) {
+      const msg = t("updates.openDownloadPageFailed", { error: String(e) });
+      error = error ? `${error}\n${msg}` : msg;
+    }
   }
 
   // ── Core update logic ─────────────────────────────────────────────────────
@@ -122,7 +134,8 @@ the Free Software Foundation, version 3 only. -->
 
     } catch (e) {
       phase = "error";
-      error = String(e);
+      error = `${String(e)}\n${t("updates.autoUpdateFailedOnline")}`;
+      await openOnlineDownload();
     }
   }
 
@@ -402,6 +415,15 @@ the Free Software Foundation, version 3 only. -->
               <span class="text-[0.65rem] text-red-600 dark:text-red-400 break-all">{error}</span>
             </div>
           {/if}
+
+          {#if phase === "error" && available}
+            <div class="flex justify-end">
+              <Button size="sm" class="text-[0.72rem] h-8 px-4"
+                      onclick={openOnlineDownload}>
+                {t("updates.downloadNow")}
+              </Button>
+            </div>
+          {/if}
         {/if}
 
       </div>
@@ -436,7 +458,7 @@ the Free Software Foundation, version 3 only. -->
               class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
                      transition-all cursor-pointer select-none
                      {checkIntervalSecs === secs
-                       ? 'border-blue-500/50 bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                       ? 'border-primary/50 bg-primary/10 text-primary'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               {t(labelKey)}
             </button>

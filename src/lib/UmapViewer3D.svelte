@@ -1433,7 +1433,7 @@ the Free Software Foundation, version 3 only. -->
                 {#each entry.timestamps.slice(0, 6) as ts}
                   <span class="text-[0.4rem] tabular-nums px-0.5 rounded
                                {ts.session === 0
-                                 ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400/80'
+                                 ? 'bg-primary/10 text-primary/80'
                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400/80'}">
                     {fmtUtcTime(ts.utc)}
                   </span>
@@ -1462,7 +1462,7 @@ the Free Software Foundation, version 3 only. -->
         </div>
         <input type="range" min="0.5" max="10" step="0.1"
                bind:value={proximityDist}
-               class="w-full h-1 accent-sky-500 dark:accent-sky-400 cursor-pointer" />
+           class="w-full h-1 accent-violet-500 dark:accent-violet-400 cursor-pointer" />
         <div class="text-[0.44rem] leading-snug min-h-[1.6em]">
           {#if selectedLabel && !animating}
             {#if proximateLabels.length > 0}
@@ -1795,7 +1795,7 @@ the Free Software Foundation, version 3 only. -->
       <input type="range"
              min={UMAP_SCALE_MIN} max={UMAP_SCALE_MAX} step="0.05"
              bind:value={pointScale}
-             class="w-16 h-1 accent-slate-500 dark:accent-white/60 cursor-pointer" />
+              class="w-16 h-1 accent-violet-500 dark:accent-violet-400 cursor-pointer" />
       <span class="text-[0.5rem] text-slate-400 dark:text-white/40 tabular-nums w-6 text-right">{pointScale.toFixed(1)}×</span>
     </div>
   {/if}

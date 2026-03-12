@@ -492,7 +492,7 @@ the Free Software Foundation, version 3 only. -->
             class="rounded-lg border px-2.5 py-2 text-[0.68rem] font-medium text-center
                    transition-colors focus:outline-none
                    {selectedPreset === p
-                     ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                     ? 'border-primary/50 bg-primary/10 text-primary'
                      : 'border-border bg-muted/20 text-muted-foreground hover:bg-muted/40'}
                    disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -517,7 +517,7 @@ the Free Software Foundation, version 3 only. -->
                  class="w-full px-2 py-1 text-[0.78rem] rounded-md
                         border border-border dark:border-white/[0.08]
                         bg-background text-foreground
-                        focus:outline-none focus:ring-1 focus:ring-blue-500/40
+                     focus:outline-none focus:ring-1 focus:ring-ring/40
                         disabled:opacity-40" />
         </div>
         <!-- Break -->
@@ -529,7 +529,7 @@ the Free Software Foundation, version 3 only. -->
                  class="w-full px-2 py-1 text-[0.78rem] rounded-md
                         border border-border dark:border-white/[0.08]
                         bg-background text-foreground
-                        focus:outline-none focus:ring-1 focus:ring-blue-500/40
+                     focus:outline-none focus:ring-1 focus:ring-ring/40
                         disabled:opacity-40" />
         </div>
         <!-- Long break -->
@@ -541,7 +541,7 @@ the Free Software Foundation, version 3 only. -->
                  class="w-full px-2 py-1 text-[0.78rem] rounded-md
                         border border-border dark:border-white/[0.08]
                         bg-background text-foreground
-                        focus:outline-none focus:ring-1 focus:ring-blue-500/40
+                     focus:outline-none focus:ring-1 focus:ring-ring/40
                         disabled:opacity-40" />
         </div>
         <!-- Long break every -->
@@ -555,7 +555,7 @@ the Free Software Foundation, version 3 only. -->
                  class="w-full px-2 py-1 text-[0.78rem] rounded-md
                         border border-border dark:border-white/[0.08]
                         bg-background text-foreground
-                        focus:outline-none focus:ring-1 focus:ring-blue-500/40
+                     focus:outline-none focus:ring-1 focus:ring-ring/40
                         disabled:opacity-40" />
         </div>
       </div>
@@ -568,7 +568,7 @@ the Free Software Foundation, version 3 only. -->
         type="checkbox"
         id="auto-label"
         bind:checked={autoLabel}
-        class="mt-0.5 w-3.5 h-3.5 rounded accent-blue-500"
+        class="mt-0.5 w-3.5 h-3.5 rounded accent-violet-500"
       />
       <div class="flex flex-col gap-0.5">
         <label for="auto-label" class="text-[0.75rem] font-medium cursor-pointer">
@@ -587,7 +587,7 @@ the Free Software Foundation, version 3 only. -->
         type="checkbox"
         id="ft-tts"
         bind:checked={ttsEnabled}
-        class="mt-0.5 w-3.5 h-3.5 rounded accent-blue-500"
+        class="mt-0.5 w-3.5 h-3.5 rounded accent-violet-500"
       />
       <div class="flex flex-col gap-0.5">
         <label for="ft-tts" class="text-[0.75rem] font-medium cursor-pointer">
@@ -633,7 +633,7 @@ the Free Software Foundation, version 3 only. -->
           </span>
           {#if cyclesDone > 0}
             <span class="text-[0.58rem] font-medium px-1.5 py-0.5 rounded-full
-                         bg-blue-500/12 text-blue-600 dark:text-blue-400">
+                         bg-primary/12 text-primary">
               {cyclesDone === 1
                 ? t("focusTimer.log.cycles",      { n: cyclesDone })
                 : t("focusTimer.log.cyclesPlural", { n: cyclesDone })}
@@ -657,10 +657,10 @@ the Free Software Foundation, version 3 only. -->
             <!-- Focus total -->
             <div class="flex flex-col items-center py-2.5 gap-0.5">
               <span class="text-[0.48rem] font-semibold uppercase tracking-widest
-                           text-blue-500/70">
+                           text-primary/70">
                 {t("focusTimer.log.focusTime")}
               </span>
-              <span class="text-[0.82rem] font-bold tabular-nums text-blue-600 dark:text-blue-400">
+              <span class="text-[0.82rem] font-bold tabular-nums text-primary">
                 {fmtDuration(focusSecs)}
               </span>
             </div>

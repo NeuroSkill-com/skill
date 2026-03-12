@@ -298,7 +298,7 @@
 
   function tagColor(tag: string): string {
     switch (tag) {
-      case "chat":      return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
+      case "chat":      return "bg-primary/10 text-primary border-primary/20";
       case "reasoning": return "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20";
       case "coding":    return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
       case "vision": case "multimodal":

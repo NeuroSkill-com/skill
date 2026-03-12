@@ -74,12 +74,12 @@ the Free Software Foundation, version 3 only. -->
       btn.className =
         "flex items-center gap-2 w-full px-3 py-1.5 text-[0.72rem] font-medium transition-colors " +
         (isActive
-          ? "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+          ? "bg-primary/10 text-primary"
           : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5");
       btn.innerHTML =
         `<span class="text-[0.9rem] leading-none">${loc.flag}</span>` +
         `<span>${loc.name}</span>` +
-        (isActive ? `<span class="ml-auto text-[0.6rem] text-blue-500">✓</span>` : "");
+        (isActive ? `<span class="ml-auto text-[0.6rem] text-primary">✓</span>` : "");
       btn.addEventListener("click", () => pick(loc.code));
       menu.appendChild(btn);
     }

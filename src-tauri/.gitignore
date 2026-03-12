@@ -18,3 +18,5 @@
 /keys/updater.key
 /keys/updater.pub
 /keys/.env.keys
+
+dist/**/*

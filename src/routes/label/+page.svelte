@@ -218,7 +218,7 @@ the Free Software Foundation, version 3 only. -->
                bg-slate-50 dark:bg-[#111118]
                px-3 py-1.5 text-[0.78rem] text-foreground leading-relaxed
                placeholder:text-muted-foreground/40
-               focus:outline-none focus:ring-1 focus:ring-blue-500/50
+           focus:outline-none focus:ring-1 focus:ring-ring/50
                resize-none"
       ></textarea>
     </div>

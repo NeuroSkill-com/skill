@@ -670,7 +670,7 @@ the Free Software Foundation, version 3 only. -->
             <div class="flex flex-wrap gap-1.5 justify-center max-w-[380px]">
               {#each calProfile.actions as action, i}
                 {@const colors = [
-                  "border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400",
+                  "border-primary/30 bg-primary/10 text-primary",
                   "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400",
                   "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
                   "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",

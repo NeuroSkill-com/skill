@@ -9,6 +9,7 @@ the Free Software Foundation, version 3 only. -->
   import { onMount, onDestroy } from "svelte";
   import type { Snippet } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { invoke } from "@tauri-apps/api/core";
   // Side-effect: initialises locale from localStorage / navigator.language
   import "$lib/i18n/index.svelte";
   import { initLocaleFromSettings } from "$lib/i18n/index.svelte";
@@ -40,6 +41,13 @@ the Free Software Foundation, version 3 only. -->
     // WKWebView web-content process was killed by macOS (memory pressure)
     // and the page is blank — Rust detects this and triggers a reload.
     (window as unknown as Record<string, unknown>)["__skill_loaded"] = true;
+
+    // Reveal the main window now that the page has fully rendered.
+    // Deferring win.show() to this point eliminates the "white screen on
+    // macOS first launch" issue caused by calling show() in Tauri setup
+    // before WKWebView has loaded any content.  For secondary windows
+    // (settings, help, etc.) the command is a no-op.
+    invoke("show_main_window").catch(() => {});
 
     // Restore theme & language from settings.json (overrides localStorage)
     await Promise.all([initThemeFromSettings(), initLocaleFromSettings()]);

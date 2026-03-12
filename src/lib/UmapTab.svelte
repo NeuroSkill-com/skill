@@ -155,7 +155,7 @@ the Free Software Foundation, version 3 only. -->
               class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
                      transition-all cursor-pointer select-none
                      {cfg.repulsion_strength === val
-                       ? 'border-orange-500/50 bg-orange-500/10 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400'
+                       ? 'border-primary/50 bg-primary/10 text-primary'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               {label}
             </button>
@@ -183,7 +183,7 @@ the Free Software Foundation, version 3 only. -->
               class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
                      transition-all cursor-pointer select-none
                      {cfg.neg_sample_rate === val
-                       ? 'border-orange-500/50 bg-orange-500/10 dark:bg-orange-500/15 text-orange-600 dark:text-orange-400'
+                       ? 'border-primary/50 bg-primary/10 text-primary'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               {label}
             </button>
@@ -219,7 +219,7 @@ the Free Software Foundation, version 3 only. -->
               class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
                      transition-all cursor-pointer select-none
                      {cfg.n_neighbors === val
-                       ? 'border-sky-500/50 bg-sky-500/10 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                       ? 'border-primary/50 bg-primary/10 text-primary'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               {label}
             </button>
@@ -243,7 +243,7 @@ the Free Software Foundation, version 3 only. -->
               class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
                      transition-all cursor-pointer select-none
                      {cfg.n_epochs === val
-                       ? 'border-sky-500/50 bg-sky-500/10 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                       ? 'border-primary/50 bg-primary/10 text-primary'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               {label}
             </button>
@@ -279,7 +279,7 @@ the Free Software Foundation, version 3 only. -->
               class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
                      transition-all cursor-pointer select-none
                      {cfg.timeout_secs === val
-                       ? 'border-rose-500/50 bg-rose-500/10 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                       ? 'border-primary/50 bg-primary/10 text-primary'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               {label}
             </button>
@@ -313,27 +313,27 @@ the Free Software Foundation, version 3 only. -->
           {t("umapSettings.pipeline")}
         </span>
         <Badge variant="outline"
-          class="text-[0.56rem] py-0 px-1.5 bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20">
+          class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           repulsion {cfg.repulsion_strength.toFixed(1)}
         </Badge>
         <Badge variant="outline"
-          class="text-[0.56rem] py-0 px-1.5 bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20">
+          class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           neg×{cfg.neg_sample_rate}
         </Badge>
         <Badge variant="outline"
-          class="text-[0.56rem] py-0 px-1.5 bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20">
+          class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           k={cfg.n_neighbors}
         </Badge>
         <Badge variant="outline"
-          class="text-[0.56rem] py-0 px-1.5 bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20">
+          class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           {cfg.n_epochs} epochs
         </Badge>
         <Badge variant="outline"
-          class="text-[0.56rem] py-0 px-1.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20">
+          class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           {cfg.timeout_secs}s timeout
         </Badge>
         <Badge variant="outline"
-          class="text-[0.56rem] py-0 px-1.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20">
+          class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           {cfg.cooldown_ms}ms cooldown
         </Badge>
         <span class="ml-auto text-[0.56rem] text-muted-foreground/60 shrink-0">fast-umap 1.2.2 · wgpu</span>
@@ -401,19 +401,19 @@ the Free Software Foundation, version 3 only. -->
   :global(.dark) .umap-range::-moz-range-thumb     { border-color: #1a1a28; box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
 
   /* Orange thumb */
-  .umap-range-orange::-webkit-slider-thumb { background: #f97316; }
-  .umap-range-orange::-moz-range-thumb     { background: #f97316; }
-  :global(.dark) .umap-range-orange::-webkit-slider-thumb { background: #fb923c; }
-  :global(.dark) .umap-range-orange::-moz-range-thumb     { background: #fb923c; }
+  .umap-range-orange::-webkit-slider-thumb { background: var(--primary); }
+  .umap-range-orange::-moz-range-thumb     { background: var(--primary); }
+  :global(.dark) .umap-range-orange::-webkit-slider-thumb { background: var(--primary); }
+  :global(.dark) .umap-range-orange::-moz-range-thumb     { background: var(--primary); }
 
   /* Rose thumb */
-  .umap-range-rose::-webkit-slider-thumb { background: #f43f5e; }
-  .umap-range-rose::-moz-range-thumb     { background: #f43f5e; }
-  :global(.dark) .umap-range-rose::-webkit-slider-thumb { background: #fb7185; }
-  :global(.dark) .umap-range-rose::-moz-range-thumb     { background: #fb7185; }
+  .umap-range-rose::-webkit-slider-thumb { background: var(--primary); }
+  .umap-range-rose::-moz-range-thumb     { background: var(--primary); }
+  :global(.dark) .umap-range-rose::-webkit-slider-thumb { background: var(--primary); }
+  :global(.dark) .umap-range-rose::-moz-range-thumb     { background: var(--primary); }
 
   /* Focus ring */
   .umap-range:focus { outline: none; }
-  .umap-range:focus::-webkit-slider-thumb { box-shadow: 0 0 0 3px rgba(249,115,22,0.25); }
-  .umap-range:focus::-moz-range-thumb     { box-shadow: 0 0 0 3px rgba(249,115,22,0.25); }
+  .umap-range:focus::-webkit-slider-thumb { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }
+  .umap-range:focus::-moz-range-thumb     { box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 35%, transparent); }
 </style>

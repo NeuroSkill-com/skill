@@ -63,6 +63,37 @@ pub fn open_notifications_settings() {
     { let _ = std::process::Command::new("ms-settings:notifications").spawn(); }
 }
 
+// ── First-launch window reveal ────────────────────────────────────────────────
+
+/// Called from `+layout.svelte` `onMount` to reveal the main window only
+/// after WKWebView has fully rendered the page.
+///
+/// On macOS, calling `win.show()` during Tauri's setup closure (before the
+/// web-content process has loaded the frontend) produces a solid white frame.
+/// Deferring the show until the JS side's `onMount` fires guarantees the
+/// compositor already has pixels to display, eliminating the white screen.
+///
+/// On Linux and Windows the window is shown in setup as before, so calling
+/// `show()` on an already-visible window is harmless.
+///
+/// Skips the show for windows whose label isn't "main" (e.g. settings,
+/// help, calibration) — those are also wrapped by +layout.svelte and would
+/// otherwise steal focus on every secondary-window open.
+///
+/// Also skips the show when onboarding is incomplete: `complete_onboarding`
+/// will call `win.show()` itself once the user finishes onboarding.
+#[tauri::command]
+pub fn show_main_window(
+    win:   tauri::WebviewWindow,
+    state: tauri::State<'_, Mutex<AppState>>,
+) {
+    if win.label() != "main" { return; }
+    if !state.lock_or_recover().onboarding_complete { return; }
+    let _ = win.show();
+    let _ = win.set_focus();
+    crate::linux_fix_decorations(&win);
+}
+
 // ── Bluetooth & utility windows ───────────────────────────────────────────────
 
 #[tauri::command]

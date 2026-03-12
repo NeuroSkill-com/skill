@@ -606,7 +606,7 @@ the Free Software Foundation, version 3 only. -->
               <input type="radio" name="openbci-board" value={val}
                 checked={openbci.board === val}
                 onchange={() => { openbci = { ...openbci, board: val }; openbciChanged = true; }}
-                class="accent-blue-500 shrink-0" />
+                class="accent-violet-500 shrink-0" />
               <span class="truncate">{t(key)}</span>
             </label>
           {/snippet}
@@ -766,7 +766,7 @@ the Free Software Foundation, version 3 only. -->
                 class="w-full min-w-0 text-[0.7rem] font-mono text-center px-1 py-0.5 rounded
                        border border-border bg-background text-foreground
                        placeholder:text-muted-foreground/35
-                       focus:outline-none focus:ring-1 focus:ring-blue-500/50" />
+                    focus:outline-none focus:ring-1 focus:ring-ring/50" />
             </div>
           {/each}
         </div>
@@ -783,7 +783,7 @@ the Free Software Foundation, version 3 only. -->
       variant={openbciSaved ? "secondary" : "outline"}
       class="text-[0.66rem] h-7 px-3
              {openbciSaved ? 'text-green-600 dark:text-green-400 border-green-500/30' :
-              openbciChanged ? 'border-blue-500/50 text-blue-600 dark:text-blue-400' :
+              openbciChanged ? 'border-primary/50 text-primary' :
               'border-border dark:border-white/10 text-muted-foreground'}"
       onclick={saveOpenbci}
       disabled={!openbciChanged && !openbciSaved}>
@@ -792,7 +792,7 @@ the Free Software Foundation, version 3 only. -->
 
     {#if !isBle}
       <Button size="sm" variant="default"
-        class="text-[0.66rem] h-7 px-3 bg-blue-600 hover:bg-blue-700 text-white"
+        class="text-[0.66rem] h-7 px-3 bg-primary hover:bg-primary/90 text-primary-foreground"
         onclick={connectOpenbci}
         disabled={openbciConnecting}>
         {openbciConnecting ? t("settings.openbciConnecting") : t("settings.openbciConnect")}
@@ -829,16 +829,16 @@ the Free Software Foundation, version 3 only. -->
               class="flex flex-col items-center gap-1 rounded-xl border px-3 py-2.5 flex-1
                      transition-all cursor-pointer select-none
                      {filter.notch === val
-                       ? 'border-blue-500/50 bg-blue-500/10 dark:bg-blue-500/15'
+                       ? 'border-primary/50 bg-primary/10'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               <span class="text-[1rem]">{flag}</span>
               <span class="text-[0.7rem] font-semibold leading-tight
-                           {filter.notch === val ? 'text-blue-600 dark:text-blue-400' : 'text-foreground'}">
+                           {filter.notch === val ? 'text-primary' : 'text-foreground'}">
                 {label}
               </span>
               <span class="text-[0.58rem] text-muted-foreground">{sub}</span>
               {#if filter.notch === val}
-                <span class="text-[0.52rem] font-bold tracking-widest uppercase text-blue-500 mt-0.5">{t("common.active")}</span>
+                <span class="text-[0.52rem] font-bold tracking-widest uppercase text-primary mt-0.5">{t("common.active")}</span>
               {/if}
             </button>
           {/each}
@@ -912,7 +912,7 @@ the Free Software Foundation, version 3 only. -->
         {/if}
         {#if filter.notch !== null}
           <Badge variant="outline"
-            class="text-[0.56rem] py-0 px-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+            class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
             Notch {filter.notch === "Hz60" ? "60+120 Hz" : "50+100 Hz"}
           </Badge>
         {/if}
@@ -960,7 +960,7 @@ the Free Software Foundation, version 3 only. -->
               class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
                      transition-all cursor-pointer select-none
                      {overlapSecs === val
-                       ? 'border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                       ? 'border-primary/50 bg-primary/10 text-primary'
                        : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
               {label}
             </button>
@@ -973,15 +973,15 @@ the Free Software Foundation, version 3 only. -->
           Pipeline
         </span>
         <Badge variant="outline"
-          class="text-[0.56rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+          class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           {EMBEDDING_EPOCH_SECS} s window
         </Badge>
         <Badge variant="outline"
-          class="text-[0.56rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+          class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           {overlapSecs} s overlap
         </Badge>
         <Badge variant="outline"
-          class="text-[0.56rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+          class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
           {Math.round(overlapSecs / EMBEDDING_EPOCH_SECS * 100)}% shared
         </Badge>
         <span class="ml-auto text-[0.56rem] text-muted-foreground/60 shrink-0">ZUNA · wgpu</span>
@@ -1365,7 +1365,7 @@ the Free Software Foundation, version 3 only. -->
               <input type="radio" name="wsHost" value={val}
                      checked={wsHost === val}
                      onchange={() => { wsHost = val; wsHostChanged = true; }}
-                     class="accent-blue-500" />
+                class="accent-violet-500" />
               <span class="text-[0.68rem] text-foreground">{lbl}</span>
             </label>
           {/each}

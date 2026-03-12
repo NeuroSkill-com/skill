@@ -110,6 +110,8 @@ pub fn new_log_buffer() -> LlmLogBuffer {
 /// and `run_actor` (which creates it) can hold a reference.
 pub type LlmLogFile = Arc<Mutex<std::io::BufWriter<std::fs::File>>>;
 
+const LLM_LOG_DIR: &str = "llm_logs";
+
 /// Append a log entry to the in-memory buffer, emit a `llm:log` Tauri event,
 /// and optionally write to the per-session log file.
 fn push_log_inner(
@@ -1627,13 +1629,15 @@ pub fn init(
     push_log(&app, &log_buf, "info", &format!("starting LLM server — model: {model_name}"));
 
     // ── Per-session log file ──────────────────────────────────────────────────
-    // Written to skill_dir/llm_<unix-seconds>.txt so each server run has its
-    // own timestamped transcript alongside the other skill log files.
+    // Written to skill_dir/llm_logs/llm_<unix-seconds>.txt so each server run
+    // has its own timestamped transcript in a dedicated LLM-only folder.
     let ts_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    let log_path = skill_dir.join(format!("llm_{ts_secs}.txt"));
+    let log_dir = skill_dir.join(LLM_LOG_DIR);
+    let _ = std::fs::create_dir_all(&log_dir);
+    let log_path = log_dir.join(format!("llm_{ts_secs}.txt"));
     push_log(&app, &log_buf, "info", &format!("session log → {}", log_path.display()));
 
     let (req_tx, req_rx) = mpsc::unbounded_channel::<InferRequest>();
