@@ -503,7 +503,12 @@ if has_bg:
     if os.path.isfile(bg_file):
         alias = Alias.for_file(bg_file)
         icvp["backgroundType"] = 2       # 2 = picture
-        icvp["backgroundImageAlias"] = bytes(alias)
+        # mac_alias v2+: .to_bytes(); older versions: bytes(alias)
+        try:
+            alias_bytes = alias.to_bytes()
+        except AttributeError:
+            alias_bytes = bytes(alias)
+        icvp["backgroundImageAlias"] = alias_bytes
     # Finder automatically looks for <name>@2x.png alongside <name>.png
     # for Retina displays — no extra alias needed in .DS_Store.
 
