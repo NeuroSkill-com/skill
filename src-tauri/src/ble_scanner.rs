@@ -72,7 +72,7 @@ fn scanner_bt_off(app: &AppHandle, emitted: &mut bool) {
     send_toast(app, ToastLevel::Error, "Bluetooth Off",
         "Bluetooth is unavailable — turn it on to connect.");
     let do_emit = {
-        let s = app.state::<Mutex<AppState>>();
+        let s = app.state::<Mutex<Box<AppState>>>();
         let mut g = s.lock_or_recover();
         let idle = matches!(g.status.state.as_str(), "disconnected" | "scanning");
         if idle {
@@ -102,7 +102,7 @@ async fn scanner_bt_on(
         "Bluetooth is back — reconnecting…");
 
     let (do_emit, preferred_id) = {
-        let s = app.state::<Mutex<AppState>>();
+        let s = app.state::<Mutex<Box<AppState>>>();
         let mut g = s.lock_or_recover();
         if g.status.state == "bt_off" {
             g.status.state      = "disconnected".into();
@@ -233,7 +233,7 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
 /// Start the background BLE scanner if it is not already running.
 /// Idempotent — safe to call multiple times.
 pub(crate) fn start_background_scanner(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<AppState>>();
+    let s_ref = app.state::<Mutex<Box<AppState>>>();
     let already = { let g = s_ref.lock_or_recover(); g.scanner.is_some() };
     if already { return; }
     let (tx, rx) = tokio::sync::oneshot::channel();

@@ -721,7 +721,7 @@ pub(crate) struct SleepStages {
 pub(crate) fn get_sleep_stages(
     start_utc: u64,
     end_utc:   u64,
-    state:     tauri::State<'_, Mutex<AppState>>,
+    state:     tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> SleepStages {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     get_sleep_stages_impl(&skill_dir, start_utc, end_utc)
@@ -1445,7 +1445,7 @@ pub(crate) fn compute_umap_compare(
     a_end_utc:   u64,
     b_start_utc: u64,
     b_end_utc:   u64,
-    state:       tauri::State<'_, Mutex<AppState>>,
+    state:       tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> UmapResult {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     match ws_commands::umap_compute_inner(&skill_dir, a_start_utc, a_end_utc, b_start_utc, b_end_utc, None) {
@@ -1465,7 +1465,7 @@ pub(crate) fn enqueue_umap_compare(
     a_end_utc:   u64,
     b_start_utc: u64,
     b_end_utc:   u64,
-    state:       tauri::State<'_, Mutex<AppState>>,
+    state:       tauri::State<'_, Mutex<Box<AppState>>>,
     queue:       tauri::State<'_, std::sync::Arc<job_queue::JobQueue>>,
 ) -> job_queue::JobTicket {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
@@ -1513,7 +1513,7 @@ pub(crate) fn poll_job(
 pub(crate) fn get_session_metrics(
     start_utc: u64,
     end_utc:   u64,
-    state:     tauri::State<'_, Mutex<AppState>>,
+    state:     tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> SessionMetrics {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     get_session_metrics_impl(&skill_dir, start_utc, end_utc)
@@ -1524,7 +1524,7 @@ pub(crate) fn get_session_metrics(
 pub(crate) fn get_session_timeseries(
     start_utc: u64,
     end_utc:   u64,
-    state:     tauri::State<'_, Mutex<AppState>>,
+    state:     tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<EpochRow> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     get_session_timeseries_impl(&skill_dir, start_utc, end_utc)

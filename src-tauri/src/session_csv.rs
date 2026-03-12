@@ -70,7 +70,7 @@ pub(crate) fn metrics_csv_path(eeg_path: &Path) -> PathBuf {
 /// (final stats).  The second write overwrites the first, adding end-time
 /// and final sample count.
 pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
-    let s_ref = app.state::<Mutex<AppState>>();
+    let s_ref = app.state::<Mutex<Box<AppState>>>();
     let s = s_ref.lock_or_recover();
 
     let session_end_utc   = unix_secs();

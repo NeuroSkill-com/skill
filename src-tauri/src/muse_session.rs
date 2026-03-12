@@ -40,7 +40,7 @@ pub(crate) async fn run_muse_session(
 
     // 1. → "scanning"
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         s.session_start_utc        = Some(unix_secs());
         s.status.state             = "scanning".into();
@@ -80,7 +80,7 @@ pub(crate) async fn run_muse_session(
 
     // 3. Pick device
     let paired_ids: Vec<String> = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let s = r.lock_or_recover();
         s.status.paired_devices.iter().map(|d| d.id.clone()).collect()
     };
@@ -104,7 +104,7 @@ pub(crate) async fn run_muse_session(
 
     // 3b. Pin the real BLE ID into status before connect_to() takes ownership.
     {
-        let sr = app.state::<Mutex<AppState>>();
+        let sr = app.state::<Mutex<Box<AppState>>>();
         let mut g = sr.lock_or_recover();
         g.status.device_id = Some(device.id.clone());
         g.retry_attempt    = 0;
@@ -181,7 +181,7 @@ pub(crate) async fn run_muse_session(
     write_session_meta(&app, &csv_path);
 
     if !user_cancelled {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         if s.status.sample_count > 0 { s.pending_reconnect = true; }
     }
@@ -202,12 +202,12 @@ pub(crate) async fn handle_event(
         // ── Connected ────────────────────────────────────────────────────────
         MuseEvent::Connected(name) => {
             let dev_id = {
-                let sr = app.state::<Mutex<AppState>>();
+                let sr = app.state::<Mutex<Box<AppState>>>();
                 let g  = sr.lock_or_recover();
                 g.status.device_id.clone().unwrap_or_else(|| name.clone())
             };
             {
-                let r = app.state::<Mutex<AppState>>();
+                let r = app.state::<Mutex<Box<AppState>>>();
                 let mut s = r.lock_or_recover();
                 s.status.state       = "connected".into();
                 s.status.device_name = Some(name.clone());
@@ -237,7 +237,7 @@ pub(crate) async fn handle_event(
 
         MuseEvent::Disconnected => {
             let (name, device_id) = {
-                let sr = app.state::<Mutex<AppState>>();
+                let sr = app.state::<Mutex<Box<AppState>>>();
                 let g  = sr.lock_or_recover();
                 (
                     g.status.device_name.clone().unwrap_or_else(|| "unknown".into()),
@@ -274,7 +274,7 @@ pub(crate) async fn handle_event(
             // ── Status write-back: raw electrode value + sample count ────────
             // Lock is held only for two field writes — no DSP inside.
             let (ipc_ch, _count) = {
-                let sr = app.state::<Mutex<AppState>>();
+                let sr = app.state::<Mutex<Box<AppState>>>();
                 let mut s = sr.lock_or_recover();
                 if r.electrode < 4 {
                     if let Some(&v) = r.samples.last() {
@@ -316,7 +316,7 @@ pub(crate) async fn handle_event(
             // ── Write quality back (brief lock, after DSP completes) ─────────
             if filter_fired {
                 let qualities = dsp.quality.all_qualities();
-                let sr = app.state::<Mutex<AppState>>();
+                let sr = app.state::<Mutex<Box<AppState>>>();
                 sr.lock_or_recover().status.channel_quality = qualities;
             }
 
@@ -362,7 +362,7 @@ pub(crate) async fn handle_event(
 
                 // Brief read lock only for temperature (one scalar copy).
                 let temperature_raw = {
-                    let sr = app.state::<Mutex<AppState>>();
+                    let sr = app.state::<Mutex<Box<AppState>>>();
                     let g = sr.lock_or_recover();
                     g.status.temperature_raw
                 };
@@ -456,7 +456,7 @@ pub(crate) async fn handle_event(
                 }
 
                 let d = {
-                    let sr = app.state::<Mutex<AppState>>();
+                    let sr = app.state::<Mutex<Box<AppState>>>();
                     let mut s = sr.lock_or_recover();
 
                     let dnd_enabled   = s.dnd_config.enabled;
@@ -566,7 +566,7 @@ pub(crate) async fn handle_event(
                         // This prevents a state mismatch if the call fails and
                         // ensures the exit is retried on the next tick.
                         {
-                            let sr = app.state::<Mutex<AppState>>();
+                            let sr = app.state::<Mutex<Box<AppState>>>();
                             let mut s = sr.lock_or_recover();
                             s.dnd_active        = enable;
                             s.dnd_below_ticks   = 0;
@@ -598,7 +598,7 @@ pub(crate) async fn handle_event(
                 // Write the latest band snapshot back so get_latest_bands
                 // can read it without any lock contention from DSP.
                 {
-                    let sr = app.state::<Mutex<AppState>>();
+                    let sr = app.state::<Mutex<Box<AppState>>>();
                     sr.lock_or_recover().latest_bands = Some(snap.clone());
                 }
 
@@ -643,7 +643,7 @@ pub(crate) async fn handle_event(
 
             // Brief lock: status write-back + IPC channel clone only.
             let ipc = {
-                let sr = app.state::<Mutex<AppState>>();
+                let sr = app.state::<Mutex<Box<AppState>>>();
                 let mut s = sr.lock_or_recover();
                 if r.ppg_channel < 3 {
                     if let Some(last) = samples_f64.last() { s.status.ppg[r.ppg_channel] = *last; }
@@ -669,7 +669,7 @@ pub(crate) async fn handle_event(
         MuseEvent::Accelerometer(imu) => {
             let last = imu.samples[2];
             let ipc = {
-                let sr = app.state::<Mutex<AppState>>();
+                let sr = app.state::<Mutex<Box<AppState>>>();
                 let mut s = sr.lock_or_recover();
                 s.status.accel = [last.x, last.y, last.z];
                 s.imu_channel.clone()
@@ -695,7 +695,7 @@ pub(crate) async fn handle_event(
         MuseEvent::Gyroscope(imu) => {
             let last = imu.samples[2];
             let (accel, ipc) = {
-                let sr = app.state::<Mutex<AppState>>();
+                let sr = app.state::<Mutex<Box<AppState>>>();
                 let mut s = sr.lock_or_recover();
                 s.status.gyro = [last.x, last.y, last.z];
                 (s.status.accel, s.imu_channel.clone())
@@ -724,7 +724,7 @@ pub(crate) async fn handle_event(
         // ── Telemetry (battery) ───────────────────────────────────────────────
         MuseEvent::Telemetry(t) => {
             const ALPHA: f32 = 0.1;
-            let r = app.state::<Mutex<AppState>>();
+            let r = app.state::<Mutex<Box<AppState>>>();
             let mut s = r.lock_or_recover();
             let prev_battery  = s.status.battery;
             let first_reading = s.battery_ema.is_none();
@@ -757,7 +757,7 @@ pub(crate) async fn handle_event(
             let bl = c.fields.get("bl").and_then(|v| v.as_str()).map(str::to_owned);
             let tp = c.fields.get("tp").and_then(|v| v.as_str()).map(str::to_owned);
             if sn.is_some() || ma.is_some() || fw.is_some() || hw.is_some() {
-                let r = app.state::<Mutex<AppState>>();
+                let r = app.state::<Mutex<Box<AppState>>>();
                 let mut s = r.lock_or_recover();
                 if let Some(v) = sn { s.status.serial_number      = Some(v); }
                 if let Some(v) = ma { s.status.mac_address         = Some(v); }

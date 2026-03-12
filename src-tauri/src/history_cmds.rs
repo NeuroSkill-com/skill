@@ -55,7 +55,7 @@ pub(crate) struct SessionEntry {
 /// Scan all `~/.skill/*/muse_*.json` sidecar files and return session entries
 /// sorted by start time descending (newest first).
 #[tauri::command]
-pub(crate) fn list_sessions(state: tauri::State<'_, Mutex<AppState>>) -> Vec<SessionEntry> {
+pub(crate) fn list_sessions(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<SessionEntry> {
     let (skill_dir, logger) = {
         let s = state.lock_or_recover();
         (s.skill_dir.clone(), s.logger.clone())
@@ -276,7 +276,7 @@ fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]
 /// This filters out dirs that hold only log files (or are completely empty),
 /// so the frontend never has to handle an "empty day" as the default view.
 #[tauri::command]
-pub(crate) fn list_session_days(state: tauri::State<'_, Mutex<AppState>>) -> Vec<String> {
+pub(crate) fn list_session_days(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     let mut days: Vec<String> = std::fs::read_dir(&skill_dir)
         .into_iter()
@@ -322,7 +322,7 @@ pub(crate) fn list_session_days(state: tauri::State<'_, Mutex<AppState>>) -> Vec
 #[tauri::command]
 pub(crate) fn list_sessions_for_day(
     day: String,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<SessionEntry> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     let day_dir = skill_dir.join(&day);
@@ -461,7 +461,7 @@ pub(crate) struct SessionStreamEvent {
 #[tauri::command]
 pub(crate) async fn stream_sessions(
     on_event: tauri::ipc::Channel<SessionStreamEvent>,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
 
@@ -632,7 +632,7 @@ pub(crate) struct HistoryStats {
 
 #[tauri::command]
 pub(crate) async fn get_history_stats(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<HistoryStats, ()> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     Ok(tokio::task::spawn_blocking(move || {
@@ -717,7 +717,7 @@ pub(crate) struct EmbeddingSession {
 /// are ≤ `GAP_SECS` apart (default 120 s — two minutes without data starts a
 /// new session).  This makes the picker independent of CSV sidecar files.
 #[tauri::command]
-pub(crate) fn list_embedding_sessions(state: tauri::State<'_, Mutex<AppState>>) -> Vec<EmbeddingSession> {
+pub(crate) fn list_embedding_sessions(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<EmbeddingSession> {
     const GAP_SECS: u64 = 120;
 
     let skill_dir = state.lock_or_recover().skill_dir.clone();

@@ -46,7 +46,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
     app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
 
     let (label, search, settings, calibration, help, history, api, theme, focus_timer) = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let g = r.lock_or_recover();
         (
             g.label_shortcut.clone(),
@@ -102,7 +102,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
     #[cfg(feature = "llm")]
     {
         let chat = {
-            let r = app.state::<Mutex<AppState>>();
+            let r = app.state::<Mutex<Box<AppState>>>();
             let s = r.lock_or_recover().chat_shortcut.clone();
             s
         };
@@ -138,12 +138,12 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
 macro_rules! shortcut_pair {
     ($get:ident, $set:ident, $field:ident, $name:literal) => {
         #[tauri::command]
-        pub fn $get(state: tauri::State<'_, Mutex<AppState>>) -> String {
+        pub fn $get(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
             state.lock_or_recover().$field.clone()
         }
         #[tauri::command]
         pub fn $set(shortcut: String, app: AppHandle) -> Result<(), String> {
-            app.state::<Mutex<AppState>>().lock_or_recover().$field = shortcut;
+            app.state::<Mutex<Box<AppState>>>().lock_or_recover().$field = shortcut;
             apply_all_shortcuts(&app)?;
             save_settings(&app);
             refresh_tray(&app);

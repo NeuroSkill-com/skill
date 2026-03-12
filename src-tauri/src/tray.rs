@@ -75,7 +75,7 @@ fn tray_download_items(app: &AppHandle) -> Vec<TrayDownloadItem> {
     use crate::llm::catalog::DownloadState;
 
     let downloads = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let g = r.lock_or_recover();
         g.llm_downloads.clone()
     };
@@ -138,7 +138,7 @@ fn tray_download_icon_progress(_app: &AppHandle) -> Option<(usize, f32)> {
 /// Two identical keys guarantee identical menus; a different key means the
 /// menu must be rebuilt.
 fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
-    let r = app.state::<Mutex<AppState>>();
+    let r = app.state::<Mutex<Box<AppState>>>();
     let g = r.lock_or_recover();
     let ls   = g.label_shortcut.clone();
     let ss   = g.search_shortcut.clone();
@@ -339,7 +339,7 @@ fn icon_with_progress(icon_state: &str, progress: Option<f32>) -> Image<'static>
 pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu<tauri::Wry>> {
     let (label_shortcut, search_shortcut, settings_shortcut, calibration_shortcut,
          help_shortcut, history_shortcut, api_shortcut, focus_timer_shortcut) = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let g = r.lock_or_recover();
         (
             g.label_shortcut.clone(),
@@ -354,7 +354,7 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
     };
     #[cfg(feature = "llm")]
     let chat_shortcut = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let s = r.lock_or_recover().chat_shortcut.clone();
         s
     };
@@ -501,7 +501,7 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
 }
 
 pub(crate) fn refresh_tray(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<AppState>>();
+    let s_ref = app.state::<Mutex<Box<AppState>>>();
     let st = { let g = s_ref.lock_or_recover(); g.status.clone() };
 
     let Some(tray) = app.tray_by_id("main") else { return };

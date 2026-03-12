@@ -157,7 +157,8 @@ const needsEspeak = subcommand === "dev" || subcommand === "build";
 
 // ── Pass-through for subcommands that don't need espeak ───────────────────────
 if (!needsEspeak) {
-  const cmd = ["npx", "tauri", subcommand, ...subArgs]
+  const passCmd = useCargo ? ["cargo", "tauri"] : ["npx", "tauri"];
+  const cmd = [...passCmd, subcommand, ...subArgs]
     .filter(Boolean)
     .join(" ");
   execSync(cmd, { cwd: root, stdio: "inherit" });
@@ -526,8 +527,22 @@ if (!isWin && !isMac && !process.env.CARGO_BUILD_JOBS) {
 }
 
 // ── Run Tauri ─────────────────────────────────────────────────────────────────
+// ── Tauri CLI binary selection ─────────────────────────────────────────────
+// Prefer `cargo tauri` (Rust binary compiled on this machine) over
+// `npx tauri` (pre-built NAPI-RS native Node module).  The NAPI-RS
+// binaries shipped by @tauri-apps/cli ≥ 2.10 contain SIMD instructions
+// (AVX2 / advanced NEON) that cause SIGILL ("illegal hardware instruction")
+// on some machines — especially during the post-build bundling /
+// updater-artifact zstd-compression phase.  `cargo tauri` is compiled
+// locally so it always matches the host CPU.
+//
+// Set TAURI_USE_NPX=1 to force the old npx path.
+const useCargo =
+  process.env.TAURI_USE_NPX !== "1" && commandExists("cargo-tauri");
+const tauriCmd = useCargo ? ["cargo", "tauri"] : ["npx", "tauri"];
+
 function runTauriWithArgs(args) {
-  const cmd = ["npx", "tauri", subcommand, ...args].join(" ").trimEnd();
+  const cmd = [...tauriCmd, subcommand, ...args].join(" ").trimEnd();
   console.log(`→ ${cmd}`);
   execSync(cmd, {
     cwd: root,
@@ -537,7 +552,7 @@ function runTauriWithArgs(args) {
 }
 
 function runTauriSubcommand(command, args) {
-  const cmd = ["npx", "tauri", command, ...args].join(" ").trimEnd();
+  const cmd = [...tauriCmd, command, ...args].join(" ").trimEnd();
   console.log(`→ ${cmd}`);
   execSync(cmd, {
     cwd: root,

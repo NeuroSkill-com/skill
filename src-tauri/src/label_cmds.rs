@@ -21,7 +21,7 @@ use crate::skill_log::SkillLogger;
 pub fn query_annotations(
     start_utc: Option<u64>,
     end_utc:   Option<u64>,
-    state:     tauri::State<'_, Mutex<AppState>>,
+    state:     tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<serde_json::Value> {
     let s = state.lock_or_recover();
     let skill_dir = s.skill_dir.clone();
@@ -60,7 +60,7 @@ pub fn query_annotations(
 #[tauri::command]
 pub fn get_recent_labels(
     limit: Option<usize>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<String> {
     let s = state.lock_or_recover();
     let skill_dir = s.skill_dir.clone();
@@ -100,7 +100,7 @@ pub fn get_recent_labels(
 }
 
 #[tauri::command]
-pub fn delete_label(label_id: i64, state: tauri::State<'_, Mutex<AppState>>) -> Result<(), String> {
+pub fn delete_label(label_id: i64, state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<(), String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
     if !labels_db.exists() { return Err("labels db not found".into()); }
@@ -113,7 +113,7 @@ pub fn delete_label(label_id: i64, state: tauri::State<'_, Mutex<AppState>>) -> 
 #[tauri::command]
 pub fn update_label(
     label_id: i64, text: String, context: Option<String>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let text    = text.trim().to_owned();
     let context = context.unwrap_or_default().trim().to_owned();
@@ -142,7 +142,7 @@ pub fn submit_label(
     label_start_utc: u64,
     text:            String,
     context:         Option<String>,
-    state:           tauri::State<'_, Mutex<AppState>>,
+    state:           tauri::State<'_, Mutex<Box<AppState>>>,
     embedder:        tauri::State<'_, std::sync::Arc<EmbedderState>>,
     label_idx:       tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
     app:             AppHandle,
@@ -271,14 +271,14 @@ pub fn list_embedding_models() -> Vec<EmbedModelInfo> {
 }
 
 #[tauri::command]
-pub fn get_embedding_model(state: tauri::State<'_, Mutex<AppState>>) -> String {
+pub fn get_embedding_model(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
     state.lock_or_recover().text_embedding_model.clone()
 }
 
 #[tauri::command]
 pub async fn set_embedding_model(
     model_code: String,
-    state:      tauri::State<'_, Mutex<AppState>>,
+    state:      tauri::State<'_, Mutex<Box<AppState>>>,
     embedder:   tauri::State<'_, std::sync::Arc<EmbedderState>>,
     app:        AppHandle,
 ) -> Result<(), String> {
@@ -329,7 +329,7 @@ pub async fn set_embedding_model(
 }
 
 #[tauri::command]
-pub fn get_stale_label_count(state: tauri::State<'_, Mutex<AppState>>) -> usize {
+pub fn get_stale_label_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> usize {
     let s = state.lock_or_recover();
     let model_code = s.text_embedding_model.clone();
     let skill_dir  = s.skill_dir.clone();
@@ -341,7 +341,7 @@ pub fn get_stale_label_count(state: tauri::State<'_, Mutex<AppState>>) -> usize 
 
 #[tauri::command]
 pub async fn rebuild_label_index(
-    state:     tauri::State<'_, Mutex<AppState>>,
+    state:     tauri::State<'_, Mutex<Box<AppState>>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<crate::label_index::RebuildStats, String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
@@ -354,7 +354,7 @@ pub async fn rebuild_label_index(
 pub async fn search_labels_by_text(
     query:     String,
     k:         usize,
-    state:     tauri::State<'_, Mutex<AppState>>,
+    state:     tauri::State<'_, Mutex<Box<AppState>>>,
     embedder:  tauri::State<'_, std::sync::Arc<EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<Vec<crate::label_index::LabelNeighbor>, String> {
@@ -376,7 +376,7 @@ pub async fn search_labels_by_text(
 pub async fn search_labels_by_eeg(
     eeg_embedding: Vec<f32>,
     k:             usize,
-    state:         tauri::State<'_, Mutex<AppState>>,
+    state:         tauri::State<'_, Mutex<Box<AppState>>>,
     label_idx:     tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<Vec<crate::label_index::LabelNeighbor>, String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
@@ -390,7 +390,7 @@ pub async fn search_labels_by_eeg(
 
 #[tauri::command]
 pub async fn reembed_all_labels(
-    state:     tauri::State<'_, Mutex<AppState>>,
+    state:     tauri::State<'_, Mutex<Box<AppState>>>,
     embedder:  tauri::State<'_, std::sync::Arc<EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
     app:       AppHandle,

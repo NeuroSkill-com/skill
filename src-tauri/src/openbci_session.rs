@@ -44,7 +44,7 @@ pub(crate) async fn run_openbci_ganglion_session(
 
     // 1. → "scanning"
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         s.session_start_utc         = Some(unix_secs());
         s.status.state              = "scanning".into();
@@ -73,7 +73,7 @@ pub(crate) async fn run_openbci_ganglion_session(
     // 2. Prepare (connect BLE via openbci crate, blocking)
     let preferred_mac = preferred_id.clone();
     let scan_timeout_secs = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let s = r.lock_or_recover();
         s.openbci_config.scan_timeout_secs
     };
@@ -102,7 +102,7 @@ pub(crate) async fn run_openbci_ganglion_session(
     // 3. Derive device name/id
     let dev_name = preferred_id.as_ref()
         .and_then(|id| {
-            let r = app.state::<Mutex<AppState>>();
+            let r = app.state::<Mutex<Box<AppState>>>();
             let s = r.lock_or_recover();
             s.status.paired_devices.iter()
                 .find(|d| &d.id == id).map(|d| d.name.clone())
@@ -116,7 +116,7 @@ pub(crate) async fn run_openbci_ganglion_session(
 
     // 4. → "connected"
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         s.status.state                = "connected".into();
         s.status.device_name          = Some(dev_name.clone());
@@ -143,7 +143,7 @@ pub(crate) async fn run_openbci_ganglion_session(
 
     // 5. Open CSV with configured channel labels
     let ch_labels: Vec<String> = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let s = r.lock_or_recover();
         let cfg_labels = &s.openbci_config.channel_labels;
         (0..4).map(|i| {
@@ -194,7 +194,7 @@ pub(crate) async fn run_openbci_ganglion_session(
 
                 // Brief lock: status write-back + IPC channel only.
                 let ipc_ch = {
-                    let sr = app.state::<Mutex<AppState>>();
+                    let sr = app.state::<Mutex<Box<AppState>>>();
                     let mut s = sr.lock_or_recover();
                     for (ch, &uv) in sample.eeg.iter().enumerate().take(EEG_CHANNELS) {
                         if ch < EEG_CHANNELS { s.status.eeg[ch] = uv; }
@@ -236,7 +236,7 @@ pub(crate) async fn run_openbci_ganglion_session(
 
                 if filter_fired {
                     let qualities = dsp.quality.all_qualities();
-                    let sr = app.state::<Mutex<AppState>>();
+                    let sr = app.state::<Mutex<Box<AppState>>>();
                     sr.lock_or_recover().status.channel_quality = qualities;
                 }
 
@@ -249,7 +249,7 @@ pub(crate) async fn run_openbci_ganglion_session(
                 if let Some(col) = spec_col { let _ = app.emit("eeg-spectrogram", &col); }
                 if let Some(snap) = band_snap {
                     // Write back so get_latest_bands can read without DSP contention.
-                    app.state::<Mutex<AppState>>().lock_or_recover().latest_bands = Some(snap.clone());
+                    app.state::<Mutex<Box<AppState>>>().lock_or_recover().latest_bands = Some(snap.clone());
                     let _ = app.emit("eeg-bands", &snap);
                     app.state::<WsBroadcaster>().send("eeg-bands", &snap);
                 }
@@ -265,13 +265,13 @@ pub(crate) async fn run_openbci_ganglion_session(
     write_session_meta(&app, &csv_path);
 
     if !user_cancelled {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         if s.status.sample_count > 0 { s.pending_reconnect = true; }
     }
     let error_msg = if user_cancelled { None } else { Some("DEVICE_DISCONNECTED".into()) };
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         r.lock_or_recover().status.device_kind = "unknown".into();
     }
     crate::go_disconnected(&app, error_msg, false);
@@ -290,7 +290,7 @@ pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
     use crate::settings::OpenBciBoard as Brd;
 
     let (board_kind, cfg) = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let s = r.lock_or_recover();
         (s.openbci_config.board.clone(), s.openbci_config.clone())
     };
@@ -300,7 +300,7 @@ pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
     }
 
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         if r.lock_or_recover().stream.is_some() {
             return Err("Already connected or connecting.".into());
         }
@@ -343,7 +343,7 @@ pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let csv_path = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         s.stream             = Some(StreamHandle { cancel_tx: tx });
         s.status.state       = "scanning".into();
@@ -386,7 +386,7 @@ async fn run_openbci_board_session(
 
     // 2. Mark connected; build channel labels
     let ch_labels: Vec<String> = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         s.status.state = "connected".into();
         let cfg_labels = &s.openbci_config.channel_labels;
@@ -442,7 +442,7 @@ async fn run_openbci_board_session(
 
                 // Brief lock: status write-back + IPC clone only.
                 let ipc_ch = {
-                    let sr = app.state::<Mutex<AppState>>();
+                    let sr = app.state::<Mutex<Box<AppState>>>();
                     let mut s = sr.lock_or_recover();
                     for (ch, &uv) in sample.eeg.iter().enumerate() {
                         if ch < pipeline_ch && ch < EEG_CHANNELS { s.status.eeg[ch] = uv; }
@@ -478,7 +478,7 @@ async fn run_openbci_board_session(
 
                 if filter_fired {
                     let qualities = dsp.quality.all_qualities();
-                    let sr = app.state::<Mutex<AppState>>();
+                    let sr = app.state::<Mutex<Box<AppState>>>();
                     sr.lock_or_recover().status.channel_quality = qualities;
                 }
 
@@ -490,7 +490,7 @@ async fn run_openbci_board_session(
                 }
                 if let Some(col) = spec_col { let _ = app.emit("eeg-spectrogram", &col); }
                 if let Some(snap) = band_snap {
-                    app.state::<Mutex<AppState>>().lock_or_recover().latest_bands = Some(snap.clone());
+                    app.state::<Mutex<Box<AppState>>>().lock_or_recover().latest_bands = Some(snap.clone());
                     let _ = app.emit("eeg-bands", &snap);
                     app.state::<WsBroadcaster>().send("eeg-bands", &snap);
                 }
@@ -505,7 +505,7 @@ async fn run_openbci_board_session(
     csv.flush();
     write_session_meta(&app, &csv_path);
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         r.lock_or_recover().status.device_kind = "unknown".into();
     }
     let error_msg = if user_cancelled { None } else { Some("DEVICE_DISCONNECTED".into()) };

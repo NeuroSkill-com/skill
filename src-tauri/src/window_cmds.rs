@@ -85,7 +85,7 @@ pub fn open_notifications_settings() {
 #[tauri::command]
 pub fn show_main_window(
     win:   tauri::WebviewWindow,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     if win.label() != "main" { return; }
     if !state.lock_or_recover().onboarding_complete { return; }
@@ -264,7 +264,7 @@ pub async fn open_api_window(app: AppHandle) -> Result<(), String> {
 ///
 /// An empty string means the window has never been seen.
 #[tauri::command]
-pub fn get_whats_new_seen_version(state: tauri::State<'_, Mutex<AppState>>) -> String {
+pub fn get_whats_new_seen_version(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
     state.lock_or_recover().last_seen_whats_new_version.clone()
 }
 
@@ -275,7 +275,7 @@ pub fn get_whats_new_seen_version(state: tauri::State<'_, Mutex<AppState>>) -> S
 #[tauri::command]
 pub fn dismiss_whats_new(version: String, app: AppHandle) {
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         r.lock_or_recover().last_seen_whats_new_version = version;
     }
     save_settings(&app);
@@ -331,7 +331,7 @@ pub async fn open_onboarding_window(app: AppHandle) -> Result<(), String> {
     }
 
 #[tauri::command]
-pub fn complete_onboarding(app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn complete_onboarding(app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     state.lock_or_recover().onboarding_complete = true;
     save_settings(&app);
     if let Some(win) = app.get_webview_window("onboarding") { let _ = win.close(); }
@@ -342,7 +342,7 @@ pub fn complete_onboarding(app: AppHandle, state: tauri::State<'_, Mutex<AppStat
 }
 
 #[tauri::command]
-pub fn get_onboarding_complete(state: tauri::State<'_, Mutex<AppState>>) -> bool {
+pub fn get_onboarding_complete(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
     state.lock_or_recover().onboarding_complete
 }
 
@@ -355,7 +355,7 @@ pub(crate) async fn open_calibration_window_inner(
     autostart:  bool,
 ) -> Result<(), String> {
     {
-        let st = app.state::<Mutex<AppState>>();
+        let st = app.state::<Mutex<Box<AppState>>>();
         let guard = st.lock_or_recover();
         if guard.status.state != "connected" || guard.stream.is_none() {
             return Err("Calibration requires a connected BLE device that is streaming data".into());
@@ -404,19 +404,19 @@ pub fn close_calibration_window(app: AppHandle) {
 // ── Calibration profile CRUD ──────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_calibration_profiles(state: tauri::State<'_, Mutex<AppState>>) -> Vec<CalibrationProfile> {
+pub fn list_calibration_profiles(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<CalibrationProfile> {
     state.lock_or_recover().calibration_profiles.clone()
 }
 
 #[tauri::command]
 pub fn get_calibration_profile(
-    id: String, state: tauri::State<'_, Mutex<AppState>>,
+    id: String, state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Option<CalibrationProfile> {
     state.lock_or_recover().calibration_profiles.iter().find(|p| p.id == id).cloned()
 }
 
 #[tauri::command]
-pub fn get_active_calibration(state: tauri::State<'_, Mutex<AppState>>) -> Option<CalibrationProfile> {
+pub fn get_active_calibration(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<CalibrationProfile> {
     let s = state.lock_or_recover();
     let id = s.active_calibration_id.clone();
     s.calibration_profiles.iter().find(|p| p.id == id).cloned()
@@ -424,7 +424,7 @@ pub fn get_active_calibration(state: tauri::State<'_, Mutex<AppState>>) -> Optio
 }
 
 #[tauri::command]
-pub fn set_active_calibration(id: String, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn set_active_calibration(id: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     state.lock_or_recover().active_calibration_id = id;
     save_settings(&app);
 }
@@ -433,7 +433,7 @@ pub fn set_active_calibration(id: String, app: AppHandle, state: tauri::State<'_
 pub fn create_calibration_profile(
     mut profile: CalibrationProfile,
     app:         AppHandle,
-    state:       tauri::State<'_, Mutex<AppState>>,
+    state:       tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> CalibrationProfile {
     profile.id = new_profile_id();
     profile.last_calibration_utc = None;
@@ -445,7 +445,7 @@ pub fn create_calibration_profile(
 
 #[tauri::command]
 pub fn update_calibration_profile(
-    profile: CalibrationProfile, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>,
+    profile: CalibrationProfile, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let mut s = state.lock_or_recover();
     let entry = s.calibration_profiles.iter_mut()
@@ -459,7 +459,7 @@ pub fn update_calibration_profile(
 
 #[tauri::command]
 pub fn delete_calibration_profile(
-    id: String, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>,
+    id: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let mut s = state.lock_or_recover();
     if s.calibration_profiles.len() <= 1 {
@@ -479,7 +479,7 @@ pub fn delete_calibration_profile(
 pub fn record_calibration_completed(
     profile_id: Option<String>,
     app:        AppHandle,
-    state:      tauri::State<'_, Mutex<AppState>>,
+    state:      tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     {
         let mut s = state.lock_or_recover();
@@ -496,7 +496,7 @@ pub fn record_calibration_completed(
 // ── Legacy calibration compat ──────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_calibration_config(state: tauri::State<'_, Mutex<AppState>>) -> CalibrationConfig {
+pub fn get_calibration_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> CalibrationConfig {
     let s = state.lock_or_recover();
     let id = s.active_calibration_id.clone();
     let profile = s.calibration_profiles.iter().find(|p| p.id == id)
@@ -543,7 +543,7 @@ pub fn get_app_name(app: AppHandle) -> String {
 }
 
 #[tauri::command]
-pub fn get_data_dir(_state: tauri::State<'_, Mutex<AppState>>) -> (String, String) {
+pub fn get_data_dir(_state: tauri::State<'_, Mutex<Box<AppState>>>) -> (String, String) {
     // skill_dir is always ~/.skill — hardcoded, never configurable
     let fixed = tilde_path(&default_skill_dir());
     (fixed.clone(), fixed)

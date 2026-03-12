@@ -4,6 +4,12 @@ All notable changes to NeuroSkill™ are documented here.
 
 ---
 
+## [Unreleased]
+
+### Refactor
+
+- **Heap-allocate AppState**: changed `Mutex<AppState>` → `Mutex<Box<AppState>>` across all Rust source files (`lib.rs`, `tray.rs`, `shortcut_cmds.rs`, `muse_session.rs`, `ws_commands.rs`, `openbci_session.rs`, `active_window.rs`, `label_cmds.rs`, `session_csv.rs`, `session_analysis.rs`, `llm/cmds.rs`, `session_dsp.rs`, `ble_scanner.rs`, `window_cmds.rs`, `history_cmds.rs`, `settings_cmds.rs`) to move the large `AppState` struct onto the heap, reducing main-thread stack frame size and mitigating stack overflow risk on platforms with smaller default stacks.
+
 ## [0.0.27]
 
 ### Bug Fixes

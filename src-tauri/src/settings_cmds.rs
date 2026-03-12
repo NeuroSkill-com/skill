@@ -98,7 +98,7 @@ fn merge_suggestion(
 pub async fn suggest_hook_keywords(
     draft:     String,
     limit:     Option<usize>,
-    state:     tauri::State<'_, Mutex<AppState>>,
+    state:     tauri::State<'_, Mutex<Box<AppState>>>,
     embedder:  tauri::State<'_, std::sync::Arc<crate::label_cmds::EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<Vec<HookKeywordSuggestion>, String> {
@@ -174,36 +174,36 @@ pub async fn suggest_hook_keywords(
 // ── EEG / PPG / IMU subscriptions ────────────────────────────────────────────
 
 #[tauri::command]
-pub fn subscribe_eeg(on_event: tauri::ipc::Channel<EegPacket>, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn subscribe_eeg(on_event: tauri::ipc::Channel<EegPacket>, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     state.lock_or_recover().eeg_channel = Some(on_event);
 }
 
 #[tauri::command]
-pub fn subscribe_ppg(on_event: tauri::ipc::Channel<PpgPacket>, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn subscribe_ppg(on_event: tauri::ipc::Channel<PpgPacket>, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     state.lock_or_recover().ppg_channel = Some(on_event);
 }
 
 #[tauri::command]
-pub fn subscribe_imu(on_event: tauri::ipc::Channel<ImuPacket>, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn subscribe_imu(on_event: tauri::ipc::Channel<ImuPacket>, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     state.lock_or_recover().imu_channel = Some(on_event);
 }
 
 // ── Device commands ────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_status(state: tauri::State<'_, Mutex<AppState>>) -> MuseStatus {
+pub fn get_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> MuseStatus {
     state.lock_or_recover().status.clone()
 }
 
 #[tauri::command]
-pub fn get_devices(state: tauri::State<'_, Mutex<AppState>>) -> Vec<DiscoveredDevice> {
+pub fn get_devices(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<DiscoveredDevice> {
     state.lock_or_recover().discovered.clone()
 }
 
 #[tauri::command]
 pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         s.preferred_id = if id.is_empty() { None } else { Some(id.clone()) };
         let pref = s.preferred_id.clone();
@@ -211,7 +211,7 @@ pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice>
     }
     save_settings(&app);
     emit_devices(&app);
-    app.state::<Mutex<AppState>>().lock_or_recover().discovered.clone()
+    app.state::<Mutex<Box<AppState>>>().lock_or_recover().discovered.clone()
 }
 
 /// Explicitly pair a discovered device so it is trusted for future connections.
@@ -221,7 +221,7 @@ pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice>
 #[tauri::command]
 pub fn pair_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         // Look up the name from the discovered list.
         let name = s.discovered.iter()
@@ -249,13 +249,13 @@ pub fn pair_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
     refresh_tray(&app);
     emit_status(&app);
     emit_devices(&app);
-    app.state::<Mutex<AppState>>().lock_or_recover().discovered.clone()
+    app.state::<Mutex<Box<AppState>>>().lock_or_recover().discovered.clone()
 }
 
 #[tauri::command]
 pub fn forget_device(id: String, app: AppHandle) -> MuseStatus {
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         s.status.paired_devices.retain(|d| d.id != id);
         for d in s.discovered.iter_mut() { if d.id == id { d.is_paired = false; } }
@@ -263,12 +263,12 @@ pub fn forget_device(id: String, app: AppHandle) -> MuseStatus {
         save_settings(&app);
     }
     refresh_tray(&app); emit_status(&app); emit_devices(&app);
-    app.state::<Mutex<AppState>>().lock_or_recover().status.clone()
+    app.state::<Mutex<Box<AppState>>>().lock_or_recover().status.clone()
 }
 
 #[tauri::command]
 pub fn cancel_retry(app: AppHandle) {
-    let r = app.state::<Mutex<AppState>>();
+    let r = app.state::<Mutex<Box<AppState>>>();
     let mut s = r.lock_or_recover();
     s.pending_reconnect           = false;
     s.retry_attempt               = 0;
@@ -284,7 +284,7 @@ pub fn cancel_retry(app: AppHandle) {
 #[tauri::command]
 pub fn retry_connect(app: AppHandle) {
     let preferred = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         s.pending_reconnect = true;
         s.retry_attempt     = 0;
@@ -299,7 +299,7 @@ pub fn retry_connect(app: AppHandle) {
 // ── EEG filter commands ────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_filter_config(state: tauri::State<'_, Mutex<AppState>>) -> FilterConfig {
+pub fn get_filter_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> FilterConfig {
     state.lock_or_recover().status.filter_config
 }
 
@@ -309,7 +309,7 @@ pub fn set_filter_config(config: FilterConfig, app: AppHandle) {
     // the change via SessionDsp::sync_config() at the top of its next frame
     // (<250 ms latency), without ever holding the AppState lock during DSP.
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         r.lock_or_recover().status.filter_config = config;
     }
     save_settings(&app);
@@ -319,7 +319,7 @@ pub fn set_filter_config(config: FilterConfig, app: AppHandle) {
 #[tauri::command]
 pub fn set_notch_preset(preset: Option<PowerlineFreq>, app: AppHandle) {
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         r.lock_or_recover().status.filter_config.notch = preset;
     }
     save_settings(&app);
@@ -329,7 +329,7 @@ pub fn set_notch_preset(preset: Option<PowerlineFreq>, app: AppHandle) {
 // ── Band power ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_latest_bands(state: tauri::State<'_, Mutex<AppState>>) -> Option<BandSnapshot> {
+pub fn get_latest_bands(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<BandSnapshot> {
     // latest_bands is written back by the session task after each ~4 Hz
     // computation; reading it never blocks on DSP.
     state.lock_or_recover().latest_bands.clone()
@@ -338,7 +338,7 @@ pub fn get_latest_bands(state: tauri::State<'_, Mutex<AppState>>) -> Option<Band
 // ── Embedding overlap ─────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_embedding_overlap(state: tauri::State<'_, Mutex<AppState>>) -> f32 {
+pub fn get_embedding_overlap(state: tauri::State<'_, Mutex<Box<AppState>>>) -> f32 {
     state.lock_or_recover().status.embedding_overlap_secs
 }
 
@@ -346,7 +346,7 @@ pub fn get_embedding_overlap(state: tauri::State<'_, Mutex<AppState>>) -> f32 {
 pub fn set_embedding_overlap(overlap_secs: f32, app: AppHandle) {
     let clamped = overlap_secs.clamp(EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS);
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         r.lock_or_recover().status.embedding_overlap_secs = clamped;
         // SessionDsp::sync_config() picks up the change next frame.
     }
@@ -371,12 +371,12 @@ pub fn get_gpu_stats() -> Option<crate::gpu_stats::GpuStats> {
 // ── Logging config ────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_log_config(state: tauri::State<'_, Mutex<AppState>>) -> crate::skill_log::LogConfig {
+pub fn get_log_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> crate::skill_log::LogConfig {
     state.lock_or_recover().logger.get_config()
 }
 
 #[tauri::command]
-pub fn set_log_config(config: crate::skill_log::LogConfig, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn set_log_config(config: crate::skill_log::LogConfig, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let s = state.lock_or_recover();
     let config_path = s.skill_dir.join(LOG_CONFIG_FILE);
     // Propagate TTS logging flag to the TTS module's runtime atomic.
@@ -387,19 +387,19 @@ pub fn set_log_config(config: crate::skill_log::LogConfig, state: tauri::State<'
 // ── EEG model config ──────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_eeg_model_config(state: tauri::State<'_, Mutex<AppState>>) -> EegModelConfig {
+pub fn get_eeg_model_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> EegModelConfig {
     state.lock_or_recover().model_config.clone()
 }
 
 #[tauri::command]
-pub fn set_eeg_model_config(config: EegModelConfig, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn set_eeg_model_config(config: EegModelConfig, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let mut s = state.lock_or_recover();
     save_model_config(&s.skill_dir, &config);
     s.model_config = config;
 }
 
 #[tauri::command]
-pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<AppState>>) -> EegModelStatus {
+pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> EegModelStatus {
     state.lock_or_recover().model_status.lock_or_recover().clone()
 }
 
@@ -413,7 +413,7 @@ pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<AppState>>) -> EegMode
 /// worker exits and respawns — loading the new weights in-process without
 /// requiring an app restart.
 #[tauri::command]
-pub fn trigger_weights_download(state: tauri::State<'_, Mutex<AppState>>) {
+pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     use std::sync::atomic::Ordering;
 
     let s = state.lock_or_recover();
@@ -449,7 +449,7 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<AppState>>) {
 /// downloads (config.json and the large safetensors file) and aborts if it
 /// is `true`.
 #[tauri::command]
-pub fn cancel_weights_download(state: tauri::State<'_, Mutex<AppState>>) {
+pub fn cancel_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
     s.download_cancel.store(true, Ordering::Relaxed);
@@ -464,12 +464,12 @@ pub fn cancel_weights_download(state: tauri::State<'_, Mutex<AppState>>) {
 // ── UMAP config ───────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_umap_config(state: tauri::State<'_, Mutex<AppState>>) -> UmapUserConfig {
+pub fn get_umap_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> UmapUserConfig {
     state.lock_or_recover().umap_config.clone()
 }
 
 #[tauri::command]
-pub fn set_umap_config(config: UmapUserConfig, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn set_umap_config(config: UmapUserConfig, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let mut s = state.lock_or_recover();
     save_umap_config(&s.skill_dir, &config);
     let cache_dir = s.skill_dir.join("umap_cache");
@@ -483,25 +483,25 @@ pub fn set_umap_config(config: UmapUserConfig, state: tauri::State<'_, Mutex<App
 // ── Theme & language ──────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_theme_and_language(state: tauri::State<'_, Mutex<AppState>>) -> (String, String) {
+pub fn get_theme_and_language(state: tauri::State<'_, Mutex<Box<AppState>>>) -> (String, String) {
     let s = state.lock_or_recover();
     (s.theme.clone(), s.language.clone())
 }
 
 #[tauri::command]
-pub fn set_theme(theme: String, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn set_theme(theme: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     state.lock_or_recover().theme = theme;
     save_settings(&app);
 }
 
 #[tauri::command]
-pub fn set_language(language: String, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn set_language(language: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     state.lock_or_recover().language = language;
     save_settings(&app);
 }
 
 #[tauri::command]
-pub fn get_accent_color(state: tauri::State<'_, Mutex<AppState>>) -> String {
+pub fn get_accent_color(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
     state.lock_or_recover().accent_color.clone()
 }
 
@@ -509,7 +509,7 @@ pub fn get_accent_color(state: tauri::State<'_, Mutex<AppState>>) -> String {
 pub fn set_accent_color(
     accent: String,
     app:    AppHandle,
-    state:  tauri::State<'_, Mutex<AppState>>,
+    state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().accent_color = accent;
     save_settings(&app);
@@ -518,12 +518,12 @@ pub fn set_accent_color(
 // ── Daily goal ────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_daily_goal(state: tauri::State<'_, Mutex<AppState>>) -> u32 {
+pub fn get_daily_goal(state: tauri::State<'_, Mutex<Box<AppState>>>) -> u32 {
     state.lock_or_recover().daily_goal_min
 }
 
 #[tauri::command]
-pub fn set_daily_goal(minutes: u32, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn set_daily_goal(minutes: u32, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let clamped = minutes.min(480);
     state.lock_or_recover().daily_goal_min = clamped;
     save_settings(&app);
@@ -531,12 +531,12 @@ pub fn set_daily_goal(minutes: u32, app: AppHandle, state: tauri::State<'_, Mute
 }
 
 #[tauri::command]
-pub fn get_goal_notified_date(state: tauri::State<'_, Mutex<AppState>>) -> String {
+pub fn get_goal_notified_date(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
     state.lock_or_recover().goal_notified_date.clone()
 }
 
 #[tauri::command]
-pub fn set_goal_notified_date(date: String, app: AppHandle, state: tauri::State<'_, Mutex<AppState>>) {
+pub fn set_goal_notified_date(date: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     state.lock_or_recover().goal_notified_date = date;
     save_settings(&app);
 }
@@ -567,7 +567,7 @@ fn sanitize_hook(mut h: HookRule) -> Option<HookRule> {
 }
 
 #[tauri::command]
-pub fn get_hooks(state: tauri::State<'_, Mutex<AppState>>) -> Vec<HookRule> {
+pub fn get_hooks(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<HookRule> {
     state.lock_or_recover().hooks.clone()
 }
 
@@ -575,7 +575,7 @@ pub fn get_hooks(state: tauri::State<'_, Mutex<AppState>>) -> Vec<HookRule> {
 pub fn set_hooks(
     hooks: Vec<HookRule>,
     app: AppHandle,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let clean: Vec<HookRule> = hooks
         .into_iter()
@@ -592,7 +592,7 @@ pub fn set_hooks(
 }
 
 #[tauri::command]
-pub fn get_hook_statuses(state: tauri::State<'_, Mutex<AppState>>) -> Vec<HookStatus> {
+pub fn get_hook_statuses(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<HookStatus> {
     let s = state.lock_or_recover();
     let runtime = s.hook_runtime.lock_or_recover();
     s.hooks
@@ -609,7 +609,7 @@ pub fn get_hook_statuses(state: tauri::State<'_, Mutex<AppState>>) -> Vec<HookSt
 pub async fn open_session_for_timestamp(
     timestamp_utc: u64,
     app: AppHandle,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     let Some(csv_path) = crate::history_cmds::find_session_csv_for_timestamp(&skill_dir, timestamp_utc) else {
@@ -621,7 +621,7 @@ pub async fn open_session_for_timestamp(
 #[tauri::command]
 pub fn get_daily_recording_mins(
     days:  Option<u32>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<(String, u32)> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     let n = days.unwrap_or(30).min(365) as i64;
@@ -679,7 +679,7 @@ pub(crate) fn unix_to_ymd(ts: u64) -> (u32, u32, u32) {
 
 /// Return `(host, port)` — the persisted WebSocket bind config.
 #[tauri::command]
-pub fn get_ws_config(state: tauri::State<'_, Mutex<AppState>>) -> (String, u16) {
+pub fn get_ws_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> (String, u16) {
     let s = state.lock_or_recover();
     (s.ws_host.clone(), s.ws_port)
 }
@@ -693,7 +693,7 @@ pub fn set_ws_config(
     host:  String,
     port:  u16,
     app:   AppHandle,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     if host != "127.0.0.1" && host != "0.0.0.0" {
         return Err(format!("invalid host '{host}': must be '127.0.0.1' or '0.0.0.0'"));
@@ -747,7 +747,7 @@ pub fn set_autostart_enabled(
 
 /// Return the background update-check interval in seconds (0 = disabled).
 #[tauri::command]
-pub fn get_update_check_interval(state: tauri::State<'_, Mutex<AppState>>) -> u64 {
+pub fn get_update_check_interval(state: tauri::State<'_, Mutex<Box<AppState>>>) -> u64 {
     state.lock_or_recover().update_check_interval_secs
 }
 
@@ -760,7 +760,7 @@ pub fn get_update_check_interval(state: tauri::State<'_, Mutex<AppState>>) -> u6
 pub fn set_update_check_interval(
     secs:  u64,
     app:   AppHandle,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().update_check_interval_secs = secs;
     crate::save_settings(&app);
@@ -770,7 +770,7 @@ pub fn set_update_check_interval(
 
 /// Return the current OpenBCI configuration.
 #[tauri::command]
-pub fn get_openbci_config(state: tauri::State<'_, Mutex<AppState>>) -> OpenBciConfig {
+pub fn get_openbci_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> OpenBciConfig {
     state.lock_or_recover().openbci_config.clone()
 }
 
@@ -782,7 +782,7 @@ pub fn get_openbci_config(state: tauri::State<'_, Mutex<AppState>>) -> OpenBciCo
 pub fn set_openbci_config(
     config: OpenBciConfig,
     app:    AppHandle,
-    state:  tauri::State<'_, Mutex<AppState>>,
+    state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().openbci_config = config;
     crate::save_settings(&app);
@@ -802,13 +802,13 @@ pub fn list_serial_ports() -> Vec<String> {
 
 /// Return the current NeuTTS configuration.
 #[tauri::command]
-pub fn get_neutts_config(state: tauri::State<'_, Mutex<AppState>>) -> NeuttsConfig {
+pub fn get_neutts_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> NeuttsConfig {
     state.lock_or_recover().neutts_config.clone()
 }
 
 /// Return whether TTS engine pre-warming at startup is enabled.
 #[tauri::command]
-pub fn get_tts_preload(state: tauri::State<'_, Mutex<AppState>>) -> bool {
+pub fn get_tts_preload(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
     state.lock_or_recover().tts_preload
 }
 
@@ -817,7 +817,7 @@ pub fn get_tts_preload(state: tauri::State<'_, Mutex<AppState>>) -> bool {
 pub fn set_tts_preload(
     preload: bool,
     app:     AppHandle,
-    state:   tauri::State<'_, Mutex<AppState>>,
+    state:   tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().tts_preload = preload;
     crate::save_settings(&app);
@@ -831,7 +831,7 @@ pub fn set_tts_preload(
 pub fn set_neutts_config(
     config: NeuttsConfig,
     app:    AppHandle,
-    state:  tauri::State<'_, Mutex<AppState>>,
+    state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     crate::tts::neutts_apply_config(&config);
     state.lock_or_recover().neutts_config = config;
@@ -842,7 +842,7 @@ pub fn set_neutts_config(
 
 /// Return whether active-window tracking is currently enabled.
 #[tauri::command]
-pub fn get_active_window_tracking(state: tauri::State<'_, Mutex<AppState>>) -> bool {
+pub fn get_active_window_tracking(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
     state.lock_or_recover().track_active_window
 }
 
@@ -851,7 +851,7 @@ pub fn get_active_window_tracking(state: tauri::State<'_, Mutex<AppState>>) -> b
 pub fn set_active_window_tracking(
     enabled: bool,
     app:     AppHandle,
-    state:   tauri::State<'_, Mutex<AppState>>,
+    state:   tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().track_active_window = enabled;
     crate::save_settings(&app);
@@ -860,13 +860,13 @@ pub fn set_active_window_tracking(
 /// Return the most recently detected active window, or `None` when tracking
 /// is disabled or no window has been observed yet.
 #[tauri::command]
-pub fn get_active_window(state: tauri::State<'_, Mutex<AppState>>) -> Option<ActiveWindowInfo> {
+pub fn get_active_window(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<ActiveWindowInfo> {
     state.lock_or_recover().current_active_window.clone()
 }
 
 /// Return whether keyboard/mouse input tracking is currently enabled.
 #[tauri::command]
-pub fn get_input_activity_tracking(state: tauri::State<'_, Mutex<AppState>>) -> bool {
+pub fn get_input_activity_tracking(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
     state.lock_or_recover().track_input_activity
 }
 
@@ -877,7 +877,7 @@ pub fn get_input_activity_tracking(state: tauri::State<'_, Mutex<AppState>>) -> 
 pub fn set_input_activity_tracking(
     enabled: bool,
     app:     AppHandle,
-    state:   tauri::State<'_, Mutex<AppState>>,
+    state:   tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
@@ -890,7 +890,7 @@ pub fn set_input_activity_tracking(
 /// Return `(last_keyboard_unix_secs, last_mouse_unix_secs)`.
 /// A value of `0` means the device type has not been seen since the app started.
 #[tauri::command]
-pub fn get_last_input_activity(state: tauri::State<'_, Mutex<AppState>>) -> (u64, u64) {
+pub fn get_last_input_activity(state: tauri::State<'_, Mutex<Box<AppState>>>) -> (u64, u64) {
     use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
     (
@@ -904,7 +904,7 @@ pub fn get_last_input_activity(state: tauri::State<'_, Mutex<AppState>>) -> (u64
 #[tauri::command]
 pub fn get_recent_active_windows(
     limit: Option<u32>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<ActiveWindowRow> {
     let n = limit.unwrap_or(50).min(500);
     state
@@ -920,7 +920,7 @@ pub fn get_recent_active_windows(
 #[tauri::command]
 pub fn get_recent_input_activity(
     limit: Option<u32>,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<InputActivityRow> {
     let n = limit.unwrap_or(50).min(500);
     state
@@ -943,7 +943,7 @@ pub fn get_recent_input_activity(
 pub fn get_input_buckets(
     from_ts: Option<u64>,
     to_ts:   Option<u64>,
-    state:   tauri::State<'_, Mutex<AppState>>,
+    state:   tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<InputBucketRow> {
     let now   = crate::unix_secs();
     let end   = to_ts.unwrap_or(now);
@@ -983,7 +983,7 @@ pub fn list_focus_modes() -> Vec<crate::dnd::FocusModeOption> {
 pub fn test_dnd(
     enabled: bool,
     app:     AppHandle,
-    state:   tauri::State<'_, Mutex<AppState>>,
+    state:   tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> bool {
     // Guard: only allow disabling, never enabling.
     if enabled { return false; }
@@ -1000,13 +1000,13 @@ pub fn test_dnd(
 
 /// Return whether DND is currently active (i.e. the app has enabled it).
 #[tauri::command]
-pub fn get_dnd_active(state: tauri::State<'_, Mutex<AppState>>) -> bool {
+pub fn get_dnd_active(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
     state.lock_or_recover().dnd_active
 }
 
 /// Return the current Do Not Disturb automation configuration.
 #[tauri::command]
-pub fn get_dnd_config(state: tauri::State<'_, Mutex<AppState>>) -> DoNotDisturbConfig {
+pub fn get_dnd_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DoNotDisturbConfig {
     state.lock_or_recover().dnd_config.clone()
 }
 
@@ -1018,7 +1018,7 @@ pub fn get_dnd_config(state: tauri::State<'_, Mutex<AppState>>) -> DoNotDisturbC
 pub fn set_dnd_config(
     config: DoNotDisturbConfig,
     app:    AppHandle,
-    state:  tauri::State<'_, Mutex<AppState>>,
+    state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let was_active = {
         let mut s = state.lock_or_recover();
@@ -1097,7 +1097,7 @@ pub struct DndStatus {
 
 /// Return a snapshot of the DND automation pipeline state.
 #[tauri::command]
-pub fn get_dnd_status(state: tauri::State<'_, Mutex<AppState>>) -> DndStatus {
+pub fn get_dnd_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DndStatus {
     let s                    = state.lock_or_recover();
     let enabled              = s.dnd_config.enabled;
     let threshold            = s.dnd_config.focus_threshold as f64;
@@ -1161,7 +1161,7 @@ pub async fn pick_ref_wav_file() -> Option<String> {
 /// next app restart.
 #[tauri::command]
 pub fn get_llm_config(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> crate::settings::LlmConfig {
     state.lock_or_recover().llm_config.clone()
 }
@@ -1174,7 +1174,7 @@ pub fn get_llm_config(
 pub fn set_llm_config(
     config: crate::settings::LlmConfig,
     app:    AppHandle,
-    state:  tauri::State<'_, Mutex<AppState>>,
+    state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     #[cfg(feature = "llm")]
     let cell = {
@@ -1246,7 +1246,7 @@ pub struct HookDistanceSuggestion {
 #[tauri::command]
 pub fn suggest_hook_distances(
     keywords: Vec<String>,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> HookDistanceSuggestion {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
 
@@ -1435,7 +1435,7 @@ fn sample_recent_eeg_embeddings(skill_dir: &std::path::Path, max: usize) -> Vec<
 pub fn get_hook_log(
     limit:  Option<i64>,
     offset: Option<i64>,
-    state:  tauri::State<'_, Mutex<AppState>>,
+    state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<crate::hooks_log::HookLogRow> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     let Some(log) = crate::hooks_log::HooksLog::open(&skill_dir) else {
@@ -1446,7 +1446,7 @@ pub fn get_hook_log(
 
 /// Return the total number of hook-fire events in the audit log.
 #[tauri::command]
-pub fn get_hook_log_count(state: tauri::State<'_, Mutex<AppState>>) -> i64 {
+pub fn get_hook_log_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> i64 {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
     crate::hooks_log::HooksLog::open(&skill_dir)
         .map(|l| l.count())

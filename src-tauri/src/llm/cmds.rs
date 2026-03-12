@@ -40,7 +40,7 @@ pub struct LlmDownloadItem {
 /// The frontend polls this every ~2 s while the LLM tab is visible.
 #[tauri::command]
 pub fn get_llm_catalog(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> LlmCatalog {
     let mut s = state.lock_or_recover();
     // Sync in-flight download progress into the catalog entries before
@@ -66,7 +66,7 @@ pub fn get_llm_catalog(
 
 #[tauri::command]
 pub fn get_llm_downloads(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<LlmDownloadItem> {
     let mut s = state.lock_or_recover();
 
@@ -115,7 +115,7 @@ pub fn get_llm_downloads(
 }
 
 /// Persist the catalog to disk (called after state changes).
-fn save_catalog(app: &AppHandle, state: &std::sync::MutexGuard<'_, AppState>) {
+fn save_catalog(app: &AppHandle, state: &AppState) {
     state.llm_catalog.save(&state.skill_dir);
     let _ = app; // suppress unused warning
 }
@@ -128,7 +128,7 @@ fn save_catalog(app: &AppHandle, state: &std::sync::MutexGuard<'_, AppState>) {
 pub fn set_llm_active_model(
     filename: String,
     app:      AppHandle,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
     s.llm_catalog.active_model = filename;
@@ -148,7 +148,7 @@ pub fn set_llm_active_model(
 pub fn set_llm_autoload_mmproj(
     enabled: bool,
     app:     AppHandle,
-    state:   tauri::State<'_, Mutex<AppState>>,
+    state:   tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
     s.llm_config.autoload_mmproj = enabled;
@@ -161,7 +161,7 @@ pub fn set_llm_autoload_mmproj(
 pub fn set_llm_active_mmproj(
     filename: String,
     app:      AppHandle,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
     if filename.is_empty() {
@@ -209,7 +209,7 @@ pub fn set_llm_active_mmproj(
 pub fn download_llm_model(
     filename: String,
     app:      AppHandle,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let (repo, _skill_dir, prog_arc, size_bytes) = {
         let mut s = state.lock_or_recover();
@@ -299,7 +299,7 @@ pub fn download_llm_model(
         let result = super::catalog::download_file(&repo, &filename2, &prog_arc, size_bytes);
 
         // After completion / failure, refresh the catalog entry.
-        if let Some(state_handle) = app2.try_state::<Mutex<AppState>>() {
+        if let Some(state_handle) = app2.try_state::<Mutex<Box<AppState>>>() {
             let mut s = state_handle.lock_or_recover();
             if let Some(entry) = s.llm_catalog.entries
                 .iter_mut()
@@ -357,7 +357,7 @@ pub fn download_llm_model(
 
 fn cancel_llm_download_inner(
     filename: String,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
     app:      Option<&AppHandle>,
 ) {
     let mut s = state.lock_or_recover();
@@ -395,7 +395,7 @@ fn cancel_llm_download_inner(
 #[tauri::command]
 pub fn cancel_llm_download(
     filename: String,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     cancel_llm_download_inner(filename, state, None);
 }
@@ -403,7 +403,7 @@ pub fn cancel_llm_download(
 #[tauri::command]
 pub fn pause_llm_download(
     filename: String,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
     if let Some(prog) = s.llm_downloads.get(&filename) {
@@ -423,7 +423,7 @@ pub fn pause_llm_download(
 pub fn resume_llm_download(
     filename: String,
     app:      AppHandle,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     {
         let mut s = state.lock_or_recover();
@@ -440,7 +440,7 @@ pub fn resume_llm_download(
 pub fn cancel_llm_download_with_app(
     filename: String,
     app:      &AppHandle,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     cancel_llm_download_inner(filename, state, Some(app));
 }
@@ -452,7 +452,7 @@ pub fn cancel_llm_download_with_app(
 pub fn delete_llm_model(
     filename: String,
     app:      AppHandle,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
     if let Some(entry) = s.llm_catalog.entries
@@ -515,7 +515,7 @@ pub async fn open_downloads_window(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn refresh_llm_catalog(
     app:   AppHandle,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
     s.llm_catalog.refresh_cache();
@@ -532,7 +532,7 @@ pub fn refresh_llm_catalog(
 
 /// Return all buffered LLM server log entries (up to 500 most recent).
 #[tauri::command]
-pub fn get_llm_logs(state: tauri::State<'_, Mutex<AppState>>) -> Vec<LlmLogEntry> {
+pub fn get_llm_logs(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<LlmLogEntry> {
     let s      = state.lock_or_recover();
     let log    = s.llm_logs.lock().unwrap();
     let result: Vec<LlmLogEntry> = log.iter().cloned().collect();
@@ -554,7 +554,7 @@ pub fn get_llm_logs(state: tauri::State<'_, Mutex<AppState>>) -> Vec<LlmLogEntry
 #[tauri::command]
 pub fn start_llm_server(
     app:   AppHandle,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<String, String> {
     use std::sync::atomic::Ordering;
 
@@ -627,7 +627,7 @@ pub fn start_llm_server(
 #[tauri::command]
 pub fn stop_llm_server(
     app:   AppHandle,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let (cell, log_buf, loading, start_error) = {
         let s = state.lock_or_recover();
@@ -678,7 +678,7 @@ pub struct LlmServerStatusResponse {
 
 #[tauri::command]
 pub fn get_llm_server_status(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> LlmServerStatusResponse {
     use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
@@ -712,7 +712,7 @@ pub struct ChatSessionResponse {
 /// Returns an empty response if the chat store is unavailable.
 #[tauri::command]
 pub fn get_last_chat_session(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> ChatSessionResponse {
     let mut s = state.lock_or_recover();
     let Some(store) = s.chat_store.as_mut() else {
@@ -727,7 +727,7 @@ pub fn get_last_chat_session(
 #[tauri::command]
 pub fn load_chat_session(
     id:    i64,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> ChatSessionResponse {
     let mut s = state.lock_or_recover();
     let Some(store) = s.chat_store.as_mut() else {
@@ -740,7 +740,7 @@ pub fn load_chat_session(
 /// Return all sessions (newest-first) for the sidebar.
 #[tauri::command]
 pub fn list_chat_sessions(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<super::chat_store::SessionSummary> {
     let mut s = state.lock_or_recover();
     let Some(store) = s.chat_store.as_mut() else { return vec![]; };
@@ -752,7 +752,7 @@ pub fn list_chat_sessions(
 pub fn rename_chat_session(
     id:    i64,
     title: String,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
     let Some(store) = s.chat_store.as_mut() else { return; };
@@ -763,7 +763,7 @@ pub fn rename_chat_session(
 #[tauri::command]
 pub fn delete_chat_session(
     id:    i64,
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let mut s = state.lock_or_recover();
     let Some(store) = s.chat_store.as_mut() else { return; };
@@ -778,7 +778,7 @@ pub fn save_chat_message(
     role:       String,
     content:    String,
     thinking:   Option<String>,
-    state:      tauri::State<'_, Mutex<AppState>>,
+    state:      tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> i64 {
     let mut s = state.lock_or_recover();
     let Some(store) = s.chat_store.as_mut() else { return 0; };
@@ -789,7 +789,7 @@ pub fn save_chat_message(
 /// Called when the user clicks "New Chat".
 #[tauri::command]
 pub fn new_chat_session(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> i64 {
     let mut s = state.lock_or_recover();
     let Some(store) = s.chat_store.as_mut() else { return 0; };
@@ -831,7 +831,7 @@ pub async fn chat_completions_ipc(
     messages: Vec<serde_json::Value>,
     params:   super::GenParams,
     channel:  tauri::ipc::Channel<ChatChunk>,
-    state:    tauri::State<'_, Mutex<AppState>>,
+    state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let cell = state.lock_or_recover().llm_state_cell.clone();
     let srv  = cell.lock().unwrap().clone()
@@ -887,7 +887,7 @@ pub async fn chat_completions_ipc(
 /// Safe to call even when no generation is in progress — it is a no-op if
 /// the server is stopped or idle.
 #[tauri::command]
-pub fn abort_llm_stream(state: tauri::State<'_, Mutex<AppState>>) {
+pub fn abort_llm_stream(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let cell = { let g = state.lock_or_recover(); g.llm_state_cell.clone() };
     let guard = cell.lock().unwrap();
     if let Some(srv) = guard.as_ref() {

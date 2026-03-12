@@ -41,7 +41,7 @@ struct RoundedBands {
 
 /// `hooks_status` — return all hooks with last-trigger metadata.
 fn hooks_status(app: &AppHandle) -> Result<Value, String> {
-    let st = app.state::<Mutex<AppState>>();
+    let st = app.state::<Mutex<Box<AppState>>>();
     let s = st.lock_or_recover();
     let runtime = s.hook_runtime.lock_or_recover();
     let statuses: Vec<crate::settings::HookStatus> = s.hooks
@@ -73,7 +73,7 @@ fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     };
 
     let skill_dir = {
-        let st = app.state::<Mutex<AppState>>();
+        let st = app.state::<Mutex<Box<AppState>>>();
         let dir = st.lock_or_recover().skill_dir.clone();
         dir
     };
@@ -287,7 +287,7 @@ fn hooks_log(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .max(0);
 
     let skill_dir = {
-        let st = app.state::<Mutex<AppState>>();
+        let st = app.state::<Mutex<Box<AppState>>>();
         let dir = st.lock_or_recover().skill_dir.clone();
         dir
     };
@@ -420,7 +420,7 @@ impl From<&LatestEpochMetrics> for RoundedScores {
 // ── status ────────────────────────────────────────────────────────────────────
 
 pub fn status(app: &AppHandle) -> Result<Value, String> {
-    let st = app.state::<Mutex<AppState>>();
+    let st = app.state::<Mutex<Box<AppState>>>();
     let guard = st.lock_or_recover();
 
     // ── Device / connection ──────────────────────────────────────────────────
@@ -656,7 +656,7 @@ pub fn label(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .trim()
         .to_owned();
 
-    let s = app.state::<Mutex<AppState>>();
+    let s = app.state::<Mutex<Box<AppState>>>();
     let guard = s.lock_or_recover();
     let now = unix_secs();
     match &guard.label_store {
@@ -731,7 +731,7 @@ pub fn search_labels(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     }
 
     let (skill_dir, model_code) = {
-        let state = app.state::<Mutex<AppState>>();
+        let state = app.state::<Mutex<Box<AppState>>>();
         let g = state.lock_or_recover();
         (g.skill_dir.clone(), g.text_embedding_model.clone())
     };
@@ -811,7 +811,7 @@ pub fn search(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let ef = msg.get("ef").and_then(|v| v.as_u64()).map(|v| v as usize);
 
     let skill_dir = {
-        let s = app.state::<Mutex<AppState>>();
+        let s = app.state::<Mutex<Box<AppState>>>();
         let dir = s.lock_or_recover().skill_dir.clone();
         dir
     };
@@ -858,7 +858,7 @@ pub fn session_metrics(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .ok_or("missing required field: \"end_utc\" (u64)")?;
     if end < start { return Err("\"end_utc\" must be >= \"start_utc\"".into()); }
 
-    let skill_dir = app.state::<Mutex<AppState>>().lock_or_recover().skill_dir.clone();
+    let skill_dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
     let mid = (start + end) / 2;
 
     let full   = crate::get_session_metrics_impl(&skill_dir, start, end);
@@ -915,7 +915,7 @@ pub fn compare(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     if a_end < a_start { return Err("\"a_end_utc\" must be >= \"a_start_utc\"".into()); }
     if b_end < b_start { return Err("\"b_end_utc\" must be >= \"b_start_utc\"".into()); }
 
-    let st = app.state::<Mutex<AppState>>();
+    let st = app.state::<Mutex<Box<AppState>>>();
     let skill_dir = st.lock_or_recover().skill_dir.clone();
 
     // ── Session metrics (all bands + derived scores + ratios + PPG) ──────────
@@ -987,7 +987,7 @@ pub fn compare(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 /// List all embedding sessions (contiguous recording ranges from the
 /// daily `eeg.sqlite` databases).  No parameters.
 pub fn sessions(app: &AppHandle) -> Result<Value, String> {
-    let st = app.state::<Mutex<AppState>>();
+    let st = app.state::<Mutex<Box<AppState>>>();
     // We can't call the #[tauri::command] directly, but we can replicate
     // the same logic.  Use the state's skill_dir.
     let skill_dir = st.lock_or_recover().skill_dir.clone();
@@ -1071,7 +1071,7 @@ pub fn sleep(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .ok_or("missing required field: \"end_utc\" (u64)")?;
     if end < start { return Err("\"end_utc\" must be >= \"start_utc\"".into()); }
 
-    let st = app.state::<Mutex<AppState>>();
+    let st = app.state::<Mutex<Box<AppState>>>();
     let skill_dir = st.lock_or_recover().skill_dir.clone();
 
     let result = crate::get_sleep_stages_impl(&skill_dir, start, end);
@@ -1105,7 +1105,7 @@ pub fn umap(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     if a_end < a_start { return Err("\"a_end_utc\" must be >= \"a_start_utc\"".into()); }
     if b_end < b_start { return Err("\"b_end_utc\" must be >= \"b_start_utc\"".into()); }
 
-    let st = app.state::<Mutex<AppState>>();
+    let st = app.state::<Mutex<Box<AppState>>>();
     let skill_dir = st.lock_or_recover().skill_dir.clone();
 
     let queue = app.state::<std::sync::Arc<crate::job_queue::JobQueue>>();
@@ -1520,7 +1520,7 @@ pub fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, String>
     let reach_seconds = reach_minutes * 60;
 
     let (skill_dir, _model_code) = {
-        let state = app.state::<Mutex<AppState>>();
+        let state = app.state::<Mutex<Box<AppState>>>();
         let g = state.lock_or_recover();
         (g.skill_dir.clone(), g.text_embedding_model.clone())
     };
@@ -1743,7 +1743,7 @@ pub fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, String>
 /// | `dnd_active` | Whether the app has currently activated DND |
 /// | `os_active` | Real OS Focus state (`null` on non-macOS) |
 pub fn dnd_status(app: &AppHandle) -> Result<Value, String> {
-    let s = app.state::<Mutex<AppState>>();
+    let s = app.state::<Mutex<Box<AppState>>>();
     let guard = s.lock_or_recover();
     let enabled       = guard.dnd_config.enabled;
     let threshold     = guard.dnd_config.focus_threshold;
@@ -1795,14 +1795,14 @@ pub fn dnd_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .ok_or_else(|| "missing required field: \"enabled\" (boolean)".to_string())?;
 
     let mode_id = {
-        let s = app.state::<Mutex<AppState>>();
+        let s = app.state::<Mutex<Box<AppState>>>();
         let g = s.lock_or_recover();
         g.dnd_config.focus_mode_identifier.clone()
     };
 
     let ok = crate::dnd::set_dnd(enabled, &mode_id);
     if ok {
-        let s = app.state::<Mutex<AppState>>();
+        let s = app.state::<Mutex<Box<AppState>>>();
         let mut guard = s.lock_or_recover();
         guard.dnd_active = enabled;
         if !enabled {
@@ -1871,7 +1871,7 @@ pub async fn say(_app: &AppHandle, msg: &Value) -> Result<Value, String> {
 #[cfg(feature = "llm")]
 fn llm_status(app: &AppHandle) -> Result<Value, String> {
     use std::sync::atomic::Ordering;
-    let state = app.state::<Mutex<AppState>>();
+    let state = app.state::<Mutex<Box<AppState>>>();
     let s = state.lock_or_recover();
     let (status, model_name) = crate::llm::cell_status(&s.llm_state_cell);
     let (n_ctx, supports_vision) = s.llm_state_cell.lock().unwrap()
@@ -1901,7 +1901,7 @@ fn llm_status(app: &AppHandle) -> Result<Value, String> {
 #[cfg(feature = "llm")]
 async fn llm_start(app: &AppHandle) -> Result<Value, String> {
     let (mut config, catalog, log_buf, cell, skill_dir) = {
-        let st = app.state::<Mutex<AppState>>();
+        let st = app.state::<Mutex<Box<AppState>>>();
         let s = st.lock_or_recover();
         (
             s.llm_config.clone(),
@@ -1949,7 +1949,7 @@ async fn llm_start(app: &AppHandle) -> Result<Value, String> {
 #[cfg(feature = "llm")]
 fn llm_stop(app: &AppHandle) -> Result<Value, String> {
     let (cell, log_buf) = {
-        let st = app.state::<Mutex<AppState>>();
+        let st = app.state::<Mutex<Box<AppState>>>();
         let s = st.lock_or_recover();
         (s.llm_state_cell.clone(), s.llm_logs.clone())
     };
@@ -1976,7 +1976,7 @@ fn llm_stop(app: &AppHandle) -> Result<Value, String> {
 /// ```
 #[cfg(feature = "llm")]
 fn llm_catalog(app: &AppHandle) -> Result<Value, String> {
-    let state = app.state::<Mutex<AppState>>();
+    let state = app.state::<Mutex<Box<AppState>>>();
     let mut s = state.lock_or_recover();
     // Sync in-flight downloads into the catalog so callers see live progress.
     let downloads = s.llm_downloads.clone();
@@ -2012,7 +2012,7 @@ fn llm_download(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     crate::llm::cmds::download_llm_model(
         filename.clone(),
         app.clone(),
-        app.state::<Mutex<AppState>>(),
+        app.state::<Mutex<Box<AppState>>>(),
     );
     Ok(serde_json::json!({ "result": "queued", "filename": filename }))
 }
@@ -2029,7 +2029,7 @@ fn llm_cancel_download(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .as_str()
         .ok_or_else(|| "llm_cancel_download: 'filename' field required".to_string())?
         .to_string();
-    crate::llm::cmds::cancel_llm_download_with_app(filename.clone(), app, app.state::<Mutex<AppState>>());
+    crate::llm::cmds::cancel_llm_download_with_app(filename.clone(), app, app.state::<Mutex<Box<AppState>>>());
     Ok(serde_json::json!({ "filename": filename }))
 }
 
@@ -2048,7 +2048,7 @@ fn llm_delete(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     crate::llm::cmds::delete_llm_model(
         filename.clone(),
         app.clone(),
-        app.state::<Mutex<AppState>>(),
+        app.state::<Mutex<Box<AppState>>>(),
     );
     Ok(serde_json::json!({ "filename": filename }))
 }
@@ -2062,7 +2062,7 @@ fn llm_delete(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 /// ```
 #[cfg(feature = "llm")]
 fn llm_logs(app: &AppHandle) -> Result<Value, String> {
-    let state = app.state::<Mutex<AppState>>();
+    let state = app.state::<Mutex<Box<AppState>>>();
     let s = state.lock_or_recover();
     let log = s.llm_logs.lock().unwrap();
     let logs: Vec<&crate::llm::LlmLogEntry> = log.iter().collect();

@@ -11,7 +11,7 @@
 //!
 //! The six DSP objects below are **only ever mutated by the active session
 //! task** (Muse BLE or OpenBCI).  In the old design they lived inside
-//! `AppState` behind the shared `Mutex<AppState>`, which meant every
+//! `AppState` behind the shared `Mutex<Box<AppState>>`, which meant every
 //! `filter.push()` / FFT / band-power calculation held the lock while
 //! running.  Any Tauri UI command that needed `AppState` during that window
 //! (e.g. `get_status`, `get_dnd_status`, `get_latest_bands`) would block,
@@ -71,7 +71,7 @@ impl SessionDsp {
     pub(crate) fn new(app: &AppHandle) -> Self {
         let (filter_cfg, overlap_secs, hooks, text_embedding_model, skill_dir, model_config,
              model_status, download_cancel, encoder_reload_requested, logger, hook_runtime) = {
-            let r = app.state::<Mutex<AppState>>();
+            let r = app.state::<Mutex<Box<AppState>>>();
             let g = r.lock_or_recover();
             (
                 g.status.filter_config,
@@ -132,7 +132,7 @@ impl SessionDsp {
     /// local DSP objects.  No-ops when nothing changed — cheap.
     pub(crate) fn sync_config(&mut self, app: &AppHandle) {
         let (filter_cfg, overlap_secs, hooks) = {
-            let r = app.state::<Mutex<AppState>>();
+            let r = app.state::<Mutex<Box<AppState>>>();
             let g = r.lock_or_recover();
             (g.status.filter_config, g.status.embedding_overlap_secs, g.hooks.clone())
         };

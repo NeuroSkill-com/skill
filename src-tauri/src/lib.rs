@@ -717,7 +717,7 @@ pub fn save_settings_handle(app: &AppHandle) { save_settings(app); }
 
 /// Persist all user-configurable state to `~/.skill/settings.json`.
 pub(crate) fn save_settings(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<AppState>>();
+    let s_ref = app.state::<Mutex<Box<AppState>>>();
     let s = s_ref.lock_or_recover();
     let data = UserSettings {
         paired:                 s.status.paired_devices.clone(),
@@ -772,7 +772,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
 
 pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
     let now = unix_secs();
-    let s_ref = app.state::<Mutex<AppState>>();
+    let s_ref = app.state::<Mutex<Box<AppState>>>();
     let mut s = s_ref.lock_or_recover();
     if let Some(d) = s.status.paired_devices.iter_mut().find(|d| d.id == id) {
         d.last_seen = now; d.name = name.to_owned();
@@ -802,7 +802,7 @@ pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
 
 pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16) {
     let now = unix_secs();
-    let s_ref = app.state::<Mutex<AppState>>();
+    let s_ref = app.state::<Mutex<Box<AppState>>>();
     let mut s = s_ref.lock_or_recover();
     let is_paired    = s.status.paired_devices.iter().any(|d| d.id == id);
     let is_preferred = s.preferred_id.as_deref() == Some(id);
@@ -859,14 +859,14 @@ pub(crate) fn yyyymmdd_utc() -> String {
 // ── Status / device emitters ──────────────────────────────────────────────────
 
 pub(crate) fn emit_status(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<AppState>>();
+    let s_ref = app.state::<Mutex<Box<AppState>>>();
     let st = { let g = s_ref.lock_or_recover(); g.status.clone() };
     let _ = app.emit("muse-status", &st);
     app.state::<WsBroadcaster>().send("muse-status", &st);
 }
 
 pub(crate) fn emit_devices(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<AppState>>();
+    let s_ref = app.state::<Mutex<Box<AppState>>>();
     let d = { let g = s_ref.lock_or_recover(); g.discovered.clone() };
     let _ = app.emit("devices-updated", &d);
 }
@@ -909,14 +909,14 @@ fn retry_delay_secs(attempt: u32) -> u32 {
 
 pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: bool) {
     let (retry, attempt) = {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let s = r.lock_or_recover();
         (s.pending_reconnect && !is_bt, s.retry_attempt)
     };
     let delay = if retry { retry_delay_secs(attempt) } else { 0 };
 
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         if is_bt {
             s.pending_reconnect = false;
@@ -963,16 +963,16 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
                 attempt + 1, delay);
             for remaining in (1..=delay).rev() {
                 {
-                    let r = app.state::<Mutex<AppState>>();
+                    let r = app.state::<Mutex<Box<AppState>>>();
                     if !r.lock_or_recover().pending_reconnect { return; }
                 }
-                app.state::<Mutex<AppState>>().lock_or_recover()
+                app.state::<Mutex<Box<AppState>>>().lock_or_recover()
                     .status.retry_countdown_secs = remaining;
                 emit_status(&app);
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
             let preferred = {
-                let r = app.state::<Mutex<AppState>>();
+                let r = app.state::<Mutex<Box<AppState>>>();
                 let mut s = r.lock_or_recover();
                 if !s.pending_reconnect { return; }
                 s.retry_attempt += 1;
@@ -991,7 +991,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
 
 pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
         if s.stream.is_some() { return; }
         s.pending_reconnect = true;
@@ -999,14 +999,14 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     let target = preferred_id.or_else(|| {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let s = r.lock_or_recover();
         s.preferred_id.clone()
             .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
     });
 
     let target_name: Option<String> = target.as_ref().and_then(|id| {
-        let r = app.state::<Mutex<AppState>>();
+        let r = app.state::<Mutex<Box<AppState>>>();
         let s = r.lock_or_recover();
         s.status.paired_devices.iter()
             .find(|d| &d.id == id).map(|d| d.name.clone())
@@ -1017,7 +1017,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
         n.starts_with("ganglion") || n.starts_with("simblee")
     }).unwrap_or(false);
 
-    app.state::<Mutex<AppState>>().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
+    app.state::<Mutex<Box<AppState>>>().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
     let csv  = new_csv_path(app);
     let app2 = app.clone();
 
@@ -1033,7 +1033,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
 }
 
 pub(crate) fn cancel_session(app: &AppHandle) {
-    let tx = app.state::<Mutex<AppState>>().lock_or_recover().stream.take().map(|sh| sh.cancel_tx);
+    let tx = app.state::<Mutex<Box<AppState>>>().lock_or_recover().stream.take().map(|sh| sh.cancel_tx);
     if let Some(tx) = tx { let _ = tx.send(()); }
 }
 
@@ -1041,7 +1041,7 @@ pub(crate) fn cancel_session(app: &AppHandle) {
 
 fn confirm_and_quit(app: AppHandle) {
     let lang = {
-        let s = app.state::<Mutex<AppState>>();
+        let s = app.state::<Mutex<Box<AppState>>>();
         let g = s.lock_or_recover();
         g.language.clone()
     };
@@ -1133,7 +1133,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
-        .manage(Mutex::new(AppState::default()))
+        .manage(Mutex::new(Box::new(AppState::default())))
         .manage(job_queue::JobQueue::new())
         .manage(std::sync::Arc::new(EmbedderState(std::sync::Mutex::new(None))))
         .manage(std::sync::Arc::new(label_index::LabelIndexState::new()))
@@ -1173,7 +1173,7 @@ pub fn run() {
 
             let app_name = app.package_info().name.to_lowercase();
             let ws_cfg = {
-                let dir = app.state::<Mutex<AppState>>().lock_or_recover().skill_dir.clone();
+                let dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
                 let s   = load_settings(&dir);
                 (s.ws_host, s.ws_port)
             };
@@ -1183,9 +1183,9 @@ pub fn run() {
             #[cfg(feature = "llm")]
             {
                 let (llm_cfg, catalog, log_buf, cell, skill_dir) = {
-                    let dir = app.state::<Mutex<AppState>>().lock_or_recover().skill_dir.clone();
+                    let dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
                     let llm_cfg = load_settings(&dir).llm;
-                    let guard = app.state::<Mutex<AppState>>();
+                    let guard = app.state::<Mutex<Box<AppState>>>();
                     let s = guard.lock().unwrap();
                     (llm_cfg, s.llm_catalog.clone(), s.llm_logs.clone(), s.llm_state_cell.clone(), s.skill_dir.clone())
                 };
@@ -1209,7 +1209,7 @@ pub fn run() {
             // mounted; they return 503 when cell is None (server not running).
             #[cfg(feature = "llm")]
             {
-                let cell = app.state::<Mutex<AppState>>()
+                let cell = app.state::<Mutex<Box<AppState>>>()
                     .lock().unwrap().llm_state_cell.clone();
                 serve_handle.set_llm(cell);
             }
@@ -1218,20 +1218,20 @@ pub fn run() {
             app.manage(broadcaster);
 
             let logger_arc = {
-                let r = app.state::<Mutex<AppState>>();
+                let r = app.state::<Mutex<Box<AppState>>>();
                 let g = r.lock_or_recover();
                 g.logger.clone()
             };
             app.manage(logger_arc);
 
             let skill_dir = {
-                let r = app.state::<Mutex<AppState>>();
+                let r = app.state::<Mutex<Box<AppState>>>();
                 let g = r.lock_or_recover();
                 g.skill_dir.clone()
             };
             let data = load_settings(&skill_dir);
             {
-                let r = app.state::<Mutex<AppState>>();
+                let r = app.state::<Mutex<Box<AppState>>>();
                 let mut s = r.lock_or_recover();
                 s.status.paired_devices         = data.paired.clone();
                 s.preferred_id                  = data.preferred_id.clone();
@@ -1302,7 +1302,7 @@ pub fn run() {
 
             {
                 let model_code = {
-                    let r = app.state::<Mutex<AppState>>();
+                    let r = app.state::<Mutex<Box<AppState>>>();
                     let g = r.lock_or_recover();
                     g.text_embedding_model.clone()
                 };
@@ -1332,12 +1332,12 @@ pub fn run() {
             // session begins.
             {
                 let model_status = {
-                    let r = app.state::<Mutex<AppState>>();
+                    let r = app.state::<Mutex<Box<AppState>>>();
                     let g = r.lock_or_recover();
                     g.model_status.clone()
                 };
                 let hf_repo = {
-                    let r = app.state::<Mutex<AppState>>();
+                    let r = app.state::<Mutex<Box<AppState>>>();
                     let g = r.lock_or_recover();
                     g.model_config.hf_repo.clone()
                 };
@@ -1426,7 +1426,7 @@ pub fn run() {
             });
 
             let init_status = {
-                let r = app.state::<Mutex<AppState>>();
+                let r = app.state::<Mutex<Box<AppState>>>();
                 let g = r.lock_or_recover();
                 g.status.clone()
             };
@@ -1500,7 +1500,7 @@ pub fn run() {
                         show_and_recover_main(app);
                     } else if id == "disconnect" || id == "cancel" {
                         {
-                            let r = app.state::<Mutex<AppState>>();
+                            let r = app.state::<Mutex<Box<AppState>>>();
                             let mut s = r.lock_or_recover();
                             s.pending_reconnect = false;
                             s.retry_attempt = 0;
@@ -1587,7 +1587,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(900)).await;
                 let preferred = {
-                    let r = app_auto.state::<Mutex<AppState>>();
+                    let r = app_auto.state::<Mutex<Box<AppState>>>();
                     let mut s = r.lock_or_recover();
                     let pref = s.preferred_id.clone()
                         .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()));
@@ -1601,7 +1601,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(1200)).await;
                 let auto_start_id: Option<String> = {
-                    let r = app_cal.state::<Mutex<AppState>>();
+                    let r = app_cal.state::<Mutex<Box<AppState>>>();
                     let s = r.lock_or_recover();
                     let active_id = &s.active_calibration_id;
                     s.calibration_profiles.iter()
@@ -1618,7 +1618,7 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(Duration::from_millis(600)).await;
                 let done = {
-                    let r = app_onboard.state::<Mutex<AppState>>();
+                    let r = app_onboard.state::<Mutex<Box<AppState>>>();
                     let g = r.lock_or_recover();
                     g.onboarding_complete
                 };
@@ -1627,7 +1627,7 @@ pub fn run() {
 
             {
                 let (act_store, kbd_ts, mouse_ts, input_flag, kbd_cnt, mouse_cnt) = {
-                    let state_ref = app.state::<Mutex<AppState>>();
+                    let state_ref = app.state::<Mutex<Box<AppState>>>();
                     let s = state_ref.lock_or_recover();
                     (
                         s.activity_store.clone(),
@@ -1717,7 +1717,7 @@ pub fn run() {
 
                     // ── Sleep after check ─────────────────────────────────────
                     let interval_secs = {
-                        let r = app_upd.state::<Mutex<AppState>>();
+                        let r = app_upd.state::<Mutex<Box<AppState>>>();
                         let g = r.lock_or_recover();
                         g.update_check_interval_secs
                     };
@@ -1751,7 +1751,7 @@ pub fn run() {
                         let os_now = crate::dnd::query_os_active();
 
                         let (prev, app_active) = {
-                            let r = app_dnd.state::<Mutex<AppState>>();
+                            let r = app_dnd.state::<Mutex<Box<AppState>>>();
                             let g = r.lock_or_recover();
                             (g.dnd_os_active, g.dnd_active)
                         };
@@ -1760,7 +1760,7 @@ pub fn run() {
                         if os_now != prev {
                             // Update cache.
                             {
-                                let r = app_dnd.state::<Mutex<AppState>>();
+                                let r = app_dnd.state::<Mutex<Box<AppState>>>();
                                 r.lock_or_recover().dnd_os_active = os_now;
                             }
 
@@ -1779,7 +1779,7 @@ pub fn run() {
                                      app believed it was active — reconciling"
                                 );
                                 {
-                                    let r = app_dnd.state::<Mutex<AppState>>();
+                                    let r = app_dnd.state::<Mutex<Box<AppState>>>();
                                     let mut g = r.lock_or_recover();
                                     g.dnd_active      = false;
                                     g.dnd_below_ticks = 0;
@@ -2027,7 +2027,7 @@ pub fn run() {
                     // resources cleanly.
                     #[cfg(feature = "llm")]
                     {
-                        let cell = app.state::<Mutex<AppState>>()
+                        let cell = app.state::<Mutex<Box<AppState>>>()
                             .lock().unwrap()
                             .llm_state_cell.clone();
                         llm::shutdown_cell(&cell);
