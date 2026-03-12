@@ -364,12 +364,11 @@ jobs:
 
       # ── Sign .app + create DMG (background, README, CHANGELOG, LICENSE) ─────
       #
-      # Uses the shared scripts/create-macos-dmg.sh which signs the .app,
-      # generates a @2x background image, stages docs, configures Finder
-      # layout, creates a compressed DMG, signs it, and notarizes with Apple.
-      # The .app is notarized + stapled via the DMG submission.
-      - name: Install Pillow (for DMG background image)
-        run: pip3 install --quiet Pillow
+      # Uses sindresorhus/create-dmg via scripts/create-macos-dmg.sh which
+      # signs .app, creates DMG with composed icon + Retina background + SLA,
+      # signs the DMG, and notarizes with Apple.
+      - name: Install create-dmg
+        run: npm install --global create-dmg
 
       - name: Sign .app + Create DMG
         env:
