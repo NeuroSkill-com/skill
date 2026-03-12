@@ -15,6 +15,11 @@ All notable changes to NeuroSkill™ are documented here.
 - **Extract `setup_app()` / `setup_background_tasks()`**: moved the ~650-line `.setup()` closure body and the updater/DND poll loops into separate `#[inline(never)]` top-level functions so LLVM cannot merge their stack frames with the already-huge `run()` frame produced by `generate_handler!` with ~150 commands.
 - **Dynamic stack growth via `stacker`**: added `stacker = "0.1"` dependency and wrapped the `skill_lib::run()` call in `main()` with `stacker::maybe_grow(32 MiB, 64 MiB, ...)`.  This dynamically extends the main-thread stack using `mmap` + inline-asm stack-pointer swap (via `psm`) without changing the thread identity, which is required on macOS where Cocoa/AppKit mandates the event loop runs on the original main thread.  Linker flags (`-Wl,-stack_size`) were unreliable because macOS ld64 rejects them on dylibs and Tauri's mixed `crate-type = ["staticlib", "cdylib", "rlib"]` build triggers both lib and bin linking.
 
+### Build / Tooling
+
+- **macOS `.app` manual assembly fallback**: when the Tauri CLI bundler process itself stack-overflows (exit 134 SIGABRT or 139 SIGSEGV) during the `--bundles app` phase — which is a Tauri CLI issue, not the app binary — `scripts/tauri-build.js` now detects the crash, verifies the release binary was already built, and assembles the `.app` bundle manually using `ditto`, `codesign --force --deep --sign -`, the project's `Info.plist`, icons, entitlements, and resources from `tauri.conf.json`.  This makes `npm run tauri:build:mac -- --bundles app` reliable even when the Tauri CLI has stack issues.
+- **Standalone macOS `.app` assembler**: added `scripts/assemble-macos-app.sh` that builds the `.app` directory structure from a pre-built release binary without invoking the Tauri CLI bundler at all.  New npm script `npm run tauri:build:mac:app` compiles with `--no-bundle` then runs the assembler.  Copies binary, merges `Info.plist` with required `CFBundle*` keys, copies icons/resources via `ditto`, and ad-hoc codesigns.
+
 ## [0.0.27]
 
 ### Bug Fixes

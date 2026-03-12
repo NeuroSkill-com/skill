@@ -707,13 +707,161 @@ const canRetryBundlesSequentially =
   bundleArg &&
   bundleTargets.length > 1;
 
+// ── macOS .app assembly fallback ───────────────────────────────────────────
+// When the Tauri CLI bundler stack-overflows (exit 134 / SIGABRT) on macOS,
+// assemble the .app bundle manually from the already-built release binary,
+// Info.plist, icons, entitlements, and resources.
+function assembleMacOsApp() {
+  const triple = explicitTarget || "aarch64-apple-darwin";
+  const binaryPath = resolve(root, "src-tauri/target", triple, "release/skill");
+  if (!existsSync(binaryPath)) {
+    console.error("→ macOS .app assembly: release binary not found at", binaryPath);
+    return false;
+  }
+
+  // Read product name and bundle config from tauri.conf.json
+  const tauriConf = JSON.parse(
+    readFileSync(resolve(root, "src-tauri/tauri.conf.json"), "utf-8")
+  );
+  const productName = tauriConf.productName || "NeuroSkill™";
+  const bundleId = tauriConf.identifier || "com.neuroskill.skill";
+  const version = tauriConf.version || "0.0.0";
+  const resources = tauriConf.bundle?.resources || {};
+  const macConf = tauriConf.bundle?.macOS || {};
+
+  const bundleDir = resolve(root, "src-tauri/target", triple, "release/bundle/macos");
+  const appDir = resolve(bundleDir, `${productName}.app`);
+  const contentsDir = resolve(appDir, "Contents");
+  const macOSDir = resolve(contentsDir, "MacOS");
+  const resDir = resolve(contentsDir, "Resources");
+
+  // Clean and create structure
+  execSync(`rm -rf ${JSON.stringify(appDir)}`, { cwd: root });
+  for (const d of [macOSDir, resDir]) {
+    execSync(`mkdir -p ${JSON.stringify(d)}`, { cwd: root });
+  }
+
+  // Copy binary
+  execSync(`cp ${JSON.stringify(binaryPath)} ${JSON.stringify(resolve(macOSDir, productName))}`, { cwd: root });
+  execSync(`chmod +x ${JSON.stringify(resolve(macOSDir, productName))}`, { cwd: root });
+
+  // Copy Info.plist (prefer custom, then generate minimal)
+  const infoPlistSrc = macConf.infoPlist
+    ? resolve(root, "src-tauri", macConf.infoPlist)
+    : null;
+  if (infoPlistSrc && existsSync(infoPlistSrc)) {
+    // Read the custom plist and inject required keys if missing
+    let plistContent = readFileSync(infoPlistSrc, "utf-8");
+    // Inject CFBundle keys before closing </dict> if not present
+    const injections = [
+      [`CFBundleExecutable`, `<key>CFBundleExecutable</key>\n  <string>${productName}</string>`],
+      [`CFBundleIdentifier`, `<key>CFBundleIdentifier</key>\n  <string>${bundleId}</string>`],
+      [`CFBundleVersion`, `<key>CFBundleVersion</key>\n  <string>${version}</string>`],
+      [`CFBundleShortVersionString`, `<key>CFBundleShortVersionString</key>\n  <string>${version}</string>`],
+      [`CFBundlePackageType`, `<key>CFBundlePackageType</key>\n  <string>APPL</string>`],
+    ];
+    for (const [key, xml] of injections) {
+      if (!plistContent.includes(key)) {
+        plistContent = plistContent.replace("</dict>", `  ${xml}\n</dict>`);
+      }
+    }
+    writeFileSync(resolve(contentsDir, "Info.plist"), plistContent);
+  } else {
+    // Generate minimal Info.plist
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>${productName}</string>
+  <key>CFBundleIdentifier</key>
+  <string>${bundleId}</string>
+  <key>CFBundleVersion</key>
+  <string>${version}</string>
+  <key>CFBundleShortVersionString</key>
+  <string>${version}</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+</dict>
+</plist>`;
+    writeFileSync(resolve(contentsDir, "Info.plist"), plist);
+  }
+
+  // Copy icon
+  const icons = tauriConf.bundle?.icon || [];
+  const icns = icons.find((i) => i.endsWith(".icns"));
+  if (icns) {
+    const icnsSrc = resolve(root, "src-tauri", icns);
+    if (existsSync(icnsSrc)) {
+      execSync(`cp ${JSON.stringify(icnsSrc)} ${JSON.stringify(resolve(resDir, "icon.icns"))}`, { cwd: root });
+    }
+  }
+
+  // Copy resources (e.g. espeak-ng-data, neutts-samples)
+  for (const [src, dst] of Object.entries(resources)) {
+    const srcPath = resolve(root, "src-tauri", src);
+    const dstPath = resolve(resDir, dst);
+    if (existsSync(srcPath)) {
+      execSync(`mkdir -p ${JSON.stringify(dirname(dstPath))}`, { cwd: root });
+      execSync(`ditto ${JSON.stringify(srcPath)} ${JSON.stringify(dstPath)}`, { cwd: root });
+    } else {
+      console.warn(`  ⚠ resource not found: ${srcPath}`);
+    }
+  }
+
+  // Copy entitlements (for ad-hoc signing)
+  const entitlements = macConf.entitlements
+    ? resolve(root, "src-tauri", macConf.entitlements)
+    : null;
+
+  // Ad-hoc codesign
+  try {
+    const signArgs = entitlements && existsSync(entitlements)
+      ? `--entitlements ${JSON.stringify(entitlements)}`
+      : "";
+    execSync(
+      `codesign --force --deep --sign - ${signArgs} ${JSON.stringify(appDir)}`,
+      { cwd: root, stdio: "inherit" }
+    );
+  } catch (e) {
+    console.warn("  ⚠ codesign failed (app may not launch on Gatekeeper-enabled systems):", e.message);
+  }
+
+  console.log(`✓ macOS .app assembled at: ${appDir}`);
+  return true;
+}
+
 try {
   runTauriWithArgs(finalArgs);
 } catch (error) {
   const hasSegfaultExitCode = Number(error?.status) === 139;
+  const hasCrashExitCode = Number(error?.status) === 134; // SIGABRT (stack overflow)
   const baseArgs = bundleArg
     ? removeBundleArg(finalArgs, bundleArg)
     : [...finalArgs];
+
+  // ── macOS: Tauri CLI bundler stack-overflow recovery ────────────────────
+  // The Tauri CLI itself (not our app) can stack-overflow during the
+  // .app bundling phase.  When this happens the release binary is already
+  // built.  Fall back to manual .app assembly.
+  if (isMac && (hasCrashExitCode || hasSegfaultExitCode) && subcommand === "build") {
+    const hasBinary = hasBuiltReleaseBinary(explicitTarget);
+    if (hasBinary) {
+      console.warn(
+        `→ macOS: Tauri CLI crashed (exit ${error.status}) during bundling; ` +
+        "release binary exists — assembling .app manually"
+      );
+      // First, try compile-only to ensure binary is ready (may be a no-op)
+      try {
+        runTauriWithArgs([...removeBundleArg(finalArgs, bundleArg), "--no-bundle"]);
+      } catch (_) { /* binary already exists, ignore */ }
+
+      if (assembleMacOsApp()) {
+        process.exit(0);
+      }
+      console.error("→ macOS: manual .app assembly also failed");
+    }
+  }
 
   if (hasSingleBundleTarget && hasSegfaultExitCode) {
     const target = bundleTargets[0];
