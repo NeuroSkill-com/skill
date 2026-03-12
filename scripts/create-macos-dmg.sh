@@ -180,7 +180,6 @@ const spec = {
     size: { width: 660, height: 520 }
   },
   'icon-size': 80,
-  'text-size': 12,
   contents: [
     { x: 180, y: 190, type: 'file', path: '${APP_DIR}' },
     { x: 480, y: 190, type: 'link', path: '/Applications' },
