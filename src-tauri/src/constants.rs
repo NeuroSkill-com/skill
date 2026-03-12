@@ -269,6 +269,9 @@ pub const SQLITE_FILE: &str = "eeg.sqlite";
 /// Activity tracking database — active windows + input-activity samples.
 pub const ACTIVITY_FILE: &str = "activity.sqlite";
 
+/// Hooks audit-log database — persists every hook trigger with full context.
+pub const HOOKS_LOG_FILE: &str = "hooks.sqlite";
+
 // ── WebSocket server ──────────────────────────────────────────────────────────
 
 /// Capacity of the `tokio::sync::broadcast` channel used to fan messages out

@@ -37,13 +37,14 @@
 //! | `ppg_red`         | REAL    | mean PPG red ADC value (nullable) |
 
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     path::{Path, PathBuf},
     sync::{mpsc, Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::skill_log::SkillLogger;
+use crate::settings::{HookLastTrigger, HookRule};
 
 use crate::MutexExt;
 use crate::{
@@ -774,9 +775,16 @@ pub struct EegAccumulator {
     /// Shared reference to the persistent cross-day global HNSW index.
     /// `None` inside the Option while the startup build is still running.
     global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
+    hooks: Vec<HookRule>,
+    text_embedding_model: String,
+    label_idx: Arc<crate::label_index::LabelIndexState>,
+    ws_broadcaster: crate::ws_server::WsBroadcaster,
+    hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+    app: tauri::AppHandle,
 }
 
 impl EegAccumulator {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         skill_dir:        PathBuf,
         config:           EegModelConfig,
@@ -785,11 +793,19 @@ impl EegAccumulator {
         reload_requested: Arc<std::sync::atomic::AtomicBool>,
         logger:           Arc<SkillLogger>,
         global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
+        hooks:            Vec<HookRule>,
+        text_embedding_model: String,
+        label_idx:        Arc<crate::label_index::LabelIndexState>,
+        ws_broadcaster:   crate::ws_server::WsBroadcaster,
+        hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+        app: tauri::AppHandle,
     ) -> Self {
         let tx = Self::spawn_worker(
             skill_dir.clone(), config.clone(),
             status.clone(), cancel.clone(), reload_requested.clone(),
             logger.clone(), global_index.clone(),
+            hooks.clone(), text_embedding_model.clone(), label_idx.clone(), ws_broadcaster.clone(),
+            hook_runtime.clone(), app.clone(),
         );
         Self {
             bufs:        std::array::from_fn(|_| VecDeque::new()),
@@ -810,12 +826,19 @@ impl EegAccumulator {
             cancel,
             reload_requested,
             global_index,
+            hooks,
+            text_embedding_model,
+            label_idx,
+            ws_broadcaster,
+            hook_runtime,
+            app,
         }
     }
 
     /// Spawn a fresh `eeg-embed` worker thread and return the sender half of
     /// its channel.  Called both at construction time and whenever `push()`
     /// detects that the previous worker exited (e.g. after a cubecl panic).
+    #[allow(clippy::too_many_arguments)]
     fn spawn_worker(
         skill_dir:        PathBuf,
         config:           EegModelConfig,
@@ -824,11 +847,21 @@ impl EegAccumulator {
         reload_requested: Arc<std::sync::atomic::AtomicBool>,
         logger:           Arc<SkillLogger>,
         global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
+        hooks:            Vec<HookRule>,
+        text_embedding_model: String,
+        label_idx:        Arc<crate::label_index::LabelIndexState>,
+        ws_broadcaster:   crate::ws_server::WsBroadcaster,
+        hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+        app: tauri::AppHandle,
     ) -> mpsc::SyncSender<EpochMsg> {
         let (tx, rx) = mpsc::sync_channel::<EpochMsg>(4);
         std::thread::Builder::new()
             .name("eeg-embed".into())
-            .spawn(move || embed_worker(rx, skill_dir, config, status, cancel, reload_requested, logger, global_index))
+            .spawn(move || embed_worker(
+                rx, skill_dir, config, status, cancel, reload_requested, logger, global_index,
+                hooks, text_embedding_model, label_idx, ws_broadcaster,
+                hook_runtime, app,
+            ))
             .expect("[embed] failed to spawn background thread");
         tx
     }
@@ -845,6 +878,12 @@ impl EegAccumulator {
             self.reload_requested.clone(),
             self.logger.clone(),
             self.global_index.clone(),
+            self.hooks.clone(),
+            self.text_embedding_model.clone(),
+            self.label_idx.clone(),
+            self.ws_broadcaster.clone(),
+            self.hook_runtime.clone(),
+            self.app.clone(),
         );
     }
 
@@ -867,6 +906,12 @@ impl EegAccumulator {
         self.hop_samples  = EMBEDDING_EPOCH_SAMPLES.saturating_sub(overlap_samps).max(1);
         self.since_last   = [0; EEG_CHANNELS];
         skill_log!(self.logger, "embedder", "overlap set to {clamped:.2} s → hop={} samples", self.hop_samples);
+    }
+
+    /// Replace hook configuration and restart the worker so it picks up changes.
+    pub fn set_hooks(&mut self, hooks: Vec<HookRule>) {
+        self.hooks = hooks;
+        self.restart_worker();
     }
 
     /// Accumulate PPG samples for `channel` (0=ambient, 1=infrared, 2=red).
@@ -968,6 +1013,397 @@ impl EegAccumulator {
 
 }
 
+#[derive(serde::Serialize)]
+struct HookBroadcastPayload {
+    hook: String,
+    context: String,
+    command: String,
+    text: String,
+}
+
+struct HookReferenceSet {
+    hook: HookRule,
+    refs: Vec<HookReference>,
+}
+
+struct HookReference {
+    emb: Vec<f32>,
+    label_id: i64,
+    label_text: String,
+    eeg_start_utc: u64,
+}
+
+struct HookMatcher {
+    skill_dir: PathBuf,
+    hooks: Vec<HookRule>,
+    label_idx: Arc<crate::label_index::LabelIndexState>,
+    ws_broadcaster: crate::ws_server::WsBroadcaster,
+    text_embedder: Option<fastembed::TextEmbedding>,
+    cache: Vec<HookReferenceSet>,
+    last_refresh_unix: u64,
+    last_fired_unix: HashMap<String, u64>,
+    logger: Arc<SkillLogger>,
+    hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+    app: tauri::AppHandle,
+    hooks_log: Option<crate::hooks_log::HooksLog>,
+}
+
+impl HookMatcher {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        skill_dir: PathBuf,
+        hooks: Vec<HookRule>,
+        text_embedding_model: String,
+        label_idx: Arc<crate::label_index::LabelIndexState>,
+        ws_broadcaster: crate::ws_server::WsBroadcaster,
+        logger: Arc<SkillLogger>,
+        hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+        app: tauri::AppHandle,
+    ) -> Self {
+        use std::str::FromStr;
+        let text_embedder = fastembed::EmbeddingModel::from_str(&text_embedding_model)
+            .ok()
+            .and_then(|model| {
+                fastembed::TextEmbedding::try_new(
+                    fastembed::InitOptions::new(model)
+                        .with_cache_dir(skill_dir.join("fastembed_cache"))
+                        .with_show_download_progress(false),
+                )
+                .ok()
+            });
+
+        let hooks_log = crate::hooks_log::HooksLog::open(&skill_dir);
+
+        Self {
+            skill_dir,
+            hooks,
+            label_idx,
+            ws_broadcaster,
+            text_embedder,
+            cache: Vec::new(),
+            last_refresh_unix: 0,
+            last_fired_unix: HashMap::new(),
+            logger,
+            hook_runtime,
+            app,
+            hooks_log,
+        }
+    }
+
+    fn maybe_refresh(&mut self) {
+        let now = unix_secs_now();
+        if now.saturating_sub(self.last_refresh_unix) < 20 {
+            return;
+        }
+        self.last_refresh_unix = now;
+
+        let Some(te) = self.text_embedder.as_mut() else {
+            self.cache.clear();
+            return;
+        };
+
+        let recent_labels = load_recent_label_texts(&self.skill_dir, 180);
+        let mut next_cache: Vec<HookReferenceSet> = Vec::new();
+
+        for hook in self.hooks.iter().filter(|h| h.enabled) {
+            let mut queries: Vec<String> = hook.keywords
+                .iter()
+                .map(|k| k.trim().to_owned())
+                .filter(|k| !k.is_empty())
+                .collect();
+
+            if queries.is_empty() {
+                continue;
+            }
+
+            for label in &recent_labels {
+                if queries.iter().any(|k| fuzzy_match(k, label)) && !queries.iter().any(|q| q == label) {
+                    queries.push(label.clone());
+                }
+            }
+
+            let query_refs: Vec<&str> = queries.iter().map(String::as_str).collect();
+            let embeddings = match te.embed(query_refs, None) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            let mut neighbors: Vec<crate::label_index::LabelNeighbor> = Vec::new();
+            for qvec in embeddings {
+                neighbors.extend(crate::label_index::search_by_text_vec(
+                    &qvec,
+                    6,
+                    64,
+                    &self.skill_dir,
+                    &self.label_idx,
+                ));
+            }
+
+            neighbors.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal));
+            let mut seen: std::collections::HashSet<i64> = std::collections::HashSet::new();
+            let mut refs: Vec<HookReference> = Vec::new();
+
+            for n in neighbors {
+                if !seen.insert(n.label_id) {
+                    continue;
+                }
+                if let Some(eeg_ref) = crate::label_index::mean_eeg_for_window(&self.skill_dir, n.eeg_start, n.eeg_end) {
+                    refs.push(HookReference {
+                        emb: eeg_ref,
+                        label_id: n.label_id,
+                        label_text: n.text,
+                        eeg_start_utc: n.eeg_start,
+                    });
+                }
+                if refs.len() >= hook.recent_limit.clamp(10, 20) {
+                    break;
+                }
+            }
+
+            if !refs.is_empty() {
+                next_cache.push(HookReferenceSet {
+                    hook: hook.clone(),
+                    refs,
+                });
+            }
+        }
+
+        if !next_cache.is_empty() {
+            skill_log!(self.logger, "hooks", "cache refreshed: {} active hooks", next_cache.len());
+        }
+        self.cache = next_cache;
+    }
+
+    fn scenario_allows_fire(scenario: &str, metrics: Option<&EpochMetrics>) -> bool {
+        let s = scenario.trim().to_lowercase();
+        if s.is_empty() || s == "any" {
+            return true;
+        }
+        let Some(m) = metrics else {
+            return false;
+        };
+
+        match s.as_str() {
+            // Elevated cognitive effort / load.
+            "cognitive" => (m.cognitive_load >= 55.0) || (m.engagement >= 60.0),
+            // Stress / affective strain patterns.
+            "emotional" => (m.stress_index >= 55.0) || (m.mood <= 45.0) || (m.relaxation <= 35.0),
+            // Physiological fatigue / strain patterns.
+            "physical" => {
+                (m.drowsiness >= 55.0)
+                    || (m.headache_index >= 45.0)
+                    || (m.migraine_index >= 45.0)
+                    || (m.hr > 0.0 && (m.hr >= 105.0 || m.hr <= 52.0))
+            }
+            _ => true,
+        }
+    }
+
+    fn maybe_fire(&mut self, embedding: &[f32], metrics: Option<&EpochMetrics>) {
+        self.maybe_refresh();
+        if self.cache.is_empty() {
+            return;
+        }
+        let now = unix_secs_now();
+
+        for entry in &self.cache {
+            if !Self::scenario_allows_fire(&entry.hook.scenario, metrics) {
+                continue;
+            }
+            let threshold = entry.hook.distance_threshold.clamp(0.01, 1.0);
+            let best = entry.refs.iter()
+                .map(|r| (r, cosine_distance(embedding, &r.emb)))
+                .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+            let Some((best_ref, min_dist)) = best else {
+                continue;
+            };
+
+            if min_dist > threshold {
+                continue;
+            }
+
+            let last = self.last_fired_unix.get(&entry.hook.name).copied().unwrap_or(0);
+            if now.saturating_sub(last) < 10 {
+                continue;
+            }
+
+            self.last_fired_unix.insert(entry.hook.name.clone(), now);
+            let ts_utc = msg_ts_utc_now();
+            self.hook_runtime.lock_or_recover().insert(
+                entry.hook.name.clone(),
+                HookLastTrigger {
+                    triggered_at_utc: ts_utc,
+                    distance: min_dist,
+                    label_id: Some(best_ref.label_id),
+                    label_text: Some(best_ref.label_text.clone()),
+                    label_eeg_start_utc: Some(best_ref.eeg_start_utc),
+                },
+            );
+
+            skill_log!(
+                self.logger,
+                "hooks",
+                "triggered hook='{}' scenario='{}' distance={:.4} label='{}' label_id={}",
+                entry.hook.name,
+                entry.hook.scenario,
+                min_dist,
+                best_ref.label_text,
+                best_ref.label_id
+            );
+
+            let payload = HookBroadcastPayload {
+                hook: entry.hook.name.clone(),
+                context: "labels".to_owned(),
+                command: entry.hook.command.clone(),
+                text: entry.hook.text.clone(),
+            };
+            self.ws_broadcaster.send("hook", &payload);
+
+            // ── Audit log ─────────────────────────────────────────────────────
+            if let Some(ref log) = self.hooks_log {
+                use serde_json::{json, to_string};
+                let hook_json   = to_string(&entry.hook).unwrap_or_default();
+                let trigger_json = to_string(&json!({
+                    "triggered_at_utc": ts_utc,
+                    "distance":          min_dist,
+                    "label_id":          best_ref.label_id,
+                    "label_text":        &best_ref.label_text,
+                    "label_eeg_start_utc": best_ref.eeg_start_utc,
+                })).unwrap_or_default();
+                let payload_json = to_string(&json!({
+                    "context": "labels",
+                    "command": &entry.hook.command,
+                    "text":    &entry.hook.text,
+                })).unwrap_or_default();
+                log.record(crate::hooks_log::HookFireEntry {
+                    triggered_at_utc: ts_utc as i64,
+                    hook_json:        &hook_json,
+                    trigger_json:     &trigger_json,
+                    payload_json:     &payload_json,
+                });
+            }
+
+            crate::send_toast(
+                &self.app,
+                crate::ToastLevel::Info,
+                "Hook Triggered",
+                &format!("{} · {}", entry.hook.name, best_ref.label_text),
+            );
+        }
+    }
+}
+
+fn msg_ts_utc_now() -> u64 {
+    yyyymmddhhmmss_utc().max(0) as u64
+}
+
+fn unix_secs_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+pub(crate) fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 2.0;
+    }
+    let mut dot = 0.0f32;
+    let mut na = 0.0f32;
+    let mut nb = 0.0f32;
+    for (&av, &bv) in a.iter().zip(b.iter()) {
+        dot += av * bv;
+        na += av * av;
+        nb += bv * bv;
+    }
+    if na <= f32::EPSILON || nb <= f32::EPSILON {
+        return 2.0;
+    }
+    let sim = dot / (na.sqrt() * nb.sqrt());
+    1.0 - sim.clamp(-1.0, 1.0)
+}
+
+fn load_recent_label_texts(skill_dir: &Path, limit: usize) -> Vec<String> {
+    let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
+    if !labels_db.exists() {
+        return Vec::new();
+    }
+    let Ok(conn) = rusqlite::Connection::open_with_flags(
+        &labels_db,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    ) else {
+        return Vec::new();
+    };
+
+    let max_rows = limit.clamp(10, 300) as i64;
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT text FROM labels
+         WHERE length(trim(text)) > 0
+         GROUP BY text
+         ORDER BY MAX(created_at) DESC
+         LIMIT ?1",
+    ) else {
+        return Vec::new();
+    };
+
+    stmt.query_map(rusqlite::params![max_rows], |row| row.get::<_, String>(0))
+        .map(|rows| {
+            rows.flatten()
+                .map(|s| s.trim().to_owned())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn normalize_text(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || c.is_whitespace())
+        .collect::<String>()
+}
+
+fn levenshtein(a: &str, b: &str) -> usize {
+    let a_chars: Vec<char> = a.chars().collect();
+    let b_chars: Vec<char> = b.chars().collect();
+    if a_chars.is_empty() {
+        return b_chars.len();
+    }
+    if b_chars.is_empty() {
+        return a_chars.len();
+    }
+
+    let mut prev: Vec<usize> = (0..=b_chars.len()).collect();
+    let mut curr = vec![0usize; b_chars.len() + 1];
+
+    for (i, &ac) in a_chars.iter().enumerate() {
+        curr[0] = i + 1;
+        for (j, &bc) in b_chars.iter().enumerate() {
+            let cost = if ac == bc { 0 } else { 1 };
+            curr[j + 1] = (curr[j] + 1)
+                .min(prev[j + 1] + 1)
+                .min(prev[j] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[b_chars.len()]
+}
+
+pub(crate) fn fuzzy_match(keyword: &str, candidate: &str) -> bool {
+    let k = normalize_text(keyword);
+    let c = normalize_text(candidate);
+    if k.is_empty() || c.is_empty() {
+        return false;
+    }
+    if c.contains(&k) || k.contains(&c) {
+        return true;
+    }
+    let dist = levenshtein(&k, &c) as f32;
+    let max_len = k.chars().count().max(c.chars().count()) as f32;
+    (dist / max_len) <= 0.32
+}
+
 // ── Background worker ─────────────────────────────────────────────────────────
 
 #[allow(clippy::too_many_arguments)]
@@ -980,6 +1416,12 @@ fn embed_worker(
     reload_requested: Arc<std::sync::atomic::AtomicBool>,
     logger:           Arc<SkillLogger>,
     global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
+    hooks:            Vec<HookRule>,
+    text_embedding_model: String,
+    label_idx:        Arc<crate::label_index::LabelIndexState>,
+    ws_broadcaster:   crate::ws_server::WsBroadcaster,
+    hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+    app: tauri::AppHandle,
 ) {
     use burn::backend::{Wgpu, wgpu::WgpuDevice};
     use ndarray::Array2;
@@ -1157,6 +1599,10 @@ fn embed_worker(
 
     // Counter for periodic global index saves.
     let mut global_save_counter: usize = 0;
+    let mut hook_matcher = HookMatcher::new(
+        skill_dir.clone(), hooks, text_embedding_model, label_idx, ws_broadcaster, logger.clone(),
+        hook_runtime, app,
+    );
 
     // ── 4. Process epoch messages ─────────────────────────────────────────────
     for msg in rx {
@@ -1347,6 +1793,18 @@ fn embed_worker(
                     }
                 }
             }
+
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                hook_matcher.maybe_fire(emb, metrics.as_ref());
+            }))
+            .map_err(|p| {
+                skill_log!(
+                    logger,
+                    "hooks",
+                    "hook matcher panicked; continuing embed worker: {}",
+                    panic_msg(&p)
+                );
+            });
 
             id
         } else {

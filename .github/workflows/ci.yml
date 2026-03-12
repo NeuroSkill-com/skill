@@ -140,20 +140,15 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-      # Guard against regressions where the Linux wrapper accidentally injects
-      # --no-bundle and skips deb/AppImage/rpm outputs.
+      - name: Verify Tauri frontend bundle structure
+        run: npm run -s verify:tauri:frontend
+
+      # Guard against regressions where the Linux wrapper no longer accepts
+      # explicit --bundles arguments.
       - name: Guard Linux bundle flags
         shell: bash
         run: |
           set -euo pipefail
-
-          SCRIPT="$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).scripts['tauri:build:linux:x64:native']")"
-          echo "tauri:build:linux:x64:native => $SCRIPT"
-
-          if [[ "$SCRIPT" != *"--bundles deb,appimage,rpm"* ]]; then
-            echo "::error::package.json script tauri:build:linux:x64:native must include '--bundles deb,appimage,rpm'."
-            exit 1
-          fi
 
           if ! grep -q 'arg === "--bundles"' scripts/tauri-build.js; then
             echo "::error::scripts/tauri-build.js no longer recognizes --bundles as explicit bundling."
@@ -162,15 +157,18 @@ jobs:
 
           echo "✓ Linux bundle guard passed."
 
-      # CI release smoke test: validates Linux release bundling path without
-      # requiring updater signing secrets.
-      - name: Build Tauri release bundles
+      # Build AppImage only via Tauri; deb/rpm are generated manually below.
+      - name: Build Tauri AppImage bundle
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           APPIMAGE_EXTRACT_AND_RUN: 1
           NO_STRIP: 1
-        # Use the native x86_64 Linux build script on x86_64 runners.
         run: npm run tauri:build:linux:x64:native
+
+      - name: Build Linux deb/rpm via system tools
+        env:
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+        run: bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu --skip-build
 
       - name: Verify Linux bundle directories and artifacts
         shell: bash

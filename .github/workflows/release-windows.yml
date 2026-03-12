@@ -310,6 +310,9 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Verify Tauri frontend bundle structure
+        run: npm run -s verify:tauri:frontend
+
       # ── Compile + bundle (frontend + Rust + NSIS installer) ──────────────────
       #
       # When CERTIFICATE_THUMBPRINT is set (cert was imported above), the config
@@ -425,7 +428,7 @@ jobs:
       # platform workflow ran first), merges the windows-x86_64 entry, then
       # re-uploads.  If no latest.json exists yet, creates one from scratch.
       - name: Update latest.json
-        shell: bash
+        shell: powershell
         env:
           GH_TOKEN:     ${{ github.token }}
           GH_REPO:      ${{ github.repository }}
@@ -434,56 +437,47 @@ jobs:
           NSIS_ZIP_NAME: ${{ steps.artifacts.outputs.nsis_zip_name }}
           NSIS_SIG_PATH: ${{ steps.artifacts.outputs.nsis_sig }}
         run: |
-          python3 - <<'PYEOF'
-          import json, os, subprocess, datetime
+          $version = $env:VERSION
+          $tag = $env:TAG
+          $repo = $env:GH_REPO
+          $zipName = $env:NSIS_ZIP_NAME
+          $sigPath = $env:NSIS_SIG_PATH
 
-          version      = os.environ["VERSION"]
-          tag          = os.environ["TAG"]
-          repo         = os.environ["GH_REPO"]
-          zip_name     = os.environ["NSIS_ZIP_NAME"]
-          sig_path     = os.environ["NSIS_SIG_PATH"]
+          $signature = (Get-Content $sigPath -Raw).Trim()
+          $downloadUrl = "https://github.com/$repo/releases/download/$tag/$zipName"
 
-          with open(sig_path) as fh:
-              signature = fh.read().strip()
-
-          download_url = (
-              f"https://github.com/{repo}/releases/download/{tag}/{zip_name}"
-          )
-
-          # Try to download the existing latest.json from the release.
-          dl = subprocess.run(
-              ["gh", "release", "download", tag,
-               "--pattern", "latest.json", "--output", "latest.json", "--clobber"],
-              capture_output=True, text=True,
-          )
-
-          if dl.returncode == 0:
-              with open("latest.json") as fh:
-                  manifest = json.load(fh)
-          else:
-              pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-              manifest = {
-                  "version":  version,
-                  "notes":    f"NeuroSkill™ v{version}",
-                  "pub_date": pub_date,
-                  "platforms": {},
-              }
-
-          manifest["platforms"]["windows-x86_64"] = {
-              "url":       download_url,
-              "signature": signature,
+          # Try to download existing latest.json from the release; fall back to
+          # a fresh manifest when it does not exist yet.
+          & gh release download $tag --pattern latest.json --output latest.json --clobber
+          if ($LASTEXITCODE -eq 0 -and (Test-Path "latest.json")) {
+            $manifest = Get-Content "latest.json" -Raw | ConvertFrom-Json
+          } else {
+            $manifest = [ordered]@{
+              version = $version
+              notes = "NeuroSkill™ v$version"
+              pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+              platforms = [ordered]@{}
+            }
           }
 
-          with open("latest.json", "w") as fh:
-              json.dump(manifest, fh, indent=2)
-              fh.write("\n")
+          if (-not $manifest.platforms) {
+            $manifest | Add-Member -NotePropertyName platforms -NotePropertyValue ([ordered]@{}) -Force
+          }
 
-          print("Updated latest.json:")
-          print(json.dumps(manifest, indent=2))
-          PYEOF
+          $manifest.platforms."windows-x86_64" = [ordered]@{
+            url = $downloadUrl
+            signature = $signature
+          }
 
-          gh release upload "$TAG" latest.json --clobber
-          echo "[ok] latest.json uploaded to release $TAG"
+          $manifest | ConvertTo-Json -Depth 20 | Out-File -FilePath "latest.json" -Encoding utf8
+          Write-Host "Updated latest.json:"
+          Get-Content "latest.json"
+
+          & gh release upload $tag latest.json --clobber
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+          Write-Host "[ok] latest.json uploaded to release $tag"
 
       # ── Remove the certificate from the runner's cert store ──────────────────
       - name: Remove signing certificate
@@ -500,40 +494,53 @@ jobs:
       # ── Discord notification ──────────────────────────────────────────────────
       - name: Notify Discord of release
         if: always()
-        shell: bash
+        shell: powershell
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           JOB_STATUS:          ${{ job.status }}
         run: |
-          RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          if ([string]::IsNullOrWhiteSpace($env:DISCORD_WEBHOOK_URL)) {
+            Write-Host "[skip] DISCORD_WEBHOOK_URL is not set; skipping Discord notification."
+            exit 0
+          }
 
-          if [[ "$JOB_STATUS" == "success" ]]; then
-            COLOR=3066993
-            TITLE="🚀 Release v${{ steps.version_meta.outputs.version }} — Windows Published"
-            DESC="Windows build published and ready to download."
-            LINK_LINE="**[Download v${{ steps.version_meta.outputs.version }}]($RELEASE_URL)**"
-          else
-            COLOR=15158332
-            TITLE="💥 Release v${{ steps.version_meta.outputs.version }} — Windows Failed"
-            DESC="The Windows release build failed. Check the run for details."
-            LINK_LINE="**[View failed run]($RUN_URL)**"
-          fi
+          $releaseUrl = "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
+          $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          curl -s -X POST "$DISCORD_WEBHOOK_URL" \
-            -H "Content-Type: application/json" \
-            -d "{
-              \"embeds\": [{
-                \"title\": \"$TITLE\",
-                \"description\": \"$DESC\n\n$LINK_LINE\",
-                \"url\": \"$RUN_URL\",
-                \"color\": $COLOR,
-                \"fields\": [
-                  {\"name\": \"Tag\",      \"value\": \"\`${{ steps.version_meta.outputs.tag }}\`\",     \"inline\": true},
-                  {\"name\": \"Version\",  \"value\": \"\`${{ steps.version_meta.outputs.version }}\`\", \"inline\": true},
-                  {\"name\": \"Platform\", \"value\": \"Windows x86_64\",          \"inline\": true},
-                  {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true}
-                ],
-                \"footer\": {\"text\": \"${{ github.repository }}\"}
-              }]
-            }"
+          if ($env:JOB_STATUS -eq "success") {
+            $color = 3066993
+            $title = "🚀 Release v${{ steps.version_meta.outputs.version }} — Windows Published"
+            $desc  = "Windows build published and ready to download."
+            $linkLine = "**[Download v${{ steps.version_meta.outputs.version }}]($releaseUrl)**"
+          } else {
+            $color = 15158332
+            $title = "💥 Release v${{ steps.version_meta.outputs.version }} — Windows Failed"
+            $desc  = "The Windows release build failed. Check the run for details."
+            $linkLine = "**[View failed run]($runUrl)**"
+          }
+
+          $payload = @{
+            embeds = @(
+              @{
+                title = $title
+                description = "$desc`n`n$linkLine"
+                url = $runUrl
+                color = $color
+                fields = @(
+                  @{ name = "Tag";      value = "`${{ steps.version_meta.outputs.tag }}`";     inline = $true },
+                  @{ name = "Version";  value = "`${{ steps.version_meta.outputs.version }}`"; inline = $true },
+                  @{ name = "Platform"; value = "Windows x86_64";                              inline = $true },
+                  @{ name = "Actor";    value = "${{ github.actor }}";                         inline = $true }
+                )
+                footer = @{ text = "${{ github.repository }}" }
+              }
+            )
+          } | ConvertTo-Json -Depth 10
+
+          try {
+            Invoke-RestMethod -Method Post -Uri $env:DISCORD_WEBHOOK_URL -ContentType "application/json" -Body $payload | Out-Null
+            Write-Host "[ok] Discord notification sent."
+          } catch {
+            Write-Error "Discord webhook request failed: $($_.Exception.Message)"
+            exit 1
+          }

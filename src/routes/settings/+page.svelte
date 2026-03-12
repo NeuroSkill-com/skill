@@ -7,6 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import SettingsTab      from "$lib/SettingsTab.svelte";
   import AppearanceTab    from "$lib/AppearanceTab.svelte";
   import EegModelTab      from "$lib/EegModelTab.svelte";
@@ -15,24 +16,25 @@ the Free Software Foundation, version 3 only. -->
   import GoalsTab         from "$lib/GoalsTab.svelte";
   import CalibrationTab   from "$lib/CalibrationTab.svelte";
   import EmbeddingsTab    from "$lib/EmbeddingsTab.svelte";
+  import HooksTab         from "$lib/HooksTab.svelte";
   import UpdatesTab       from "$lib/UpdatesTab.svelte";
   import TtsTab           from "$lib/TtsTab.svelte";
   import PermissionsTab   from "$lib/PermissionsTab.svelte";
   import LlmTab           from "$lib/LlmTab.svelte";
   import { t }            from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 
-  type Tab = "goals" | "calibration" | "embeddings" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions" | "llm";
+  type Tab = "goals" | "calibration" | "embeddings" | "hooks" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions" | "llm";
   let tab = $state<Tab>("goals");
 
-  const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "llm", "model", "embeddings", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
+  const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "llm", "model", "embeddings", "hooks", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
   const TAB_LABELS: Record<Tab, () => string> = {
     goals:       () => t("settingsTabs.goals"),
     calibration: () => t("settingsTabs.calibration"),
     tts:         () => t("settingsTabs.tts"),
     llm:         () => t("settingsTabs.llm"),
     embeddings:  () => t("settingsTabs.embeddings"),
+    hooks:       () => t("settingsTabs.hooks"),
     appearance:  () => t("settingsTabs.appearance"),
     settings:    () => t("settingsTabs.settings"),
     shortcuts:   () => t("settingsTabs.shortcuts"),
@@ -50,6 +52,7 @@ the Free Software Foundation, version 3 only. -->
     llm:         `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>`,
     model:       `<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.04z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.04z"/>`,
     embeddings:  `<circle cx="12" cy="12" r="2"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><path d="m6 6.5 4 4.5M14 6.5l-2 4M18 7l-4 4.5M6 17l4-4.5M14 17.5l2-4M18 17l-4-4.5"/>`,
+    hooks:       `<path d="M10 13a5 5 0 0 1 0-7l1.5-1.5a5 5 0 0 1 7 7L17 13"/><path d="M14 11a5 5 0 0 1 0 7L12.5 19.5a5 5 0 1 1-7-7L7 11"/>`,
     appearance:  `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>`,
     settings:    `<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>`,
     shortcuts:   `<rect x="3" y="11" width="4" height="6" rx="1"/><rect x="10" y="5" width="4" height="12" rx="1"/><rect x="17" y="8" width="4" height="9" rx="1"/>`,
@@ -76,8 +79,64 @@ the Free Software Foundation, version 3 only. -->
   }
 
   let unlisten: UnlistenFn | null = null;
+  let splitRoot: HTMLDivElement | null = null;
+  let navWidth = $state(176);
+  let resizingNav = false;
+
+  const NAV_WIDTH_MIN = 140;
+  const NAV_WIDTH_MAX = 320;
+  const NAV_WIDTH_KEY = "settings.nav.width";
+
+  function clampNavWidth(px: number): number {
+    return Math.max(NAV_WIDTH_MIN, Math.min(NAV_WIDTH_MAX, Math.round(px)));
+  }
+
+  function persistNavWidth(px: number): void {
+    try { localStorage.setItem(NAV_WIDTH_KEY, String(px)); } catch {}
+  }
+
+  function setNavWidthFromPointer(clientX: number): void {
+    if (!splitRoot) return;
+    const rect = splitRoot.getBoundingClientRect();
+    const next = clampNavWidth(clientX - rect.left);
+    navWidth = next;
+  }
+
+  function onResizeMove(e: MouseEvent): void {
+    if (!resizingNav) return;
+    e.preventDefault();
+    setNavWidthFromPointer(e.clientX);
+  }
+
+  function stopResize(): void {
+    if (!resizingNav) return;
+    resizingNav = false;
+    persistNavWidth(navWidth);
+    if (typeof document !== "undefined") {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    window.removeEventListener("mousemove", onResizeMove);
+    window.removeEventListener("mouseup", stopResize);
+  }
+
+  function startResize(e: MouseEvent): void {
+    e.preventDefault();
+    resizingNav = true;
+    if (typeof document !== "undefined") {
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    }
+    window.addEventListener("mousemove", onResizeMove);
+    window.addEventListener("mouseup", stopResize);
+  }
 
   onMount(async () => {
+    try {
+      const stored = Number(localStorage.getItem(NAV_WIDTH_KEY) ?? "");
+      if (!Number.isNaN(stored) && stored > 0) navWidth = clampNavWidth(stored);
+    } catch {}
+
     window.addEventListener("keydown", onKeydown);
 
     // Support ?tab=updates query param (used by open_updates_window)
@@ -96,20 +155,26 @@ the Free Software Foundation, version 3 only. -->
   });
   onDestroy(() => {
     if (typeof window !== "undefined") window.removeEventListener("keydown", onKeydown);
+    stopResize();
     unlisten?.();
   });
 
-  useWindowTitle("window.title.settings");
+  $effect(() => {
+    const settingsTitle = t("settingsTabs.settings");
+    const sectionTitle = tabLabel(tab);
+    const title = `${settingsTitle} — ${sectionTitle}`;
+    getCurrentWindow().setTitle(title);
+  });
 </script>
 
 <main class="h-full min-h-0 flex flex-col overflow-hidden"
       aria-label={t("settingsTabs.settings")}>
 
   <!-- ── Body: sidebar + content ──────────────────────────────────────────── -->
-  <div class="min-h-0 flex-1 flex overflow-hidden">
+  <div class="min-h-0 flex-1 flex overflow-hidden" bind:this={splitRoot}>
 
     <!-- Sidebar nav -->
-    <nav class="w-44 shrink-0 border-r border-border dark:border-white/[0.07]
+    <nav style={`width:${navWidth}px`} class="shrink-0 border-r border-border dark:border-white/[0.07]
                 overflow-y-auto py-2 flex flex-col gap-0.5
                 bg-muted/20 dark:bg-white/[0.015]"
          aria-label={t("settingsTabs.settings")}>
@@ -154,6 +219,13 @@ the Free Software Foundation, version 3 only. -->
       {/each}
     </nav>
 
+    <button
+      type="button"
+      class="w-1 shrink-0 cursor-col-resize bg-border/30 hover:bg-primary/40 transition-colors"
+      aria-label={t("settingsTabs.settings")}
+      onmousedown={startResize}
+    ></button>
+
     <!-- Content area -->
     <div id="tab-panel-{tab}" role="tabpanel" aria-label={tabLabel(tab)}
          class="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-4">
@@ -169,6 +241,8 @@ the Free Software Foundation, version 3 only. -->
         <CalibrationTab />
       {:else if tab === "embeddings"}
         <EmbeddingsTab />
+      {:else if tab === "hooks"}
+        <HooksTab />
       {:else if tab === "tts"}
         <TtsTab />
       {:else if tab === "llm"}

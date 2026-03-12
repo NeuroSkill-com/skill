@@ -52,6 +52,8 @@ pub struct LogConfig {
     /// Session history loading (directory scan, sidecar parsing, orphan CSV
     /// detection).  Can be noisy when many sessions exist; off by default.
     pub history:   bool,
+    /// Hook runtime in the embedding worker (matching, trigger, notifications).
+    pub hooks:     bool,
 }
 
 impl Default for LogConfig {
@@ -65,6 +67,7 @@ impl Default for LogConfig {
             bands:     false,
             tts:       false,
             history:   false,
+            hooks:     true,
         }
     }
 }
@@ -94,6 +97,7 @@ impl SkillLogger {
             "bands"     => cfg.bands,
             "tts"       => cfg.tts,
             "history"   => cfg.history,
+            "hooks"     => cfg.hooks,
             _           => true,
         }
     }

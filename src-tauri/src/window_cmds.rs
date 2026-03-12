@@ -116,7 +116,7 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
     }
     tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App("settings".into()))
         .title("NeuroSkill™ – Settings")
-        .inner_size(680.0, 720.0).min_inner_size(580.0, 560.0)
+        .inner_size(760.0, 720.0).min_inner_size(580.0, 560.0)
         .center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
@@ -130,7 +130,7 @@ pub async fn open_model_tab(app: AppHandle) -> Result<(), String> {
     tauri::WebviewWindowBuilder::new(&app, "settings",
         tauri::WebviewUrl::App("settings?tab=model".into()))
         .title("NeuroSkill™ – Model")
-        .inner_size(680.0, 720.0).min_inner_size(580.0, 560.0)
+        .inner_size(760.0, 720.0).min_inner_size(580.0, 560.0)
         .center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 
@@ -144,7 +144,7 @@ pub async fn open_updates_window(app: AppHandle) -> Result<(), String> {
     tauri::WebviewWindowBuilder::new(&app, "settings",
         tauri::WebviewUrl::App("settings?tab=updates".into()))
         .title("NeuroSkill™ – Updates")
-        .inner_size(680.0, 720.0).min_inner_size(580.0, 560.0)
+        .inner_size(760.0, 720.0).min_inner_size(580.0, 560.0)
         .center().decorations(false).build().map(|_| ()).map_err(|e| e.to_string())
 }
 

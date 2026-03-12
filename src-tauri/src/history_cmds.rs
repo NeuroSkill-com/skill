@@ -799,3 +799,53 @@ pub(crate) fn list_embedding_sessions(state: tauri::State<'_, Mutex<AppState>>) 
     sessions
 }
 
+pub(crate) fn find_session_csv_for_timestamp(skill_dir: &std::path::Path, ts_utc: u64) -> Option<String> {
+    let mut containing: Option<String> = None;
+    let mut nearest: Option<(u64, String)> = None;
+
+    let entries = std::fs::read_dir(skill_dir).ok()?;
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if !path.is_dir() { continue; }
+
+        let files = match std::fs::read_dir(&path) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        for file in files.filter_map(|e| e.ok()) {
+            let jp = file.path();
+            let fname = jp.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if !fname.starts_with("muse_") || !fname.ends_with(".json") { continue; }
+
+            let json = match std::fs::read_to_string(&jp) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            let meta: serde_json::Value = match serde_json::from_str(&json) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+            let start = meta["session_start_utc"].as_u64();
+            let end = meta["session_end_utc"].as_u64().or(start);
+            let csv_file = meta["csv_file"].as_str().unwrap_or("");
+            if csv_file.is_empty() { continue; }
+            let csv_path = path.join(csv_file).to_string_lossy().into_owned();
+
+            if let (Some(s), Some(e)) = (start, end) {
+                if ts_utc >= s && ts_utc <= e {
+                    containing = Some(csv_path);
+                    break;
+                }
+                let dist = if ts_utc < s { s - ts_utc } else { ts_utc.saturating_sub(e) };
+                match &nearest {
+                    Some((best, _)) if *best <= dist => {}
+                    _ => nearest = Some((dist, csv_path)),
+                }
+            }
+        }
+        if containing.is_some() { break; }
+    }
+
+    containing.or_else(|| nearest.map(|(_, p)| p))
+}
+

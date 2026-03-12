@@ -72,6 +72,23 @@ function runPreflightChecks() {
   runCheckStep("npm run sync:i18n:check", "npm run sync:i18n:check");
 }
 
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function bumpChangelogUnreleased(changelogPath, version, date) {
+  const changelog = readText(changelogPath);
+  const unreleasedHeader = /^## \[Unreleased\]\s*$/m;
+
+  if (!unreleasedHeader.test(changelog)) {
+    throw new Error(`Could not find \"## [Unreleased]\" in ${changelogPath}`);
+  }
+
+  const replacement = `## [Unreleased]\n\n## [${version}] — ${date}`;
+  const updated = changelog.replace(unreleasedHeader, replacement);
+  writeText(changelogPath, updated);
+}
+
 // ── resolve new version ───────────────────────────────────────────────────────
 
 const pkg = JSON.parse(readText("package.json"));
@@ -114,5 +131,11 @@ if (!versionLine.test(cargo)) {
 cargo = cargo.replace(versionLine, `version = "${newVersion}"`);
 writeText(cargoPath, cargo);
 console.log("  ✓  src-tauri/Cargo.toml");
+
+// ── CHANGELOG.md ─────────────────────────────────────────────────────────────
+
+const changelogPath = "CHANGELOG.md";
+bumpChangelogUnreleased(changelogPath, newVersion, todayIsoDate());
+console.log("  ✓  CHANGELOG.md (Unreleased → versioned section)");
 
 console.log(`\nDone! Version is now ${newVersion}`);

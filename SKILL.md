@@ -22,6 +22,7 @@ automation pipeline.
    - [session](#session)
    - [sessions](#sessions)
    - [label](#label)
+   - [hooks](#hooks)
    - [search-labels](#search-labels)
    - [interactive](#interactive)
    - [search](#search)
@@ -824,6 +825,49 @@ echo "Created label #$LABEL_ID"
 **Response:**
 ```jsonc
 { "command": "label", "ok": true, "label_id": 42 }
+```
+
+---
+
+### `hooks`
+
+List configured Proactive Hooks with scenario + last-trigger metadata.
+
+Also supports:
+- `hooks suggest` — suggest a threshold from current labels + EEG embeddings
+- `hooks log` — list trigger audit rows from `hooks.sqlite`
+
+```bash
+node cli.ts hooks
+node cli.ts hooks --json
+node cli.ts hooks --json | jq '.hooks[] | {name: .hook.name, scenario: .hook.scenario, last: .last_trigger.triggered_at_utc}'
+node cli.ts hooks suggest "focus,deep work"
+node cli.ts hooks suggest "focus" --json | jq '.suggestion.suggested'
+node cli.ts hooks log --limit 20 --offset 0
+node cli.ts hooks log --json | jq '.rows[] | {ts: .triggered_at_utc, hook: (.hook_json|fromjson).name, scenario: (.hook_json|fromjson).scenario}'
+
+# Scenario-focused quick examples:
+# cognitive: deep work overload guard
+node cli.ts hooks suggest "focus,deep work"
+# emotional: stress-recovery style labels
+node cli.ts hooks suggest "stress,anxious,overwhelmed"
+# physical: fatigue/body-state style labels
+node cli.ts hooks suggest "fatigue,tired,slump"
+```
+
+**HTTP:**
+```bash
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"hooks_status"}'
+
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"hooks_suggest","keywords":["focus","deep work"]}'
+
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"hooks_log","limit":20,"offset":0}'
 ```
 
 ---

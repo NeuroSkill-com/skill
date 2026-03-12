@@ -72,6 +72,7 @@ mod ws_commands;
 mod label_index;
 mod ws_server;
 mod api;
+pub(crate) mod hooks_log;
 
 /// OpenAI-compatible LLM inference server — same port as WebSocket API.
 /// Enabled by the `llm` Cargo feature; no-op when the feature is absent.
@@ -138,7 +139,7 @@ pub(crate) use settings::{
     default_api_shortcut, default_theme_shortcut, default_focus_timer_shortcut,
     default_theme, default_accent_color, default_daily_goal_min, default_embedding_model,
     default_ws_host, default_ws_port, default_update_check_interval, UserSettings,
-    NeuttsConfig, default_track_active_window, default_track_input_activity,
+    NeuttsConfig, HookRule, HookLastTrigger, default_track_active_window, default_track_input_activity,
     DoNotDisturbConfig,
 };
 
@@ -187,11 +188,6 @@ fn linux_has_appindicator_runtime() -> bool {
     }
 
     false
-}
-
-#[cfg(not(target_os = "linux"))]
-fn linux_has_appindicator_runtime() -> bool {
-    true
 }
 
 mod shortcut_cmds;
@@ -262,6 +258,8 @@ use settings_cmds::{
     get_accent_color, set_accent_color,
     get_daily_goal, set_daily_goal, get_goal_notified_date, set_goal_notified_date,
     get_daily_recording_mins,
+    get_hooks, set_hooks, get_hook_statuses, open_session_for_timestamp,
+    suggest_hook_distances, suggest_hook_keywords, get_hook_log, get_hook_log_count,
     get_ws_config, set_ws_config,
     get_autostart_enabled, set_autostart_enabled,
     get_update_check_interval, set_update_check_interval,
@@ -523,6 +521,8 @@ pub struct AppState {
     pub daily_goal_min: u32,
     pub goal_notified_date: String,
     pub text_embedding_model: String,
+    pub hooks: Vec<HookRule>,
+    pub hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
     pub ws_host: String,
     pub ws_port: u16,
     pub update_check_interval_secs: u64,
@@ -652,6 +652,8 @@ impl Default for AppState {
             daily_goal_min: default_daily_goal_min(),
             goal_notified_date: String::new(),
             text_embedding_model: default_embedding_model(),
+            hooks: Vec::new(),
+            hook_runtime: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             ws_host: default_ws_host(),
             ws_port: default_ws_port(),
             update_check_interval_secs: default_update_check_interval(),
@@ -739,6 +741,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         daily_goal_min:         s.daily_goal_min,
         goal_notified_date:     s.goal_notified_date.clone(),
         text_embedding_model:   s.text_embedding_model.clone(),
+        hooks:                  s.hooks.clone(),
         ws_host:                s.ws_host.clone(),
         ws_port:                s.ws_port,
         update_check_interval_secs: s.update_check_interval_secs,
@@ -1246,6 +1249,7 @@ pub fn run() {
                 s.daily_goal_min               = data.daily_goal_min;
                 s.goal_notified_date           = data.goal_notified_date;
                 s.text_embedding_model         = data.text_embedding_model.clone();
+                s.hooks                        = data.hooks;
                 s.ws_host                      = data.ws_host.clone();
                 s.ws_port                      = data.ws_port;
                 s.update_check_interval_secs   = data.update_check_interval_secs;
@@ -1796,6 +1800,8 @@ pub fn run() {
             get_daily_goal, set_daily_goal,
             get_goal_notified_date, set_goal_notified_date,
             get_daily_recording_mins,
+            get_hooks, set_hooks, get_hook_statuses, open_session_for_timestamp,
+            suggest_hook_distances, suggest_hook_keywords, get_hook_log, get_hook_log_count,
             quit_app, open_label_window, open_labels_window, open_focus_timer_window,
             submit_label, close_label_window,
             query_annotations, get_recent_labels, delete_label, update_label, get_queue_stats,

@@ -86,8 +86,11 @@
  * 4.  SAY                — Speak text via on-device TTS (fire-and-forget)
  * 5.  LABEL              — Create a timestamped text annotation
  * 6.  SEARCH_LABELS      — Search labels by free-text query (text / context / both modes)
- * 7.  INTERACTIVE_SEARCH — Cross-modal 4-layer graph search (query → labels → EEG → found labels)
- * 8.  SEARCH             — ANN similarity search across EEG embedding history
+ * 7.  HOOKS_STATUS       — Proactive Hook rules + scenario + last-trigger metadata
+ * 8.  HOOKS_SUGGEST      — Suggest threshold from labels + EEG embedding distances
+ * 9.  HOOKS_LOG          — Paginated hook trigger audit log from hooks.sqlite (includes scenario in hook_json)
+ * 10. INTERACTIVE_SEARCH — Cross-modal 4-layer graph search (query → labels → EEG → found labels)
+ * 11. SEARCH             — ANN similarity search across EEG embedding history
  * 9.  COMPARE            — Side-by-side metrics for two time ranges + UMAP enqueue
  * 10. SLEEP              — Sleep stage classification for a time range
  * 11. CALIBRATE          — list_calibrations + run_calibration (open & auto-start)
@@ -821,6 +824,60 @@ async function testLabel(): Promise<void> {
     r.ok ? ok(`label created: id=${r.label_id}`) : fail(`ok=${r.ok}, error=${r.error}`);
     field("label_id", r.label_id, "auto-incremented label ID in labels.sqlite");
   } catch (e: any) { fail(`label failed: ${e.message}`); }
+}
+
+async function testHooksStatus(): Promise<void> {
+  heading("hooks_status");
+
+  try {
+    const r = await send({ command: "hooks_status" });
+    if (r.ok === true) ok("hooks_status returns ok=true");
+    else fail(`hooks_status failed: ${r.error ?? "unknown"}`);
+
+    if (Array.isArray(r.hooks)) ok(`hooks array present (${r.hooks.length})`);
+    else fail("hooks field is not an array");
+
+    const first = Array.isArray(r.hooks) && r.hooks.length > 0 ? r.hooks[0] : null;
+    if (first?.hook) {
+      if (typeof first.hook.scenario === "string") ok(`hook.scenario present (${first.hook.scenario})`);
+      else fail("hook.scenario missing or not a string");
+    } else {
+      info("no hooks configured; scenario field check skipped");
+    }
+  } catch (e: any) {
+    fail(`hooks_status request failed: ${e.message}`);
+  }
+}
+
+async function testHooksSuggest(): Promise<void> {
+  heading("hooks_suggest");
+  try {
+    const r = await send({ command: "hooks_suggest", keywords: ["focus"] });
+    if (r.ok === true) ok("hooks_suggest returns ok=true");
+    else fail(`hooks_suggest failed: ${r.error ?? "unknown"}`);
+
+    if (r.suggestion && typeof r.suggestion === "object") ok("suggestion payload present");
+    else fail("missing suggestion object");
+  } catch (e: any) {
+    fail(`hooks_suggest request failed: ${e.message}`);
+  }
+}
+
+async function testHooksLog(): Promise<void> {
+  heading("hooks_log");
+  try {
+    const r = await send({ command: "hooks_log", limit: 5, offset: 0 });
+    if (r.ok === true) ok("hooks_log returns ok=true");
+    else fail(`hooks_log failed: ${r.error ?? "unknown"}`);
+
+    if (Array.isArray(r.rows)) ok(`rows array present (${r.rows.length})`);
+    else fail("rows field is not an array");
+
+    if (typeof r.total === "number") ok(`total count present (${r.total})`);
+    else fail("total field is not numeric");
+  } catch (e: any) {
+    fail(`hooks_log request failed: ${e.message}`);
+  }
 }
 
 
@@ -2944,6 +3001,9 @@ async function main(): Promise<void> {
   await testNotify();
   await testSay();
   await testLabel();
+  await testHooksStatus();
+  await testHooksSuggest();
+  await testHooksLog();
   await testSearchLabels();
   await testInteractiveSearch();
   await testSearch();

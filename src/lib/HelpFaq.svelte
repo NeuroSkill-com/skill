@@ -154,6 +154,25 @@ umap_poll  — poll for UMAP result by job_id`}</pre>
     </div>
   </section>
 
+  <!-- ── Hooks help ─────────────────────────────────────────────────────── -->
+  <section class="flex flex-col gap-2">
+    <h2 class="help-h2">{t("helpOld.hooksTitle")}</h2>
+    <p class="help-p">{t("helpOld.hooksDesc")}</p>
+    <div class="rounded-xl border border-border dark:border-white/[0.06]
+                bg-muted/50 dark:bg-[#0f0f18] px-4 py-3 flex flex-col gap-2">
+      <p class="text-[0.72rem] font-semibold text-muted-foreground uppercase tracking-widest">
+        {t("helpOld.hooksFlow")}
+      </p>
+      <pre class="text-[0.72rem] font-mono text-foreground/80 whitespace-pre-wrap">{`🧠 new EEG epoch
+   ↓
+🔎 fuzzy keywords + text neighbors
+   ↓
+📏 cosine distance check (threshold)
+   ↓
+🪝 hook event + toast + OS notification`}</pre>
+    </div>
+  </section>
+
   <!-- ── FAQ ────────────────────────────────────────────────────────────── -->
   <section class="flex flex-col gap-2">
     <h2 class="help-h2">{t("helpOld.faq")}</h2>
@@ -161,6 +180,7 @@ umap_poll  — poll for UMAP result by job_id`}</pre>
                 rounded-xl border border-border dark:border-white/[0.06]
                 bg-white dark:bg-[#14141e] overflow-hidden">
       {#each [
+        ["helpOld.hooksFaqQ", "helpOld.hooksFaqA"],
         ["helpOld.faqQ1",  "helpOld.faqA1"],
         ["helpOld.faqQ2",  "helpOld.faqA2"],
         ["helpOld.faqQ3",  "helpOld.faqA3"],

@@ -306,6 +306,7 @@ pub type SharedTracker = Arc<StdMutex<WsTracker>>;
 /// A `Send + Sync` handle for broadcasting JSON messages to every connected
 /// WebSocket client.  Store as Tauri managed state; clone is cheap
 /// (just clones the inner `broadcast::Sender`).
+#[derive(Clone)]
 pub struct WsBroadcaster {
     tx:      broadcast::Sender<String>,
     pub tracker: SharedTracker,

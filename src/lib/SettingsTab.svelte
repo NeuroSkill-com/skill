@@ -54,6 +54,7 @@ the Free Software Foundation, version 3 only. -->
     filter:    boolean;
     bands:     boolean;
     history:   boolean;
+    hooks:     boolean;
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -75,7 +76,7 @@ the Free Software Foundation, version 3 only. -->
   }
   let gpuStats = $state<GpuStats | null>(null);
 
-  let logConfig      = $state<LogConfig>({ embedder: true, bluetooth: true, websocket: false, csv: false, filter: false, bands: false, history: false });
+  let logConfig      = $state<LogConfig>({ embedder: true, bluetooth: true, websocket: false, csv: false, filter: false, bands: false, history: false, hooks: true });
   let dataDirCurrent = $state("");
   let dataDirDefault = $state("");
   let dataDirInput   = $state("");
@@ -1252,6 +1253,7 @@ the Free Software Foundation, version 3 only. -->
           ["filter",    t("settings.logFilter"),       t("settings.logFilterDesc")],
           ["bands",     t("settings.logBands"),        t("settings.logBandsDesc")],
           ["history",   t("settings.logHistory"),      t("settings.logHistoryDesc")],
+          ["hooks",     t("settings.logHooks"),        t("settings.logHooksDesc")],
         ] as [keyof LogConfig, string, string][]) as [key, label, desc]}
           <button
             onclick={() => toggleLog(key)}

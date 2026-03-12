@@ -67,6 +67,7 @@ jobs:
             libasound2-dev
             cmake
             binutils
+            rpm
             squashfs-tools
             libfuse2
           version: tauri-release-linux-v1
@@ -132,21 +133,15 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+      - name: Verify Tauri frontend bundle structure
+        run: npm run -s verify:tauri:frontend
+
       # ── Guard bundle-flag contract ───────────────────────────────────────────
-      # Ensures the Linux release script keeps explicit deb/AppImage bundling
-      # and that the wrapper still recognizes `--bundles` as a bundle request.
+      # Ensures the wrapper still recognizes `--bundles` as a bundle request.
       - name: Guard Linux bundle flags
         shell: bash
         run: |
           set -euo pipefail
-
-          SCRIPT="$(node -p "JSON.parse(require('fs').readFileSync('package.json','utf8')).scripts['tauri:build:linux:x64:native']")"
-          echo "tauri:build:linux:x64:native => $SCRIPT"
-
-          if [[ "$SCRIPT" != *"--bundles deb,appimage,rpm"* ]]; then
-            echo "::error::package.json script tauri:build:linux:x64:native must include '--bundles deb,appimage,rpm'."
-            exit 1
-          fi
 
           if ! grep -q 'arg === "--bundles"' scripts/tauri-build.js; then
             echo "::error::scripts/tauri-build.js no longer recognizes --bundles as explicit bundling."
@@ -155,7 +150,7 @@ jobs:
 
           echo "✓ Linux bundle guard passed."
 
-      # ── Compile + bundle (frontend + Rust + deb + AppImage + rpm) ───────────
+      # ── Compile + bundle (frontend + Rust + AppImage) ───────────────────────
       #
       # --features llm-vulkan enables the llama.cpp Vulkan GPU backend so the
       # shipped binary can offload LLM inference to any Vulkan-capable GPU
@@ -163,10 +158,8 @@ jobs:
       # SDK was installed in the step above; at runtime any Vulkan 1.0+ driver
       # works and llama.cpp falls back to CPU automatically when no GPU is found.
       #
-      # Produces three bundle types:
-      #   deb      — Debian/Ubuntu package (.deb)
+      # Tauri produces AppImage artifacts only in this workflow:
       #   appimage — portable self-contained executable (.AppImage)
-      #   rpm      — Fedora/RHEL/openSUSE package (.rpm)
       #
       # With createUpdaterArtifacts: true in tauri.conf.json and
       # TAURI_SIGNING_PRIVATE_KEY set, Tauri also produces:
@@ -176,7 +169,7 @@ jobs:
       # APPIMAGE_EXTRACT_AND_RUN=1 tells appimagetool to extract itself rather
       # than trying to mount via FUSE, which avoids kernel-level FUSE issues in
       # the GitHub Actions sandbox.
-      - name: Build Tauri (Linux — deb + AppImage + rpm)
+      - name: Build Tauri (Linux — AppImage)
         env:
           ESPEAK_LIB_DIR:                     ${{ github.workspace }}/src-tauri/espeak-static/lib
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -186,8 +179,12 @@ jobs:
           # binaries (glibc/binutils incompatibility with DWARF debug sections).
           # NO_STRIP=1 skips that step; the binary is already release-optimised.
           NO_STRIP:                           1
-        # Use the native x86_64 Linux build script on x86_64 runners.
         run: npm run tauri:build:linux:x64:native
+
+      - name: Build Linux deb/rpm via system tools
+        env:
+          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+        run: bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu --skip-build
 
       # ── Post-build sanity check ─────────────────────────────────────────────
       - name: Verify Linux bundle directories

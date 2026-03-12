@@ -208,6 +208,7 @@ jobs:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
         run: |
           npm run build
+          npm run -s verify:tauri:frontend
           cd src-tauri
           cargo build --release --target aarch64-apple-darwin
 
@@ -216,6 +217,7 @@ jobs:
       # Reproduces what the Tauri bundler would have done:
       #   • Contents/MacOS/skill          — the compiled binary
       #   • Contents/Resources/icon.icns  — app icon
+      #   • Contents/Resources/app/        — built SvelteKit frontend (html/js/css/static)
       #   • Contents/Resources/espeak-ng-data/   \  declared in
       #   • Contents/Resources/neutts-samples/   /  tauri.conf.json
       #   • Contents/Info.plist           — Tauri CFBundle* keys merged with
@@ -240,6 +242,29 @@ jobs:
           # Icon (CFBundleIconFile references it by stem, without .icns)
           cp "src-tauri/icons/icon.icns" \
              "$APP_BUNDLE/Contents/Resources/icon.icns"
+
+          # Frontend build output (defensive copy for release bundle integrity)
+          if [ ! -f "build/index.html" ]; then
+            echo "::error::Expected frontend build output missing: build/index.html"
+            exit 1
+          fi
+          rm -rf "$APP_BUNDLE/Contents/Resources/app"
+          # Use macOS-native copy semantics for app bundle contents.
+          ditto "build" "$APP_BUNDLE/Contents/Resources/app"
+          if [ ! -f "$APP_BUNDLE/Contents/Resources/app/index.html" ]; then
+            echo "::error::Frontend assets were not copied into app bundle."
+            exit 1
+          fi
+          if [ ! -d "$APP_BUNDLE/Contents/Resources/app/_app/immutable" ]; then
+            echo "::error::Missing copied _app/immutable frontend directory in app bundle."
+            exit 1
+          fi
+          JS_COUNT="$(find "$APP_BUNDLE/Contents/Resources/app/_app/immutable" -type f -name "*.js" | wc -l | tr -d ' ')"
+          CSS_COUNT="$(find "$APP_BUNDLE/Contents/Resources/app/_app/immutable" -type f -name "*.css" | wc -l | tr -d ' ')"
+          if [ "$JS_COUNT" -eq 0 ] || [ "$CSS_COUNT" -eq 0 ]; then
+            echo "::error::Copied frontend assets look incomplete (js=$JS_COUNT css=$CSS_COUNT)."
+            exit 1
+          fi
 
           # Resources declared in tauri.conf.json (paths relative to src-tauri/)
           cp -R "src-tauri/resources/espeak-ng-data" \

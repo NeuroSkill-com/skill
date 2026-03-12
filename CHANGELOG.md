@@ -4,15 +4,52 @@ All notable changes to NeuroSkill™ are documented here.
 
 ---
 
-## [Unreleased]
+## [0.0.27]
+
+### Build / Tooling
+
+- `npm run bump` now also rotates the changelog release header automatically: it preserves a fresh `## [Unreleased]` section and inserts `## [x.y.z] — YYYY-MM-DD` for the newly bumped version.
+
+### Features
+
+- **Hooks lifecycle completeness pass**: hook triggers now surface full runtime context (last-trigger time, matched label, and one-click session open), emit both in-app toast + native OS notification payloads, and persist immutable trigger snapshots into dedicated `hooks.sqlite` JSON audit rows; the trigger path runs in the background embedding worker with panic isolation and dedicated `hooks` logger toggles, while docs/tests/examples/locales were updated together (`SKILL.md`, `cli.ts`, `test.ts`, Help/FAQ + flow diagram, and `en`/`de`/`fr`/`he`/`uk` translations).
+- **Proactive Hooks rename + scenarios**: renamed user-facing Hooks copy from “Automation Hooks” to **Proactive Hooks** and added per-hook scenario modes (`any`, `cognitive`, `emotional`, `physical`) so triggers can be gated by live state metrics in the background worker.
+- **Hooks keyword picker keyboard UX**: keyword suggestions now support keyboard navigation (`↑` / `↓` / `Enter` / `Esc`) in addition to click-to-apply.
+- **Hooks quick examples**: added one-click starter scenarios (cognitive deep-work guard, emotional calm recovery, physical body-break) to speed up hook creation.
+- **Hooks keyword suggestions while typing**: Settings → Hooks now shows live keyword suggestions in the add-keyword flow by combining fuzzy matches from `labels.sqlite` with semantic nearest-label hits from the label text HNSW index; suggestion chips include source tags (`fuzzy`, `semantic`, or `fuzzy+semantic`) and can be clicked to add quickly.
+- **Hooks button text-fit polish**: small action buttons in Hooks now use wrap-safe sizing (`h-auto` + multiline text) so localized labels fit without clipping.
+- **Hooks scenario dropdown theming polish**: scenario selector now uses themed custom select styling (`appearance-none`, semantic border/ring tokens, custom chevron) for consistent dark/light appearance.
+- **Hooks heading naming tweak**: Hooks tab card heading now uses the concise localized tab label ("Hooks") instead of longer variant text.
+- **Settings sidebar resize**: Settings tab navigation sidebar is now mouse-resizable with a drag handle, bounded min/max width, and persisted width between opens.
+- **Settings titlebar clarity**: settings window title now always includes localized “Settings” plus the active tab name (for example “Settings — Hooks”).
+
+- **Hook distance suggestion**: new "Suggest threshold" button in Settings → Hooks that analyses real HNSW and SQLite data — finds labels matching the hook's keywords, computes cosine-distance distribution of recent EEG embeddings against those label references, and presents a percentile bar (min/p25/p50/p75/max) with a one-click "Apply" action to set the recommended threshold.
+- **Hooks WS/CLI observability expansion**: added websocket commands `hooks_suggest` and `hooks_log`, plus CLI subcommands `hooks suggest` and `hooks log` (limit/offset pagination) for scriptable threshold recommendations and audit-log inspection over either WebSocket or HTTP tunnel transport.
+- **Hook fire history viewer**: expandable "Hook fire history" section in Settings → Hooks with paginated (20/page) collapsible event rows showing timestamp, label, distance, command, and threshold-at-fire metadata.
+- **Last-trigger relative age**: the last-trigger display in Settings → Hooks now shows a live relative-time label (e.g. "12s ago", "3m ago") that updates every second alongside the absolute timestamp.
+- Added a new **Settings → Hooks** tab for user-defined automation hooks: each hook supports name, enabled flag, multiple keywords, command payload, custom text payload, configurable EEG distance threshold, and configurable recent-reference count (clamped to 10–20).
+- Added backend hook persistence and runtime matching pipeline: hook rules are saved in `settings.json`, hook keyword queries use fuzzy matching plus text-embedding/HNSW nearest-label expansion, then map to recent label-window EEG references; incoming EEG embeddings now trigger websocket broadcasts when close enough, with payload `{ hook, context: "labels", command, text }`.
 
 ### Documentation
 
-- **Linux setup docs now include tray runtime dependency guidance**: updated `LINUX.md` with a dedicated runtime prerequisite for `tauri dev` (`libayatana-appindicator3-1`, with `libappindicator3-1` fallback) and added troubleshooting steps for the startup error `Failed to load ayatana-appindicator3 or appindicator3 dynamic library`.
-- **Linux docs cross-link clarity pass**: added a reciprocal pointer in `LINUX.md` back to `README.md` Development prerequisites and explicit wording that missing appindicator runtime packages can break `npm run tauri dev` at startup.
+- **Proactive Hooks docs/examples refresh**: updated `SKILL.md` hooks scenarios and jq examples, refreshed CLI help/output text in `cli.ts` to include scenario metadata, and extended `test.ts` hook status smoke checks to validate `hook.scenario` when hooks exist.
+- Added hooks explainers in Help/FAQ including a compact hook flow diagram and a dedicated trigger-mechanics FAQ entry.
 
 ### Bug Fixes
 
+- **Windows CI Rust warning cleanup (`dead_code`)**: removed the non-Linux `linux_has_appindicator_runtime()` stub from `src-tauri/src/lib.rs` so only the Linux implementation is compiled; this eliminates the Windows-only `function is never used` warning while preserving the Linux tray-runtime guard behavior.
+
+### Documentation
+
+- **README Linux packaging quickstart added**: added a concise Development-section command block in `README.md` for Linux release-style local packaging (`tauri:build:linux:x64:native` for AppImage, then `package:linux:system:x64:native -- --skip-build` for manual `.deb`/`.rpm`), including an explicit `ALLOW_LINUX_CROSS=1` cross-target example.
+- **Linux setup docs now include tray runtime dependency guidance**: updated `LINUX.md` with a dedicated runtime prerequisite for `tauri dev` (`libayatana-appindicator3-1`, with `libappindicator3-1` fallback) and added troubleshooting steps for the startup error `Failed to load ayatana-appindicator3 or appindicator3 dynamic library`.
+- **Linux docs cross-link clarity pass**: added a reciprocal pointer in `LINUX.md` back to `README.md` Development prerequisites and explicit wording that missing appindicator runtime packages can break `npm run tauri dev` at startup.
+- **Linux packaging command docs aligned with workflows**: updated the `LINUX.md` build section to recommend the canonical local flow (`npm run tauri:build:linux:x64:native` for AppImage, then `npm run package:linux:system:x64:native -- --skip-build` for `.deb`/`.rpm` via `dpkg-deb`/`rpmbuild`), with cross-target examples when `ALLOW_LINUX_CROSS=1` is intentional.
+
+### Bug Fixes
+
+- **Rust clippy warning cleanup (embeddings/settings)**: marked argument-heavy constructor/spawn entry points in `src-tauri/src/eeg_embeddings.rs` with targeted `#[allow(clippy::too_many_arguments)]` (matching the existing worker rationale), and replaced the manual `Default` implementation for `HookStatus` with `#[derive(Default)]` in `src-tauri/src/settings.rs`.
+- **Rust hooks settings compile fix (`E0596`)**: fixed `set_hooks` in `src-tauri/src/settings_cmds.rs` by binding the locked app state as mutable before assigning `s.hooks`, resolving `cannot borrow 's' as mutable, as it is not declared as mutable` during `cargo clippy`/build.
 - **Linux tray is now mandatory with fail-fast startup guard**: before tray initialization, startup probes for loadable appindicator shared objects; when `libayatana-appindicator3` / `libappindicator3` is missing, startup aborts immediately with a clear prerequisite error instead of panicking inside `libappindicator-sys` or running without tray.
 - **Linux `tauri dev` tray-runtime preflight**: `scripts/tauri-build.js` now checks for a loadable appindicator runtime (`libayatana-appindicator3.so*` or `libappindicator3.so*`) before launching `npx tauri dev`; when missing, it exits early with distro-aware install guidance (`apt`/`dnf`/`pacman`/`zypper`) instead of letting the app crash at startup with a `libappindicator-sys` panic.
 - **`npm run bump` Linux preflight dependency clarity**: added an explicit `pkg-config` guard before `cargo clippy` in `scripts/bump.js` that checks `webkit2gtk-4.1`, `javascriptcoregtk-4.1`, and `libsoup-3.0`; when missing, bump now fails fast with actionable `apt install` guidance instead of surfacing a lower-level `webkit2gtk-sys` build-script crash.
@@ -28,6 +65,13 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### CI Runtime
 
+- Tauri frontend bundling contract guard: added `scripts/verify-tauri-frontend-structure.js` and wired it into `npm run build` (`package.json`) so `tauri build` (via `beforeBuildCommand`) now fails fast unless the configured `src-tauri/tauri.conf.json` `build.frontendDist` path contains valid built assets (`index.html` + `_app/immutable` JS/CSS) rather than raw source files.
+- Linux/macOS/Windows bundling workflows now run an explicit `npm run -s verify:tauri:frontend` step before packaging (`.github/workflows/ci.yml`, `.github/workflows/release-linux.yml`, `.github/workflows/release-mac.yml`, `.github/workflows/release-windows.yml`) to enforce the same Tauri asset layout contract in CI.
+- Windows release Discord notifier fix: `.github/workflows/release-windows.yml` now sends the Discord payload from a PowerShell object serialized via `ConvertTo-Json` (instead of shell-escaped inline JSON), eliminating Discord API `50109` (`The request body contains invalid JSON`) failures after successful Windows builds.
+- Windows release post-build hardening: `.github/workflows/release-windows.yml` now updates `latest.json` with native PowerShell (no `python3` dependency in Git Bash on `windows-latest`) and skips the Discord notification step when `DISCORD_WEBHOOK_URL` is unset, avoiding non-build-related exit failures after successful Windows artifact compilation.
+- macOS release bundle frontend integrity: `.github/workflows/release-mac.yml` now copies the generated SvelteKit `build/` output into `Contents/Resources/app` with `ditto` during manual `.app` assembly and fails fast if `build/index.html`, copied `index.html`, copied `_app/immutable`, or copied JS/CSS assets are missing, preventing release artifacts that omit frontend HTML/JS/CSS/static files.
+- Linux CI + release packaging now avoids Tauri for `.deb`/`.rpm`: both `.github/workflows/ci.yml` and `.github/workflows/release-linux.yml` build only AppImage via `tauri-build.js --bundles appimage`, then run `scripts/package-linux-system-bundles.sh` to generate `.deb` with `dpkg-deb` and `.rpm` with `rpmbuild`; this removes Tauri Linux deb/rpm bundler segfaults from automated Linux build paths while keeping artifact outputs unchanged.
+- Linux workflow/script consistency pass: `package.json` Linux Tauri scripts (`tauri:build:linux:arm64`, `tauri:build:linux:x64:native`, `tauri:build:linux:x64`) now target AppImage-only bundling, and both Linux workflows call the npm script entrypoint for the AppImage build before running manual system-tool `.deb`/`.rpm` packaging.
 - Linux CI/release workflow hardening: added native Linux x86_64 npm scripts (`tauri:build:linux:x64:native`, `package:linux:portable:x64:native`) and switched `.github/workflows/ci.yml` + `.github/workflows/release-linux.yml` to those scripts so hosted x86_64 runners no longer depend on `ALLOW_LINUX_CROSS` cross-mode execution paths.
 - Linux CI execution policy refinement: in `.github/workflows/ci.yml`, heavy Linux bundling jobs (`linux-release` and `linux-portable-package`) now run by default on `push`, and can be explicitly enabled for manual `workflow_dispatch` runs via `run_linux_bundles=true`, keeping pull-request CI focused on faster validation.
 - Updated GitHub Actions workflows to Node 24-ready action versions across CI and release workflows: `actions/checkout` → `v6`, `actions/setup-node` → `v6`, `actions/cache` → `v5`, and `Swatinem/rust-cache` → `v2.9.0`, removing the GitHub deprecation warnings about Node 20-based actions.
@@ -35,6 +79,8 @@ All notable changes to NeuroSkill™ are documented here.
 - Reintroduced Linux Tauri system dependency caching in CI and Linux release workflows via `awalsh128/cache-apt-pkgs-action` (`.github/workflows/ci.yml`, `.github/workflows/release-linux.yml`) so WebKit/GTK build dependencies are restored from cache instead of re-downloaded on every run.
 
 ### UI / Type Safety
+
+- **Settings window width bump**: increased the default Settings window width from `680` to `760` (height unchanged) so tabs and controls have more horizontal room; applied consistently to Settings/Model/Updates entry paths that create the shared `settings` window.
 
 ### What's New window
 

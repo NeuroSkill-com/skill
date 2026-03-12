@@ -30,6 +30,9 @@ const CLI_VERSION = "1.1.0";
  *   timer                          Open focus-timer window and start work phase immediately
  *   umap                           3D UMAP projection with live progress bar
  *   listen                         Stream broadcast events for N seconds
+ *   hooks                          List Proactive Hook rules, scenarios, and last-trigger metadata
+ *   hooks suggest "kw1,kw2"        Suggest threshold from real EEG/label data
+ *   hooks log [--limit N --offset M]  View paginated hook trigger audit log rows
  *   dnd                            Show DND automation status (config + live eligibility + OS state)
  *   dnd on                         Force-enable DND immediately (bypass EEG threshold)
  *   dnd off                        Force-disable DND immediately
@@ -104,6 +107,9 @@ const CLI_VERSION = "1.1.0";
  *   npx tsx cli.ts umap                             # auto: last 2 sessions → 3D points
  *   npx tsx cli.ts umap --json | jq '.points | length'
  *   npx tsx cli.ts listen --seconds 30              # 30s event stream
+ *   npx tsx cli.ts hooks --json | jq '.hooks[] | {name: .hook.name, scenario: .hook.scenario, last: .last_trigger.triggered_at_utc}'
+ *   npx tsx cli.ts hooks suggest "focus,deep work"
+ *   npx tsx cli.ts hooks log --limit 10 --offset 0
  *   npx tsx cli.ts raw '{"command":"search","start_utc":1740412800,"end_utc":1740415500,"k":3}'
  *
  * Requires: Node ≥ 18, bonjour-service + ws (devDependencies).
@@ -606,6 +612,10 @@ interface Args {
   subAction?: string;
   /** Numeric ID for `calibrations get <id>`. */
   id?: number;
+  /** Generic pagination limit for subcommands that support it (e.g. hooks log). */
+  limit?: number;
+  /** Generic pagination offset for subcommands that support it (e.g. hooks log). */
+  offset?: number;
   /**
    * One or more image file paths for `llm chat`.
    * Each file is base64-encoded and embedded as an `image_url` content part.
@@ -672,6 +682,7 @@ function parseArgs(): Args {
     "--start", "--end", "--a-start", "--a-end", "--b-start", "--b-end",
     "--k", "--k-text", "--k-eeg", "--k-labels", "--reach", "--ef",
     "--mode", "--profile", "--seconds", "--poll",
+    "--limit", "--offset",
     "--context", "--at", "--voice",
     "--system", "--max-tokens", "--temperature", "--image",
   ]);
@@ -704,6 +715,8 @@ function parseArgs(): Args {
     else if (a === "--ef")       { args.ef      = nextInt("--ef");      }
     else if (a === "--seconds")  { args.seconds = nextInt("--seconds"); }
     else if (a === "--poll")     { args.poll    = nextInt("--poll");    }
+    else if (a === "--limit")    { args.limit   = nextInt("--limit");   }
+    else if (a === "--offset")   { args.offset  = nextInt("--offset");  }
     else if (a === "--at")          { args.at          = nextInt("--at");          }
     else if (a === "--max-tokens")  { args.maxTokens   = nextInt("--max-tokens");   }
     else if (a === "--mode")        { args.mode        = argv[++i]; }
@@ -757,6 +770,12 @@ function parseArgs(): Args {
       const n = Number(a);
       if (isNaN(n)) { console.error(`error: calibrations get requires a numeric id (got: ${JSON.stringify(a)})`); process.exit(1); }
       args.id = n;
+    }
+    else if (args.command === "hooks" && !args.subAction) {
+      args.subAction = a.toLowerCase();
+    }
+    else if (args.command === "hooks" && args.subAction === "suggest" && !args.text) {
+      args.text = a;
     }
     else if (args.command === "session" || args.command === "sleep") {
       const n = Number(a);
@@ -814,6 +833,9 @@ ${m("llm logs",                                      "print last 500 LLM server 
 ${m("llm chat",                                       "interactive multi-turn chat REPL; type /help inside for commands")}
 ${m('llm chat "message"',                            "single-shot: send one message, stream the reply, and exit")}
 ${m("listen [--seconds <n>]",                        "listen for broadcast events (default: 5s)")}
+${m("hooks",                                         "list Proactive Hooks (scenario + last trigger metadata)")}
+${m('hooks suggest "kw1,kw2"',                       "suggest threshold from matching labels + recent EEG embeddings")}
+${m("hooks log [--limit <n>] [--offset <n>]",       "show hook trigger audit history from hooks.sqlite")}
 ${m("raw '{\"command\":\"status\"}'",                "send raw JSON, print full response")}
 
 ${BOLD}OPTIONS${RESET}
@@ -825,6 +847,8 @@ ${BOLD}OPTIONS${RESET}
   ${YELLOW}--full${RESET}            print full JSON response after the human-readable summary
   ${YELLOW}--no-color${RESET}        disable ANSI color output (also honoured via NO_COLOR env var)
   ${YELLOW}--poll <n>${RESET}        (status) re-poll every N seconds; keeps the socket open
+  ${YELLOW}--limit <n>${RESET}       (hooks log) page size (default: 20)
+  ${YELLOW}--offset <n>${RESET}      (hooks log) row offset (default: 0)
   ${YELLOW}--trends${RESET}          (sessions) show per-session metric trends and first/second-half deltas
   ${YELLOW}--context "..."${RESET}   (label) long-form annotation body; used by search-labels --mode context
   ${YELLOW}--at <utc>${RESET}        (label) backdate to a specific unix second (default: now)
@@ -3085,6 +3109,96 @@ async function cmdDnd(args: Args): Promise<void> {
   printResult(r);
 }
 
+async function cmdHooks(args: Args): Promise<void> {
+  const sub = (args.subAction ?? "status").toLowerCase();
+
+  if (sub === "status") {
+    print(`${BOLD}🪝 proactive hooks${RESET}`);
+    const r = await send({ command: "hooks_status" });
+    if (!r.ok) { printResult(r); printError(r.error ?? "hooks_status failed"); }
+
+    const hooks = Array.isArray(r.hooks) ? r.hooks : [];
+    if (hooks.length === 0) {
+      print(`  ${DIM}(no hooks configured)${RESET}`);
+      printResult(r);
+      return;
+    }
+
+    for (const row of hooks) {
+      const hook = row.hook ?? {};
+      const trig = row.last_trigger ?? null;
+      const enabled = hook.enabled ? `${GREEN}on${RESET}` : `${GRAY}off${RESET}`;
+      const scenario = String(hook.scenario ?? "any");
+      print(`  ${CYAN}${hook.name ?? "(unnamed)"}${RESET}  [${enabled}]  ${DIM}scenario=${scenario}${RESET}`);
+      if (trig?.triggered_at_utc) {
+        const label = trig.label_text ? ` label=${JSON.stringify(trig.label_text)}` : "";
+        const dist = typeof trig.distance === "number" ? ` d=${trig.distance.toFixed(3)}` : "";
+        print(`    last=${trig.triggered_at_utc}${dist}${label}`);
+      } else {
+        print(`    ${DIM}last=never${RESET}`);
+      }
+    }
+
+    printResult(r);
+    return;
+  }
+
+  if (sub === "suggest") {
+    if (!args.text) printError('usage: cli.ts hooks suggest "kw1,kw2"');
+    const keywords = (args.text ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    print(`${BOLD}🪝 hooks suggest${RESET} ${DIM}${keywords.join(", ")}${RESET}`);
+    const r = await send({ command: "hooks_suggest", keywords });
+    if (!r.ok) { printResult(r); printError(r.error ?? "hooks_suggest failed"); }
+    const s = r.suggestion ?? {};
+    print(`  suggested   ${CYAN}${Number(s.suggested ?? 0.1).toFixed(2)}${RESET}`);
+    print(`  distances   min=${Number(s.eeg_min ?? 0).toFixed(3)} p25=${Number(s.eeg_p25 ?? 0).toFixed(3)} p50=${Number(s.eeg_p50 ?? 0).toFixed(3)} p75=${Number(s.eeg_p75 ?? 0).toFixed(3)} max=${Number(s.eeg_max ?? 0).toFixed(3)}`);
+    print(`  samples     labels=${s.label_n ?? 0} refs=${s.ref_n ?? 0} eeg=${s.sample_n ?? 0}`);
+    if (s.note) print(`  ${DIM}${s.note}${RESET}`);
+    printResult(r);
+    return;
+  }
+
+  if (sub === "log") {
+    const limit = args.limit ?? 20;
+    const offset = args.offset ?? 0;
+    print(`${BOLD}🪝 hooks log${RESET} ${DIM}(limit=${limit}, offset=${offset})${RESET}`);
+    const r = await send({ command: "hooks_log", limit, offset });
+    if (!r.ok) { printResult(r); printError(r.error ?? "hooks_log failed"); }
+    const rows = Array.isArray(r.rows) ? r.rows : [];
+    const total = Number(r.total ?? 0);
+
+    if (rows.length === 0) {
+      print(`  ${DIM}(no hook events)${RESET}`);
+      printResult(r);
+      return;
+    }
+
+    for (const row of rows) {
+      let hookName = "(unknown)";
+      let scenario = "any";
+      let label = "";
+      let dist = "";
+      try {
+        const h = JSON.parse(row.hook_json ?? "{}");
+        const t = JSON.parse(row.trigger_json ?? "{}");
+        hookName = h.name ?? hookName;
+        scenario = h.scenario ?? scenario;
+        if (t.label_text) label = ` label=${JSON.stringify(t.label_text)}`;
+        if (typeof t.distance === "number") dist = ` d=${t.distance.toFixed(3)}`;
+      } catch {}
+      print(`  ${CYAN}${hookName}${RESET}  ${DIM}[${scenario}]${RESET}  ts=${row.triggered_at_utc}${dist}${label}`);
+    }
+    print(`  ${DIM}showing ${rows.length} row(s), total=${total}${RESET}`);
+    printResult(r);
+    return;
+  }
+
+  printError(`unknown hooks subcommand: "${sub}". Valid: status suggest log`);
+}
+
 /**
  * `listen` — Passively listen for broadcast events from the Skill server.
  *
@@ -3793,6 +3907,9 @@ async function main(): Promise<void> {
           );
         }
         await cmdListen(args.seconds ?? 5);
+        break;
+      case "hooks":
+        await cmdHooks(args);
         break;
       case "llm":
         await cmdLlm(args);

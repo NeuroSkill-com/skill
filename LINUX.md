@@ -139,18 +139,35 @@ sudo apt install -y sqlite3
 
 ## 8) Build after prerequisites are installed
 
-From repo root:
+From repo root, use the Linux-native script entrypoints:
 
 ```bash
 npm install
-npm run tauri:build
+
+# 1) Build AppImage via Tauri
+npm run tauri:build:linux:x64:native
+
+# 2) Build .deb + .rpm with system tools (dpkg-deb + rpmbuild)
+#    Reuses the release binary from step 1.
+npm run package:linux:system:x64:native -- --skip-build
 ```
 
-The build wrapper automatically:
+Optional portable tarball package:
 
-- checks/installs Vulkan prerequisites (`scripts/install-vulkan-sdk.sh`)
-- builds static `espeak-ng` if missing (`scripts/build-espeak-static.sh`)
-- injects `--features llm-vulkan` if no explicit `--features` was provided
+```bash
+npm run package:linux:portable:x64:native
+```
+
+Notes:
+
+- `tauri:build:linux:*` scripts now target AppImage-only bundling.
+- `.deb`/`.rpm` are produced by `scripts/package-linux-system-bundles.sh`.
+- For intentional cross-target x86_64 builds from non-x86_64 hosts, use:
+
+```bash
+ALLOW_LINUX_CROSS=1 npm run tauri:build:linux:x64
+ALLOW_LINUX_CROSS=1 bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu
+```
 
 ## Runtime warning troubleshooting
 

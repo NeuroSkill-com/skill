@@ -60,6 +60,7 @@ pub(crate) struct SessionDsp {
     // ── Cached config — compared each frame to detect Tauri-command changes ──
     last_filter_config: FilterConfig,
     last_overlap_secs:  f32,
+    last_hooks: Vec<crate::settings::HookRule>,
 }
 
 impl SessionDsp {
@@ -68,19 +69,22 @@ impl SessionDsp {
     /// Acquires the `AppState` lock exactly once, clones the needed values,
     /// and releases it before building any DSP object.
     pub(crate) fn new(app: &AppHandle) -> Self {
-        let (filter_cfg, overlap_secs, skill_dir, model_config,
-             model_status, download_cancel, encoder_reload_requested, logger) = {
+        let (filter_cfg, overlap_secs, hooks, text_embedding_model, skill_dir, model_config,
+             model_status, download_cancel, encoder_reload_requested, logger, hook_runtime) = {
             let r = app.state::<Mutex<AppState>>();
             let g = r.lock_or_recover();
             (
                 g.status.filter_config,
                 g.status.embedding_overlap_secs,
+                g.hooks.clone(),
+                g.text_embedding_model.clone(),
                 g.skill_dir.clone(),
                 g.model_config.clone(),
                 g.model_status.clone(),
                 g.download_cancel.clone(),
                 g.encoder_reload_requested.clone(),
                 g.logger.clone(),
+                g.hook_runtime.clone(),
             )
         }; // lock released here
 
@@ -90,10 +94,20 @@ impl SessionDsp {
             .state::<std::sync::Arc<crate::global_eeg_index::GlobalEegIndex>>()
             .inner()
             .arc();
+        let label_idx = app
+            .state::<std::sync::Arc<crate::label_index::LabelIndexState>>()
+            .inner()
+            .clone();
+        let ws_broadcaster = app
+            .state::<crate::ws_server::WsBroadcaster>()
+            .inner()
+            .clone();
 
         let mut accumulator = EegAccumulator::new(
             skill_dir, model_config, model_status, download_cancel,
             encoder_reload_requested, logger, global_index,
+            hooks.clone(), text_embedding_model, label_idx, ws_broadcaster,
+            hook_runtime, app.clone(),
         );
         accumulator.set_overlap_secs(overlap_secs);
 
@@ -106,6 +120,7 @@ impl SessionDsp {
             accumulator,
             last_filter_config: filter_cfg,
             last_overlap_secs:  overlap_secs,
+            last_hooks: hooks,
         }
     }
 
@@ -116,10 +131,10 @@ impl SessionDsp {
     /// the user adjusted settings in the UI), and applies the change to the
     /// local DSP objects.  No-ops when nothing changed — cheap.
     pub(crate) fn sync_config(&mut self, app: &AppHandle) {
-        let (filter_cfg, overlap_secs) = {
+        let (filter_cfg, overlap_secs, hooks) = {
             let r = app.state::<Mutex<AppState>>();
             let g = r.lock_or_recover();
-            (g.status.filter_config, g.status.embedding_overlap_secs)
+            (g.status.filter_config, g.status.embedding_overlap_secs, g.hooks.clone())
         };
 
         if filter_cfg != self.last_filter_config {
@@ -129,6 +144,10 @@ impl SessionDsp {
         if (overlap_secs - self.last_overlap_secs).abs() > f32::EPSILON {
             self.accumulator.set_overlap_secs(overlap_secs);
             self.last_overlap_secs = overlap_secs;
+        }
+        if hooks != self.last_hooks {
+            self.accumulator.set_hooks(hooks.clone());
+            self.last_hooks = hooks;
         }
     }
 }

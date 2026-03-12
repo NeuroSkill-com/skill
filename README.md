@@ -425,6 +425,27 @@ npm run tauri build
 npm run tauri build -- --debug
 ```
 
+### Linux packaging quickstart
+
+Use this local flow on Linux when you want release-style artifacts:
+
+```bash
+# 1) Build AppImage via Tauri
+npm run tauri:build:linux:x64:native
+
+# 2) Build .deb + .rpm via system tools (dpkg-deb + rpmbuild)
+npm run package:linux:system:x64:native -- --skip-build
+```
+
+Cross-target x86_64 builds from non-x86_64 hosts (intentional only):
+
+```bash
+ALLOW_LINUX_CROSS=1 npm run tauri:build:linux:x64
+ALLOW_LINUX_CROSS=1 bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu
+```
+
+For full Linux prerequisites and troubleshooting, see [`LINUX.md`](LINUX.md).
+
 ### Project Structure
 
 ```

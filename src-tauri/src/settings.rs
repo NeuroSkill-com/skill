@@ -535,6 +535,69 @@ pub(crate) fn default_theme_shortcut()       -> String { "CmdOrCtrl+Shift+T".int
 pub(crate) fn default_focus_timer_shortcut() -> String { "CmdOrCtrl+Shift+P".into() }
 #[cfg(feature = "llm")]
 pub(crate) fn default_chat_shortcut()        -> String { "CmdOrCtrl+Shift+I".into() }
+pub(crate) fn default_hook_distance_threshold() -> f32 { 0.1 }
+pub(crate) fn default_hook_recent_limit() -> usize { 12 }
+pub(crate) fn default_hook_scenario() -> String { "any".into() }
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HookRule {
+    pub name: String,
+    pub enabled: bool,
+    pub keywords: Vec<String>,
+    #[serde(default = "default_hook_scenario")]
+    pub scenario: String,
+    pub command: String,
+    pub text: String,
+    #[serde(default = "default_hook_distance_threshold")]
+    pub distance_threshold: f32,
+    #[serde(default = "default_hook_recent_limit")]
+    pub recent_limit: usize,
+}
+
+impl Default for HookRule {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            enabled: true,
+            keywords: Vec::new(),
+            scenario: default_hook_scenario(),
+            command: String::new(),
+            text: String::new(),
+            distance_threshold: default_hook_distance_threshold(),
+            recent_limit: default_hook_recent_limit(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HookLastTrigger {
+    pub triggered_at_utc: u64,
+    pub distance: f32,
+    pub label_id: Option<i64>,
+    pub label_text: Option<String>,
+    pub label_eeg_start_utc: Option<u64>,
+}
+
+impl Default for HookLastTrigger {
+    fn default() -> Self {
+        Self {
+            triggered_at_utc: 0,
+            distance: 0.0,
+            label_id: None,
+            label_text: None,
+            label_eeg_start_utc: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct HookStatus {
+    pub hook: HookRule,
+    pub last_trigger: Option<HookLastTrigger>,
+}
 
 // ── UserSettings (serialised to settings.json) ────────────────────────────────
 
@@ -590,6 +653,8 @@ pub(crate) struct UserSettings {
     pub goal_notified_date:     String,
     #[serde(default = "default_embedding_model")]
     pub text_embedding_model:   String,
+    #[serde(default)]
+    pub hooks:                  Vec<HookRule>,
     /// WebSocket server bind host.  `"127.0.0.1"` (loopback-only, default)
     /// or `"0.0.0.0"` (all interfaces — exposes the API on the LAN).
     #[serde(default = "default_ws_host")]
@@ -763,6 +828,7 @@ impl Default for UserSettings {
             daily_goal_min:         default_daily_goal_min(),
             goal_notified_date:     String::new(),
             text_embedding_model:   default_embedding_model(),
+            hooks:                  Vec::new(),
             ws_host:                default_ws_host(),
             ws_port:                default_ws_port(),
             update_check_interval_secs: default_update_check_interval(),
