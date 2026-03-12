@@ -78,6 +78,7 @@ tauri-build = { version = "2.5.6", features = [] }
 
 [dependencies]
 dirs = "6"
+stacker = "0.1"
 
 # Cross-platform GPU detection (VRAM, unified memory, backend).
 # Used by gpu_stats.rs on Linux and Windows where IOKit is unavailable.
