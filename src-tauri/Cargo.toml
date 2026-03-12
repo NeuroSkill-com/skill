@@ -18,7 +18,10 @@ license = "GPL-3.0-only"
 #  llm         — OpenAI-compatible local LLM inference server embedded in the
 #                same HTTP port as the WebSocket API.  Uses llama-cpp-4 (Rust
 #                bindings for llama.cpp).  On by default.
-#                GPU offloading flags (pick at most one):
+#                GPU offloading is automatic by platform:
+#                  macOS        → Metal  (via target-specific dep features)
+#                  Linux/Windows → Vulkan (via target-specific dep features)
+#                Manual override flags (pick at most one):
 #                  --features llm-metal   (macOS Metal)
 #                  --features llm-cuda    (NVIDIA CUDA)
 #                  --features llm-vulkan  (cross-platform Vulkan)
@@ -239,6 +242,10 @@ crossbeam-channel = "0.5.15"
 # On Linux / Windows the default ort backend is used instead.
 [target.'cfg(target_os = "macos")'.dependencies]
 fastembed = { version = "5.11.0", features = ["metal"] }
+# llama-cpp-4 with Metal GPU offload — merged with the base [dependencies] entry
+# so that when the `llm` feature is active the Metal backend is compiled in
+# automatically on macOS.
+llama-cpp-4 = { version = "0.2.10", optional = true, features = ["metal"] }
 # Pure-Rust Focus Mode / Do Not Disturb control — no Swift, no ObjC, no
 # private frameworks.  Replaces the hand-rolled Assertions.json writer.
 macos-focus = "0.0.1"
@@ -256,6 +263,10 @@ neutts = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgpu", 
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 fastembed = { version = "5.11.0" }
+# llama-cpp-4 with Vulkan GPU offload — merged with the base [dependencies]
+# entry so that when the `llm` feature is active the Vulkan backend is compiled
+# in automatically on Linux and Windows.
+llama-cpp-4 = { version = "0.2.10", optional = true, features = ["vulkan"] }
 
 [dev-dependencies]
 tempfile = "3"

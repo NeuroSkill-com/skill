@@ -8,6 +8,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Dependencies
 
+- **Auto-enable GPU backend for LLM by platform**: `llama-cpp-4` now receives `metal` on macOS and `vulkan` on Linux/Windows via target-specific dependency feature merging in `Cargo.toml`, so the `llm` feature automatically uses the correct GPU backend without requiring manual `--features llm-metal` / `--features llm-vulkan` flags.
 - **Bump `llama-cpp-4` from 0.2.9 → 0.2.10** (and `llama-cpp-sys-4` 0.2.9 → 0.2.10).
 
 ### Build / Tooling

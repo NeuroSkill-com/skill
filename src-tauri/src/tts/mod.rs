@@ -15,6 +15,7 @@ mod kitten;
 #[cfg(feature = "tts-neutts")]
 mod neutts;
 
+#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 use std::num::NonZero;
 use std::path::PathBuf;
 use std::sync::{OnceLock, atomic::{AtomicBool, Ordering}};
@@ -69,6 +70,7 @@ static TTS_LOGGING: AtomicBool = AtomicBool::new(false);
 #[allow(dead_code)]
 pub fn set_logging(enable: bool) { TTS_LOGGING.store(enable, Ordering::Relaxed); }
 
+#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 pub(super) fn tts_log(msg: &str) {
     if TTS_LOGGING.load(Ordering::Relaxed) {
         eprintln!("[tts] {msg}");
@@ -77,6 +79,7 @@ pub(super) fn tts_log(msg: &str) {
 
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
+#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 pub(super) const TAIL_SILENCE_SECS: f32 = 0.25;
 
 // ─── Progress event ───────────────────────────────────────────────────────────
@@ -97,6 +100,7 @@ pub struct TtsProgressEvent {
 
 pub(crate) const TTS_PROGRESS_EVENT: &str = "tts-progress";
 
+#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 impl TtsProgressEvent {
     /// A mid-load progress step.
     pub(super) fn step(step: u32, total: u32, label: String) -> Self {
@@ -158,6 +162,7 @@ pub(crate) fn init_espeak_bundled_data_path(resource_dir: &std::path::Path) {
 /// We only call `set_data_path()` when the path actually exists on disk so we
 /// never hand a non-existent path to espeak, which would permanently poison the
 /// `OnceCell` init result and break all phonemisation.
+#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 pub(super) fn init_espeak_data_path() {
     let explicit   = std::env::var("ESPEAK_DATA_PATH").ok();
     let dev_baked  = option_env!("ESPEAK_DATA_PATH_DEV"); // absolute path from build.rs
@@ -236,10 +241,9 @@ fn use_neutts() -> bool { false }
 /// the llama.cpp/Metal `ggml_metal_device_free` assertion from firing during
 /// C++ static destructors after `exit()`.
 pub(crate) fn tts_shutdown() {
-    let timeout = std::time::Duration::from_secs(8);
-
     #[cfg(feature = "tts-neutts")]
     {
+        let timeout = std::time::Duration::from_secs(8);
         let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
         if neutts::try_shutdown(tx) && rx.recv_timeout(timeout).is_err() {
             eprintln!("[neutts] shutdown timed out — forcing drop");
@@ -274,10 +278,15 @@ pub struct NeuttsVoiceInfo {
 /// can listen via `appWindow.listen("tts_progress", …)`.
 #[tauri::command]
 pub async fn tts_init(app_handle: AppHandle) -> Result<(), String> {
-    let app = app_handle.clone();
-    let emit = move |ev: TtsProgressEvent| {
-        app.emit(TTS_PROGRESS_EVENT, ev).ok();
+    #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+    let emit = {
+        let app = app_handle.clone();
+        move |ev: TtsProgressEvent| {
+            app.emit(TTS_PROGRESS_EVENT, ev).ok();
+        }
     };
+    #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+    let _ = &app_handle;
 
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
@@ -347,6 +356,7 @@ pub async fn tts_init(app_handle: AppHandle) -> Result<(), String> {
 /// Unload the active TTS backend, freeing memory.
 #[tauri::command]
 pub async fn tts_unload(app_handle: AppHandle) -> Result<(), String> {
+    let _ = &app_handle;
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
         {
@@ -386,6 +396,8 @@ pub async fn tts_unload(app_handle: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn tts_speak(text: String, voice: Option<String>) {
     let voice_str = voice.unwrap_or_default();
+    #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+    { let _ = (&text, &voice_str); }
 
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
@@ -476,6 +488,8 @@ pub async fn tts_get_voice() -> String {
 /// Set the active voice name (KittenTTS) or preset (NeuTTS).
 #[tauri::command]
 pub async fn tts_set_voice(voice: String) {
+    #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
+    let _ = &voice;
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
         {

@@ -109,6 +109,7 @@
 //! Existing WS clients continue to connect to `ws://host:port/` as before.
 
 use std::net::SocketAddr;
+#[cfg(feature = "llm")]
 use std::sync::Mutex;
 
 use axum::{

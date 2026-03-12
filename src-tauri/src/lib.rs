@@ -1172,20 +1172,22 @@ pub fn run() {
             }
 
             let app_name = app.package_info().name.to_lowercase();
-            let (ws_cfg, llm_cfg) = {
+            let ws_cfg = {
                 let dir = app.state::<Mutex<AppState>>().lock_or_recover().skill_dir.clone();
                 let s   = load_settings(&dir);
-                ((s.ws_host, s.ws_port), s.llm)
+                (s.ws_host, s.ws_port)
             };
 
             // ── LLM server (optional, same port) ──────────────────────────
             // Routes are always mounted; cell holds None until started.
             #[cfg(feature = "llm")]
             {
-                let (catalog, log_buf, cell, skill_dir) = {
+                let (llm_cfg, catalog, log_buf, cell, skill_dir) = {
+                    let dir = app.state::<Mutex<AppState>>().lock_or_recover().skill_dir.clone();
+                    let llm_cfg = load_settings(&dir).llm;
                     let guard = app.state::<Mutex<AppState>>();
                     let s = guard.lock().unwrap();
-                    (s.llm_catalog.clone(), s.llm_logs.clone(), s.llm_state_cell.clone(), s.skill_dir.clone())
+                    (llm_cfg, s.llm_catalog.clone(), s.llm_logs.clone(), s.llm_state_cell.clone(), s.skill_dir.clone())
                 };
                 if llm_cfg.enabled {
                     let app_handle = app.handle().clone();
@@ -1198,6 +1200,7 @@ pub fn run() {
                 }
             }
 
+            #[allow(unused_mut)]
             let (broadcaster, mut serve_handle) = ws_server::bind_with(ws_cfg.0, ws_cfg.1);
             ws_server::register_mdns(&app_name, serve_handle.port);
             let ws_app = app.handle().clone();

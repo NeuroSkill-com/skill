@@ -51,6 +51,7 @@ fn progress_percent(progress: f32) -> u8 {
     ((progress.clamp(0.0, 1.0) * 100.0).round() as u8).min(100)
 }
 
+#[cfg(feature = "llm")]
 fn ellipsize_middle(text: &str, max_chars: usize) -> String {
     let chars: Vec<char> = text.chars().collect();
     if chars.len() <= max_chars {
