@@ -2,8 +2,8 @@
 # ── Create a macOS DMG from a pre-built .app bundle ───────────────────────
 #
 # Uses sindresorhus/create-dmg for the base DMG (composed icon, Retina
-# background, ULFO+APFS), then post-processes to add extra files
-# (README, CHANGELOG, LICENSE) and a version-stamped background.
+# background, ULFO+APFS), then post-processes to add README, CHANGELOG,
+# LICENSE and uses AppleScript to position them in the Finder window.
 #
 # Usage:
 #   bash scripts/create-macos-dmg.sh [target-triple]
@@ -78,11 +78,6 @@ if $NEED_INSTALL; then
   npm install --global create-dmg@latest
 fi
 
-# NOTE: We intentionally do NOT create license.txt here.
-# create-dmg's SLA (via hdiutil udifrez) gets lost when we re-compress the
-# DMG in Phase 2, and re-embedding it corrupts the DMG on macOS 14+.
-# The LICENSE file is included as a visible file inside the DMG instead.
-
 # ── Prepare output directory ──────────────────────────────────────────────
 DMG_DIR="$BUNDLE_DIR/dmg"
 mkdir -p "$DMG_DIR"
@@ -95,7 +90,9 @@ rm -f "$DMG_DIR/${PRODUCT_NAME} ${VERSION}.dmg"
 
 # ══════════════════════════════════════════════════════════════════════════
 # Phase 1: create-dmg produces the base DMG
-#   → composed volume icon, Retina background, SLA, app + Applications
+#   → composed volume icon, Retina background, app + Applications
+#   → ULFO format, APFS filesystem
+#   → No SLA (hdiutil udifrez corrupts DMGs on macOS 14+)
 # ══════════════════════════════════════════════════════════════════════════
 echo "  Phase 1: create-dmg (base DMG) …"
 CREATE_DMG_ARGS=(--overwrite --dmg-title "NeuroSkill" --no-code-sign)
@@ -113,11 +110,16 @@ fi
 echo "  ✓ base DMG created"
 
 # ══════════════════════════════════════════════════════════════════════════
-# Phase 2: Post-process — add extra files + version-stamped background
-#   Convert to read-write, mount, inject files, re-compress.
-#   SLA is re-embedded after re-compression (convert loses resource forks).
+# Phase 2: Post-process — add extra files
+#   Convert to read-write, mount, copy docs, use AppleScript to position
+#   icons (only reliable method on APFS), re-compress.
+#
+#   IMPORTANT: Do NOT rewrite .DS_Store with Python ds_store/mac_alias.
+#   Those libraries produce HFS+-style entries that crash Finder on APFS.
+#   AppleScript (via osascript) is what appdmg itself uses and is the
+#   only reliable way to set Finder view properties on APFS volumes.
 # ══════════════════════════════════════════════════════════════════════════
-echo "  Phase 2: post-processing (extra files + version background) …"
+echo "  Phase 2: post-processing (adding docs) …"
 
 WORK_DIR="$(mktemp -d)"; CLEANUP_DIRS+=("$WORK_DIR")
 DMG_RW="$WORK_DIR/rw.dmg"
@@ -126,14 +128,7 @@ DMG_RW="$WORK_DIR/rw.dmg"
 hdiutil convert "$DMG_OUT" -format UDRW -o "$DMG_RW" -quiet
 
 # Resize to accommodate extra files (+5 MB headroom)
-EXTRA_SIZE=5
-for doc in README.md CHANGELOG.md LICENSE; do
-  if [[ -f "$ROOT/$doc" ]]; then
-    DOC_KB=$(du -k "$ROOT/$doc" | cut -f1)
-    EXTRA_SIZE=$(( EXTRA_SIZE + DOC_KB / 1024 + 1 ))
-  fi
-done
-hdiutil resize -size +${EXTRA_SIZE}m "$DMG_RW" 2>/dev/null || true
+hdiutil resize -size +5m "$DMG_RW" 2>/dev/null || true
 
 # Mount
 MOUNT_DIR=""
@@ -147,187 +142,57 @@ else
   for doc in README.md CHANGELOG.md LICENSE; do
     if [[ -f "$ROOT/$doc" ]]; then
       cp "$ROOT/$doc" "$MOUNT_DIR/$doc"
-      echo "  ✓ $doc"
+      echo "  ✓ $doc added"
     fi
   done
 
-  # ── Replace background with branded logo + version ─────────────────────
-  # create-dmg generates a generic 660×400 background. We replace it with
-  # a custom dark canvas showing the app icon, version, and install hint.
-  # Window is 660×520 to fit the docs bottom row with breathing room.
-  # Backgrounds: 660×520 @1x + 1320×1040 @2x (Retina).
-  ICON_PNG="$TAURI_DIR/icons/icon.png"
-  BG_DIR="$MOUNT_DIR/.background"
-  if [[ -d "$BG_DIR" ]] && [[ -f "$ICON_PNG" ]]; then
-    python3 - "$BG_DIR" "$ICON_PNG" "$VERSION" "$PRODUCT_NAME" <<'PYEOF' 2>/dev/null && true || true
-import sys, os
+  # ── Use AppleScript to resize window + position all icons ─────────────
+  # This is the same technique appdmg uses internally. It works reliably
+  # on both HFS+ and APFS because Finder writes the .DS_Store itself.
+  VOL_NAME=$(basename "$MOUNT_DIR")
+  osascript <<APPLESCRIPT 2>/dev/null && echo "  ✓ Finder layout configured" || echo "  ⊘ AppleScript layout skipped (no Finder permission)"
+tell application "Finder"
+  tell disk "${VOL_NAME}"
+    open
+    delay 1
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set the bounds of container window to {100, 100, 760, 620}
+    set viewOptions to the icon view options of container window
+    set arrangement of viewOptions to not arranged
+    set icon size of viewOptions to 80
+    set text size of viewOptions to 12
+    -- Top row: app + Applications
+    set position of item "${PRODUCT_NAME}.app" of container window to {180, 170}
+    set position of item "Applications" of container window to {480, 170}
+    -- Bottom row: docs
+    try
+      set position of item "README.md" of container window to {140, 370}
+    end try
+    try
+      set position of item "LICENSE" of container window to {330, 370}
+    end try
+    try
+      set position of item "CHANGELOG.md" of container window to {520, 370}
+    end try
+    close
+    open
+    -- Give Finder time to write .DS_Store
+    delay 3
+    close
+  end tell
+end tell
+APPLESCRIPT
 
-bg_dir, icon_path, version, product_name = sys.argv[1:5]
+  # ── Cleanup ─────────────────────────────────────────────────────────────
+  chmod -Rf go-w "$MOUNT_DIR" 2>/dev/null || true
+  rm -rf "$MOUNT_DIR/.fseventsd" \
+         "$MOUNT_DIR/.Trashes" \
+         "$MOUNT_DIR/.Spotlight-V100" \
+         "$MOUNT_DIR/.TemporaryItems" 2>/dev/null || true
+  dot_clean "$MOUNT_DIR" 2>/dev/null || true
 
-try:
-    from PIL import Image, ImageDraw, ImageFont
-except ImportError:
-    print("  ⊘ Pillow not available — keeping default background")
-    sys.exit(0)
-
-BG_COLOR  = (30, 30, 30, 255)
-TXT_COLOR = (200, 200, 200, 255)
-DIM_COLOR = (120, 120, 120, 255)
-
-def load_font(size):
-    for fp in [
-        "/System/Library/Fonts/Helvetica.ttc",
-        "/System/Library/Fonts/SFNSDisplay.ttf",
-        "/System/Library/Fonts/SFNS.ttf",
-        "/Library/Fonts/Arial.ttf",
-    ]:
-        try:
-            return ImageFont.truetype(fp, size)
-        except (OSError, IOError):
-            continue
-    return ImageFont.load_default()
-
-icon_orig = Image.open(icon_path).convert("RGBA")
-
-for scale, suffix in [(1, "background.png"), (2, "background@2x.png")]:
-    W = 660 * scale
-    H = 520 * scale
-
-    bg = Image.new("RGBA", (W, H), BG_COLOR)
-    draw = ImageDraw.Draw(bg)
-
-    # ── Icon (centered horizontally, in the upper third) ──────────────
-    icon_sz = 128 * scale
-    icon = icon_orig.resize((icon_sz, icon_sz), Image.LANCZOS)
-    ix = (W - icon_sz) // 2
-    iy = 40 * scale
-    bg.paste(icon, (ix, iy), icon)
-
-    # ── Product name ──────────────────────────────────────────────────
-    font_name = load_font(20 * scale)
-    nbox = draw.textbbox((0, 0), product_name, font=font_name)
-    nw = nbox[2] - nbox[0]
-    draw.text(((W - nw) // 2, iy + icon_sz + 12 * scale),
-              product_name, fill=TXT_COLOR, font=font_name)
-
-    # ── Version ───────────────────────────────────────────────────────
-    font_ver = load_font(14 * scale)
-    vtxt = f"v{version}"
-    vbox = draw.textbbox((0, 0), vtxt, font=font_ver)
-    vw = vbox[2] - vbox[0]
-    draw.text(((W - vw) // 2, iy + icon_sz + 44 * scale),
-              vtxt, fill=DIM_COLOR, font=font_ver)
-
-    # ── Install hint (bottom) ─────────────────────────────────────────
-    font_hint = load_font(12 * scale)
-    hint = "Drag to Applications to install"
-    hbox = draw.textbbox((0, 0), hint, font=font_hint)
-    hw = hbox[2] - hbox[0]
-    draw.text(((W - hw) // 2, H - 30 * scale),
-              hint, fill=DIM_COLOR, font=font_hint)
-
-    out = os.path.join(bg_dir, suffix)
-    bg.save(out, "PNG")
-
-# Remove any other background files create-dmg may have left
-for f in os.listdir(bg_dir):
-    if f not in ("background.png", "background@2x.png"):
-        os.remove(os.path.join(bg_dir, f))
-
-print(f"  ✓ background replaced (logo + v{version}, 660×520 @1x + @2x)")
-PYEOF
-  fi
-
-  # ── Rewrite .DS_Store with taller window + all icon positions ───────────
-  # create-dmg wrote a 660×400 window. We rewrite it for 660×520 with
-  # updated positions: app row at y=220, docs row at y=400.
-  python3 - "$MOUNT_DIR" "$PRODUCT_NAME" <<'PYEOF' 2>/dev/null && true || true
-import sys, os, plistlib
-
-mount_dir = sys.argv[1]
-product_name = sys.argv[2]
-
-try:
-    from ds_store import DSStore
-    from mac_alias import Alias
-except ImportError:
-    import subprocess
-    subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "--quiet", "ds_store", "mac_alias"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-    )
-    from ds_store import DSStore
-    from mac_alias import Alias
-
-ds_path = os.path.join(mount_dir, ".DS_Store")
-
-# ── Icon-view properties (icvp) ────────────────────────────────────────
-icvp = {
-    "viewOptionsVersion": 1,
-    "backgroundType": 0,
-    "iconSize": 80.0,
-    "textSize": 12.0,
-    "gridSpacing": 100.0,
-    "gridOffsetX": 0.0,
-    "gridOffsetY": 0.0,
-    "arrangeBy": "none",
-    "showIconPreview": True,
-    "showItemInfo": False,
-    "labelOnBottom": True,
-}
-
-# Background alias
-bg_file = os.path.join(mount_dir, ".background", "background.png")
-if os.path.isfile(bg_file):
-    alias = Alias.for_file(bg_file)
-    icvp["backgroundType"] = 2
-    try:
-        icvp["backgroundImageAlias"] = alias.to_bytes()
-    except AttributeError:
-        icvp["backgroundImageAlias"] = bytes(alias)
-
-icvp_blob = plistlib.dumps(icvp, fmt=plistlib.FMT_BINARY)
-
-# ── Window bounds: 660 wide × 520 tall ─────────────────────────────────
-bwsp = {
-    "WindowBounds": "{{100, 100}, {660, 520}}",
-    "ContainerShowSidebar": False,
-    "ShowPathbar": False,
-    "ShowSidebar": False,
-    "ShowStatusBar": False,
-    "ShowTabView": False,
-    "ShowToolbar": False,
-    "SidebarWidth": 0,
-    "PreviewPaneVisibility": False,
-}
-bwsp_blob = plistlib.dumps(bwsp, fmt=plistlib.FMT_BINARY)
-
-# ── Icon positions ──────────────────────────────────────────────────────
-#   Top row (y=220):  app + Applications
-#   Bottom row (y=400): README, LICENSE, CHANGELOG
-positions = {
-    f"{product_name}.app": (180, 220),
-    "Applications":        (480, 220),
-    "README.md":           (140, 400),
-    "LICENSE":             (330, 400),
-    "CHANGELOG.md":        (520, 400),
-}
-
-# ── Write .DS_Store ─────────────────────────────────────────────────────
-with DSStore.open(ds_path, "w+") as d:
-    d["."]["bwsp"] = bwsp_blob
-    d["."]["icvp"] = icvp_blob
-    d["."]["vSrn"] = ("long", 1)
-    d["."]["vstl"] = ("type", b"icnv")
-
-    for name, (x, y) in positions.items():
-        if os.path.exists(os.path.join(mount_dir, name)):
-            d[name]["Iloc"] = (x, y)
-
-print("  ✓ .DS_Store rewritten (660×520 window, 2-row layout)")
-PYEOF
-
-  # ── Hide dotfiles ───────────────────────────────────────────────────────
   if command -v SetFile &>/dev/null; then
     for hidden in "$MOUNT_DIR/.background" \
                   "$MOUNT_DIR/.DS_Store" \
@@ -336,14 +201,6 @@ PYEOF
       [[ -e "$hidden" ]] && SetFile -a V "$hidden" 2>/dev/null || true
     done
   fi
-
-  # ── Permissions + cleanup ───────────────────────────────────────────────
-  chmod -Rf go-w "$MOUNT_DIR" 2>/dev/null || true
-  rm -rf "$MOUNT_DIR/.fseventsd" \
-         "$MOUNT_DIR/.Trashes" \
-         "$MOUNT_DIR/.Spotlight-V100" \
-         "$MOUNT_DIR/.TemporaryItems" 2>/dev/null || true
-  dot_clean "$MOUNT_DIR" 2>/dev/null || true
 
   sync; sleep 1
   hdiutil detach "$MOUNT_DIR" -quiet 2>/dev/null \
@@ -356,14 +213,8 @@ hdiutil convert "$DMG_RW" -format ULFO -o "$DMG_OUT" -ov -quiet
 echo "  ✓ DMG re-compressed (ULFO)"
 
 # ══════════════════════════════════════════════════════════════════════════
-# Phase 3: Sign (SLA intentionally skipped)
-#   hdiutil convert creates a new file, losing the SLA resource fork from
-#   Phase 1.  Re-embedding via hdiutil udifrez corrupts the DMG on macOS
-#   14+ (Finder blacks out and crashes on open).  The LICENSE file is
-#   included inside the DMG as a visible file instead.
+# Phase 3: Sign
 # ══════════════════════════════════════════════════════════════════════════
-
-# ── Sign the DMG ──────────────────────────────────────────────────────────
 if [[ "$SIGN_ID" != "-" ]]; then
   codesign --force --timestamp --sign "$SIGN_ID" "$DMG_OUT"
   echo "  ✓ DMG signed"
@@ -402,7 +253,7 @@ echo "  • Applications → /Applications"
 [[ -f "$ROOT/CHANGELOG.md" ]] && echo "  • CHANGELOG.md"
 [[ -f "$ROOT/LICENSE" ]]      && echo "  • LICENSE"
 echo "  • Composed volume icon (app icon on disk)"
-echo "  • Background image (logo + version, Retina @2x)"
+echo "  • Background image (Retina @2x)"
 echo ""
 echo "To open:    open '$DMG_OUT'"
 echo "To install: drag $PRODUCT_NAME to Applications"
