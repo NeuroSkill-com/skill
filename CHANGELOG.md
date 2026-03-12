@@ -6,6 +6,11 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+## [0.0.36] — 2026-03-12
+### CI Runtime
+
+- Fixed macOS updater 404: renamed the macOS updater tarball from `NeuroSkill™.app.tar.gz` (non-ASCII URL) to `NeuroSkill_<version>_aarch64.app.tar.gz` so the URL stored in `latest.json` is pure ASCII and resolves correctly in the Tauri updater HTTP client.
+
 ## [0.0.35] — 2026-03-12
 ### CI Runtime
 

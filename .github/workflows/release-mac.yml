@@ -356,8 +356,14 @@ jobs:
           find "$BUNDLE_DIR/macos" \
             \( -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" \) -delete
 
-          # Create tarball from the signed + notarized + stapled .app
-          TAR_PATH="$BUNDLE_DIR/macos/$(basename "$APP_BUNDLE").tar.gz"
+          # Create tarball from the signed + notarized + stapled .app.
+          # Use an ASCII-only filename for the tarball so the URL stored in
+          # latest.json is a valid RFC 3986 URI; non-ASCII characters such as ™
+          # (U+2122) in the filename cause the Tauri updater to produce a 404
+          # because its HTTP client rejects or misroutes an un-encoded URL.
+          # The .app bundle inside the tar keeps its original NeuroSkill™.app name.
+          VERSION="$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+          TAR_PATH="$BUNDLE_DIR/macos/NeuroSkill_${VERSION}_aarch64.app.tar.gz"
           tar -czf "$TAR_PATH" \
             -C "$(dirname "$APP_BUNDLE")" "$(basename "$APP_BUNDLE")"
 
@@ -525,7 +531,7 @@ jobs:
           except Exception:
               notes = ""
           if not notes:
-              notes = f"NeuroSkill™ v{version}"
+              notes = f"NeuroSkill v{version}"
 
           download_url = (
               f"https://github.com/{repo}/releases/download/{tag}/{app_tar_name}"
