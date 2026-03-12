@@ -1176,18 +1176,21 @@ pub fn set_llm_config(
     app:    AppHandle,
     state:  tauri::State<'_, Mutex<AppState>>,
 ) {
+    #[cfg(feature = "llm")]
+    let cell = {
+        let mut s = state.lock_or_recover();
+        s.llm_config = config.clone();
+        s.llm_state_cell.clone()
+    };
+    #[cfg(not(feature = "llm"))]
     {
         let mut s = state.lock_or_recover();
         s.llm_config = config.clone();
+    }
 
-        #[cfg(feature = "llm")]
-        {
-            let cell = s.llm_state_cell.clone();
-            drop(s);
-            if let Some(server) = cell.lock().unwrap().clone() {
-                *server.allowed_tools.lock().unwrap() = config.tools.clone();
-            }
-        }
+    #[cfg(feature = "llm")]
+    if let Some(server) = cell.lock().unwrap().clone() {
+        *server.allowed_tools.lock().unwrap() = config.tools.clone();
     }
 
     save_settings(&app);
