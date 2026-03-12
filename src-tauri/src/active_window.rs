@@ -304,6 +304,21 @@ fn poll_input_activity() -> (bool, bool) {
         return (false, false);
     }
 
+    let in_wayland = std::env::var("XDG_SESSION_TYPE")
+        .map(|v| v.eq_ignore_ascii_case("wayland"))
+        .unwrap_or(false)
+        || std::env::var("WAYLAND_DISPLAY")
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false);
+
+    if in_wayland {
+        MISSING.store(true, Ordering::Relaxed);
+        eprintln!(
+            "[input-monitor] Wayland session detected — xprintidle is X11-only; keyboard/mouse idle tracking unavailable"
+        );
+        return (false, false);
+    }
+
     let out = match std::process::Command::new("xprintidle").output() {
         Ok(o) if o.status.success() => o,
         _ => {

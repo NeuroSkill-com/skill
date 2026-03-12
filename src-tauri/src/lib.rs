@@ -1528,10 +1528,14 @@ pub fn run() {
             let app_upd = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 use tauri_plugin_updater::UpdaterExt;
+                let mut updater_platform_unsupported = false;
                 // Short startup delay so the rest of the app is fully
                 // initialised before we hit the network.
                 tokio::time::sleep(Duration::from_secs(30)).await;
                 loop {
+                    if updater_platform_unsupported {
+                        break;
+                    }
                     // ── Check first, then sleep ───────────────────────────────
                     // Previous pattern was sleep→check, which meant the first
                     // background check fired at startup_delay + interval_secs
@@ -1560,7 +1564,19 @@ pub fn run() {
                                     eprintln!("[updater] up to date");
                                     let _ = app_upd.emit("update-checked", ());
                                 }
-                                Ok(Err(e)) => eprintln!("[updater] check failed: {e}"),
+                                Ok(Err(e)) => {
+                                    let msg = e.to_string();
+                                    if msg.contains("None of the fallback platforms")
+                                        || msg.contains("were found in the response `platforms` object")
+                                    {
+                                        eprintln!(
+                                            "[updater] no release artifacts for this platform; disabling background update checks"
+                                        );
+                                        updater_platform_unsupported = true;
+                                    } else {
+                                        eprintln!("[updater] check failed: {e}");
+                                    }
+                                }
                             }
                         }
                     }

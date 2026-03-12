@@ -635,5 +635,4 @@ the Free Software Foundation, version 3 only. -->
 </main>
 
 <style>
-  :global(body) { overflow: hidden; }
 </style>

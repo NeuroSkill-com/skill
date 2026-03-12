@@ -56,3 +56,6 @@
     class="inline-block w-0.5 h-[1em] bg-foreground/70 animate-pulse ml-0.5 align-middle"
   ></span>{/if}
 </div>
+
+<style>
+</style>

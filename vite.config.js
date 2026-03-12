@@ -7,6 +7,7 @@
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
+import path from "node:path";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -35,10 +36,21 @@ const suppressUnusedImportWarnings = {
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [
-    tailwindcss(),
     sveltekit(),
+    tailwindcss(),
     suppressUnusedImportWarnings,
   ],
+
+  test: {
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/build/**",
+      "**/.{idea,git,cache,output,temp}/**",
+      "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*",
+      "src-tauri/target/**",
+    ],
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
@@ -56,6 +68,9 @@ export default defineConfig(() => ({
           port: 1421,
         }
       : undefined,
+    fs: {
+      allow: [path.resolve("."), path.resolve("./src")],
+    },
     watch: {
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],

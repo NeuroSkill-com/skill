@@ -134,3 +134,35 @@ The build wrapper automatically:
 - checks/installs Vulkan prerequisites (`scripts/install-vulkan-sdk.sh`)
 - builds static `espeak-ng` if missing (`scripts/build-espeak-static.sh`)
 - injects `--features llm-vulkan` if no explicit `--features` was provided
+
+## Runtime warning troubleshooting
+
+### `libEGL warning: egl: failed to create dri2 screen`
+
+These warnings usually come from Mesa/WebKit probing GPU backends. On some
+Linux setups (remote sessions, mixed Wayland/X11 stacks, unsupported drivers)
+the probe fails before falling back.
+
+If the app otherwise works, this warning is typically non-fatal.
+
+To force a software-rendering fallback in dev:
+
+```bash
+WEBKIT_DISABLE_DMABUF_RENDERER=1 LIBGL_ALWAYS_SOFTWARE=1 npm run tauri dev
+```
+
+### `[input-monitor] xprintidle not found`
+
+Install `xprintidle` on X11 sessions:
+
+```bash
+sudo apt install xprintidle
+```
+
+On Wayland sessions, `xprintidle` does not work (X11-only), so idle
+keyboard/mouse tracking is unavailable.
+
+### `[updater] ... fallback platforms ... not found`
+
+Linux release artifacts are currently not published in the updater feed, so
+automatic update checks can be unavailable depending on architecture.

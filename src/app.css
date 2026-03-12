@@ -369,3 +369,43 @@
   border: none;
   border-radius: 0;
 }
+
+/* ── What's New markdown tuning ───────────────────────────────────────────── */
+.wn-body .mdr {
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.wn-body .mdr h1,
+.wn-body .mdr h2,
+.wn-body .mdr h3,
+.wn-body .mdr h4 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: oklch(0.55 0.22 293);
+  margin: 1.1em 0 0.4em;
+}
+.dark .wn-body .mdr h1,
+.dark .wn-body .mdr h2,
+.dark .wn-body .mdr h3,
+.dark .wn-body .mdr h4 {
+  color: oklch(0.68 0.19 293);
+}
+
+.wn-body .mdr ul,
+.wn-body .mdr ol {
+  margin: 0.2em 0;
+  padding-left: 1.25em;
+}
+.wn-body .mdr li {
+  margin: 0.2em 0;
+  color: oklch(from var(--foreground) l c h / 85%);
+}
+.wn-body .mdr li::marker {
+  color: oklch(0.58 0.24 293);
+}
+.wn-body .mdr li > p {
+  margin: 0;
+}
