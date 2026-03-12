@@ -70,31 +70,41 @@ else
 PLIST
 fi
 
-# Inject required keys if missing (using python3 for reliable XML manipulation)
+# Inject required keys if missing (using plistlib for correct types)
 python3 << PYEOF
-import re
+import plistlib, sys
 
-with open("$DEST_PLIST", "r") as f:
-    content = f.read()
+with open("$DEST_PLIST", "rb") as f:
+    plist = plistlib.load(f)
 
-injections = {
-    "CFBundleExecutable": "$PRODUCT_NAME",
-    "CFBundleIdentifier": "$BUNDLE_ID",
-    "CFBundleVersion": "$VERSION",
-    "CFBundleShortVersionString": "$VERSION",
-    "CFBundlePackageType": "APPL",
+# Base keys — custom plist values win (applied first, then .update skips existing)
+base = {
+    "CFBundleExecutable":          "$PRODUCT_NAME",
+    "CFBundleIdentifier":          "$BUNDLE_ID",
+    "CFBundleName":                "$PRODUCT_NAME",
+    "CFBundleDisplayName":         "$PRODUCT_NAME",
+    "CFBundleVersion":             "$VERSION",
+    "CFBundleShortVersionString":  "$VERSION",
+    "CFBundlePackageType":         "APPL",
+    "CFBundleSignature":           "????",
     "CFBundleInfoDictionaryVersion": "6.0",
-    "CFBundleIconFile": "icon",
-    "NSHighResolutionCapable": "true",
+    "CFBundleIconFile":            "icon",
+    "NSHighResolutionCapable":     True,
+    "NSRequiresAquaSystemAppearance": False,
+    "LSMinimumSystemVersion":      "11.0",
 }
 
-for key, value in injections.items():
-    if key not in content:
-        entry = f"  <key>{key}</key>\n  <string>{value}</string>\n"
-        content = content.replace("</dict>", entry + "</dict>")
+# Only inject keys that are missing — custom plist keys take priority
+for key, value in base.items():
+    if key not in plist:
+        plist[key] = value
 
-with open("$DEST_PLIST", "w") as f:
-    f.write(content)
+with open("$DEST_PLIST", "wb") as f:
+    plistlib.dump(plist, f, fmt=plistlib.FMT_XML)
+
+# Print what ended up in the plist
+for k in sorted(plist):
+    print(f"    {k} = {plist[k]!r}")
 PYEOF
 echo "  ✓ Info.plist"
 

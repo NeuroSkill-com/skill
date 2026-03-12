@@ -264,35 +264,45 @@ if $HAS_BG; then
   echo "  ✓ .background/background.png"
 fi
 
-# ── Create read-write DMG (needed to apply Finder view settings) ──────────
+# ── Create read-write HFS+ DMG (needed to apply Finder view settings) ────
+# IMPORTANT: must use -fs HFS+ (not APFS).  Finder .DS_Store background
+# image settings only work on HFS+ volumes.  APFS DMGs silently ignore
+# the background picture AppleScript directive.
 RW_DIR="$(mktemp -d)"; CLEANUP_DIRS+=("$RW_DIR")
 DMG_RW="$RW_DIR/rw.dmg"
 
+# Calculate a generous size (source + 20 MB headroom for .DS_Store etc.)
+STAGING_SIZE_KB=$(du -sk "$STAGING" | cut -f1)
+DMG_SIZE_MB=$(( (STAGING_SIZE_KB / 1024) + 20 ))
+
 hdiutil create \
   -volname "NeuroSkill" \
-  -srcfolder "$STAGING" \
+  -fs HFS+ \
+  -size "${DMG_SIZE_MB}m" \
   -ov -format UDRW \
   "$DMG_RW"
 
-# ── Apply Finder view settings ────────────────────────────────────────────
-# Mount the RW image, run AppleScript to set icon positions / background /
-# window chrome, then detach.  This works on macOS only (requires Finder +
-# osascript); in CI headless runners it may silently no-op — that's fine,
-# the DMG is still fully functional.
+# Mount, copy contents, apply Finder view, detach
 MOUNT_DIR="$(hdiutil attach -readwrite -noverify -noautoopen "$DMG_RW" \
   | grep '/Volumes/' | sed 's/.*\/Volumes/\/Volumes/')" || true
 
 if [[ -n "${MOUNT_DIR:-}" ]] && [[ -d "$MOUNT_DIR" ]]; then
-  # Build the AppleScript.  The background line is conditional.
+  # Copy staged contents into the mounted volume
+  ditto "$STAGING" "$MOUNT_DIR"
+
+  # ── Apply Finder view settings ──────────────────────────────────────────
+  # AppleScript sets icon view, background image, icon positions, and window
+  # chrome.  The open→delay→close cycle ensures Finder writes .DS_Store.
   BG_LINE=""
   if $HAS_BG; then
     BG_LINE='set background picture of viewOptions to file ".background:background.png"'
   fi
 
-  osascript <<APPLESCRIPT 2>/dev/null || true
+  osascript <<APPLESCRIPT || true
 tell application "Finder"
   tell disk "NeuroSkill"
     open
+    delay 1
     set current view of container window to icon view
     set toolbar visible of container window to false
     set statusbar visible of container window to false
@@ -318,20 +328,34 @@ tell application "Finder"
     end try
     close
     open
-    delay 1
+    delay 2
     close
   end tell
 end tell
 APPLESCRIPT
+
+  # Give Finder time to flush .DS_Store
   sync
+  sleep 2
+
   hdiutil detach "$MOUNT_DIR" -quiet 2>/dev/null \
     || hdiutil detach "$MOUNT_DIR" -force 2>/dev/null \
     || true
   echo "  ✓ Finder view configured"
+else
+  # Fallback: if mount failed, create from srcfolder (no Finder settings)
+  rm -f "$DMG_RW"
+  hdiutil create \
+    -volname "NeuroSkill" \
+    -srcfolder "$STAGING" \
+    -fs HFS+ \
+    -ov -format UDRW \
+    "$DMG_RW"
+  echo "  ⊘ Could not mount RW DMG — Finder settings skipped"
 fi
 
 # ── Convert to compressed read-only DMG ───────────────────────────────────
-hdiutil convert "$DMG_RW" -format UDZO -o "$DMG_OUT" -ov
+hdiutil convert "$DMG_RW" -format UDZO -imagekey zlib-level=9 -o "$DMG_OUT" -ov
 echo "  ✓ DMG created"
 
 # ── Sign the DMG ──────────────────────────────────────────────────────────
