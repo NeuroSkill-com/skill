@@ -82,11 +82,13 @@ BG_1X="$STAGE/background.png"
 BG_2X="$STAGE/background@2x.png"
 HAS_BG=false
 
+APPEARANCE=$(defaults read -g AppleInterfaceStyle 2>/dev/null || echo "Light")
+
 if [[ -f "$ICON_PNG" ]]; then
-  python3 - "$ICON_PNG" "$VERSION" "$PRODUCT_NAME" "$STAGE" <<'PYEOF' && HAS_BG=true || true
+  python3 - "$ICON_PNG" "$VERSION" "$PRODUCT_NAME" "$STAGE" "$APPEARANCE" <<'PYEOF' && HAS_BG=true || true
 import sys, os
 
-icon_path, version, product_name, out_dir = sys.argv[1:5]
+icon_path, version, product_name, out_dir, appearance = sys.argv[1:6]
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -94,9 +96,21 @@ except ImportError:
     print("  ⊘ Pillow not available — using default background")
     sys.exit(1)
 
-BG_COLOR  = (30, 30, 30, 255)
-TXT_COLOR = (200, 200, 200, 255)
-DIM_COLOR = (120, 120, 120, 255)
+is_dark = appearance.lower() == "dark"
+
+if is_dark:
+    BG_COLOR  = (30, 30, 30, 255)
+    TXT_COLOR = (220, 220, 225, 255)
+    DIM_COLOR = (130, 130, 135, 255)
+else:
+    BG_COLOR  = (240, 240, 245, 255)
+    TXT_COLOR = (40, 40, 45, 255)
+    DIM_COLOR = (120, 120, 125, 255)
+
+# Write bg color hex for appdmg fallback
+bg_hex = "#1e1e1e" if is_dark else "#f0f0f5"
+with open(os.path.join(out_dir, "bg_color.txt"), "w") as f:
+    f.write(bg_hex)
 
 def load_font(size):
     for fp in [
@@ -152,8 +166,95 @@ for scale, filename in [(1, "background.png"), (2, "background@2x.png")]:
 
     bg.save(os.path.join(out_dir, filename), "PNG")
 
-print(f"  ✓ background image (logo + v{version}, 660×520 @1x + @2x)")
+mode = "dark" if is_dark else "light"
+print(f"  ✓ background image ({mode} mode, logo + v{version}, 660×520 @1x + @2x)")
 PYEOF
+fi
+
+# ── Generate volume icon with version badge ───────────────────────────────
+# Overlays a "v0.0.28" pill badge on the app icon at all .iconset sizes,
+# then converts to .icns via iconutil.
+VOL_ICNS="$STAGE/VolumeIcon.icns"
+if [[ -f "$ICON_PNG" ]]; then
+  python3 - "$ICON_PNG" "$VERSION" "$STAGE" <<'PYEOF' 2>/dev/null || true
+import sys, os, subprocess
+
+icon_path, version, out_dir = sys.argv[1:4]
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    sys.exit(1)
+
+SIZES = [16, 32, 64, 128, 256, 512, 1024]
+badge_text = f"v{version}"
+
+def load_font(size):
+    for fp in [
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/System/Library/Fonts/SFNSDisplay.ttf",
+        "/System/Library/Fonts/SFNS.ttf",
+        "/Library/Fonts/Arial.ttf",
+    ]:
+        try:
+            return ImageFont.truetype(fp, size)
+        except (OSError, IOError):
+            continue
+    return ImageFont.load_default()
+
+icon = Image.open(icon_path).convert("RGBA")
+iconset = os.path.join(out_dir, "VolumeIcon.iconset")
+os.makedirs(iconset, exist_ok=True)
+
+for sz in SIZES:
+    img = icon.resize((sz, sz), Image.LANCZOS)
+
+    if sz >= 64:
+        draw = ImageDraw.Draw(img)
+        font_size = max(8, sz // 8)
+        font = load_font(font_size)
+        bbox = draw.textbbox((0, 0), badge_text, font=font)
+        tw = bbox[2] - bbox[0]
+        th = bbox[3] - bbox[1]
+
+        pad_x = max(2, sz // 64)
+        pad_y = max(1, sz // 128)
+        badge_w = tw + pad_x * 2
+        badge_h = th + pad_y * 2
+        bx = sz - badge_w - max(1, sz // 32)
+        by = sz - badge_h - max(1, sz // 32)
+        radius = max(2, sz // 64)
+
+        draw.rounded_rectangle(
+            [bx, by, bx + badge_w, by + badge_h],
+            radius=radius, fill=(0, 0, 0, 180)
+        )
+        draw.text((bx + pad_x, by + pad_y - 1), badge_text,
+                  fill=(255, 255, 255, 230), font=font)
+
+    # Apple naming: icon_16x16.png, icon_16x16@2x.png (=32px), etc.
+    if sz <= 512:
+        img.save(os.path.join(iconset, f"icon_{sz}x{sz}.png"), "PNG")
+    if sz >= 32 and sz // 2 in [16, 32, 128, 256, 512]:
+        half = sz // 2
+        img.save(os.path.join(iconset, f"icon_{half}x{half}@2x.png"), "PNG")
+
+icns_path = os.path.join(out_dir, "VolumeIcon.icns")
+result = subprocess.run(
+    ["iconutil", "--convert", "icns", "--output", icns_path, iconset],
+    capture_output=True, text=True
+)
+if result.returncode == 0:
+    print(f"  ✓ volume icon (app icon + v{version} badge)")
+else:
+    print(f"  ⚠ iconutil failed: {result.stderr.strip()}")
+    sys.exit(1)
+PYEOF
+fi
+
+# Fall back to plain icon.icns if badge generation failed
+if [[ ! -f "$VOL_ICNS" ]]; then
+  VOL_ICNS="$TAURI_DIR/icons/icon.icns"
 fi
 
 # ── Prepare output directory ──────────────────────────────────────────────
@@ -186,17 +287,22 @@ const spec = {
   ]
 };
 
-// Icon
-const icnsPath = '${ICON_ICNS}';
+// Icon (version-badged volume icon, falls back to plain app icon)
+const icnsPath = '${VOL_ICNS}';
 try { require('fs').accessSync(icnsPath); spec.icon = icnsPath; } catch {}
 
 // Background
 const bgPath = '${BG_2X}';
 const bg1xPath = '${BG_1X}';
+const bgColorFile = '${STAGE}/bg_color.txt';
 try {
-  require('fs').accessSync(bgPath);
+  require('fs').accessSync(bg1xPath);
   spec.background = bg1xPath;
-  spec['background-color'] = '#1e1e1e';
+  try {
+    spec['background-color'] = require('fs').readFileSync(bgColorFile, 'utf8').trim();
+  } catch {
+    spec['background-color'] = '#1e1e1e';
+  }
 } catch {}
 
 // Extra files (docs)
