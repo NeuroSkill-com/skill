@@ -5296,6 +5296,240 @@
       "advanced": true
     },
     {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q2_k.gguf",
+      "quant": "Q2_K",
+      "size_gb": 3.56,
+      "description": "Ultra-small; lowest quality",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q3_k_s.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 3.97,
+      "description": "Small 3-bit quant",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q3_k_m.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 4.31,
+      "description": "Balanced 3-bit quant",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q3_k_l.gguf",
+      "quant": "Q3_K_L",
+      "size_gb": 4.59,
+      "description": "Larger 3-bit quant",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q4_0.gguf",
+      "quant": "Q4_0",
+      "size_gb": 4.95,
+      "description": "Legacy 4-bit quant; broad compatibility",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": false
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q4_k_s.gguf",
+      "quant": "Q4_K_S",
+      "size_gb": 4.98,
+      "description": "4-bit k-quant small",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": false
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q4_k_m.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 5.34,
+      "description": "Recommended \u2014 best quality/size tradeoff",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": true,
+      "advanced": false
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q5_0.gguf",
+      "quant": "Q5_0",
+      "size_gb": 5.87,
+      "description": "5-bit quant; good quality",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q5_k_s.gguf",
+      "quant": "Q5_K_S",
+      "size_gb": 5.87,
+      "description": "5-bit k-quant small",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q5_k_m.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 6.08,
+      "description": "High quality; \u2265 8 GB VRAM",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": false
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q6_k.gguf",
+      "quant": "Q6_K",
+      "size_gb": 6.85,
+      "description": "Near-lossless; \u2265 8 GB VRAM",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 8.87,
+      "description": "Effectively lossless; \u2265 12 GB VRAM",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "Tesslate/OmniCoder-9B-GGUF",
+      "filename": "omnicoder-9b-bf16.gguf",
+      "quant": "BF16",
+      "size_gb": 16.69,
+      "description": "Full BF16 precision; \u2265 20 GB VRAM",
+      "family_id": "omnicoder-9b",
+      "family_name": "OmniCoder 9B",
+      "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
+      "tags": [
+        "chat",
+        "coding",
+        "medium"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
       "repo": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
       "quant": "Q4_K_M",

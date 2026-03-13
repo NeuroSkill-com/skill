@@ -9,6 +9,7 @@ All notable changes to NeuroSkill™ are documented here.
 ### LLM Catalog
 
 - Added Qwen3.5 27B Claude 4.6 Opus Reasoning Distilled model family (`eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF`) to the LLM catalog with 17 quant variants (Q2_K through BF16/F16).
+- Added OmniCoder 9B model family (`Tesslate/OmniCoder-9B-GGUF`) to the LLM catalog with 13 quant variants (Q2_K through BF16) — a coding-focused 9B model.
 
 ## [0.0.36] — 2026-03-12
 ### CI Runtime
