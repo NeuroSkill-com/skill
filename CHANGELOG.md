@@ -17,6 +17,9 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Bugfixes
 
+- Fixed malformed thought traces that began with an unmatched opening `json` code fence and partial JSON fragments, which caused the rest of the thought bubble markdown to render incorrectly. The shared `normalizeMarkdown()` helper now strips that narrow orphaned preamble while preserving legitimate closed fenced code blocks.
+- Fixed another chat tool-call transcript leak in the frontend parser. `stripToolCallFences()` now mirrors the Rust-side tool-call prefix heuristic instead of relying on narrow fence regexes, so incomplete or malformed fenced JSON blocks with blank lines or partial bodies are suppressed before they can appear in the lead-in bubble.
+- Hardened chat markdown normalization for malformed model output. Emphasis repair now runs through a shared `normalizeMarkdown()` utility that protects fenced code blocks and inline code spans, trims stray spaces inside `*`/`**` delimiters, and falls back to raw `<strong>`/`<em>` tags when CommonMark flanking rules would still reject the emphasis. Added unit coverage for the repaired cases.
 - Fixed expanded thought panels rendering raw markdown while final answers rendered correctly. The thought body now uses the shared `MarkdownRenderer`, so the same markdown normalization and parsing logic applies in both places. Added a muted renderer variant to preserve the thought-panel visual treatment.
 - Fixed bold/italic not rendering when models emit `**word **` (space before closing delimiter) or `**Label:**value` (closing `**` preceded by punctuation followed by a non-whitespace character — CommonMark non-right-flanking edge case). Extended `normalizeMd()` in `MarkdownRenderer` with a trailing-space strip pass and a targeted conversion of punctuation-adjacent patterns to raw `<strong>`/`<em>` HTML so they always render as bold/italic regardless of CommonMark delimiter rules.
 

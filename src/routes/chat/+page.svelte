@@ -96,19 +96,51 @@
         Object.values(v).every(val => typeof val === "object" && val !== null);
     }
 
+    function looksLikeToolCallJsonPrefix(s: string): boolean {
+      const trimmed = s.trimStart();
+      if (!trimmed.startsWith("{")) return false;
+
+      const probe = trimmed.slice(0, 240).toLowerCase();
+      const isDictStyle = [...KNOWN_TOOLS].some(name =>
+        probe.includes(`"${name}":`) || probe.includes(`"${name}": `)
+      );
+      if (isDictStyle) return true;
+
+      const mentionsToolName =
+        probe.includes('"name"') ||
+        probe.includes('"tool"') ||
+        probe.includes('"tool_calls"') ||
+        probe.includes('"function"');
+      const mentionsArgs =
+        probe.includes('"parameters') ||
+        probe.includes('"arguments') ||
+        probe.includes('<think>');
+
+      return mentionsToolName && mentionsArgs;
+    }
+
     // 1. Complete fenced blocks
     let s = raw.replace(/```(?:json)?\n([\s\S]*?)\n?```/g, (match, body: string) => {
+      const trimmedBody = body.trim();
       try {
-        const v = JSON.parse(body.trim()) as Record<string, unknown>;
+        const v = JSON.parse(trimmedBody) as Record<string, unknown>;
         if (typeof v === "object" && v !== null && !Array.isArray(v) && isToolCallObject(v))
           return "";
       } catch { /* not JSON — keep */ }
+      if (looksLikeToolCallJsonPrefix(trimmedBody)) return "";
       return match;
     });
-    // 2a. Incomplete fence immediately before a <think> tag
-    s = s.replace(/```(?:json)?\n\{[\s\S]*?(?=\n*<think>)/g, "");
-    // 2b. Incomplete fence at end of string (still streaming)
-    s = s.replace(/```(?:json)?\n\{[^`]*$/, "");
+
+    // 2a. Incomplete fence immediately before a <think> tag.
+    s = s.replace(/```(?:json)?\n([\s\S]*?)(?=\n*<think>)/g, (match, body: string) =>
+      looksLikeToolCallJsonPrefix(body) ? "" : match
+    );
+
+    // 2b. Incomplete fence at end of string (still streaming).
+    s = s.replace(/```(?:json)?\n([\s\S]*)$/g, (match, body: string) =>
+      looksLikeToolCallJsonPrefix(body) ? "" : match
+    );
+
     return s;
   }
 
