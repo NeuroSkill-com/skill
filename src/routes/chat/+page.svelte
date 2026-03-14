@@ -80,15 +80,28 @@
    *      tag (final-state leak) or sits at the very end of the string (mid-stream).
    */
   function stripToolCallFences(raw: string): string {
+    // Known built-in tool names — must stay in sync with KNOWN_TOOL_NAMES in tools.rs
+    const KNOWN_TOOLS = new Set(["date", "location", "web_search", "web_fetch"]);
+
+    function isToolCallObject(v: Record<string, unknown>): boolean {
+      // Standard single-call: has name/tool + parameters/arguments
+      if (
+        ("name" in v || "tool" in v || "tool_calls" in v) &&
+        ("parameters" in v || "arguments" in v || "tool_calls" in v)
+      ) return true;
+      // Dict-style multi-tool: {"date": {}, "location": {}}
+      const keys = Object.keys(v);
+      return keys.length > 0 &&
+        keys.some(k => KNOWN_TOOLS.has(k)) &&
+        Object.values(v).every(val => typeof val === "object" && val !== null);
+    }
+
     // 1. Complete fenced blocks
     let s = raw.replace(/```(?:json)?\n([\s\S]*?)\n?```/g, (match, body: string) => {
       try {
         const v = JSON.parse(body.trim()) as Record<string, unknown>;
-        if (
-          typeof v === "object" && v !== null && !Array.isArray(v) &&
-          ("name" in v || "tool" in v || "tool_calls" in v) &&
-          ("parameters" in v || "arguments" in v || "tool_calls" in v)
-        ) return "";
+        if (typeof v === "object" && v !== null && !Array.isArray(v) && isToolCallObject(v))
+          return "";
       } catch { /* not JSON — keep */ }
       return match;
     });
@@ -708,8 +721,28 @@
       ...historyMsgs,
     ];
 
-    let rawAcc = ""; // full raw text including any <think> tags
+    let rawAcc = ""; // raw text for the current inference round (reset between rounds)
     let usage: UsageInfo | undefined;
+
+    // Multi-round tool-calling state.
+    // Each time the LLM finishes a round and the backend dispatches tool calls, we
+    // "freeze" the accumulated thinking and lead-in text, reset rawAcc, and begin
+    // accumulating the next round's output fresh.  This prevents cross-round text
+    // from being concatenated into one blob and ensures that whatever the LLM said
+    // before a tool call (e.g. "I'll use the date tool") is cleanly shown as leadIn
+    // rather than flickering in the response bubble while the tool is running.
+    let hadToolUse     = false;
+    let frozenLeadIn   = "";   // lead-in text collected from all completed rounds
+    let frozenThinking = "";   // thinking text collected from all completed rounds
+
+    // Merge the per-round parsed state with accumulated frozen state from prior rounds.
+    function mergeWithFrozen(parsed: { leadIn: string; thinking: string; content: string }) {
+      return {
+        leadIn:   [frozenLeadIn,   parsed.leadIn  ].filter(s => s.trim()).join("\n\n"),
+        thinking: [frozenThinking, parsed.thinking].filter(s => s.trim()).join("\n\n"),
+        content:  parsed.content,
+      };
+    }
 
     // ── IPC Channel — tokens stream directly from the Rust actor, no HTTP ──
     //
@@ -726,8 +759,11 @@
     channel.onmessage = async (chunk: ChatChunk) => {
       if (chunk.type === "delta") {
         if (ttft === undefined) ttft = performance.now() - t0;
+        // First delta after tool calls: rawAcc was already reset in the tool_use
+        // handler; just clear the hadToolUse flag so we know we're back in streaming.
+        if (hadToolUse) hadToolUse = false;
         rawAcc += chunk.content;
-        const { leadIn, thinking, content } = parseAssistantOutput(rawAcc);
+        const { leadIn, thinking, content } = mergeWithFrozen(parseAssistantOutput(rawAcc));
         messages = messages.map(m =>
           m.id === assistantMsg.id
             ? { ...m, leadIn, content, thinking, thinkOpen: m.thinkOpen ?? false }
@@ -737,10 +773,29 @@
 
       } else if (chunk.type === "tool_use") {
         const evt: ToolUseEvent = { tool: chunk.tool, status: chunk.status, detail: chunk.detail };
+
+        if (evt.status === "calling" && !hadToolUse) {
+          // First tool call of a new round.  Freeze whatever the LLM has streamed so
+          // far (thinking + any content like "I'll use the X tool") into the frozen
+          // accumulators, then reset rawAcc so the next LLM round starts clean.
+          const prev = parseAssistantOutput(rawAcc);
+          frozenLeadIn   = [frozenLeadIn,   prev.leadIn, prev.content].filter(s => s.trim()).join("\n\n");
+          frozenThinking = [frozenThinking,  prev.thinking            ].filter(s => s.trim()).join("\n\n");
+          rawAcc     = "";
+          hadToolUse = true;
+          // Immediately reflect the updated leadIn/thinking and empty content so the
+          // response bubble disappears while tools are running.
+          messages = messages.map(m =>
+            m.id === assistantMsg.id
+              ? { ...m, leadIn: frozenLeadIn, thinking: frozenThinking, content: "" }
+              : m
+          );
+        }
+
         messages = messages.map(m => {
           if (m.id !== assistantMsg.id) return m;
           const existing = m.toolUses ?? [];
-          // Update existing entry for same tool or add new one
+          // Update an existing "calling" entry for the same tool, or add a new row.
           const idx = existing.findIndex(e => e.tool === evt.tool && e.status === "calling");
           if (evt.status !== "calling" && idx >= 0) {
             const updated = [...existing];
@@ -753,7 +808,7 @@
 
       } else if (chunk.type === "done") {
         const elapsed = performance.now() - t0;
-        const { leadIn, thinking, content } = parseAssistantOutput(rawAcc);
+        const { leadIn, thinking, content } = mergeWithFrozen(parseAssistantOutput(rawAcc));
         usage = {
           prompt_tokens:     chunk.prompt_tokens,
           completion_tokens: chunk.completion_tokens,
@@ -770,7 +825,7 @@
       } else if (chunk.type === "error") {
         // "aborted" → keep whatever was streamed so far as the final answer.
         // Any other message → show as an error bubble.
-        const { leadIn, thinking, content } = parseAssistantOutput(rawAcc);
+        const { leadIn, thinking, content } = mergeWithFrozen(parseAssistantOutput(rawAcc));
         messages = messages.map(m =>
           m.id === assistantMsg.id
             ? {
@@ -811,7 +866,7 @@
       // (e.g. actor crashed), mark the message as no longer pending.
       messages = messages.map(m =>
         m.id === assistantMsg.id && m.pending
-          ? { ...m, pending: false, ...parseAssistantOutput(rawAcc) }
+          ? { ...m, pending: false, ...mergeWithFrozen(parseAssistantOutput(rawAcc)) }
           : m
       );
 
