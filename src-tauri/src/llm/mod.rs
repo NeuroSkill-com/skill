@@ -68,6 +68,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::sync::mpsc::{self, UnboundedSender};
 use tauri::Emitter as _;
+use chrono::{SecondsFormat, Utc, Local};
 
 use llama_cpp_4::{
     context::params::{LlamaContextParams, LlamaPoolingType},
@@ -613,6 +614,14 @@ fn truncate_text(s: &str, max_chars: usize) -> String {
     s.chars().take(max_chars).collect()
 }
 
+fn format_utc_offset(offset_seconds: i32) -> String {
+    let sign = if offset_seconds >= 0 { '+' } else { '-' };
+    let total = offset_seconds.unsigned_abs();
+    let hours = total / 3600;
+    let mins = (total % 3600) / 60;
+    format!("{sign}{hours:02}:{mins:02}")
+}
+
 struct ToolCallStreamSanitizer {
     raw:                 String,
     emitted_visible_len: usize,
@@ -649,11 +658,21 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
     match call.function.name.as_str() {
         "date" => {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+            let now_utc = Utc::now();
+            let now_local = now_utc.with_timezone(&Local);
+            let offset_seconds = now_local.offset().local_minus_utc();
             json!({
                 "ok": true,
                 "tool": "date",
                 "unix": now.as_secs(),
                 "unix_ms": now.as_millis() as u64,
+                "iso_utc": now_utc.to_rfc3339_opts(SecondsFormat::Millis, true),
+                "iso_local": now_local.to_rfc3339_opts(SecondsFormat::Millis, false),
+                "timezone": {
+                    "name": now_local.format("%Z").to_string(),
+                    "offset": format_utc_offset(offset_seconds),
+                    "offset_seconds": offset_seconds
+                },
                 "tz_env": std::env::var("TZ").ok(),
                 "lang_env": std::env::var("LANG").ok(),
             })

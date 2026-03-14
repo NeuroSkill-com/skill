@@ -9037,6 +9037,7 @@ dependencies = [
  "btleplug",
  "burn",
  "burn-cubecl",
+ "chrono",
  "crossbeam-channel",
  "csv",
  "cubecl",

@@ -12,6 +12,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -147,6 +148,7 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
     const END:   &str = "[/TOOL_CALL]";
 
     let mut calls = Vec::new();
+    let mut dedup = HashSet::<(String, String)>::new();
     let mut remaining = content;
 
     while let Some(s) = remaining.find(START) {
@@ -163,11 +165,7 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
                     })
                     .unwrap_or_else(|| "{}".to_string());
 
-                calls.push(ToolCall {
-                    id:        format!("call_{}", calls.len()),
-                    call_type: "function".into(),
-                    function:  ToolCallFunction { name, arguments: args },
-                });
+                push_tool_call(&mut calls, &mut dedup, name, args);
             }
             remaining = &after_start[e + END.len()..];
         } else {
@@ -175,7 +173,173 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
         }
     }
 
+    extract_tool_calls_from_json_text(content, &mut calls, &mut dedup);
+
     calls
+}
+
+fn push_tool_call(
+    calls: &mut Vec<ToolCall>,
+    dedup: &mut HashSet<(String, String)>,
+    name: String,
+    arguments: String,
+) {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return;
+    }
+    let key = (name.clone(), arguments.clone());
+    if !dedup.insert(key) {
+        return;
+    }
+
+    calls.push(ToolCall {
+        id: format!("call_{}", calls.len()),
+        call_type: "function".into(),
+        function: ToolCallFunction { name, arguments },
+    });
+}
+
+fn args_to_json_string(v: Option<&Value>) -> String {
+    match v {
+        Some(a) if a.is_string() => a.as_str().unwrap_or("{}").to_string(),
+        Some(a)                  => a.to_string(),
+        None                     => "{}".to_string(),
+    }
+}
+
+fn tool_name_from_value(v: &Value) -> String {
+    v.get("name")
+        .or_else(|| v.get("tool"))
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn extract_calls_from_value(v: &Value, calls: &mut Vec<ToolCall>, dedup: &mut HashSet<(String, String)>) {
+    // OpenAI-style envelope: { "tool_calls": [ ... ] }
+    if let Some(arr) = v.get("tool_calls").and_then(|x| x.as_array()) {
+        for item in arr {
+            let func = item.get("function").unwrap_or(item);
+            let mut name = tool_name_from_value(func);
+            if name.is_empty() {
+                name = tool_name_from_value(item);
+            }
+            let args = args_to_json_string(func.get("arguments").or_else(|| func.get("parameters")));
+            push_tool_call(calls, dedup, name, args);
+        }
+        return;
+    }
+
+    // Single call object forms:
+    // {"name":"date","parameters":{}}
+    // {"tool":"date","parameters":{}}
+    // {"name":"date","arguments":"{}"}
+    // {"function":{"name":"date","arguments":{}}}
+    let single = if let Some(f) = v.get("function") { f } else { v };
+    let name = tool_name_from_value(single);
+    if !name.is_empty() {
+        let args = args_to_json_string(single.get("arguments").or_else(|| single.get("parameters")));
+        push_tool_call(calls, dedup, name, args);
+    }
+}
+
+fn is_tool_call_value(v: &Value) -> bool {
+    if v.get("tool_calls").and_then(|x| x.as_array()).is_some() {
+        return true;
+    }
+
+    let single = if let Some(f) = v.get("function") { f } else { v };
+    !tool_name_from_value(single).is_empty()
+}
+
+fn extract_tool_calls_from_json_text(
+    content: &str,
+    calls: &mut Vec<ToolCall>,
+    dedup: &mut HashSet<(String, String)>,
+) {
+    // 1) JSON code fences (```json ... ``` and ``` ... ```)
+    let mut cursor = 0usize;
+    while let Some(rel) = content[cursor..].find("```") {
+        let fence_start = cursor + rel;
+        let after_open = fence_start + 3;
+        let Some(nl_rel) = content[after_open..].find('\n') else {
+            break;
+        };
+        let header_end = after_open + nl_rel;
+        let header = content[after_open..header_end].trim().to_ascii_lowercase();
+        let body_start = header_end + 1;
+        let Some(close_rel) = content[body_start..].find("```") else {
+            break;
+        };
+        let body_end = body_start + close_rel;
+        let body = content[body_start..body_end].trim();
+
+        if (header.is_empty() || header == "json") && !body.is_empty() {
+            if let Ok(v) = serde_json::from_str::<Value>(body) {
+                extract_calls_from_value(&v, calls, dedup);
+            }
+        }
+
+        cursor = body_end + 3;
+    }
+
+    // 2) Bare JSON objects embedded in prose.
+    //    We scan balanced {...} ranges and try to parse each range as JSON.
+    for (start, end) in find_balanced_json_objects(content) {
+        if let Ok(v) = serde_json::from_str::<Value>(&content[start..end]) {
+            extract_calls_from_value(&v, calls, dedup);
+        }
+    }
+}
+
+fn find_balanced_json_objects(content: &str) -> Vec<(usize, usize)> {
+    let bytes = content.as_bytes();
+    let mut out = Vec::new();
+
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut start = None::<usize>;
+
+    for (i, &b) in bytes.iter().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match b {
+                b'\\' => escaped = true,
+                b'"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+
+        match b {
+            b'"' => in_string = true,
+            b'{' => {
+                if depth == 0 {
+                    start = Some(i);
+                }
+                depth += 1;
+            }
+            b'}' => {
+                if depth == 0 {
+                    continue;
+                }
+                depth -= 1;
+                if depth == 0 {
+                    if let Some(s) = start.take() {
+                        out.push((s, i + 1));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    out
 }
 
 /// Remove `[TOOL_CALL]…[/TOOL_CALL]` markers from assistant message content.
@@ -202,7 +366,189 @@ pub fn strip_tool_call_blocks_preserve(content: &str) -> String {
         }
     }
 
+    strip_json_tool_call_payloads_preserve(&out)
+}
+
+fn strip_json_tool_call_payloads_preserve(content: &str) -> String {
+    let mut ranges = Vec::<(usize, usize)>::new();
+
+    // Strip fenced JSON blocks that are tool-call payloads.
+    let mut cursor = 0usize;
+    while let Some(rel) = content[cursor..].find("```") {
+        let fence_start = cursor + rel;
+        let after_open = fence_start + 3;
+        let Some(nl_rel) = content[after_open..].find('\n') else {
+            break;
+        };
+        let header_end = after_open + nl_rel;
+        let header = content[after_open..header_end].trim().to_ascii_lowercase();
+        let body_start = header_end + 1;
+        let Some(close_rel) = content[body_start..].find("```") else {
+            break;
+        };
+        let body_end = body_start + close_rel;
+        let body = content[body_start..body_end].trim();
+
+        if (header.is_empty() || header == "json") && !body.is_empty() {
+            if let Ok(v) = serde_json::from_str::<Value>(body) {
+                if is_tool_call_value(&v) {
+                    ranges.push((fence_start, body_end + 3));
+                }
+            }
+        }
+
+        cursor = body_end + 3;
+    }
+
+    // Strip inline JSON objects that are tool-call payloads.
+    for (start, end) in find_balanced_json_objects(content) {
+        if let Ok(v) = serde_json::from_str::<Value>(&content[start..end]) {
+            if is_tool_call_value(&v) {
+                ranges.push((start, end));
+            }
+        }
+    }
+
+    if let Some((start, end)) = find_incomplete_trailing_tool_call_range(content) {
+        ranges.push((start, end));
+    }
+
+    if ranges.is_empty() {
+        return content.to_string();
+    }
+
+    ranges.sort_by_key(|(s, _)| *s);
+    let mut merged = Vec::<(usize, usize)>::new();
+    for (s, e) in ranges {
+        if let Some((_, last_e)) = merged.last_mut() {
+            if s <= *last_e {
+                if e > *last_e {
+                    *last_e = e;
+                }
+                continue;
+            }
+        }
+        merged.push((s, e));
+    }
+
+    let mut out = String::new();
+    let mut keep_from = 0usize;
+    for (s, e) in merged {
+        if s > keep_from {
+            out.push_str(&content[keep_from..s]);
+        }
+        keep_from = e;
+    }
+    if keep_from < content.len() {
+        out.push_str(&content[keep_from..]);
+    }
+
     out
+}
+
+fn find_incomplete_trailing_tool_call_range(content: &str) -> Option<(usize, usize)> {
+    find_incomplete_trailing_fenced_tool_call_range(content)
+        .or_else(|| find_incomplete_trailing_inline_tool_call_range(content))
+}
+
+fn find_incomplete_trailing_fenced_tool_call_range(content: &str) -> Option<(usize, usize)> {
+    let fence_start = content.rfind("```")?;
+    let after_open = fence_start + 3;
+    if after_open >= content.len() {
+        return None;
+    }
+
+    if content[after_open..].contains("```") {
+        return None;
+    }
+
+    let nl_rel = content[after_open..].find('\n')?;
+    let header_end = after_open + nl_rel;
+    let header = content[after_open..header_end].trim().to_ascii_lowercase();
+    if !header.is_empty() && header != "json" {
+        return None;
+    }
+
+    let body = content[header_end + 1..].trim_start();
+    if looks_like_tool_call_json_prefix(body) {
+        let end = content[fence_start..]
+            .find("<think>")
+            .map(|idx| fence_start + idx)
+            .unwrap_or(content.len());
+        return Some((fence_start, end));
+    }
+
+    None
+}
+
+fn find_incomplete_trailing_inline_tool_call_range(content: &str) -> Option<(usize, usize)> {
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut start = None::<usize>;
+
+    for (i, b) in content.bytes().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match b {
+                b'\\' => escaped = true,
+                b'"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+
+        match b {
+            b'"' => in_string = true,
+            b'{' => {
+                if depth == 0 {
+                    start = Some(i);
+                }
+                depth += 1;
+            }
+            b'}' => {
+                if depth > 0 {
+                    depth -= 1;
+                    if depth == 0 {
+                        start = None;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let start = start?;
+    let tail = &content[start..];
+    if looks_like_tool_call_json_prefix(tail) {
+        let end = content[start..]
+            .find("<think>")
+            .map(|idx| start + idx)
+            .unwrap_or(content.len());
+        return Some((start, end));
+    }
+    None
+}
+
+fn looks_like_tool_call_json_prefix(s: &str) -> bool {
+    let trimmed = s.trim_start();
+    if !trimmed.starts_with('{') {
+        return false;
+    }
+
+    let probe: String = trimmed.chars().take(240).collect::<String>().to_ascii_lowercase();
+    let mentions_tool_name = probe.contains("\"name\"")
+        || probe.contains("\"tool\"")
+        || probe.contains("\"tool_calls\"")
+        || probe.contains("\"function\"");
+    let mentions_args = probe.contains("\"parameters")
+        || probe.contains("\"arguments")
+        || probe.contains("<think>");
+
+    mentions_tool_name && mentions_args
 }
 
 pub fn strip_tool_call_blocks(content: &str) -> String {
@@ -228,11 +574,92 @@ mod tests {
         assert_eq!(calls[0].function.name, "get_weather");
     }
 
+        #[test]
+        fn extract_openai_style_single_json_object() {
+                let msg = r#"I'll use the date tool now.
+json
+{
+    "name": "date",
+    "parameters": {}
+}"#;
+                let calls = extract_tool_calls(msg);
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].function.name, "date");
+                assert_eq!(calls[0].function.arguments, "{}");
+        }
+
+            #[test]
+            fn extract_tool_key_alias_single_json_object() {
+                let msg = r#"The user is asking about the current time.
+        I'll fetch it now.
+        json
+        Copy
+        {
+          "tool": "date",
+          "parameters": {}
+        }
+        I'll fetch that information for you right away."#;
+                let calls = extract_tool_calls(msg);
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].function.name, "date");
+                assert_eq!(calls[0].function.arguments, "{}");
+            }
+
+        #[test]
+        fn extract_openai_tool_calls_envelope() {
+                let msg = r#"```json
+{
+    "tool_calls": [
+        {
+            "type": "function",
+            "function": {
+                "name": "date",
+                "arguments": "{}"
+            }
+        }
+    ]
+}
+```"#;
+                let calls = extract_tool_calls(msg);
+                assert_eq!(calls.len(), 1);
+                assert_eq!(calls[0].function.name, "date");
+                assert_eq!(calls[0].function.arguments, "{}");
+        }
+
     #[test]
     fn strip_blocks() {
         let msg = r#"Here you go. [TOOL_CALL]{"name":"foo","arguments":{}}[/TOOL_CALL] Done."#;
         let stripped = strip_tool_call_blocks(msg);
         assert!(!stripped.contains("[TOOL_CALL]"));
         assert!(stripped.contains("Done."));
+    }
+
+    #[test]
+    fn strip_inline_json_tool_payload() {
+        let msg = r#"I'll use a tool.
+{"name":"date","parameters":{}}
+Then answer naturally."#;
+        let stripped = strip_tool_call_blocks(msg);
+        assert!(!stripped.contains("\"name\":\"date\""));
+        assert!(stripped.contains("Then answer naturally."));
+    }
+
+    #[test]
+    fn keep_non_tool_json_blocks() {
+        let msg = r#"```json
+{"status":"ok","count":3}
+```"#;
+        let stripped = strip_tool_call_blocks(msg);
+        assert!(stripped.contains("\"status\":\"ok\""));
+    }
+
+    #[test]
+    fn strip_incomplete_fenced_tool_payload_before_think() {
+        let msg = "```json\n{\n  \"name\": \"date\",\n  \"parameter<think>thinking</think>\nFinal answer.";
+        let stripped = strip_tool_call_blocks(msg);
+        assert!(!stripped.contains("```json"));
+        assert!(!stripped.contains("\"name\": \"date\""));
+        assert!(stripped.contains("<think>thinking</think>"));
+        assert!(stripped.contains("Final answer."));
     }
 }

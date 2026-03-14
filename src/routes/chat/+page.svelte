@@ -30,6 +30,8 @@
     id:           number;
     role:         Role;
     content:      string;
+    /** Assistant text emitted before a <think> block, shown as its own bubble */
+    leadIn?:      string;
     /** Images attached to a user message */
     attachments?: Attachment[];
     /** Chain-of-thought text between <think>…</think> (stripped from content) */
@@ -55,16 +57,95 @@
    * We strip those tags and store the content separately so the UI can
    * show it collapsed (or hide it entirely).
    */
-  function parseThinking(raw: string): { thinking: string; content: string } {
-    // Strip any leading whitespace/newlines the model emits before <think>.
-    const trimmed = raw.trimStart();
-    // Completed think block
-    const full = trimmed.match(/^<think>([\s\S]*?)<\/think>\s*([\s\S]*)$/);
-    if (full) return { thinking: full[1].trim(), content: full[2] };
-    // Still-open think block (streaming)
-    const open = trimmed.match(/^<think>([\s\S]*)$/);
-    if (open) return { thinking: open[1], content: "" };
-    return { thinking: "", content: raw };
+  function cleanAssistantLeadIn(raw: string): string {
+    return raw
+      .replace(/```[a-z]*\s*/gi, "")
+      .split("\n")
+      .filter(line => !/^\s*(json|copy)\s*$/i.test(line))
+      .join("\n")
+      .trim();
+  }
+
+  /**
+   * Strip tool-call JSON code fences that leaked into rawAcc.
+   *
+   * The streaming sanitizer on the Rust side holds back tool-call JSON, but
+   * it can only recognise a fence as a tool call once it has seen BOTH a
+   * "tool"/"name" key AND a "parameters"/"arguments" key.  Tokens emitted
+   * before that threshold are already in rawAcc and need to be cleaned here.
+   *
+   * Two patterns are handled:
+   *   1. Complete fenced block  (```json … ```)  whose body is a tool-call object.
+   *   2. Incomplete fenced block (no closing ```) that either precedes a <think>
+   *      tag (final-state leak) or sits at the very end of the string (mid-stream).
+   */
+  function stripToolCallFences(raw: string): string {
+    // 1. Complete fenced blocks
+    let s = raw.replace(/```(?:json)?\n([\s\S]*?)\n?```/g, (match, body: string) => {
+      try {
+        const v = JSON.parse(body.trim()) as Record<string, unknown>;
+        if (
+          typeof v === "object" && v !== null && !Array.isArray(v) &&
+          ("name" in v || "tool" in v || "tool_calls" in v) &&
+          ("parameters" in v || "arguments" in v || "tool_calls" in v)
+        ) return "";
+      } catch { /* not JSON — keep */ }
+      return match;
+    });
+    // 2a. Incomplete fence immediately before a <think> tag
+    s = s.replace(/```(?:json)?\n\{[\s\S]*?(?=\n*<think>)/g, "");
+    // 2b. Incomplete fence at end of string (still streaming)
+    s = s.replace(/```(?:json)?\n\{[^`]*$/, "");
+    return s;
+  }
+
+  /**
+   * Split raw assistant output (which may contain multiple <think>…</think>
+   * blocks from multi-turn tool-calling) into three display zones.
+   *
+   * The model typically emits:
+   *   <think>pre-tool reasoning</think>
+   *   I'll use the X tool…           ← lead-in / inter-think text
+   *   ```json{"tool":"X",…}```       ← stripped by stripToolCallFences
+   *   <think>post-tool reasoning</think>
+   *   Final answer                   ← content
+   *
+   * All <think> blocks are merged into `thinking`.
+   * Text segments between/after think blocks are arranged so that
+   * - `leadIn`  = everything except the last non-empty segment
+   * - `content` = the last non-empty segment (the actual final answer)
+   */
+  function parseAssistantOutput(raw: string): { leadIn: string; thinking: string; content: string } {
+    const s = stripToolCallFences(raw);
+
+    if (!s.includes("<think>")) return { leadIn: "", thinking: "", content: s };
+
+    // Collect all complete think blocks; replace each with a NUL sentinel
+    const thinkingParts: string[] = [];
+    let withoutThink = s.replace(/<think>([\s\S]*?)<\/think>/g, (_: string, inner: string) => {
+      thinkingParts.push(inner.trim());
+      return "\x00";
+    });
+
+    // Handle an unclosed <think> at the end (still streaming in thinking phase)
+    const openIdx = withoutThink.indexOf("<think>");
+    if (openIdx !== -1) {
+      thinkingParts.push(withoutThink.slice(openIdx + 7).trim());
+      withoutThink = withoutThink.slice(0, openIdx);
+    }
+
+    const thinking = thinkingParts.join("\n\n");
+
+    // Non-thinking segments (split by sentinel, trim, drop empty)
+    const parts = withoutThink.split("\x00").map((p: string) => p.trim()).filter(Boolean);
+
+    if (parts.length === 0) return { leadIn: "", thinking, content: "" };
+
+    // Last segment = final answer; earlier segments = inter-think lead-in text
+    const content = parts[parts.length - 1];
+    const leadIn  = parts.slice(0, -1).map(cleanAssistantLeadIn).filter(Boolean).join("\n\n");
+
+    return { leadIn, thinking, content };
   }
 
   interface ServerStatusPayload { status: ServerStatus; model_name: string; model?: string; supports_vision?: boolean; }
@@ -646,10 +727,10 @@
       if (chunk.type === "delta") {
         if (ttft === undefined) ttft = performance.now() - t0;
         rawAcc += chunk.content;
-        const { thinking, content } = parseThinking(rawAcc);
+        const { leadIn, thinking, content } = parseAssistantOutput(rawAcc);
         messages = messages.map(m =>
           m.id === assistantMsg.id
-            ? { ...m, content, thinking, thinkOpen: m.thinkOpen ?? false }
+            ? { ...m, leadIn, content, thinking, thinkOpen: m.thinkOpen ?? false }
             : m
         );
         await scrollBottom();
@@ -672,7 +753,7 @@
 
       } else if (chunk.type === "done") {
         const elapsed = performance.now() - t0;
-        const { thinking, content } = parseThinking(rawAcc);
+        const { leadIn, thinking, content } = parseAssistantOutput(rawAcc);
         usage = {
           prompt_tokens:     chunk.prompt_tokens,
           completion_tokens: chunk.completion_tokens,
@@ -681,7 +762,7 @@
         };
         messages = messages.map(m =>
           m.id === assistantMsg.id
-            ? { ...m, pending: false, content, thinking, ttft, elapsed, usage }
+            ? { ...m, pending: false, leadIn, content, thinking, ttft, elapsed, usage }
             : m
         );
         await scrollBottom();
@@ -689,11 +770,12 @@
       } else if (chunk.type === "error") {
         // "aborted" → keep whatever was streamed so far as the final answer.
         // Any other message → show as an error bubble.
-        const { thinking, content } = parseThinking(rawAcc);
+        const { leadIn, thinking, content } = parseAssistantOutput(rawAcc);
         messages = messages.map(m =>
           m.id === assistantMsg.id
             ? {
                 ...m, pending: false,
+                leadIn,
                 content:  chunk.message === "aborted"
                   ? (content || "*(aborted)*")
                   : `*Error: ${chunk.message}*`,
@@ -729,7 +811,7 @@
       // (e.g. actor crashed), mark the message as no longer pending.
       messages = messages.map(m =>
         m.id === assistantMsg.id && m.pending
-          ? { ...m, pending: false, ...parseThinking(rawAcc) }
+          ? { ...m, pending: false, ...parseAssistantOutput(rawAcc) }
           : m
       );
 
@@ -1396,6 +1478,62 @@
 
             <div class="flex flex-col gap-1 max-w-[82%]">
 
+              <!-- Lead-in bubble (text before a tool/thinking phase) -->
+              {#if msg.leadIn?.trim()}
+                <div class="rounded-2xl rounded-tl-sm border border-border/70 bg-background/80
+                            px-3 py-2 text-[0.72rem] leading-relaxed text-muted-foreground
+                            whitespace-pre-wrap break-words">
+                  {msg.leadIn}
+                </div>
+              {/if}
+
+              <!-- Tool-use bubbles -->
+              {#if msg.toolUses?.length}
+                <div class="flex flex-col gap-1">
+                  {#each msg.toolUses as tu}
+                    {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐" }}
+                    {@const icon = icons[tu.tool] ?? "🔧"}
+                    <div class="rounded-2xl rounded-tl-sm border px-3 py-2 text-[0.68rem]
+                                leading-relaxed break-words
+                                {tu.status === 'calling'
+                                  ? 'border-primary/30 bg-primary/8 text-primary'
+                                  : tu.status === 'done'
+                                    ? 'border-emerald-500/30 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300'
+                                    : 'border-red-500/30 bg-red-500/8 text-red-700 dark:text-red-300'}">
+                      <div class="flex items-center gap-1.5 font-medium">
+                        <span>{icon}</span>
+                        <span>{t(`chat.tools.${tu.tool}`)}</span>
+                        <span class="ml-auto flex items-center gap-1">
+                          {#if tu.status === "calling"}
+                            <span class="flex gap-0.5">
+                              {#each [0,1,2] as i}
+                                <span class="w-1 h-1 rounded-full bg-current animate-bounce"
+                                      style="animation-delay:{i*0.1}s"></span>
+                              {/each}
+                            </span>
+                          {:else if tu.status === "done"}
+                            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
+                              <polyline points="2 6 5 9 10 3"/>
+                            </svg>
+                          {:else}
+                            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" class="w-3 h-3">
+                              <line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/>
+                            </svg>
+                          {/if}
+                        </span>
+                      </div>
+                      {#if tu.detail && tu.status !== 'done'}
+                        <div class="mt-1 whitespace-pre-wrap text-[0.62rem] opacity-75">
+                          {tu.detail}
+                        </div>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+
               <!-- Thinking block (collapsible) -->
               {#if msg.thinking || (msg.pending && msg.content === "" && !msg.thinking)}
                 <div class="rounded-xl border border-violet-500/20 bg-violet-500/5
@@ -1442,53 +1580,13 @@
                 </div>
               {/if}
 
-              <!-- Tool-use indicators -->
-              {#if msg.toolUses?.length}
-                <div class="flex flex-wrap gap-1.5 px-1">
-                  {#each msg.toolUses as tu}
-                    {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐" }}
-                    {@const icon = icons[tu.tool] ?? "🔧"}
-                    <div class="flex items-center gap-1 px-2 py-0.5 rounded-md text-[0.6rem] font-medium
-                                border transition-all
-                                {tu.status === 'calling'
-                                  ? 'border-primary/30 bg-primary/8 text-primary animate-pulse'
-                                  : tu.status === 'done'
-                                    ? 'border-emerald-500/30 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400'
-                                    : 'border-red-500/30 bg-red-500/8 text-red-600 dark:text-red-400'}">
-                      <span>{icon}</span>
-                      <span>{t(`chat.tools.${tu.tool}`)}</span>
-                      {#if tu.status === "calling"}
-                        <span class="flex gap-0.5 ml-0.5">
-                          {#each [0,1,2] as i}
-                            <span class="w-0.5 h-0.5 rounded-full bg-current animate-bounce"
-                                  style="animation-delay:{i*0.1}s"></span>
-                          {/each}
-                        </span>
-                      {:else if tu.status === "done"}
-                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
-                             stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5">
-                          <polyline points="2 6 5 9 10 3"/>
-                        </svg>
-                      {:else}
-                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
-                             stroke-linecap="round" class="w-2.5 h-2.5">
-                          <line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/>
-                        </svg>
-                      {/if}
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-
               <!-- Response bubble (shown once we're past the <think> block) -->
-              {#if msg.content || (!msg.pending)}
+              {#if msg.content.trim()}
                 <div class="group/bubble flex flex-col gap-0.5">
                   <div class="rounded-2xl rounded-tl-sm bg-muted dark:bg-[#1a1a28]
                               px-3.5 py-2.5 text-[0.78rem] leading-relaxed text-foreground
                               break-words overflow-hidden">
-                    {#if !(msg.pending && msg.content === "")}
-                      <MarkdownRenderer content={msg.content} pending={msg.pending} />
-                    {/if}
+                    <MarkdownRenderer content={msg.content} pending={msg.pending} />
                   </div>
 
                   <!-- Copy raw markdown — visible on hover once generation is done -->
