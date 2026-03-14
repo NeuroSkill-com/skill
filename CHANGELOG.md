@@ -6,6 +6,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+## [0.0.37] — 2026-03-14
 ### History — Calendar Heatmap View
 
 - **Calendar heatmap** replaces the old single-day paginator as the default history view. Choose between **Year**, **Month** (default), **Week**, and **Day** granularity via a segmented control in the titlebar.
