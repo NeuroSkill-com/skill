@@ -2397,6 +2397,22 @@ const uk: Record<string, string> = {
   "chat.eeg.noSignal":                  "Немає сигналу ЕЕГ",
   "chat.eeg.contextLabel":              "Вставляти живий стан мозку ЕЕГ",
 
+  // ── Інструменти ──────────────────────────────────────────────────────────
+  "chat.tools.label":                   "Інструменти",
+  "chat.tools.date":                    "Дата і час",
+  "chat.tools.dateDesc":                "Поточна дата, час і часовий пояс",
+  "chat.tools.location":                "Місцезнаходження",
+  "chat.tools.locationDesc":            "Приблизне місцезнаходження за IP-геолокацією",
+  "chat.tools.web_search":              "Веб-пошук",
+  "chat.tools.web_searchDesc":          "Пошук у вебі через DuckDuckGo",
+  "chat.tools.web_fetch":               "Завантажити сторінку",
+  "chat.tools.web_fetchDesc":           "Завантажити та прочитати веб-сторінку",
+  "chat.tools.unsupported":             "Інструменти потребують запущеного сервера",
+  "chat.tools.calling":                 "Виклик {tool}…",
+  "chat.tools.done":                    "{tool} завершено",
+  "chat.tools.error":                   "{tool} не вдалося",
+  "chat.tools.badge":                   "Інструменти",
+
   // ── Бібліотека шаблонів ──────────────────────────────────────────────────
   "chat.prompts.btn":                   "Шаблони запитів",
   "chat.prompts.title":                 "Шаблони запитів",

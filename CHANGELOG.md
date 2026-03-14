@@ -6,6 +6,25 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Chat — Tool Calling
+
+- Added tool calling support to the LLM chat window with four built-in tools: **Date & Time**, **Location** (IP geolocation via ipwho.is), **Web Search** (DuckDuckGo Instant Answer API), and **Web Fetch** (fetch & read web pages).
+- Added per-tool enable/disable toggles in the chat settings panel — persisted via `settings.json` under `llm.tools`.
+- Added live tool-use indicators on assistant messages (calling → done/error) via a new `ToolUse` IPC chunk variant.
+- Added a **Tools** badge in the chat header showing the number of enabled tools.
+- Tool toggles are only shown when the model is running (`supports_tools` flag from the server status).
+- Fully localised in all five languages (EN, DE, FR, UK, HE).
+
+### Bugfixes
+
+- Fixed Tailwind v4 `Invalid declaration: onMount` dev-server errors across `CustomTitleBar.svelte`, `+page.svelte`, `GpuChart.svelte`, `DisclaimerFooter.svelte`, and others — `@tailwindcss/vite` v4.2's `enforce:"pre"` transform matched `.svelte?svelte&type=style&lang.css` virtual modules before the Svelte compiler had extracted the `<style>` block, causing the CSS parser to choke on JavaScript imports. Patched `vite.config.js` with a shim that skips all `.svelte` style virtual module IDs in Tailwind's transform plugins. Also removed empty `<style></style>` blocks in `whats-new/+page.svelte` and `UmapViewer3D.svelte`.
+- Fixed mmproj crash when the vision projector file is missing on disk — added an `exists()` guard before calling `mtmd_init_from_file` (which can abort/segfault on some platforms instead of returning null); switched from `active_mmproj_path()` to `resolve_mmproj_path(autoload)` so auto-detection works properly; stale paths where the file has been deleted are now filtered out with a warning instead of passed to the C library.
+- Fixed app crash after mmproj fails to load — the clip/vision GPU warmup in `MtmdContextParams` (enabled by default) could corrupt Vulkan GPU state when the mmproj file was incompatible with the text model, causing the subsequent text-model warmup decode to abort the process. Disabled the clip warmup at init time (deferred to the first real multimodal request); wired up `no_mmproj_gpu` and `mmproj_n_threads` settings that were defined in `settings.rs` but never passed to the native library; added a file-size sanity check (files < 1 KB are rejected as truncated downloads); wrapped `init_from_file` in `catch_unwind` so a native panic cannot take down the application; improved error messages to include the file path and size for easier diagnostics.
+- Fixed Linux mmproj startup crashes caused by unstable mtmd/Vulkan projector initialization paths on some driver stacks: mmproj now defaults to CPU projector init on Linux (while preserving normal text-model GPU offload), and advanced users can explicitly re-enable mmproj GPU init with `SKILL_FORCE_MMPROJ_GPU=1`.
+- Fixed stale `mmproj` fallback selection on startup: when the active text model belongs to a known catalog repo, startup now rejects projector paths from a different repo (for example, a 27B projector with a 4B model), logs a clear mismatch warning, and continues in text-only mode without calling mtmd on the incompatible file.
+- Fixed Linux app auto-close after startup caused by implicit `RunEvent::ExitRequested` handling: implicit exits are now prevented consistently, main window is hidden instead, and only explicit quit paths run full shutdown.
+- Fixed intermittent `npm run tauri dev` startup failure on Linux (`scripts/build-espeak-static.sh` exit `141`): replaced a SIGPIPE-prone `ar -t ... | head -1` cache-check pipeline (with `set -o pipefail`) by a safe `mapfile`-based first-object read, preventing false build-script aborts on valid archives.
+
 ### LLM Catalog
 
 - Added Qwen3.5 27B Claude 4.6 Opus Reasoning Distilled model family (`eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF`) to the LLM catalog with 17 quant variants (Q2_K through BF16/F16).

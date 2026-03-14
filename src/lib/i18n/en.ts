@@ -2589,6 +2589,22 @@ const en: Record<string, string> = {
   "chat.eeg.noSignal":                  "No EEG signal",
   "chat.eeg.contextLabel":              "Inject live EEG brain state",
 
+  // ── Tools ────────────────────────────────────────────────────────────────
+  "chat.tools.label":                   "Tools",
+  "chat.tools.date":                    "Date & time",
+  "chat.tools.dateDesc":                "Current date, time, and timezone",
+  "chat.tools.location":                "Location",
+  "chat.tools.locationDesc":            "Approximate location via IP geolocation",
+  "chat.tools.web_search":              "Web search",
+  "chat.tools.web_searchDesc":          "Search the web via DuckDuckGo",
+  "chat.tools.web_fetch":               "Web fetch",
+  "chat.tools.web_fetchDesc":           "Fetch and read a web page",
+  "chat.tools.unsupported":             "Tools require the model to be running",
+  "chat.tools.calling":                 "Calling {tool}…",
+  "chat.tools.done":                    "{tool} completed",
+  "chat.tools.error":                   "{tool} failed",
+  "chat.tools.badge":                   "Tools",
+
   // ── Prompt library ───────────────────────────────────────────────────────
   "chat.prompts.btn":                   "Prompt templates",
   "chat.prompts.title":                 "Prompt Templates",

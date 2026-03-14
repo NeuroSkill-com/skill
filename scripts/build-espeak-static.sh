@@ -59,7 +59,11 @@ if [[ -f "$STATIC_LIB" ]]; then
     else
         # Linux (and other ELF platforms): read the first 4 bytes of the first
         # object to distinguish ELF from Mach-O.
-        _first_obj=$(ar -t "$STATIC_LIB" 2>/dev/null | head -1)
+        # Avoid `head -1` pipelines under `set -o pipefail`: `ar -t | head -1`
+        # can return 141 (SIGPIPE) when `head` exits early, aborting the
+        # script intermittently even though the archive is valid.
+        mapfile -t _archive_objs < <(ar -t "$STATIC_LIB" 2>/dev/null || true)
+        _first_obj="${_archive_objs[0]-}"
         if [[ -n "$_first_obj" ]]; then
             _magic=$(ar -p "$STATIC_LIB" "$_first_obj" 2>/dev/null \
                      | od -An -N4 -tx1 2>/dev/null | tr -d ' \n')

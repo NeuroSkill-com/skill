@@ -33,11 +33,53 @@ const suppressUnusedImportWarnings = {
   },
 };
 
+// ── Tailwind v4 + Svelte compatibility shim ──────────────────────────────────
+//
+// @tailwindcss/vite v4.2 registers its serve & build transform plugins with
+// `enforce: "pre"`.  Both match `*.svelte?svelte&type=style&lang.css` via the
+// `&lang.css` suffix in their ID filter.  In the dev server's pre-transform
+// phase the Svelte compiler has not yet extracted the `<style>` block, so the
+// raw `.svelte` file (script + markup + style) is handed to Tailwind's CSS
+// parser, which crashes on `import { onMount }` etc.
+//
+// Fix: patch every Tailwind plugin's transform handler (both serve and build)
+// to skip `.svelte` style virtual modules entirely.  Svelte component `<style>`
+// blocks contain plain CSS — they don't use Tailwind `@apply` or utilities, so
+// Tailwind processing is not needed.  Tailwind utilities used in Svelte
+// templates are resolved through the main `app.css` import.
+
+function patchTailwindForSvelte() {
+  const plugins = tailwindcss();
+  const pluginArray = Array.isArray(plugins) ? plugins : [plugins];
+
+  for (const p of pluginArray) {
+    if (!p.transform) continue;
+
+    const origTransform = p.transform;
+
+    // The transform can be a plain function or an object { filter, handler }.
+    if (typeof origTransform === "function") {
+      p.transform = function (code, id) {
+        if (id.includes(".svelte?") && id.includes("&lang.css")) return;
+        return origTransform.call(this, code, id);
+      };
+    } else if (typeof origTransform === "object" && origTransform.handler) {
+      const origHandler = origTransform.handler;
+      origTransform.handler = function (code, id) {
+        if (id.includes(".svelte?") && id.includes("&lang.css")) return;
+        return origHandler.call(this, code, id);
+      };
+    }
+  }
+
+  return pluginArray;
+}
+
 // https://vite.dev/config/
 export default defineConfig(() => ({
   plugins: [
     sveltekit(),
-    tailwindcss(),
+    ...patchTailwindForSvelte(),
     suppressUnusedImportWarnings,
   ],
 

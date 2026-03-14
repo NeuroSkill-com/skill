@@ -817,15 +817,17 @@ where
     Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx))
 }
 
-async fn run_chat_with_builtin_tools<F>(
+async fn run_chat_with_builtin_tools<F, G>(
     state: &LlmServerState,
     base_messages: Vec<Value>,
     params: GenParams,
     mut tools_from_req: Vec<tools::Tool>,
     mut on_visible_delta: F,
+    mut on_tool_event: G,
 ) -> Result<(String, String, usize, usize, usize), String>
 where
     F: FnMut(&str),
+    G: FnMut(&str, &str, Option<&str>),
 {
     const MAX_TOOL_ROUNDS: usize = 3;
     const MAX_TOOL_CALLS: usize = 4;
@@ -867,7 +869,14 @@ where
         }));
 
         for tc in tool_calls.into_iter().take(MAX_TOOL_CALLS) {
+            let detail_str = if tc.function.arguments.len() > 2 {
+                Some(tc.function.arguments.as_str())
+            } else { None };
+            on_tool_event(&tc.function.name, "calling", detail_str);
             let tool_result = execute_builtin_tool_call(&tc, &allowed_tools).await;
+            let ok = tool_result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+            on_tool_event(&tc.function.name, if ok { "done" } else { "error" },
+                if ok { None } else { tool_result.get("error").and_then(|v| v.as_str()) });
             messages.push(json!({
                 "role": "tool",
                 "tool_call_id": tc.id,
@@ -1344,6 +1353,16 @@ fn run_actor(
         }
         mmproj_path.as_ref().and_then(|p| {
             use llama_cpp_4::mtmd::{MtmdContext, MtmdContextParams};
+
+            // Guard: verify the file still exists on disk before handing it to
+            // the C library.  mtmd_init_from_file can abort/segfault on some
+            // platforms when the file is missing rather than returning null.
+            if !p.exists() {
+                llm_error!(&app, &log_buf, log_file,
+                    "mmproj file missing: {} — vision disabled", p.display());
+                return None;
+            }
+
             // Silence clip_model_loader tensor spam before loading the projector.
             // clip.cpp maintains its own logger (separate from llama_log_set),
             // so we must call mtmd_log_set explicitly.
@@ -1355,19 +1374,79 @@ fn run_actor(
                 ) {}
                 unsafe { mtmd_log_set(Some(noop), std::ptr::null_mut()) };
             }
-            match MtmdContext::init_from_file(p, &model, MtmdContextParams::default()) {
-                Ok(mc) => {
+            // Validate file size — reject empty / obviously truncated files
+            // before handing them to the C library, which may abort internally.
+            let file_size = std::fs::metadata(p).map(|m| m.len()).unwrap_or(0);
+            if file_size < 1024 {
+                llm_error!(&app, &log_buf, log_file,
+                    "mmproj file too small ({file_size} bytes): {} — \
+                     likely a failed download; re-download in Settings → LLM",
+                    p.display());
+                return None;
+            }
+
+            // Linux Vulkan + mtmd init can still hard-abort for some projector
+            // / driver combinations before returning an error. Prefer the CPU
+            // projector path by default on Linux to keep startup stable.
+            //
+            // Advanced users can force mmproj GPU offload with:
+            //   SKILL_FORCE_MMPROJ_GPU=1
+            let force_mmproj_gpu = std::env::var("SKILL_FORCE_MMPROJ_GPU")
+                .ok()
+                .as_deref()
+                .map(|v| matches!(v, "1" | "true" | "TRUE" | "yes" | "YES"))
+                .unwrap_or(false);
+
+            let mut mmproj_use_gpu = !config.no_mmproj_gpu;
+            if cfg!(target_os = "linux") && mmproj_use_gpu && !force_mmproj_gpu {
+                mmproj_use_gpu = false;
+                llm_warn!(&app, &log_buf, log_file,
+                    "linux mmproj GPU offload disabled by default for stability; \
+                     using CPU projector path (set SKILL_FORCE_MMPROJ_GPU=1 to override)");
+            }
+
+            let mtmd_params = MtmdContextParams::default()
+                .use_gpu(mmproj_use_gpu)
+                .n_threads(config.mmproj_n_threads)
+                .print_timings(config.verbose)
+                .warmup(false);  // defer warmup — avoids Vulkan/GPU crashes
+                                 // when the mmproj is incompatible; the first
+                                 // real multimodal request will compile kernels
+
+            llm_info!(&app, &log_buf, log_file,
+                "loading mmproj: {} ({:.1} MB, gpu={}, threads={})",
+                p.display(), file_size as f64 / 1_048_576.0,
+                mmproj_use_gpu, config.mmproj_n_threads);
+
+            // Run init in a catch_unwind so a native abort / Rust panic in the
+            // C library doesn't take down the whole application.
+            let mmproj_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                MtmdContext::init_from_file(p, &model, mtmd_params)
+            }));
+
+            match mmproj_result {
+                Ok(Ok(mc)) => {
                     llm_info!(&app, &log_buf, log_file,
                         "mmproj loaded ✓ — vision={} audio={}",
                         mc.supports_vision(), mc.supports_audio());
                     vision_flag.store(true, Ordering::Relaxed);
                     Some(mc)
                 }
-                Err(e) => {
-                    llm_error!(&app, &log_buf, log_file, "failed to load mmproj: {e}");
+                Ok(Err(e)) => {
+                    llm_error!(&app, &log_buf, log_file,
+                        "failed to load mmproj: {e} — file: {}", p.display());
                     llm_info!(&app, &log_buf, log_file,
                         "vision disabled — to enable image input, \
-                         ensure the mmproj file exists or re-download it in Settings → LLM");
+                         ensure the mmproj file matches your model or re-download it in Settings → LLM");
+                    None
+                }
+                Err(_panic) => {
+                    llm_error!(&app, &log_buf, log_file,
+                        "mmproj loading crashed (panic in native code) — \
+                         file: {} — vision disabled", p.display());
+                    llm_info!(&app, &log_buf, log_file,
+                        "try re-downloading the mmproj in Settings → LLM, \
+                         or disable autoload_mmproj");
                     None
                 }
             }
@@ -1413,7 +1492,7 @@ fn run_actor(
     let model_file    = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
     let vision_loaded = vision_flag.load(Ordering::Relaxed);
     llm_info!(&app, &log_buf, log_file, "server ready — model={} supports_vision={}", model_file, vision_loaded);
-    let _ = app.emit("llm:status", json!({"status":"running","model":model_file,"supports_vision":vision_loaded}));
+    let _ = app.emit("llm:status", json!({"status":"running","model":model_file,"supports_vision":vision_loaded,"supports_tools":true}));
 
     // ── event loop ──
     while let Some(req) = rx.blocking_recv() {
@@ -1621,7 +1700,50 @@ pub fn init(
         return None;
     }
 
-    let mmproj_path = catalog.active_mmproj_path().or_else(|| config.mmproj.clone());
+    // Resolve the mmproj path: explicit selection → auto-detect from catalog →
+    // legacy config.mmproj field.
+    //
+    // Safety guards:
+    // 1) Skip stale paths that no longer exist on disk.
+    // 2) If the active model is from the bundled catalog, reject mmproj files
+    //    that belong to a different repo. This prevents stale config.mmproj
+    //    values (for a previously-used model family) from being passed to mtmd
+    //    for an incompatible active model.
+    let active_model_repo = catalog.active_model_entry().map(|e| e.repo.as_str());
+    let mmproj_path = catalog
+        .resolve_mmproj_path(config.autoload_mmproj)
+        .or_else(|| config.mmproj.clone())
+        .filter(|p| {
+            let Some(model_repo) = active_model_repo else { return true; };
+
+            let file_name = p.file_name().and_then(|s| s.to_str()).unwrap_or_default();
+            let mmproj_repo = catalog.entries.iter()
+                .find(|e| {
+                    e.is_mmproj
+                        && (e.local_path.as_ref().is_some_and(|lp| lp == p)
+                            || e.filename == file_name)
+                })
+                .map(|e| e.repo.as_str());
+
+            if let Some(mm_repo) = mmproj_repo {
+                if mm_repo != model_repo {
+                    push_log(&app, &log_buf, "warn",
+                        &format!(
+                            "mmproj/model repo mismatch — skipping vision projector: {} \
+                             (mmproj repo: {}, model repo: {})",
+                            p.display(), mm_repo, model_repo,
+                        ));
+                    return false;
+                }
+            }
+            true
+        })
+        .filter(|p| {
+            if p.exists() { return true; }
+            push_log(&app, &log_buf, "warn",
+                &format!("mmproj file not found (deleted?): {} — skipping vision", p.display()));
+            false
+        });
     let model_name  = model_path
         .file_stem()
         .and_then(|s| s.to_str())
@@ -1765,7 +1887,7 @@ async fn chat_completions(
                 Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
     }
 
-    match run_chat_with_builtin_tools(&state, req.messages.clone(), req.gen.clone(), req.tools.clone(), |_| {}).await {
+    match run_chat_with_builtin_tools(&state, req.messages.clone(), req.gen.clone(), req.tools.clone(), |_| {}, |_,_,_| {}).await {
         Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => {
             if req.stream {
                 let model_name = state.model_name.clone();

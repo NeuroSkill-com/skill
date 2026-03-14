@@ -1815,5 +1815,4 @@ the Free Software Foundation, version 3 only. -->
 </div><!-- end flex row (sidebar + canvas) -->
 </div><!-- end flex-col outer -->
 
-<style>
-</style>
+<!-- no component-scoped styles — all styling via Tailwind utilities -->

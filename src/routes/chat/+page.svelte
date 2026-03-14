@@ -24,6 +24,8 @@
   type Role = "user" | "assistant" | "system";
   type ServerStatus = "stopped" | "loading" | "running";
 
+  interface ToolUseEvent { tool: string; status: string; detail?: string; }
+
   interface Message {
     id:           number;
     role:         Role;
@@ -42,6 +44,8 @@
     elapsed?:     number;
     /** Token usage from the final SSE chunk */
     usage?:       UsageInfo;
+    /** Tool calls made during this response */
+    toolUses?:    ToolUseEvent[];
   }
 
   /**
@@ -75,6 +79,7 @@
   // ── IPC streaming types (mirror Rust ChatChunk) ───────────────────────────
 
   interface ChatChunkDelta { type: "delta"; content: string; }
+  interface ChatChunkToolUse { type: "tool_use"; tool: string; status: string; detail?: string; }
   interface ChatChunkDone  {
     type:              "done";
     finish_reason:     string;
@@ -83,7 +88,7 @@
     n_ctx:             number;
   }
   interface ChatChunkError { type: "error"; message: string; }
-  type ChatChunk = ChatChunkDelta | ChatChunkDone | ChatChunkError;
+  type ChatChunk = ChatChunkDelta | ChatChunkToolUse | ChatChunkDone | ChatChunkError;
 
   /** Thinking budget levels: token limit for <think> block. null = unlimited. */
   type ThinkingLevel = "minimal" | "normal" | "extended" | "unlimited";
@@ -185,9 +190,13 @@
 
   // ── State ──────────────────────────────────────────────────────────────────
 
+  interface ToolConfig { date: boolean; location: boolean; web_search: boolean; web_fetch: boolean; }
+
   let status         = $state<ServerStatus>("stopped");
   let modelName      = $state("");
   let supportsVision = $state(false);
+  let supportsTools  = $state(false);
+  let toolConfig     = $state<ToolConfig>({ date: true, location: true, web_search: true, web_fetch: true });
   let messages       = $state<Message[]>([]);
   let sessionId      = $state(0);   // current chat_history.sqlite session id
   let input          = $state("");
@@ -278,6 +287,22 @@
 
   /** Whether the prompt has been edited away from the default. */
   const isDefaultPrompt = $derived(systemPrompt.trim() === SYSTEM_PROMPT_DEFAULT.trim());
+
+  /** Number of enabled tools. */
+  const enabledToolCount = $derived(
+    [toolConfig.date, toolConfig.location, toolConfig.web_search, toolConfig.web_fetch]
+      .filter(Boolean).length
+  );
+
+  /** Persist tool config changes to the Rust backend. */
+  async function updateToolConfig(patch: Partial<ToolConfig>) {
+    toolConfig = { ...toolConfig, ...patch };
+    try {
+      const cfg = await invoke<any>("get_llm_config");
+      cfg.tools = { ...toolConfig };
+      await invoke("set_llm_config", { config: cfg });
+    } catch { /* settings unavailable */ }
+  }
 
   let generating     = $state(false);
   let aborting       = $state(false);   // true while abort_llm_stream is in flight
@@ -629,6 +654,22 @@
         );
         await scrollBottom();
 
+      } else if (chunk.type === "tool_use") {
+        const evt: ToolUseEvent = { tool: chunk.tool, status: chunk.status, detail: chunk.detail };
+        messages = messages.map(m => {
+          if (m.id !== assistantMsg.id) return m;
+          const existing = m.toolUses ?? [];
+          // Update existing entry for same tool or add new one
+          const idx = existing.findIndex(e => e.tool === evt.tool && e.status === "calling");
+          if (evt.status !== "calling" && idx >= 0) {
+            const updated = [...existing];
+            updated[idx] = evt;
+            return { ...m, toolUses: updated };
+          }
+          return { ...m, toolUses: [...existing, evt] };
+        });
+        await scrollBottom();
+
       } else if (chunk.type === "done") {
         const elapsed = performance.now() - t0;
         const { thinking, content } = parseThinking(rawAcc);
@@ -780,10 +821,24 @@
   onMount(async () => {
     // Initial status
     try {
-      const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean }>("get_llm_server_status");
+      const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean; supports_tools: boolean }>("get_llm_server_status");
       status         = s.status;
       modelName      = s.model_name;
       supportsVision = s.supports_vision ?? false;
+      supportsTools  = s.supports_tools ?? false;
+    } catch {}
+
+    // Load tool config from persisted settings
+    try {
+      const cfg = await invoke<any>("get_llm_config");
+      if (cfg?.tools) {
+        toolConfig = {
+          date:       cfg.tools.date       ?? true,
+          location:   cfg.tools.location   ?? true,
+          web_search: cfg.tools.web_search ?? true,
+          web_fetch:  cfg.tools.web_fetch  ?? true,
+        };
+      }
     } catch {}
 
     // Live status events
@@ -796,9 +851,12 @@
         if (ev.payload.supports_vision !== undefined) {
           supportsVision = ev.payload.supports_vision;
         }
+        if ((ev.payload as any).supports_tools !== undefined) {
+          supportsTools = (ev.payload as any).supports_tools;
+        }
         if (status === "running") clearInterval(pollTimer!);
-        // When the server stops, vision capability resets.
-        if (status === "stopped") supportsVision = false;
+        // When the server stops, capabilities reset.
+        if (status === "stopped") { supportsVision = false; supportsTools = false; }
       });
     } catch {}
 
@@ -814,10 +872,11 @@
       }
       if (status === "running") ranAfterRunning = true;
       try {
-        const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean }>("get_llm_server_status");
+        const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean; supports_tools: boolean }>("get_llm_server_status");
         status         = s.status;
         modelName      = s.model_name;
         supportsVision = s.supports_vision ?? false;
+        supportsTools  = s.supports_tools ?? false;
       } catch {}
     }, 1500);
 
@@ -917,6 +976,26 @@
                     :                       'bg-slate-400/50'}"></span>
       <span class="text-[0.72rem] font-semibold truncate {statusColor}">{statusLabel}</span>
     </div>
+
+    <!-- Tools badge -->
+    {#if supportsTools && enabledToolCount > 0}
+      <button
+        onclick={() => showSettings = true}
+        title="{enabledToolCount} tool{enabledToolCount !== 1 ? 's' : ''} enabled"
+        class="flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer
+               shrink-0 text-[0.6rem] font-semibold
+               bg-primary/10 text-primary hover:bg-primary/20">
+        <!-- Wrench icon -->
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 shrink-0">
+          <path d="M14.7 6.3a1 1 0 0 0 0-1.4l-.6-.6a1 1 0 0 0-1.4 0L6.3 10.7a1 1 0 0 0 0 1.4l.6.6a1 1 0 0 0 1.4 0z"/>
+          <path d="M16 2l2 2-1.5 1.5L14.5 3.5z"/>
+          <path d="M2 18l4-1 9.3-9.3-3-3L3 14z"/>
+        </svg>
+        <span>{t("chat.tools.badge")}</span>
+        <span class="tabular-nums opacity-70">{enabledToolCount}</span>
+      </button>
+    {/if}
 
     <!-- EEG context badge -->
     {#if latestBands}
@@ -1129,6 +1208,64 @@
         </div>
       {/if}
 
+      <!-- Tools allow-list -->
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
+            {t("chat.tools.label")}
+          </span>
+          {#if supportsTools}
+            <span class="text-[0.55rem] tabular-nums text-muted-foreground/40 select-none">
+              {enabledToolCount}/4
+            </span>
+          {/if}
+        </div>
+        {#if !supportsTools}
+          <p class="text-[0.58rem] text-muted-foreground/50 italic">
+            {t("chat.tools.unsupported")}
+          </p>
+        {:else}
+          <div class="grid grid-cols-2 gap-1.5">
+            {#each [
+              { key: "date"       as const, icon: "🕐" },
+              { key: "location"   as const, icon: "📍" },
+              { key: "web_search" as const, icon: "🔍" },
+              { key: "web_fetch"  as const, icon: "🌐" },
+            ] as tool}
+              <button
+                onclick={() => updateToolConfig({ [tool.key]: !toolConfig[tool.key] })}
+                class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all
+                       cursor-pointer select-none text-left
+                       {toolConfig[tool.key]
+                         ? 'border-primary/40 bg-primary/8 text-foreground'
+                         : 'border-border bg-background text-muted-foreground/50 hover:border-muted-foreground/30'}">
+                <span class="text-sm shrink-0">{tool.icon}</span>
+                <div class="flex flex-col gap-0 min-w-0">
+                  <span class="text-[0.63rem] font-medium truncate">
+                    {t(`chat.tools.${tool.key}`)}
+                  </span>
+                  <span class="text-[0.5rem] text-muted-foreground/50 truncate leading-tight">
+                    {t(`chat.tools.${tool.key}Desc`)}
+                  </span>
+                </div>
+                <!-- Toggle indicator -->
+                <div class="ml-auto shrink-0 w-3 h-3 rounded-full border-2 flex items-center justify-center
+                            {toolConfig[tool.key]
+                              ? 'border-primary bg-primary'
+                              : 'border-muted-foreground/30 bg-transparent'}">
+                  {#if toolConfig[tool.key]}
+                    <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round" class="w-2 h-2">
+                      <polyline points="2 5 4 7 8 3"/>
+                    </svg>
+                  {/if}
+                </div>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
       <!-- Thinking level -->
       <div class="flex flex-col gap-1">
         <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -1302,6 +1439,44 @@
                       {msg.thinking}
                     </div>
                   {/if}
+                </div>
+              {/if}
+
+              <!-- Tool-use indicators -->
+              {#if msg.toolUses?.length}
+                <div class="flex flex-wrap gap-1.5 px-1">
+                  {#each msg.toolUses as tu}
+                    {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐" }}
+                    {@const icon = icons[tu.tool] ?? "🔧"}
+                    <div class="flex items-center gap-1 px-2 py-0.5 rounded-md text-[0.6rem] font-medium
+                                border transition-all
+                                {tu.status === 'calling'
+                                  ? 'border-primary/30 bg-primary/8 text-primary animate-pulse'
+                                  : tu.status === 'done'
+                                    ? 'border-emerald-500/30 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400'
+                                    : 'border-red-500/30 bg-red-500/8 text-red-600 dark:text-red-400'}">
+                      <span>{icon}</span>
+                      <span>{t(`chat.tools.${tu.tool}`)}</span>
+                      {#if tu.status === "calling"}
+                        <span class="flex gap-0.5 ml-0.5">
+                          {#each [0,1,2] as i}
+                            <span class="w-0.5 h-0.5 rounded-full bg-current animate-bounce"
+                                  style="animation-delay:{i*0.1}s"></span>
+                          {/each}
+                        </span>
+                      {:else if tu.status === "done"}
+                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5">
+                          <polyline points="2 6 5 9 10 3"/>
+                        </svg>
+                      {:else}
+                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" class="w-2.5 h-2.5">
+                          <line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/>
+                        </svg>
+                      {/if}
+                    </div>
+                  {/each}
                 </div>
               {/if}
 

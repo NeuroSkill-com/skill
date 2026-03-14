@@ -2253,6 +2253,22 @@ const he: Record<string, string> = {
   "chat.eeg.noSignal":                  "אין אות EEG",
   "chat.eeg.contextLabel":              "הזרק מצב מוח EEG בזמן אמת",
 
+  // ── כלים ─────────────────────────────────────────────────────────────────
+  "chat.tools.label":                   "כלים",
+  "chat.tools.date":                    "תאריך ושעה",
+  "chat.tools.dateDesc":                "תאריך, שעה ואזור זמן נוכחיים",
+  "chat.tools.location":                "מיקום",
+  "chat.tools.locationDesc":            "מיקום משוער לפי כתובת IP",
+  "chat.tools.web_search":              "חיפוש ברשת",
+  "chat.tools.web_searchDesc":          "חיפוש ברשת דרך DuckDuckGo",
+  "chat.tools.web_fetch":               "שליפת דף",
+  "chat.tools.web_fetchDesc":           "שליפה וקריאה של דף אינטרנט",
+  "chat.tools.unsupported":             "כלים דורשים שרת פעיל",
+  "chat.tools.calling":                 "קורא ל-{tool}…",
+  "chat.tools.done":                    "{tool} הושלם",
+  "chat.tools.error":                   "{tool} נכשל",
+  "chat.tools.badge":                   "כלים",
+
   // ── ספריית תבניות ────────────────────────────────────────────────────────
   "chat.prompts.btn":                   "תבניות פרומפט",
   "chat.prompts.title":                 "תבניות פרומפט",

@@ -213,5 +213,4 @@ the Free Software Foundation, version 3 only. -->
 
 </main>
 
-<style>
-</style>
+<!-- no component-scoped styles — all styling via Tailwind utilities -->

@@ -671,6 +671,8 @@ pub struct LlmServerStatusResponse {
     pub n_ctx:          usize,
     /// True when a vision projector is loaded and image input is supported.
     pub supports_vision: bool,
+    /// True when the model is running and built-in tools are available.
+    pub supports_tools:  bool,
     /// Non-null when the most recent background start attempt failed.
     /// Cleared when a new start is requested.
     pub start_error:    Option<String>,
@@ -687,15 +689,16 @@ pub fn get_llm_server_status(
     if matches!(status, LlmStatus::Stopped) && s.llm.loading.load(Ordering::Relaxed) {
         status = LlmStatus::Loading;
     }
-    let (n_ctx, supports_vision) = s.llm.state_cell.lock().unwrap()
+    let (n_ctx, supports_vision, supports_tools) = s.llm.state_cell.lock().unwrap()
         .as_ref()
         .map(|srv| (
             srv.n_ctx.load(Ordering::Relaxed),
             srv.vision_ready.load(Ordering::Relaxed),
+            srv.is_ready(),
         ))
-        .unwrap_or((0, false));
+        .unwrap_or((0, false, false));
     let start_error = s.llm.start_error.lock().unwrap().clone();
-    LlmServerStatusResponse { status, model_name, n_ctx, supports_vision, start_error }
+    LlmServerStatusResponse { status, model_name, n_ctx, supports_vision, supports_tools, start_error }
 }
 
 // ── Chat history persistence ───────────────────────────────────────────────────
@@ -812,9 +815,10 @@ pub fn new_chat_session(
 #[derive(serde::Serialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatChunk {
-    Delta   { content: String },
-    Done    { finish_reason: String, prompt_tokens: usize, completion_tokens: usize, n_ctx: usize },
-    Error   { message: String },
+    Delta    { content: String },
+    ToolUse  { tool: String, status: String, detail: Option<String> },
+    Done     { finish_reason: String, prompt_tokens: usize, completion_tokens: usize, n_ctx: usize },
+    Error    { message: String },
 }
 
 /// Stream a chat completion directly through Tauri IPC, bypassing the HTTP
@@ -842,8 +846,15 @@ pub async fn chat_completions_ipc(
     let mut abort_rx = srv.abort_tx.subscribe();
     abort_rx.borrow_and_update();
 
+    let tool_channel = channel.clone();
     let gen_fut = super::run_chat_with_builtin_tools(&srv, messages, params, Vec::new(), |delta| {
         let _ = channel.send(ChatChunk::Delta { content: delta.to_string() });
+    }, move |tool_name: &str, status: &str, detail: Option<&str>| {
+        let _ = tool_channel.send(ChatChunk::ToolUse {
+            tool:   tool_name.to_string(),
+            status: status.to_string(),
+            detail: detail.map(|s| s.to_string()),
+        });
     });
     tokio::pin!(gen_fut);
 

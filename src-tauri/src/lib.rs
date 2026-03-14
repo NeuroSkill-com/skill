@@ -1964,11 +1964,6 @@ pub fn run() {
                 #[allow(unused_variables)]
                 tauri::RunEvent::ExitRequested { api, code, .. } => {
                     eprintln!("[run-event] ExitRequested code={code:?}");
-                    // On macOS / Windows, prevent implicit exit so the app
-                    // stays alive in the system tray when the last window is
-                    // closed.  On Linux, allow the exit so the app actually
-                    // terminates when the user closes the main window.
-                    #[cfg(not(target_os = "linux"))]
                     if code.is_none() {
                         eprintln!("[run-event] preventing exit, hiding main window");
                         api.prevent_exit();
@@ -1979,8 +1974,6 @@ pub fn run() {
                         eprintln!("[run-event] explicit exit requested — running blocking shutdown");
                         run_blocking_exit_shutdown(app);
                     }
-                    #[cfg(target_os = "linux")]
-                    eprintln!("[run-event] allowing exit on Linux");
                 }
                 // macOS: user clicks the Dock icon while the app is running
                 // with no visible windows (all hidden in the tray).
