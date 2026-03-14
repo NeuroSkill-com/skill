@@ -43,11 +43,15 @@
   }
 
   interface LlmCatalog { entries: LlmModelEntry[]; active_model: string; active_mmproj: string; }
+  type ToolExecutionMode = "sequential" | "parallel";
   interface LlmToolsConfig {
     date: boolean;
     location: boolean;
     web_search: boolean;
     web_fetch: boolean;
+    execution_mode: ToolExecutionMode;
+    max_rounds: number;
+    max_calls_per_round: number;
   }
 
   interface LlmConfig {
@@ -58,7 +62,7 @@
     autoload_mmproj: boolean; verbose: boolean;
   }
 
-  type LlmToolKey = keyof LlmToolsConfig;
+  type LlmToolKey = "date" | "location" | "web_search" | "web_fetch";
 
   interface ModelFamily {
     id:          string;
@@ -78,7 +82,7 @@
   let config  = $state<LlmConfig>({
     enabled: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
-    tools: { date: true, location: true, web_search: true, web_fetch: true },
+    tools: { date: true, location: true, web_search: true, web_fetch: true, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 3, max_calls_per_round: 4 },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
   });
@@ -1055,6 +1059,29 @@
               </button>
             </div>
           {/each}
+        </div>
+
+        <!-- Execution mode -->
+        <div class="flex flex-col gap-1 mt-1">
+          <span class="text-[0.65rem] text-muted-foreground">{t("llm.tools.executionMode")}</span>
+          <div class="flex rounded-lg overflow-hidden border border-border text-[0.68rem] font-medium">
+            {#each [
+              { key: "parallel"   as ToolExecutionMode, label: t("llm.tools.parallel") },
+              { key: "sequential" as ToolExecutionMode, label: t("llm.tools.sequential") },
+            ] as mode}
+              <button
+                onclick={async () => {
+                  config = { ...config, tools: { ...config.tools, execution_mode: mode.key } };
+                  await saveConfig();
+                }}
+                class="flex-1 py-1.5 transition-colors cursor-pointer
+                       {config.tools.execution_mode === mode.key
+                         ? 'bg-primary text-primary-foreground'
+                         : 'bg-background text-muted-foreground hover:bg-muted'}">
+                {mode.label}
+              </button>
+            {/each}
+          </div>
         </div>
       </div>
 

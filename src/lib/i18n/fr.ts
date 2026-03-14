@@ -2151,6 +2151,9 @@ const fr: Record<string, string> = {
   "llm.tools.webSearchDesc": "Autorise des requêtes de réponse instantanée DuckDuckGo.",
   "llm.tools.webFetch":    "Récupération web",
   "llm.tools.webFetchDesc": "Permet de récupérer le corps texte brut d'une page HTTP(S) publique.",
+  "llm.tools.executionMode":            "Mode d'exécution des outils",
+  "llm.tools.parallel":                 "Parallèle",
+  "llm.tools.sequential":              "Séquentiel",
 
   "llm.mmproj.nThreads":             "Fils d'encodeur",
   "llm.mmproj.nThreadsDesc":         "Threads CPU pour l’encodeur vision/audio.",
@@ -2413,6 +2416,9 @@ const fr: Record<string, string> = {
   "chat.tools.done":                    "{tool} terminé",
   "chat.tools.error":                   "{tool} échoué",
   "chat.tools.badge":                   "Outils",
+  "chat.tools.executionMode":           "Mode d'exécution",
+  "chat.tools.parallel":                "Parallèle",
+  "chat.tools.sequential":             "Séquentiel",
 
   // ── Bibliothèque de prompts ──────────────────────────────────────────────
   "chat.prompts.btn":                   "Modèles de prompt",

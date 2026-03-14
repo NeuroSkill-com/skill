@@ -2150,6 +2150,9 @@ const uk: Record<string, string> = {
   "llm.tools.webSearchDesc": "Дозволяє прості миттєві відповіді DuckDuckGo.",
   "llm.tools.webFetch":    "Завантаження сторінки",
   "llm.tools.webFetchDesc": "Дозволяє завантажувати текстовий вміст публічної HTTP(S) сторінки.",
+  "llm.tools.executionMode":            "Режим виконання інструментів",
+  "llm.tools.parallel":                 "Паралельний",
+  "llm.tools.sequential":              "Послідовний",
 
   "llm.mmproj.nThreads":             "Потоки енкодера",
   "llm.mmproj.nThreadsDesc":         "Потоки CPU для візуального/аудіо-енкодера.",
@@ -2412,6 +2415,9 @@ const uk: Record<string, string> = {
   "chat.tools.done":                    "{tool} завершено",
   "chat.tools.error":                   "{tool} не вдалося",
   "chat.tools.badge":                   "Інструменти",
+  "chat.tools.executionMode":           "Режим виконання",
+  "chat.tools.parallel":                "Паралельний",
+  "chat.tools.sequential":             "Послідовний",
 
   // ── Бібліотека шаблонів ──────────────────────────────────────────────────
   "chat.prompts.btn":                   "Шаблони запитів",

@@ -2151,6 +2151,9 @@ const de: Record<string, string> = {
   "llm.tools.webSearchDesc": "Erlaubt einfache DuckDuckGo-Sofortantwort-Suchanfragen.",
   "llm.tools.webFetch":    "Web-Abruf",
   "llm.tools.webFetchDesc": "Erlaubt das Abrufen des Rohtexts einer öffentlichen HTTP(S)-Seite.",
+  "llm.tools.executionMode":            "Werkzeug-Ausführungsmodus",
+  "llm.tools.parallel":                 "Parallel",
+  "llm.tools.sequential":              "Sequentiell",
 
   "llm.mmproj.nThreads":             "Encoder-Threads",
   "llm.mmproj.nThreadsDesc":         "CPU-Threads für den Bild-/Audio-Encoder.",
@@ -2413,6 +2416,9 @@ const de: Record<string, string> = {
   "chat.tools.done":                    "{tool} abgeschlossen",
   "chat.tools.error":                   "{tool} fehlgeschlagen",
   "chat.tools.badge":                   "Werkzeuge",
+  "chat.tools.executionMode":           "Ausführungsmodus",
+  "chat.tools.parallel":                "Parallel",
+  "chat.tools.sequential":             "Sequentiell",
 
   // ── Prompt-Bibliothek ────────────────────────────────────────────────────
   "chat.prompts.btn":                   "Prompt-Vorlagen",

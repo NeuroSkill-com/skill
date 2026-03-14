@@ -816,7 +816,11 @@ pub fn new_chat_session(
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatChunk {
     Delta    { content: String },
+    /// Legacy event — still emitted for backwards compatibility.
     ToolUse  { tool: String, status: String, detail: Option<String> },
+    /// Rich tool-execution lifecycle events (pi-mono style).
+    ToolExecutionStart  { tool_call_id: String, tool_name: String, args: serde_json::Value },
+    ToolExecutionEnd    { tool_call_id: String, tool_name: String, result: serde_json::Value, is_error: bool },
     Done     { finish_reason: String, prompt_tokens: usize, completion_tokens: usize, n_ctx: usize },
     Error    { message: String },
 }
@@ -849,12 +853,31 @@ pub async fn chat_completions_ipc(
     let tool_channel = channel.clone();
     let gen_fut = super::run_chat_with_builtin_tools(&srv, messages, params, Vec::new(), |delta| {
         let _ = channel.send(ChatChunk::Delta { content: delta.to_string() });
-    }, move |tool_name: &str, status: &str, detail: Option<&str>| {
-        let _ = tool_channel.send(ChatChunk::ToolUse {
-            tool:   tool_name.to_string(),
-            status: status.to_string(),
-            detail: detail.map(|s| s.to_string()),
-        });
+    }, move |event: super::ToolEvent| {
+        match event {
+            super::ToolEvent::Status { tool_name, status, detail } => {
+                let _ = tool_channel.send(ChatChunk::ToolUse {
+                    tool:   tool_name,
+                    status,
+                    detail,
+                });
+            }
+            super::ToolEvent::ExecutionStart { tool_call_id, tool_name, args } => {
+                let _ = tool_channel.send(ChatChunk::ToolExecutionStart {
+                    tool_call_id,
+                    tool_name,
+                    args,
+                });
+            }
+            super::ToolEvent::ExecutionEnd { tool_call_id, tool_name, result, is_error } => {
+                let _ = tool_channel.send(ChatChunk::ToolExecutionEnd {
+                    tool_call_id,
+                    tool_name,
+                    result,
+                    is_error,
+                });
+            }
+        }
     });
     tokio::pin!(gen_fut);
 

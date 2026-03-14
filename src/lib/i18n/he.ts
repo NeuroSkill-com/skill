@@ -2268,6 +2268,9 @@ const he: Record<string, string> = {
   "chat.tools.done":                    "{tool} הושלם",
   "chat.tools.error":                   "{tool} נכשל",
   "chat.tools.badge":                   "כלים",
+  "chat.tools.executionMode":           "מצב ביצוע",
+  "chat.tools.parallel":                "מקבילי",
+  "chat.tools.sequential":             "סדרתי",
 
   // ── ספריית תבניות ────────────────────────────────────────────────────────
   "chat.prompts.btn":                   "תבניות פרומפט",
@@ -2420,6 +2423,9 @@ const he: Record<string, string> = {
   "llm.tools.webSearchDesc": "Allow simple DuckDuckGo instant-answer web search queries.",
   "llm.tools.webFetch": "Web fetch",
   "llm.tools.webFetchDesc": "Allow fetching the raw text body of a public HTTP(S) page.",
+  "llm.tools.executionMode":            "מצב ביצוע כלים",
+  "llm.tools.parallel":                 "מקבילי",
+  "llm.tools.sequential":              "סדרתי",
 
   // ── Auto-synced from en.ts (2026-03-12) ──
   // TODO: translate the following 19 key(s) into he

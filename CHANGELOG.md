@@ -6,6 +6,18 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Chat — Tool Calling (pi-mono architecture)
+
+- Implemented pi-mono style tool calling architecture with structured lifecycle events, argument validation, and configurable execution modes.
+- Added **JSON Schema argument validation** for tool calls using the `jsonschema` crate — tool arguments are now validated against the tool's JSON Schema `parameters` definition before execution, with detailed error messages on validation failure (modelled after pi-mono's `validateToolArguments` with AJV).
+- Added **configurable tool execution mode**: `parallel` (prepare sequentially, execute concurrently — default) and `sequential` (execute one-by-one in order). Persisted in `settings.json` under `llm.tools.execution_mode`.
+- Added **configurable max tool rounds** (`max_rounds`, default 3) and **max tool calls per round** (`max_calls_per_round`, default 4) — both persisted in settings.
+- Added **rich tool-execution lifecycle events** via IPC: `ToolExecutionStart` (with tool_call_id, tool_name, validated args) and `ToolExecutionEnd` (with result JSON and is_error flag), alongside the legacy `ToolUse` status events for backwards compatibility.
+- Added **`BeforeToolCallFn` / `AfterToolCallFn` hook type definitions** for future extensibility — allows blocking tool execution or overriding results programmatically (modelled after pi-mono's `beforeToolCall`/`afterToolCall` hooks).
+- Added execution mode toggle UI in both the Chat window settings panel and Settings → LLM tools section.
+- Fully localised new strings in all five languages (EN, DE, FR, UK, HE).
+- Added 4 new Rust unit tests for argument validation (valid args, missing required, no schema, wrong type) — all 15 tool tests pass.
+
 ### Chat — Tool Calling
 
 - Added tool calling support to the LLM chat window with four built-in tools: **Date & Time**, **Location** (IP geolocation via ipwho.is), **Web Search** (DuckDuckGo Instant Answer API), and **Web Fetch** (fetch & read web pages).

@@ -398,15 +398,46 @@ pub struct LlmToolConfig {
     pub location:   bool,
     pub web_search: bool,
     pub web_fetch:  bool,
+
+    /// Tool execution mode: "parallel" or "sequential".
+    /// Parallel: prepare sequentially, execute concurrently.
+    /// Sequential: prepare and execute one at a time.
+    #[serde(default = "default_tool_execution_mode")]
+    pub execution_mode: ToolExecutionMode,
+
+    /// Maximum number of tool-calling rounds per chat turn.
+    #[serde(default = "default_max_tool_rounds")]
+    pub max_rounds: usize,
+
+    /// Maximum number of tool calls executed per round.
+    #[serde(default = "default_max_tool_calls_per_round")]
+    pub max_calls_per_round: usize,
 }
+
+/// How tool calls from a single assistant message are executed.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolExecutionMode {
+    /// Execute tool calls one by one in order.
+    Sequential,
+    /// Prepare sequentially, then execute allowed tools concurrently.
+    Parallel,
+}
+
+fn default_tool_execution_mode()       -> ToolExecutionMode { ToolExecutionMode::Parallel }
+fn default_max_tool_rounds()           -> usize { 3 }
+fn default_max_tool_calls_per_round()  -> usize { 4 }
 
 impl Default for LlmToolConfig {
     fn default() -> Self {
         Self {
-            date:       true,
-            location:   true,
-            web_search: true,
-            web_fetch:  true,
+            date:               true,
+            location:           true,
+            web_search:         true,
+            web_fetch:          true,
+            execution_mode:     default_tool_execution_mode(),
+            max_rounds:         default_max_tool_rounds(),
+            max_calls_per_round: default_max_tool_calls_per_round(),
         }
     }
 }

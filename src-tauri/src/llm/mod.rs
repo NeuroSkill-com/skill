@@ -836,6 +836,29 @@ where
     Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx))
 }
 
+/// Callback signatures for tool-call lifecycle hooks (pi-mono style).
+///
+/// `BeforeToolCallFn`: called after argument validation but before execution.
+/// Return `Some(reason)` to block execution (the reason becomes the error
+/// message in the tool result).  Return `None` to allow execution.
+///
+/// `AfterToolCallFn`: called after execution with the raw result.
+/// Return `Some(replacement)` to override the result; `None` to keep it.
+#[allow(dead_code)]
+pub type BeforeToolCallFn = Box<dyn Fn(&tools::ToolCall, &Value) -> Option<String> + Send + Sync>;
+#[allow(dead_code)]
+pub type AfterToolCallFn  = Box<dyn Fn(&tools::ToolCall, &Value, bool) -> Option<(Value, bool)> + Send + Sync>;
+
+/// Extended tool-call event sink (pi-mono style lifecycle events).
+pub enum ToolEvent {
+    /// Legacy: simple status string (kept for backwards compat).
+    Status { tool_name: String, status: String, detail: Option<String> },
+    /// Tool execution is about to begin (after validation).
+    ExecutionStart { tool_call_id: String, tool_name: String, args: Value },
+    /// Tool execution finished.
+    ExecutionEnd { tool_call_id: String, tool_name: String, result: Value, is_error: bool },
+}
+
 async fn run_chat_with_builtin_tools<F, G>(
     state: &LlmServerState,
     base_messages: Vec<Value>,
@@ -846,13 +869,15 @@ async fn run_chat_with_builtin_tools<F, G>(
 ) -> Result<(String, String, usize, usize, usize), String>
 where
     F: FnMut(&str),
-    G: FnMut(&str, &str, Option<&str>),
+    G: FnMut(ToolEvent),
 {
-    const MAX_TOOL_ROUNDS: usize = 3;
-    const MAX_TOOL_CALLS: usize = 4;
+    let allowed_tools = state.allowed_tools.lock().unwrap().clone();
+
+    let max_rounds         = allowed_tools.max_rounds;
+    let max_calls_per_round = allowed_tools.max_calls_per_round;
+    let execution_mode     = allowed_tools.execution_mode.clone();
 
     let mut messages = base_messages;
-    let allowed_tools = state.allowed_tools.lock().unwrap().clone();
     if tools_from_req.is_empty() {
         tools_from_req = enabled_builtin_llm_tools(&allowed_tools);
     } else {
@@ -860,7 +885,13 @@ where
     }
     tools::inject_tools_into_system_prompt(&mut messages, &tools_from_req);
 
-    for _ in 0..=MAX_TOOL_ROUNDS {
+    // Build a lookup map for argument validation.
+    let tool_defs: std::collections::HashMap<String, tools::Tool> = tools_from_req
+        .iter()
+        .map(|t| (t.function.name.clone(), t.clone()))
+        .collect();
+
+    for _ in 0..=max_rounds {
         let images = extract_images_from_messages(&messages);
         let (tok_tx, tok_rx) = mpsc::unbounded_channel();
         state.req_tx
@@ -887,24 +918,211 @@ where
             "content": cleaned,
         }));
 
-        for tc in tool_calls.into_iter().take(MAX_TOOL_CALLS) {
-            let detail_str = if tc.function.arguments.len() > 2 {
-                Some(tc.function.arguments.as_str())
-            } else { None };
-            on_tool_event(&tc.function.name, "calling", detail_str);
-            let tool_result = execute_builtin_tool_call(&tc, &allowed_tools).await;
-            let ok = tool_result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-            on_tool_event(&tc.function.name, if ok { "done" } else { "error" },
-                if ok { None } else { tool_result.get("error").and_then(|v| v.as_str()) });
-            messages.push(json!({
-                "role": "tool",
-                "tool_call_id": tc.id,
-                "content": tool_result.to_string(),
-            }));
+        let selected_calls: Vec<tools::ToolCall> = tool_calls.into_iter().take(max_calls_per_round).collect();
+
+        match execution_mode {
+            crate::settings::ToolExecutionMode::Sequential => {
+                execute_tool_calls_sequential(
+                    &selected_calls, &tool_defs, &allowed_tools,
+                    &mut messages, &mut on_tool_event,
+                ).await;
+            }
+            crate::settings::ToolExecutionMode::Parallel => {
+                execute_tool_calls_parallel(
+                    &selected_calls, &tool_defs, &allowed_tools,
+                    &mut messages, &mut on_tool_event,
+                ).await;
+            }
         }
     }
 
     Err("tool-calling round limit reached".to_string())
+}
+
+/// Validate arguments for a tool call.  Returns the parsed args `Value` or an
+/// error result to inject directly.
+fn validate_and_prepare(
+    tc: &tools::ToolCall,
+    tool_defs: &std::collections::HashMap<String, tools::Tool>,
+    allowed_tools: &crate::settings::LlmToolConfig,
+) -> Result<Value, Value> {
+    // Check if tool is enabled.
+    if !is_builtin_tool_enabled(allowed_tools, &tc.function.name) {
+        return Err(json!({ "ok": false, "tool": tc.function.name, "error": "tool disabled in settings" }));
+    }
+
+    // Parse raw arguments string.
+    let args: Value = serde_json::from_str(&tc.function.arguments)
+        .unwrap_or_else(|_| json!({}));
+
+    // Validate against JSON Schema if a definition exists.
+    if let Some(tool_def) = tool_defs.get(&tc.function.name) {
+        match tools::validate_tool_arguments(tool_def, &args) {
+            Ok(validated) => Ok(validated),
+            Err(err_msg) => Err(json!({ "ok": false, "tool": tc.function.name, "error": err_msg })),
+        }
+    } else {
+        // Unknown tool — let execution handle the error.
+        Ok(args)
+    }
+}
+
+/// Execute tool calls one-by-one in order (pi-mono "sequential" mode).
+async fn execute_tool_calls_sequential<G>(
+    calls: &[tools::ToolCall],
+    tool_defs: &std::collections::HashMap<String, tools::Tool>,
+    allowed_tools: &crate::settings::LlmToolConfig,
+    messages: &mut Vec<Value>,
+    on_tool_event: &mut G,
+)
+where
+    G: FnMut(ToolEvent),
+{
+    for tc in calls {
+        let args_result = validate_and_prepare(tc, tool_defs, allowed_tools);
+
+        let args_for_event = match &args_result {
+            Ok(v) => v.clone(),
+            Err(_) => serde_json::from_str(&tc.function.arguments).unwrap_or(json!({})),
+        };
+
+        // Emit start events (legacy + rich).
+        let detail_str = if tc.function.arguments.len() > 2 {
+            Some(tc.function.arguments.clone())
+        } else { None };
+        on_tool_event(ToolEvent::Status {
+            tool_name: tc.function.name.clone(),
+            status: "calling".into(),
+            detail: detail_str,
+        });
+        on_tool_event(ToolEvent::ExecutionStart {
+            tool_call_id: tc.id.clone(),
+            tool_name: tc.function.name.clone(),
+            args: args_for_event,
+        });
+
+        let (tool_result, is_error) = match args_result {
+            Err(err_val) => (err_val, true),
+            Ok(_) => {
+                let result = execute_builtin_tool_call(tc, allowed_tools).await;
+                let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                (result, !ok)
+            }
+        };
+
+        // Emit end events (legacy + rich).
+        on_tool_event(ToolEvent::Status {
+            tool_name: tc.function.name.clone(),
+            status: if is_error { "error" } else { "done" }.into(),
+            detail: if is_error { tool_result.get("error").and_then(|v| v.as_str()).map(|s| s.to_string()) } else { None },
+        });
+        on_tool_event(ToolEvent::ExecutionEnd {
+            tool_call_id: tc.id.clone(),
+            tool_name: tc.function.name.clone(),
+            result: tool_result.clone(),
+            is_error,
+        });
+
+        messages.push(json!({
+            "role": "tool",
+            "tool_call_id": tc.id,
+            "content": tool_result.to_string(),
+        }));
+    }
+}
+
+/// Execute tool calls concurrently (pi-mono "parallel" mode).
+///
+/// Preparation (validation) is done sequentially, then all valid calls are
+/// spawned concurrently and results collected in source order.
+async fn execute_tool_calls_parallel<G>(
+    calls: &[tools::ToolCall],
+    tool_defs: &std::collections::HashMap<String, tools::Tool>,
+    allowed_tools: &crate::settings::LlmToolConfig,
+    messages: &mut Vec<Value>,
+    on_tool_event: &mut G,
+)
+where
+    G: FnMut(ToolEvent),
+{
+    // Phase 1: Prepare all calls (validate arguments, emit start events).
+    struct PreparedCall {
+        tc: tools::ToolCall,
+        validation: Result<Value, Value>,
+    }
+
+    let mut prepared = Vec::with_capacity(calls.len());
+    for tc in calls {
+        let args_result = validate_and_prepare(tc, tool_defs, allowed_tools);
+
+        let args_for_event = match &args_result {
+            Ok(v) => v.clone(),
+            Err(_) => serde_json::from_str(&tc.function.arguments).unwrap_or(json!({})),
+        };
+
+        let detail_str = if tc.function.arguments.len() > 2 {
+            Some(tc.function.arguments.clone())
+        } else { None };
+        on_tool_event(ToolEvent::Status {
+            tool_name: tc.function.name.clone(),
+            status: "calling".into(),
+            detail: detail_str,
+        });
+        on_tool_event(ToolEvent::ExecutionStart {
+            tool_call_id: tc.id.clone(),
+            tool_name: tc.function.name.clone(),
+            args: args_for_event,
+        });
+
+        prepared.push(PreparedCall { tc: tc.clone(), validation: args_result });
+    }
+
+    // Phase 2: Execute valid calls concurrently, immediately resolve errors.
+    let mut futures = Vec::with_capacity(prepared.len());
+    for p in &prepared {
+        let tc = p.tc.clone();
+        let allowed = allowed_tools.clone();
+        let is_valid = p.validation.is_ok();
+
+        if is_valid {
+            futures.push(tokio::spawn(async move {
+                let result = execute_builtin_tool_call(&tc, &allowed).await;
+                let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                (tc, result, !ok)
+            }));
+        } else {
+            let err_val = p.validation.as_ref().err().unwrap().clone();
+            futures.push(tokio::spawn(async move {
+                (tc, err_val, true)
+            }));
+        }
+    }
+
+    // Phase 3: Collect results in source order and emit end events.
+    for future in futures {
+        let (tc, tool_result, is_error) = future.await.unwrap_or_else(|e| {
+            let tc = calls[0].clone(); // fallback
+            (tc, json!({"ok": false, "error": e.to_string()}), true)
+        });
+
+        on_tool_event(ToolEvent::Status {
+            tool_name: tc.function.name.clone(),
+            status: if is_error { "error" } else { "done" }.into(),
+            detail: if is_error { tool_result.get("error").and_then(|v| v.as_str()).map(|s| s.to_string()) } else { None },
+        });
+        on_tool_event(ToolEvent::ExecutionEnd {
+            tool_call_id: tc.id.clone(),
+            tool_name: tc.function.name.clone(),
+            result: tool_result.clone(),
+            is_error,
+        });
+
+        messages.push(json!({
+            "role": "tool",
+            "tool_call_id": tc.id,
+            "content": tool_result.to_string(),
+        }));
+    }
 }
 
 // ── Shared sampling loop ───────────────────────────────────────────────────────
@@ -1906,7 +2124,7 @@ async fn chat_completions(
                 Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
     }
 
-    match run_chat_with_builtin_tools(&state, req.messages.clone(), req.gen.clone(), req.tools.clone(), |_| {}, |_,_,_| {}).await {
+    match run_chat_with_builtin_tools(&state, req.messages.clone(), req.gen.clone(), req.tools.clone(), |_| {}, |_: ToolEvent| {}).await {
         Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => {
             if req.stream {
                 let model_name = state.model_name.clone();

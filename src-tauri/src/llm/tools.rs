@@ -14,6 +14,49 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
 
+// ── Argument validation ───────────────────────────────────────────────────────
+
+/// Validate tool-call arguments against the tool's JSON Schema `parameters`.
+///
+/// Returns the (potentially coerced) arguments value, or an `Err` with a
+/// human-readable validation error message.
+///
+/// Modelled after pi-mono's `validateToolArguments` which uses AJV against
+/// TypeBox schemas.  Here we use the `jsonschema` crate for Rust.
+pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> Result<Value, String> {
+    let Some(ref schema) = tool.function.parameters else {
+        // No schema defined — accept any arguments.
+        return Ok(args.clone());
+    };
+
+    let compiled = jsonschema::validator_for(schema)
+        .map_err(|e| format!("Invalid tool schema for \"{}\": {e}", tool.function.name))?;
+
+    let errors: Vec<String> = compiled
+        .iter_errors(args)
+        .map(|err| {
+            let path_str = err.instance_path.to_string();
+            let path = if path_str.is_empty() {
+                "root".to_string()
+            } else {
+                path_str
+            };
+            format!("  - {path}: {err}")
+        })
+        .collect();
+
+    if !errors.is_empty() {
+        return Err(format!(
+            "Validation failed for tool \"{}\":\n{}\n\nReceived arguments:\n{}",
+            tool.function.name,
+            errors.join("\n"),
+            serde_json::to_string_pretty(args).unwrap_or_default()
+        ));
+    }
+
+    Ok(args.clone())
+}
+
 /// Built-in tool names used for dict-style multi-tool recognition:
 ///   { "date": {}, "location": {} }
 /// These must stay in sync with `enabled_builtin_llm_tools` in mod.rs.
@@ -233,6 +276,15 @@ fn tool_name_from_value(v: &Value) -> String {
 }
 
 fn extract_calls_from_value(v: &Value, calls: &mut Vec<ToolCall>, dedup: &mut HashSet<(String, String)>) {
+    // Top-level array of tool-call objects (Qwen3.5 emits this format):
+    //   [{"name":"date","parameters":{}},{"name":"location","parameters":{}}]
+    if let Some(arr) = v.as_array() {
+        for item in arr {
+            extract_calls_from_value(item, calls, dedup);
+        }
+        return;
+    }
+
     // OpenAI-style envelope: { "tool_calls": [ ... ] }
     if let Some(arr) = v.get("tool_calls").and_then(|x| x.as_array()) {
         for item in arr {
@@ -277,6 +329,10 @@ fn extract_calls_from_value(v: &Value, calls: &mut Vec<ToolCall>, dedup: &mut Ha
 }
 
 fn is_tool_call_value(v: &Value) -> bool {
+    // Top-level array of tool-call objects
+    if let Some(arr) = v.as_array() {
+        return arr.iter().any(is_tool_call_value);
+    }
     if v.get("tool_calls").and_then(|x| x.as_array()).is_some() {
         return true;
     }
@@ -325,6 +381,13 @@ fn extract_tool_calls_from_json_text(
             extract_calls_from_value(&v, calls, dedup);
         }
     }
+
+    // 3) Bare JSON arrays embedded in prose (Qwen3.5 emits [{"name":"date",...}]).
+    for (start, end) in find_balanced_json_arrays(content) {
+        if let Ok(v) = serde_json::from_str::<Value>(&content[start..end]) {
+            extract_calls_from_value(&v, calls, dedup);
+        }
+    }
 }
 
 fn find_balanced_json_objects(content: &str) -> Vec<(usize, usize)> {
@@ -359,6 +422,56 @@ fn find_balanced_json_objects(content: &str) -> Vec<(usize, usize)> {
                 depth += 1;
             }
             b'}' => {
+                if depth == 0 {
+                    continue;
+                }
+                depth -= 1;
+                if depth == 0 {
+                    if let Some(s) = start.take() {
+                        out.push((s, i + 1));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    out
+}
+
+/// Find balanced `[…]` JSON array ranges in text (for Qwen3.5 array-style tool calls).
+fn find_balanced_json_arrays(content: &str) -> Vec<(usize, usize)> {
+    let bytes = content.as_bytes();
+    let mut out = Vec::new();
+
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut start = None::<usize>;
+
+    for (i, &b) in bytes.iter().enumerate() {
+        if in_string {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+            match b {
+                b'\\' => escaped = true,
+                b'"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+
+        match b {
+            b'"' => in_string = true,
+            b'[' => {
+                if depth == 0 {
+                    start = Some(i);
+                }
+                depth += 1;
+            }
+            b']' => {
                 if depth == 0 {
                     continue;
                 }
@@ -436,6 +549,15 @@ fn strip_json_tool_call_payloads_preserve(content: &str) -> String {
 
     // Strip inline JSON objects that are tool-call payloads.
     for (start, end) in find_balanced_json_objects(content) {
+        if let Ok(v) = serde_json::from_str::<Value>(&content[start..end]) {
+            if is_tool_call_value(&v) {
+                ranges.push((start, end));
+            }
+        }
+    }
+
+    // Strip inline JSON arrays that are tool-call payloads.
+    for (start, end) in find_balanced_json_arrays(content) {
         if let Ok(v) = serde_json::from_str::<Value>(&content[start..end]) {
             if is_tool_call_value(&v) {
                 ranges.push((start, end));
@@ -555,25 +677,64 @@ fn find_incomplete_trailing_inline_tool_call_range(content: &str) -> Option<(usi
         }
     }
 
-    let start = start?;
-    let tail = &content[start..];
-    if looks_like_tool_call_json_prefix(tail) {
-        let end = content[start..]
-            .find("<think>")
-            .map(|idx| start + idx)
-            .unwrap_or(content.len());
-        return Some((start, end));
+    if let Some(start) = start {
+        let tail = &content[start..];
+        if looks_like_tool_call_json_prefix(tail) {
+            let end = content[start..]
+                .find("<think>")
+                .map(|idx| start + idx)
+                .unwrap_or(content.len());
+            return Some((start, end));
+        }
     }
+
+    // Also check for unclosed `[` (array-style tool calls from Qwen3.5).
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut arr_start = None::<usize>;
+
+    for (i, b) in content.bytes().enumerate() {
+        if in_string {
+            if escaped { escaped = false; continue; }
+            match b {
+                b'\\' => escaped = true,
+                b'"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match b {
+            b'"' => in_string = true,
+            b'[' => { if depth == 0 { arr_start = Some(i); } depth += 1; }
+            b']' => { if depth > 0 { depth -= 1; if depth == 0 { arr_start = None; } } }
+            _ => {}
+        }
+    }
+
+    if let Some(start) = arr_start {
+        let tail = &content[start..];
+        if looks_like_tool_call_json_prefix(tail) {
+            let end = content[start..]
+                .find("<think>")
+                .map(|idx| start + idx)
+                .unwrap_or(content.len());
+            return Some((start, end));
+        }
+    }
+
     None
 }
 
 fn looks_like_tool_call_json_prefix(s: &str) -> bool {
     let trimmed = s.trim_start();
-    if !trimmed.starts_with('{') {
+    // Accept both `{` (object) and `[` (array) prefixes.
+    // Qwen3.5 emits arrays like [{"name":"date","parameters":{}}].
+    if !trimmed.starts_with('{') && !trimmed.starts_with('[') {
         return false;
     }
 
-    let probe: String = trimmed.chars().take(240).collect::<String>().to_ascii_lowercase();
+    let probe: String = trimmed.chars().take(320).collect::<String>().to_ascii_lowercase();
 
     // Dict-style: any known tool name appears as a JSON key (e.g. "date":)
     let is_dict_style = KNOWN_TOOL_NAMES.iter().any(|n| {
@@ -587,8 +748,8 @@ fn looks_like_tool_call_json_prefix(s: &str) -> bool {
         || probe.contains("\"tool\"")
         || probe.contains("\"tool_calls\"")
         || probe.contains("\"function\"");
-    let mentions_args = probe.contains("\"parameters")
-        || probe.contains("\"arguments")
+    let mentions_args = probe.contains("\"parameter")
+        || probe.contains("\"argument")
         || probe.contains("<think>");
 
     mentions_tool_name && mentions_args
@@ -713,6 +874,87 @@ Then answer naturally."#;
         assert!(!stripped.contains("\"date\""), "date key should be stripped");
         assert!(!stripped.contains("\"location\""), "location key should be stripped");
         assert!(stripped.contains("Done."), "prose should survive");
+    }
+
+    #[test]
+    fn validate_tool_args_valid() {
+        let tool = Tool {
+            tool_type: "function".into(),
+            function: ToolFunction {
+                name: "web_search".into(),
+                description: Some("Search the web".into()),
+                parameters: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string" }
+                    },
+                    "required": ["query"],
+                    "additionalProperties": false
+                })),
+            },
+        };
+        let args = serde_json::json!({"query": "test"});
+        let result = validate_tool_arguments(&tool, &args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_tool_args_missing_required() {
+        let tool = Tool {
+            tool_type: "function".into(),
+            function: ToolFunction {
+                name: "web_search".into(),
+                description: Some("Search the web".into()),
+                parameters: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string" }
+                    },
+                    "required": ["query"],
+                    "additionalProperties": false
+                })),
+            },
+        };
+        let args = serde_json::json!({});
+        let result = validate_tool_arguments(&tool, &args);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Validation failed"));
+    }
+
+    #[test]
+    fn validate_tool_args_no_schema() {
+        let tool = Tool {
+            tool_type: "function".into(),
+            function: ToolFunction {
+                name: "date".into(),
+                description: Some("Get date".into()),
+                parameters: None,
+            },
+        };
+        let args = serde_json::json!({"anything": true});
+        let result = validate_tool_arguments(&tool, &args);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_tool_args_wrong_type() {
+        let tool = Tool {
+            tool_type: "function".into(),
+            function: ToolFunction {
+                name: "web_search".into(),
+                description: None,
+                parameters: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string" }
+                    },
+                    "required": ["query"]
+                })),
+            },
+        };
+        let args = serde_json::json!({"query": 123});
+        let result = validate_tool_arguments(&tool, &args);
+        assert!(result.is_err());
     }
 
     #[test]

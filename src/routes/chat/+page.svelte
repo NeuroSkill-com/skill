@@ -98,9 +98,10 @@
 
     function looksLikeToolCallJsonPrefix(s: string): boolean {
       const trimmed = s.trimStart();
-      if (!trimmed.startsWith("{")) return false;
+      // Accept both object `{` and array `[` prefixes (Qwen3.5 emits arrays).
+      if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return false;
 
-      const probe = trimmed.slice(0, 240).toLowerCase();
+      const probe = trimmed.slice(0, 320).toLowerCase();
       const isDictStyle = [...KNOWN_TOOLS].some(name =>
         probe.includes(`"${name}":`) || probe.includes(`"${name}": `)
       );
@@ -112,19 +113,29 @@
         probe.includes('"tool_calls"') ||
         probe.includes('"function"');
       const mentionsArgs =
-        probe.includes('"parameters') ||
-        probe.includes('"arguments') ||
+        probe.includes('"parameter') ||
+        probe.includes('"argument') ||
         probe.includes('<think>');
 
       return mentionsToolName && mentionsArgs;
+    }
+
+    function isToolCallArray(v: unknown): boolean {
+      if (!Array.isArray(v)) return false;
+      return v.some(item =>
+        typeof item === "object" && item !== null && !Array.isArray(item) &&
+        isToolCallObject(item as Record<string, unknown>)
+      );
     }
 
     // 1. Complete fenced blocks
     let s = raw.replace(/```(?:json)?\n([\s\S]*?)\n?```/g, (match, body: string) => {
       const trimmedBody = body.trim();
       try {
-        const v = JSON.parse(trimmedBody) as Record<string, unknown>;
+        const v = JSON.parse(trimmedBody);
         if (typeof v === "object" && v !== null && !Array.isArray(v) && isToolCallObject(v))
+          return "";
+        if (isToolCallArray(v))
           return "";
       } catch { /* not JSON — keep */ }
       if (looksLikeToolCallJsonPrefix(trimmedBody)) return "";
@@ -141,7 +152,34 @@
       looksLikeToolCallJsonPrefix(body) ? "" : match
     );
 
+    // 3. Bare inline tool-call JSON (not fenced) — strip any { or [ balanced/partial
+    //    block that looks like a tool call, possibly with trailing garbage.
+    s = s.replace(/(?:^|\n)\s*[\[{][\s\S]*$/gm, (match) => {
+      if (looksLikeToolCallJsonPrefix(match.trim())) return "";
+      return match;
+    });
+
     return s;
+  }
+
+  /**
+   * Clean lead-in text for display.  When tool calls are active, aggressively
+   * strip ALL incomplete code fences and any JSON-like fragments — these are
+   * almost always tool-call artifacts the model emitted mid-stream.
+   */
+  function cleanLeadInForDisplay(raw: string, hasToolUses: boolean): string {
+    if (!raw.trim()) return "";
+
+    let s = stripToolCallFences(raw);
+
+    if (hasToolUses) {
+      // Strip any remaining incomplete fenced code block (opening ``` with no closing ```)
+      s = s.replace(/```[a-z]*\n[\s\S]*$/gi, "");
+      // Strip bare JSON-like fragments at end of string
+      s = s.replace(/\n\s*[\[{][\s\S]*$/g, "");
+    }
+
+    return s.trim();
   }
 
   /**
@@ -206,6 +244,8 @@
 
   interface ChatChunkDelta { type: "delta"; content: string; }
   interface ChatChunkToolUse { type: "tool_use"; tool: string; status: string; detail?: string; }
+  interface ChatChunkToolExecStart { type: "tool_execution_start"; tool_call_id: string; tool_name: string; args: any; }
+  interface ChatChunkToolExecEnd   { type: "tool_execution_end";   tool_call_id: string; tool_name: string; result: any; is_error: boolean; }
   interface ChatChunkDone  {
     type:              "done";
     finish_reason:     string;
@@ -214,7 +254,7 @@
     n_ctx:             number;
   }
   interface ChatChunkError { type: "error"; message: string; }
-  type ChatChunk = ChatChunkDelta | ChatChunkToolUse | ChatChunkDone | ChatChunkError;
+  type ChatChunk = ChatChunkDelta | ChatChunkToolUse | ChatChunkToolExecStart | ChatChunkToolExecEnd | ChatChunkDone | ChatChunkError;
 
   /** Thinking budget levels: token limit for <think> block. null = unlimited. */
   type ThinkingLevel = "minimal" | "normal" | "extended" | "unlimited";
@@ -316,13 +356,22 @@
 
   // ── State ──────────────────────────────────────────────────────────────────
 
-  interface ToolConfig { date: boolean; location: boolean; web_search: boolean; web_fetch: boolean; }
+  type ToolExecutionMode = "sequential" | "parallel";
+  interface ToolConfig {
+    date: boolean; location: boolean; web_search: boolean; web_fetch: boolean;
+    execution_mode: ToolExecutionMode;
+    max_rounds: number;
+    max_calls_per_round: number;
+  }
 
   let status         = $state<ServerStatus>("stopped");
   let modelName      = $state("");
   let supportsVision = $state(false);
   let supportsTools  = $state(false);
-  let toolConfig     = $state<ToolConfig>({ date: true, location: true, web_search: true, web_fetch: true });
+  let toolConfig     = $state<ToolConfig>({
+    date: true, location: true, web_search: true, web_fetch: true,
+    execution_mode: "parallel", max_rounds: 3, max_calls_per_round: 4,
+  });
   let messages       = $state<Message[]>([]);
   let sessionId      = $state(0);   // current chat_history.sqlite session id
   let input          = $state("");
@@ -838,6 +887,16 @@
         });
         await scrollBottom();
 
+      } else if (chunk.type === "tool_execution_start") {
+        // Rich lifecycle event: tool execution is beginning (after validation).
+        // Already handled by the legacy "tool_use/calling" event above.
+        // This event carries structured args for advanced UI use.
+
+      } else if (chunk.type === "tool_execution_end") {
+        // Rich lifecycle event: tool execution finished.
+        // Already handled by the legacy "tool_use/done|error" event above.
+        // This event carries the full result JSON and is_error flag.
+
       } else if (chunk.type === "done") {
         const elapsed = performance.now() - t0;
         const { leadIn, thinking, content } = mergeWithFrozen(parseAssistantOutput(rawAcc));
@@ -1002,10 +1061,13 @@
       const cfg = await invoke<any>("get_llm_config");
       if (cfg?.tools) {
         toolConfig = {
-          date:       cfg.tools.date       ?? true,
-          location:   cfg.tools.location   ?? true,
-          web_search: cfg.tools.web_search ?? true,
-          web_fetch:  cfg.tools.web_fetch  ?? true,
+          date:                cfg.tools.date                ?? true,
+          location:            cfg.tools.location            ?? true,
+          web_search:          cfg.tools.web_search          ?? true,
+          web_fetch:           cfg.tools.web_fetch           ?? true,
+          execution_mode:      cfg.tools.execution_mode      ?? "parallel",
+          max_rounds:          cfg.tools.max_rounds          ?? 3,
+          max_calls_per_round: cfg.tools.max_calls_per_round ?? 4,
         };
       }
     } catch {}
@@ -1432,6 +1494,28 @@
               </button>
             {/each}
           </div>
+
+          <!-- Tool execution mode toggle -->
+          <div class="col-span-2 mt-1.5">
+            <div class="flex items-center justify-between gap-2 mb-1">
+              <span class="text-[0.53rem] text-muted-foreground/60">{t("chat.tools.executionMode")}</span>
+            </div>
+            <div class="flex rounded-md overflow-hidden border border-border text-[0.6rem] font-medium">
+              {#each [
+                { key: "parallel"   as ToolExecutionMode, labelKey: "chat.tools.parallel" },
+                { key: "sequential" as ToolExecutionMode, labelKey: "chat.tools.sequential" },
+              ] as mode}
+                <button
+                  onclick={() => updateToolConfig({ execution_mode: mode.key })}
+                  class="flex-1 py-1 transition-colors cursor-pointer
+                         {toolConfig.execution_mode === mode.key
+                           ? 'bg-primary text-primary-foreground'
+                           : 'bg-background text-muted-foreground hover:bg-muted'}">
+                  {t(mode.labelKey)}
+                </button>
+              {/each}
+            </div>
+          </div>
         {/if}
       </div>
 
@@ -1621,55 +1705,46 @@
               {/if}
 
               <!-- Lead-in bubble (text the model emitted before calling a tool) -->
-              {#if msg.leadIn?.trim()}
+              {#if cleanLeadInForDisplay(msg.leadIn ?? "", !!msg.toolUses?.length)}
                 <div class="rounded-2xl rounded-tl-sm border border-border/70 bg-background/80
                             px-3 py-2 text-[0.72rem] leading-relaxed text-muted-foreground
                             whitespace-pre-wrap break-words">
-                  {msg.leadIn}
+                  {cleanLeadInForDisplay(msg.leadIn ?? "", !!msg.toolUses?.length)}
                 </div>
               {/if}
 
-              <!-- Tool-use bubbles -->
+              <!-- Tool-use pills -->
               {#if msg.toolUses?.length}
-                <div class="flex flex-col gap-1">
+                <div class="flex flex-wrap gap-1.5">
                   {#each msg.toolUses as tu}
                     {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐" }}
                     {@const icon = icons[tu.tool] ?? "🔧"}
-                    <div class="rounded-2xl rounded-tl-sm border px-3 py-2 text-[0.68rem]
-                                leading-relaxed break-words
+                    <div class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[0.65rem]
+                                font-medium select-none border
                                 {tu.status === 'calling'
                                   ? 'border-primary/30 bg-primary/8 text-primary'
                                   : tu.status === 'done'
                                     ? 'border-emerald-500/30 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300'
                                     : 'border-red-500/30 bg-red-500/8 text-red-700 dark:text-red-300'}">
-                      <div class="flex items-center gap-1.5 font-medium">
-                        <span>{icon}</span>
-                        <span>{t(`chat.tools.${tu.tool}`)}</span>
-                        <span class="ml-auto flex items-center gap-1">
-                          {#if tu.status === "calling"}
-                            <span class="flex gap-0.5">
-                              {#each [0,1,2] as i}
-                                <span class="w-1 h-1 rounded-full bg-current animate-bounce"
-                                      style="animation-delay:{i*0.1}s"></span>
-                              {/each}
-                            </span>
-                          {:else if tu.status === "done"}
-                            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-                              <polyline points="2 6 5 9 10 3"/>
-                            </svg>
-                          {:else}
-                            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" class="w-3 h-3">
-                              <line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/>
-                            </svg>
-                          {/if}
+                      <span class="text-sm">{icon}</span>
+                      <span>{t(`chat.tools.${tu.tool}`)}</span>
+                      {#if tu.status === "calling"}
+                        <span class="flex gap-0.5 ml-0.5">
+                          {#each [0,1,2] as i}
+                            <span class="w-1 h-1 rounded-full bg-current animate-bounce"
+                                  style="animation-delay:{i*0.1}s"></span>
+                          {/each}
                         </span>
-                      </div>
-                      {#if tu.detail && tu.status !== 'done'}
-                        <div class="mt-1 whitespace-pre-wrap text-[0.62rem] opacity-75">
-                          {tu.detail}
-                        </div>
+                      {:else if tu.status === "done"}
+                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
+                          <polyline points="2 6 5 9 10 3"/>
+                        </svg>
+                      {:else}
+                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" class="w-3 h-3">
+                          <line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/>
+                        </svg>
                       {/if}
                     </div>
                   {/each}
