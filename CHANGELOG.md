@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### UI
+
+- Main-window titlebar now tints red when Bluetooth is unavailable (`bt_off` state), giving an immediate visual cue that the BLE adapter is off or missing. Uses the semantic `--color-error` token so the tint respects both light and dark themes.
+
 ### Chat — Tool Calling (pi-mono architecture)
 
 - Implemented pi-mono style tool calling architecture with structured lifecycle events, argument validation, and configurable execution modes.

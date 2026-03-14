@@ -287,6 +287,7 @@ use llm::cmds::{
     chat_completions_ipc, abort_llm_stream,
     get_last_chat_session, save_chat_message, new_chat_session,
     load_chat_session, list_chat_sessions, rename_chat_session, delete_chat_session,
+    get_model_hardware_fit,
 };
 
 // ── Imports ───────────────────────────────────────────────────────────────────
@@ -1906,6 +1907,8 @@ pub fn run() {
             chat_completions_ipc,
             #[cfg(feature = "llm")]
             abort_llm_stream,
+            #[cfg(feature = "llm")]
+            get_model_hardware_fit,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,
