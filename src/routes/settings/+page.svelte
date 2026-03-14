@@ -82,6 +82,7 @@ the Free Software Foundation, version 3 only. -->
   let splitRoot: HTMLDivElement | null = null;
   let navWidth = $state(176);
   let resizingNav = false;
+  let lastSettingsWindowTitle = "";
 
   const NAV_WIDTH_MIN = 140;
   const NAV_WIDTH_MAX = 320;
@@ -163,6 +164,8 @@ the Free Software Foundation, version 3 only. -->
     const settingsTitle = t("settingsTabs.settings");
     const sectionTitle = tabLabel(tab);
     const title = `${settingsTitle} — ${sectionTitle}`;
+    if (title === lastSettingsWindowTitle) return;
+    lastSettingsWindowTitle = title;
     getCurrentWindow().setTitle(title);
   });
 </script>

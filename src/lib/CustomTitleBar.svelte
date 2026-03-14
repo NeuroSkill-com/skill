@@ -76,7 +76,10 @@ the Free Software Foundation, version 3 only. -->
     const titleEl = document.querySelector("title");
     if (titleEl) {
       titleObserver = new MutationObserver(() => {
-        windowTitle = document.title || "NeuroSkill™";
+        const nextTitle = document.title || "NeuroSkill™";
+        if (nextTitle !== windowTitle) {
+          windowTitle = nextTitle;
+        }
       });
       titleObserver.observe(titleEl, {
         childList: true,

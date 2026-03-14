@@ -20,6 +20,8 @@
 
 import { t } from "$lib/i18n/index.svelte";
 
+let lastAppliedTitle = "";
+
 /**
  * Registers a reactive `$effect` that immediately sets the OS window title
  * to `t(key)` and keeps it updated whenever the locale changes.
@@ -34,8 +36,10 @@ import { t } from "$lib/i18n/index.svelte";
 export function useWindowTitle(key: string): void {
   $effect(() => {
     const title = t(key);
+    if (title === lastAppliedTitle) return;
+    lastAppliedTitle = title;
     import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
-      getCurrentWindow().setTitle(title);
+      getCurrentWindow().setTitle(title).catch(() => {});
     });
   });
 }

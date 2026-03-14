@@ -17,6 +17,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Bugfixes
 
+- Reduced title/menu redraw churn by deduplicating unchanged window-title writes (`setTitle`) and skipping no-op titlebar title-observer state updates.
 - Reduced spacing between titlebar close/maximize/minimize controls across all windows by matching shared `CustomTitleBar` window-control button width to the other titlebar icon buttons (`30px`).
 - Fixed Tailwind v4 `Invalid declaration: onMount` dev-server errors across `CustomTitleBar.svelte`, `+page.svelte`, `GpuChart.svelte`, `DisclaimerFooter.svelte`, and others — `@tailwindcss/vite` v4.2's `enforce:"pre"` transform matched `.svelte?svelte&type=style&lang.css` virtual modules before the Svelte compiler had extracted the `<style>` block, causing the CSS parser to choke on JavaScript imports. Patched `vite.config.js` with a shim that skips all `.svelte` style virtual module IDs in Tailwind's transform plugins. Also removed empty `<style></style>` blocks in `whats-new/+page.svelte` and `UmapViewer3D.svelte`.
 - Fixed mmproj crash when the vision projector file is missing on disk — added an `exists()` guard before calling `mtmd_init_from_file` (which can abort/segfault on some platforms instead of returning null); switched from `active_mmproj_path()` to `resolve_mmproj_path(autoload)` so auto-detection works properly; stale paths where the file has been deleted are now filtered out with a warning instead of passed to the C library.
