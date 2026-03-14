@@ -10,23 +10,49 @@
 fn main() {
     // The Tauri `run()` function has an enormous stack frame because
     // `generate_handler!` expands ~150 command handlers inline, plus deep
-    // generics from serde / HNSW / llama.cpp.  The default main-thread
-    // stack (8 MB on macOS / Linux, 1 MB on Windows) overflows.
+    // generics from serde / HNSW / llama.cpp.
     //
-    // We cannot spawn a separate thread because macOS Cocoa / AppKit
-    // requires the NSApplication run-loop on the original main thread.
-    // Linker flags (-Wl,-stack_size) are unreliable across Tauri's
-    // mixed crate-type build (staticlib + cdylib + rlib).
-    //
-    // `stacker::maybe_grow` dynamically extends the stack using mmap +
-    // inline-asm stack-pointer swap (via the `psm` crate).  The main
-    // thread identity is preserved so Cocoa is happy.  Pages are lazily
-    // committed, so the 64 MiB reservation costs only what is actually
-    // touched.
-    const RED_ZONE: usize  = 32 * 1024 * 1024; // 32 MiB remaining trigger
-    const NEW_STACK: usize = 64 * 1024 * 1024; // 64 MiB new stack
+    // On Linux, raising RLIMIT_STACK preserves the true main-thread stack.
+    // That avoids JavaScriptCoreGTK's stack-sanitizer abort, which is
+    // triggered when `stacker` swaps the main-thread stack pointer.
+    #[cfg(target_os = "linux")]
+    {
+        const DESIRED_STACK: libc::rlim_t = 64 * 1024 * 1024;
 
-    stacker::maybe_grow(RED_ZONE, NEW_STACK, || {
+        unsafe {
+            let mut limit = libc::rlimit {
+                rlim_cur: 0,
+                rlim_max: 0,
+            };
+            if libc::getrlimit(libc::RLIMIT_STACK, &mut limit) == 0 {
+                let desired = if limit.rlim_max == libc::RLIM_INFINITY {
+                    DESIRED_STACK
+                } else {
+                    std::cmp::min(limit.rlim_max, DESIRED_STACK)
+                };
+                if desired > limit.rlim_cur {
+                    let raised = libc::rlimit {
+                        rlim_cur: desired,
+                        rlim_max: limit.rlim_max,
+                    };
+                    let _ = libc::setrlimit(libc::RLIMIT_STACK, &raised);
+                }
+            }
+        }
+
         skill_lib::run();
-    });
+    }
+
+    // On macOS and Windows we still need `stacker`: Cocoa requires the app
+    // loop on the original main thread, and Windows' default 1 MiB stack is
+    // far too small for the generated Tauri handler stack frame.
+    #[cfg(not(target_os = "linux"))]
+    {
+        const RED_ZONE: usize  = 32 * 1024 * 1024; // 32 MiB remaining trigger
+        const NEW_STACK: usize = 64 * 1024 * 1024; // 64 MiB new stack
+
+        stacker::maybe_grow(RED_ZONE, NEW_STACK, || {
+            skill_lib::run();
+        });
+    }
 }
