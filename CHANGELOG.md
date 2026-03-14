@@ -6,8 +6,28 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### History — Calendar Heatmap View
+
+- **Calendar heatmap** replaces the old single-day paginator as the default history view. Choose between **Year**, **Month** (default), **Week**, and **Day** granularity via a segmented control in the titlebar.
+- **Year view**: GitHub-style contribution heatmap with weekly columns, month labels, and an intensity legend (emerald gradient). Click any day with recordings to drill into the day view.
+- **Month view**: traditional calendar grid with per-day session counts and heat-colored backgrounds. Out-of-month days are dimmed; today is ring-highlighted.
+- **Week view**: 24-hour timeline grid per day with canvas-rendered **epoch dots** — one dot per 5-second EEG embedding, color-coded by session. Each dot's Y position maps relaxation value within the session's band. Session bar fallback renders while timeseries loads. Day label sidebar shows weekday, date, and session count; click to navigate to day view. Empty days show a subtle placeholder.
+- **Day view – epoch dot canvas**: new canvas timeline below the existing 24h bar renders all epoch dots for the day, with session color legend and label count summary. Label markers appear as amber triangles with text.
+- **Always-rendered UI**: the calendar grid renders immediately, even while data is loading or when there are no recordings yet. A skeleton pulse animation shows in the day-label slot during loading; empty state shows a gentle hint with the clock icon and guidance text.
+- **Reworked titlebar UX**: themed `history-viewmode-seg` segmented control (accent-aware via `--color-primary`); context-sensitive navigation — day mode shows prev/next arrows with position counter, calendar modes show period-appropriate prev/next with a formatted label (e.g. "March 2026"); skeleton loading animation for day labels.
+- **i18n**: all new strings (`history.view.year/month/week/day`, `history.heatmap.less/more/none/hours/dayStreak`, `history.session`) translated across English, German, French, Hebrew, and Ukrainian.
+
+### LLM — Hardware Fit Prediction
+
+- **`get_model_hardware_fit` Tauri command**: uses `llmfit-core`'s `ModelFit::analyze` against the user's detected hardware (`SystemSpecs::detect()`, cached via `OnceLock`) to predict whether each catalog model will run. Returns fit level, run mode, estimated memory, tok/s, and composite score.
+- **Per-quant fit badges** in the LLM settings tab: 🟢 Runs great / 🟡 Runs well / 🟠 Tight fit / 🔴 Won't fit. Hover tooltip shows run mode, memory breakdown, and estimated speed.
+- **Hardware fit detail row** below each model entry showing run mode, memory utilization, estimated tok/s, and score.
+- **Hardware summary line** above the family dropdown showing available memory from the detected GPU/RAM pool.
+- **i18n**: `llm.fit.*` keys translated across all 5 locales.
+
 ### UI
 
+- **Refactored `CustomTitleBar.svelte`**: collapsed the macOS and Windows/Linux duplicate branches into shared Svelte 5 snippets (`windowControls`, `centerContent`, `actionButtons`, `historyHead`, `tbBtn`, plus reusable icon snippets). Single unified template switches element order based on platform. Eliminated all duplicated HTML and CSS blocks. **975 → 533 lines (45% reduction).**
 - Main-window titlebar now tints red when Bluetooth is unavailable (`bt_off` state), giving an immediate visual cue that the BLE adapter is off or missing. Uses the semantic `--color-error` token so the tint respects both light and dark themes.
 
 ### Chat — Tool Calling (pi-mono architecture)

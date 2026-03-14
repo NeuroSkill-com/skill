@@ -5,6 +5,9 @@
 // titlebar so that the history window's navigation controls live inside the
 // 30 px titlebar instead of a separate in-page header row.
 
+/** Calendar heatmap view granularity. */
+export type HistoryViewMode = "year" | "month" | "week" | "day";
+
 /** Display data written by the history page, read by CustomTitleBar. */
 export const hBar = $state({
   /** True once the history page has mounted and set up callbacks. */
@@ -23,6 +26,10 @@ export const hBar = $state({
   compareCount:    0,
   /** Whether the labels panel is open. */
   showLabels:      false,
+  /** Current history view mode (calendar granularity). */
+  viewMode:        "month" as HistoryViewMode,
+  /** Navigation label for calendar views (e.g. "March 2026"). */
+  calendarLabel:   "",
 });
 
 /** Callbacks set by the history page on mount. */
@@ -33,6 +40,9 @@ export const hCbs = {
   openCompare:   () => {},
   toggleLabels:  () => {},
   reload:        () => {},
+  setViewMode:   (_m: HistoryViewMode) => {},
+  calendarPrev:  () => {},
+  calendarNext:  () => {},
 } as {
   prev:          () => void;
   next:          () => void;
@@ -40,4 +50,7 @@ export const hCbs = {
   openCompare:   () => void;
   toggleLabels:  () => void;
   reload:        () => void;
+  setViewMode:   (m: HistoryViewMode) => void;
+  calendarPrev:  () => void;
+  calendarNext:  () => void;
 };
