@@ -49,7 +49,5 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="mdr" onclick={onCopy}>
-  {@html html}{#if pending}<span
-    class="inline-block w-0.5 h-[1em] bg-foreground/70 animate-pulse ml-0.5 align-middle"
-  ></span>{/if}
+  {@html html}
 </div>

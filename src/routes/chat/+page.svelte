@@ -1470,15 +1470,70 @@
         <!-- Assistant message -->
         {:else if msg.role === "assistant"}
           <div class="flex justify-start gap-2.5">
-            <!-- Avatar -->
-            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600
-                        flex items-center justify-center shrink-0 mt-0.5 text-white text-[0.55rem] font-bold">
-              AI
-            </div>
+            <!-- Avatar / spinner -->
+            {#if msg.pending}
+              <div class="w-6 h-6 shrink-0 mt-0.5 flex items-center justify-center">
+                <svg class="w-5 h-5 animate-spin text-violet-500" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2.5" class="opacity-20"/>
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="opacity-80"/>
+                </svg>
+              </div>
+            {:else}
+              <div class="w-6 h-6 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600
+                          flex items-center justify-center shrink-0 mt-0.5 text-white text-[0.55rem] font-bold">
+                AI
+              </div>
+            {/if}
 
             <div class="flex flex-col gap-1 max-w-[82%]">
 
-              <!-- Lead-in bubble (text before a tool/thinking phase) -->
+              <!-- Thinking block (collapsible) — shown first: happens before lead-in/tools -->
+              {#if msg.thinking || (msg.pending && msg.content === "" && !msg.thinking && !msg.toolUses?.length && !msg.leadIn?.trim())}
+                <div class="rounded-xl border border-violet-500/20 bg-violet-500/5
+                            text-[0.7rem] overflow-hidden">
+                  <button
+                    onclick={() => {
+                      messages = messages.map(m =>
+                        m.id === msg.id ? { ...m, thinkOpen: !m.thinkOpen } : m
+                      );
+                    }}
+                    class="w-full flex items-center gap-1.5 px-3 py-1.5 text-left
+                           text-violet-600 dark:text-violet-400 hover:bg-violet-500/10
+                           transition-colors cursor-pointer">
+                    {#if msg.pending && !msg.thinking?.trim()}
+                      <!-- still waiting for thinking content -->
+                      <span class="flex gap-0.5">
+                        {#each [0,1,2] as i}
+                          <span class="w-1 h-1 rounded-full bg-violet-400 animate-bounce"
+                                style="animation-delay:{i*0.12}s"></span>
+                        {/each}
+                      </span>
+                      <span class="text-[0.65rem]">{t("chat.thinking")}</span>
+                    {:else}
+                      <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 shrink-0
+                           transition-transform {msg.thinkOpen ? 'rotate-90' : ''}">
+                        <path d="M6 3l5 5-5 5V3z"/>
+                      </svg>
+                      <span class="text-[0.65rem] font-medium">
+                        {msg.pending ? t("chat.thinking") : t("chat.thought")}
+                      </span>
+                      {#if !msg.pending && msg.thinking}
+                        <span class="ml-auto text-[0.6rem] text-muted-foreground/50">
+                          {t("chat.words", { count: msg.thinking.trim().split(/\s+/).length })}
+                        </span>
+                      {/if}
+                    {/if}
+                  </button>
+                  {#if msg.thinkOpen && msg.thinking}
+                    <div class="px-3 pb-2 pt-0 text-muted-foreground/70 leading-relaxed
+                                whitespace-pre-wrap border-t border-violet-500/10 text-[0.68rem]">
+                      {msg.thinking}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+
+              <!-- Lead-in bubble (text the model emitted before calling a tool) -->
               {#if msg.leadIn?.trim()}
                 <div class="rounded-2xl rounded-tl-sm border border-border/70 bg-background/80
                             px-3 py-2 text-[0.72rem] leading-relaxed text-muted-foreground
@@ -1531,52 +1586,6 @@
                       {/if}
                     </div>
                   {/each}
-                </div>
-              {/if}
-
-              <!-- Thinking block (collapsible) -->
-              {#if msg.thinking || (msg.pending && msg.content === "" && !msg.thinking)}
-                <div class="rounded-xl border border-violet-500/20 bg-violet-500/5
-                            text-[0.7rem] overflow-hidden">
-                  <button
-                    onclick={() => {
-                      messages = messages.map(m =>
-                        m.id === msg.id ? { ...m, thinkOpen: !m.thinkOpen } : m
-                      );
-                    }}
-                    class="w-full flex items-center gap-1.5 px-3 py-1.5 text-left
-                           text-violet-600 dark:text-violet-400 hover:bg-violet-500/10
-                           transition-colors cursor-pointer">
-                    {#if msg.pending && !msg.thinking?.trim()}
-                      <!-- still waiting for thinking content -->
-                      <span class="flex gap-0.5">
-                        {#each [0,1,2] as i}
-                          <span class="w-1 h-1 rounded-full bg-violet-400 animate-bounce"
-                                style="animation-delay:{i*0.12}s"></span>
-                        {/each}
-                      </span>
-                      <span class="text-[0.65rem]">{t("chat.thinking")}</span>
-                    {:else}
-                      <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 shrink-0
-                           transition-transform {msg.thinkOpen ? 'rotate-90' : ''}">
-                        <path d="M6 3l5 5-5 5V3z"/>
-                      </svg>
-                      <span class="text-[0.65rem] font-medium">
-                        {msg.pending ? t("chat.thinking") : t("chat.thought")}
-                      </span>
-                      {#if !msg.pending && msg.thinking}
-                        <span class="ml-auto text-[0.6rem] text-muted-foreground/50">
-                          {t("chat.words", { count: msg.thinking.trim().split(/\s+/).length })}
-                        </span>
-                      {/if}
-                    {/if}
-                  </button>
-                  {#if msg.thinkOpen && msg.thinking}
-                    <div class="px-3 pb-2 pt-0 text-muted-foreground/70 leading-relaxed
-                                whitespace-pre-wrap border-t border-violet-500/10 text-[0.68rem]">
-                      {msg.thinking}
-                    </div>
-                  {/if}
                 </div>
               {/if}
 
