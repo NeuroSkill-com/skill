@@ -578,7 +578,7 @@ the Free Software Foundation, version 3 only. -->
   }
 
   .titlebar-controls button {
-    width: 46px;
+    width: 30px;
     height: 30px;
   }
 
