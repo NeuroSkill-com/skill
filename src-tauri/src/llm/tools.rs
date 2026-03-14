@@ -14,6 +14,22 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
 
+/// Built-in tool names used for dict-style multi-tool recognition:
+///   { "date": {}, "location": {} }
+/// These must stay in sync with `enabled_builtin_llm_tools` in mod.rs.
+const KNOWN_TOOL_NAMES: &[&str] = &["date", "location", "web_search", "web_fetch"];
+
+/// Returns true if `v` is a dict-style multi-tool object whose keys are
+/// (at least partially) known tool names and whose values are parameter objects.
+///   { "date": {}, "location": {} }
+fn is_dict_style_multi_tool(v: &Value) -> bool {
+    let Some(obj) = v.as_object() else { return false; };
+    if obj.is_empty() { return false; }
+    let has_known_key = obj.keys().any(|k| KNOWN_TOOL_NAMES.contains(&k.as_str()));
+    let all_obj_vals  = obj.values().all(|v| v.is_object() || v.is_null());
+    has_known_key && all_obj_vals
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -231,6 +247,22 @@ fn extract_calls_from_value(v: &Value, calls: &mut Vec<ToolCall>, dedup: &mut Ha
         return;
     }
 
+    // Dict-style multi-tool call: { "date": {}, "location": {} }
+    // Keys are tool names, values are parameter objects.
+    if is_dict_style_multi_tool(v) {
+        if let Some(obj) = v.as_object() {
+            for (name, params) in obj {
+                let args = if params.is_object() && !params.as_object().unwrap().is_empty() {
+                    params.to_string()
+                } else {
+                    "{}".to_string()
+                };
+                push_tool_call(calls, dedup, name.clone(), args);
+            }
+        }
+        return;
+    }
+
     // Single call object forms:
     // {"name":"date","parameters":{}}
     // {"tool":"date","parameters":{}}
@@ -248,7 +280,9 @@ fn is_tool_call_value(v: &Value) -> bool {
     if v.get("tool_calls").and_then(|x| x.as_array()).is_some() {
         return true;
     }
-
+    if is_dict_style_multi_tool(v) {
+        return true;
+    }
     let single = if let Some(f) = v.get("function") { f } else { v };
     !tool_name_from_value(single).is_empty()
 }
@@ -540,6 +574,15 @@ fn looks_like_tool_call_json_prefix(s: &str) -> bool {
     }
 
     let probe: String = trimmed.chars().take(240).collect::<String>().to_ascii_lowercase();
+
+    // Dict-style: any known tool name appears as a JSON key (e.g. "date":)
+    let is_dict_style = KNOWN_TOOL_NAMES.iter().any(|n| {
+        probe.contains(&format!("\"{}\":", n)) || probe.contains(&format!("\"{}\": ", n))
+    });
+    if is_dict_style {
+        return true;
+    }
+
     let mentions_tool_name = probe.contains("\"name\"")
         || probe.contains("\"tool\"")
         || probe.contains("\"tool_calls\"")
@@ -651,6 +694,25 @@ Then answer naturally."#;
 ```"#;
         let stripped = strip_tool_call_blocks(msg);
         assert!(stripped.contains("\"status\":\"ok\""));
+    }
+
+    #[test]
+    fn extract_dict_style_multi_tool() {
+        let msg = "I'll get that information for you.\n```json\n{\n  \"date\": {},\n  \"location\": {}\n}\n```\nLet me fetch that for you.";
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 2, "expected 2 calls, got: {:?}", calls.iter().map(|c| &c.function.name).collect::<Vec<_>>());
+        let names: Vec<&str> = calls.iter().map(|c| c.function.name.as_str()).collect();
+        assert!(names.contains(&"date"),     "missing date");
+        assert!(names.contains(&"location"), "missing location");
+    }
+
+    #[test]
+    fn strip_dict_style_multi_tool_fence() {
+        let msg = "I'll get that.\n```json\n{\n  \"date\": {},\n  \"location\": {}\n}\n```\nDone.";
+        let stripped = strip_tool_call_blocks(msg);
+        assert!(!stripped.contains("\"date\""), "date key should be stripped");
+        assert!(!stripped.contains("\"location\""), "location key should be stripped");
+        assert!(stripped.contains("Done."), "prose should survive");
     }
 
     #[test]

@@ -28,7 +28,30 @@
 
   // ── Derived HTML ──────────────────────────────────────────────────────────
 
-  const html = $derived(marked.parse(content, {
+  // Normalize common LLM bold/italic formatting quirks before parsing.
+  // Models often emit malformed bold/italic that CommonMark won't parse:
+  //   "** word**"  – space after opening delimiter
+  //   "**word **"  – space before closing delimiter
+  //   "**Label:**x" – closing ** preceded by punctuation and followed by a
+  //                   non-whitespace char is NOT "right-flanking" per CommonMark
+  //                   spec § 6.4, so the parser treats it as literal asterisks.
+  function normalizeMd(raw: string): string {
+    return raw
+      // 1. Strip stray space after opening ** (e.g. "** word**" → "**word**")
+      .replace(/\*\*\s+(\S[\s\S]*?\S)\s*\*\*/g, "**$1**")
+      .replace(/\*\*\s+(\S)\*\*/g, "**$1**")
+      // 2. Strip stray space before closing ** (e.g. "**word **" → "**word**")
+      .replace(/\*\*((?:[^*\n])+?)\s+\*\*/g, (_, g) => `**${g.trimEnd()}**`)
+      // 3. CommonMark edge-case: closing ** preceded by punctuation and followed
+      //    by a non-whitespace char is not right-flanking and won't close bold.
+      //    Convert these to raw <strong> so the browser always renders them bold.
+      .replace(/\*\*([^*\n]{1,300}[:.!?,;)\]'"»])\*\*(?=[^\s*])/g, "<strong>$1</strong>")
+      // 4. Strip stray spaces inside * (italic)
+      .replace(/\*\s+(\S[\s\S]*?\S)\s*\*/g, "*$1*")
+      .replace(/\*\s+(\S)\*/g, "*$1*");
+  }
+
+  const html = $derived(marked.parse(normalizeMd(content), {
     breaks: true,
     gfm: true,
     renderer,
