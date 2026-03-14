@@ -14,6 +14,7 @@ the Free Software Foundation, version 3 only. -->
   import { hBar, hCbs } from "$lib/history-titlebar.svelte";
   import { helpTitlebarState } from "$lib/help-search-state.svelte";
   import { labelTitlebarState } from "$lib/label-titlebar.svelte";
+  import { isBtOff } from "$lib/bt-status-store.svelte";
 
   let osType: string | null = $state(null);
   let windowLabel = $state("main");
@@ -29,6 +30,9 @@ the Free Software Foundation, version 3 only. -->
   const isDownloadsWindow = $derived(windowLabel === "downloads");
   const isHistoryWindow   = $derived(windowLabel === "history");
   const isLabelWindow     = $derived(windowLabel === "label");
+
+  /** True when Bluetooth is unavailable — tints the main-window titlebar red. */
+  const btUnavailable = $derived(isMainWindow && isBtOff());
 
   const SEARCH_MODE_EVENT = "skill:search-mode";
   const SEARCH_SET_MODE_EVENT = "skill:search-set-mode";
@@ -123,7 +127,7 @@ the Free Software Foundation, version 3 only. -->
   }
 </script>
 
-<div class="titlebar">
+<div class="titlebar {btUnavailable ? 'titlebar--bt-off' : ''}">
   {#if osType === "Darwin"}
     <!-- macOS: controls on left, spacer, actions on right -->
     <div class="titlebar-controls">
@@ -514,6 +518,12 @@ the Free Software Foundation, version 3 only. -->
     z-index: 1000;
     border-bottom: 1px solid var(--color-border);
     gap: 0;
+  }
+
+  /* ── Bluetooth-off red tint (main window only) ──────────────────────── */
+  .titlebar--bt-off {
+    background: color-mix(in oklab, var(--color-error, #ef4444) 18%, var(--color-surface));
+    border-bottom-color: color-mix(in oklab, var(--color-error, #ef4444) 30%, var(--color-border));
   }
 
   .titlebar-drag-region {

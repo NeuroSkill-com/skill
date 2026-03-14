@@ -6064,6 +6064,133 @@
       "is_mmproj": true,
       "recommended": false,
       "advanced": false
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
+      "filename": "LFM2.5-VL-1.6B-Q4_0.gguf",
+      "quant": "Q4_0",
+      "size_gb": 0.65,
+      "description": "Smallest quant \u2014 fastest, fits anywhere",
+      "family_id": "lfm25-vl-1.6b",
+      "family_name": "LFM2.5-VL 1.6B",
+      "family_desc": "Liquid Foundation Model 2.5 Vision-Language \u2014 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
+      "tags": [
+        "chat",
+        "vision",
+        "multimodal",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": false
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
+      "filename": "LFM2.5-VL-1.6B-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 1.16,
+      "description": "Recommended \u2014 best quality/size tradeoff",
+      "family_id": "lfm25-vl-1.6b",
+      "family_name": "LFM2.5-VL 1.6B",
+      "family_desc": "Liquid Foundation Model 2.5 Vision-Language \u2014 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
+      "tags": [
+        "chat",
+        "vision",
+        "multimodal",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": true,
+      "advanced": false
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
+      "filename": "LFM2.5-VL-1.6B-F16.gguf",
+      "quant": "F16",
+      "size_gb": 2.18,
+      "description": "Full FP16 precision",
+      "family_id": "lfm25-vl-1.6b",
+      "family_name": "LFM2.5-VL 1.6B",
+      "family_desc": "Liquid Foundation Model 2.5 Vision-Language \u2014 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
+      "tags": [
+        "chat",
+        "vision",
+        "multimodal",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
+      "filename": "LFM2.5-VL-1.6B-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 2.18,
+      "description": "Full BF16 precision",
+      "family_id": "lfm25-vl-1.6b",
+      "family_name": "LFM2.5-VL 1.6B",
+      "family_desc": "Liquid Foundation Model 2.5 Vision-Language \u2014 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
+      "tags": [
+        "chat",
+        "vision",
+        "multimodal",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
+      "filename": "mmproj-LFM2.5-VL-1.6b-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 0.54,
+      "description": "Vision projector \u2014 Q8_0 (recommended, smallest)",
+      "family_id": "lfm25-vl-1.6b",
+      "family_name": "",
+      "family_desc": "",
+      "tags": [
+        "vision",
+        "multimodal"
+      ],
+      "is_mmproj": true,
+      "recommended": true,
+      "advanced": false
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
+      "filename": "mmproj-LFM2.5-VL-1.6b-F16.gguf",
+      "quant": "F16",
+      "size_gb": 0.80,
+      "description": "Vision projector \u2014 FP16",
+      "family_id": "lfm25-vl-1.6b",
+      "family_name": "",
+      "family_desc": "",
+      "tags": [
+        "vision",
+        "multimodal"
+      ],
+      "is_mmproj": true,
+      "recommended": false,
+      "advanced": false
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
+      "filename": "mmproj-LFM2.5-VL-1.6b-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 0.80,
+      "description": "Vision projector \u2014 BF16",
+      "family_id": "lfm25-vl-1.6b",
+      "family_name": "",
+      "family_desc": "",
+      "tags": [
+        "vision",
+        "multimodal"
+      ],
+      "is_mmproj": true,
+      "recommended": false,
+      "advanced": true
     }
   ]
 }

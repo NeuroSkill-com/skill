@@ -76,7 +76,20 @@
     downloaded:  LlmModelEntry[];
   }
 
+  interface ModelHardwareFit {
+    filename:          string;
+    fitLevel:          "perfect"|"good"|"marginal"|"too_tight";
+    runMode:           "gpu"|"moe"|"cpu_gpu"|"cpu";
+    memoryRequiredGb:  number;
+    memoryAvailableGb: number;
+    estimatedTps:      number;
+    score:             number;
+    notes:             string[];
+  }
+
   // ── State ──────────────────────────────────────────────────────────────────
+
+  let hardwareFits = $state<Map<string, ModelHardwareFit>>(new Map());
 
   let catalog = $state<LlmCatalog>({ entries: [], active_model: "", active_mmproj: "" });
   let config  = $state<LlmConfig>({
@@ -300,6 +313,46 @@
     return a.quant.localeCompare(b.quant) || a.filename.localeCompare(b.filename);
   }
 
+  function fitBadgeClass(level: string): string {
+    switch (level) {
+      case "perfect":   return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+      case "good":      return "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30";
+      case "marginal":  return "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30";
+      case "too_tight": return "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+      default:          return "bg-slate-500/10 text-slate-500 border-slate-500/20";
+    }
+  }
+
+  function fitBadgeIcon(level: string): string {
+    switch (level) {
+      case "perfect":   return "🟢";
+      case "good":      return "🟡";
+      case "marginal":  return "🟠";
+      case "too_tight": return "🔴";
+      default:          return "⚪";
+    }
+  }
+
+  function fitBadgeLabel(level: string): string {
+    switch (level) {
+      case "perfect":   return t("llm.fit.perfect");
+      case "good":      return t("llm.fit.good");
+      case "marginal":  return t("llm.fit.marginal");
+      case "too_tight": return t("llm.fit.tooTight");
+      default:          return "";
+    }
+  }
+
+  function runModeLabel(mode: string): string {
+    switch (mode) {
+      case "gpu":     return "GPU";
+      case "moe":     return "MoE offload";
+      case "cpu_gpu": return "CPU + GPU";
+      case "cpu":     return "CPU";
+      default:        return mode;
+    }
+  }
+
   function tagColor(tag: string): string {
     switch (tag) {
       case "chat":      return "bg-primary/10 text-primary border-primary/20";
@@ -337,6 +390,15 @@
 
   async function loadCatalog() {
     try { catalog = await invoke<LlmCatalog>("get_llm_catalog"); } catch {}
+  }
+
+  async function loadHardwareFit() {
+    try {
+      const fits = await invoke<ModelHardwareFit[]>("get_model_hardware_fit");
+      const map = new Map<string, ModelHardwareFit>();
+      for (const f of fits) map.set(f.filename, f);
+      hardwareFits = map;
+    } catch {}
   }
 
   async function loadConfig() {
@@ -431,7 +493,7 @@
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   onMount(async () => {
-    await Promise.all([loadCatalog(), loadConfig()]);
+    await Promise.all([loadCatalog(), loadConfig(), loadHardwareFit()]);
     try {
       const s = await invoke<{
         status: "stopped"|"loading"|"running";
@@ -627,6 +689,21 @@
     </Card>
   {:else}
 
+    <!-- Hardware summary -->
+    {#if hardwareFits.size > 0}
+      {@const anyFit = hardwareFits.values().next().value}
+      {#if anyFit}
+        <div class="flex items-center gap-2 text-[0.56rem] text-muted-foreground/60 px-0.5 -mt-0.5 mb-0.5">
+          <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 shrink-0 opacity-40">
+            <path d="M2 4a2 2 0 012-2h8a2 2 0 012 2v5a2 2 0 01-2 2H8l-4 3V11H4a2 2 0 01-2-2V4z"/>
+          </svg>
+          <span>
+            {t("llm.fit.memLabel")}: {anyFit.memoryAvailableGb} GB
+          </span>
+        </div>
+      {/if}
+    {/if}
+
     <!-- Family dropdown -->
     <div class="relative">
       <select
@@ -709,6 +786,7 @@
               {@const downloading = entry.state === "downloading"}
               {@const downloaded  = entry.state === "downloaded"}
               {@const failed      = entry.state === "failed" || entry.state === "cancelled"}
+              {@const fit         = hardwareFits.get(entry.filename)}
 
               <div class="flex flex-col gap-1 px-4 py-2.5
                            {isActive ? 'bg-violet-50/60 dark:bg-violet-950/20' : ''}">
@@ -736,6 +814,13 @@
                       <span class="shrink-0 rounded-full border border-slate-500/20 bg-slate-500/10
                                    px-1.5 py-0.5 text-[0.5rem] font-semibold text-slate-600 dark:text-slate-300">
                         {vendorLabel(entry.repo)}
+                      </span>
+                    {/if}
+                    {#if fit}
+                      <span class="shrink-0 rounded-full border px-1.5 py-0.5 text-[0.5rem] font-semibold
+                                   {fitBadgeClass(fit.fitLevel)}"
+                            title="{runModeLabel(fit.runMode)} · {fit.memoryRequiredGb} / {fit.memoryAvailableGb} GB · ~{fit.estimatedTps} tok/s">
+                        {fitBadgeIcon(fit.fitLevel)} {fitBadgeLabel(fit.fitLevel)}
                       </span>
                     {/if}
                     <span class="text-[0.63rem] text-muted-foreground/70 truncate">
@@ -821,6 +906,21 @@
                   <p class="text-[0.53rem] font-mono text-muted-foreground/40 break-all leading-tight">
                     {entry.local_path}
                   </p>
+                {/if}
+
+                <!-- Hardware fit detail -->
+                {#if fit}
+                  <div class="flex items-center gap-2 flex-wrap text-[0.54rem] text-muted-foreground/60 mt-0.5">
+                    <span>{runModeLabel(fit.runMode)}</span>
+                    <span class="opacity-40">·</span>
+                    <span>{t("llm.fit.memLabel")}: {fit.memoryRequiredGb} / {fit.memoryAvailableGb} GB</span>
+                    <span class="opacity-40">·</span>
+                    <span>~{fit.estimatedTps} {t("llm.fit.tokSec")}</span>
+                    {#if fit.score > 0}
+                      <span class="opacity-40">·</span>
+                      <span>{t("llm.fit.scoreLabel")}: {fit.score.toFixed(1)}</span>
+                    {/if}
+                  </div>
                 {/if}
 
               </div>

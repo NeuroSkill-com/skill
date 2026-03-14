@@ -32,6 +32,7 @@ the Free Software Foundation, version 3 only. -->
   import { t } from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import { addToast } from "$lib/toast-store.svelte";
+  import { setBtOff } from "$lib/bt-status-store.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 
   // ── Model download status (shown as a banner when downloading/retrying) ────
@@ -770,6 +771,9 @@ the Free Software Foundation, version 3 only. -->
   $effect(() => { checkOnboarding(); });
 
   const sc = $derived(STATE_COLORS[status.state]);
+
+  // Keep the shared BT-off store in sync so the titlebar can react.
+  $effect(() => { setBtOff(status.state === "bt_off"); });
 
   useWindowTitle("window.title.main");
 </script>

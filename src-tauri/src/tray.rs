@@ -46,6 +46,14 @@ const MENU_REBUILD_MIN_MS: u64 = 300;
 /// triggered if and only if the visible menu would differ.
 static LAST_MENU_KEY: Mutex<String> = Mutex::new(String::new());
 
+/// Fingerprint of the last structural key — when only the status key changes,
+/// we update existing menu items in-place instead of rebuilding.
+static LAST_STRUCTURE_KEY: Mutex<String> = Mutex::new(String::new());
+
+/// Cached reference to the current tray `Menu` so we can call `menu.get(id)`
+/// for in-place item updates without `TrayIcon::menu()` (which doesn't exist).
+static CURRENT_MENU: Mutex<Option<Menu<tauri::Wry>>> = Mutex::new(None);
+
 #[cfg(feature = "llm")]
 #[derive(Clone)]
 struct TrayDownloadItem {
@@ -145,10 +153,9 @@ fn tray_download_icon_progress(_app: &AppHandle) -> Option<(usize, f32)> {
     None
 }
 
-/// Compute a compact string key from all state that `build_menu` renders.
-/// Two identical keys guarantee identical menus; a different key means the
-/// menu must be rebuilt.
-fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
+/// Structural key — things that change the number / identity of menu items.
+/// When this changes, the entire menu must be rebuilt via `set_menu()`.
+fn structure_key(st: &MuseStatus, app: &AppHandle) -> String {
     let r = app.state::<Mutex<Box<AppState>>>();
     let g = r.lock_or_recover();
     let ls   = g.label_shortcut.clone();
@@ -175,23 +182,36 @@ fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
     pair_parts.sort_unstable();
     let pairs = pair_parts.join(",");
 
-    // Battery can jitter between frequent telemetry samples.
-    // Bucket to 10% steps so tiny fluctuations do not constantly invalidate
-    // the tray menu fingerprint.
+    // Structural: the BT state determines which action items are shown
+    // (disconnect vs cancel vs connect-to-X vs scan).
+    let state = st.state.as_str();
+
+    format!("{state}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}|{llm_downloads}")
+}
+
+/// Status key — things that only change text/enabled state of existing items.
+/// When this changes (but structure_key doesn't), we update items in-place
+/// via `set_text()` / `set_enabled()` — no `set_menu()` call needed.
+fn status_key(st: &MuseStatus) -> String {
     let batt_bucket = if st.battery <= 0.0 {
         0u32
     } else {
         (((st.battery as u32) / 10) * 10).min(100)
     };
-    let state = st.state.as_str();
-    let name  = st.device_name.as_deref().unwrap_or("");
-    let tgt   = if state == "scanning" {
+    let name = st.device_name.as_deref().unwrap_or("");
+    let tgt  = if st.state == "scanning" {
         st.target_name.as_deref().unwrap_or("")
     } else {
         ""
     };
+    let is_streaming = st.state == "connected";
+    format!("{name}|{batt_bucket}|{tgt}|{is_streaming}")
+}
 
-    format!("{state}|{name}|{batt_bucket}|{tgt}|{pairs}|{ls}|{ss}|{sets}|{cs}|{hs}|{hist}|{api}|{ts}|{ft}|{chat}|{llm_downloads}")
+/// Combined key for full dedup (used by LAST_MENU_KEY to track whether
+/// *anything* changed at all).
+fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
+    format!("{}|{}", structure_key(st, app), status_key(st))
 }
 
 fn shortcut_suffix(shortcut: &str) -> String {
@@ -375,29 +395,36 @@ pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu
     menu.append(&MenuItem::with_id(app, "open_skill", &open_skill_label, true, None::<&str>)?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
+    // ── Status info (always present — updated in-place by update_status_items) ──
+    let info_text = match st.state.as_str() {
+        "connected" => format!("● {}", st.device_name.as_deref().unwrap_or("BCI device")),
+        "scanning"  => match &st.target_name {
+            Some(n) => format!("Searching for {n}…"),
+            None    => "Scanning for BCI device…".into(),
+        },
+        "bt_off"    => "⚠ Bluetooth Unavailable".into(),
+        _           => "○ Disconnected".into(),
+    };
+    menu.append(&MenuItem::with_id(app, "info", &info_text, false, None::<&str>)?)?;
+
+    // Battery line (always present; hidden when no battery data)
+    let has_batt = st.state == "connected" && st.battery > 0.0;
+    let batt_text = if has_batt { format!("🔋 {:.0}%", st.battery) } else { String::new() };
+    let batt_item = MenuItem::with_id(app, "battery_info", &batt_text, false, None::<&str>)?;
+    if !has_batt { let _ = batt_item.set_enabled(false); }
+    menu.append(&batt_item)?;
+
+    menu.append(&PredefinedMenuItem::separator(app)?)?;
+
+    // ── Action items (state-dependent — trigger full rebuild when they change) ──
     match st.state.as_str() {
         "connected" => {
-            let name = st.device_name.as_deref().unwrap_or("BCI device");
-            menu.append(&MenuItem::with_id(app, "info", format!("● {name}"), false, None::<&str>)?)?;
-            if st.battery > 0.0 {
-                menu.append(&MenuItem::with_id(app, "battery_info",
-                    format!("🔋 {:.0}%", st.battery), false, None::<&str>)?)?;
-            }
-            menu.append(&PredefinedMenuItem::separator(app)?)?;
             menu.append(&MenuItem::with_id(app, "disconnect", "Disconnect", true, None::<&str>)?)?;
         }
         "scanning" => {
-            let lbl = match &st.target_name {
-                Some(n) => format!("Searching for {n}…"),
-                None    => "Scanning for BCI device…".into(),
-            };
-            menu.append(&MenuItem::with_id(app, "scan_info", &lbl, false, None::<&str>)?)?;
-            menu.append(&PredefinedMenuItem::separator(app)?)?;
             menu.append(&MenuItem::with_id(app, "cancel", "Cancel", true, None::<&str>)?)?;
         }
         "bt_off" => {
-            menu.append(&MenuItem::with_id(app, "bt_info", "⚠ Bluetooth Unavailable", false, None::<&str>)?)?;
-            menu.append(&PredefinedMenuItem::separator(app)?)?;
             menu.append(&MenuItem::with_id(app, "retry",   "Retry Connection",         true, None::<&str>)?)?;
             menu.append(&MenuItem::with_id(app, "open_bt", "Open Bluetooth Settings…", true, None::<&str>)?)?;
         }
@@ -550,42 +577,98 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
         }
     }
 
-    // ── Menu (only rebuild when content would actually differ) ────────────────
+    // ── Menu ───────────────────────────────────────────────────────────────────
     //
-    // `tray.set_menu()` replaces the native menu object, which on macOS/Windows
-    // dismisses the menu if the user currently has it open. Skipping the call
-    // when the fingerprint is unchanged prevents the "menu disappears on hover"
-    // symptom that occurs when status events arrive while the user is reading
-    // the open menu.
-    let key = menu_key(&st, app);
+    // Strategy: split updates into *structural* (add/remove items → set_menu)
+    // and *status-only* (change text/enabled on existing items → set_text).
+    // Status-only updates are O(1) and never dismiss an open menu.
+
+    let full_key = menu_key(&st, app);
     {
-        let mut last = LAST_MENU_KEY.lock().unwrap_or_else(|p| p.into_inner());
-        if *last != key {
-            // Debounce: if we rebuilt very recently, defer to a short async
-            // timer so rapid state transitions (e.g. disconnect + reconnect
-            // attempt) don't block the main thread with repeated native menu
-            // teardown/rebuild cycles.
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64;
-            let prev = LAST_MENU_REBUILD_MS.load(std::sync::atomic::Ordering::Relaxed);
-            if now_ms.saturating_sub(prev) < MENU_REBUILD_MIN_MS {
-                // Defer the rebuild — spawn a short timer that re-calls refresh_tray.
-                let app2 = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(MENU_REBUILD_MIN_MS)).await;
-                    refresh_tray(&app2);
-                });
-                return;
-            }
-            if let Ok(m) = build_menu(app, &st) {
-                let _ = tray.set_menu(Some(m));
-                *last = key;
-                LAST_MENU_REBUILD_MS.store(now_ms, std::sync::atomic::Ordering::Relaxed);
-            } else {
-                eprintln!("[tray] menu rebuild failed; preserving previous native menu");
-            }
+        let last = LAST_MENU_KEY.lock().unwrap_or_else(|p| p.into_inner());
+        if *last == full_key {
+            return; // nothing changed at all
         }
+    }
+
+    let s_key = structure_key(&st, app);
+    let structure_changed = {
+        let last = LAST_STRUCTURE_KEY.lock().unwrap_or_else(|p| p.into_inner());
+        *last != s_key
+    };
+
+    if structure_changed {
+        // Full rebuild — menu item count or identity changed.
+        // First do a fast in-place status patch so the user sees the new
+        // status text instantly, then rebuild the full menu asynchronously.
+        if let Some(ref menu) = *CURRENT_MENU.lock().unwrap_or_else(|p| p.into_inner()) {
+            update_status_items(menu, &st);
+        }
+        // Debounce rapid structural rebuilds.
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let prev = LAST_MENU_REBUILD_MS.load(std::sync::atomic::Ordering::Relaxed);
+        if now_ms.saturating_sub(prev) < MENU_REBUILD_MIN_MS {
+            let app2 = app.clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(MENU_REBUILD_MIN_MS)).await;
+                refresh_tray(&app2);
+            });
+            return;
+        }
+        if let Ok(m) = build_menu(app, &st) {
+            let _ = tray.set_menu(Some(m.clone()));
+            *CURRENT_MENU.lock().unwrap_or_else(|p| p.into_inner()) = Some(m);
+            *LAST_STRUCTURE_KEY.lock().unwrap_or_else(|p| p.into_inner()) = s_key;
+            *LAST_MENU_KEY.lock().unwrap_or_else(|p| p.into_inner()) = full_key;
+            LAST_MENU_REBUILD_MS.store(now_ms, std::sync::atomic::Ordering::Relaxed);
+        } else {
+            eprintln!("[tray] menu rebuild failed; preserving previous native menu");
+        }
+    } else {
+        // Status-only update — patch existing items in-place (no set_menu).
+        if let Some(ref menu) = *CURRENT_MENU.lock().unwrap_or_else(|p| p.into_inner()) {
+            update_status_items(menu, &st);
+        }
+        *LAST_MENU_KEY.lock().unwrap_or_else(|p| p.into_inner()) = full_key;
+    }
+}
+
+/// Patch text/enabled on existing menu items without replacing the menu.
+/// This avoids the expensive native menu teardown/rebuild cycle for
+/// state transitions like connected↔disconnected that don't change
+/// which items exist.
+fn update_status_items(menu: &Menu<tauri::Wry>, st: &MuseStatus) {
+    // Status info line
+    if let Some(item) = menu.get("info").and_then(|k| k.as_menuitem().cloned()) {
+        let text = match st.state.as_str() {
+            "connected" => format!("● {}", st.device_name.as_deref().unwrap_or("BCI device")),
+            "scanning"  => match &st.target_name {
+                Some(n) => format!("Searching for {n}…"),
+                None    => "Scanning for BCI device…".into(),
+            },
+            "bt_off"    => "⚠ Bluetooth Unavailable".into(),
+            _           => "○ Disconnected".into(),
+        };
+        let _ = item.set_text(text);
+    }
+
+    // Battery line
+    if let Some(item) = menu.get("battery_info").and_then(|k| k.as_menuitem().cloned()) {
+        if st.battery > 0.0 {
+            let _ = item.set_text(format!("🔋 {:.0}%", st.battery));
+            let _ = item.set_enabled(true);  // make visible
+        } else {
+            let _ = item.set_text("");
+            let _ = item.set_enabled(false); // hide
+        }
+    }
+
+    // Calibrate is only enabled while streaming
+    let is_streaming = st.state == "connected";
+    if let Some(item) = menu.get("calibrate").and_then(|k| k.as_menuitem().cloned()) {
+        let _ = item.set_enabled(is_streaming);
     }
 }
