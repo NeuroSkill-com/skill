@@ -1073,23 +1073,27 @@ fn confirm_and_quit(app: AppHandle) {
         g.language.clone()
     };
     std::thread::spawn(move || {
-        if quit_confirmed(&lang) { app.exit(0); }
+        if quit_confirmed(&lang, &app) { app.exit(0); }
     });
 }
 
 #[cfg(not(target_os = "macos"))]
-fn quit_confirmed(lang: &str) -> bool {
+fn quit_confirmed(lang: &str, app: &AppHandle) -> bool {
+    use tauri::Manager;
     let (title, description) = quit_dialog_strings(lang);
-    rfd::MessageDialog::new()
+    let mut dialog = rfd::MessageDialog::new()
         .set_title(title)
         .set_description(description)
-        .set_buttons(rfd::MessageButtons::YesNo)
-        .show()
-        == rfd::MessageDialogResult::Yes
+        .set_buttons(rfd::MessageButtons::YesNo);
+    // Set the parent window so the dialog appears focused / modal
+    if let Some(win) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&win);
+    }
+    dialog.show() == rfd::MessageDialogResult::Yes
 }
 
 #[cfg(target_os = "macos")]
-fn quit_confirmed(lang: &str) -> bool {
+fn quit_confirmed(lang: &str, _app: &AppHandle) -> bool {
     use dispatch2::DispatchQueue;
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn};

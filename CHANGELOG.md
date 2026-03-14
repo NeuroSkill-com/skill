@@ -29,6 +29,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Bugfixes
 
+- Fixed quit confirmation dialog never receiving focus — set the parent window on the `rfd::MessageDialog` so the popup appears focused and modal on Linux/Windows instead of opening behind the main window.
+
 - Fixed malformed thought traces that began with an unmatched opening `json` code fence and partial JSON fragments, which caused the rest of the thought bubble markdown to render incorrectly. The shared `normalizeMarkdown()` helper now strips that narrow orphaned preamble while preserving legitimate closed fenced code blocks.
 - Fixed another chat tool-call transcript leak in the frontend parser. `stripToolCallFences()` now mirrors the Rust-side tool-call prefix heuristic instead of relying on narrow fence regexes, so incomplete or malformed fenced JSON blocks with blank lines or partial bodies are suppressed before they can appear in the lead-in bubble.
 - Hardened chat markdown normalization for malformed model output. Emphasis repair now runs through a shared `normalizeMarkdown()` utility that protects fenced code blocks and inline code spans, trims stray spaces inside `*`/`**` delimiters, and falls back to raw `<strong>`/`<em>` tags when CommonMark flanking rules would still reject the emphasis. Added unit coverage for the repaired cases.

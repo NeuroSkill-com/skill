@@ -30,6 +30,17 @@ use crate::{AppState, MuseStatus};
 /// Fingerprint of the last icon state pushed to the OS tray.
 static LAST_ICON_STATE: Mutex<String> = Mutex::new(String::new());
 
+/// Timestamp (ms) of the last actual menu rebuild.  Used to debounce rapid
+/// `refresh_tray` calls — if a rebuild happened less than `MENU_REBUILD_MIN_MS`
+/// ago, the menu update is deferred to a short async timer instead of running
+/// synchronously.
+static LAST_MENU_REBUILD_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Minimum interval between menu rebuilds (ms).  Prevents multiple rapid
+/// state changes (disconnect → scan → disconnect) from blocking the main
+/// thread with repeated native menu teardown/rebuild cycles.
+const MENU_REBUILD_MIN_MS: u64 = 300;
+
 /// Fingerprint of the last menu content pushed to the OS tray.
 /// Encodes every piece of data that `build_menu` uses so a rebuild is
 /// triggered if and only if the visible menu would differ.
@@ -550,9 +561,28 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
     {
         let mut last = LAST_MENU_KEY.lock().unwrap_or_else(|p| p.into_inner());
         if *last != key {
+            // Debounce: if we rebuilt very recently, defer to a short async
+            // timer so rapid state transitions (e.g. disconnect + reconnect
+            // attempt) don't block the main thread with repeated native menu
+            // teardown/rebuild cycles.
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            let prev = LAST_MENU_REBUILD_MS.load(std::sync::atomic::Ordering::Relaxed);
+            if now_ms.saturating_sub(prev) < MENU_REBUILD_MIN_MS {
+                // Defer the rebuild — spawn a short timer that re-calls refresh_tray.
+                let app2 = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(MENU_REBUILD_MIN_MS)).await;
+                    refresh_tray(&app2);
+                });
+                return;
+            }
             if let Ok(m) = build_menu(app, &st) {
                 let _ = tray.set_menu(Some(m));
                 *last = key;
+                LAST_MENU_REBUILD_MS.store(now_ms, std::sync::atomic::Ordering::Relaxed);
             } else {
                 eprintln!("[tray] menu rebuild failed; preserving previous native menu");
             }
