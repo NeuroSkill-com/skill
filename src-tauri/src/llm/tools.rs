@@ -877,6 +877,44 @@ Then answer naturally."#;
     }
 
     #[test]
+    fn extract_array_style_tool_calls() {
+        let msg = r#"I'll get that info.
+```json
+[
+  {"name": "date", "parameters": {}},
+  {"name": "location", "parameters": {}}
+]
+```"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 2, "expected 2, got {:?}", calls.iter().map(|c| &c.function.name).collect::<Vec<_>>());
+        let names: Vec<&str> = calls.iter().map(|c| c.function.name.as_str()).collect();
+        assert!(names.contains(&"date"));
+        assert!(names.contains(&"location"));
+    }
+
+    #[test]
+    fn strip_array_style_tool_call_fence() {
+        let msg = r#"I'll get that info.
+```json
+[
+  {"name": "date", "parameters": {}},
+  {"name": "location", "parameters": {}}
+]
+```
+Done."#;
+        let stripped = strip_tool_call_blocks(msg);
+        assert!(!stripped.contains("\"name\""), "tool call JSON should be stripped");
+        assert!(stripped.contains("Done."));
+    }
+
+    #[test]
+    fn strip_incomplete_array_tool_call() {
+        let msg = "I'll get that.\n[\n  {\n    \"name\": \"date\",\n    \"parameterarameter";
+        let stripped = strip_tool_call_blocks(msg);
+        assert!(!stripped.contains("parameterarameter"), "incomplete array should be stripped: got '{}'", stripped);
+    }
+
+    #[test]
     fn validate_tool_args_valid() {
         let tool = Tool {
             tool_type: "function".into(),
