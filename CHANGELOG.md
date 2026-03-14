@@ -17,6 +17,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Bugfixes
 
+- Fixed expanded thought panels rendering raw markdown while final answers rendered correctly. The thought body now uses the shared `MarkdownRenderer`, so the same markdown normalization and parsing logic applies in both places. Added a muted renderer variant to preserve the thought-panel visual treatment.
 - Fixed bold/italic not rendering when models emit `**word **` (space before closing delimiter) or `**Label:**value` (closing `**` preceded by punctuation followed by a non-whitespace character — CommonMark non-right-flanking edge case). Extended `normalizeMd()` in `MarkdownRenderer` with a trailing-space strip pass and a targeted conversion of punctuation-adjacent patterns to raw `<strong>`/`<em>` HTML so they always render as bold/italic regardless of CommonMark delimiter rules.
 
 - Reworked chat-window assistant turn parsing/rendering so one streamed assistant turn can display as separate bubbles for lead-in text, tool activity, collapsed thinking, and final response, instead of merging tool chatter, `<think>` content, and the user-facing answer into one Markdown bubble.

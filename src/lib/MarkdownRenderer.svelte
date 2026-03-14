@@ -4,7 +4,15 @@
   import { marked, Renderer } from "marked";
   import type { Tokens } from "marked";
 
-  let { content = "", pending = false }: { content: string; pending?: boolean } = $props();
+  let {
+    content = "",
+    pending = false,
+    className = "",
+  }: {
+    content: string;
+    pending?: boolean;
+    className?: string;
+  } = $props();
 
   const renderer = new Renderer();
 
@@ -71,6 +79,6 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="mdr" onclick={onCopy}>
+<div class={`mdr ${className}`.trim()} onclick={onCopy}>
   {@html html}
 </div>

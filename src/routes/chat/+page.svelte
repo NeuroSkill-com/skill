@@ -1581,8 +1581,8 @@
                   </button>
                   {#if msg.thinkOpen && msg.thinking}
                     <div class="px-3 pb-2 pt-0 text-muted-foreground/70 leading-relaxed
-                                whitespace-pre-wrap border-t border-violet-500/10 text-[0.68rem]">
-                      {msg.thinking}
+                                border-t border-violet-500/10 text-[0.68rem] break-words overflow-hidden">
+                      <MarkdownRenderer content={msg.thinking} className="mdr-muted" />
                     </div>
                   {/if}
                 </div>
