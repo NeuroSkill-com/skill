@@ -176,7 +176,6 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
         }
 
         let mut poll_tick = tokio::time::interval(Duration::from_secs(3));
-        let mut poll_count: u64 = 0;
         loop {
             tokio::select! {
                 biased;
@@ -205,31 +204,6 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
                 }
 
                 _ = poll_tick.tick(), if scanning => {
-                    poll_count += 1;
-
-                    // Every 5th poll (~15 s), restart the scan with the MW75
-                    // service UUID filter.  On macOS CoreBluetooth, a service-
-                    // filtered scan is the only way to discover already-paired
-                    // Classic BT devices (like MW75) that aren't actively
-                    // advertising their name.  We then immediately restart the
-                    // generic scan so Muse / Ganglion devices remain visible.
-                    if poll_count % 5 == 0 {
-                        let _ = adapter.stop_scan().await;
-                        let mw75_filter = ScanFilter {
-                            services: vec![MW75_SERVICE_UUID],
-                        };
-                        if adapter.start_scan(mw75_filter).await.is_ok() {
-                            // Brief pause to let CoreBluetooth discover MW75 peripherals
-                            tokio::time::sleep(Duration::from_millis(500)).await;
-                            let _ = adapter.stop_scan().await;
-                        }
-                        // Restart generic scan
-                        if adapter.start_scan(ScanFilter::default()).await.is_err() {
-                            scanning = false;
-                            continue;
-                        }
-                    }
-
                     match adapter.peripherals().await {
                         Err(_) => { let _ = adapter.stop_scan().await; continue 'outer; }
                         Ok(peripherals) => {
@@ -269,6 +243,20 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
                 }
             }
         }
+    }
+}
+
+/// Stop the background BLE scanner if it is running.
+///
+/// Should be called before starting a device session that creates its own
+/// btleplug Manager (like MW75) to avoid two CoreBluetooth central managers
+/// competing for main-queue delegate callbacks on macOS.
+pub(crate) fn stop_background_scanner(app: &AppHandle) {
+    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let tx = s_ref.lock_or_recover().scanner.take().map(|sh| sh.cancel_tx);
+    if let Some(tx) = tx {
+        let _ = tx.send(());
+        app_log!(app, "bluetooth", "[scanner] background scanner stopped");
     }
 }
 
