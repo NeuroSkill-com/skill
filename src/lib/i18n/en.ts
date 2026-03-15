@@ -2914,6 +2914,18 @@ const en: Record<string, string> = {
   "screenshots.permissionGranted":               "Screen recording permission granted.",
   "screenshots.openPermissionSettings":          "Open Screen Recording Settings",
 
+  "screenshots.ocrTitle":                         "OCR Text Extraction",
+  "screenshots.ocrEngine":                       "On-Device OCR",
+  "screenshots.ocrDesc":                         "Text is extracted from each screenshot at full resolution before downsizing using the ocrs engine. The extracted text is embedded with BGE-Small-EN-v1.5 and indexed in a separate HNSW index for semantic text search. OCR models (~10 MB each) are downloaded automatically on first use.",
+  "screenshots.ocrDetModel":                     "Detection model",
+  "screenshots.ocrRecModel":                     "Recognition model",
+  "screenshots.ocrTextEmbed":                    "Text embedding",
+  "screenshots.ocrIndex":                        "Text index",
+  "screenshots.ocrSearchTitle":                  "Search by Screen Text",
+  "screenshots.ocrSearchPlaceholder":            "Search text visible in screenshots…",
+  "screenshots.ocrSearchBtn":                    "Search",
+  "screenshots.ocrNoResults":                    "No matching screenshots found.",
+
   "screenshots.stats":                           "Statistics",
   "screenshots.totalCount":                      "Total screenshots",
   "screenshots.embeddedCount":                   "Embedded",

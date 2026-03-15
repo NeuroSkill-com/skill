@@ -57,6 +57,12 @@ the Free Software Foundation, version 3 only. -->
   let staleCount   = $state(0);
   let unlisten: UnlistenFn | null = null;
 
+  // ── OCR search state ──────────────────────────────────────────────────────
+  let ocrQuery     = $state("");
+  let ocrResults   = $state<Array<{timestamp: number; unix_ts: number; filename: string; app_name: string; window_title: string; similarity: number}>>([]);
+  let ocrSearching = $state(false);
+  let ocrSearched  = $state(false);
+
   // ── Recommended image size for current model ──────────────────────────────
   const recommendedSize = $derived.by(() => {
     if (config.embed_backend === "mmproj") return 768;
@@ -118,6 +124,26 @@ the Free Software Foundation, version 3 only. -->
     } finally {
       reembedding = false;
       progress = null;
+    }
+  }
+
+  // ── OCR search ──────────────────────────────────────────────────────────
+  async function searchOcr() {
+    if (!ocrQuery.trim()) return;
+    ocrSearching = true;
+    ocrSearched = false;
+    try {
+      ocrResults = await invoke<typeof ocrResults>("search_screenshots_by_text", {
+        query: ocrQuery.trim(),
+        k: 20,
+        mode: "semantic",
+      });
+      ocrSearched = true;
+    } catch {
+      ocrResults = [];
+      ocrSearched = true;
+    } finally {
+      ocrSearching = false;
     }
   }
 
@@ -454,6 +480,97 @@ the Free Software Foundation, version 3 only. -->
       </div>
     </div>
   {/if}
+
+  <!-- ── OCR Text Extraction ─────────────────────────────────────────────── -->
+  <div class="flex items-center gap-2 px-0.5 pt-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      {t("screenshots.ocrTitle")}
+    </span>
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="px-4 py-3.5 flex flex-col gap-3">
+
+      <!-- OCR description -->
+      <div class="flex items-start gap-3">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
+             stroke-linecap="round" stroke-linejoin="round"
+             class="w-5 h-5 shrink-0 text-primary/70 mt-0.5">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <div class="flex flex-col gap-1 min-w-0">
+          <span class="text-[0.72rem] font-semibold text-foreground">{t("screenshots.ocrEngine")}</span>
+          <p class="text-[0.6rem] text-muted-foreground leading-relaxed">
+            {t("screenshots.ocrDesc")}
+          </p>
+        </div>
+      </div>
+
+      <Separator class="bg-border dark:bg-white/[0.05]" />
+
+      <!-- OCR model info -->
+      <div class="flex flex-col gap-2">
+        <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[0.62rem]">
+          <span class="text-muted-foreground">{t("screenshots.ocrDetModel")}</span>
+          <span class="text-foreground font-mono text-[0.58rem]">text-detection.rten</span>
+          <span class="text-muted-foreground">{t("screenshots.ocrRecModel")}</span>
+          <span class="text-foreground font-mono text-[0.58rem]">text-recognition.rten</span>
+          <span class="text-muted-foreground">{t("screenshots.ocrTextEmbed")}</span>
+          <span class="text-foreground font-mono text-[0.58rem]">BGE-Small-EN-v1.5 — 384d</span>
+          <span class="text-muted-foreground">{t("screenshots.ocrIndex")}</span>
+          <span class="text-foreground font-mono text-[0.58rem]">screenshots_ocr.hnsw</span>
+        </div>
+      </div>
+
+      <Separator class="bg-border dark:bg-white/[0.05]" />
+
+      <!-- OCR search -->
+      <div class="flex flex-col gap-1.5">
+        <span class="text-[0.68rem] font-semibold text-foreground">{t("screenshots.ocrSearchTitle")}</span>
+        <div class="flex gap-2">
+          <input
+            type="text"
+            bind:value={ocrQuery}
+            placeholder={t("screenshots.ocrSearchPlaceholder")}
+            class="flex-1 rounded-lg border border-border dark:border-white/[0.08]
+                   bg-white dark:bg-[#14141e] px-3 py-1.5
+                   text-[0.68rem] text-foreground placeholder:text-muted-foreground/40
+                   focus:outline-none focus:ring-1 focus:ring-ring/50"
+            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') searchOcr(); }}
+          />
+          <Button size="sm" onclick={searchOcr} disabled={ocrSearching}
+                  class="text-[0.62rem] h-8 px-3 shrink-0">
+            {ocrSearching ? '…' : t("screenshots.ocrSearchBtn")}
+          </Button>
+        </div>
+        {#if ocrResults.length > 0}
+          <div class="flex flex-col gap-1 mt-1 max-h-40 overflow-y-auto">
+            {#each ocrResults as r}
+              <div class="rounded-lg border border-border dark:border-white/[0.06]
+                          bg-muted/20 dark:bg-white/[0.015] px-3 py-2 flex flex-col gap-0.5">
+                <div class="flex items-center gap-2">
+                  <span class="text-[0.6rem] font-semibold text-foreground truncate">{r.app_name || '—'}</span>
+                  {#if r.similarity > 0}
+                    <span class="text-[0.5rem] text-muted-foreground/50 tabular-nums shrink-0">
+                      {(r.similarity * 100).toFixed(0)}%
+                    </span>
+                  {/if}
+                </div>
+                <span class="text-[0.56rem] text-muted-foreground truncate">{r.window_title || r.filename}</span>
+              </div>
+            {/each}
+          </div>
+        {:else if ocrSearched}
+          <span class="text-[0.58rem] text-muted-foreground/50 italic">{t("screenshots.ocrNoResults")}</span>
+        {/if}
+      </div>
+
+    </CardContent>
+  </Card>
 
   <!-- ── Privacy note ────────────────────────────────────────────────────── -->
   <div class="rounded-xl border border-primary/20 bg-primary/5
