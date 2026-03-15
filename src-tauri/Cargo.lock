@@ -9313,6 +9313,7 @@ dependencies = [
  "sha2",
  "skill-eeg",
  "skill-llm",
+ "skill-tts",
  "stacker",
  "sysinfo 0.38.4",
  "tauri",
@@ -9359,6 +9360,22 @@ dependencies = [
  "serde_json",
  "tokio",
  "ureq 2.12.1",
+]
+
+[[package]]
+name = "skill-tts"
+version = "0.0.1"
+dependencies = [
+ "dirs",
+ "hf-hub 0.5.0",
+ "hound",
+ "kittentts",
+ "neutts",
+ "rodio",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
 ]
 
 [[package]]

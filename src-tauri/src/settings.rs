@@ -337,55 +337,14 @@ pub(crate) fn tilde_path(p: &Path) -> String {
 ///
 /// When `enabled` is `true`, all speech synthesis (calibration prompts,
 /// WebSocket `say` commands) uses the NeuTTS GGUF backbone + NeuCodec decoder
-/// pipeline located at `/agent/neutts-rs` instead of KittenTTS.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default)]
-pub struct NeuttsConfig {
-    /// Use NeuTTS instead of KittenTTS for all speech synthesis.
-    pub enabled: bool,
+// ── NeuTTS configuration ──────────────────────────────────────────────────────
+//
+// Type defined in the `skill-tts` crate and re-exported here.
+#[allow(unused_imports)]
+pub use skill_tts::NeuttsConfig;
+#[allow(unused_imports)]
+pub use skill_tts::config::default_neutts_backbone_repo;
 
-    /// HuggingFace backbone repo, e.g. `"neuphonic/neutts-nano-q4-gguf"`.
-    /// Must be one of the repos listed in `neutts_rs::download::BACKBONE_MODELS`.
-    #[serde(default = "default_neutts_backbone_repo")]
-    pub backbone_repo: String,
-
-    /// Specific GGUF filename within the repo.
-    /// Empty string means "auto-select the first `.gguf` file found".
-    pub gguf_file: String,
-
-    /// Absolute path to a reference WAV file used for voice cloning.
-    /// Empty means no reference has been selected — NeuTTS will use the
-    /// backbone's built-in voice.
-    pub ref_wav_path: String,
-
-    /// Verbatim transcript of the speech in `ref_wav_path`.
-    /// Used by espeak-ng to phonemise the reference segment.
-    pub ref_text: String,
-
-    /// Name of a bundled preset voice from `neutts-rs/samples/`.
-    /// One of: `"jo"`, `"dave"`, `"greta"`, `"juliette"`, `"mateo"`.
-    /// Empty string means use the custom `ref_wav_path` instead.
-    pub voice_preset: String,
-}
-
-pub(crate) fn default_neutts_backbone_repo() -> String {
-    "neuphonic/neutts-nano-q4-gguf".into()
-}
-
-impl Default for NeuttsConfig {
-    fn default() -> Self {
-        Self {
-            enabled:       false,
-            backbone_repo: default_neutts_backbone_repo(),
-            gguf_file:     String::new(),
-            voice_preset:  "jo".into(),
-            ref_wav_path:  String::new(),
-            ref_text:      String::new(),
-        }
-    }
-}
-
-// ── LLM server configuration ──────────────────────────────────────────────────
 //
 // Types are defined in the `skill-llm` crate and re-exported here so the rest
 // of the main crate can keep using `crate::settings::{LlmConfig, …}`.

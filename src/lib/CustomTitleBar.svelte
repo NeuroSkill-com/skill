@@ -21,7 +21,7 @@ the Free Software Foundation, version 3 only. -->
   let osType: string | null = $state(null);
   let windowLabel = $state("main");
   let windowTitle = $state("");
-  let searchMode = $state<"eeg" | "text" | "interactive">("interactive");
+  let searchMode = $state<"eeg" | "text" | "interactive" | "images">("interactive");
   let titleObserver: MutationObserver | null = null;
 
   // ── Derived ─────────────────────────────────────────────────────────────
@@ -44,11 +44,11 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Helpers ─────────────────────────────────────────────────────────────
   function emitApiRefresh() { window.dispatchEvent(new CustomEvent(API_REFRESH_EVENT)); }
-  function emitSearchModeSwitch(mode: "eeg" | "text" | "interactive") {
+  function emitSearchModeSwitch(mode: "eeg" | "text" | "interactive" | "images") {
     window.dispatchEvent(new CustomEvent(SEARCH_SET_MODE_EVENT, { detail: { mode } }));
   }
-  function normalizeSearchMode(v: unknown): "eeg" | "text" | "interactive" {
-    return v === "eeg" || v === "text" || v === "interactive" ? v : "interactive";
+  function normalizeSearchMode(v: unknown): "eeg" | "text" | "interactive" | "images" {
+    return v === "eeg" || v === "text" || v === "interactive" || v === "images" ? v : "interactive";
   }
   async function minimizeWindow()       { await getCurrentWindow().minimize(); }
   async function toggleMaximizeWindow() { await getCurrentWindow().toggleMaximize(); }
@@ -152,7 +152,7 @@ the Free Software Foundation, version 3 only. -->
   {#if isSearchWindow}
     <div class="search-window-head">
       <div class="search-mode-switch" role="tablist" aria-label={t("search.title")}>
-        {#each (["eeg","text","interactive"] as const) as mode}
+        {#each (["eeg","text","interactive","images"] as const) as mode}
           <button type="button" role="tab" aria-selected={searchMode === mode}
                   class="search-mode-button {searchMode === mode ? 'active' : ''}"
                   onclick={() => emitSearchModeSwitch(mode)}>

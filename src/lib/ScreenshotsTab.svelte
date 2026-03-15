@@ -66,12 +66,7 @@ the Free Software Foundation, version 3 only. -->
   let unlisten: UnlistenFn | null = null;
 
   // ── OCR search state ──────────────────────────────────────────────────────
-  let screenshotsPort = $state(8375);
-  let ocrQuery     = $state("");
-  let ocrResults   = $state<Array<{timestamp: number; unix_ts: number; filename: string; app_name: string; window_title: string; ocr_text: string; similarity: number}>>([]);
-  let ocrSearching = $state(false);
-  let ocrSearched  = $state(false);
-  let ocrSearchMode = $state<"substring" | "semantic">("substring");
+
 
   // ── Pipeline metrics ──────────────────────────────────────────────────────
   interface PipelineMetrics {
@@ -103,11 +98,6 @@ the Free Software Foundation, version 3 only. -->
     if (us < 1000) return `${us}µs`;
     if (us < 1_000_000) return `${(us / 1000).toFixed(1)}ms`;
     return `${(us / 1_000_000).toFixed(2)}s`;
-  }
-
-  function screenshotSrc(filename: string): string {
-    if (!filename) return "";
-    return `http://127.0.0.1:${screenshotsPort}/screenshots/${filename}`;
   }
 
   function fmtMs(ms: number): string {
@@ -149,10 +139,7 @@ the Free Software Foundation, version 3 only. -->
     try {
       estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
     } catch { estimate = null; }
-    try {
-      const [, port] = await invoke<[string, number]>("get_screenshots_dir");
-      screenshotsPort = port;
-    } catch {}
+
     if (isMac) {
       try { screenPermission = await invoke<boolean>("check_screen_recording_permission"); }
       catch { screenPermission = null; }
@@ -209,26 +196,6 @@ the Free Software Foundation, version 3 only. -->
     } finally {
       reembedding = false;
       progress = null;
-    }
-  }
-
-  // ── OCR search ──────────────────────────────────────────────────────────
-  async function searchOcr() {
-    if (!ocrQuery.trim()) return;
-    ocrSearching = true;
-    ocrSearched = false;
-    try {
-      ocrResults = await invoke<typeof ocrResults>("search_screenshots_by_text", {
-        query: ocrQuery.trim(),
-        k: 20,
-        mode: ocrSearchMode,
-      });
-      ocrSearched = true;
-    } catch {
-      ocrResults = [];
-      ocrSearched = true;
-    } finally {
-      ocrSearching = false;
     }
   }
 
@@ -746,91 +713,15 @@ the Free Software Foundation, version 3 only. -->
 
       <Separator class="bg-border dark:bg-white/[0.05]" />
 
-      <!-- OCR search -->
-      <div class="flex flex-col gap-1.5">
-        <div class="flex items-center justify-between">
-          <span class="text-[0.68rem] font-semibold text-foreground">{t("screenshots.ocrSearchTitle")}</span>
-          <div class="flex rounded-lg border border-border dark:border-white/[0.08] overflow-hidden">
-            <button
-              onclick={() => { ocrSearchMode = "substring"; }}
-              class="px-2 py-0.5 text-[0.52rem] font-medium transition-colors
-                     {ocrSearchMode === 'substring'
-                       ? 'bg-primary text-primary-foreground'
-                       : 'text-muted-foreground hover:text-foreground'}">
-              {t("screenshots.ocrModeSubstring")}
-            </button>
-            <button
-              onclick={() => { ocrSearchMode = "semantic"; }}
-              class="px-2 py-0.5 text-[0.52rem] font-medium transition-colors
-                     {ocrSearchMode === 'semantic'
-                       ? 'bg-primary text-primary-foreground'
-                       : 'text-muted-foreground hover:text-foreground'}">
-              {t("screenshots.ocrModeSemantic")}
-            </button>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <input
-            type="text"
-            bind:value={ocrQuery}
-            placeholder={t("screenshots.ocrSearchPlaceholder")}
-            class="flex-1 rounded-lg border border-border dark:border-white/[0.08]
-                   bg-white dark:bg-[#14141e] px-3 py-1.5
-                   text-[0.68rem] text-foreground placeholder:text-muted-foreground/40
-                   focus:outline-none focus:ring-1 focus:ring-ring/50"
-            onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') searchOcr(); }}
-          />
-          <Button size="sm" onclick={searchOcr} disabled={ocrSearching}
-                  class="text-[0.62rem] h-8 px-3 shrink-0">
-            {ocrSearching ? '…' : t("screenshots.ocrSearchBtn")}
-          </Button>
-        </div>
-        {#if ocrResults.length > 0}
-          <div class="flex flex-col gap-2 mt-1 max-h-[28rem] overflow-y-auto">
-            {#each ocrResults as r}
-              <div class="rounded-xl border border-border dark:border-white/[0.06]
-                          bg-muted/20 dark:bg-white/[0.015] overflow-hidden">
-                <!-- Thumbnail -->
-                {#if r.filename}
-                  <img src={screenshotSrc(r.filename)}
-                       alt="Screenshot"
-                       class="w-full h-auto max-h-40 object-cover bg-black/5 dark:bg-white/[0.02]"
-                       loading="lazy" />
-                {/if}
-                <!-- Metadata + OCR text -->
-                <div class="px-3 py-2 flex flex-col gap-1">
-                  <div class="flex items-center gap-2">
-                    <span class="text-[0.62rem] font-semibold text-foreground truncate">
-                      {r.app_name || '—'}
-                    </span>
-                    {#if r.similarity > 0}
-                      <span class="rounded-full px-1.5 py-0 text-[0.48rem] font-semibold
-                                   bg-primary/15 text-primary border border-primary/25 shrink-0">
-                        {(r.similarity * 100).toFixed(0)}%
-                      </span>
-                    {/if}
-                    <span class="ml-auto text-[0.48rem] text-muted-foreground/40 tabular-nums shrink-0">
-                      {new Date(r.unix_ts * 1000).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  {#if r.window_title}
-                    <span class="text-[0.56rem] text-muted-foreground truncate">{r.window_title}</span>
-                  {/if}
-                  {#if r.ocr_text}
-                    <p class="text-[0.54rem] text-foreground/70 leading-relaxed
-                              whitespace-pre-wrap break-words max-h-20 overflow-y-auto
-                              rounded bg-muted/40 dark:bg-white/[0.03] px-2 py-1.5 mt-0.5
-                              font-mono">
-                      {r.ocr_text.length > 500 ? r.ocr_text.slice(0, 500) + '…' : r.ocr_text}
-                    </p>
-                  {/if}
-                </div>
-              </div>
-            {/each}
-          </div>
-        {:else if ocrSearched}
-          <span class="text-[0.58rem] text-muted-foreground/50 italic">{t("screenshots.ocrNoResults")}</span>
-        {/if}
+      <!-- Search hint — directs users to the Search window Images tab -->
+      <div class="flex items-center gap-2 px-1 py-1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             class="w-3.5 h-3.5 text-primary/50 shrink-0">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <span class="text-[0.58rem] text-muted-foreground leading-relaxed">
+          {t("screenshots.ocrSearchHint")}
+        </span>
       </div>
 
     </CardContent>

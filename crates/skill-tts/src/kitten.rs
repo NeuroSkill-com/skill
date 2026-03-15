@@ -11,19 +11,19 @@ use kittentts::{KittenTTS, download::{self, LoadProgress}};
 use rodio::{DeviceSinkBuilder, MixerDeviceSink};
 use tokio::sync::oneshot;
 
-use super::{play_f32_audio, tts_log, init_espeak_data_path};
+use crate::{play_f32_audio, tts_log, init_espeak_data_path};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-pub(super) const HF_REPO:       &str = "KittenML/kitten-tts-mini-0.8";
-pub(super) const VOICE_DEFAULT: &str = "Jasper";
+pub const HF_REPO:       &str = "KittenML/kitten-tts-mini-0.8";
+pub const VOICE_DEFAULT: &str = "Jasper";
 const SPEED:                    f32  = 1.0;
-pub(super) const SAMPLE_RATE:   u32  = kittentts::SAMPLE_RATE;
+pub const SAMPLE_RATE:   u32  = kittentts::SAMPLE_RATE;
 
 // ─── Statics ──────────────────────────────────────────────────────────────────
 
-pub(super) static AVAILABLE_VOICES: OnceLock<Vec<String>>               = OnceLock::new();
-pub(super) static LOADED:           AtomicBool                          = AtomicBool::new(false);
+pub static AVAILABLE_VOICES: OnceLock<Vec<String>>               = OnceLock::new();
+pub static LOADED:           AtomicBool                          = AtomicBool::new(false);
            static ACTIVE_VOICE:     OnceLock<std::sync::RwLock<String>> = OnceLock::new();
 
 // ─── Voice accessors ──────────────────────────────────────────────────────────
@@ -32,17 +32,17 @@ fn voice_lock() -> &'static std::sync::RwLock<String> {
     ACTIVE_VOICE.get_or_init(|| std::sync::RwLock::new(VOICE_DEFAULT.to_string()))
 }
 
-pub(super) fn get_voice() -> String {
+pub fn get_voice() -> String {
     voice_lock().read().map(|g| g.clone()).unwrap_or_else(|_| VOICE_DEFAULT.to_string())
 }
 
-pub(super) fn set_voice(voice: String) {
+pub fn set_voice(voice: String) {
     if let Ok(mut g) = voice_lock().write() { *g = voice; }
 }
 
 // ─── Worker channel ───────────────────────────────────────────────────────────
 
-pub(super) enum Cmd {
+pub enum Cmd {
     Init  { cb: Box<dyn FnMut(LoadProgress) + Send + 'static>, done: oneshot::Sender<Result<(), String>> },
     Speak { text: String, voice: String, done: oneshot::Sender<()> },
     Unload { done: oneshot::Sender<()> },
@@ -53,11 +53,11 @@ static TX: OnceLock<std::sync::mpsc::SyncSender<Cmd>> = OnceLock::new();
 
 /// Send a blocking `Shutdown` command to the worker if it has been started.
 /// Returns `true` if the channel send succeeded (worker is running).
-pub(super) fn try_shutdown(done: std::sync::mpsc::SyncSender<()>) -> bool {
+pub fn try_shutdown(done: std::sync::mpsc::SyncSender<()>) -> bool {
     TX.get().map(|ch| ch.send(Cmd::Shutdown { done }).is_ok()).unwrap_or(false)
 }
 
-pub(super) fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
+pub fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
     TX.get_or_init(|| {
         let (tx, rx) = std::sync::mpsc::sync_channel::<Cmd>(16);
         std::thread::Builder::new()

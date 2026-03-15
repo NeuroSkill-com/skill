@@ -146,13 +146,13 @@ the Free Software Foundation, version 3 only. -->
   }
 
   // ── Mode ─────────────────────────────────────────────────────────────────
-  type SearchMode = "eeg" | "text" | "interactive";
+  type SearchMode = "eeg" | "text" | "interactive" | "images";
   let mode = $state<SearchMode>("interactive");
   const SEARCH_MODE_EVENT = "skill:search-mode";
   const SEARCH_SET_MODE_EVENT = "skill:search-set-mode";
 
   function normalizeSearchMode(value: unknown): SearchMode {
-    return value === "eeg" || value === "text" || value === "interactive"
+    return value === "eeg" || value === "text" || value === "interactive" || value === "images"
       ? value
       : "interactive";
   }
@@ -174,6 +174,11 @@ the Free Software Foundation, version 3 only. -->
     const initialMode = normalizeSearchMode(new URLSearchParams(window.location.search).get("mode"));
     switchMode(initialMode);
     emitSearchMode(initialMode);
+
+    // Load screenshot server port for image URLs
+    invoke<[string, number]>("get_screenshots_dir")
+      .then(([, port]) => { imgPort = port; })
+      .catch(() => {});
 
     return () => {
       window.removeEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
@@ -701,6 +706,39 @@ the Free Software Foundation, version 3 only. -->
     } catch { /* swallow */ }
   }
 
+  // ── Images mode (screenshot OCR search) ──────────────────────────────────
+  interface ImgResult {
+    timestamp: number; unix_ts: number; filename: string;
+    app_name: string; window_title: string; ocr_text: string; similarity: number;
+  }
+  let imgQuery       = $state("");
+  let imgResults     = $state<ImgResult[]>([]);
+  let imgSearching   = $state(false);
+  let imgSearched    = $state(false);
+  let imgSearchMode  = $state<"substring" | "semantic">("substring");
+  let imgPort        = $state(8375);
+
+  function imgSrc(filename: string): string {
+    return filename ? `http://127.0.0.1:${imgPort}/screenshots/${filename}` : "";
+  }
+
+  async function searchImages() {
+    if (!imgQuery.trim()) return;
+    imgSearching = true;
+    imgSearched = false;
+    try {
+      imgResults = await invoke<ImgResult[]>("search_screenshots_by_text", {
+        query: imgQuery.trim(), k: 20, mode: imgSearchMode,
+      });
+      imgSearched = true;
+    } catch {
+      imgResults = [];
+      imgSearched = true;
+    } finally {
+      imgSearching = false;
+    }
+  }
+
   useWindowTitle("window.title.search");
 </script>
 
@@ -721,6 +759,10 @@ the Free Software Foundation, version 3 only. -->
       {:else if mode === "interactive" && ixSearched}
         <span class="text-[0.6rem] text-muted-foreground/55 select-none tabular-nums">
           {t("search.interactiveNodeCount", { n: ixNodes.length, e: ixEdges.length })}
+        </span>
+      {:else if mode === "images" && imgSearched}
+        <span class="text-[0.6rem] text-muted-foreground/55 select-none tabular-nums">
+          {imgResults.length} {t("search.imageResultsCount")}
         </span>
       {/if}
     </div>
@@ -925,7 +967,7 @@ the Free Software Foundation, version 3 only. -->
         {/if}
       </div>
 
-    {:else}
+    {:else if mode === "text"}
       <!-- Text mode: query box -->
       <div class="flex flex-col gap-1">
         <label for="search-text-query" class="text-[0.58rem] text-muted-foreground/60 uppercase tracking-widest font-semibold select-none">
@@ -969,6 +1011,49 @@ the Free Software Foundation, version 3 only. -->
             {t("common.search")}
           {/if}
         </Button>
+      </div>
+
+    {:else if mode === "images"}
+      <!-- Images mode: OCR text search -->
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center justify-between">
+          <label for="search-img-query" class="text-[0.58rem] text-muted-foreground/60 uppercase tracking-widest font-semibold select-none">
+            {t("search.imageQueryLabel")}
+          </label>
+          <div class="flex rounded-lg border border-border dark:border-white/[0.08] overflow-hidden">
+            <button onclick={() => { imgSearchMode = "substring"; }}
+                    class="px-2 py-0.5 text-[0.52rem] font-medium transition-colors
+                           {imgSearchMode === 'substring' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}">
+              {t("search.imageMatchText")}
+            </button>
+            <button onclick={() => { imgSearchMode = "semantic"; }}
+                    class="px-2 py-0.5 text-[0.52rem] font-medium transition-colors
+                           {imgSearchMode === 'semantic' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}">
+              {t("search.imageMatchSemantic")}
+            </button>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <input id="search-img-query" type="text" bind:value={imgQuery}
+                 onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') searchImages(); }}
+                 placeholder={t("search.imagePlaceholder")}
+                 class="flex-1 rounded-md border border-border dark:border-white/[0.1]
+                        bg-background px-3 py-2 text-[0.8rem]
+                        placeholder:text-muted-foreground/30
+                        focus:outline-none focus:ring-1 focus:ring-primary/50" />
+          <Button onclick={searchImages} disabled={imgSearching || !imgQuery.trim()} size="sm"
+                  class="gap-1.5 h-9 px-4 text-[0.72rem] shrink-0">
+            {#if imgSearching}
+              <Spinner size="w-3 h-3" />
+              {t("search.searching")}
+            {:else}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3.5 h-3.5">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+              </svg>
+              {t("search.modeImages")}
+            {/if}
+          </Button>
+        </div>
       </div>
     {/if}
   </div>
@@ -1811,7 +1896,7 @@ the Free Software Foundation, version 3 only. -->
       {/if}
 
     <!-- ══════════════════ TEXT MODE ════════════════════════════════════ -->
-    {:else}
+    {:else if mode === "text"}
 
       {#if !textSearched && !textSearching}
         <!-- Empty state -->
@@ -2043,6 +2128,76 @@ the Free Software Foundation, version 3 only. -->
                     disabled={page>=textTotalPages-1} onclick={() => page++}>{t("search.next")}</Button>
           </div>
         {/if}
+      {/if}
+
+    <!-- ══════════════════ IMAGES MODE ═══════════════════════════════════ -->
+    {:else if mode === "images"}
+      {#if !imgSearched && !imgSearching}
+        <div class="flex flex-col items-center justify-center h-full gap-4 text-center px-10">
+          <div class="w-16 h-16 rounded-2xl bg-primary/8 flex items-center justify-center">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                 class="w-8 h-8 text-primary/40">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>
+            </svg>
+          </div>
+          <p class="text-[0.8rem] text-muted-foreground/50 max-w-[300px] leading-relaxed">
+            {t("search.imageEmptyState")}
+          </p>
+        </div>
+      {:else if imgSearching}
+        <div class="flex items-center justify-center h-full gap-2">
+          <Spinner size="w-4 h-4" />
+          <span class="text-[0.72rem] text-muted-foreground">{t("search.searching")}</span>
+        </div>
+      {:else if imgResults.length === 0}
+        <div class="flex flex-col items-center justify-center h-full gap-3 text-center px-10">
+          <span class="text-3xl opacity-30">🔍</span>
+          <p class="text-[0.78rem] text-muted-foreground/50">{t("search.imageNoResults")}</p>
+        </div>
+      {:else}
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4">
+          {#each imgResults as r}
+            <div class="rounded-xl border border-border dark:border-white/[0.06]
+                        bg-white dark:bg-[#14141e] overflow-hidden shadow-sm
+                        hover:shadow-md transition-shadow">
+              <!-- Thumbnail -->
+              {#if r.filename}
+                <img src={imgSrc(r.filename)} alt="Screenshot"
+                     class="w-full h-auto max-h-48 object-cover bg-black/5 dark:bg-white/[0.02]"
+                     loading="lazy" />
+              {/if}
+              <!-- Metadata -->
+              <div class="px-3 py-2 flex flex-col gap-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-[0.66rem] font-semibold text-foreground truncate">
+                    {r.app_name || '—'}
+                  </span>
+                  {#if r.similarity > 0}
+                    <span class="rounded-full px-1.5 py-0 text-[0.48rem] font-semibold
+                                 bg-primary/15 text-primary border border-primary/25 shrink-0">
+                      {(r.similarity * 100).toFixed(0)}%
+                    </span>
+                  {/if}
+                  <span class="ml-auto text-[0.5rem] text-muted-foreground/40 tabular-nums shrink-0">
+                    {new Date(r.unix_ts * 1000).toLocaleString()}
+                  </span>
+                </div>
+                {#if r.window_title}
+                  <span class="text-[0.58rem] text-muted-foreground truncate">{r.window_title}</span>
+                {/if}
+                {#if r.ocr_text}
+                  <p class="text-[0.54rem] text-foreground/60 leading-relaxed
+                            whitespace-pre-wrap break-words max-h-24 overflow-y-auto
+                            rounded bg-muted/40 dark:bg-white/[0.03] px-2 py-1.5 mt-0.5
+                            font-mono">
+                    {r.ocr_text.length > 400 ? r.ocr_text.slice(0, 400) + '…' : r.ocr_text}
+                  </p>
+                {/if}
+              </div>
+            </div>
+          {/each}
+        </div>
       {/if}
     {/if}
 

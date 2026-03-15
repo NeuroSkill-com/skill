@@ -13,32 +13,32 @@ use rodio::{DeviceSinkBuilder, MixerDeviceSink};
 use sha2::{Digest, Sha256};
 use tokio::sync::oneshot;
 
-use super::{play_f32_audio, skill_dir, tts_log, init_espeak_data_path};
+use crate::{play_f32_audio, skill_dir, tts_log, init_espeak_data_path};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-pub(super) const SAMPLE_RATE: u32 = neutts::codec::SAMPLE_RATE;
+pub const SAMPLE_RATE: u32 = neutts::codec::SAMPLE_RATE;
 
 /// Runtime path to the bundled preset voice sample files.
 /// Set by `mod.rs::init_neutts_samples_dir()` during Tauri setup.
 /// Falls back to `resources/neutts-samples` relative to CWD if unset.
 static SAMPLES_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-pub(super) fn set_samples_dir(path: PathBuf) { let _ = SAMPLES_DIR.set(path); }
+pub fn set_samples_dir(path: PathBuf) { let _ = SAMPLES_DIR.set(path); }
 
 fn samples_dir() -> PathBuf {
     SAMPLES_DIR.get().cloned().unwrap_or_else(|| PathBuf::from("resources/neutts-samples"))
 }
 
 /// Valid preset voice ids — must match filenames under `samples_dir()`.
-pub(super) const PRESET_NAMES: &[&str] = &["jo", "dave", "greta", "juliette", "mateo"];
+pub const PRESET_NAMES: &[&str] = &["jo", "dave", "greta", "juliette", "mateo"];
 
-pub(super) fn is_preset(name: &str) -> bool { PRESET_NAMES.contains(&name) }
+pub fn is_preset(name: &str) -> bool { PRESET_NAMES.contains(&name) }
 
 // ─── Paths within skill_dir ───────────────────────────────────────────────────
 
 /// `skill_dir/models/neutts/` — stores `neucodec_decoder.safetensors` (converted once).
-pub(super) fn model_dir() -> PathBuf { skill_dir().join("models/neutts") }
+pub fn model_dir() -> PathBuf { skill_dir().join("models/neutts") }
 
 /// `skill_dir/cache/neutts-ref-codes/` — encoded voice reference `.npy` files.
 fn ref_code_cache_dir() -> PathBuf { skill_dir().join("cache/neutts-ref-codes") }
@@ -48,8 +48,8 @@ fn wav_cache_dir() -> PathBuf { skill_dir().join("cache/neutts-wav") }
 
 // ─── Statics ──────────────────────────────────────────────────────────────────
 
-pub(super) static LOADING: AtomicBool = AtomicBool::new(false);
-pub(super) static READY:   AtomicBool = AtomicBool::new(false);
+pub static LOADING: AtomicBool = AtomicBool::new(false);
+pub static READY:   AtomicBool = AtomicBool::new(false);
 
 struct RuntimeConfig {
     backbone_repo: String,
@@ -71,13 +71,13 @@ fn cfg_lock() -> &'static RwLock<RuntimeConfig> {
     }))
 }
 
-pub(super) fn read_cfg() -> (String, Option<String>, String, String, String) {
+pub fn read_cfg() -> (String, Option<String>, String, String, String) {
     let g = cfg_lock().read().unwrap();
     (g.backbone_repo.clone(), g.gguf_file.clone(),
      g.voice_preset.clone(), g.ref_wav_path.clone(), g.ref_text.clone())
 }
 
-pub(super) fn set_voice_preset(preset: String) {
+pub fn set_voice_preset(preset: String) {
     if let Ok(mut g) = cfg_lock().write() {
         g.voice_preset = preset;
     }
@@ -86,7 +86,7 @@ pub(super) fn set_voice_preset(preset: String) {
 // ─── Config application ───────────────────────────────────────────────────────
 
 /// Sync runtime config from settings.  Called from `mod.rs::neutts_apply_config`.
-pub(super) fn apply_config(cfg: &crate::settings::NeuttsConfig) {
+pub fn apply_config(cfg: &crate::config::NeuttsConfig) {
     let was_ready = READY.load(Ordering::Relaxed);
 
     if let Ok(mut g) = cfg_lock().write() {
@@ -98,9 +98,9 @@ pub(super) fn apply_config(cfg: &crate::settings::NeuttsConfig) {
     }
 
     // When KittenTTS is also compiled, the `enabled` flag is the runtime switch
-    // stored in `super::NEUTTS_ENABLED`.  Update it from here.
+    // stored in `crate::NEUTTS_ENABLED`.  Update it from here.
     #[cfg(feature = "tts-kitten")]
-    super::NEUTTS_ENABLED.store(cfg.enabled, Ordering::Relaxed);
+    crate::NEUTTS_ENABLED.store(cfg.enabled, Ordering::Relaxed);
 
     if cfg.enabled && was_ready {
         READY.store(false, Ordering::Relaxed);
@@ -110,7 +110,7 @@ pub(super) fn apply_config(cfg: &crate::settings::NeuttsConfig) {
 
 // ─── Worker channel ───────────────────────────────────────────────────────────
 
-pub(super) enum Cmd {
+pub enum Cmd {
     Init {
         backbone_repo: String,
         gguf_file:     Option<String>,
@@ -139,11 +139,11 @@ static TX: OnceLock<std::sync::mpsc::SyncSender<Cmd>> = OnceLock::new();
 
 /// Send a `Shutdown` command to the worker if it has been started.
 /// Returns `true` if the channel send succeeded (worker is running).
-pub(super) fn try_shutdown(done: std::sync::mpsc::SyncSender<()>) -> bool {
+pub fn try_shutdown(done: std::sync::mpsc::SyncSender<()>) -> bool {
     TX.get().map(|ch| ch.send(Cmd::Shutdown { done }).is_ok()).unwrap_or(false)
 }
 
-pub(super) fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
+pub fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
     TX.get_or_init(|| {
         let (tx, rx) = std::sync::mpsc::sync_channel::<Cmd>(16);
         std::thread::Builder::new()
@@ -595,7 +595,7 @@ fn play_wav(stream: &MixerDeviceSink, path: &Path) {
 
 // ─── Progress mapper ──────────────────────────────────────────────────────────
 
-pub(super) fn progress_to_event(p: neutts::download::LoadProgress) -> super::TtsProgressEvent {
+pub fn progress_to_event(p: neutts::download::LoadProgress) -> crate::TtsProgressEvent {
     use neutts::download::LoadProgress as NP;
     match p {
         NP::Fetching { step, total, file, repo, size_mb } => {
@@ -603,15 +603,15 @@ pub(super) fn progress_to_event(p: neutts::download::LoadProgress) -> super::Tts
                 Some(mb) => format!("{file} from {repo} (~{mb} MB)"),
                 None     => format!("{file} from {repo}"),
             };
-            super::TtsProgressEvent::step(step, total, label)
+            crate::TtsProgressEvent::step(step, total, label)
         }
         NP::Downloading { step, total, downloaded, total_bytes } => {
-            super::TtsProgressEvent::step(step, total,
+            crate::TtsProgressEvent::step(step, total,
                 format!("Downloading… {}/{} MB",
                     downloaded / 1_048_576, total_bytes / 1_048_576))
         }
         NP::Loading { step, total, component } => {
-            super::TtsProgressEvent::step(step, total, component)
+            crate::TtsProgressEvent::step(step, total, component)
         }
     }
 }

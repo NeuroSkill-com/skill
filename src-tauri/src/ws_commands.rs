@@ -1914,7 +1914,7 @@ pub async fn say(_app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
     let spoken = text.clone();
     let voice_echo = voice.clone();
-    tokio::spawn(async move { crate::tts::tts_speak(text, voice).await });
+    tokio::spawn(async move { skill_tts::tts_speak(text, voice).await });
 
     let mut resp = serde_json::json!({ "spoken": spoken });
     if let Some(v) = voice_echo {
