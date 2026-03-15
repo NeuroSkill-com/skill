@@ -774,6 +774,212 @@ fn truncate_text(s: &str, max_chars: usize) -> String {
     s.chars().take(max_chars).collect()
 }
 
+// ── DuckDuckGo search helpers ─────────────────────────────────────────────────
+
+/// Strip HTML tags from a string (simple regex-free approach).
+fn strip_html_tags(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_tag = false;
+    for ch in s.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    // Decode common HTML entities.
+    out.replace("&amp;", "&")
+       .replace("&lt;", "<")
+       .replace("&gt;", ">")
+       .replace("&quot;", "\"")
+       .replace("&#x27;", "'")
+       .replace("&#39;", "'")
+       .replace("&nbsp;", " ")
+}
+
+/// Primary search: DuckDuckGo JSON API (`api.duckduckgo.com/?format=json`).
+///
+/// This endpoint provides instant answers plus related topics.  It doesn't
+/// return full web-search results for every query but is fast and structured.
+fn ddg_json_search(agent: &ureq::Agent, query: &str) -> Vec<Value> {
+    let resp = agent
+        .get("https://api.duckduckgo.com/")
+        .query("q", query)
+        .query("format", "json")
+        .query("no_html", "1")
+        .query("no_redirect", "1")
+        .call();
+
+    let Ok(r) = resp else { return Vec::new(); };
+    let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+    let mut results = Vec::new();
+
+    // Abstract / instant answer.
+    if let Some(abs) = v.get("AbstractText").and_then(|x| x.as_str()) {
+        if !abs.trim().is_empty() {
+            results.push(json!({
+                "title": v.get("Heading").cloned().unwrap_or(Value::String("DuckDuckGo".into())),
+                "url":   v.get("AbstractURL").cloned().unwrap_or(Value::Null),
+                "snippet": truncate_text(abs, 500),
+            }));
+        }
+    }
+
+    // Answer box (e.g. calculations, conversions).
+    if let Some(ans) = v.get("Answer").and_then(|x| x.as_str()) {
+        if !ans.trim().is_empty() && !results.iter().any(|r| r.get("snippet").and_then(|s| s.as_str()) == Some(ans)) {
+            results.push(json!({
+                "title": "Answer",
+                "url":   Value::Null,
+                "snippet": truncate_text(ans, 500),
+            }));
+        }
+    }
+
+    // Related topics.
+    if let Some(topics) = v.get("RelatedTopics").and_then(|x| x.as_array()) {
+        for t in topics.iter().take(8) {
+            // Top-level topics.
+            if let (Some(text), Some(url)) = (
+                t.get("Text").and_then(|x| x.as_str()),
+                t.get("FirstURL").and_then(|x| x.as_str()),
+            ) {
+                results.push(json!({
+                    "title":   text.split(" - ").next().unwrap_or("result"),
+                    "url":     url,
+                    "snippet": truncate_text(text, 500),
+                }));
+            }
+            // Nested topic groups.
+            if let Some(sub) = t.get("Topics").and_then(|x| x.as_array()) {
+                for st in sub.iter().take(3) {
+                    if let (Some(text), Some(url)) = (
+                        st.get("Text").and_then(|x| x.as_str()),
+                        st.get("FirstURL").and_then(|x| x.as_str()),
+                    ) {
+                        results.push(json!({
+                            "title":   text.split(" - ").next().unwrap_or("result"),
+                            "url":     url,
+                            "snippet": truncate_text(text, 500),
+                        }));
+                    }
+                }
+            }
+        }
+    }
+
+    // Cap total results.
+    results.truncate(10);
+    results
+}
+
+/// Fallback search: scrape DuckDuckGo HTML lite page.
+///
+/// When the JSON API returns no useful results (which happens for most general
+/// queries), we fall back to fetching the HTML lite search page and extracting
+/// result links and snippets.
+fn ddg_html_search(agent: &ureq::Agent, query: &str) -> Vec<Value> {
+    let resp = agent
+        .post("https://html.duckduckgo.com/html/")
+        .set("User-Agent", "Mozilla/5.0 (compatible; SkillBot/1.0)")
+        .set("Content-Type", "application/x-www-form-urlencoded")
+        .send_string(&format!("q={}", urlencoding::encode(query)));
+
+    let Ok(r) = resp else { return Vec::new(); };
+    let body = match r.into_string() {
+        Ok(s) => s,
+        Err(_) => return Vec::new(),
+    };
+
+    // Parse results from the HTML.  The DDG HTML lite page uses a consistent
+    // structure: each result is in a div with class "result".
+    //   <a class="result__a" href="…">Title</a>
+    //   <a class="result__snippet" …>Snippet text</a>
+    //
+    // We use simple string scanning rather than pulling in an HTML parser dep.
+    let mut results = Vec::new();
+
+    // Split on result blocks.
+    for chunk in body.split("class=\"result__body") {
+        if results.len() >= 10 {
+            break;
+        }
+
+        // Extract URL from result__a or result__url href.
+        let url = extract_attr_value(chunk, "class=\"result__a\"", "href=\"")
+            .or_else(|| extract_attr_value(chunk, "class=\"result__url\"", "href=\""));
+
+        // Extract title from result__a tag content.
+        let title = extract_tag_content(chunk, "class=\"result__a\"");
+
+        // Extract snippet from result__snippet.
+        let snippet = extract_tag_content(chunk, "class=\"result__snippet\"");
+
+        if let Some(url) = url {
+            // DDG proxies URLs through a redirect; extract the real URL.
+            let real_url = extract_ddg_redirect_url(&url).unwrap_or_else(|| url.clone());
+
+            // Skip DDG internal links.
+            if real_url.contains("duckduckgo.com") {
+                continue;
+            }
+
+            let title_text = title.map(|t| strip_html_tags(&t)).unwrap_or_default();
+            let snippet_text = snippet.map(|s| strip_html_tags(&s)).unwrap_or_default();
+
+            if !title_text.is_empty() || !snippet_text.is_empty() {
+                results.push(json!({
+                    "title":   if title_text.is_empty() { real_url.clone() } else { title_text },
+                    "url":     real_url,
+                    "snippet": truncate_text(&snippet_text, 500),
+                }));
+            }
+        }
+    }
+
+    results
+}
+
+/// Extract the value of an attribute that follows a marker string.
+/// E.g., given marker `class="result__a"` and attr `href="`, find the href value.
+fn extract_attr_value(html: &str, marker: &str, attr: &str) -> Option<String> {
+    let marker_pos = html.find(marker)?;
+    let after_marker = &html[marker_pos..];
+    let attr_pos = after_marker.find(attr)?;
+    let value_start = attr_pos + attr.len();
+    let after_attr = &after_marker[value_start..];
+    let end = after_attr.find('"')?;
+    Some(after_attr[..end].to_string())
+}
+
+/// Extract the text content of a tag that contains a marker class.
+fn extract_tag_content(html: &str, marker: &str) -> Option<String> {
+    let marker_pos = html.find(marker)?;
+    let after_marker = &html[marker_pos..];
+    // Find the end of the opening tag.
+    let tag_close = after_marker.find('>')?;
+    let content_start = tag_close + 1;
+    let after_tag = &after_marker[content_start..];
+    // Find the closing tag (</a>, </span>, etc.).
+    let end = after_tag.find("</").unwrap_or(after_tag.len().min(1000));
+    Some(after_tag[..end].to_string())
+}
+
+/// Extract the real URL from DuckDuckGo's redirect wrapper.
+/// DDG wraps URLs like: `//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com&rut=…`
+fn extract_ddg_redirect_url(url: &str) -> Option<String> {
+    if let Some(pos) = url.find("uddg=") {
+        let after = &url[pos + 5..];
+        let end = after.find('&').unwrap_or(after.len());
+        let encoded = &after[..end];
+        // URL-decode the target.
+        Some(urlencoding::decode(encoded).unwrap_or_else(|_| encoded.into()).into_owned())
+    } else {
+        None
+    }
+}
+
 // ── Filesystem tool helpers ───────────────────────────────────────────────────
 
 /// Resolve a path for filesystem tools.  Supports `~` expansion and relative
@@ -1106,47 +1312,24 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
 
             tokio::task::spawn_blocking(move || {
                 let agent = ureq::AgentBuilder::new()
-                    .timeout_connect(std::time::Duration::from_secs(3))
-                    .timeout_read(std::time::Duration::from_secs(5))
+                    .timeout_connect(std::time::Duration::from_secs(5))
+                    .timeout_read(std::time::Duration::from_secs(10))
                     .build();
-                let resp = agent
-                    .get("https://api.duckduckgo.com/")
-                    .query("q", &query)
-                    .query("format", "json")
-                    .query("no_html", "1")
-                    .query("no_redirect", "1")
-                    .call();
 
-                match resp {
-                    Ok(r) => {
-                        let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
-                        let mut results = Vec::new();
+                // ── Strategy 1: DuckDuckGo JSON search ────────────────────
+                let results = ddg_json_search(&agent, &query);
 
-                        if let Some(abs) = v.get("AbstractText").and_then(|x| x.as_str()) {
-                            if !abs.trim().is_empty() {
-                                results.push(json!({
-                                    "title": v.get("Heading").cloned().unwrap_or(Value::String("DuckDuckGo".into())),
-                                    "url": v.get("AbstractURL").cloned().unwrap_or(Value::Null),
-                                    "snippet": truncate_text(abs, 500),
-                                }));
-                            }
-                        }
+                // ── Strategy 2: Fallback to HTML scraping ─────────────────
+                let results = if results.is_empty() {
+                    ddg_html_search(&agent, &query)
+                } else {
+                    results
+                };
 
-                        if let Some(topics) = v.get("RelatedTopics").and_then(|x| x.as_array()) {
-                            for t in topics.iter().take(5) {
-                                if let (Some(text), Some(url)) = (t.get("Text").and_then(|x| x.as_str()), t.get("FirstURL").and_then(|x| x.as_str())) {
-                                    results.push(json!({
-                                        "title": text.split(" - ").next().unwrap_or("result"),
-                                        "url": url,
-                                        "snippet": truncate_text(text, 500),
-                                    }));
-                                }
-                            }
-                        }
-
-                        json!({ "ok": true, "tool": "web_search", "query": query, "results": results })
-                    }
-                    Err(e) => json!({ "ok": false, "tool": "web_search", "error": e.to_string() }),
+                if results.is_empty() {
+                    json!({ "ok": true, "tool": "web_search", "query": query, "results": [], "note": "no results found" })
+                } else {
+                    json!({ "ok": true, "tool": "web_search", "query": query, "results": results })
                 }
             }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_search", "error": e.to_string() }))
         }
