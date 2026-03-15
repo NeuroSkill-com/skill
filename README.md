@@ -29,6 +29,48 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 
 ---
 
+## Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+  - [Data Flow](#data-flow)
+- [Data Storage](#data-storage)
+  - [SQLite Schema](#sqlite-schema-embeddings-table)
+- [Computed Metrics Reference](#computed-metrics-reference)
+  - [Band Powers](#band-powers)
+  - [Derived Scores](#derived-scores)
+  - [Frontal Alpha Asymmetry (FAA)](#frontal-alpha-asymmetry-faa)
+  - [Cross-Band Ratios](#cross-band-ratios)
+  - [Spectral Shape Metrics](#spectral-shape-metrics)
+  - [Cross-Channel Metrics](#cross-channel-metrics)
+  - [Time-Domain Features (Hjorth Parameters)](#time-domain-features-hjorth-parameters)
+  - [Nonlinear Complexity Measures](#nonlinear-complexity-measures)
+  - [Cross-Frequency Coupling](#cross-frequency-coupling)
+  - [Spatial Asymmetry](#spatial-asymmetry)
+  - [PPG-Derived Metrics](#ppg-derived-metrics)
+  - [Composite Indices](#composite-indices)
+- [WebSocket API](#websocket-api)
+  - [Discovery](#discovery)
+  - [Broadcast Events](#broadcast-events-server--client)
+  - [Commands](#commands-client--server)
+  - [REST API Shortcuts](#rest-api-shortcuts)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+  - [Global](#global-system-wide-work-even-when-window-is-hidden)
+  - [In-app](#in-app)
+- [Development](#development)
+  - [Prerequisites](#prerequisites)
+  - [Setup](#setup)
+  - [Install (Homebrew)](#install-homebrew-macos-apple-silicon)
+  - [Build](#build)
+  - [Linux Packaging](#linux-packaging-quickstart)
+  - [Project Structure](#project-structure)
+  - [Pre-commit Checks](#pre-commit-checks)
+- [Versioning](#versioning)
+- [Release](#release)
+- [License](#license)
+
+---
+
 ## Features
 
 | Feature | Description |
