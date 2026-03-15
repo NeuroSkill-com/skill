@@ -57,6 +57,8 @@ the Free Software Foundation, version 3 only. -->
   let expanded      = $state<Record<string, boolean>>({});
   let confirmDelete = $state<string | null>(null);
   let hoveredSession = $state<string | null>(null);
+  /** Currently hovered label id — drives exact-match and proximity highlighting. */
+  let hoveredLabelId = $state<number | null>(null);
 
   // ── Chart visibility (IntersectionObserver per row) ─────────────────────
   /** csv_paths whose row has entered the viewport — chart is only mounted then. */
@@ -582,29 +584,24 @@ the Free Software Foundation, version 3 only. -->
       ctx.globalAlpha = 1.0;
     });
 
-    // Draw labels as markers
+    // Draw labels as rainbow-colored circles
     if (labels.length > 0) {
+      const labelColors = assignLabelRainbowColors(labels);
       ctx.globalAlpha = 0.9;
+      const dotR = Math.max(3, Math.min(5, h * 0.06));
       for (const label of labels) {
         const t = label.eeg_start;
         if (t < dayStart || t >= dayEnd) continue;
         const x = ((t - dayStart) / 86400) * w;
-        // Draw a small triangle marker at the bottom
-        ctx.fillStyle = "#f59e0b";
+        const color = labelColors.get(label.id) ?? "#f59e0b";
+        ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.moveTo(x, h);
-        ctx.lineTo(x - 3, h - 5);
-        ctx.lineTo(x + 3, h - 5);
-        ctx.closePath();
+        ctx.arc(x, h - dotR - 1, dotR, 0, Math.PI * 2);
         ctx.fill();
-        // Draw label text
-        ctx.fillStyle = getComputedStyle(canvas).getPropertyValue("--dot-label-text") || "rgba(245,158,11,0.8)";
-        ctx.font = `bold ${Math.max(6, h * 0.1)}px system-ui, sans-serif`;
-        ctx.textAlign = "left";
-        const maxLabelW = w - x - 4;
-        if (maxLabelW > 10) {
-          ctx.fillText(label.text, x + 5, h - 1, maxLabelW);
-        }
+        // Subtle white border for visibility
+        ctx.strokeStyle = "rgba(255,255,255,0.6)";
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
       }
       ctx.globalAlpha = 1.0;
     }
@@ -828,6 +825,20 @@ the Free Software Foundation, version 3 only. -->
   }
   const SESSION_COLORS = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#06b6d4"];
   function sessionColor(idx: number): string { return SESSION_COLORS[idx % SESSION_COLORS.length]; }
+
+  /** Assign rainbow HSL colors to labels based on their temporal proximity.
+   *  Labels sorted by time get evenly distributed hues across the rainbow,
+   *  so nearby labels share similar colors and distant ones are visually distinct. */
+  function assignLabelRainbowColors(labels: LabelRow[]): Map<number, string> {
+    const colorMap = new Map<number, string>();
+    if (labels.length === 0) return colorMap;
+    const sorted = [...labels].sort((a, b) => a.eeg_start - b.eeg_start);
+    for (let i = 0; i < sorted.length; i++) {
+      const hue = labels.length === 1 ? 180 : (i / (sorted.length - 1)) * 300; // 0 (red) → 300 (magenta)
+      colorMap.set(sorted[i].id, `hsl(${hue}, 80%, 55%)`);
+    }
+    return colorMap;
+  }
 
   /** Svelte action: draw a mini sparkline on a canvas element. */
   function drawSparkline(canvas: HTMLCanvasElement, ts: EpochRow[]) {

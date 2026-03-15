@@ -7,7 +7,7 @@
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::{AppState, MutexExt};
 use crate::session_csv::{metrics_csv_path, ppg_csv_path};
@@ -15,19 +15,11 @@ use crate::label_store;
 
 #[tauri::command]
 pub(crate) async fn open_history_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("history") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "history", tauri::WebviewUrl::App("history".into()))
-        .title("NeuroSkill™ – History")
-        .inner_size(920.0, 780.0)
-        .min_inner_size(700.0, 560.0)
-        .resizable(true)
-        .center()
-        .decorations(false).transparent(true)
-        .build()
-        .map(|w| { let _ = w.set_focus(); })
-        .map_err(|e| e.to_string())
+    crate::window_cmds::focus_or_create(&app, crate::window_cmds::WindowSpec {
+        label: "history", route: "history", title: "NeuroSkill™ – History",
+        inner_size: (920.0, 780.0), min_inner_size: Some((700.0, 560.0)),
+        ..Default::default()
+    })
 }
 
 /// A session entry read from a JSON sidecar file.

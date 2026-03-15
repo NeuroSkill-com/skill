@@ -82,6 +82,39 @@ pub(crate) fn focus_or_create(app: &AppHandle, spec: WindowSpec) -> Result<(), S
         .map_err(|e| e.to_string())
 }
 
+/// Like `focus_or_create` but emits an event to the existing window when it is
+/// already open.  Used for settings sub-tabs (model, updates, etc.).
+pub(crate) fn focus_or_create_with_emit(
+    app: &AppHandle, spec: WindowSpec, event: &str, payload: &str,
+) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(spec.label) {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+        let _ = win.emit(event, payload.to_string());
+        return Ok(());
+    }
+    // Fall through to normal builder
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        app, spec.label,
+        tauri::WebviewUrl::App(spec.route.into()),
+    )
+    .title(spec.title)
+    .inner_size(spec.inner_size.0, spec.inner_size.1)
+    .resizable(spec.resizable)
+    .center()
+    .decorations(false)
+    .transparent(true);
+
+    if let Some((w, h)) = spec.min_inner_size {
+        builder = builder.min_inner_size(w, h);
+    }
+
+    builder.build()
+        .map(|w| { let _ = w.set_focus(); })
+        .map_err(|e| e.to_string())
+}
+
 // ── Permissions ───────────────────────────────────────────────────────────────
 
 /// Return whether the app currently holds macOS Accessibility (AX) permission.
@@ -246,30 +279,20 @@ pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn open_model_tab(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("settings") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus();
-        let _ = win.emit("switch-tab", "model");
-        return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "settings",
-        tauri::WebviewUrl::App("settings?tab=model".into()))
-        .title("NeuroSkill™ – Model")
-        .inner_size(760.0, 720.0).min_inner_size(580.0, 560.0)
-        .center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    focus_or_create_with_emit(&app, WindowSpec {
+        label: "settings", route: "settings?tab=model", title: "NeuroSkill™ – Model",
+        inner_size: (760.0, 720.0), min_inner_size: Some((580.0, 560.0)),
+        ..Default::default()
+    }, "switch-tab", "model")
 }
 
 #[tauri::command]
 pub async fn open_updates_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("settings") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus();
-        let _ = win.emit("switch-tab", "updates");
-        return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "settings",
-        tauri::WebviewUrl::App("settings?tab=updates".into()))
-        .title("NeuroSkill™ – Updates")
-        .inner_size(760.0, 720.0).min_inner_size(580.0, 560.0)
-        .center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    focus_or_create_with_emit(&app, WindowSpec {
+        label: "settings", route: "settings?tab=updates", title: "NeuroSkill™ – Updates",
+        inner_size: (760.0, 720.0), min_inner_size: Some((580.0, 560.0)),
+        ..Default::default()
+    }, "switch-tab", "updates")
 }
 
 #[tauri::command]
@@ -367,13 +390,11 @@ pub fn close_label_window(app: AppHandle) {
 
 #[tauri::command]
 pub async fn open_api_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("api") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "api", tauri::WebviewUrl::App("api".into()))
-        .title("NeuroSkill™ – API Status")
-        .inner_size(620.0, 560.0).min_inner_size(480.0, 400.0)
-        .resizable(true).center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    focus_or_create(&app, WindowSpec {
+        label: "api", route: "api", title: "NeuroSkill™ – API Status",
+        inner_size: (620.0, 560.0), min_inner_size: Some((480.0, 400.0)),
+        ..Default::default()
+    })
 }
 
 /// Return the last app version for which the What's New window was dismissed.
@@ -407,35 +428,20 @@ pub fn dismiss_whats_new(version: String, app: AppHandle) {
 /// The window's own page calls `set_whats_new_seen_version` on dismiss.
 #[tauri::command]
 pub async fn open_whats_new_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("whats-new") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus();
-        return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        "whats-new",
-        tauri::WebviewUrl::App("whats-new".into()),
-    )
-    .title("What's New in NeuroSkill™")
-    .inner_size(520.0, 620.0)
-    .resizable(false)
-    .center()
-    .decorations(false).transparent(true)
-    .build()
-    .map(|w| { let _ = w.set_focus(); })
-    .map_err(|e| e.to_string())
+    focus_or_create(&app, WindowSpec {
+        label: "whats-new", route: "whats-new", title: "What's New in NeuroSkill™",
+        inner_size: (520.0, 620.0), resizable: false,
+        ..Default::default()
+    })
 }
 
 #[tauri::command]
 pub async fn open_onboarding_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("onboarding") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "onboarding",
-        tauri::WebviewUrl::App("onboarding".into()))
-        .title("NeuroSkill™ – Welcome")
-        .inner_size(680.0, 760.0).min_inner_size(560.0, 620.0)
-        .resizable(true).center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    focus_or_create(&app, WindowSpec {
+        label: "onboarding", route: "onboarding", title: "NeuroSkill™ – Welcome",
+        inner_size: (680.0, 760.0), min_inner_size: Some((560.0, 620.0)),
+        ..Default::default()
+    })
 }
 
     #[tauri::command]

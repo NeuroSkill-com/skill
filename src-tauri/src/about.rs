@@ -13,7 +13,7 @@
 //! * [`open_about_window`] — Tauri command that opens the custom About window.
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::constants::{
     APP_DISPLAY_NAME, APP_TAGLINE,
@@ -104,25 +104,12 @@ pub fn get_about_info(app: AppHandle) -> AboutInfo {
 /// Open (or focus) the custom About window.
 #[tauri::command]
 pub async fn open_about_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("about") {
-        let _ = win.unminimize();
-        let _ = win.show();
-        let _ = win.set_focus();
-        return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        "about",
-        tauri::WebviewUrl::App("about".into()),
-    )
-    .title(format!("About {APP_DISPLAY_NAME}"))
-    .inner_size(520.0, 740.0)
-    .resizable(false)
-    .center()
-    .decorations(false).transparent(true)
-    .build()
-    .map(|w| { let _ = w.set_focus(); })
-    .map_err(|e| e.to_string())
+    let title = format!("About {APP_DISPLAY_NAME}");
+    crate::window_cmds::focus_or_create(&app, crate::window_cmds::WindowSpec {
+        label: "about", route: "about", title: &title,
+        inner_size: (520.0, 740.0), resizable: false,
+        ..Default::default()
+    })
 }
 
 

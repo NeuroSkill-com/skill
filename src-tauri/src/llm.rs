@@ -682,26 +682,11 @@ pub fn delete_llm_model(
 
 #[tauri::command]
 pub async fn open_downloads_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("downloads") {
-        win.unminimize().ok();
-        win.show().ok();
-        win.set_focus().ok();
-        return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        "downloads",
-        tauri::WebviewUrl::App("downloads".into()),
-    )
-    .title("NeuroSkill™ – Downloads")
-    .inner_size(760.0, 640.0)
-    .min_inner_size(560.0, 420.0)
-    .resizable(true)
-    .center()
-    .decorations(false).transparent(true)
-    .build()
-    .map(|w| { let _ = w.set_focus(); })
-    .map_err(|e| e.to_string())
+    crate::window_cmds::focus_or_create(&app, crate::window_cmds::WindowSpec {
+        label: "downloads", route: "downloads", title: "NeuroSkill™ – Downloads",
+        inner_size: (760.0, 640.0), min_inner_size: Some((560.0, 420.0)),
+        ..Default::default()
+    })
 }
 
 /// Force-refresh the catalog by re-probing the HuggingFace Hub disk cache.
@@ -1212,26 +1197,11 @@ pub fn cancel_tool_call(
 /// Open (or focus) the floating Chat window.
 #[tauri::command]
 pub async fn open_chat_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("chat") {
-        win.unminimize().ok();
-        win.show().ok();
-        win.set_focus().ok();
-        return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        "chat",
-        tauri::WebviewUrl::App("chat".into()),
-    )
-    .title("NeuroSkill™ – Chat")
-    .inner_size(760.0, 680.0)
-    .min_inner_size(480.0, 400.0)
-    .resizable(true)
-    .center()
-    .decorations(false).transparent(true)
-    .build()
-    .map(|w| { let _ = w.set_focus(); })
-    .map_err(|e| e.to_string())
+    crate::window_cmds::focus_or_create(&app, crate::window_cmds::WindowSpec {
+        label: "chat", route: "chat", title: "NeuroSkill™ – Chat",
+        inner_size: (760.0, 680.0), min_inner_size: Some((480.0, 400.0)),
+        ..Default::default()
+    })
 }
 
 // ── Hardware fit prediction ───────────────────────────────────────────────────

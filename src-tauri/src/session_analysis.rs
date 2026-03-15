@@ -1382,19 +1382,11 @@ pub(crate) fn get_csv_metrics(csv_path: String) -> Option<CsvMetricsResult> {
 /// Open the session comparison window (or focus it if already open).
 #[tauri::command]
 pub(crate) async fn open_compare_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("compare") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "compare", tauri::WebviewUrl::App("compare".into()))
-        .title("NeuroSkill™ – Compare")
-        .inner_size(780.0, 640.0)
-        .min_inner_size(600.0, 440.0)
-        .resizable(true)
-        .center()
-        .decorations(false).transparent(true)
-        .build()
-        .map(|w| { let _ = w.set_focus(); })
-        .map_err(|e| e.to_string())
+    crate::window_cmds::focus_or_create(&app, crate::window_cmds::WindowSpec {
+        label: "compare", route: "compare", title: "NeuroSkill™ – Compare",
+        inner_size: (780.0, 640.0), min_inner_size: Some((600.0, 440.0)),
+        ..Default::default()
+    })
 }
 
 /// Open compare window pre-selecting two specific sessions by their UTC ranges.

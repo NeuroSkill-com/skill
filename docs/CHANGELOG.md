@@ -14,6 +14,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Rewrite root `README.md`**: restructured to reference all workspace crate READMEs and `docs/` guides; added project layout section with crate table, vendored crates, and frontend structure; added documentation section linking to CHANGELOG, METRICS, HOOKS, LLM, LINUX, and WINDOWS; streamlined API section; moved detailed metrics/schema reference to `docs/METRICS.md`.
 
+- **Add workspace crate outline to `AGENTS.md`**: brief table of all 17 workspace crates and 2 vendored crates with one-line purpose descriptions, so coding agents have immediate context on the crate layout.
+
 ### Refactor
 
 - **Deduplicate frontend types and formatting helpers**: extracted shared TypeScript interfaces (`MuseStatus`, `SleepEpoch`, `SleepSummary`, `SleepStages`, `LabelRow`, `DiscoveredDevice`, `FilterConfig`, `PairedDevice`, `MUSE_CHANNELS`, `MUSE_POSITIONS`) into `$lib/types.ts`; extracted 12 formatting functions (`fmtTime`, `fmtTimeShort`, `fmtDate`, `fmtDateIso`, `fmtDateTime`, `fmtDateTimeSecs`, `fmtDateTimeLocale`, `fmtDuration`, `fmtDurationRange`, `fmtSecs`, `fmtUtcDay`, `fmtDayKey`, `fmtMs`, `fmtElapsed`, `pad`) into `$lib/format.ts`; extracted `SleepAnalysis` interface and `analyzeSleep()` function into `$lib/sleep-analysis.ts`; updated 15 consumer files across routes and lib components to import from shared modules instead of re-declaring locally; eliminates ~30 duplicate interface definitions and ~20 duplicate utility functions.
