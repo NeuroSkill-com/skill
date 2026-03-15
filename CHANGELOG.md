@@ -12,6 +12,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Build
 
+- **Extract screenshots into `skill-screenshots` workspace crate**: moved 1,533 lines of screenshot capture, vision embedding, HNSW similarity search, OCR text extraction, and fastembed model management from the monolithic `skill` crate into `crates/skill-screenshots/`. Introduced `ScreenshotContext` trait to abstract `tauri::AppHandle` + `AppState` access (config reads, session state, active window info, LLM mmproj embedding). `TauriScreenshotContext` adapter in the main crate bridges the Tauri runtime to the trait. `ScreenshotConfig` moved to `skill-screenshots::config` and re-exported from `settings.rs`. Dependencies: `skill-constants`, `skill-data`, `fastembed`, `fast-hnsw`, `ocrs`, `rten`, `image`.
+
 - **Create `skill-constants` crate as single source of truth**: all constants (EEG hardware/filter/band, data-file paths, calibration defaults, WebSocket, mDNS, app identity, screenshot/OCR, HNSW settings) are now canonically defined once in `crates/skill-constants/`. The `skill-eeg`, `skill-data`, and main `skill` crates all depend on and re-export from it, eliminating duplicate definitions. Zero dependencies — pure `const` values only.
 
 - **Extract data/utility modules into `skill-data` workspace crate**: moved 2,984 lines of pure data/utility logic (label SQLite store, screenshot SQLite store, hooks audit log, GPU stats queries, PPG/heart-rate analysis, Do Not Disturb platform automation, BLE device types) from the monolithic `skill` crate into `crates/skill-data/`. Includes a `MutexExt` poison-recovery trait. All modules have zero tauri/AppState coupling. Uses `skill-constants` for file-path constants.
