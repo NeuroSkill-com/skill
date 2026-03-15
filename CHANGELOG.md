@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Chat History
+
+- **Tool calls now persisted in SQLite**: tool-call events (tool name, status, arguments, results, tool_call_id) are now saved alongside assistant messages in a new `chat_tool_calls` table. When reloading a session, tool-call cards are fully restored with expandable details — previously tool calls were lost on reload and only the text content was preserved. The new Tauri command `save_chat_tool_calls` writes tool rows after the assistant message is saved; `load_session` joins them back in a single efficient query. Existing databases are migrated seamlessly via `CREATE TABLE IF NOT EXISTS`.
+
 ### All Windows
 
 - **Real-time context usage prediction**: the context usage bar now updates live instead of only after inference completes:
