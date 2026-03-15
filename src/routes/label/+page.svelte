@@ -12,6 +12,7 @@ the Free Software Foundation, version 3 only. -->
   import { t }        from "$lib/i18n/index.svelte";
   import { labelTitlebarState } from "$lib/label-titlebar.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
+  import { fmtElapsed } from "$lib/format";
 
   // ── State ──────────────────────────────────────────────────────────────────
   let text          = $state("");
@@ -31,11 +32,6 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const isMac = typeof navigator !== "undefined" && navigator.platform?.includes("Mac");
-
-  function fmtElapsed(s: number) {
-    const m = Math.floor(s / 60), ss = s % 60;
-    return m > 0 ? `${m}m ${String(ss).padStart(2,"0")}s` : `${s}s`;
-  }
 
   /** Close via Rust command — avoids importing webviewWindow (causes Vite reload). */
   async function closeWindow() {

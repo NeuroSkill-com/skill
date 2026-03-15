@@ -29,6 +29,7 @@ the Free Software Foundation, version 3 only. -->
     UMAP_TRACE_COLOR, UMAP_TRACE_NODE_COLOR,
   } from "$lib/constants";
   import { getResolved } from "$lib/theme-store.svelte";
+  import { fmtTimeShort } from "$lib/format";
 
   interface UmapPoint {
     x: number; y: number; z: number;
@@ -267,8 +268,7 @@ the Free Software Foundation, version 3 only. -->
   }
   function fmtUtcTime(utc: number): string {
     if (!utc) return "—";
-    const d = new Date(utc * 1000);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return fmtTimeShort(utc);
   }
 
   function normalise(pts: UmapPoint[]): Float32Array {

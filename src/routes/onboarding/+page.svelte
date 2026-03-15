@@ -73,7 +73,7 @@ the Free Software Foundation, version 3 only. -->
   let status = $state<MuseStatus>({
     state: "disconnected", device_name: null, battery: 0,
     channel_quality: ["no_signal","no_signal","no_signal","no_signal"],
-  });
+  } as MuseStatus);
 
   const EEG_CH = ["TP9", "AF7", "AF8", "TP10"];
   const QC: Record<string, string> = {

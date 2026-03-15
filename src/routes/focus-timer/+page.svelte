@@ -14,6 +14,7 @@ the Free Software Foundation, version 3 only. -->
   import { t }           from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import { Button }             from "$lib/components/ui/button";
+  import { fmtDuration, fmtTimeShort as fmtTime } from "$lib/format";
 
   // ── Presets ────────────────────────────────────────────────────────────────
   type Preset = "pomodoro" | "deepWork" | "shortFocus" | "custom";
@@ -144,23 +145,6 @@ the Free Software Foundation, version 3 only. -->
   const breakSecs  = $derived(sessionLog.filter(e => e.type !== "work").reduce((s, e) => s + e.durationSecs, 0));
   const logTotalSecs = $derived(focusSecs + breakSecs);
   const cyclesDone = $derived(sessionLog.filter(e => e.type === "work").length);
-
-  /** Format seconds as "Xh Ym" (hours suppressed when < 1h) or "Ym Zs" (minutes suppressed when < 1m). */
-  function fmtDuration(secs: number): string {
-    if (secs <= 0) return "0m";
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
-    if (m > 0) return s > 0 ? `${m}m ${s}s` : `${m}m`;
-    return `${s}s`;
-  }
-
-  /** Format a UTC unix timestamp as a local HH:MM string. */
-  function fmtTime(utc: number): string {
-    const d = new Date(utc * 1000);
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-  }
 
   // Whether the log panel is expanded
   let logOpen = $state(true);

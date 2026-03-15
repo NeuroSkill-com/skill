@@ -14,25 +14,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
   import { t } from "$lib/i18n/index.svelte";
   import TimeSeriesChart from "$lib/dashboard/TimeSeriesChart.svelte";
-
-  interface SleepEpoch {
-    utc:       number;
-    stage:     number;   // 0=Wake, 1=N1, 2=N2, 3=N3, 5=REM
-    rel_delta: number;
-    rel_theta: number;
-    rel_alpha: number;
-    rel_beta:  number;
-  }
-
-  interface SleepSummary {
-    total_epochs:  number;
-    wake_epochs:   number;
-    n1_epochs:     number;
-    n2_epochs:     number;
-    n3_epochs:     number;
-    rem_epochs:    number;
-    epoch_secs:    number;
-  }
+  import type { SleepEpoch, SleepSummary } from "$lib/types";
 
   let { epochs, summary, xMin, xMax }: {
     epochs: SleepEpoch[];

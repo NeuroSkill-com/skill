@@ -13,6 +13,7 @@ the Free Software Foundation, version 3 only. -->
   import { t }                  from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+  import { fmtTime } from "$lib/format";
 
   // ── Types ──────────────────────────────────────────────────────────────────
   interface WsClient {
@@ -40,12 +41,6 @@ the Free Software Foundation, version 3 only. -->
     if (d < 60)   return t("common.secondsAgo", { n: d });
     if (d < 3600) return t("common.minutesAgo", { n: Math.floor(d / 60) });
     return t("common.hoursAgo", { n: Math.floor(d / 3600) });
-  }
-
-  function fmtTime(utc: number): string {
-    return new Date(utc * 1000).toLocaleTimeString(undefined, {
-      hour: "2-digit", minute: "2-digit", second: "2-digit",
-    });
   }
 
   function shortPeer(peer: string): string {

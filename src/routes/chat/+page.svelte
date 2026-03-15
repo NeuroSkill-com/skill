@@ -20,6 +20,7 @@
   import PromptLibrary                from "$lib/PromptLibrary.svelte";
   import { t }                        from "$lib/i18n/index.svelte";
   import { chatTitlebarState }        from "$lib/chat-titlebar.svelte";
+  import { fmtMs }                    from "$lib/format";
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -1604,11 +1605,6 @@
     if (generating) invoke("abort_llm_stream").catch(() => {});
   });
 
-  // ── Formatting helpers ─────────────────────────────────────────────────────
-
-  function fmtMs(ms: number): string {
-    return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
-  }
 </script>
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->

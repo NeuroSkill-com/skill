@@ -107,9 +107,9 @@ export interface LabelRow {
   id:          number;
   eeg_start:   number;
   eeg_end:     number;
-  label_start?: number;
-  label_end?:   number;
+  label_start: number;
+  label_end:   number;
   text:        string;
-  context?:    string;
+  context:     string;
   created_at:  number;
 }

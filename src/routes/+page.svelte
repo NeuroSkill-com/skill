@@ -34,7 +34,7 @@ the Free Software Foundation, version 3 only. -->
   import { addToast } from "$lib/toast-store.svelte";
   import { setBtOff } from "$lib/bt-status-store.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import type { MuseStatus } from "$lib/types";
+  import type { MuseStatus, DiscoveredDevice } from "$lib/types";
 
   // ── Model download status (shown as a banner when downloading/retrying) ────
   interface ModelDownloadStatus {
