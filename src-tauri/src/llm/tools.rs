@@ -159,32 +159,39 @@ pub struct ImageUrl {
 
 // ── Tool injection / extraction ───────────────────────────────────────────────
 
-/// Inject tool definitions and calling instructions into the system prompt.
-///
-/// llama.cpp local models do not have native function-calling support in all
-/// builds; we inject a system prompt block that:
-///   1. Lists available tools with their JSON Schema parameters.
-///   2. Tells the model the exact format to emit a tool call.
-///   3. Explains the tool-result flow so the model waits for results.
-///
-/// The extractor (`extract_tool_calls`) accepts several formats, but we teach
-/// the model the `[TOOL_CALL]…[/TOOL_CALL]` format which is the most reliable
-/// for local models (unambiguous delimiters, no fence/JSON confusion).
-pub fn inject_tools_into_system_prompt(
-    messages: &mut Vec<Value>,
-    tools:    &[Tool],
-) {
-    if tools.is_empty() { return; }
+/// Build a compact tool block for small context windows (≤ 4096 tokens).
+/// Minimal instructions, no examples, terse parameter listing.
+fn build_compact_tool_block(tools: &[Tool]) -> String {
+    let mut names = Vec::new();
+    for t in tools {
+        let name = &t.function.name;
+        let params: Vec<String> = t.function.parameters.as_ref()
+            .and_then(|p| p.get("properties"))
+            .and_then(|p| p.as_object())
+            .map(|props| props.keys().cloned().collect())
+            .unwrap_or_default();
+        if params.is_empty() {
+            names.push(format!("{name}"));
+        } else {
+            names.push(format!("{name}({})", params.join(",")));
+        }
+    }
+    format!(
+r#"Tools: {}
+Call: [TOOL_CALL]{{"name":"<tool>","arguments":{{...}}}}[/TOOL_CALL]
+Wait for results. Do NOT fabricate results."#,
+        names.join(", ")
+    )
+}
 
-    // ── Build per-tool descriptions ──────────────────────────────────────
-
+/// Build the full tool block with descriptions, parameter docs, and examples.
+fn build_full_tool_block(tools: &[Tool]) -> String {
     let mut tool_lines = String::new();
     for t in tools {
         let name = &t.function.name;
         let desc = t.function.description.as_deref().unwrap_or("");
         tool_lines.push_str(&format!("- **{name}**: {desc}\n"));
 
-        // Show required parameters inline so the model knows the shape.
         if let Some(ref params) = t.function.parameters {
             if let Some(props) = params.get("properties").and_then(|p| p.as_object()) {
                 let required: Vec<&str> = params.get("required")
@@ -201,9 +208,7 @@ pub fn inject_tools_into_system_prompt(
         }
     }
 
-    // ── Build the instruction block ──────────────────────────────────────
-
-    let tool_block = format!(
+    format!(
 r#"# Tools
 
 You have access to the following tools:
@@ -233,7 +238,36 @@ Assistant: [TOOL_CALL]{{"name":"bash","arguments":{{"command":"df -h"}}}}[/TOOL_
 
 User: "Read the file config.toml"
 Assistant: [TOOL_CALL]{{"name":"read_file","arguments":{{"path":"config.toml"}}}}[/TOOL_CALL]"#
-    );
+    )
+}
+
+/// Inject tool definitions and calling instructions into the system prompt.
+///
+/// llama.cpp local models do not have native function-calling support in all
+/// builds; we inject a system prompt block that:
+///   1. Lists available tools with their JSON Schema parameters.
+///   2. Tells the model the exact format to emit a tool call.
+///   3. Explains the tool-result flow so the model waits for results.
+///
+/// The extractor (`extract_tool_calls`) accepts several formats, but we teach
+/// the model the `[TOOL_CALL]…[/TOOL_CALL]` format which is the most reliable
+/// for local models (unambiguous delimiters, no fence/JSON confusion).
+pub fn inject_tools_into_system_prompt(
+    messages: &mut Vec<Value>,
+    tools:    &[Tool],
+    n_ctx:    usize,
+) {
+    if tools.is_empty() { return; }
+
+    // Use a compact tool prompt for small context windows (≤ 4096 tokens)
+    // to leave room for conversation history and the model's response.
+    let compact = n_ctx > 0 && n_ctx <= 4096;
+
+    let tool_block = if compact {
+        build_compact_tool_block(tools)
+    } else {
+        build_full_tool_block(tools)
+    };
 
     // Prepend to or create the first system message.
     let has_system = messages.first().and_then(|m| m.get("role")).and_then(|r| r.as_str()) == Some("system");

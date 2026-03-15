@@ -17,6 +17,10 @@ All notable changes to NeuroSkill™ are documented here.
 ### LLM — Coding-Agent Tools
 
 - **Bash tool** (`bash`): execute shell commands from the LLM chat with configurable timeout. Output is tail-truncated to 2 000 lines / 50 KB (keeps the end where errors appear). Commands run in the user's home directory.
+- **Context-aware tool calling**: tool-calling now adapts to the available context window to prevent "prompt too long" errors.
+  - **Compact tool prompt** (≤ 4096 tokens): the verbose tool system prompt (descriptions, parameter docs, examples) is replaced with a minimal 3-line version listing tool names and the call format, saving ~500 tokens.
+  - **Automatic history trimming**: before each inference round, the message history is checked against 75% of `n_ctx`. Long tool results in history are truncated to 2 KB, then oldest non-system messages are dropped until the conversation fits within budget.
+  - **Full tool prompt** (> 4096 tokens): unchanged — includes per-parameter documentation, rules, and examples.
 - **Long command → script file**: bash commands exceeding 8 KB are automatically written to a timestamped shell script (`cmd_<ts>_<ms>.sh`) in `skill_dir/chats/scripts/<session>/` and executed as `bash <script>` instead of `bash -c <command>`, avoiding OS ARG_MAX / "prompt too long" errors. Scripts include `set -euo pipefail`, are preserved per-session for inspection, and the tool result includes the `script_path` when one was used.
 - **Read file tool** (`read_file`): read text file contents with `offset`/`limit` pagination for large files. Output is head-truncated to 2 000 lines / 50 KB with continuation hints.
 - **Write file tool** (`write_file`): create or overwrite files with automatic parent directory creation.
