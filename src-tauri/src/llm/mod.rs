@@ -292,6 +292,9 @@ pub struct LlmServerState {
     /// Checked before each tool execution; cancelled calls return an error
     /// result instead of running.
     pub cancelled_tool_calls: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    /// Directory for storing tool-generated script files (per-session).
+    /// Located at `skill_dir/chats/scripts/<session_ts>/`.
+    pub scripts_dir: std::path::PathBuf,
 
     /// Abort signal for IPC-streamed chat (`chat_completions_ipc`).
     ///
@@ -922,7 +925,7 @@ impl ToolCallStreamSanitizer {
     }
 }
 
-async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmToolConfig) -> Value {
+async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmToolConfig, scripts_dir: &std::path::Path) -> Value {
     let args: Value = serde_json::from_str(&call.function.arguments).unwrap_or_else(|_| json!({}));
 
     if !is_builtin_tool_enabled(allowed_tools, &call.function.name) {
@@ -1084,12 +1087,43 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
                 }
             }
 
+            let scripts_dir = scripts_dir.to_path_buf();
             tokio::task::spawn_blocking(move || {
                 use std::process::Command;
 
                 let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+
+                // If the command is long (>8 KB), write it to a script file
+                // to avoid ARG_MAX / "prompt too long" errors.
+                const SCRIPT_THRESHOLD: usize = 8 * 1024;
+                let (actual_arg, script_path) = if command.len() > SCRIPT_THRESHOLD {
+                    let _ = std::fs::create_dir_all(&scripts_dir);
+                    let ts = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default();
+                    let filename = format!("cmd_{}_{}.sh", ts.as_secs(), ts.subsec_millis());
+                    let path = scripts_dir.join(&filename);
+                    let script_content = format!("#!/usr/bin/env bash\nset -euo pipefail\n\n{}\n", command);
+                    if let Err(e) = std::fs::write(&path, &script_content) {
+                        return json!({ "ok": false, "tool": "bash", "error": format!("failed to write script: {}", e) });
+                    }
+                    // Make executable
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755));
+                    }
+                    (path.to_string_lossy().to_string(), Some(path))
+                } else {
+                    (command.clone(), None)
+                };
+
                 let mut cmd = Command::new("bash");
-                cmd.arg("-c").arg(&command).current_dir(&home);
+                if script_path.is_some() {
+                    cmd.arg(&actual_arg).current_dir(&home);
+                } else {
+                    cmd.arg("-c").arg(&actual_arg).current_dir(&home);
+                }
                 cmd.stdout(std::process::Stdio::piped());
                 cmd.stderr(std::process::Stdio::piped());
 
@@ -1144,6 +1178,9 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
                                 }
                                 if timed_out {
                                     result["error"] = json!(format!("command timed out after {} seconds", timeout_secs.unwrap_or(0)));
+                                }
+                                if let Some(ref sp) = script_path {
+                                    result["script_path"] = json!(sp.to_string_lossy());
                                 }
                                 result
                             }
@@ -1471,14 +1508,14 @@ where
                 execute_tool_calls_sequential(
                     &selected_calls, &tool_defs, &allowed_tools,
                     &mut messages, &mut on_tool_event,
-                    &cancelled_set,
+                    &cancelled_set, &state.scripts_dir,
                 ).await;
             }
             crate::settings::ToolExecutionMode::Parallel => {
                 execute_tool_calls_parallel(
                     &selected_calls, &tool_defs, &allowed_tools,
                     &mut messages, &mut on_tool_event,
-                    &cancelled_set,
+                    &cancelled_set, &state.scripts_dir,
                 ).await;
             }
         }
@@ -1523,6 +1560,7 @@ async fn execute_tool_calls_sequential<G>(
     messages: &mut Vec<Value>,
     on_tool_event: &mut G,
     cancelled_set: &Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    scripts_dir: &std::path::Path,
 )
 where
     G: FnMut(ToolEvent),
@@ -1579,7 +1617,7 @@ where
             match args_result {
                 Err(err_val) => (err_val, true),
                 Ok(_) => {
-                    let result = execute_builtin_tool_call(tc, allowed_tools).await;
+                    let result = execute_builtin_tool_call(tc, allowed_tools, scripts_dir).await;
                     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
                     (result, !ok)
                 }
@@ -1618,6 +1656,7 @@ async fn execute_tool_calls_parallel<G>(
     messages: &mut Vec<Value>,
     on_tool_event: &mut G,
     cancelled_set: &Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    scripts_dir: &std::path::Path,
 )
 where
     G: FnMut(ToolEvent),
@@ -1684,6 +1723,7 @@ where
         let allowed = allowed_tools.clone();
         let is_valid = p.validation.is_ok();
         let cancel_check = cancelled_set.clone();
+        let sdir = scripts_dir.to_path_buf();
 
         if is_valid {
             futures.push(tokio::spawn(async move {
@@ -1691,7 +1731,7 @@ where
                 if cancel_check.lock().unwrap().contains(&tc.id) {
                     return (tc.clone(), json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }), true);
                 }
-                let result = execute_builtin_tool_call(&tc, &allowed).await;
+                let result = execute_builtin_tool_call(&tc, &allowed, &sdir).await;
                 let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
                 (tc, result, !ok)
             }));
@@ -2631,12 +2671,21 @@ pub fn init(
 
     let _ = app.emit("llm:status", json!({"status":"loading","model":model_name}));
 
+    // Create per-session scripts directory under skill_dir/chats/scripts/<unix_ts>/
+    let session_ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let scripts_dir = skill_dir.join("chats").join("scripts").join(session_ts.to_string());
+    let _ = std::fs::create_dir_all(&scripts_dir);
+
     Some(Arc::new(LlmServerState {
         req_tx,
         model_name,
         api_key:      config.api_key.clone(),
         allowed_tools,
         cancelled_tool_calls: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+        scripts_dir,
         ready:        ready_flag,
         n_ctx:        n_ctx_flag,
         vision_ready: vision_flag,

@@ -9,6 +9,7 @@ All notable changes to NeuroSkill™ are documented here.
 ### LLM — Coding-Agent Tools
 
 - **Bash tool** (`bash`): execute shell commands from the LLM chat with configurable timeout. Output is tail-truncated to 2 000 lines / 50 KB (keeps the end where errors appear). Commands run in the user's home directory.
+- **Long command → script file**: bash commands exceeding 8 KB are automatically written to a timestamped shell script (`cmd_<ts>_<ms>.sh`) in `skill_dir/chats/scripts/<session>/` and executed as `bash <script>` instead of `bash -c <command>`, avoiding OS ARG_MAX / "prompt too long" errors. Scripts include `set -euo pipefail`, are preserved per-session for inspection, and the tool result includes the `script_path` when one was used.
 - **Read file tool** (`read_file`): read text file contents with `offset`/`limit` pagination for large files. Output is head-truncated to 2 000 lines / 50 KB with continuation hints.
 - **Write file tool** (`write_file`): create or overwrite files with automatic parent directory creation.
 - **Edit file tool** (`edit_file`): surgical find-and-replace edits with exact text matching, CRLF-aware line ending preservation, and duplicate-occurrence rejection.
@@ -30,6 +31,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Moved chat history into `chats/` subdirectory**: the LLM chat history database (`chat_history.sqlite`) is now stored under `skill_dir/chats/` instead of directly in `skill_dir`. The `chats/` directory is created automatically on first use.
 - **Automatic migration**: existing `chat_history.sqlite` files in the old location are automatically moved to the new `chats/` subdirectory on startup, including WAL and SHM sidecar files. No manual action required.
+- **Fixed chat messages not persisting**: the `save_chat_message` Tauri invoke used snake_case `session_id` as the parameter key, but Tauri v2's `#[tauri::command]` macro expects camelCase `sessionId` from the JS side. This caused every save call to silently fail (the `.catch(() => {})` handler swallowed the deserialization error). Both the user-message and assistant-message save calls are now fixed.
 
 ### i18n
 

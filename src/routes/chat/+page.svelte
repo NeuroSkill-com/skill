@@ -849,7 +849,7 @@
     // Persist user message immediately (fire-and-forget)
     if (sessionId > 0 && text) {
       invoke("save_chat_message", {
-        session_id: sessionId, role: "user", content: text, thinking: null,
+        sessionId, role: "user", content: text, thinking: null,
       }).catch(() => {});
     }
 
@@ -1084,7 +1084,7 @@
       // Persist the completed assistant message (fire-and-forget).
       if (sessionId > 0 && finalAssistant && !finalAssistant.pending && finalAssistant.content) {
         invoke("save_chat_message", {
-          session_id: sessionId,
+          sessionId,
           role:       "assistant",
           content:    finalAssistant.content,
           thinking:   finalAssistant.thinking ?? null,
