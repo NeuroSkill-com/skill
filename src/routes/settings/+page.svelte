@@ -21,13 +21,14 @@ the Free Software Foundation, version 3 only. -->
   import TtsTab           from "$lib/TtsTab.svelte";
   import PermissionsTab   from "$lib/PermissionsTab.svelte";
   import LlmTab           from "$lib/LlmTab.svelte";
+  import ScreenshotsTab   from "$lib/ScreenshotsTab.svelte";
   import { t }            from "$lib/i18n/index.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 
-  type Tab = "goals" | "calibration" | "embeddings" | "hooks" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions" | "llm";
+  type Tab = "goals" | "calibration" | "embeddings" | "hooks" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions" | "llm" | "screenshots";
   let tab = $state<Tab>("goals");
 
-  const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "llm", "model", "embeddings", "hooks", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
+  const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "llm", "model", "embeddings", "screenshots", "hooks", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
   const TAB_LABELS: Record<Tab, () => string> = {
     goals:       () => t("settingsTabs.goals"),
     calibration: () => t("settingsTabs.calibration"),
@@ -42,6 +43,7 @@ the Free Software Foundation, version 3 only. -->
     umap:        () => t("settingsTabs.umap"),
     updates:     () => t("settingsTabs.updates"),
     permissions: () => t("settingsTabs.permissions"),
+    screenshots: () => t("settingsTabs.screenshots"),
   };
 
   // ── Icons per tab (16×16 stroked) ────────────────────────────────────────
@@ -59,6 +61,7 @@ the Free Software Foundation, version 3 only. -->
     umap:        `<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><circle cx="12" cy="12" r="2"/><path d="M6 8v6M18 8v6M8 6h6M8 18h6"/>`,
     updates:     `<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>`,
     permissions: `<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
+    screenshots: `<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/>`,
   };
 
   const tabLabel = (id: Tab) => TAB_LABELS[id]();
@@ -254,6 +257,8 @@ the Free Software Foundation, version 3 only. -->
         <UmapTab />
       {:else if tab === "updates"}
         <UpdatesTab />
+      {:else if tab === "screenshots"}
+        <ScreenshotsTab />
       {:else if tab === "permissions"}
         <PermissionsTab />
       {:else}

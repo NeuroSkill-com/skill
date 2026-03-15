@@ -2851,6 +2851,53 @@ const en: Record<string, string> = {
 
   "helpHooks.tipsTitle":                 "Tuning Tips",
   "helpHooks.tipsBody":                  "Start with one hook and a few keywords that match labels you have already recorded. Use the distance suggestion tool to set an initial threshold. Monitor the history log for a day and adjust: lower the threshold if you see false positives, raise it if the hook never fires. Adding more specific keywords (e.g. 'deep focus reading' vs. 'focus') generally improves precision. Avoid very short or generic single-word keywords unless you want broad matching.",
+
+  // ── Screenshots tab ───────────────────────────────────────────────────────
+  "settingsTabs.screenshots":                    "Screenshots",
+
+  "screenshots.title":                           "Screenshot Capture",
+  "screenshots.enableToggle":                    "Enable Screenshot Capture",
+  "screenshots.enableDesc":                      "Capture the active window periodically and embed with a vision model for visual-similarity search.",
+  "screenshots.sessionOnlyToggle":               "Session Only",
+  "screenshots.sessionOnlyDesc":                 "Only capture during active EEG recording sessions.",
+
+  "screenshots.interval":                        "Capture Interval",
+  "screenshots.intervalDesc":                    "Seconds between captures (aligned with EEG epoch cadence).",
+  "screenshots.intervalUnit":                    "seconds",
+
+  "screenshots.imageSize":                       "Image Size",
+  "screenshots.imageSizeDesc":                   "Intermediate resolution (px). Captured window is resized to fit this square before saving and embedding.",
+  "screenshots.imageSizeUnit":                   "px",
+  "screenshots.imageSizeRecommended":            "Recommended for current model:",
+
+  "screenshots.quality":                         "WebP Quality",
+  "screenshots.qualityDesc":                     "WebP compression quality (0–100). Lower = smaller files.",
+
+  "screenshots.embeddingModel":                  "Embedding Model",
+  "screenshots.embeddingModelDesc":              "Vision model used to generate image embeddings for similarity search.",
+  "screenshots.backendFastembed":                "fastembed (local ONNX)",
+  "screenshots.backendMmproj":                   "mmproj (LLM vision projector)",
+  "screenshots.modelClip":                       "CLIP ViT-B/32 — 512d (fast, default)",
+  "screenshots.modelNomic":                      "Nomic Embed Vision v1.5 — 768d",
+
+  "screenshots.reembed":                         "Re-embed Screenshots",
+  "screenshots.reembedDesc":                     "Recompute embeddings for all existing screenshots using the current model.",
+  "screenshots.reembedBtn":                      "Re-embed",
+  "screenshots.reembedding":                     "Embedding…",
+  "screenshots.stale":                           "stale",
+  "screenshots.unembedded":                      "unembedded",
+  "screenshots.estimate":                        "Estimated time:",
+  "screenshots.modelChanged":                    "Embedding model changed",
+  "screenshots.modelChangedDesc":                "screenshots were embedded with a different model. Re-embed for consistent search results.",
+
+  "screenshots.privacyNote":                     "All screenshots are stored locally only and never transmitted. Opt-in, session-gated by default.",
+  "screenshots.storagePath":                     "Storage: ~/.skill/screenshots/",
+
+  "screenshots.stats":                           "Statistics",
+  "screenshots.totalCount":                      "Total screenshots",
+  "screenshots.embeddedCount":                   "Embedded",
+  "screenshots.unembeddedCount":                 "Not yet embedded",
+  "screenshots.staleCount":                      "Stale (different model)",
 };
 
 export default en;
