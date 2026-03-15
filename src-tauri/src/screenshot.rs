@@ -11,7 +11,7 @@
 //! stores the raw embedding alongside metadata in SQLite + HNSW.  The shared
 //! `YYYYMMDDHHmmss` timestamp is the cross-modal join key to EEG embeddings.
 
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -23,8 +23,10 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{AppState, MutexExt};
 use crate::constants::{
-    SCREENSHOTS_DIR, SCREENSHOTS_HNSW, SCREENSHOT_HNSW_SAVE_EVERY,
+    SCREENSHOTS_DIR, SCREENSHOTS_HNSW, SCREENSHOTS_OCR_HNSW, SCREENSHOT_HNSW_SAVE_EVERY,
     HNSW_M, HNSW_EF_CONSTRUCTION,
+    OCR_DETECTION_MODEL_URL, OCR_RECOGNITION_MODEL_URL,
+    OCR_DETECTION_MODEL_FILE, OCR_RECOGNITION_MODEL_FILE,
 };
 use crate::screenshot_store::{
     ScreenshotStore, ScreenshotRow, ScreenshotResult,
@@ -575,6 +577,123 @@ fn fastembed_embed(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) ->
     }
 }
 
+// ── OCR engine ────────────────────────────────────────────────────────────────
+
+/// Download an OCR model file if it doesn't exist yet.
+fn download_ocr_model(url: &str, dest: &Path) -> bool {
+    if dest.exists() { return true; }
+    eprintln!("[screenshot] downloading OCR model: {url}");
+    match ureq::get(url).call() {
+        Ok(resp) => {
+            let mut body = Vec::new();
+            if resp.into_reader().read_to_end(&mut body).is_ok() && !body.is_empty() {
+                if let Some(parent) = dest.parent() {
+                    let _ = std::fs::create_dir_all(parent);
+                }
+                if std::fs::write(dest, &body).is_ok() {
+                    eprintln!("[screenshot] OCR model saved: {}", dest.display());
+                    return true;
+                }
+            }
+            eprintln!("[screenshot] OCR model download failed (empty body)");
+            false
+        }
+        Err(e) => {
+            eprintln!("[screenshot] OCR model download error: {e}");
+            false
+        }
+    }
+}
+
+/// Load the ocrs OCR engine.  Downloads model files on first use.
+fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
+    let ocr_dir = skill_dir.join("ocr_models");
+    let det_path = ocr_dir.join(OCR_DETECTION_MODEL_FILE);
+    let rec_path = ocr_dir.join(OCR_RECOGNITION_MODEL_FILE);
+
+    if !download_ocr_model(OCR_DETECTION_MODEL_URL, &det_path) { return None; }
+    if !download_ocr_model(OCR_RECOGNITION_MODEL_URL, &rec_path) { return None; }
+
+    let det_model = rten::Model::load_file(&det_path).ok()?;
+    let rec_model = rten::Model::load_file(&rec_path).ok()?;
+
+    ocrs::OcrEngine::new(ocrs::OcrEngineParams {
+        detection_model: Some(det_model),
+        recognition_model: Some(rec_model),
+        ..Default::default()
+    }).ok()
+}
+
+/// Run OCR on raw image bytes (PNG/JPEG/WebP).  Returns the extracted text.
+/// This should be called on the **full-resolution** captured image before
+/// any downsizing, for maximum text recognition quality.
+fn run_ocr(engine: &ocrs::OcrEngine, raw_bytes: &[u8]) -> Option<String> {
+    let img = image::load_from_memory(raw_bytes).ok()?.into_rgb8();
+    let (w, h) = img.dimensions();
+    let source = ocrs::ImageSource::from_bytes(img.as_raw(), (w, h)).ok()?;
+    let input = engine.prepare_input(source).ok()?;
+    let text = engine.get_text(&input).ok()?;
+    let text = text.trim().to_string();
+    if text.is_empty() { None } else { Some(text) }
+}
+
+/// Embed OCR text using the existing fastembed text embedder.
+fn embed_ocr_text(text: &str, skill_dir: &Path) -> Option<Vec<f32>> {
+    let cache = skill_dir.join("fastembed_cache");
+    // Use the default text embedding model (small, fast)
+    let model = fastembed::EmbeddingModel::BGESmallENV15;
+    let mut embedder = fastembed::TextEmbedding::try_new(
+        fastembed::InitOptions::new(model).with_cache_dir(cache)
+    ).ok()?;
+    let mut results = embedder.embed(vec![text], None).ok()?;
+    if results.is_empty() { None } else { Some(results.remove(0)) }
+}
+
+// ── OCR HNSW helpers ──────────────────────────────────────────────────────────
+
+fn load_or_rebuild_ocr_hnsw(
+    skill_dir: &Path,
+    store: &ScreenshotStore,
+) -> LabeledIndex<Cosine, i64> {
+    let hnsw_path = skill_dir.join(SCREENSHOTS_OCR_HNSW);
+    if hnsw_path.exists() {
+        match LabeledIndex::<Cosine, i64>::load(&hnsw_path, Cosine) {
+            Ok(idx) => {
+                eprintln!("[screenshot] loaded OCR HNSW from {}", hnsw_path.display());
+                return idx;
+            }
+            Err(e) => {
+                eprintln!("[screenshot] OCR HNSW load error: {e} — rebuilding");
+            }
+        }
+    }
+    rebuild_ocr_hnsw_from_sqlite(store, skill_dir)
+}
+
+fn rebuild_ocr_hnsw_from_sqlite(
+    store: &ScreenshotStore,
+    skill_dir: &Path,
+) -> LabeledIndex<Cosine, i64> {
+    let mut idx = fresh_hnsw();
+    let rows = store.all_ocr_embeddings();
+    eprintln!("[screenshot] rebuilding OCR HNSW from {} embeddings", rows.len());
+    for (ts, emb) in &rows {
+        idx.insert(emb.clone(), *ts);
+    }
+    let hnsw_path = skill_dir.join(SCREENSHOTS_OCR_HNSW);
+    if let Err(e) = idx.save(&hnsw_path) {
+        eprintln!("[screenshot] OCR HNSW save error: {e}");
+    }
+    idx
+}
+
+fn save_ocr_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
+    let path = skill_dir.join(SCREENSHOTS_OCR_HNSW);
+    if let Err(e) = idx.save(&path) {
+        eprintln!("[screenshot] OCR HNSW save error: {e}");
+    }
+}
+
 // ── Screenshot event payload ──────────────────────────────────────────────────
 
 #[derive(Clone, Serialize)]
@@ -608,16 +727,35 @@ pub fn run_screenshot_worker(
         g.screenshot_config.clone()
     };
 
-    // Load HNSW
+    // Load HNSW indexes
     let mut hnsw = load_or_rebuild_hnsw(&skill_dir, &store);
+    let mut ocr_hnsw = load_or_rebuild_ocr_hnsw(&skill_dir, &store);
 
     // Load fastembed model if configured
     let mut fe_encoder = load_fastembed_image(&config, &skill_dir);
+
+    // Load OCR engine (downloads models on first use)
+    let ocr_engine = load_ocr_engine(&skill_dir);
+    if ocr_engine.is_some() {
+        eprintln!("[screenshot] OCR engine loaded");
+    } else {
+        eprintln!("[screenshot] OCR engine not available — text extraction disabled");
+    }
+
+    // Load text embedder for OCR text (reuse fastembed cache)
+    let mut text_embedder: Option<fastembed::TextEmbedding> = {
+        let cache = skill_dir.join("fastembed_cache");
+        fastembed::TextEmbedding::try_new(
+            fastembed::InitOptions::new(fastembed::EmbeddingModel::BGESmallENV15)
+                .with_cache_dir(cache)
+        ).ok()
+    };
 
     let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
     let _ = std::fs::create_dir_all(&screenshots_dir);
 
     let mut inserts_since_save: usize = 0;
+    let mut ocr_inserts_since_save: usize = 0;
     let mut last_config = config;
 
     loop {
@@ -656,6 +794,13 @@ pub fn run_screenshot_worker(
         let captured = match capture_active_window() {
             Some(c) => c,
             None => continue,
+        };
+
+        // ── OCR on full-resolution image (before downsizing) ──
+        let ocr_text = if let Some(ref engine) = ocr_engine {
+            run_ocr(engine, &captured.raw_bytes).unwrap_or_default()
+        } else {
+            String::new()
         };
 
         // ── Resize + pad ──
@@ -751,6 +896,31 @@ pub fn run_screenshot_worker(
             None
         };
 
+        // ── OCR text embedding + HNSW ──
+        let (ocr_embedding, ocr_embedding_dim, ocr_hnsw_id) = if !ocr_text.is_empty() {
+            if let Some(ref mut te) = text_embedder {
+                match te.embed(vec![&ocr_text], None) {
+                    Ok(mut vecs) if !vecs.is_empty() => {
+                        let emb = vecs.remove(0);
+                        let dim = emb.len();
+                        let id = ocr_hnsw.len() as u64;
+                        ocr_hnsw.insert(emb.clone(), ts_i64);
+                        ocr_inserts_since_save += 1;
+                        if ocr_inserts_since_save >= SCREENSHOT_HNSW_SAVE_EVERY {
+                            save_ocr_hnsw(&ocr_hnsw, &skill_dir);
+                            ocr_inserts_since_save = 0;
+                        }
+                        (Some(emb), dim, Some(id))
+                    }
+                    _ => (None, 0, None),
+                }
+            } else {
+                (None, 0, None)
+            }
+        } else {
+            (None, 0, None)
+        };
+
         // ── SQLite insert ──
         store.insert(&ScreenshotRow {
             timestamp: ts_i64,
@@ -768,6 +938,10 @@ pub fn run_screenshot_worker(
             quality: config.quality,
             app_name,
             window_title,
+            ocr_text,
+            ocr_embedding,
+            ocr_embedding_dim,
+            ocr_hnsw_id,
         });
 
         // ── Notify frontend ──
@@ -805,6 +979,40 @@ pub fn search_by_vector(
             }
         }
     }).collect()
+}
+
+/// Search screenshots by OCR text similarity using the OCR HNSW index.
+/// Embeds the query text with fastembed, then searches the OCR HNSW.
+pub fn search_by_ocr_text_embedding(
+    skill_dir: &Path,
+    store: &ScreenshotStore,
+    query: &str,
+    k: usize,
+) -> Vec<ScreenshotResult> {
+    // Embed the query text
+    let query_emb = embed_ocr_text(query, skill_dir);
+    let query_emb = match query_emb {
+        Some(v) => v,
+        None => return vec![],
+    };
+
+    // Load OCR HNSW
+    let hnsw_path = skill_dir.join(SCREENSHOTS_OCR_HNSW);
+    let hnsw = match LabeledIndex::<Cosine, i64>::load(&hnsw_path, Cosine) {
+        Ok(idx) => idx,
+        Err(_) => return vec![],
+    };
+
+    search_by_vector(&hnsw, store, &query_emb, k)
+}
+
+/// Search screenshots by OCR text substring (SQL LIKE).
+pub fn search_by_ocr_text_like(
+    store: &ScreenshotStore,
+    query: &str,
+    limit: usize,
+) -> Vec<ScreenshotResult> {
+    store.search_by_ocr_text(query, limit)
 }
 
 /// Get screenshots around a given unix timestamp.

@@ -1583,6 +1583,33 @@ pub fn search_screenshots_by_image(
     crate::screenshot::search_by_vector(&hnsw, &store, &query, k)
 }
 
+/// Search screenshots by OCR text — both semantic (embedding similarity)
+/// and substring (SQL LIKE) modes.
+/// `mode`: "semantic" (default) uses text embedding HNSW search,
+///         "substring" uses SQL LIKE matching.
+#[tauri::command]
+pub fn search_screenshots_by_text(
+    query: String,
+    k: Option<usize>,
+    mode: Option<String>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Vec<crate::screenshot_store::ScreenshotResult> {
+    let (skill_dir, store) = {
+        let g = state.lock_or_recover();
+        (g.skill_dir.clone(), g.screenshot_store.clone())
+    };
+    let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+        Some(s) => s,
+        None => return vec![],
+    };
+    let k = k.unwrap_or(20);
+    let mode = mode.unwrap_or_else(|| "semantic".into());
+    match mode.as_str() {
+        "substring" => crate::screenshot::search_by_ocr_text_like(&store, &query, k),
+        _ => crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k),
+    }
+}
+
 /// Find screenshots visually similar to a query embedding vector.
 #[tauri::command]
 pub fn search_screenshots_by_vector(

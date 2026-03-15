@@ -155,6 +155,11 @@ sha2 = { version = "0.10", optional = true }
 # WAV read-back for NeuTTS cache playback — already compiled transitively via neutts.
 hound = { version = "3", optional = true }
 
+# OCR engine — extract text from screenshots before downsizing.
+# Models (~10 MB each) are auto-downloaded from S3 on first use.
+ocrs = "0.12.1"
+rten = "0.24.0"
+
 # Image processing — resize/pad screenshots before saving and embedding.
 # Already compiled transitively via fastembed; listing it here gives
 # screenshot.rs direct access to DynamicImage, GenericImageView, etc.

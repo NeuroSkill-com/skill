@@ -215,6 +215,23 @@ pub const SCREENSHOTS_HNSW: &str = "screenshots.hnsw";
 /// Number of new screenshot embeddings between periodic HNSW saves.
 pub const SCREENSHOT_HNSW_SAVE_EVERY: usize = 10;
 
+/// HNSW index file for text-similarity search over OCR text embeddings.
+pub const SCREENSHOTS_OCR_HNSW: &str = "screenshots_ocr.hnsw";
+
+/// URL for the ocrs text-detection model (~10 MB).
+pub const OCR_DETECTION_MODEL_URL: &str =
+    "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten";
+
+/// URL for the ocrs text-recognition model (~10 MB).
+pub const OCR_RECOGNITION_MODEL_URL: &str =
+    "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten";
+
+/// Filename for the cached OCR detection model.
+pub const OCR_DETECTION_MODEL_FILE: &str = "text-detection.rten";
+
+/// Filename for the cached OCR recognition model.
+pub const OCR_RECOGNITION_MODEL_FILE: &str = "text-recognition.rten";
+
 // ── Calibration ───────────────────────────────────────────────────────────────
 
 /// Default label for the first calibration action.

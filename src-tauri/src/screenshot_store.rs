@@ -48,13 +48,26 @@ CREATE TABLE IF NOT EXISTS screenshots (
 
     -- Active-window context
     app_name        TEXT NOT NULL DEFAULT '',
-    window_title    TEXT NOT NULL DEFAULT ''
+    window_title    TEXT NOT NULL DEFAULT '',
+
+    -- OCR
+    ocr_text        TEXT NOT NULL DEFAULT '',       -- extracted text (full)
+    ocr_embedding   BLOB,                           -- text embedding (f32 LE × dim)
+    ocr_embedding_dim INTEGER NOT NULL DEFAULT 0,
+    ocr_hnsw_id     INTEGER                         -- row in screenshots_ocr.hnsw
 );
 
 CREATE INDEX IF NOT EXISTS idx_ss_ts       ON screenshots (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_ss_unix     ON screenshots (unix_ts DESC);
 CREATE INDEX IF NOT EXISTS idx_ss_model    ON screenshots (model_backend, model_id);
 ";
+
+// ── Migrations ────────────────────────────────────────────────────────────────
+
+const MIGRATE_OCR_TEXT: &str       = "ALTER TABLE screenshots ADD COLUMN ocr_text TEXT NOT NULL DEFAULT ''";
+const MIGRATE_OCR_EMBEDDING: &str  = "ALTER TABLE screenshots ADD COLUMN ocr_embedding BLOB";
+const MIGRATE_OCR_DIM: &str        = "ALTER TABLE screenshots ADD COLUMN ocr_embedding_dim INTEGER NOT NULL DEFAULT 0";
+const MIGRATE_OCR_HNSW: &str       = "ALTER TABLE screenshots ADD COLUMN ocr_hnsw_id INTEGER";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -75,6 +88,10 @@ pub struct ScreenshotRow {
     pub quality:       u8,
     pub app_name:      String,
     pub window_title:  String,
+    pub ocr_text:      String,
+    pub ocr_embedding: Option<Vec<f32>>,
+    pub ocr_embedding_dim: usize,
+    pub ocr_hnsw_id:   Option<u64>,
 }
 
 /// Lightweight result type for search queries.
@@ -140,6 +157,11 @@ impl ScreenshotStore {
             eprintln!("[screenshot_store] DDL error: {e}");
             return None;
         }
+        // Run OCR migrations (silently ignore "duplicate column" errors
+        // on databases that already have these columns).
+        for sql in [MIGRATE_OCR_TEXT, MIGRATE_OCR_EMBEDDING, MIGRATE_OCR_DIM, MIGRATE_OCR_HNSW] {
+            let _ = conn.execute(sql, []);
+        }
         Some(Self { conn: Mutex::new(conn) })
     }
 
@@ -149,13 +171,17 @@ impl ScreenshotStore {
         let emb_blob: Option<Vec<u8>> = row.embedding.as_ref().map(|v| {
             v.iter().flat_map(|f| f.to_le_bytes()).collect()
         });
+        let ocr_blob: Option<Vec<u8>> = row.ocr_embedding.as_ref().map(|v| {
+            v.iter().flat_map(|f| f.to_le_bytes()).collect()
+        });
         conn.execute(
             "INSERT INTO screenshots (
                 timestamp, unix_ts, filename, width, height, file_size,
                 hnsw_id, embedding, embedding_dim,
                 model_backend, model_id, image_size, quality,
-                app_name, window_title
-            ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+                app_name, window_title,
+                ocr_text, ocr_embedding, ocr_embedding_dim, ocr_hnsw_id
+            ) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
             params![
                 row.timestamp,
                 row.unix_ts as i64,
@@ -172,6 +198,10 @@ impl ScreenshotStore {
                 row.quality as i64,
                 row.app_name,
                 row.window_title,
+                row.ocr_text,
+                ocr_blob,
+                row.ocr_embedding_dim as i64,
+                row.ocr_hnsw_id.map(|v| v as i64),
             ],
         ).ok()?;
         Some(conn.last_insert_rowid())
@@ -287,6 +317,76 @@ impl ScreenshotStore {
              ORDER BY unix_ts"
         ).unwrap();
         stmt.query_map(params![lo, hi], |r| {
+            Ok(ScreenshotResult {
+                timestamp:    r.get(0)?,
+                unix_ts:      r.get::<_, i64>(1)? as u64,
+                filename:     r.get(2)?,
+                app_name:     r.get(3)?,
+                window_title: r.get(4)?,
+                similarity:   0.0,
+            })
+        }).unwrap().filter_map(|r| r.ok()).collect()
+    }
+
+    /// Load all OCR text embeddings from the database (for HNSW rebuild).
+    pub fn all_ocr_embeddings(&self) -> Vec<(i64, Vec<f32>)> {
+        let conn = self.conn.lock_or_recover();
+        let mut stmt = conn.prepare(
+            "SELECT timestamp, ocr_embedding, ocr_embedding_dim FROM screenshots
+             WHERE ocr_embedding IS NOT NULL
+             ORDER BY id"
+        ).unwrap();
+        stmt.query_map([], |r| {
+            let ts: i64 = r.get(0)?;
+            let blob: Vec<u8> = r.get(1)?;
+            let dim: i64 = r.get(2)?;
+            let floats: Vec<f32> = blob.chunks_exact(4)
+                .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .collect();
+            debug_assert_eq!(floats.len(), dim as usize);
+            Ok((ts, floats))
+        }).unwrap().filter_map(|r| r.ok()).collect()
+    }
+
+    /// Update OCR text and embedding for a specific row.
+    pub fn update_ocr(
+        &self,
+        id: i64,
+        ocr_text: &str,
+        ocr_embedding: Option<&[f32]>,
+        ocr_hnsw_id: Option<u64>,
+    ) {
+        let conn = self.conn.lock_or_recover();
+        let blob: Option<Vec<u8>> = ocr_embedding.map(|emb| {
+            emb.iter().flat_map(|f| f.to_le_bytes()).collect()
+        });
+        let dim = ocr_embedding.map_or(0i64, |e| e.len() as i64);
+        let _ = conn.execute(
+            "UPDATE screenshots SET
+                ocr_text = ?1, ocr_embedding = ?2, ocr_embedding_dim = ?3, ocr_hnsw_id = ?4
+             WHERE id = ?5",
+            params![
+                ocr_text,
+                blob,
+                dim,
+                ocr_hnsw_id.map(|v| v as i64),
+                id,
+            ],
+        );
+    }
+
+    /// Search screenshots by OCR text (LIKE query).
+    pub fn search_by_ocr_text(&self, query: &str, limit: usize) -> Vec<ScreenshotResult> {
+        let conn = self.conn.lock_or_recover();
+        let pattern = format!("%{query}%");
+        let mut stmt = conn.prepare(
+            "SELECT timestamp, unix_ts, filename, app_name, window_title
+             FROM screenshots
+             WHERE ocr_text LIKE ?1
+             ORDER BY unix_ts DESC
+             LIMIT ?2"
+        ).unwrap();
+        stmt.query_map(params![pattern, limit as i64], |r| {
             Ok(ScreenshotResult {
                 timestamp:    r.get(0)?,
                 unix_ts:      r.get::<_, i64>(1)? as u64,
