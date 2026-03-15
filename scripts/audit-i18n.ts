@@ -77,6 +77,73 @@ const EXEMPT_KEY_PREFIXES = [
   "helpRef.title",
   "helpRef.metrics",
   "helpRef.doi",
+  "helpApi.cmd",                // API command names are code identifiers
+  "onboarding.models.",         // model product names (Qwen3.5, NeuTTS, Kitten TTS)
+  "ttsTab.backend",             // TTS engine names (KittenTTS, NeuTTS)
+  "ttsTab.voice",               // voice names (Juliette, Jasper)
+  "ttsTab.kittenModel",         // model spec string
+  "calibration.preset.",        // preset names used as identifiers
+  "focusTimer.preset.",         // preset names
+  "sd.delta", "sd.theta", "sd.alpha", "sd.beta", "sd.gamma", // Greek letter + band name
+  "sd.hjorthMob", "sd.permEnt", "sd.higuchiFd",               // scientific metric abbreviations
+  "sd.stress",                  // loanword used across languages
+  "sd.meditation",              // loanword used across languages
+  "sd.chartFaa", "sd.chartHjorth", "sd.chartHrv",             // chart label + acronym
+  "compare.rmssd", "compare.sdnn",                             // HRV metric acronyms
+  "perm.bluetooth", "perm.whyBluetooth",                       // technology brand name
+  "settings.logBluetooth", "settings.logWebsocket",            // technology names
+  "settings.openbciPreset",     // electrode placement names (Frontal, Occipital)
+  "settings.gpuLatency",        // technical spec string
+  "helpPrivacy.ble",            // technology full name
+  "helpSettings.openbciGanglion", // hardware product name
+  "apiStatus.",                 // generic English labels used in technical context
+  "llm.size",                   // "{gb} GB" template
+  "llm.tools.parallel", "chat.tools.parallel", // mode label
+  "chat.think.",                // thinking mode labels (Minimal/Normal)
+  "dnd.focusLookbackValue",     // "{secs}s" / "{min}m" template
+  "settings.currentVersion",    // "{app} v{version}" template
+  "whatsNew.version",           // "Version {version}" template
+  "cmdK.section",               // command palette section labels
+  "onboarding.step.bluetooth",  // technology name in step label
+  "compare.meditation", "compare.heatmap", // loanwords
+  "hooks.scenario.emotional",   // loanword
+  "dashboard.signal", "dashboard.meditation", // loanwords
+  "appearance.themeSystem",     // "System" is universal
+  "model.encoder",              // technical term
+  "calibration.iteration",      // Iteration used in German too
+  "settings.openbci",           // brand name
+  "downloads.windowTitle",      // "Downloads" is universal
+  "llm.mmproj",                 // "Multimodal" is universal
+  "ttsTab.requirementsDesc",    // shell commands — language-neutral
+  "helpSettings.openbciWifi",   // hardware product name
+  "dashboard.relaxation", "dashboard.engagement", "dashboard.migraine", // cognates
+  "dashboard.hjorthActivity", "dashboard.hjorthComplexity",   // scientific labels
+  "chartScheme.mono",           // "Monochrome" cognate
+  "settings.shortcutCalibration", "settings.calibration",     // "Calibration" cognate
+  "calibration.title",          // "Calibration" cognate
+  "embeddings.dimLegend",       // "Dimensions" cognate
+  "settings.action1", "settings.action2",                     // "Action" cognate
+  "sd.hjorthAct",               // scientific abbreviation
+  "sd.chartScores", "sd.chartSpectral",                       // chart label cognates
+  "umap.sessionA", "umap.sessionB",                           // "Session" cognate
+  "search.textViaModel",        // "via {model}" technical
+  "history.sessions", "history.session", "history.totalSessions", // "session(s)" cognate
+  "helpSettings.calibration",   // "Calibration" cognate
+  "compare.sessionA", "compare.sessionB", "compare.scores",  // cognates
+  "compare.sessions", "compare.umapPoints",                   // cognates
+  "settingsTabs.embeddings",    // technical term
+  "settingsTabs.calibration",   // cognate
+  "hooks.keywordSuggestions",   // "Suggestions" cognate
+  "hooks.distance", "hooks.logDistance",                       // "Distance" cognate/technical
+  "shortcuts.openCalibration",  // "Calibration" cognate
+  "onboarding.step.calibration",// "Calibration" cognate
+  "focusTimer.sessions",        // "sessions" cognate
+  "focusTimer.log.cycles", "focusTimer.log.cyclesPlural",     // "cycle(s)" cognate
+  "perm.notifications", "perm.matrixNotifications", "perm.whyNotifications", // "Notifications" cognate
+  "chat.tools.argsLabel",       // "Arguments" technical
+  "dnd.exitDurationValue",      // "{min} min" template
+  "dnd.buildingScore",          // template with placeholders
+  "calibration.iteration",      // "Iteration" cognate
 ];
 
 /** Exact keys that are always the same across locales. */
