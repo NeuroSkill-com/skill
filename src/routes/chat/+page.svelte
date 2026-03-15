@@ -1994,7 +1994,8 @@
                   {#each msg.toolUses as tu, tuIdx}
                     {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐", bash: "💻", read_file: "📄", write_file: "✏️", edit_file: "🔧", search_output: "🔎" }}
                     {@const icon = icons[tu.tool] ?? "🔧"}
-                    {@const hasDetails = !!(tu.args || tu.result || tu.detail)}
+                    {@const bashCmd = tu.tool === "bash" ? (tu.args?.command || tu.result?.command || "") : ""}
+                    {@const hasDetails = !!(tu.args || tu.result || tu.detail || bashCmd)}
                     {@const dangerKey = detectToolDanger(tu)}
                     {@const isDangerous = !!dangerKey}
                     {@const borderColor =
@@ -2056,10 +2057,10 @@
                           {/if}
 
                           <!-- Brief summary of args in header -->
-                          {#if tu.args}
+                          {#if tu.args || bashCmd}
                             <span class="text-[0.6rem] text-muted-foreground/60 truncate ml-1 flex-1 min-w-0 font-mono">
-                              {#if tu.tool === "bash" && tu.args.command}
-                                {tu.args.command.length > 60 ? tu.args.command.slice(0, 60) + "…" : tu.args.command}
+                              {#if tu.tool === "bash" && bashCmd}
+                                {bashCmd.length > 60 ? bashCmd.slice(0, 60) + "…" : bashCmd}
                               {:else if (tu.tool === "read_file" || tu.tool === "write_file" || tu.tool === "edit_file") && tu.args.path}
                                 {tu.args.path}
                               {:else if tu.tool === "web_search" && tu.args.query}
@@ -2143,14 +2144,14 @@
                         <div class="border-t border-current/10 px-3 py-2 flex flex-col gap-2
                                     text-[0.63rem] text-muted-foreground">
                           <!-- Bash: show command prominently -->
-                          {#if tu.tool === "bash" && tu.args?.command}
+                          {#if tu.tool === "bash" && bashCmd}
                             <div class="flex flex-col gap-0.5">
                               <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
                                 {t("chat.tools.commandLabel")}
                               </span>
                               <pre class="font-mono text-[0.65rem] leading-relaxed whitespace-pre-wrap break-all
                                           bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2 max-h-48 overflow-y-auto
-                                          text-foreground select-text">{tu.args.command}</pre>
+                                          text-foreground select-text">{bashCmd}</pre>
                             </div>
                           <!-- File tools: show path prominently -->
                           {:else if (tu.tool === "read_file" || tu.tool === "write_file" || tu.tool === "edit_file") && tu.args?.path}

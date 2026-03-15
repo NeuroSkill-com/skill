@@ -1314,6 +1314,7 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
                                 let mut result = json!({
                                     "ok": exit_code == 0 && !timed_out,
                                     "tool": "bash",
+                                    "command": command,
                                     "exit_code": exit_code,
                                     "output": summary,
                                     "output_file": output_file.to_string_lossy(),
