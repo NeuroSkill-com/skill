@@ -533,11 +533,13 @@ node cli.ts calibrate --json | jq -e '.ok' > /dev/null \
 
 | Hidden field | Type | Contents |
 |---|---|---|
-| events array | array | Full array of every raw broadcast event received. The summary only prints `event_type × count`; `--full` appends every packet. |
+| events array | array | Full array of every raw broadcast event received. The summary only prints `event_type × count` (plus a dedicated 🪝 section for hook triggers); `--full` appends every packet. |
+| hook events | objects | Full `{ event: "hook", payload: { hook, scenario, distance, label_id, label_text, triggered_at_utc, command, text, context } }` for each Proactive Hook trigger — the summary shows hook name, distance, and matched label; `--json` gives the complete payload for scripting. |
 
 ```bash
 node cli.ts listen --seconds 10 --json | jq '[.[] | select(.event == "scores")]'
 node cli.ts listen --seconds 5  --json | jq '.[0]'   # first event in full
+node cli.ts listen --seconds 60 --json | jq '[.[] | select(.event == "hook") | .payload]'
 ```
 
 ---
@@ -1071,6 +1073,138 @@ curl -s -X POST http://127.0.0.1:8375/ \
   -H "Content-Type: application/json" \
   -d '{"command":"hooks_log","limit":20,"offset":0}'
 ```
+
+#### How Proactive Hooks Work (Broadcast → `listen`)
+
+Proactive Hooks are a **real-time pattern matching system** that runs inside the
+EEG embedding pipeline.  Every 5 seconds, when a new EEG embedding epoch is
+computed, the server checks all enabled hooks against the live brain state:
+
+```
+EEG stream → 5 s epoch → embedding vector → cosine distance to hook references
+                                                       ↓
+                                              distance ≤ threshold?
+                                                       ↓
+                                              scenario gate passes?
+                                                       ↓
+                                       broadcast { event: "hook", payload: {...} }
+                                              + audit log in hooks.sqlite
+                                              + OS toast notification
+```
+
+**Step by step:**
+
+1. **Labels as reference patterns** — When you create labels (`node cli.ts label "deep focus"`),
+   the server embeds both the text and the surrounding EEG window.  Each hook's
+   `keywords` are matched against label texts to build a set of reference EEG
+   embeddings (up to `recent_limit` most recent matches).
+
+2. **Live comparison** — Every new 5-second EEG epoch is compared (cosine distance)
+   against every enabled hook's reference embeddings.  If the closest match is
+   within the hook's `distance_threshold`, the hook fires.
+
+3. **Scenario gating** — Before firing, the hook checks the current epoch's metrics
+   against the scenario filter:
+   - `any` — always passes
+   - `cognitive` — requires elevated theta/beta ratio or cognitive load ≥ 55
+   - `emotional` — requires stress index ≥ 55, mood ≤ 45, or relaxation ≤ 35
+   - `physical` — requires drowsiness ≥ 55, headache/migraine index ≥ 45, or extreme HR
+
+4. **Cooldown** — A hook cannot fire more than once every 10 seconds (prevents
+   rapid-fire spam when the brain state is sustained).
+
+5. **Broadcast** — When a hook fires, the server pushes a `{ "event": "hook" }` message
+   over WebSocket to **all connected clients**.  This is the same broadcast mechanism
+   used for EEG, scores, and label events — any WebSocket listener receives it.
+
+6. **Audit log** — Every trigger is persisted to `hooks.sqlite` for later review
+   via `hooks log`.
+
+**Why this matters for the CLI:**
+
+Because hook triggers are broadcast events, `listen` captures them automatically.
+This lets you build automation pipelines that react to your brain state in real time:
+
+```bash
+# ── React to hook triggers in a shell script ──────────────────────────────────
+# Listen for 5 minutes and act on any hook triggers:
+node cli.ts listen --seconds 300 --json | jq -c '.[] | select(.event == "hook") | .payload' | while read -r payload; do
+  HOOK=$(echo "$payload" | jq -r '.hook')
+  DIST=$(echo "$payload" | jq -r '.distance')
+  LABEL=$(echo "$payload" | jq -r '.label_text')
+  echo "Hook triggered: $HOOK (dist=$DIST, label=$LABEL)"
+
+  # Run custom actions based on hook name:
+  case "$HOOK" in
+    "Deep Work Guard")
+      node cli.ts notify "Deep Focus Detected" "Distance: $DIST to '$LABEL'"
+      ;;
+    "Stress Alert")
+      osascript -e 'display notification "Take a break" with title "Stress Detected"'
+      ;;
+  esac
+done
+
+# ── Python real-time hook listener ────────────────────────────────────────────
+python3 - <<'EOF'
+import asyncio, json
+import websockets
+
+async def listen_for_hooks(port: int):
+    async with websockets.connect(f"ws://127.0.0.1:{port}") as ws:
+        print("Listening for hook triggers…")
+        async for raw in ws:
+            msg = json.loads(raw)
+            if msg.get("event") == "hook":
+                p = msg["payload"]
+                print(f"🪝 {p['hook']} fired! distance={p['distance']:.4f} label=\"{p['label_text']}\"")
+                # Do something: send Slack message, log to CSV, trigger HomeKit, etc.
+
+asyncio.run(listen_for_hooks(8375))
+EOF
+
+# ── End-to-end workflow: create labels, add hook, listen for triggers ─────────
+# 1. Record some EEG while in a specific state and label it:
+node cli.ts label "deep focus coding"
+node cli.ts label "deep concentration"
+
+# 2. Create a hook that fires when your brain returns to that state:
+node cli.ts hooks add "Focus Mode" \
+  --keywords "focus,concentration,deep" \
+  --scenario cognitive \
+  --threshold 0.15
+
+# 3. Verify the threshold makes sense:
+node cli.ts hooks suggest "focus,concentration,deep"
+
+# 4. Listen and watch for triggers:
+node cli.ts listen --seconds 300
+
+# 5. Check the audit log after the session:
+node cli.ts hooks log --limit 10
+```
+
+**Hook trigger event shape (WebSocket):**
+```jsonc
+{
+  "event": "hook",
+  "payload": {
+    "hook":             "Deep Work Guard",      // hook rule name
+    "scenario":         "cognitive",            // scenario filter
+    "context":          "labels",               // match source
+    "distance":         0.0892,                 // cosine distance to closest reference
+    "label_id":         7,                      // which label's EEG pattern matched
+    "label_text":       "focused reading session",
+    "triggered_at_utc": 1740412830,             // unix seconds
+    "command":          "notify",               // configured action
+    "text":             "You're in deep focus!" // configured payload
+  }
+}
+```
+
+> **Note:** Hook broadcast events are only available over WebSocket.  HTTP transport
+> (`--http`) has no push streaming, so you cannot receive hook triggers via HTTP.
+> Use `listen` (which requires WebSocket) or connect directly via `ws://`.
 
 ---
 
@@ -1706,7 +1840,8 @@ completed in 8432ms
 ### `listen`
 
 Passively collect real-time broadcast events from the server for a fixed duration.
-Events include raw EEG packets, PPG, IMU, scores, and label-created notifications.
+Events include raw EEG packets, PPG, IMU, scores, label-created notifications,
+and **Proactive Hook triggers**.
 
 > Requires WebSocket (`--http` mode has no push streaming).
 
@@ -1716,18 +1851,32 @@ node cli.ts listen --seconds 30
 node cli.ts listen --seconds 10 --json
 node cli.ts listen --seconds 5 --json | jq '[.[] | select(.event == "scores")]'
 node cli.ts listen --seconds 5 --json | jq 'map(select(.event == "eeg")) | length'
+
+# ── Capture hook triggers ────────────────────────────────────────────────────
+node cli.ts listen --seconds 60 --json | jq '[.[] | select(.event == "hook")]'
+node cli.ts listen --seconds 300 --json | jq '[.[] | select(.event == "hook") | .payload]'
 ```
 
 **Example output:**
 ```
-⚡ listen for 5s…
+⚡ listen for 30s…
 
-  eeg ×47
-  ppg ×12
-  scores ×5
-  imu ×25
-  label_created ×0
+  eeg ×282
+  ppg ×72
+  scores ×30
+  imu ×150
+  hook ×1
+
+  🪝 Hook Triggers
+  Deep Work Guard  [cognitive]  dist: 0.0892
+    matched label: "focused reading session"  id: 7
+    command: notify
+    text: You're in deep focus — stay in the zone!
 ```
+
+When a hook fires during the listen window, the CLI prints a dedicated
+**🪝 Hook Triggers** section showing the hook name, scenario, cosine distance
+to the matched label, and the label that triggered it.
 
 **JSON event shapes:**
 ```jsonc
@@ -1747,6 +1896,22 @@ node cli.ts listen --seconds 5 --json | jq 'map(select(.event == "eeg")) | lengt
 
 // Label created (by dashboard or CLI):
 { "event": "label_created", "label_id": 43, "text": "distracted", "created_at": 1740412830 }
+
+// Proactive Hook trigger (fired when live EEG matches a labeled pattern):
+{
+  "event": "hook",
+  "payload": {
+    "hook": "Deep Work Guard",           // hook rule name
+    "scenario": "cognitive",             // scenario: any | cognitive | emotional | physical
+    "context": "labels",                 // what matched (always "labels" currently)
+    "distance": 0.0892,                  // cosine distance to the matched label's EEG embedding
+    "label_id": 7,                       // label that triggered the match
+    "label_text": "focused reading session",
+    "triggered_at_utc": 1740412830,      // unix seconds when the hook fired
+    "command": "notify",                 // configured hook command
+    "text": "You're in deep focus — stay in the zone!"  // configured hook text
+  }
+}
 ```
 
 ---

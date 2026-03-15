@@ -6,7 +6,17 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Server
+
+- **Enriched hook trigger broadcast**: the `hook` WebSocket broadcast event now includes full trigger context — `scenario`, `distance` (cosine distance to matched reference), `label_id`, `label_text`, and `triggered_at_utc` — in addition to the existing `hook`, `command`, `text`, and `context` fields. Previously these details were only available in the audit log; now any WebSocket listener receives the complete trigger context in real time.
+
+### CLI
+
+- **Hook trigger display in `listen`**: the `listen` command now renders a dedicated 🪝 Hook Triggers section when hook events are received during the listen window. Shows hook name, scenario, cosine distance, matched label text/id, and configured command/text. Makes it easy to observe and debug Proactive Hook behavior from the terminal.
+
 ### Documentation
+
+- **How Proactive Hooks Work**: added comprehensive section to SKILL.md explaining the end-to-end hook pipeline: label creation → reference EEG embeddings → live cosine comparison → scenario gating (any/cognitive/emotional/physical) → 10s cooldown → WebSocket broadcast → audit log → OS toast. Includes the hook trigger event JSON shape, automation recipes (shell script pipeline, Python async listener, end-to-end workflow), and notes on WebSocket-only availability.
 
 - **SKILL.md comprehensive coverage**: updated SKILL.md to document all cli.ts functionality. Added missing commands: `say` (TTS with `--voice`), `calibrations` (list/get profiles), `dnd` (status/on/off automation control). Expanded `hooks` to cover all CRUD subcommands (list, add, remove, enable, disable, update) with mutation flags (`--keywords`, `--scenario`, `--command`, `--hook-text`, `--threshold`, `--recent`). Added all new LLM subcommands (`add`, `select`, `mmproj`, `autoload-mmproj`, `pause`, `resume`, `downloads`, `refresh`, `fit`). Documented missing global options: `--poll <n>` (status), `--context`/`--at` (label), `--no-color`, `--version`. Added WebSocket command table entries, HTTP examples, `--full` reveals sections for say/calibrations/dnd, and updated Global Options table and Table of Contents.
 
