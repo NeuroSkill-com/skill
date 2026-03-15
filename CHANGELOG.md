@@ -1,6 +1,8 @@
 # Changelog
 
 All notable changes to NeuroSkill™ are documented here.
+Pending changes live as fragments in [`changes/unreleased/`](changes/unreleased/).
+Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ---
 
@@ -942,4 +944,3 @@ All notable changes to NeuroSkill™ are documented here.
 - Better updater configuration
 
 ---
-

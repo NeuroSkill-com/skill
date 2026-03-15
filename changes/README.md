@@ -37,14 +37,16 @@ Happens automatically during `npm run bump`:
 
 1. Reads all `.md` files from `changes/unreleased/`
 2. Groups entries by category in canonical order
-3. Prepends a new `## [x.y.z] — date` section to `CHANGELOG.md`
-4. Moves fragments to `changes/releases/<version>/`
+3. Writes `changes/releases/<version>.md`
+4. Deletes consumed fragment files
+5. Rebuilds `CHANGELOG.md` from all release files (newest first)
 
 Can also be run standalone:
 
 ```bash
-npm run compile:changelog -- 0.0.38            # uses today's date
+npm run compile:changelog -- 0.0.38            # compile + rebuild
 node scripts/compile-changelog.js 0.0.38 2026-03-15  # explicit date
+node scripts/compile-changelog.js --rebuild    # rebuild from archives only
 ```
 
 ## Directory structure
@@ -55,7 +57,9 @@ changes/
 ├── unreleased/            ← pending fragments (one per change)
 │   ├── feat-new-thing.md
 │   └── fix-bug.md
-└── releases/              ← archived fragments by version
-    ├── 0.0.37/
-    └── 0.0.38/
+└── releases/              ← one file per version
+    ├── 0.0.37.md
+    └── 0.0.38.md
 ```
+
+`CHANGELOG.md` at the project root is **generated** — it is rebuilt from `changes/releases/*.md`. Do not edit it directly.

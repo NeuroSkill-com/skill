@@ -14,7 +14,7 @@
 
 - [x] Move `CHANGELOG.md` from `docs/` to project root — merged the root-level 2026-03-15 entries (dedup codebase, rename apple-ocr → skill-vision, extract activity_store/label_index/autostart/session_csv) into the comprehensive `docs/CHANGELOG.md`, then moved the combined file to root; updated `README.md` link
 
-- [x] Fragment-based changelog system — `changes/unreleased/` holds one `.md` file per change; `npm run bump` compiles fragments into `CHANGELOG.md` and archives to `changes/releases/<version>/`; updated AGENTS.md contribution rules, added `scripts/compile-changelog.js`, `npm run compile:changelog`
+- [x] Fragment-based changelog system — `changes/unreleased/` holds one `.md` file per change; `npm run bump` compiles fragments into `changes/releases/<version>.md`, deletes consumed fragments, and rebuilds `CHANGELOG.md`; migrated all 20 historical releases to flat files; updated AGENTS.md, added `scripts/compile-changelog.js`, `npm run compile:changelog`
 
 - [x] Extract `skill-devices` crate — moved DND focus-mode decision engine (`dnd_tick`, `DndConfig`, `DndState`, `DndDecision`, `dnd_apply_os_result`), composite EEG score computation (`compute_meditation`, `compute_cognitive_load`, `compute_drowsiness`, `compute_engagement_raw`, `focus_score`), battery EMA smoothing (`BatteryEma`, `BatteryAlert`), and SNR constants from `muse_session.rs` (774 lines) into `crates/skill-devices/`; zero Tauri dependencies — depends on `skill-eeg`, `serde`; includes 9 unit tests covering all composite scores, battery alerts, and DND activation/deactivation logic; `muse_session.rs` delegates composite score calculations via `skill_devices::compute_*`; all existing import paths unchanged
 
