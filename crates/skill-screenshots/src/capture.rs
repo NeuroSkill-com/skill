@@ -1448,7 +1448,7 @@ pub fn rebuild_embeddings(
     }
 
     // Rebuild HNSW
-    rebuild_hnsw_from_sqlite(store, skill_dir);
+    load_or_rebuild_hnsw_generic(skill_dir, SCREENSHOTS_HNSW, "vision", || store.all_embeddings());
 
     ReembedResult {
         embedded,

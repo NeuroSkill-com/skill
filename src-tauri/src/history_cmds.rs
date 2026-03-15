@@ -268,56 +268,72 @@ fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]
 /// This filters out dirs that hold only log files (or are completely empty),
 /// so the frontend never has to handle an "empty day" as the default view.
 #[tauri::command]
-pub(crate) fn list_session_days(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<String> {
+pub(crate) async fn list_session_days(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<Vec<String>, String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
-    let mut days: Vec<String> = std::fs::read_dir(&skill_dir)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|e| {
-            let name = e.file_name();
-            let s = name.to_string_lossy();
-            if !(s.len() == 8 && s.bytes().all(|b| b.is_ascii_digit()) && e.path().is_dir()) {
-                return None;
-            }
-            // Check for at least one valid session file before including this day.
-            let has_sessions = std::fs::read_dir(e.path())
-                .into_iter()
-                .flatten()
-                .flatten()
-                .any(|f| {
-                    let fname = f.file_name();
-                    let fname = fname.to_string_lossy();
-                    if fname.starts_with("muse_") && fname.ends_with(".json") {
-                        return true; // JSON sidecar
-                    }
-                    if fname.starts_with("muse_") && fname.ends_with(".csv") {
-                        // Skip derived companion files — _metrics.csv and _ppg.csv are not sessions.
-                        if fname.ends_with("_metrics.csv") || fname.ends_with("_ppg.csv") {
-                            return false;
+    tokio::task::spawn_blocking(move || {
+        let mut days: Vec<String> = std::fs::read_dir(&skill_dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                let name = e.file_name();
+                let s = name.to_string_lossy();
+                if !(s.len() == 8 && s.bytes().all(|b| b.is_ascii_digit()) && e.path().is_dir()) {
+                    return None;
+                }
+                // Check for at least one valid session file before including this day.
+                let has_sessions = std::fs::read_dir(e.path())
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .any(|f| {
+                        let fname = f.file_name();
+                        let fname = fname.to_string_lossy();
+                        if fname.starts_with("muse_") && fname.ends_with(".json") {
+                            return true; // JSON sidecar
                         }
-                        // Orphaned CSV — only counts if there is no sidecar
-                        return !f.path().with_extension("json").exists();
-                    }
-                    false
-                });
-            if has_sessions { Some(s.to_string()) } else { None }
-        })
-        .collect();
-    days.sort_by(|a, b| b.cmp(a)); // newest first
-    days
+                        if fname.starts_with("muse_") && fname.ends_with(".csv") {
+                            // Skip derived companion files — _metrics.csv and _ppg.csv are not sessions.
+                            if fname.ends_with("_metrics.csv") || fname.ends_with("_ppg.csv") {
+                                return false;
+                            }
+                            // Orphaned CSV — only counts if there is no sidecar
+                            return !f.path().with_extension("json").exists();
+                        }
+                        false
+                    });
+                if has_sessions { Some(s.to_string()) } else { None }
+            })
+            .collect();
+        days.sort_by(|a, b| b.cmp(a)); // newest first
+        days
+    }).await.map_err(|e| e.to_string())
 }
 
 /// Load all sessions belonging to a single recording day (`YYYYMMDD`).
-/// This is the async-friendly counterpart to `list_sessions` — callers
+/// This is the async counterpart to `list_sessions` — callers
 /// iterate over `list_session_days()` and invoke this for each day in turn.
+/// All file I/O runs on a blocking thread so the UI stays responsive.
 #[tauri::command]
-pub(crate) fn list_sessions_for_day(
+pub(crate) async fn list_sessions_for_day(
     day: String,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<SessionEntry> {
+) -> Result<Vec<SessionEntry>, String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
-    let day_dir = skill_dir.join(&day);
+    tokio::task::spawn_blocking(move || {
+        // Open a read-only label store on this thread (Connection is not Send).
+        let label_store = label_store::LabelStore::open(&skill_dir);
+        list_sessions_for_day_impl(&day, &skill_dir, label_store.as_ref())
+    }).await.map_err(|e| e.to_string())
+}
+
+/// Pure implementation — no Tauri state, safe to call from blocking threads.
+fn list_sessions_for_day_impl(
+    day: &str,
+    skill_dir: &std::path::Path,
+    label_store: Option<&label_store::LabelStore>,
+) -> Vec<SessionEntry> {
+    let day_dir = skill_dir.join(day);
     if !day_dir.is_dir() { return vec![]; }
 
     let files: Vec<_> = std::fs::read_dir(&day_dir)
@@ -401,18 +417,13 @@ pub(crate) fn list_sessions_for_day(
     }
 
     // Override start/end/duration with ground-truth timestamps from _metrics.csv.
-    // This fixes orphaned CSVs (where end = unreliable mtime) and sessions whose
-    // sidecar was only written at session-start (app crashed before clean shutdown).
     patch_session_timestamps(&mut raw);
 
     // Hydrate labels
-    {
-        let s = state.lock_or_recover();
-        if let Some(store) = &s.label_store {
-            for (session, start, end) in raw.iter_mut() {
-                if let (Some(s), Some(e)) = (start, end) {
-                    session.labels = store.query_range(*s, *e);
-                }
+    if let Some(store) = label_store {
+        for (session, start, end) in raw.iter_mut() {
+            if let (Some(s), Some(e)) = (start, end) {
+                session.labels = store.query_range(*s, *e);
             }
         }
     }

@@ -190,21 +190,21 @@ mod tests {
 
     #[test]
     fn civil_known_date() {
-        // 2026-03-15 12:00:00 UTC = 1773748800
-        let (y, mo, d, h, _, _) = civil_from_unix(1773748800);
+        // 2026-03-15 12:00:00 UTC = 1773576000
+        let (y, mo, d, h, _, _) = civil_from_unix(1773576000);
         assert_eq!((y, mo, d, h), (2026, 3, 15, 12));
     }
 
     #[test]
     fn unix_to_ts_roundtrip() {
-        let unix = 1773748800u64;
+        let unix = 1773576000u64;
         let ts = unix_to_ts(unix);
         assert_eq!(ts_to_unix(ts), unix);
     }
 
     #[test]
     fn fmt_unix_utc_format() {
-        let s = fmt_unix_utc(1773748800);
+        let s = fmt_unix_utc(1773576000);
         assert_eq!(s, "2026-03-15 12:00");
     }
 

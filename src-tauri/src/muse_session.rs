@@ -320,7 +320,8 @@ pub(crate) async fn handle_event(
                 // ── Enrich snap via shared skill-devices logic ───────────────
                 let temperature_raw = {
                     let sr = app.state::<Mutex<Box<AppState>>>();
-                    sr.lock_or_recover().status.temperature_raw
+                    let val = sr.lock_or_recover().status.temperature_raw;
+                    val
                 };
                 let enrich_ctx = skill_devices::SnapshotContext {
                     ppg:             dsp.accumulator.latest_ppg().cloned(),

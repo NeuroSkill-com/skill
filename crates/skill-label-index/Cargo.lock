@@ -2824,6 +2824,7 @@ dependencies = [
  "serde",
  "serde_json",
  "skill-constants",
+ "skill-data",
 ]
 
 [[package]]

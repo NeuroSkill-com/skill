@@ -718,13 +718,15 @@ pub(crate) struct SleepStages {
 ///
 /// These thresholds are tuned for the Muse 2 / Muse S headband.
 #[tauri::command]
-pub(crate) fn get_sleep_stages(
+pub(crate) async fn get_sleep_stages(
     start_utc: u64,
     end_utc:   u64,
     state:     tauri::State<'_, Mutex<Box<AppState>>>,
-) -> SleepStages {
+) -> Result<SleepStages, String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
-    get_sleep_stages_impl(&skill_dir, start_utc, end_utc)
+    tokio::task::spawn_blocking(move || {
+        get_sleep_stages_impl(&skill_dir, start_utc, end_utc)
+    }).await.map_err(|e| e.to_string())
 }
 
 pub(crate) fn get_sleep_stages_impl(
@@ -1351,52 +1353,64 @@ pub(crate) fn poll_job(
 }
 
 /// Tauri IPC wrapper for [`get_session_metrics_impl`].
+/// Runs on a blocking thread so the UI stays responsive.
 #[tauri::command]
-pub(crate) fn get_session_metrics(
+pub(crate) async fn get_session_metrics(
     start_utc: u64,
     end_utc:   u64,
     state:     tauri::State<'_, Mutex<Box<AppState>>>,
-) -> SessionMetrics {
+) -> Result<SessionMetrics, String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
-    get_session_metrics_impl(&skill_dir, start_utc, end_utc)
+    tokio::task::spawn_blocking(move || {
+        get_session_metrics_impl(&skill_dir, start_utc, end_utc)
+    }).await.map_err(|e| e.to_string())
 }
 
 /// Return per-epoch time-series data for charts.
+/// Runs on a blocking thread so the UI stays responsive.
 #[tauri::command]
-pub(crate) fn get_session_timeseries(
+pub(crate) async fn get_session_timeseries(
     start_utc: u64,
     end_utc:   u64,
     state:     tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<EpochRow> {
+) -> Result<Vec<EpochRow>, String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
-    get_session_timeseries_impl(&skill_dir, start_utc, end_utc)
+    tokio::task::spawn_blocking(move || {
+        get_session_timeseries_impl(&skill_dir, start_utc, end_utc)
+    }).await.map_err(|e| e.to_string())
 }
 
 /// Load metrics directly from a session's `_metrics.csv` file.
 /// This is the primary path for history view — works without SQLite epochs.
+/// Runs on a blocking thread so the UI stays responsive.
 #[tauri::command]
-pub(crate) fn get_csv_metrics(csv_path: String) -> Option<CsvMetricsResult> {
-    load_csv_metrics_cached(std::path::Path::new(&csv_path))
+pub(crate) async fn get_csv_metrics(csv_path: String) -> Result<Option<CsvMetricsResult>, String> {
+    tokio::task::spawn_blocking(move || {
+        load_csv_metrics_cached(std::path::Path::new(&csv_path))
+    }).await.map_err(|e| e.to_string())
 }
 
 /// Batch-load metrics for multiple sessions in a single IPC call.
 /// Returns a map of csv_path → CsvMetricsResult for all sessions that
 /// have data.  Timeseries are downsampled to at most `max_ts_points`
 /// (default 360) to keep the payload small for sparklines and heatmaps.
+/// All file I/O runs on a blocking thread.
 #[tauri::command]
-pub(crate) fn get_day_metrics_batch(
+pub(crate) async fn get_day_metrics_batch(
     csv_paths: Vec<String>,
     max_ts_points: Option<usize>,
-) -> std::collections::HashMap<String, CsvMetricsResult> {
-    let cap = max_ts_points.unwrap_or(360);
-    let mut out = std::collections::HashMap::with_capacity(csv_paths.len());
-    for path in &csv_paths {
-        if let Some(mut result) = load_csv_metrics_cached(std::path::Path::new(path)) {
-            downsample_timeseries(&mut result.timeseries, cap);
-            out.insert(path.clone(), result);
+) -> Result<std::collections::HashMap<String, CsvMetricsResult>, String> {
+    tokio::task::spawn_blocking(move || {
+        let cap = max_ts_points.unwrap_or(360);
+        let mut out = std::collections::HashMap::with_capacity(csv_paths.len());
+        for path in &csv_paths {
+            if let Some(mut result) = load_csv_metrics_cached(std::path::Path::new(path)) {
+                downsample_timeseries(&mut result.timeseries, cap);
+                out.insert(path.clone(), result);
+            }
         }
-    }
-    out
+        out
+    }).await.map_err(|e| e.to_string())
 }
 
 /// Downsample a timeseries to at most `max` points using LTTB-like
