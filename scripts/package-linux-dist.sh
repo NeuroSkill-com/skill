@@ -116,7 +116,7 @@ cp "$ROOT_DIR/src-tauri/icons/128x128.png" "$package_root/icon.png"
 cat > "$package_root/neuroskill.desktop" <<EOF
 [Desktop Entry]
 Type=Application
-Name=NeuroSkill™
+Name=NeuroSkill
 Comment=Neurofeedback and local AI assistant
 Exec=neuroskill
 Icon=icon

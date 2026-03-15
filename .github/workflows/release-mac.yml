@@ -233,7 +233,7 @@ jobs:
       # espeak-ng-data  is gitignored       → populated by build.rs above.
       - name: Create .app bundle
         run: |
-          APP_NAME="NeuroSkill™"
+          APP_NAME="NeuroSkill"
           BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
           APP_BUNDLE="$BUNDLE_DIR/macos/${APP_NAME}.app"
 
@@ -293,8 +293,8 @@ jobs:
           base = {
               "CFBundleIdentifier":         "com.neuroskill.skill",
               "CFBundleExecutable":         "skill",
-              "CFBundleName":               "NeuroSkill\u2122",
-              "CFBundleDisplayName":        "NeuroSkill\u2122",
+              "CFBundleName":               "NeuroSkill",
+              "CFBundleDisplayName":        "NeuroSkill",
               "CFBundleVersion":            version,
               "CFBundleShortVersionString": version,
               "CFBundlePackageType":        "APPL",
@@ -361,7 +361,7 @@ jobs:
           # latest.json is a valid RFC 3986 URI; non-ASCII characters such as ™
           # (U+2122) in the filename cause the Tauri updater to produce a 404
           # because its HTTP client rejects or misroutes an un-encoded URL.
-          # The .app bundle inside the tar keeps its original NeuroSkill™.app name.
+          # The .app bundle inside the tar keeps its original NeuroSkill.app name.
           VERSION="$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
           TAR_PATH="$BUNDLE_DIR/macos/NeuroSkill_${VERSION}_aarch64.app.tar.gz"
           tar -czf "$TAR_PATH" \
@@ -421,8 +421,8 @@ jobs:
       #
       # macOS assets uploaded here:
       #   NeuroSkill_<ver>_aarch64.dmg       — drag-to-install disk image
-      #   NeuroSkill™.app.tar.gz             — Tauri updater bundle
-      #   NeuroSkill™.app.tar.gz.sig         — Ed25519 signature for the updater
+      #   NeuroSkill.app.tar.gz              — Tauri updater bundle
+      #   NeuroSkill.app.tar.gz.sig          — Ed25519 signature for the updater
       - name: Prepare changelog notes for release
         shell: bash
         run: |
@@ -530,8 +530,8 @@ jobs:
               ).strip()
           except Exception:
               notes = ""
-          if not notes:
-              notes = f"NeuroSkill v{version}"
+            if not notes:
+              notes = f"NeuroSkill™ v{version}"
 
           download_url = (
               f"https://github.com/{repo}/releases/download/{tag}/{app_tar_name}"
@@ -585,13 +585,13 @@ jobs:
 
           if [[ "$JOB_STATUS" == "success" ]]; then
             COLOR=3066993
-            TITLE="🚀 Release v${{ steps.version_meta.outputs.version }} — macOS Published"
-            DESC="macOS build published and ready to download."
+            TITLE="🚀 NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} — macOS Published"
+            DESC="NeuroSkill™ macOS build published and ready to download."
             LINK_LINE="**[Download v${{ steps.version_meta.outputs.version }}]($RELEASE_URL)**"
           else
             COLOR=15158332
-            TITLE="💥 Release v${{ steps.version_meta.outputs.version }} — macOS Failed"
-            DESC="The macOS release build failed. Check the run for details."
+            TITLE="💥 NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} — macOS Failed"
+            DESC="The NeuroSkill™ macOS release build failed. Check the run for details."
             LINK_LINE="**[View failed run]($RUN_URL)**"
           fi
 

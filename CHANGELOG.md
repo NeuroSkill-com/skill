@@ -6,7 +6,22 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Build / Tooling
+
+- Renamed Homebrew cask to `neuroskill` and moved definition to `Casks/neuroskill.rb`; install path is now `brew tap NeuroSkill-com/skill && brew install --cask neuroskill`.
+- Updated cask generation (`scripts/generate-homebrew-cask.sh`) to write `Casks/neuroskill.rb`, target `NeuroSkill.app` (without `™`), and preserve user data by removing `~/.skill` from `zap`.
+
+### Naming / Windows
+
+- Set `src-tauri/tauri.conf.json` `productName` to `NeuroSkill` (no trademark symbol) so generated artifact/file naming stays ASCII-safe and consistent.
+- Updated frontend app-name normalization (`src/lib/app-name-store.svelte.ts`) to always render the UI-facing name as `NeuroSkill™`, even when backend/app config returns plain `NeuroSkill`.
+- Hardened Windows packaging/release scripts (`scripts/create-windows-nsis.ps1`, `release-windows.ps1`) to initialize UTF-8 console/output encoding (`UTF8Encoding` + code page 65001) so `™` and other non-ASCII UI text render consistently.
+- Updated NSIS generation so installer/Add-Remove-Programs display labels use `NeuroSkill™` while filesystem/registry key names remain `NeuroSkill`.
+- Updated release workflow `latest.json` fallback notes in `.github/workflows/release-linux.yml`, `.github/workflows/release-mac.yml`, and `.github/workflows/release-windows.yml` to use `NeuroSkill™ v<version>` for user-facing updater notes while keeping file/artifact names ASCII-safe.
+- Updated release workflow Discord notification titles/descriptions in `.github/workflows/release-linux.yml`, `.github/workflows/release-mac.yml`, and `.github/workflows/release-windows.yml` to use the UI-facing product name `NeuroSkill™`.
+
 ## [0.0.37] — 2026-03-14
+
 ### History — Calendar Heatmap View
 
 - **Calendar heatmap** replaces the old single-day paginator as the default history view. Choose between **Year**, **Month** (default), **Week**, and **Day** granularity via a segmented control in the titlebar.

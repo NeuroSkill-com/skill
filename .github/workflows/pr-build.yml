@@ -309,7 +309,7 @@ jobs:
       # ── Assemble .app bundle ──────────────────────────────────────────────
       - name: Create .app bundle
         run: |
-          APP_NAME="NeuroSkill™"
+          APP_NAME="NeuroSkill"
           BUNDLE_DIR="src-tauri/target/aarch64-apple-darwin/release/bundle"
           APP_BUNDLE="$BUNDLE_DIR/macos/${APP_NAME}.app"
 
@@ -339,8 +339,8 @@ jobs:
           base = {
               "CFBundleIdentifier":         "com.neuroskill.skill",
               "CFBundleExecutable":         "skill",
-              "CFBundleName":               "NeuroSkill\u2122",
-              "CFBundleDisplayName":        "NeuroSkill\u2122",
+              "CFBundleName":               "NeuroSkill",
+              "CFBundleDisplayName":        "NeuroSkill",
               "CFBundleVersion":            version,
               "CFBundleShortVersionString": version,
               "CFBundlePackageType":        "APPL",

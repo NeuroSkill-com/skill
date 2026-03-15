@@ -381,7 +381,7 @@ jobs:
               pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
               manifest = {
                   "version":  version,
-                  "notes":    f"NeuroSkill™ v{version}",
+                    "notes":    f"NeuroSkill™ v{version}",
                   "pub_date": pub_date,
                   "platforms": {},
               }
@@ -414,13 +414,13 @@ jobs:
 
           if [[ "$JOB_STATUS" == "success" ]]; then
             COLOR=3066993
-            TITLE="🚀 Release v${{ steps.version_meta.outputs.version }} — Linux Published"
-            DESC="Linux build published and ready to download."
+            TITLE="🚀 NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} — Linux Published"
+            DESC="NeuroSkill™ Linux build published and ready to download."
             LINK_LINE="**[Download v${{ steps.version_meta.outputs.version }}]($RELEASE_URL)**"
           else
             COLOR=15158332
-            TITLE="💥 Release v${{ steps.version_meta.outputs.version }} — Linux Failed"
-            DESC="The Linux release build failed. Check the run for details."
+            TITLE="💥 NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} — Linux Failed"
+            DESC="The NeuroSkill™ Linux release build failed. Check the run for details."
             LINK_LINE="**[View failed run]($RUN_URL)**"
           fi
 

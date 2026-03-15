@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Build, sign, package, and upload a NeuroSkill™ Windows release.
+    Build, sign, package, and upload a NeuroSkill Windows release.
 
 .DESCRIPTION
     Handles the full Windows release pipeline:
@@ -127,6 +127,17 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Ensure consistent UTF-8 rendering for UI/user-facing strings (e.g. ™).
+try {
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [Console]::InputEncoding = $utf8NoBom
+    [Console]::OutputEncoding = $utf8NoBom
+    $OutputEncoding = $utf8NoBom
+    chcp 65001 | Out-Null
+} catch {
+    # best-effort only
+}
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -462,7 +473,7 @@ try {
     $releaseNotes = (& git tag -l --format="%(contents)" "v$VERSION" 2>$null).Trim()
 } catch { }
 if ([string]::IsNullOrEmpty($releaseNotes)) {
-    $releaseNotes = "NeuroSkill(tm) v$VERSION"
+    $releaseNotes = "NeuroSkill™ v$VERSION"
 }
 
 $manifest = [ordered]@{

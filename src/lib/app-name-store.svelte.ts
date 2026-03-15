@@ -15,7 +15,10 @@
 
 import { invoke } from "@tauri-apps/api/core";
 
-let appName = $state("NeuroSkill™");   // sensible fallback while we fetch
+const DEFAULT_APP_BASE_NAME = "NeuroSkill";
+const TRADEMARK_SUFFIX = "™";
+
+let appName = $state(`${DEFAULT_APP_BASE_NAME}${TRADEMARK_SUFFIX}`);   // sensible fallback while we fetch
 
 /** Reactive getter — use inside Svelte `$derived` / templates. */
 export function getAppName(): string {
@@ -27,11 +30,21 @@ function titleCase(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Ensure UI-facing name always renders with a single trailing trademark sign. */
+function toDisplayName(raw: string): string {
+  const normalizedBase = raw
+    .replaceAll(TRADEMARK_SUFFIX, "")
+    .replace(/\(tm\)/gi, "")
+    .trim();
+  const base = normalizedBase || DEFAULT_APP_BASE_NAME;
+  return `${titleCase(base)}${TRADEMARK_SUFFIX}`;
+}
+
 // Fetch from Rust on module init (runs once per window).
 (async () => {
   try {
     const raw = await invoke<string>("get_app_name");
-    if (raw) appName = titleCase(raw);
+    if (raw) appName = toDisplayName(raw);
   } catch {
     // keep fallback
   }

@@ -412,6 +412,26 @@ python3 -c "from huggingface_hub import snapshot_download; snapshot_download('ma
 npm run tauri dev
 ```
 
+### Install (Homebrew, macOS Apple Silicon)
+
+```bash
+brew tap NeuroSkill-com/skill
+brew install --cask neuroskill
+```
+
+Upgrade later:
+
+```bash
+brew upgrade --cask neuroskill
+```
+
+Maintainers: update `Casks/neuroskill.rb` for each release:
+
+```bash
+# Auto-detects version from src-tauri/tauri.conf.json and SHA-256 from GitHub release metadata
+npm run brew:cask:generate
+```
+
 ### Build
 
 ```bash

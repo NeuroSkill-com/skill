@@ -134,7 +134,7 @@ chmod +x "$stage_root/usr/bin/neuroskill"
 cat > "$stage_root/usr/share/applications/neuroskill.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=NeuroSkill™
+Name=NeuroSkill
 Comment=Neurofeedback and local AI assistant
 Exec=neuroskill
 Icon=neuroskill

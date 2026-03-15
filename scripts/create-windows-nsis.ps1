@@ -37,12 +37,24 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Ensure consistent UTF-8 handling for trademark and other non-ASCII UI text.
+try {
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [Console]::InputEncoding = $utf8NoBom
+    [Console]::OutputEncoding = $utf8NoBom
+    $OutputEncoding = $utf8NoBom
+    chcp 65001 | Out-Null
+} catch {
+    # best-effort only; keep script functional in restricted hosts
+}
+
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Split-Path -Parent $ScriptDir
 $TauriDir = Join-Path $Root "src-tauri"
 $Conf = Get-Content (Join-Path $TauriDir "tauri.conf.json") -Raw | ConvertFrom-Json
 
 $ProductName = $Conf.productName
+$ProductDisplayName = if ($ProductName.EndsWith("™")) { $ProductName } else { "$ProductName™" }
 $Version = $Conf.version
 $Identifier = $Conf.identifier
 $BinaryName = "skill.exe"
@@ -342,11 +354,11 @@ $imageDirectives
 
 ; ── Version info ────────────────────────────────────────────────────────
 VIProductVersion "$Version.0"
-VIAddVersionKey "ProductName" "$ProductName"
+VIAddVersionKey "ProductName" "$ProductDisplayName"
 VIAddVersionKey "ProductVersion" "$Version"
 VIAddVersionKey "FileVersion" "$Version"
 VIAddVersionKey "LegalCopyright" "GPL-3.0-only"
-VIAddVersionKey "FileDescription" "$ProductName Installer"
+VIAddVersionKey "FileDescription" "$ProductDisplayName Installer"
 
 ; ── Install section ─────────────────────────────────────────────────────
 Section "Install"
@@ -365,7 +377,7 @@ $($installFiles -join "`n")
   CreateShortCut "`$DESKTOP\$ProductName.lnk" "`$INSTDIR\skill.exe" "" "`$INSTDIR\icon.ico"
 
   ; Registry (Add/Remove Programs)
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductName" "DisplayName" "$ProductName"
+    WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductName" "DisplayName" "$ProductDisplayName"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductName" "DisplayVersion" "$Version"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductName" "UninstallString" "`$INSTDIR\uninstall.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductName" "DisplayIcon" "`$INSTDIR\icon.ico"
@@ -402,7 +414,8 @@ $($uninstallFiles -join "`n")
 SectionEnd
 "@
 
-    Set-Content -Path $NsiScript -Value $nsiContent -Encoding UTF8
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($NsiScript, $nsiContent, $utf8NoBom)
     Write-Host "  [ok] NSIS script written"
 
     # ── Run NSIS ────────────────────────────────────────────────────────────
