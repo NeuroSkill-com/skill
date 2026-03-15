@@ -1287,6 +1287,7 @@
   const TYPING_LABEL_INTERVAL_MS = 5_000;      // 5 s — matches EPOCH_S
   const WORD_BOUNDARY_TIMEOUT_MS = 1_500;      // max wait for word to finish
   let typedCharsInWindow   = $state("");        // accumulates typed chars
+  let deletedCharsInWindow = $state("");        // accumulates deleted chars
   let typingLabelTimer: ReturnType<typeof setInterval> | undefined;
   let windowStartUtc       = 0;                 // UTC second when window opened
   let pendingFlush         = false;             // true = 5 s fired, waiting for word boundary
@@ -1297,9 +1298,51 @@
     return /[\s\p{P}]/u.test(ch);
   }
 
+  /** Extract the text about to be removed by a delete-type inputEvent. */
+  function captureDeletedText(e: InputEvent): string {
+    if (!inputEl) return "";
+    const val   = inputEl.value;
+    const start = inputEl.selectionStart ?? 0;
+    const end   = inputEl.selectionEnd   ?? 0;
+
+    // If there's a selection, the whole selection is deleted.
+    if (start !== end) return val.slice(start, end);
+
+    switch (e.inputType) {
+      case "deleteContentBackward":
+        return start > 0 ? val.slice(start - 1, start) : "";
+      case "deleteContentForward":
+        return start < val.length ? val.slice(start, start + 1) : "";
+      case "deleteWordBackward": {
+        // Walk backwards past whitespace, then past word chars.
+        let i = start;
+        while (i > 0 && /\s/.test(val[i - 1])) i--;
+        while (i > 0 && !/\s/.test(val[i - 1])) i--;
+        return val.slice(i, start);
+      }
+      case "deleteWordForward": {
+        let i = start;
+        while (i < val.length && !/\s/.test(val[i])) i++;
+        while (i < val.length && /\s/.test(val[i])) i++;
+        return val.slice(start, i);
+      }
+      case "deleteByCut":
+        return start !== end ? val.slice(start, end) : "";
+      default:
+        return "";
+    }
+  }
+
   /** Called from the textarea `beforeinput` handler. */
   function onChatBeforeInput(e: InputEvent) {
-    // Only count keyboard-originated insertions (not paste/drop/autocomplete).
+    // ── Deletions — capture what's about to be removed ────────────────────
+    if (e.inputType.startsWith("delete")) {
+      const removed = captureDeletedText(e);
+      if (removed) deletedCharsInWindow += " " + removed;
+      return;
+    }
+
+    // ── Insertions — only count keyboard-originated (not paste/drop) ─────
     if (e.inputType === "insertText" && e.data) {
       typedCharsInWindow += e.data;
       // If we're waiting for a word boundary to flush, check each character.
@@ -1342,22 +1385,50 @@
    * Actually submit the label for the current window.
    * Called either at a word boundary after the 5 s timer, or by the safety
    * timeout if the user pauses mid-word.
+   *
+   * Words that were typed and then deleted within the same window are
+   * wrapped in `<del>…</del>` so downstream consumers can see edits.
    */
   async function commitTypingLabel() {
     pendingFlush = false;
     if (wordBoundaryTimeout) { clearTimeout(wordBoundaryTimeout); wordBoundaryTimeout = undefined; }
 
-    const raw = typedCharsInWindow.trim();
-    typedCharsInWindow = "";
+    const rawTyped   = typedCharsInWindow.trim();
+    const rawDeleted = deletedCharsInWindow.trim();
+    typedCharsInWindow   = "";
+    deletedCharsInWindow = "";
     const labelStartUtc = windowStartUtc;
     windowStartUtc = Math.floor(Date.now() / 1000);   // new window starts now
-    if (!raw) return;
+    if (!rawTyped) return;
+
+    const isAlphaNum = (w: string) =>
+      /[a-zA-Z0-9\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF]/.test(w);
 
     // Extract recognisable words (strip stray punctuation-only tokens).
-    const words = raw.split(/\s+/).filter(w => /[a-zA-Z0-9\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF]/.test(w));
-    if (words.length === 0) return;
+    const typedWords = rawTyped.split(/\s+/).filter(isAlphaNum);
+    if (typedWords.length === 0) return;
 
-    const labelText = words.join(" ");
+    // Build a deletion multiset: count how many times each word was deleted.
+    const deletedCounts = new Map<string, number>();
+    if (rawDeleted) {
+      for (const w of rawDeleted.split(/\s+/).filter(isAlphaNum)) {
+        const lc = w.toLowerCase();
+        deletedCounts.set(lc, (deletedCounts.get(lc) ?? 0) + 1);
+      }
+    }
+
+    // Render each typed word, wrapping in <del> if it was also deleted.
+    const rendered = typedWords.map(w => {
+      const lc   = w.toLowerCase();
+      const dCnt = deletedCounts.get(lc) ?? 0;
+      if (dCnt > 0) {
+        deletedCounts.set(lc, dCnt - 1);
+        return `<del>${w}</del>`;
+      }
+      return w;
+    });
+
+    const labelText = rendered.join(" ");
     const context   = buildSessionContext();
 
     try {
@@ -1398,7 +1469,8 @@
 
   function startTypingLabelTimer() {
     stopTypingLabelTimer();
-    typedCharsInWindow = "";
+    typedCharsInWindow   = "";
+    deletedCharsInWindow = "";
     pendingFlush = false;
     windowStartUtc = Math.floor(Date.now() / 1000);
     typingLabelTimer = setInterval(onTypingWindowTick, TYPING_LABEL_INTERVAL_MS);
