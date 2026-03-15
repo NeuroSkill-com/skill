@@ -777,6 +777,9 @@ const de: Record<string, string> = {
   "helpDash.trayGreenDesc":      "Live-EEG-Daten werden von Ihrem BCI-Gerät gestreamt.",
   "helpDash.trayRed":            "Rot — Bluetooth aus",
   "helpDash.trayRedDesc":        "Bluetooth ist ausgeschaltet. Keine Suche oder Verbindung möglich.",
+  "helpDash.community":          "Community",
+  "helpDash.communityDesc":      "Treten Sie der NeuroSkill-Discord-Community bei, um Fragen zu stellen, Feedback zu geben und sich mit anderen Nutzern und Entwicklern zu vernetzen.",
+  "helpDash.discordLink":        "Discord beitreten",
   "helpDash.faa":                "Frontale Alpha-Asymmetrie (FAA)",
   "helpDash.faaBody":            "Eine mittig verankerte Anzeige der Echtzeit-FAA: ln(AF8 α) − ln(AF7 α). Positive Werte zeigen stärkere rechts-frontale Alpha-Leistung an, was mit Annäherungsmotivation der linken Hemisphäre assoziiert wird. Negative Werte deuten auf Rückzugstendenz hin. Der Wert wird mit einem exponentiellen gleitenden Durchschnitt geglättet und liegt typischerweise zwischen −1 und +1. FAA wird zusammen mit jeder 5-Sekunden-Embedding-Epoche in eeg.sqlite gespeichert.",
 
@@ -2048,6 +2051,7 @@ const de: Record<string, string> = {
   "about.authors":            "Autoren",
   "about.license":            "Lizenz",
   "about.acknowledgements":   "Danksagungen",
+  "about.discord":            "Discord",
 
   // ── Auto-synced from en.ts (2026-03-03) ──
   "dashboard.lookingForGanglion": "Auf der Suche nach einem OpenBCI-Ganglion…",

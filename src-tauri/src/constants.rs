@@ -340,6 +340,9 @@ pub const APP_WEBSITE_LABEL: &str = "neuroskill.com";
 /// Source-code / repository URL.
 pub const APP_REPO_URL: &str = "https://github.com/NeuroSkill-com/skill";
 
+/// Discord community invite URL.
+pub const APP_DISCORD_URL: &str = "https://discord.gg/nA6Xk5MV";
+
 /// SPDX licence identifier for the application.
 pub const APP_LICENSE: &str = "GPL-3.0-only";
 

@@ -2001,6 +2001,7 @@ const he: Record<string, string> = {
   "about.authors":            "מחברים",
   "about.license":            "רישיון",
   "about.acknowledgements":   "תודות",
+  "about.discord":            "Discord",
 
   // ── Interactive search ───────────────────────────────────────────────────
   "search.interactiveQueryLabel":       "חיפוש",
@@ -2426,6 +2427,9 @@ const he: Record<string, string> = {
   "helpDash.trayGreenDesc": "משדר נתוני EEG חיים ממכשיר ה-BCI שלכם.",
   "helpDash.trayRed": "אדום — בלוטות׳ כבוי",
   "helpDash.trayRedDesc": "רדיו הבלוטות׳ כבוי. אין אפשרות לסרוק או להתחבר.",
+  "helpDash.community":          "קהילה",
+  "helpDash.communityDesc":      "הצטרפו לקהילת Discord של NeuroSkill כדי לשאול שאלות, לשתף משוב וליצור קשר עם משתמשים ומפתחים אחרים.",
+  "helpDash.discordLink":        "הצטרפו ל-Discord שלנו",
   "helpSettings.settingsTab": "לשונית הגדרות",
   "helpSettings.settingsTabDesc": "הגדרת העדפות מכשיר, עיבוד אות, פרמטרי הטמעה, כיול, קיצורי דרך ורישום.",
   "helpSettings.pairedDevices": "מכשירים מותאמים",

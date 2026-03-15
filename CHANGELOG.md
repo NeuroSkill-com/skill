@@ -10,6 +10,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **README badges**: added Discord community invite badge, Homebrew cask install badge, and one-click download buttons for macOS (Apple Silicon DMG), Windows (x86_64 EXE), and Linux (x86_64 AppImage) at the top of README.md — all download links point to the latest GitHub release.
 
+### UI
+
+- **Discord link in Help & About**: added Discord community invite link (`https://discord.gg/nA6Xk5MV`) to the About window Links section and to the Help window Dashboard tab as a new Community section with Discord icon. New `APP_DISCORD_URL` constant in Rust backend, `discordUrl` field on `AboutInfo`, and full i18n across all 5 locales (en/de/fr/uk/he).
+
 ### Features
 
 - **Screenshots Settings UI tab**: new `ScreenshotsTab.svelte` in the Settings window with full configuration UI — master enable toggle, session-only toggle, capture interval slider (1–30 s), image size slider (128–512 px) with per-model recommended size hint, WebP quality slider (10–100), embedding backend selector (fastembed local ONNX / mmproj LLM vision projector), fastembed model picker (CLIP ViT-B/32 512d / Nomic Embed Vision v1.5 768d), Apply button. Includes model-changed warning banner with stale count and time estimate, re-embed button with live progress bar and ETA, statistics grid (embedded/unembedded/stale counts), and privacy note callout. Full i18n across all 5 locales (en/de/fr/uk/he). Tab icon uses image/landscape SVG. Positioned between Embeddings and Hooks in the settings sidebar.

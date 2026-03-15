@@ -924,6 +924,9 @@ const en: Record<string, string> = {
   "helpDash.trayGreenDesc":      "Streaming live EEG data from your BCI device.",
   "helpDash.trayRed":            "Red — Bluetooth Off",
   "helpDash.trayRedDesc":        "The Bluetooth radio is off. No scanning or connection is possible.",
+  "helpDash.community":          "Community",
+  "helpDash.communityDesc":      "Join the NeuroSkill Discord community to ask questions, share feedback, and connect with other users and developers.",
+  "helpDash.discordLink":        "Join our Discord",
 
   // ── Help Settings ────────────────────────────────────────────────────────
   "helpSettings.settingsTab":          "Settings Tab",
@@ -2206,6 +2209,7 @@ const en: Record<string, string> = {
   "about.authors":            "Authors",
   "about.license":            "License",
   "about.acknowledgements":   "Acknowledgements",
+  "about.discord":            "Discord",
 
   // ── Settings: Voice (TTS) tab ────────────────────────────────────────────
   "settingsTabs.tts":          "Voice",

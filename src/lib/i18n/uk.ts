@@ -771,6 +771,9 @@ const uk: Record<string, string> = {
   "helpDash.trayGreenDesc":      "Передача даних ЕЕГ в реальному часі з пристрою BCI.",
   "helpDash.trayRed":            "Червоний — Bluetooth вимкнено",
   "helpDash.trayRedDesc":        "Bluetooth вимкнено. Пошук та підключення неможливі.",
+  "helpDash.community":          "Спільнота",
+  "helpDash.communityDesc":      "Приєднуйтесь до спільноти NeuroSkill у Discord, щоб ставити запитання, ділитися відгуками та спілкуватися з іншими користувачами та розробниками.",
+  "helpDash.discordLink":        "Приєднатися до Discord",
   "helpDash.faa":                "Фронтальна альфа-асиметрія (FAA)",
   "helpDash.faaBody":            "Шкала з центральним закріпленням, що показує індекс FAA в реальному часі: ln(AF8 α) − ln(AF7 α). Позитивні значення вказують на більшу правосторонню фронтальну альфа-потужність, пов'язану з мотивацією наближення лівої півкулі. Негативні значення вказують на тенденцію уникнення. Значення згладжується експоненціальним ковзним середнім і зазвичай знаходиться в діапазоні від −1 до +1. FAA зберігається разом із кожною 5-секундною епохою вбудовування в eeg.sqlite.",
 
@@ -2004,6 +2007,7 @@ const uk: Record<string, string> = {
   "about.authors":            "Автори",
   "about.license":            "Ліцензія",
   "about.acknowledgements":   "Подяки",
+  "about.discord":            "Discord",
 
   // ── Interactive search ───────────────────────────────────────────────────
   "search.interactiveQueryLabel":       "Пошук",
