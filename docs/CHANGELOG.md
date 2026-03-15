@@ -8,7 +8,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Docs
 
-- **Add `README.md` to every workspace crate**: created README files for all 19 crates that were missing one (`skill-label-index`, `skill-exg`, `skill-settings`, `skill-router`, `skill-tts`, `skill-autostart`, `skill-commands`, `skill-data`, `skill-jobs`, `skill-devices`, `skill-screenshots`, `skill-constants`, `skill-eeg`, `skill-llm`, `skill-tray`, `skill-tools`, `apple-ocr`, `rdev`, `src-tauri`); each README contains the crate name as heading and its description from `Cargo.toml`; `fast-hnsw` already had one.
+- **Add `README.md` to every workspace crate**: created README files for all 19 crates that were missing one (`skill-label-index`, `skill-exg`, `skill-settings`, `skill-router`, `skill-tts`, `skill-autostart`, `skill-commands`, `skill-data`, `skill-jobs`, `skill-devices`, `skill-screenshots`, `skill-constants`, `skill-eeg`, `skill-llm`, `skill-tray`, `skill-tools`, `skill-vision`, `rdev`, `src-tauri`); each README contains the crate name as heading and its description from `Cargo.toml`; `fast-hnsw` already had one.
 
 - **Expand `crates/*/README.md`**: rewrote all 17 crate READMEs with comprehensive documentation — overview paragraph, public API tables (key types, functions, modules), feature flags where applicable, and full dependency lists.
 

@@ -2,6 +2,15 @@
 
 ## 2026-03-15
 
+### Refactor: rename apple-ocr → skill-vision
+
+- Renamed `crates/apple-ocr/` to `crates/skill-vision/` for naming consistency with the rest of the workspace (`skill-*` convention)
+- Updated `Cargo.toml` package name from `apple-ocr` to `skill-vision`
+- Updated `src-tauri/Cargo.toml` dependency path
+- Updated `skill-screenshots/src/capture.rs` to reference `skill_vision::` instead of `apple_ocr::`
+- Added `skill-vision` as a macOS-only dependency in `skill-screenshots/Cargo.toml` (was previously missing — the `#[cfg(target_os = "macos")]` gate masked the missing dep on non-macOS builds)
+- All 2 unit tests pass; full workspace builds cleanly
+
 ### Refactor: extract activity_store, label_index, autostart, session_csv into workspace crates
 
 - **`skill-data` crate extended** with three new modules:
