@@ -484,6 +484,42 @@ Maintainers: update `Casks/neuroskill.rb` for each release:
 npm run brew:cask:generate
 ```
 
+### Build cache (optional, recommended)
+
+Install **sccache** and **mold** to speed up Rust/C++ builds by ~50%. The build system auto-detects these tools at build time — no config changes needed.
+
+```bash
+# macOS / Linux — interactive setup, prompts before installing each tool
+npm run setup:build-cache
+
+# Windows (PowerShell)
+.\scripts\setup-build-cache.ps1
+```
+
+Or install manually:
+
+```bash
+# sccache — caches rustc + C/C++ compilation across clean builds
+brew install sccache          # macOS
+cargo install sccache         # any platform
+scoop install sccache         # Windows
+winget install Mozilla.sccache # Windows
+
+# mold — fast linker (Linux only, not needed on macOS/Windows)
+sudo apt install mold clang   # Debian/Ubuntu
+sudo dnf install mold clang   # Fedora
+sudo pacman -S mold clang     # Arch
+```
+
+Once installed, `npm run tauri dev` and `npm run tauri build` automatically use them. No env vars or config changes required.
+
+| Tool | Platform | What it does | Speedup |
+|---|---|---|---|
+| sccache | macOS, Linux, Windows | Caches rustc + cc/c++ outputs | ~50% faster clean rebuilds |
+| mold | Linux only | Fast linker (replaces ld/lld) | Faster link step |
+
+To temporarily disable: `SKILL_NO_SCCACHE=1` or `SKILL_NO_MOLD=1`.
+
 ### Build
 
 ```bash

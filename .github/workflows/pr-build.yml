@@ -220,6 +220,10 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # ── Build cache (sccache) ─────────────────────────────────────────────────
+      - name: Setup sccache
+        uses: Mozilla-Actions/sccache-action@v0.0.9
+
       # ── Node.js ─────────────────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -301,6 +305,7 @@ jobs:
       - name: Compile (frontend + Rust)
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+          RUSTC_WRAPPER: sccache
         run: |
           npm run build
           cd src-tauri

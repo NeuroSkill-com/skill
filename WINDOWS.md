@@ -290,6 +290,26 @@ If you need a full NSIS installer (e.g. for a release), use
 `npm run tauri:build:win:nsis` for local packaging, or `release-windows.ps1`
 for signed release automation.
 
+## Build cache (optional, recommended)
+
+Install **sccache** to cache Rust and C/C++ compilation outputs across clean
+rebuilds (~50% faster). The build wrapper auto-detects it — no config needed.
+
+```powershell
+# One of:
+scoop install sccache
+winget install Mozilla.sccache
+cargo install sccache
+
+# Or run the interactive setup script:
+.\scripts\setup-build-cache.ps1
+```
+
+mold (fast linker) is Linux-only and not applicable on Windows. The MSVC linker
+(`link.exe`) is used automatically.
+
+To disable at build time: `$env:SKILL_NO_SCCACHE="1"`.
+
 ## Troubleshooting NSIS packaging
 
 ### `NSIS not found`

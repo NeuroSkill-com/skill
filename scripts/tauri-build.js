@@ -46,7 +46,8 @@ const isLinux = platform() === "linux";
 
 function commandExists(cmd) {
   try {
-    execSync(`command -v ${cmd}`, { stdio: "ignore" });
+    const check = isWin ? `where ${cmd}` : `command -v ${cmd}`;
+    execSync(check, { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -524,6 +525,70 @@ if (!isWin && !isMac && !process.env.CARGO_BUILD_JOBS) {
       ` to prevent OOM-induced cascade errors (set CARGO_BUILD_JOBS to override)`
     );
   }
+}
+
+// ── Build cache + fast linker detection ────────────────────────────────────────
+//
+// sccache caches both rustc and C/C++ (-sys crate) compilation outputs,
+// reducing clean-rebuild time by ~50%.  mold is a fast linker for Linux.
+// Both are auto-detected; neither is required.
+//
+// To disable: SKILL_NO_SCCACHE=1 or SKILL_NO_MOLD=1
+
+function detectSccache() {
+  if (process.env.SKILL_NO_SCCACHE === "1") return false;
+  if (process.env.RUSTC_WRAPPER) return false; // already set by caller
+  return commandExists("sccache");
+}
+
+function detectMold() {
+  if (!isLinux) return false;
+  if (process.env.SKILL_NO_MOLD === "1") return false;
+  return commandExists("mold") && commandExists("clang");
+}
+
+const hasSccache = detectSccache();
+const hasMold = detectMold();
+
+if (hasSccache) {
+  process.env.RUSTC_WRAPPER = "sccache";
+  console.log("→ sccache detected — enabling compilation cache (RUSTC_WRAPPER=sccache)");
+} else if (!process.env.RUSTC_WRAPPER) {
+  const sccacheHint = isMac
+    ? "brew install sccache"
+    : isWin
+      ? "scoop install sccache  (or: cargo install sccache)"
+      : "cargo install sccache  (or: sudo apt install sccache)";
+  console.log(
+    "→ sccache not found — builds will be slower on clean rebuilds" +
+    `\n  Install: ${sccacheHint}`
+  );
+}
+
+if (hasMold) {
+  // Cargo env-var form of [target.<triple>.linker] and [target.<triple>.rustflags]
+  // Uses the target from explicit --target arg or auto-detected host triple.
+  const hostArchMap = { x64: "x86_64", arm64: "aarch64" };
+  const hostArch = hostArchMap[arch()] || arch();
+  const targets = explicitTarget
+    ? [explicitTarget]
+    : [`${hostArch}-unknown-linux-gnu`];
+
+  for (const target of targets) {
+    const envKey = target.toUpperCase().replace(/-/g, "_");
+    if (!process.env[`CARGO_TARGET_${envKey}_LINKER`]) {
+      process.env[`CARGO_TARGET_${envKey}_LINKER`] = "clang";
+      process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] =
+        (process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] || "") +
+        " -C link-arg=-fuse-ld=mold";
+    }
+  }
+  console.log("→ mold + clang detected — enabling fast linker (-fuse-ld=mold)");
+} else if (isLinux) {
+  console.log(
+    "→ mold/clang not found — using default linker" +
+    "\n  Install: sudo apt install mold clang  (faster linking)"
+  );
 }
 
 // ── Run Tauri ─────────────────────────────────────────────────────────────────

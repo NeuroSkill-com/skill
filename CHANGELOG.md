@@ -8,7 +8,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Build
 
-- **sccache + mold linker for faster builds**: configured `sccache` as the `rustc-wrapper` in `.cargo/config.toml` to cache both Rust and C/C++ compilation outputs (llama-cpp-sys, libsqlite3-sys, onig_sys, etc.) across clean builds. Added `mold` linker configuration for `aarch64-unknown-linux-gnu` and `x86_64-unknown-linux-gnu` targets via `clang` + `-fuse-ld=mold` for significantly faster linking. Added missing `protocol-asset` feature to the `tauri` dependency to match the `assetProtocol` allowlist in `tauri.conf.json`. Clean release rebuild time reduced from ~6 minutes to ~2m45s (54% faster).
+- **sccache + mold for faster builds**: build caching and fast linking are now auto-detected at build time by `scripts/tauri-build.js` — no hardcoded config, builds work fine when the tools are absent. **sccache** caches both Rust and C/C++ compilation outputs (llama-cpp-sys, libsqlite3-sys, onig_sys, etc.) across clean builds on all platforms (macOS, Linux, Windows). **mold** (Linux only) speeds up linking via `clang` + `-fuse-ld=mold`. New `scripts/setup-build-cache.sh` (macOS/Linux) and `scripts/setup-build-cache.ps1` (Windows) interactive setup scripts; `npm run setup:build-cache` npm shortcut. All CI workflows updated with `Mozilla-Actions/sccache-action` and `RUSTC_WRAPPER: sccache`; Linux CI/release also installs mold+clang. Fixed `commandExists` in tauri-build.js to use `where` on Windows instead of `command -v`. Added missing `protocol-asset` feature to the `tauri` dependency to match `tauri.conf.json`. Clean release rebuild time reduced from ~6 minutes to ~2m45s (~54% faster).
 
 ### Documentation
 

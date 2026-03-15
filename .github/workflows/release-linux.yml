@@ -82,6 +82,13 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # ── Build cache (sccache + mold) ──────────────────────────────────────────
+      - name: Setup sccache
+        uses: Mozilla-Actions/sccache-action@v0.0.9
+
+      - name: Install mold + clang
+        run: sudo apt-get update -qq && sudo apt-get install -y mold clang
+
       # ── Node.js ───────────────────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -161,6 +168,9 @@ jobs:
       - name: Compile (frontend + Rust)
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+          RUSTC_WRAPPER: sccache
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         shell: bash
         run: |
           set -euo pipefail

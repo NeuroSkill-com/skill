@@ -88,6 +88,10 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # ── Build cache (sccache) ─────────────────────────────────────────────────
+      - name: Setup sccache
+        uses: Mozilla-Actions/sccache-action@v0.0.9
+
       # ── Node.js ───────────────────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -379,6 +383,7 @@ jobs:
           # Points clang-sys at the standalone LLVM's libclang.dll, bypassing
           # VS's bundled Clang 19 which lacks __builtin_ia32_* MMX intrinsics.
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
+          RUSTC_WRAPPER: sccache
         run: |
           $bundleDirCandidates = @(
             (Join-Path $PWD "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"),

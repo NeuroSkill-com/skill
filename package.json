@@ -40,6 +40,7 @@
     "audit:i18n:check": "npx tsx scripts/audit-i18n.ts --check",
     "sync:llm:catalog": "node scripts/sync-llm-catalog.js --write",
     "sync:llm:catalog:check": "node scripts/sync-llm-catalog.js --check",
+    "setup:build-cache": "bash scripts/setup-build-cache.sh",
     "bump": "node scripts/bump.js",
     "tag": "node scripts/tag.js"
   },

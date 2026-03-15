@@ -39,7 +39,18 @@
 
 [build]
 # target intentionally omitted — defaults to the host triple
-rustc-wrapper = "sccache"
+#
+# ── Build caching (sccache) ───────────────────────────────────────────────────
+#
+# sccache caches both rustc and C/C++ compilation outputs, dramatically
+# speeding up clean rebuilds (6 min → ~2m45s on a typical full build).
+#
+# When sccache is installed, the build wrapper (scripts/tauri-build.js)
+# automatically sets RUSTC_WRAPPER=sccache in the environment.
+# To install: `cargo install sccache` or `brew install sccache`
+#
+# Do NOT hardcode `rustc-wrapper = "sccache"` here — it breaks builds
+# for developers who don't have sccache installed.
 
 # ── espeak-ng static library ──────────────────────────────────────────────────
 #
@@ -101,18 +112,20 @@ CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 # sections are intentionally absent here because macOS needs no target-wide
 # rustflags.  The stack size is handled exclusively by build.rs.
 
-# ── Linux: use mold linker for faster linking ─────────────────────────────────
+# ── Linux: fast linker (mold) ─────────────────────────────────────────────────
 #
 # mold is a drop-in replacement for ld/lld that is significantly faster for
-# large binaries.  The -fuse-ld=mold flag tells clang to delegate to mold.
-# Install: apt install mold (or cargo install mold)
-[target.aarch64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
-
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+# large binaries.  When mold + clang are installed, scripts/tauri-build.js
+# automatically sets CARGO_TARGET_*_LINKER and CARGO_TARGET_*_RUSTFLAGS
+# environment variables so cargo uses mold without hardcoding it here.
+#
+# Do NOT hardcode [target.*-unknown-linux-gnu] linker/rustflags here — it
+# breaks builds for developers who don't have mold or clang installed.
+#
+# Install (Debian/Ubuntu): sudo apt install mold clang
+# Install (Fedora):        sudo dnf install mold clang
+# Install (Arch):          sudo pacman -S mold clang
+# Install (macOS):         not needed — Apple's ld is already fast
 
 # ── Windows MSVC: increase main-thread stack size ────────────────────────────
 #

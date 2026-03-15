@@ -25,6 +25,10 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      # ── Build cache (sccache) ───────────────────────────────────────────────
+      - name: Setup sccache
+        uses: Mozilla-Actions/sccache-action@v0.0.9
+
       - name: Cache Cargo
         uses: actions/cache@v5
         with:
@@ -73,12 +77,14 @@ jobs:
         working-directory: src-tauri
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+          RUSTC_WRAPPER: sccache
         run: cargo check --locked --target x86_64-unknown-linux-gnu --features llm-vulkan
 
       - name: cargo clippy
         working-directory: src-tauri
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
+          RUSTC_WRAPPER: sccache
         run: cargo clippy --locked --target x86_64-unknown-linux-gnu --features llm-vulkan -- -D warnings
 
   # ── Linux portable package smoke test ──────────────────────────────────────
@@ -99,6 +105,10 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # ── Build cache (sccache + mold) ────────────────────────────────────────
+      - name: Setup sccache
+        uses: Mozilla-Actions/sccache-action@v0.0.9
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -116,7 +126,8 @@ jobs:
             librsvg2-dev patchelf libssl-dev
             libudev-dev libdbus-1-dev pkg-config
             libasound2-dev cmake binutils
-          version: tauri-linux-portable-v1
+            mold clang
+          version: tauri-linux-portable-v2
 
       - name: Install Vulkan SDK
         run: bash scripts/install-vulkan-sdk.sh
@@ -271,6 +282,10 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # ── Build cache (sccache) ───────────────────────────────────────────────
+      - name: Setup sccache
+        uses: Mozilla-Actions/sccache-action@v0.0.9
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -413,6 +428,7 @@ jobs:
           LLVM_CONFIG:   ${{ env.LLVM_CONFIG }}
           CC:            ${{ env.CC }}
           CXX:           ${{ env.CXX }}
+          RUSTC_WRAPPER: sccache
         run: cargo check --target x86_64-pc-windows-msvc --features llm-vulkan
 
       - name: cargo clippy
@@ -425,6 +441,7 @@ jobs:
           LLVM_CONFIG:   ${{ env.LLVM_CONFIG }}
           CC:            ${{ env.CC }}
           CXX:           ${{ env.CXX }}
+          RUSTC_WRAPPER: sccache
         run: >
           cargo clippy
           --target x86_64-pc-windows-msvc
