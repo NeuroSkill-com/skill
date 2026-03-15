@@ -11,9 +11,21 @@ skill-data      = { path = "../skill-data" }
 serde           = { version = "1", features = ["derive"] }
 serde_json      = "1"
 image           = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"] }
-fast-hnsw       = "1.0.1"
+fast-hnsw          = "1.0.1"
+crossbeam-channel  = "0.5"
 ocrs            = "0.12.1"
 rten            = "0.24.0"
+chrono          = { version = "0.4", default-features = false, features = ["clock", "std"] }
+ureq            = { version = "2", features = ["native-tls"] }
+
+[target.'cfg(target_os = "macos")'.dependencies.ort]
+version = "=2.0.0-rc.11"
+default-features = false
+features = ["coreml"]
+
+[target.'cfg(not(target_os = "macos"))'.dependencies.ort]
+version = "=2.0.0-rc.11"
+default-features = false
 
 [target.'cfg(target_os = "macos")'.dependencies]
 fastembed = { version = "5.11.0", features = ["metal"] }

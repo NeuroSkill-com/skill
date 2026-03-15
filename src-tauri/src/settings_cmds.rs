@@ -1529,7 +1529,8 @@ pub async fn rebuild_screenshot_embeddings(
     };
     Ok(tokio::task::spawn_blocking(move || {
         let store = store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
-        Some(crate::screenshot::rebuild_embeddings(&store, &config, &skill_dir, &app))
+        let ctx = crate::screenshot::TauriScreenshotContext { app };
+        Some(crate::screenshot::rebuild_embeddings(&store, &config, &skill_dir, &ctx))
     }).await.unwrap_or(None))
 }
 

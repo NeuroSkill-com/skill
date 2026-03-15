@@ -181,7 +181,8 @@ skill-llm  = { path = "../crates/skill-llm" }
 skill-eeg  = { path = "../crates/skill-eeg" }
 skill-tts  = { path = "../crates/skill-tts" }
 skill-data      = { path = "../crates/skill-data" }
-skill-constants = { path = "../crates/skill-constants" }
+skill-constants    = { path = "../crates/skill-constants" }
+skill-screenshots  = { path = "../crates/skill-screenshots" }
 chrono     = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 # PNG encoding for the About-window icon data URL

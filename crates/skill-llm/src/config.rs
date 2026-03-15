@@ -137,11 +137,23 @@ pub struct LlmConfig {
     /// Enable verbose llama.cpp / clip_model_loader logging to stderr.
     #[serde(default)]
     pub verbose: bool,
+
+    /// Enable flash attention (KV cache in f16 instead of f32, faster on
+    /// GPU backends that support it — Metal, CUDA, Vulkan).  Default: `true`.
+    #[serde(default = "default_flash_attention")]
+    pub flash_attention: bool,
+
+    /// Offload the KQV tensor operations to the GPU even when not all layers
+    /// are offloaded.  Default: `true`.
+    #[serde(default = "default_offload_kqv")]
+    pub offload_kqv: bool,
 }
 
 fn default_llm_parallel()      -> usize { 1 }
 fn default_mmproj_n_threads()  -> i32   { 4 }
 fn default_autoload_mmproj()   -> bool  { true }
+fn default_flash_attention()   -> bool  { true }
+fn default_offload_kqv()       -> bool  { true }
 
 impl Default for LlmConfig {
     fn default() -> Self {
@@ -158,6 +170,8 @@ impl Default for LlmConfig {
             no_mmproj_gpu:    false,
             autoload_mmproj:  default_autoload_mmproj(),
             verbose:          false,
+            flash_attention:  default_flash_attention(),
+            offload_kqv:      default_offload_kqv(),
         }
     }
 }

@@ -1,5 +1,7 @@
 # TODO
 
+- [x] GPU optimization across all model systems — enabled flash attention and KQV offloading in LLM context params (Metal/CUDA/Vulkan); added `flash_attention` and `offload_kqv` config options to `LlmConfig` (both default `true`); mmproj on Linux now attempts GPU first and falls back to CPU gracefully instead of blanket CPU-only default; screenshot embeddings on Windows now try DirectML (GPU via DirectX 12) and on Linux try CUDA before CPU fallback; cached OCR text embedder via `OnceLock<Mutex<>>` to avoid re-creating the fastembed TextEmbedding model (~200ms overhead) on every search query
+
 - [x] improve web_search tool with DuckDuckGo JSON + HTML fallback — replaced the limited DuckDuckGo Instant Answer API with a two-strategy approach: primary uses `api.duckduckgo.com/?format=json` (instant answers, answer box, related topics including nested topic groups); fallback scrapes `html.duckduckgo.com/html/` for actual web search results when JSON API returns nothing; HTML scraper extracts titles, URLs, and snippets from result blocks, resolves DDG redirect URLs to real targets, strips HTML tags and decodes entities; results capped at 10; added `urlencoding` crate dependency for URL encoding/decoding
 
 - [x] Discord link in Help & About — added Discord community invite link to the About window Links section and Help window Dashboard tab Community section; `APP_DISCORD_URL` constant, `discordUrl` on `AboutInfo`, Discord SVG icon, i18n keys in all 5 locales
