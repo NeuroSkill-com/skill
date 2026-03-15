@@ -937,6 +937,7 @@ pub fn run_screenshot_worker(
     let mut backoff_multiplier: u64 = 1;
     let mut consecutive_ok: u32 = 0;
     const MAX_BACKOFF: u64 = 4;
+    const BACKOFF_STEPS: [u64; 4] = [1, 2, 3, 4];
 
     loop {
         // Re-read config + session state in a single lock acquisition
@@ -1050,7 +1051,10 @@ pub fn run_screenshot_worker(
                     // Successful send — recover toward base interval
                     consecutive_ok += 1;
                     if consecutive_ok >= 3 && backoff_multiplier > 1 {
-                        backoff_multiplier = (backoff_multiplier / 2).max(1);
+                        // Step down: 4→3→2→1
+                        let cur_idx = BACKOFF_STEPS.iter().position(|&s| s == backoff_multiplier)
+                            .unwrap_or(BACKOFF_STEPS.len() - 1);
+                        backoff_multiplier = if cur_idx > 0 { BACKOFF_STEPS[cur_idx - 1] } else { 1 };
                         consecutive_ok = 0;
                         eprintln!("[screenshot] backoff recovered → {}× base interval",
                             backoff_multiplier);
@@ -1058,11 +1062,13 @@ pub fn run_screenshot_worker(
                 }
                 Err(_) => {
                     metrics.drops.fetch_add(1, Ordering::Relaxed);
-                    // Drop — embed thread can't keep up.  Double the interval
-                    // to release pressure (up to MAX_BACKOFF × base).
+                    // Drop — embed thread can't keep up.  Step up the interval
+                    // to release pressure (1→2→3→4 × base).
                     consecutive_ok = 0;
                     if backoff_multiplier < MAX_BACKOFF {
-                        backoff_multiplier = (backoff_multiplier * 2).min(MAX_BACKOFF);
+                        let cur_idx = BACKOFF_STEPS.iter().position(|&s| s == backoff_multiplier)
+                            .unwrap_or(0);
+                        backoff_multiplier = BACKOFF_STEPS[(cur_idx + 1).min(BACKOFF_STEPS.len() - 1)];
                         eprintln!("[screenshot] embed queue full — backing off to {}× base interval ({}s)",
                             backoff_multiplier, config.interval_secs as u64 * backoff_multiplier);
                     }

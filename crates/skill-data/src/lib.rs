@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 NeuroSkill.com
+//! `skill-data` — pure data, storage, and utility modules for NeuroSkill.
+//!
+//! This crate contains modules with zero tauri/AppState coupling:
+//!
+//! - **label_store** — SQLite label persistence
+//! - **screenshot_store** — SQLite screenshot metadata + embedding store
+//! - **hooks_log** — SQLite hook-fire audit log
+//! - **gpu_stats** — GPU hardware info queries
+//! - **ppg_analysis** — PPG/heart-rate signal analysis
+//! - **dnd** — Do Not Disturb platform automation
+//! - **device** — BLE device types
+//! - **util** — shared utilities (MutexExt)
+
+pub mod util;
+pub mod label_store;
+pub mod screenshot_store;
+pub mod hooks_log;
+pub mod gpu_stats;
+pub mod ppg_analysis;
+pub mod dnd;
+pub mod device;

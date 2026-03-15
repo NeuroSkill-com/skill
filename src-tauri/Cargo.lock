@@ -9311,6 +9311,7 @@ dependencies = [
  "serde_json",
  "serialport",
  "sha2",
+ "skill-data",
  "skill-eeg",
  "skill-llm",
  "skill-tts",
@@ -9329,6 +9330,17 @@ dependencies = [
  "tower-http",
  "ureq 2.12.1",
  "zuna-rs",
+]
+
+[[package]]
+name = "skill-data"
+version = "0.0.1"
+dependencies = [
+ "llmfit-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sysinfo 0.38.4",
 ]
 
 [[package]]
