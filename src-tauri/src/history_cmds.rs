@@ -16,7 +16,7 @@ use crate::label_store;
 #[tauri::command]
 pub(crate) async fn open_history_window(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("history") {
-        let _ = win.show(); let _ = win.set_focus(); return Ok(());
+        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
     }
     tauri::WebviewWindowBuilder::new(&app, "history", tauri::WebviewUrl::App("history".into()))
         .title("NeuroSkill™ – History")
@@ -26,7 +26,7 @@ pub(crate) async fn open_history_window(app: AppHandle) -> Result<(), String> {
         .center()
         .decorations(false).transparent(true)
         .build()
-        .map(|_| ())
+        .map(|w| { let _ = w.set_focus(); })
         .map_err(|e| e.to_string())
 }
 

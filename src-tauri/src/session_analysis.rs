@@ -1541,7 +1541,7 @@ pub(crate) fn get_csv_metrics(csv_path: String) -> Option<CsvMetricsResult> {
 #[tauri::command]
 pub(crate) async fn open_compare_window(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("compare") {
-        let _ = win.show(); let _ = win.set_focus(); return Ok(());
+        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
     }
     tauri::WebviewWindowBuilder::new(&app, "compare", tauri::WebviewUrl::App("compare".into()))
         .title("NeuroSkill™ – Compare")
@@ -1551,7 +1551,7 @@ pub(crate) async fn open_compare_window(app: AppHandle) -> Result<(), String> {
         .center()
         .decorations(false).transparent(true)
         .build()
-        .map(|_| ())
+        .map(|w| { let _ = w.set_focus(); })
         .map_err(|e| e.to_string())
 }
 
@@ -1581,6 +1581,6 @@ pub(crate) async fn open_compare_window_with_sessions(
         .center()
         .decorations(false).transparent(true)
         .build()
-        .map(|_| ())
+        .map(|w| { let _ = w.set_focus(); })
         .map_err(|e| e.to_string())
 }

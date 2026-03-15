@@ -490,6 +490,7 @@ pub fn delete_llm_model(
 #[tauri::command]
 pub async fn open_downloads_window(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("downloads") {
+        win.unminimize().ok();
         win.show().ok();
         win.set_focus().ok();
         return Ok(());
@@ -506,7 +507,7 @@ pub async fn open_downloads_window(app: AppHandle) -> Result<(), String> {
     .center()
     .decorations(false).transparent(true)
     .build()
-    .map(|_| ())
+    .map(|w| { let _ = w.set_focus(); })
     .map_err(|e| e.to_string())
 }
 
@@ -1016,6 +1017,7 @@ pub fn cancel_tool_call(
 #[tauri::command]
 pub async fn open_chat_window(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("chat") {
+        win.unminimize().ok();
         win.show().ok();
         win.set_focus().ok();
         return Ok(());
@@ -1032,7 +1034,7 @@ pub async fn open_chat_window(app: AppHandle) -> Result<(), String> {
     .center()
     .decorations(false).transparent(true)
     .build()
-    .map(|_| ())
+    .map(|w| { let _ = w.set_focus(); })
     .map_err(|e| e.to_string())
 }
 

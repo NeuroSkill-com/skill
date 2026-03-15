@@ -1451,6 +1451,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 Err(_) => return,
             }
         };
+        let _ = win.unminimize();
         let _ = win.show();
         let _ = win.set_focus();
         linux_fix_decorations(&win);

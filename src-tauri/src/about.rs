@@ -103,6 +103,7 @@ pub fn get_about_info(app: AppHandle) -> AboutInfo {
 #[tauri::command]
 pub async fn open_about_window(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("about") {
+        let _ = win.unminimize();
         let _ = win.show();
         let _ = win.set_focus();
         return Ok(());
@@ -118,7 +119,7 @@ pub async fn open_about_window(app: AppHandle) -> Result<(), String> {
     .center()
     .decorations(false).transparent(true)
     .build()
-    .map(|_| ())
+    .map(|w| { let _ = w.set_focus(); })
     .map_err(|e| e.to_string())
 }
 
