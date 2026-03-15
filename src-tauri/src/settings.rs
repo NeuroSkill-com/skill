@@ -769,7 +769,7 @@ pub(crate) fn default_track_input_activity() -> bool { true }
 // ── Screenshot capture + vision embedding ─────────────────────────────────────
 
 pub(crate) fn default_screenshot_interval()        -> u32    { 5 }
-pub(crate) fn default_screenshot_image_size()      -> u32    { 224 }
+pub(crate) fn default_screenshot_image_size()      -> u32    { 768 }
 pub(crate) fn default_screenshot_quality()         -> u8     { 60 }
 pub(crate) fn default_screenshot_session_only()    -> bool   { true }
 pub(crate) fn default_screenshot_embed_backend()   -> String { "fastembed".into() }
@@ -858,11 +858,11 @@ impl ScreenshotConfig {
     pub fn recommended_image_size(&self) -> u32 {
         match self.embed_backend.as_str() {
             "fastembed" => match self.fastembed_model.as_str() {
-                "nomic-embed-vision-v1.5" => 384,
-                _                         => 224,
+                "nomic-embed-vision-v1.5" => 768,
+                _                         => 768,
             },
-            "mmproj" => 384,
-            _        => 224,
+            "mmproj" => 768,
+            _        => 768,
         }
     }
 }

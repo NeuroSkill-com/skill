@@ -40,7 +40,7 @@ the Free Software Foundation, version 3 only. -->
   let config = $state<ScreenshotConfig>({
     enabled: false,
     interval_secs: 5,
-    image_size: 224,
+    image_size: 768,
     quality: 60,
     session_only: true,
     embed_backend: "fastembed",
@@ -59,9 +59,9 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Recommended image size for current model ──────────────────────────────
   const recommendedSize = $derived.by(() => {
-    if (config.embed_backend === "mmproj") return 384;
-    if (config.fastembed_model === "nomic-embed-vision-v1.5") return 384;
-    return 224;
+    if (config.embed_backend === "mmproj") return 768;
+    if (config.fastembed_model === "nomic-embed-vision-v1.5") return 768;
+    return 768;
   });
 
   // ── Load ───────────────────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ the Free Software Foundation, version 3 only. -->
             {config.image_size} {t("screenshots.imageSizeUnit")}
           </span>
         </div>
-        <input id="ss-size" type="range" min="128" max="512" step="16"
+        <input id="ss-size" type="range" min="224" max="1536" step="32"
                bind:value={config.image_size}
                class="w-full accent-primary h-1.5" />
         <span class="text-[0.54rem] text-muted-foreground/60">
