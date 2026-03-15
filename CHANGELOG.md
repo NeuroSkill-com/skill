@@ -48,6 +48,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### i18n
 
+- **Translate 286 untranslated keys across de/fr/he/uk**: titles, labels, section headings, and short descriptions for LLM help, Hooks help, TTS help, FAQ, compare, settings, and UI elements. Reduced untranslated key count from 688 to 408 (remaining are long help body paragraphs requiring full paragraph translation).
 - **Translation audit script** (`scripts/audit-i18n.ts`): new script that detects untranslated keys in non-English locale files by comparing values against the English source of truth. Keys with values identical to English are flagged as untranslated, with an exemption system for legitimately identical content (technical acronyms like `UMAP`/`EEG`, math formulas, brand names, URLs, placeholder-only strings). Supports `--check` for CI (exits 1 on untranslated keys), `--locale <code>` to audit a single locale, and `--verbose` to show English values. Available as `npm run audit:i18n` and `npm run audit:i18n:check`.
 
 ### CLI — Proactive Hooks CRUD
