@@ -6,6 +6,20 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### CLI
+
+- **Full LLM management via CLI**: all LLM operations can now be performed entirely from the command line without opening the GUI. Nine new WebSocket API commands and corresponding CLI subcommands added:
+  - `llm select <filename>` — set the active text model
+  - `llm mmproj <filename|none>` — set the active vision projector (or disable it)
+  - `llm autoload-mmproj <on|off>` — toggle auto-loading of mmproj on server start
+  - `llm pause <filename>` — pause an in-progress download
+  - `llm resume <filename>` — resume a paused download
+  - `llm downloads` — list all downloads with status, progress, and size
+  - `llm refresh` — re-probe the HF Hub cache for externally downloaded models
+  - `llm fit` — check which models fit in available RAM/VRAM with fit level and run mode
+  - All new commands support `--json` for machine-readable output and `--full` for verbose JSON.
+  - Complete workflow example: `llm catalog` → `llm download` → `llm select` → `llm mmproj` → `llm start` → `llm chat`
+
 ### Help Window
 
 - **LLM help section**: new "LLM" tab in the Help window documenting the local inference server, model catalog and quantisation levels, hardware fit badges, vision/multimodal models, downloading workflow, GPU layers, context size, parallel requests, API key, built-in tools (safe vs. privileged), execution mode & limits, chat window, external client usage, and server logs. 19 searchable help items across 5 sections.
