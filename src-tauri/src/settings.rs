@@ -399,6 +399,22 @@ pub struct LlmToolConfig {
     pub web_search: bool,
     pub web_fetch:  bool,
 
+    /// Allow the LLM to execute bash/shell commands.
+    #[serde(default)]
+    pub bash: bool,
+
+    /// Allow the LLM to read file contents.
+    #[serde(default)]
+    pub read_file: bool,
+
+    /// Allow the LLM to write/create files.
+    #[serde(default)]
+    pub write_file: bool,
+
+    /// Allow the LLM to make surgical find-and-replace edits to files.
+    #[serde(default)]
+    pub edit_file: bool,
+
     /// Tool execution mode: "parallel" or "sequential".
     /// Parallel: prepare sequentially, execute concurrently.
     /// Sequential: prepare and execute one at a time.
@@ -435,6 +451,10 @@ impl Default for LlmToolConfig {
             location:           true,
             web_search:         true,
             web_fetch:          true,
+            bash:               false,
+            read_file:          false,
+            write_file:         false,
+            edit_file:          false,
             execution_mode:     default_tool_execution_mode(),
             max_rounds:         default_max_tool_rounds(),
             max_calls_per_round: default_max_tool_calls_per_round(),

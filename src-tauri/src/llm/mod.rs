@@ -583,6 +583,102 @@ fn builtin_llm_tools() -> Vec<tools::Tool> {
                 })),
             },
         },
+        tools::Tool {
+            tool_type: "function".into(),
+            function: tools::ToolFunction {
+                name: "bash".into(),
+                description: Some("Execute a bash command in the working directory. Returns stdout and stderr. Output is truncated to the last 2000 lines or 50 KB (whichever is hit first). Optionally provide a timeout in seconds (default: no timeout).".into()),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "command": {
+                            "type": "string",
+                            "description": "Bash command to execute"
+                        },
+                        "timeout": {
+                            "type": "number",
+                            "description": "Timeout in seconds (optional, no default timeout)"
+                        }
+                    },
+                    "required": ["command"],
+                    "additionalProperties": false
+                })),
+            },
+        },
+        tools::Tool {
+            tool_type: "function".into(),
+            function: tools::ToolFunction {
+                name: "read_file".into(),
+                description: Some("Read the contents of a text file. Output is truncated to 2000 lines or 50 KB (whichever is hit first). Use offset/limit for large files. When you need the full file, continue with offset until complete.".into()),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file to read (relative or absolute)"
+                        },
+                        "offset": {
+                            "type": "number",
+                            "description": "Line number to start reading from (1-indexed)"
+                        },
+                        "limit": {
+                            "type": "number",
+                            "description": "Maximum number of lines to read"
+                        }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                })),
+            },
+        },
+        tools::Tool {
+            tool_type: "function".into(),
+            function: tools::ToolFunction {
+                name: "write_file".into(),
+                description: Some("Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Automatically creates parent directories.".into()),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file to write (relative or absolute)"
+                        },
+                        "content": {
+                            "type": "string",
+                            "description": "Content to write to the file"
+                        }
+                    },
+                    "required": ["path", "content"],
+                    "additionalProperties": false
+                })),
+            },
+        },
+        tools::Tool {
+            tool_type: "function".into(),
+            function: tools::ToolFunction {
+                name: "edit_file".into(),
+                description: Some("Edit a file by replacing exact text. The old_text must match exactly (including whitespace). Use this for precise, surgical edits.".into()),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the file to edit (relative or absolute)"
+                        },
+                        "old_text": {
+                            "type": "string",
+                            "description": "Exact text to find and replace (must match exactly)"
+                        },
+                        "new_text": {
+                            "type": "string",
+                            "description": "New text to replace the old text with"
+                        }
+                    },
+                    "required": ["path", "old_text", "new_text"],
+                    "additionalProperties": false
+                })),
+            },
+        },
     ]
 }
 
@@ -592,6 +688,10 @@ fn is_builtin_tool_enabled(config: &LlmToolConfig, name: &str) -> bool {
         "location"   => config.location,
         "web_search" => config.web_search,
         "web_fetch"  => config.web_fetch,
+        "bash"       => config.bash,
+        "read_file"  => config.read_file,
+        "write_file" => config.write_file,
+        "edit_file"  => config.edit_file,
         _            => false,
     }
 }
@@ -612,6 +712,114 @@ fn filter_allowed_tool_defs(tool_defs: Vec<tools::Tool>, config: &LlmToolConfig)
 
 fn truncate_text(s: &str, max_chars: usize) -> String {
     s.chars().take(max_chars).collect()
+}
+
+// ── Filesystem tool helpers ───────────────────────────────────────────────────
+
+/// Resolve a path for filesystem tools.  Supports `~` expansion and relative
+/// paths (resolved against the user's home directory).
+fn resolve_tool_path(path: &str) -> std::path::PathBuf {
+    let expanded = if path == "~" {
+        dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/"))
+    } else if let Some(rest) = path.strip_prefix("~/") {
+        dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/")).join(rest)
+    } else {
+        std::path::PathBuf::from(path)
+    };
+
+    if expanded.is_absolute() {
+        expanded
+    } else {
+        dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/")).join(expanded)
+    }
+}
+
+struct TruncatedOutput {
+    text: String,
+    was_truncated: bool,
+    total_lines: usize,
+    total_bytes: usize,
+    output_lines: usize,
+}
+
+/// Truncate from the tail (keep last N lines / max bytes).
+/// Suitable for bash output where the end (errors/results) matters most.
+fn truncate_tool_output(content: &str, max_lines: usize, max_bytes: usize) -> TruncatedOutput {
+    let total_bytes = content.len();
+    let lines: Vec<&str> = content.split('\n').collect();
+    let total_lines = lines.len();
+
+    if total_lines <= max_lines && total_bytes <= max_bytes {
+        return TruncatedOutput {
+            text: content.to_string(),
+            was_truncated: false,
+            total_lines,
+            total_bytes,
+            output_lines: total_lines,
+        };
+    }
+
+    // Work backwards from end
+    let mut output: Vec<&str> = Vec::new();
+    let mut byte_count = 0usize;
+
+    for &line in lines.iter().rev() {
+        let lb = line.len() + if output.is_empty() { 0 } else { 1 }; // +1 for newline
+        if byte_count + lb > max_bytes || output.len() >= max_lines {
+            break;
+        }
+        output.push(line);
+        byte_count += lb;
+    }
+
+    output.reverse();
+    let output_lines = output.len();
+    TruncatedOutput {
+        text: output.join("\n"),
+        was_truncated: true,
+        total_lines,
+        total_bytes,
+        output_lines,
+    }
+}
+
+/// Truncate from the head (keep first N lines / max bytes).
+/// Suitable for file reads where you want to see the beginning.
+fn truncate_tool_output_head(content: &str, max_lines: usize, max_bytes: usize) -> TruncatedOutput {
+    let total_bytes = content.len();
+    let lines: Vec<&str> = content.split('\n').collect();
+    let total_lines = lines.len();
+
+    if total_lines <= max_lines && total_bytes <= max_bytes {
+        return TruncatedOutput {
+            text: content.to_string(),
+            was_truncated: false,
+            total_lines,
+            total_bytes,
+            output_lines: total_lines,
+        };
+    }
+
+    let mut output: Vec<&str> = Vec::new();
+    let mut byte_count = 0usize;
+
+    for &line in &lines {
+        let lb = line.len() + if output.is_empty() { 0 } else { 1 };
+        if byte_count + lb > max_bytes || output.len() >= max_lines {
+            break;
+        }
+        output.push(line);
+        byte_count += lb;
+    }
+
+    let output_lines = output.len();
+    TruncatedOutput {
+        text: output.join("\n"),
+        was_truncated: true,
+        total_lines,
+        total_bytes,
+        output_lines,
+    }
 }
 
 fn format_utc_offset(offset_seconds: i32) -> String {
@@ -793,6 +1001,247 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
                     Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_for_fetch, "error": e.to_string() }),
                 }
             }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }))
+        }
+
+        "bash" => {
+            let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if command.is_empty() {
+                return json!({ "ok": false, "tool": "bash", "error": "missing command" });
+            }
+            let timeout_secs = args.get("timeout").and_then(|v| v.as_f64()).map(|t| t as u64);
+
+            tokio::task::spawn_blocking(move || {
+                use std::process::Command;
+
+                let home = dirs::home_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+                let mut cmd = Command::new("bash");
+                cmd.arg("-c").arg(&command).current_dir(&home);
+                cmd.stdout(std::process::Stdio::piped());
+                cmd.stderr(std::process::Stdio::piped());
+
+                let child = cmd.spawn();
+                match child {
+                    Ok(mut child) => {
+                        // If timeout specified, poll with deadline then kill
+                        let timed_out = if let Some(secs) = timeout_secs {
+                            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(secs);
+                            loop {
+                                match child.try_wait() {
+                                    Ok(Some(_)) => break false,
+                                    Ok(None) => {
+                                        if std::time::Instant::now() >= deadline {
+                                            let _ = child.kill();
+                                            break true;
+                                        }
+                                        std::thread::sleep(std::time::Duration::from_millis(50));
+                                    }
+                                    Err(_) => break false,
+                                }
+                            }
+                        } else {
+                            false
+                        };
+
+                        match child.wait_with_output() {
+                            Ok(out) => {
+                                let stdout = String::from_utf8_lossy(&out.stdout);
+                                let stderr = String::from_utf8_lossy(&out.stderr);
+                                let mut combined = String::new();
+                                if !stdout.is_empty() { combined.push_str(&stdout); }
+                                if !stderr.is_empty() {
+                                    if !combined.is_empty() { combined.push('\n'); }
+                                    combined.push_str(&stderr);
+                                }
+
+                                // Truncate: keep last 2000 lines / 50 KB
+                                let truncated = truncate_tool_output(&combined, 2000, 50 * 1024);
+
+                                let exit_code = out.status.code().unwrap_or(-1);
+                                let mut result = json!({
+                                    "ok": exit_code == 0 && !timed_out,
+                                    "tool": "bash",
+                                    "exit_code": exit_code,
+                                    "output": truncated.text,
+                                });
+                                if truncated.was_truncated {
+                                    result["truncated"] = json!(true);
+                                    result["total_lines"] = json!(truncated.total_lines);
+                                    result["total_bytes"] = json!(truncated.total_bytes);
+                                }
+                                if timed_out {
+                                    result["error"] = json!(format!("command timed out after {} seconds", timeout_secs.unwrap_or(0)));
+                                }
+                                result
+                            }
+                            Err(e) => json!({ "ok": false, "tool": "bash", "error": e.to_string() }),
+                        }
+                    }
+                    Err(e) => json!({ "ok": false, "tool": "bash", "error": e.to_string() }),
+                }
+            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "bash", "error": e.to_string() }))
+        }
+
+        "read_file" => {
+            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if path.is_empty() {
+                return json!({ "ok": false, "tool": "read_file", "error": "missing path" });
+            }
+            let offset = args.get("offset").and_then(|v| v.as_u64()).map(|v| v as usize);
+            let limit = args.get("limit").and_then(|v| v.as_u64()).map(|v| v as usize);
+
+            tokio::task::spawn_blocking(move || {
+                let resolved = resolve_tool_path(&path);
+
+                match std::fs::read_to_string(&resolved) {
+                    Ok(content) => {
+                        let all_lines: Vec<&str> = content.split('\n').collect();
+                        let total_file_lines = all_lines.len();
+
+                        let start_line = offset.map(|o| (o.max(1)) - 1).unwrap_or(0);
+
+                        if start_line >= all_lines.len() {
+                            return json!({
+                                "ok": false, "tool": "read_file",
+                                "error": format!("offset {} is beyond end of file ({} lines total)", offset.unwrap_or(1), total_file_lines)
+                            });
+                        }
+
+                        let end_line = if let Some(lim) = limit {
+                            (start_line + lim).min(all_lines.len())
+                        } else {
+                            all_lines.len()
+                        };
+
+                        let selected: String = all_lines[start_line..end_line].join("\n");
+                        let user_limited = limit.is_some() && end_line < all_lines.len();
+
+                        // Truncate: keep first 2000 lines / 50 KB
+                        let truncated = truncate_tool_output_head(&selected, 2000, 50 * 1024);
+                        let start_display = start_line + 1;
+
+                        let mut result = json!({
+                            "ok": true,
+                            "tool": "read_file",
+                            "content": truncated.text,
+                            "total_lines": total_file_lines,
+                        });
+
+                        if truncated.was_truncated {
+                            let end_display = start_display + truncated.output_lines.saturating_sub(1);
+                            let next_offset = end_display + 1;
+                            result["truncated"] = json!(true);
+                            result["showing_lines"] = json!(format!("{}-{}", start_display, end_display));
+                            result["hint"] = json!(format!("Use offset={} to continue reading.", next_offset));
+                        } else if user_limited {
+                            let remaining = all_lines.len() - end_line;
+                            let next_offset = end_line + 1;
+                            result["remaining_lines"] = json!(remaining);
+                            result["hint"] = json!(format!("Use offset={} to continue reading.", next_offset));
+                        }
+
+                        result
+                    }
+                    Err(e) => json!({ "ok": false, "tool": "read_file", "error": format!("{}: {}", resolved.display(), e) }),
+                }
+            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "read_file", "error": e.to_string() }))
+        }
+
+        "write_file" => {
+            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if path.is_empty() {
+                return json!({ "ok": false, "tool": "write_file", "error": "missing path" });
+            }
+
+            tokio::task::spawn_blocking(move || {
+                let resolved = resolve_tool_path(&path);
+
+                // Create parent directories
+                if let Some(parent) = resolved.parent() {
+                    if let Err(e) = std::fs::create_dir_all(parent) {
+                        return json!({ "ok": false, "tool": "write_file", "error": format!("cannot create directories: {}", e) });
+                    }
+                }
+
+                match std::fs::write(&resolved, &content) {
+                    Ok(()) => json!({
+                        "ok": true,
+                        "tool": "write_file",
+                        "path": resolved.display().to_string(),
+                        "bytes_written": content.len(),
+                    }),
+                    Err(e) => json!({ "ok": false, "tool": "write_file", "error": format!("{}: {}", resolved.display(), e) }),
+                }
+            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "write_file", "error": e.to_string() }))
+        }
+
+        "edit_file" => {
+            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let old_text = args.get("old_text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let new_text = args.get("new_text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if path.is_empty() {
+                return json!({ "ok": false, "tool": "edit_file", "error": "missing path" });
+            }
+            if old_text.is_empty() {
+                return json!({ "ok": false, "tool": "edit_file", "error": "missing old_text" });
+            }
+
+            tokio::task::spawn_blocking(move || {
+                let resolved = resolve_tool_path(&path);
+
+                let content = match std::fs::read_to_string(&resolved) {
+                    Ok(c) => c,
+                    Err(e) => return json!({ "ok": false, "tool": "edit_file", "error": format!("cannot read {}: {}", resolved.display(), e) }),
+                };
+
+                // Normalize line endings for matching
+                let normalized_content = content.replace("\r\n", "\n");
+                let normalized_old = old_text.replace("\r\n", "\n");
+                let normalized_new = new_text.replace("\r\n", "\n");
+
+                // Count occurrences
+                let occurrences = normalized_content.matches(&normalized_old).count();
+
+                if occurrences == 0 {
+                    return json!({
+                        "ok": false, "tool": "edit_file",
+                        "error": "could not find the exact text in the file. The old_text must match exactly including all whitespace and newlines."
+                    });
+                }
+
+                if occurrences > 1 {
+                    return json!({
+                        "ok": false, "tool": "edit_file",
+                        "error": format!("found {} occurrences of the text. The text must be unique. Please provide more context to make it unique.", occurrences)
+                    });
+                }
+
+                let new_content = normalized_content.replacen(&normalized_old, &normalized_new, 1);
+
+                if normalized_content == new_content {
+                    return json!({
+                        "ok": false, "tool": "edit_file",
+                        "error": "no changes made — the replacement produced identical content."
+                    });
+                }
+
+                // Restore original line endings if file used CRLF
+                let final_content = if content.contains("\r\n") {
+                    new_content.replace('\n', "\r\n")
+                } else {
+                    new_content
+                };
+
+                match std::fs::write(&resolved, &final_content) {
+                    Ok(()) => json!({
+                        "ok": true,
+                        "tool": "edit_file",
+                        "path": resolved.display().to_string(),
+                        "message": "successfully replaced text",
+                    }),
+                    Err(e) => json!({ "ok": false, "tool": "edit_file", "error": format!("cannot write {}: {}", resolved.display(), e) }),
+                }
+            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "edit_file", "error": e.to_string() }))
         }
 
         other => json!({ "ok": false, "tool": other, "error": "unsupported tool" }),

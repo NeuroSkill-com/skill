@@ -81,7 +81,7 @@
    */
   function stripToolCallFences(raw: string): string {
     // Known built-in tool names — must stay in sync with KNOWN_TOOL_NAMES in tools.rs
-    const KNOWN_TOOLS = new Set(["date", "location", "web_search", "web_fetch"]);
+    const KNOWN_TOOLS = new Set(["date", "location", "web_search", "web_fetch", "bash", "read_file", "write_file", "edit_file"]);
 
     function isToolCallObject(v: Record<string, unknown>): boolean {
       // Standard single-call: has name/tool + parameters/arguments
@@ -359,6 +359,7 @@
   type ToolExecutionMode = "sequential" | "parallel";
   interface ToolConfig {
     date: boolean; location: boolean; web_search: boolean; web_fetch: boolean;
+    bash: boolean; read_file: boolean; write_file: boolean; edit_file: boolean;
     execution_mode: ToolExecutionMode;
     max_rounds: number;
     max_calls_per_round: number;
@@ -370,6 +371,7 @@
   let supportsTools  = $state(false);
   let toolConfig     = $state<ToolConfig>({
     date: true, location: true, web_search: true, web_fetch: true,
+    bash: false, read_file: false, write_file: false, edit_file: false,
     execution_mode: "parallel", max_rounds: 3, max_calls_per_round: 4,
   });
   let messages       = $state<Message[]>([]);
@@ -465,7 +467,8 @@
 
   /** Number of enabled tools. */
   const enabledToolCount = $derived(
-    [toolConfig.date, toolConfig.location, toolConfig.web_search, toolConfig.web_fetch]
+    [toolConfig.date, toolConfig.location, toolConfig.web_search, toolConfig.web_fetch,
+     toolConfig.bash, toolConfig.read_file, toolConfig.write_file, toolConfig.edit_file]
       .filter(Boolean).length
   );
 
@@ -1065,6 +1068,10 @@
           location:            cfg.tools.location            ?? true,
           web_search:          cfg.tools.web_search          ?? true,
           web_fetch:           cfg.tools.web_fetch           ?? true,
+          bash:                cfg.tools.bash                ?? false,
+          read_file:           cfg.tools.read_file           ?? false,
+          write_file:          cfg.tools.write_file          ?? false,
+          edit_file:           cfg.tools.edit_file           ?? false,
           execution_mode:      cfg.tools.execution_mode      ?? "parallel",
           max_rounds:          cfg.tools.max_rounds          ?? 3,
           max_calls_per_round: cfg.tools.max_calls_per_round ?? 4,
@@ -1462,6 +1469,10 @@
               { key: "location"   as const, icon: "📍" },
               { key: "web_search" as const, icon: "🔍" },
               { key: "web_fetch"  as const, icon: "🌐" },
+              { key: "bash"       as const, icon: "💻" },
+              { key: "read_file"  as const, icon: "📄" },
+              { key: "write_file" as const, icon: "✏️" },
+              { key: "edit_file"  as const, icon: "🔧" },
             ] as tool}
               <button
                 onclick={() => updateToolConfig({ [tool.key]: !toolConfig[tool.key] })}
@@ -1717,7 +1728,7 @@
               {#if msg.toolUses?.length}
                 <div class="flex flex-wrap gap-1.5">
                   {#each msg.toolUses as tu}
-                    {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐" }}
+                    {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐", bash: "💻", read_file: "📄", write_file: "✏️", edit_file: "🔧" }}
                     {@const icon = icons[tu.tool] ?? "🔧"}
                     <div class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[0.65rem]
                                 font-medium select-none border

@@ -49,6 +49,10 @@
     location: boolean;
     web_search: boolean;
     web_fetch: boolean;
+    bash: boolean;
+    read_file: boolean;
+    write_file: boolean;
+    edit_file: boolean;
     execution_mode: ToolExecutionMode;
     max_rounds: number;
     max_calls_per_round: number;
@@ -62,7 +66,7 @@
     autoload_mmproj: boolean; verbose: boolean;
   }
 
-  type LlmToolKey = "date" | "location" | "web_search" | "web_fetch";
+  type LlmToolKey = "date" | "location" | "web_search" | "web_fetch" | "bash" | "read_file" | "write_file" | "edit_file";
 
   interface ModelFamily {
     id:          string;
@@ -95,7 +99,7 @@
   let config  = $state<LlmConfig>({
     enabled: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
-    tools: { date: true, location: true, web_search: true, web_fetch: true, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 3, max_calls_per_round: 4 },
+    tools: { date: true, location: true, web_search: true, web_fetch: true, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 3, max_calls_per_round: 4 },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
   });
@@ -121,12 +125,16 @@
   let unlistenLog:    (() => void) | undefined;
   let unlistenStatus: (() => void) | undefined;
 
-  let TOOL_ROWS = $derived<Array<{ key: LlmToolKey; label: string; desc: string }>>(
+  let TOOL_ROWS = $derived<Array<{ key: LlmToolKey; label: string; desc: string; warn?: boolean }>>(
     [
       { key: "date",       label: t("llm.tools.date"),      desc: t("llm.tools.dateDesc") },
       { key: "location",   label: t("llm.tools.location"),  desc: t("llm.tools.locationDesc") },
       { key: "web_search", label: t("llm.tools.webSearch"), desc: t("llm.tools.webSearchDesc") },
       { key: "web_fetch",  label: t("llm.tools.webFetch"),  desc: t("llm.tools.webFetchDesc") },
+      { key: "bash",       label: t("llm.tools.bash"),      desc: t("llm.tools.bashDesc"),      warn: true },
+      { key: "read_file",  label: t("llm.tools.readFile"),  desc: t("llm.tools.readFileDesc") },
+      { key: "write_file", label: t("llm.tools.writeFile"), desc: t("llm.tools.writeFileDesc"), warn: true },
+      { key: "edit_file",  label: t("llm.tools.editFile"),  desc: t("llm.tools.editFileDesc"),  warn: true },
     ]
   );
 
@@ -1140,9 +1148,21 @@
 
         <div class="flex flex-col gap-2">
           {#each TOOL_ROWS as tool}
-            <div class="flex items-center justify-between gap-4 rounded-xl border border-border/60 dark:border-white/[0.06] bg-slate-50/60 dark:bg-[#111118] px-3 py-2.5">
+            <div class="flex items-center justify-between gap-4 rounded-xl border
+                        {tool.warn && config.tools[tool.key]
+                          ? 'border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/15'
+                          : 'border-border/60 dark:border-white/[0.06] bg-slate-50/60 dark:bg-[#111118]'}
+                        px-3 py-2.5">
               <div class="flex flex-col gap-0.5">
-                <span class="text-[0.74rem] font-semibold text-foreground">{tool.label}</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[0.74rem] font-semibold text-foreground">{tool.label}</span>
+                  {#if tool.warn}
+                    <span class="text-[0.5rem] font-semibold rounded-full border px-1.5 py-0
+                                 border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      {t("llm.tools.advanced")}
+                    </span>
+                  {/if}
+                </div>
                 <span class="text-[0.62rem] text-muted-foreground leading-relaxed">{tool.desc}</span>
               </div>
               <button role="switch" aria-checked={config.tools[tool.key]} aria-label={tool.label}
@@ -1152,7 +1172,9 @@
                 }}
                 class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
                        border-transparent transition-colors duration-200
-                       {config.tools[tool.key] ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
+                       {config.tools[tool.key]
+                         ? (tool.warn ? 'bg-amber-500' : 'bg-blue-500')
+                         : 'bg-muted dark:bg-white/10'}">
                 <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
                               transform transition-transform duration-200
                               {config.tools[tool.key] ? 'translate-x-4' : 'translate-x-0'}"></span>

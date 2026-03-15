@@ -6,6 +6,23 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### LLM — Coding-Agent Tools
+
+- **Bash tool** (`bash`): execute shell commands from the LLM chat with configurable timeout. Output is tail-truncated to 2 000 lines / 50 KB (keeps the end where errors appear). Commands run in the user's home directory.
+- **Read file tool** (`read_file`): read text file contents with `offset`/`limit` pagination for large files. Output is head-truncated to 2 000 lines / 50 KB with continuation hints.
+- **Write file tool** (`write_file`): create or overwrite files with automatic parent directory creation.
+- **Edit file tool** (`edit_file`): surgical find-and-replace edits with exact text matching, CRLF-aware line ending preservation, and duplicate-occurrence rejection.
+- All four tools are **disabled by default** and marked with an "Advanced" warning badge in the UI — they must be explicitly enabled per-tool in Settings → LLM or the Chat sidebar.
+- Path resolution supports `~` home-directory expansion and relative paths (resolved against home).
+- Updated `KNOWN_TOOL_NAMES` for tool-call extraction and stripping in both Rust and frontend.
+- Full i18n for all 5 locales (en, de, fr, he, uk).
+
+### i18n
+
+- Translated all remaining English-fallback keys in Hebrew (`he.ts`): 138 dashboard/history/help keys, 39 hooks keys, 10 LLM tool keys, and 2 help-settings keys.
+- Translated 39 hooks keys into German (`de.ts`), French (`fr.ts`), and Ukrainian (`uk.ts`).
+- Removed all `// TODO: translate` markers — zero untranslated keys remain across all 4 non-English locales.
+
 ### Build / Tooling
 
 - Renamed Homebrew cask to `neuroskill` and moved definition to `Casks/neuroskill.rb`; install path is now `brew tap NeuroSkill-com/skill && brew install --cask neuroskill`.
