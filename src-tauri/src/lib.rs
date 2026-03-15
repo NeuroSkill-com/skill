@@ -112,8 +112,8 @@ pub(crate) use session_analysis::{
     get_session_metrics_impl,
     get_sleep_stages_impl,
     compute_compare_insights, analyze_sleep_stages, analyze_search_results,
-    analyze_umap_points, compute_status_history,
-    load_labels_range, find_label_for_epoch, load_embeddings_range
+    compute_status_history,
+    load_embeddings_range
 };
 use session_analysis::{
     get_sleep_stages, compute_umap_compare, enqueue_umap_compare, poll_job,

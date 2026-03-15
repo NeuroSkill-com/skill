@@ -1164,95 +1164,7 @@ pub(crate) fn analyze_search_results(result: &commands::SearchResult) -> serde_j
 
 // ── UMAP analysis ────────────────────────────────────────────────────────────
 
-/// Compute cluster separation metrics and outliers from UMAP 3D coordinates.
-pub(crate) fn analyze_umap_points(
-    embedding: &[Vec<f64>],
-    session_ids: &[u8],    // 0 = A, 1 = B
-    timestamps: &[u64],
-    _n_a: usize,
-) -> serde_json::Value {
-    let n = embedding.len().min(session_ids.len());
-    if n == 0 { return serde_json::json!(null); }
-
-    // Centroids
-    let (mut ca, mut cb) = ([0.0f64; 3], [0.0f64; 3]);
-    let (mut na, mut nb) = (0usize, 0usize);
-    for i in 0..n {
-        let c = if session_ids[i] == 0 { &mut ca } else { &mut cb };
-        let cnt = if session_ids[i] == 0 { &mut na } else { &mut nb };
-        for d in 0..3 { c[d] += embedding[i][d]; }
-        *cnt += 1;
-    }
-    if na > 0 { for c in ca.iter_mut() { *c /= na as f64; } }
-    if nb > 0 { for c in cb.iter_mut() { *c /= nb as f64; } }
-
-    // Inter-cluster distance
-    let inter_dist = ((ca[0]-cb[0]).powi(2) + (ca[1]-cb[1]).powi(2) + (ca[2]-cb[2]).powi(2)).sqrt();
-
-    // Intra-cluster spread (mean distance to own centroid)
-    let dist_to = |pt: &[f64], c: &[f64; 3]| -> f64 {
-        ((pt[0]-c[0]).powi(2) + (pt[1]-c[1]).powi(2) + (pt[2]-c[2]).powi(2)).sqrt()
-    };
-    let (mut spread_a, mut spread_b) = (0.0f64, 0.0f64);
-    for i in 0..n {
-        if session_ids[i] == 0 { spread_a += dist_to(&embedding[i], &ca); }
-        else                   { spread_b += dist_to(&embedding[i], &cb); }
-    }
-    if na > 0 { spread_a /= na as f64; }
-    if nb > 0 { spread_b /= nb as f64; }
-
-    // Separation score: inter / (0.5*(intra_a + intra_b))  — higher is better
-    let avg_intra = (spread_a + spread_b) / 2.0;
-    let separation = if avg_intra > 1e-9 { inter_dist / avg_intra } else { 0.0 };
-
-    // Outliers: points > 2 std-devs from their own centroid
-    let mut all_dists_a: Vec<f64> = Vec::new();
-    let mut all_dists_b: Vec<f64> = Vec::new();
-    for i in 0..n {
-        let d = dist_to(&embedding[i], if session_ids[i] == 0 { &ca } else { &cb });
-        if session_ids[i] == 0 { all_dists_a.push(d); } else { all_dists_b.push(d); }
-    }
-    let std_a = if all_dists_a.len() > 1 {
-        let m = all_dists_a.iter().sum::<f64>() / all_dists_a.len() as f64;
-        (all_dists_a.iter().map(|x| (x - m).powi(2)).sum::<f64>() / all_dists_a.len() as f64).sqrt()
-    } else { 1.0 };
-    let std_b = if all_dists_b.len() > 1 {
-        let m = all_dists_b.iter().sum::<f64>() / all_dists_b.len() as f64;
-        (all_dists_b.iter().map(|x| (x - m).powi(2)).sum::<f64>() / all_dists_b.len() as f64).sqrt()
-    } else { 1.0 };
-
-    let mut outliers: Vec<serde_json::Value> = Vec::new();
-    let mut oi_a = 0usize;
-    let mut oi_b = 0usize;
-    for i in 0..n {
-        let c = if session_ids[i] == 0 { &ca } else { &cb };
-        let d = dist_to(&embedding[i], c);
-        let threshold = if session_ids[i] == 0 { spread_a + 2.0 * std_a } else { spread_b + 2.0 * std_b };
-        if d > threshold {
-            if outliers.len() < 20 { // cap to 20
-                outliers.push(serde_json::json!({
-                    "x": r2f(embedding[i][0]), "y": r2f(embedding[i][1]), "z": r2f(embedding[i][2]),
-                    "session": if session_ids[i] == 0 { "A" } else { "B" },
-                    "utc": timestamps.get(i).copied().unwrap_or(0),
-                    "distance_to_centroid": r2f(d),
-                }));
-            }
-            if session_ids[i] == 0 { oi_a += 1; } else { oi_b += 1; }
-        }
-    }
-
-    serde_json::json!({
-        "centroid_a": [r2f(ca[0]), r2f(ca[1]), r2f(ca[2])],
-        "centroid_b": [r2f(cb[0]), r2f(cb[1]), r2f(cb[2])],
-        "inter_cluster_distance": r2f(inter_dist),
-        "intra_spread_a": r2f(spread_a),
-        "intra_spread_b": r2f(spread_b),
-        "separation_score": r2f(separation),
-        "n_outliers_a": oi_a,
-        "n_outliers_b": oi_b,
-        "outliers": outliers,
-    })
-}
+// analyze_umap_points — moved to skill_router crate.
 
 // ── Status history ───────────────────────────────────────────────────────────
 
@@ -1354,36 +1266,7 @@ struct UmapPoint {
     label: Option<String>,
 }
 
-/// Load all labels from `labels.sqlite` whose EEG window overlaps [start, end].
-/// Returns Vec<(eeg_start_unix, eeg_end_unix, text)>.
-pub(crate) fn load_labels_range(
-    skill_dir: &std::path::Path,
-    start_utc: u64,
-    end_utc:   u64,
-) -> Vec<(u64, u64, String)> {
-    let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
-    if !labels_db.exists() { return vec![]; }
-    let conn = match rusqlite::Connection::open_with_flags(
-        &labels_db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ) { Ok(c) => c, Err(_) => return vec![] };
-    let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-    let mut stmt = match conn.prepare(
-        "SELECT eeg_start, eeg_end, text FROM labels
-         WHERE eeg_end >= ?1 AND eeg_start <= ?2
-         ORDER BY eeg_start"
-    ) { Ok(s) => s, Err(_) => return vec![] };
-    stmt.query_map(
-        rusqlite::params![start_utc as i64, end_utc as i64],
-        |row| Ok((row.get::<_, i64>(0)? as u64, row.get::<_, i64>(1)? as u64, row.get::<_, String>(2)?))
-    ).map(|rows| rows.flatten().collect()).unwrap_or_default()
-}
-
-/// Find the first label whose EEG window contains `epoch_utc`.
-pub(crate) fn find_label_for_epoch(labels: &[(u64, u64, String)], epoch_utc: u64) -> Option<String> {
-    labels.iter()
-        .find(|(start, end, _)| epoch_utc >= *start && epoch_utc <= *end)
-        .map(|(_, _, text)| text.clone())
-}
+// load_labels_range — moved to skill_router crate.
 
 /// Result of UMAP projection comparing two sessions.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -1394,49 +1277,8 @@ pub(crate) struct UmapResult {
     dim:     usize,
 }
 
-/// Load all embedding vectors from daily SQLite DBs in [start, end] UTC range.
-pub(crate) fn load_embeddings_range(
-    skill_dir: &std::path::Path,
-    start_utc: u64,
-    end_utc:   u64,
-) -> Vec<(u64, Vec<f32>)> {
-    use crate::commands::unix_to_ts;
-    let ts_start = unix_to_ts(start_utc);
-    let ts_end   = unix_to_ts(end_utc);
-
-    let mut out: Vec<(u64, Vec<f32>)> = Vec::new();
-    let entries = match std::fs::read_dir(skill_dir) {
-        Ok(e) => e, Err(_) => return out,
-    };
-    for entry in entries.filter_map(|e| e.ok()) {
-        let path = entry.path();
-        if !path.is_dir() { continue; }
-        let db_path = path.join(crate::constants::SQLITE_FILE);
-        if !db_path.exists() { continue; }
-        let conn = match rusqlite::Connection::open_with_flags(
-            &db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) { Ok(c) => c, Err(_) => continue };
-        let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        let mut stmt = match conn.prepare(
-            "SELECT timestamp, eeg_embedding FROM embeddings
-             WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY timestamp"
-        ) { Ok(s) => s, Err(_) => continue };
-
-        let rows = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
-            let ts: i64 = row.get(0)?;
-            let blob: Vec<u8> = row.get(1)?;
-            let emb: Vec<f32> = blob.chunks_exact(4)
-                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-                .collect();
-            Ok((crate::commands::ts_to_unix(ts), emb))
-        });
-        if let Ok(rows) = rows {
-            for r in rows.flatten() { out.push(r); }
-        }
-    }
-    out.sort_by_key(|e| e.0);
-    out
-}
+// load_embeddings_range — delegated to skill_router crate.
+pub(crate) use skill_router::load_embeddings_range;
 
 /// Tauri command: compute UMAP 3D projection (synchronous fallback).
 #[tauri::command]

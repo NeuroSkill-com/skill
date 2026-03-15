@@ -16,28 +16,17 @@ use crate::MutexExt;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 
-use serde::Serialize;
-
 use crate::constants::SQLITE_FILE;
 use crate::eeg_model_config::LatestEpochMetrics;
 use crate::{AppState, unix_secs};
 
-// ── rounded scores helper ─────────────────────────────────────────────────────
+// ── Re-exports from skill-router ──────────────────────────────────────────────
 
-fn r1(v: f32) -> f32 { (v * 10.0).round() / 10.0 }
-fn r2(v: f32) -> f32 { (v * 100.0).round() / 100.0 }
-fn r3(v: f32) -> f32 { (v * 1000.0).round() / 1000.0 }
-fn r1d(v: f64) -> f64 { (v * 10.0).round() / 10.0 }
-fn r2d(v: f64) -> f64 { (v * 100.0).round() / 100.0 }
-
-#[derive(Serialize)]
-struct RoundedBands {
-    rel_delta: f32,
-    rel_theta: f32,
-    rel_alpha: f32,
-    rel_beta:  f32,
-    rel_gamma: f32,
-}
+pub use skill_router::{
+    r1, r2, r3, r1d, r2d,
+    RoundedBands, RoundedScores,
+    umap_compute_inner,
+};
 
 /// `hooks_get` — return raw hook rules (no runtime trigger state).
 fn hooks_get(app: &AppHandle) -> Result<Value, String> {
@@ -345,62 +334,8 @@ fn hooks_log(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     }))
 }
 
-#[derive(Serialize)]
-struct RoundedScores {
-    relaxation: f32,
-    engagement: f32,
-    faa: f32,
-    tar: f32,
-    bar: f32,
-    dtr: f32,
-    pse: f32,
-    apf: f32,
-    bps: f32,
-    snr: f32,
-    coherence: f32,
-    mu_suppression: f32,
-    mood: f32,
-    tbr: f32,
-    sef95: f32,
-    spectral_centroid: f32,
-    hjorth_activity: f32,
-    hjorth_mobility: f32,
-    hjorth_complexity: f32,
-    permutation_entropy: f32,
-    higuchi_fd: f32,
-    dfa_exponent: f32,
-    sample_entropy: f32,
-    pac_theta_gamma: f32,
-    laterality_index: f32,
-    hr: f64,
-    rmssd: f64,
-    sdnn: f64,
-    pnn50: f64,
-    lf_hf_ratio: f64,
-    respiratory_rate: f64,
-    spo2_estimate: f64,
-    perfusion_index: f64,
-    stress_index: f64,
-    // Artifact detection
-    blink_count: u64,
-    blink_rate: f64,
-    // Head pose
-    head_pitch: f64,
-    head_roll: f64,
-    stillness: f64,
-    nod_count: u64,
-    shake_count: u64,
-    // Composite scores
-    meditation: f64,
-    cognitive_load: f64,
-    drowsiness: f64,
-    bands: RoundedBands,
-    epoch_timestamp: i64,
-}
-
-impl From<&LatestEpochMetrics> for RoundedScores {
-    fn from(m: &LatestEpochMetrics) -> Self {
-        Self {
+fn rounded_scores_from(m: &LatestEpochMetrics) -> RoundedScores {
+        RoundedScores {
             relaxation: r1(m.relaxation_score),
             engagement: r1(m.engagement_score),
             faa: r3(m.faa),
@@ -454,7 +389,6 @@ impl From<&LatestEpochMetrics> for RoundedScores {
             },
             epoch_timestamp: m.epoch_timestamp,
         }
-    }
 }
 
 // ── status ────────────────────────────────────────────────────────────────────
@@ -647,7 +581,7 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
         "signal_quality": channel_quality,
         "sleep": sleep_json,
         "scores": match latest_metrics {
-            Some(ref m) => serde_json::to_value(RoundedScores::from(m))
+            Some(ref m) => serde_json::to_value(rounded_scores_from(m))
                 .unwrap_or(Value::Null),
             None => Value::Null,
         },
@@ -1228,218 +1162,8 @@ pub fn umap_poll(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     serde_json::to_value(&result).map_err(|e| e.to_string())
 }
 
-/// Backend type alias used by fast-umap (GPU-accelerated via wgpu / CubeCL).
-///
-/// We use the raw `CubeBackend` (without the `Fusion` wrapper) because
-/// `fast_umap::backend::AutodiffBackend` is only implemented for
-/// `Autodiff<CubeBackend<R, F, I, BT>>`, not for `Autodiff<Fusion<…>>`.
-type FastUmapBackend = burn::backend::Autodiff<
-    burn_cubecl::CubeBackend<cubecl::wgpu::WgpuRuntime, f32, i32, u32>,
->;
-
-/// Return the path to the UMAP cache directory inside `~/.skill/umap_cache/`.
-fn umap_cache_dir(skill_dir: &std::path::Path) -> std::path::PathBuf {
-    skill_dir.join("umap_cache")
-}
-
-/// Build a deterministic cache filename for a session-pair UMAP result.
-///
-/// Format: `umap_{a_start}_{a_end}_{b_start}_{b_end}.json`
-fn umap_cache_path(
-    skill_dir: &std::path::Path,
-    a_start: u64,
-    a_end: u64,
-    b_start: u64,
-    b_end: u64,
-) -> std::path::PathBuf {
-    umap_cache_dir(skill_dir)
-        .join(format!("umap_{a_start}_{a_end}_{b_start}_{b_end}.json"))
-}
-
-/// Try to load a cached UMAP result from disk.
-fn umap_cache_load(path: &std::path::Path) -> Option<serde_json::Value> {
-    let bytes = std::fs::read(path).ok()?;
-    serde_json::from_slice(&bytes).ok()
-}
-
-/// Persist a UMAP result to the cache directory (best-effort, errors are logged).
-fn umap_cache_store(path: &std::path::Path, value: &serde_json::Value) {
-    if let Some(parent) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!("[umap] failed to create cache dir: {e}");
-            return;
-        }
-    }
-    match serde_json::to_vec(value) {
-        Ok(bytes) => {
-            if let Err(e) = std::fs::write(path, bytes) {
-                eprintln!("[umap] failed to write cache file: {e}");
-            } else {
-                eprintln!("[umap] cached result to {}", path.display());
-            }
-        }
-        Err(e) => eprintln!("[umap] failed to serialise cache: {e}"),
-    }
-}
-
-/// Inner UMAP compute — shared by both WS and Tauri IPC paths.
-///
-/// Uses `fast-umap` (parametric, GPU-accelerated) instead of `umap-rs` for
-/// significantly faster projection on large embedding sets.
-///
-/// Results are cached to `~/.skill/umap_cache/umap_{a}_{b}_{c}_{d}.json` so
-/// that repeated queries for the same session pair return instantly.
-pub fn umap_compute_inner(
-    skill_dir: &std::path::Path,
-    a_start: u64,
-    a_end: u64,
-    b_start: u64,
-    b_end: u64,
-    on_progress: Option<Box<dyn Fn(fast_umap::EpochProgress) + Send>>,
-) -> Result<serde_json::Value, String> {
-    // ── Check cache first ────────────────────────────────────────────────
-    let cache_path = umap_cache_path(skill_dir, a_start, a_end, b_start, b_end);
-    if let Some(cached) = umap_cache_load(&cache_path) {
-        eprintln!("[umap] cache hit: {}", cache_path.display());
-        return Ok(cached);
-    }
-
-    let embs_a = crate::load_embeddings_range(skill_dir, a_start, a_end);
-    let embs_b = crate::load_embeddings_range(skill_dir, b_start, b_end);
-    let all_labels = crate::load_labels_range(
-        skill_dir,
-        a_start.min(b_start),
-        a_end.max(b_end),
-    );
-
-    let n_a = embs_a.len();
-    let n_b = embs_b.len();
-    let n   = n_a + n_b;
-
-    let umap_start = std::time::Instant::now();
-    eprintln!("[umap] computing 3D projection for {} embeddings (A={}, B={})", n, n_a, n_b);
-
-    if n < 5 {
-        return Ok(serde_json::json!({ "points": [], "n_a": n_a, "n_b": n_b, "dim": 0 }));
-    }
-
-    let dim = embs_a.first().or(embs_b.first())
-        .map(|e| e.1.len()).unwrap_or(0);
-    if dim == 0 {
-        return Ok(serde_json::json!({ "points": [], "n_a": n_a, "n_b": n_b, "dim": 0 }));
-    }
-
-    // ── Load user-configurable UMAP parameters ─────────────────────────────
-    let ucfg = crate::load_umap_config(skill_dir);
-
-    // All embeddings are used — no subsampling.
-    let n_use = n;
-
-    // Build Vec<Vec<f64>> input expected by fast-umap.
-    let mut data: Vec<Vec<f64>> = Vec::with_capacity(n_use);
-    let mut timestamps: Vec<u64> = Vec::with_capacity(n_use);
-    let mut labels: Vec<u8> = Vec::with_capacity(n_use);
-    for (ts, emb) in embs_a.iter().chain(embs_b.iter()) {
-        data.push(emb.iter().map(|&v| v as f64).collect());
-        timestamps.push(*ts);
-        labels.push(if timestamps.len() <= n_a { 0 } else { 1 });
-    }
-
-    let k = ucfg.n_neighbors.clamp(2, 50).min(n_use - 1).min(n_use / 2).max(2);
-    let n_epochs = ucfg.n_epochs.clamp(50, 2000);
-
-    let config = fast_umap::UmapConfig {
-        n_components: 3,
-        graph: fast_umap::GraphParams {
-            n_neighbors: k,
-            ..Default::default()
-        },
-        optimization: fast_umap::OptimizationParams {
-            n_epochs,
-            verbose: false,
-            repulsion_strength: ucfg.repulsion_strength.clamp(0.1, 10.0),
-            neg_sample_rate: ucfg.neg_sample_rate.clamp(1, 30),
-            timeout: Some(ucfg.timeout_secs.clamp(10, 600)),
-            cooldown_ms: ucfg.cooldown_ms.clamp(0, 10_000),
-            figures_dir: Some(skill_dir.join("tmp/figures")),
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-
-    // Build per-point label strings for fast-umap's training chart snapshots.
-    // Also includes user-defined labels from the label store if present.
-    let fit_labels: Vec<String> = (0..n_use).map(|i| {
-        let session_tag = if labels[i] == 0 { "A" } else { "B" };
-        if let Some(lbl) = crate::find_label_for_epoch(&all_labels, timestamps[i]) {
-            format!("{session_tag}:{lbl}")
-        } else {
-            session_tag.to_string()
-        }
-    }).collect();
-
-    // Run UMAP in a catch_unwind guard — GPU buffer readback can abort on some
-    // drivers when VRAM pressure is high or tensor shapes are degenerate.
-    let fit_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let umap = fast_umap::Umap::<FastUmapBackend>::new(config);
-        let (_exit_tx, exit_rx) = crossbeam_channel::unbounded::<()>();
-        let fitted = if let Some(cb) = on_progress {
-            umap.fit_with_progress(data, Some(fit_labels), exit_rx, cb)
-        } else {
-            umap.fit_with_signal(data, Some(fit_labels), exit_rx)
-        };
-        fitted.into_embedding()
-    }));
-
-    let embedding = match fit_result {
-        Ok(emb) => emb,
-        Err(e) => {
-            let msg = if let Some(s) = e.downcast_ref::<String>() {
-                s.clone()
-            } else if let Some(s) = e.downcast_ref::<&str>() {
-                s.to_string()
-            } else {
-                "unknown panic".to_string()
-            };
-            eprintln!("[umap] UMAP fit panicked: {msg}");
-            return Err(format!("UMAP projection failed: {msg}"));
-        }
-    };
-
-    let points: Vec<serde_json::Value> = (0..n_use).map(|i| {
-        let mut pt = serde_json::json!({
-            "x": embedding[i][0],
-            "y": embedding[i][1],
-            "z": embedding[i][2],
-            "session": labels[i],
-            "utc": timestamps[i],
-        });
-        if let Some(lbl) = crate::find_label_for_epoch(&all_labels, timestamps[i]) {
-            pt.as_object_mut().unwrap().insert("label".into(), serde_json::Value::String(lbl));
-        }
-        pt
-    }).collect();
-
-    let elapsed_ms = umap_start.elapsed().as_millis() as u64;
-    eprintln!("[umap] projection done in {elapsed_ms} ms ({n_use} embeddings)");
-
-    // Cluster analysis (centroids, separation score, outliers)
-    let analysis = crate::analyze_umap_points(&embedding, &labels, &timestamps, n_a);
-
-    let result = serde_json::json!({
-        "points":     points,
-        "n_a":        n_a,
-        "n_b":        n_b,
-        "dim":        dim,
-        "elapsed_ms": elapsed_ms,
-        "analysis":   analysis,
-    });
-
-    // ── Persist to cache ─────────────────────────────────────────────────
-    umap_cache_store(&cache_path, &result);
-
-    Ok(result)
-}
+// umap_compute_inner, cache helpers, analyze_umap_points, load_embeddings_range,
+// load_labels_range, find_label_for_epoch — all re-exported from skill_router above.
 
 // ── calibration profile commands ──────────────────────────────────────────────
 
