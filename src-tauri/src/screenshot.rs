@@ -657,12 +657,29 @@ fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
 }
 
 /// Run OCR on raw image bytes (PNG/JPEG/WebP).  Returns the extracted text.
-/// This should be called on the **full-resolution** captured image before
-/// any downsizing, for maximum text recognition quality.
+///
+/// The image is first downsized to `OCR_MAX_DIMENSION` max dimension
+/// (1536px) if larger.  Full retina captures are far too large for the
+/// rten-based OCR engine and cause 20+ second inference times.  At 1536px
+/// all readable text is preserved and OCR completes in <1 second.
 fn run_ocr(engine: &ocrs::OcrEngine, raw_bytes: &[u8]) -> Option<String> {
-    let img = image::load_from_memory(raw_bytes).ok()?.into_rgb8();
+    let img = image::load_from_memory(raw_bytes).ok()?;
     let (w, h) = img.dimensions();
-    let source = ocrs::ImageSource::from_bytes(img.as_raw(), (w, h)).ok()?;
+
+    // Downsize if larger than OCR_MAX_DIMENSION
+    let img = if w > OCR_MAX_DIMENSION || h > OCR_MAX_DIMENSION {
+        let scale = (OCR_MAX_DIMENSION as f64 / w as f64)
+            .min(OCR_MAX_DIMENSION as f64 / h as f64);
+        let nw = (w as f64 * scale).round() as u32;
+        let nh = (h as f64 * scale).round() as u32;
+        img.resize(nw, nh, image::imageops::FilterType::Triangle)
+    } else {
+        img
+    };
+
+    let rgb = img.into_rgb8();
+    let (w, h) = rgb.dimensions();
+    let source = ocrs::ImageSource::from_bytes(rgb.as_raw(), (w, h)).ok()?;
     let input = engine.prepare_input(source).ok()?;
     let text = engine.get_text(&input).ok()?;
     let text = text.trim().to_string();
@@ -842,9 +859,17 @@ struct EmbedJob {
     row_id:      i64,
     ts_i64:      i64,
     resized_png: Vec<u8>,
-    ocr_text:    String,
+    /// Raw capture bytes at full resolution — used for OCR in the embed
+    /// thread.  `None` when OCR is disabled to avoid copying large buffers.
+    raw_for_ocr: Option<Vec<u8>>,
     config:      ScreenshotConfig,
 }
+
+/// Maximum dimension (width or height) for the image passed to the OCR
+/// engine.  Full retina captures (5120×2880+) are far too large for text
+/// detection and make OCR take 20+ seconds.  Downsizing to 1536px max
+/// preserves all readable text while reducing OCR time to <1 second.
+const OCR_MAX_DIMENSION: u32 = 1536;
 
 // ── Background worker ─────────────────────────────────────────────────────────
 
@@ -880,23 +905,6 @@ pub fn run_screenshot_worker(
         let r = app.state::<Mutex<Box<AppState>>>();
         let g = r.lock_or_recover();
         g.screenshot_config.clone()
-    };
-
-    // Load OCR engine if enabled (downloads models on first use).
-    // OCR runs in the capture thread because it needs the full-res image
-    // before downsizing, and it's fast enough (~50-200 ms) to not block
-    // the 5 s cadence.
-    let ocr_engine = if config.ocr_enabled {
-        let engine = load_ocr_engine(&skill_dir);
-        if engine.is_some() {
-            eprintln!("[screenshot] OCR engine ({}) loaded", config.ocr_engine);
-        } else {
-            eprintln!("[screenshot] OCR engine not available");
-        }
-        engine
-    } else {
-        eprintln!("[screenshot] OCR disabled by config");
-        None
     };
 
     // ── Spawn the embed thread ──
@@ -951,28 +959,21 @@ pub fn run_screenshot_worker(
         };
         metrics.capture_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
-        // ── OCR on full-resolution image (before downsizing) ──
-        let t0 = Instant::now();
-        let ocr_text = if config.ocr_enabled {
-            if let Some(ref engine) = ocr_engine {
-                run_ocr(engine, &captured.raw_bytes).unwrap_or_default()
-            } else {
-                String::new()
-            }
-        } else {
-            String::new()
-        };
-        metrics.ocr_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
-
         // ── Resize + pad ──
         let t0 = Instant::now();
         let (resized_png, w, h) = match resize_fit_pad(&captured.raw_bytes, config.image_size) {
             Some(r) => r,
             None => continue,
         };
-        // Drop the full-res capture immediately to free memory
-        drop(captured);
         metrics.resize_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+
+        // Keep raw bytes for OCR in embed thread (only if OCR enabled)
+        let raw_for_ocr = if config.ocr_enabled {
+            Some(captured.raw_bytes.clone())
+        } else {
+            None
+        };
+        drop(captured);
 
         // ── Save to disk as WebP + SQLite + context ──
         let t0 = Instant::now();
@@ -1014,7 +1015,7 @@ pub fn run_screenshot_worker(
             quality: config.quality,
             app_name,
             window_title,
-            ocr_text: ocr_text.clone(),
+            ocr_text: String::new(), // backfilled by embed thread after OCR
             ocr_embedding: None,
             ocr_embedding_dim: 0,
             ocr_hnsw_id: None,
@@ -1033,7 +1034,7 @@ pub fn run_screenshot_worker(
                 row_id,
                 ts_i64,
                 resized_png,
-                ocr_text,
+                raw_for_ocr,
                 config: config.clone(),
             }) {
                 Ok(()) => {
@@ -1070,6 +1071,20 @@ fn run_embed_thread(
     let mut fe_encoder = load_fastembed_image(&initial_config, &skill_dir);
     let mut last_backend = initial_config.embed_backend.clone();
     let mut last_model   = initial_config.fastembed_model.clone();
+
+    // Load OCR engine (downloads models on first use)
+    let ocr_engine = if initial_config.ocr_enabled {
+        let engine = load_ocr_engine(&skill_dir);
+        if engine.is_some() {
+            eprintln!("[screenshot-embed] OCR engine ({}) loaded", initial_config.ocr_engine);
+        } else {
+            eprintln!("[screenshot-embed] OCR engine not available");
+        }
+        engine
+    } else {
+        eprintln!("[screenshot-embed] OCR disabled by config");
+        None
+    };
 
     // Load text embedder for OCR
     let mut text_embedder: Option<fastembed::TextEmbedding> = if initial_config.ocr_enabled {
@@ -1164,11 +1179,20 @@ fn run_embed_thread(
             );
         }
 
-        // ── Backfill OCR text embedding ──
+        // ── OCR extraction (on raw full-res image, downsized to OCR_MAX_DIMENSION) ──
+        let t_ocr = Instant::now();
+        let ocr_text = if let (Some(ref engine), Some(ref raw)) = (&ocr_engine, &job.raw_for_ocr) {
+            run_ocr(engine, raw).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        metrics.ocr_us.store(t_ocr.elapsed().as_micros() as u64, Ordering::Relaxed);
+
+        // ── OCR text embedding + backfill ──
         let t0 = Instant::now();
-        if !job.ocr_text.is_empty() {
+        if !ocr_text.is_empty() {
             if let Some(ref mut te) = text_embedder {
-                if let Ok(mut vecs) = te.embed(vec![job.ocr_text.as_str()], None) {
+                if let Ok(mut vecs) = te.embed(vec![ocr_text.as_str()], None) {
                     if let Some(emb) = vecs.pop() {
                         let id = ocr_hnsw.len() as u64;
                         ocr_hnsw.insert(emb.clone(), job.ts_i64);
@@ -1177,9 +1201,12 @@ fn run_embed_thread(
                             save_ocr_hnsw(&ocr_hnsw, &skill_dir);
                             ocr_inserts_since_save = 0;
                         }
-                        store.update_ocr(job.row_id, &job.ocr_text, Some(&emb), Some(id));
+                        store.update_ocr(job.row_id, &ocr_text, Some(&emb), Some(id));
                     }
                 }
+            } else {
+                // No text embedder — still save the OCR text without embedding
+                store.update_ocr(job.row_id, &ocr_text, None, None);
             }
         }
         metrics.text_embed_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
