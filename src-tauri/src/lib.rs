@@ -1444,7 +1444,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 tauri::WebviewUrl::App("".into()),
             )
             .title(constants::APP_DISPLAY_NAME)
-            .decorations(false)
+            .decorations(false).transparent(true)
             .build()
             {
                 Ok(win) => win,

@@ -181,6 +181,8 @@
 @layer base {
   * { @apply border-border outline-ring/50; }
   html {
+    border-radius: 10px;
+    overflow: hidden;
     scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
     scrollbar-width: thin;
   }
