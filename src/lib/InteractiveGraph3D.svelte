@@ -22,6 +22,7 @@ the Free Software Foundation, version 3 only. -->
   import type { OrbitControls as OrbitControlsType } from "three/examples/jsm/controls/OrbitControls.js";
   import { t } from "$lib/i18n/index.svelte";
   import { getResolved } from "$lib/theme-store.svelte";
+  import { fmtDateTimeLocale } from "$lib/format";
 
   // ── Types ─────────────────────────────────────────────────────────────────
   interface GraphNode {
@@ -554,7 +555,7 @@ the Free Software Foundation, version 3 only. -->
       };
       const lines: string[] = [`${kindLabel[n.kind] ?? n.kind}`];
       if (n.text)           lines.push(n.text.slice(0, 80));
-      if (n.timestamp_unix) lines.push(new Date(n.timestamp_unix * 1000).toLocaleString());
+      if (n.timestamp_unix) lines.push(fmtDateTimeLocale(n.timestamp_unix));
       if (n.distance > 0)   lines.push(`dist: ${n.distance.toFixed(4)}`);
       if (selectedNodeId === null)
         lines.push("click to highlight connections");
@@ -650,7 +651,7 @@ the Free Software Foundation, version 3 only. -->
 
   function fmtTs(unix: number) {
     if (!unix) return "—";
-    return new Date(unix*1000).toLocaleString(undefined, { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit", hour12:false });
+    return fmtDateTimeLocale(unix);
   }
 </script>
 

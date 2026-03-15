@@ -23,6 +23,8 @@ the Free Software Foundation, version 3 only. -->
   import {
     pad, fmtTime, fmtDate, fmtDateTimeSecs as fmtDateTime,
     fmtDuration as fmtDurationSecs, fmtUtcDay, fmtSecs,
+    fmtDateTimeLocalInput, parseDateTimeLocalInput,
+    dateToCompactKey, fromUnix, fmtDateTimeLocale,
   } from "$lib/format";
   import type { UmapPoint, UmapResult } from "$lib/types";
 
@@ -77,9 +79,9 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Formatting helpers ───────────────────────────────────────────────────
   function toInputValue(d: Date) {
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    return fmtDateTimeLocalInput(Math.floor(d.getTime() / 1000));
   }
-  function fromInputValue(s: string) { return Math.floor(new Date(s).getTime() / 1000); }
+  function fromInputValue(s: string) { return parseDateTimeLocalInput(s); }
   function fmtDuration(s: number, e: number) { return fmtDurationSecs(e - s); }
 
   // Distance → colour/width

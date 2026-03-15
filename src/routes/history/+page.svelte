@@ -24,7 +24,10 @@ the Free Software Foundation, version 3 only. -->
   import { Spinner }       from "$lib/components/ui/spinner";
   import { hBar, hCbs, type HistoryViewMode } from "$lib/history-titlebar.svelte";
   import type { LabelRow, SleepStages } from "$lib/types";
-  import { fmtDayKey, fmtDurationRange } from "$lib/format";
+  import {
+    fmtDayKey, fmtDurationRange, fmtDateTimeLocale, fmtTimeShort,
+    dateToLocalKey, fromUnix, pad, setupHiDpiCanvas, getDpr,
+  } from "$lib/format";
 
   // ── Types ───────────────────────────────────────────────────────────────
   interface SessionEntry {
@@ -360,7 +363,11 @@ the Free Software Foundation, version 3 only. -->
       if (loadSeq === seq) dayLoading = false;
     }
 
-    // ③ Speculatively warm adjacent days so the next navigation is instant.
+    // ③ Load screenshots for the day.
+    const { startSec } = localDayBounds(localKey);
+    void loadDayScreenshots(startSec);
+
+    // ④ Speculatively warm adjacent days so the next navigation is instant.
     setTimeout(() => {
       if (idx > 0)                    void prefetchDay(localDays[idx - 1]);
       if (idx < localDays.length - 1) void prefetchDay(localDays[idx + 1]);
@@ -406,6 +413,34 @@ the Free Software Foundation, version 3 only. -->
     } catch (e) { console.error("open_compare_window_with_sessions:", e); }
   }
   function exitCompareMode() { compareMode = false; compareSelected = []; }
+
+  // ── Screenshots for current day ───────────────────────────────────────
+  interface ScreenshotInfo { unix_ts: number; filename: string; app_name: string; window_title: string }
+  /** Screenshots for the current day, keyed by unix_ts for fast lookup. */
+  let dayScreenshots = $state<ScreenshotInfo[]>([]);
+  /** Set of unix timestamps that have a screenshot — for O(1) cell lookup. */
+  let screenshotTsSet = $derived(new Set(dayScreenshots.map(s => s.unix_ts)));
+  /** Map unix_ts → ScreenshotInfo for tooltip/preview lookup. */
+  let screenshotByTs  = $derived(new Map(dayScreenshots.map(s => [s.unix_ts, s])));
+  /** API port for screenshot image URLs. */
+  let screenshotPort  = $state(8375);
+  /** Currently previewed screenshot (shown on hover). */
+  let screenshotPreview = $state<{ x: number; y: number; src: string; title: string } | null>(null);
+
+  function screenshotUrl(filename: string): string {
+    return filename ? `http://127.0.0.1:${screenshotPort}/screenshots/${filename}` : "";
+  }
+
+  /** Load all screenshots within the current day's time range. */
+  async function loadDayScreenshots(dayStart: number) {
+    try {
+      const midpoint = dayStart + 43200; // noon
+      const results = await invoke<ScreenshotInfo[]>("get_screenshots_around", {
+        timestamp: midpoint, windowSecs: 43200,
+      });
+      dayScreenshots = results;
+    } catch { dayScreenshots = []; }
+  }
 
   // ── Labels browser ──────────────────────────────────────────────────────
   let allLabels      = $state<any[]>([]);
@@ -524,13 +559,9 @@ the Free Software Foundation, version 3 only. -->
     canvas: HTMLCanvasElement,
     data: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }
   ) {
-    const dpr = devicePixelRatio || 1;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (w === 0 || h === 0) return;
-    canvas.width  = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(canvas, w, h);
 
     const { sessions, dayStart, labels } = data;
     const dayEnd = dayStart + 86400;
@@ -615,39 +646,34 @@ the Free Software Foundation, version 3 only. -->
   /** Tooltip state for the day-grid canvas. */
   let gridTooltip = $state<{ x: number; y: number; hour: number; row: number; time: string; values: { label: string; val: string; color: string }[] } | null>(null);
 
+  interface GridData { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[]; screenshotTs: Set<number> }
+
   /** Svelte action: render the 24×720 heatmap grid on canvas. */
-  function drawDayGrid(
-    canvas: HTMLCanvasElement,
-    data: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }
-  ) {
+  function drawDayGrid(canvas: HTMLCanvasElement, data: GridData) {
     renderDayGrid(canvas, data);
-    const onMove = (e: MouseEvent) => handleGridHover(canvas, e, data);
-    const onLeave = () => { gridTooltip = null; };
-    canvas.addEventListener("mousemove", onMove);
-    canvas.addEventListener("mouseleave", onLeave);
+    let currentOnMove = (e: MouseEvent) => handleGridHover(canvas, e, data);
+    let currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; };
+    canvas.addEventListener("mousemove", currentOnMove);
+    canvas.addEventListener("mouseleave", currentOnLeave);
     return {
-      update(d: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }) {
+      update(d: GridData) {
         renderDayGrid(canvas, d);
-        canvas.removeEventListener("mousemove", onMove);
-        canvas.removeEventListener("mouseleave", onLeave);
-        const onMove2 = (e: MouseEvent) => handleGridHover(canvas, e, d);
-        const onLeave2 = () => { gridTooltip = null; };
-        canvas.addEventListener("mousemove", onMove2);
-        canvas.addEventListener("mouseleave", onLeave2);
+        canvas.removeEventListener("mousemove", currentOnMove);
+        canvas.removeEventListener("mouseleave", currentOnLeave);
+        currentOnMove = (e: MouseEvent) => handleGridHover(canvas, e, d);
+        currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; };
+        canvas.addEventListener("mousemove", currentOnMove);
+        canvas.addEventListener("mouseleave", currentOnLeave);
       },
       destroy() {
-        canvas.removeEventListener("mousemove", onMove);
-        canvas.removeEventListener("mouseleave", onLeave);
+        canvas.removeEventListener("mousemove", currentOnMove);
+        canvas.removeEventListener("mouseleave", currentOnLeave);
       }
     };
   }
 
   /** Resolve grid cell under mouse and build tooltip data. */
-  function handleGridHover(
-    canvas: HTMLCanvasElement,
-    e: MouseEvent,
-    data: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }
-  ) {
+  function handleGridHover(canvas: HTMLCanvasElement, e: MouseEvent, data: GridData) {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
@@ -657,7 +683,7 @@ the Free Software Foundation, version 3 only. -->
     const col = Math.floor(mx / colW);
     const row = Math.floor(my / rowH);
     if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) {
-      gridTooltip = null; return;
+      gridTooltip = null; screenshotPreview = null; return;
     }
     const secInDay = col * 3600 + row * GRID_BIN;
     const cellT = data.dayStart + secInDay;
@@ -688,20 +714,32 @@ the Free Software Foundation, version 3 only. -->
         values.push({ label: "label", val: lbl.text, color: lColor });
       }
     }
+
+    // Check for screenshot in this cell — show preview if hovering directly on the indicator
+    let foundScreenshot = false;
+    for (let t = cellT; t < cellEnd; t++) {
+      const info = screenshotByTs.get(t);
+      if (info) {
+        values.push({ label: "📷", val: info.window_title || info.app_name || "screenshot", color: "#60a5fa" });
+        // Show image preview only when hovering the cell with a screenshot
+        screenshotPreview = {
+          x: e.clientX, y: e.clientY,
+          src: screenshotUrl(info.filename),
+          title: info.window_title || info.app_name || "",
+        };
+        foundScreenshot = true;
+        break;
+      }
+    }
+    if (!foundScreenshot) screenshotPreview = null;
+
     gridTooltip = { x: e.clientX, y: e.clientY, hour: col, row, time: timeStr, values };
   }
 
-  function renderDayGrid(
-    canvas: HTMLCanvasElement,
-    data: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }
-  ) {
-    const dpr = devicePixelRatio || 1;
+  function renderDayGrid(canvas: HTMLCanvasElement, data: GridData) {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (w === 0 || h === 0) return;
-    canvas.width  = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(canvas, w, h);
 
     const { sessions, dayStart, labels } = data;
     const colW = w / GRID_COLS;
@@ -787,6 +825,35 @@ the Free Software Foundation, version 3 only. -->
         ctx.strokeStyle = "rgba(255,255,255,0.7)";
         ctx.lineWidth = 0.8;
         ctx.stroke();
+      }
+      ctx.globalAlpha = 1.0;
+    }
+
+    // ⑦ Draw screenshot indicators — small camera-icon diamonds at grid cells
+    if (data.screenshotTs.size > 0) {
+      const iconR = Math.max(2, Math.min(4, colW * 0.12));
+      ctx.globalAlpha = 0.85;
+      for (const ts of data.screenshotTs) {
+        const secOff = ts - dayStart;
+        if (secOff < 0 || secOff >= 86400) continue;
+        const col = Math.floor(secOff / 3600);
+        const row = Math.floor((secOff % 3600) / GRID_BIN);
+        const cx = col * colW + colW - iconR - 1;
+        const cy = row * rowH + rowH / 2;
+        // Diamond shape
+        ctx.fillStyle = isDark ? "rgba(96,165,250,0.9)" : "rgba(59,130,246,0.85)";
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - iconR);
+        ctx.lineTo(cx + iconR, cy);
+        ctx.lineTo(cx, cy + iconR);
+        ctx.lineTo(cx - iconR, cy);
+        ctx.closePath();
+        ctx.fill();
+        // Tiny white dot in center (lens)
+        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.beginPath();
+        ctx.arc(cx, cy, iconR * 0.3, 0, Math.PI * 2);
+        ctx.fill();
       }
       ctx.globalAlpha = 1.0;
     }
@@ -957,7 +1024,7 @@ the Free Software Foundation, version 3 only. -->
     const d = new Date();
     if (!daySet.has(today)) d.setDate(d.getDate() - 1);
     for (let i = 0; i < 365; i++) {
-      const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      const k = dateToLocalKey(d);
       if (daySet.has(k)) { streak++; d.setDate(d.getDate() - 1); }
       else break;
     }
@@ -975,8 +1042,7 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Helpers ──────────────────────────────────────────────────────────────
   function dateKey(utc: number): string {
-    const d = new Date(utc * 1000);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    return dateToLocalKey(fromUnix(utc));
   }
   function dateLabel(key: string): string {
     const [y, m, d] = key.split("-").map(Number);
@@ -986,12 +1052,9 @@ the Free Software Foundation, version 3 only. -->
   }
   function fmtTime(utc: number | null): string {
     if (!utc) return "–";
-    return new Date(utc * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+    return fmtDateTimeLocale(utc);
   }
-  function fmtTimeShort(utc: number | null): string {
-    if (!utc) return "–";
-    return new Date(utc * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  }
+
   function fmtDuration(start: number | null, end: number | null): string {
     return fmtDurationRange(start, end);
   }
@@ -1111,6 +1174,10 @@ the Free Software Foundation, version 3 only. -->
     }
     daysLoading = false;
     if (localDays.length > 0) await loadDay(0);
+    // Load screenshot port
+    invoke<[string, number]>("get_screenshots_dir")
+      .then(([, port]) => { screenshotPort = port; })
+      .catch(() => {});
     // Load aggregate stats lazily — not needed for initial render
     invoke<HistoryStatsData>("get_history_stats")
       .then(s => { historyStats = s; })
@@ -1474,9 +1541,9 @@ the Free Software Foundation, version 3 only. -->
               <!-- Heatmap canvas (scrollable) -->
               <div class="overflow-y-auto max-h-[420px] scrollbar-thin relative">
                 {#if anyTs}
-                  {#key sessions.map(s => tsCache[s.csv_path] === "loading" ? "l" : "r").join(",")}
+                  {#key sessions.map(s => tsCache[s.csv_path] === "loading" ? "l" : "r").join(",") + ":" + dayScreenshots.length}
                     <canvas class="w-full" style="height:720px;"
-                            use:drawDayGrid={{ sessions, dayStart: currentDayStart, labels: dayLbls }}>
+                            use:drawDayGrid={{ sessions, dayStart: currentDayStart, labels: dayLbls, screenshotTs: screenshotTsSet }}>
                     </canvas>
                   {/key}
                 {:else}
@@ -1505,7 +1572,7 @@ the Free Software Foundation, version 3 only. -->
                     <div class="flex items-center gap-1">
                       <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{sessionColor(idx)}"></span>
                       <span class="text-[0.46rem] text-muted-foreground/50 tabular-nums">
-                        {fmtTimeShort(session.session_start_utc)} → {fmtTimeShort(session.session_end_utc)}
+                        {fmtTimeShort(session.session_start_utc!)} → {fmtTimeShort(session.session_end_utc!)}
                       </span>
                     </div>
                   {/if}
@@ -1575,6 +1642,26 @@ the Free Software Foundation, version 3 only. -->
             </div>
           {/if}
 
+          <!-- Screenshot preview (shown when hovering a cell with a screenshot) -->
+          {#if screenshotPreview}
+            <div class="fixed pointer-events-none z-[110]"
+                 style="left:{screenshotPreview.x + 16}px; top:{screenshotPreview.y + 16}px;">
+              <div class="rounded-lg overflow-hidden border border-border dark:border-white/[0.12]
+                          shadow-2xl bg-popover">
+                <img src={screenshotPreview.src}
+                     alt="screenshot preview"
+                     class="block max-w-[220px] max-h-[160px] object-contain bg-black/5 dark:bg-white/5" />
+                {#if screenshotPreview.title}
+                  <div class="px-2 py-1 border-t border-border/30 dark:border-white/[0.06]">
+                    <span class="text-[0.48rem] text-muted-foreground/70 truncate block max-w-[210px]">
+                      {screenshotPreview.title}
+                    </span>
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+
           <!-- Session list (lazy chart rendering via IntersectionObserver) -->
           {#if dayLoading && sessions.length === 0}
             <div class="flex items-center gap-2 py-4 text-muted-foreground/50">
@@ -1632,9 +1719,9 @@ the Free Software Foundation, version 3 only. -->
                   <span class="w-2 h-2 rounded-full shrink-0" style="background:{color}"></span>
 
                   <span class="text-[0.68rem] font-semibold text-foreground tabular-nums">
-                    {fmtTimeShort(session.session_start_utc)}
+                    {fmtTimeShort(session.session_start_utc!)}
                     <span class="text-muted-foreground/40 font-normal">→</span>
-                    {fmtTimeShort(session.session_end_utc)}
+                    {fmtTimeShort(session.session_end_utc!)}
                   </span>
                   <span class="text-[0.58rem] text-muted-foreground/60 tabular-nums">{dur}</span>
 

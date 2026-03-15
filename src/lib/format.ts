@@ -1,9 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Shared date/time/duration formatting helpers.
 
+// ── Primitives ────────────────────────────────────────────────────────────────
+
 /** Zero-pad a number to 2 digits. */
 export function pad(n: number): string {
   return String(n).padStart(2, "0");
+}
+
+/** Convert a unix-second UTC timestamp to a JS Date. */
+export function fromUnix(utc: number): Date {
+  return new Date(utc * 1000);
+}
+
+/** Convert a JS Date to unix seconds (integer). */
+export function toUnix(d: Date): number {
+  return Math.floor(d.getTime() / 1000);
 }
 
 /** Format a unix-second UTC timestamp as local "HH:MM:SS" (24h). */
@@ -125,4 +137,113 @@ export function fmtMs(ms: number): string {
 export function fmtElapsed(s: number): string {
   const m = Math.floor(s / 60), ss = s % 60;
   return m > 0 ? `${m}m ${String(ss).padStart(2, "0")}s` : `${s}s`;
+}
+
+// ── Date-key helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Format a JS Date as a local "YYYY-MM-DD" date key string.
+ * Useful for calendar/history day keys derived from local time.
+ */
+export function dateToLocalKey(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Format a JS Date as a compact local "YYYYMMDD" string (no dashes).
+ * Useful for localStorage keys and compact day identifiers.
+ */
+export function dateToCompactKey(d: Date): string {
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+}
+
+/**
+ * Format a unix-second UTC timestamp as a local "YYYY-MM-DD" date key.
+ * Shorthand for `dateToLocalKey(fromUnix(utc))`.
+ */
+export function unixToLocalKey(utc: number): string {
+  return dateToLocalKey(fromUnix(utc));
+}
+
+/**
+ * Format a unix-second UTC timestamp as a compact local "YYYYMMDD" string.
+ * Shorthand for `dateToCompactKey(fromUnix(utc))`.
+ */
+export function unixToCompactKey(utc: number): string {
+  return dateToCompactKey(fromUnix(utc));
+}
+
+/**
+ * UTC midnight of a local "YYYY-MM-DD" key, returned as unix seconds.
+ * The timestamp corresponds to local midnight (not UTC midnight).
+ */
+export function localKeyToUnix(key: string): number {
+  const [y, m, d] = key.split("-").map(Number);
+  return Math.floor(new Date(y, m - 1, d).getTime() / 1000);
+}
+
+// ── Additional locale-aware formatters ────────────────────────────────────────
+
+/** Format a unix-second UTC timestamp as locale short date+time, e.g. "3/12/26, 2:30 PM". */
+export function fmtLocaleShort(utc: number): string {
+  return fromUnix(utc).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+}
+
+/**
+ * Format a unix-second timestamp for a datetime-local input value.
+ * Returns "YYYY-MM-DDThh:mm:ss" in local time.
+ */
+export function fmtDateTimeLocalInput(utc: number): string {
+  const d = fromUnix(utc);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/**
+ * Parse a datetime-local input value "YYYY-MM-DDThh:mm..." to unix seconds.
+ */
+export function parseDateTimeLocalInput(s: string): number {
+  return Math.floor(new Date(s).getTime() / 1000);
+}
+
+/** Format a countdown timer as "MM:SS". */
+export function fmtCountdown(totalSecs: number): string {
+  const m = Math.floor(totalSecs / 60);
+  const s = totalSecs % 60;
+  return `${pad(m)}:${pad(s)}`;
+}
+
+// ── Canvas helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Set up a canvas for hi-DPI (Retina) rendering.
+ *
+ * Sets canvas.width/height to the CSS size × devicePixelRatio, applies the
+ * DPR scale transform, and returns the 2D context. All subsequent drawing
+ * coordinates are in CSS pixels.
+ *
+ * @param canvas  The canvas element.
+ * @param cssW    Desired CSS width (defaults to `canvas.clientWidth`).
+ * @param cssH    Desired CSS height (defaults to `canvas.clientHeight`).
+ * @returns       The 2D rendering context with DPR transform applied.
+ */
+export function setupHiDpiCanvas(
+  canvas: HTMLCanvasElement,
+  cssW?: number,
+  cssH?: number,
+): CanvasRenderingContext2D {
+  const dpr = devicePixelRatio || 1;
+  const w = cssW ?? canvas.clientWidth;
+  const h = cssH ?? canvas.clientHeight;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext("2d")!;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+/**
+ * Returns the current devicePixelRatio (for canvas-only sizing without setTransform).
+ */
+export function getDpr(): number {
+  return devicePixelRatio || 1;
 }

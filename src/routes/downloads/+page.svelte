@@ -5,6 +5,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { Button } from "$lib/components/ui/button";
   import { t } from "$lib/i18n/index.svelte";
+  import { fmtDateTimeLocale } from "$lib/format";
 
   type DownloadState = "not_downloaded" | "downloading" | "paused" | "downloaded" | "failed" | "cancelled";
 
@@ -65,7 +66,7 @@
 
   function fmtInitiated(unix: number | null): string {
     if (!unix) return t("downloads.initiatedUnknown");
-    return new Date(unix * 1000).toLocaleString();
+    return fmtDateTimeLocale(unix);
   }
 
   function statusLabel(s: DownloadState): string {

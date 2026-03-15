@@ -25,7 +25,11 @@ the Free Software Foundation, version 3 only. -->
   import type { SessionMetrics, EpochRow } from "$lib/dashboard/SessionDetail.svelte";
   import type { SleepEpoch, SleepSummary, SleepStages } from "$lib/types";
   import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
-  import { fmtSecs, fmtTime, fmtDateTime, fmtDuration, pad } from "$lib/format";
+  import {
+    fmtSecs, fmtTime, fmtDateTime, fmtDuration, pad,
+    fmtDateIso, fmtDayKey, fmtDateTimeLocalInput, parseDateTimeLocalInput,
+    dateToLocalKey, fromUnix, setupHiDpiCanvas,
+  } from "$lib/format";
   import type { UmapPoint, UmapResult, UmapProgress } from "$lib/types";
 
   // ── Types ──────────────────────────────────────────────────────────────────
@@ -172,8 +176,7 @@ the Free Software Foundation, version 3 only. -->
 
   /** Local date string "YYYY-MM-DD" from a UTC unix-second timestamp. */
   function localDateFromUtc(utc: number): string {
-    const d = new Date(utc * 1000);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    return dateToLocalKey(fromUnix(utc));
   }
 
   /** UTC seconds for local midnight of a "YYYY-MM-DD" date string. */
@@ -197,10 +200,7 @@ the Free Software Foundation, version 3 only. -->
 
   /** Human-readable date label for a "YYYY-MM-DD" string. */
   function dayLabel(dateStr: string): string {
-    const [y, mo, d] = dateStr.split("-").map(Number);
-    return new Date(y, mo - 1, d).toLocaleDateString("default", {
-      weekday: "short", month: "short", day: "numeric", year: "numeric",
-    });
+    return fmtDayKey(dateStr);
   }
 
   /** Sessions that overlap the half-open interval [startUtc, endUtc). */
@@ -212,12 +212,11 @@ the Free Software Foundation, version 3 only. -->
   const sortedDays = $derived.by(() => {
     const s = new Set<string>();
     for (const sess of sessions) {
-      let d = new Date(sess.start_utc * 1000);
-      d = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      const endD = new Date(sess.end_utc * 1000);
+      let d = new Date(fromUnix(sess.start_utc).getFullYear(), fromUnix(sess.start_utc).getMonth(), fromUnix(sess.start_utc).getDate());
+      const endD = fromUnix(sess.end_utc);
       const endMid = new Date(endD.getFullYear(), endD.getMonth(), endD.getDate());
       while (d <= endMid) {
-        s.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);
+        s.add(dateToLocalKey(d));
         d.setDate(d.getDate() + 1);
       }
     }
@@ -255,17 +254,14 @@ the Free Software Foundation, version 3 only. -->
     else              { bRangeStart = sess.start_utc; bRangeEnd = sess.end_utc; }
   }
 
-  /** "YYYY-MM-DDThh:mm" from a UTC unix-second timestamp (for datetime-local inputs). */
+  /** "YYYY-MM-DDThh:mm:ss" from a UTC unix-second timestamp (for datetime-local inputs). */
   function utcToDateTimeLocal(utc: number): string {
-    const d = new Date(utc * 1000);
-    const Y = d.getFullYear(), Mo = d.getMonth()+1, D = d.getDate();
-    const h = d.getHours(), m = d.getMinutes();
-    return `${Y}-${String(Mo).padStart(2,"0")}-${String(D).padStart(2,"0")}T${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+    return fmtDateTimeLocalInput(utc);
   }
 
   /** UTC seconds from a "YYYY-MM-DDThh:mm" datetime-local string. */
   function dateTimeLocalToUtc(dt: string): number {
-    return Math.floor(new Date(dt).getTime() / 1000);
+    return parseDateTimeLocalInput(dt);
   }
 
   /** Update range start from a datetime-local input. */
@@ -870,13 +866,9 @@ the Free Software Foundation, version 3 only. -->
   let radarCanvas = $state<HTMLCanvasElement | null>(null);
 
   function drawRadar(canvas: HTMLCanvasElement, a: SessionMetrics, b: SessionMetrics) {
-    const dpr = devicePixelRatio || 1;
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(canvas, w, h);
 
     const cx = w / 2, cy = h / 2;
     const radius = Math.min(cx, cy) - 28;
@@ -972,13 +964,9 @@ the Free Software Foundation, version 3 only. -->
 
   /** Draw a horizontal stacked band-power bar on a canvas. */
   function drawSpectrum(canvas: HTMLCanvasElement, m: SessionMetrics, label: string) {
-    const dpr = devicePixelRatio || 1;
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
-    canvas.width  = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(canvas, w, h);
 
     const vals = bandKeys.map(k => m[k] ?? 0);
     let sum = vals.reduce((a, b) => a + b, 0);
@@ -1030,13 +1018,9 @@ the Free Software Foundation, version 3 only. -->
 
   /** Draw a diff bar — each band as grouped vertical bars (A vs B). */
   function drawDiffChart(canvas: HTMLCanvasElement, a: SessionMetrics, b: SessionMetrics) {
-    const dpr = devicePixelRatio || 1;
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
-    canvas.width  = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(canvas, w, h);
 
     const ml = 4, mr = 4, mt = 14, mb = 16;
     const cw = w - ml - mr;
@@ -1159,17 +1143,13 @@ the Free Software Foundation, version 3 only. -->
    */
   function drawBandHeatmap(canvas: HTMLCanvasElement, ts: EpochRow[], dark: boolean) {
     if (!canvas || ts.length < 2) return;
-    const dpr  = devicePixelRatio || 1;
     const rows = HM_BANDS_DEF;
     const nRows = rows.length;
     const cssH  = HEATMAP_ROW_H * nRows;
     const cssW  = canvas.clientWidth;
     if (cssW <= 0) return;
 
-    canvas.width  = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssH * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(canvas, cssW, cssH);
     // Fill background explicitly so alpha-blended cells composite correctly in
     // both dark (#0e0e1a) and light (#f5f5fa) mode.
     ctx.fillStyle = dark ? "#0e0e1a" : "#f5f5fa";
@@ -1215,17 +1195,13 @@ the Free Software Foundation, version 3 only. -->
    */
   function drawScoreHeatmap(canvas: HTMLCanvasElement, ts: EpochRow[], dark: boolean) {
     if (!canvas || ts.length < 2) return;
-    const dpr   = devicePixelRatio || 1;
     const rows  = HM_SCORES_DEF;
     const nRows = rows.length;
     const cssH  = HEATMAP_ROW_H * nRows;
     const cssW  = canvas.clientWidth;
     if (cssW <= 0) return;
 
-    canvas.width  = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssH * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(canvas, cssW, cssH);
     ctx.fillStyle = dark ? "#0e0e1a" : "#f5f5fa";
     ctx.fillRect(0, 0, cssW, cssH);
 
@@ -1270,17 +1246,13 @@ the Free Software Foundation, version 3 only. -->
    */
   function drawBandDiffHeatmap(canvas: HTMLCanvasElement, tsA: EpochRow[], tsB: EpochRow[], dark: boolean) {
     if (!canvas || tsA.length < 2 || tsB.length < 2) return;
-    const dpr   = devicePixelRatio || 1;
     const rows  = HM_BANDS_DEF;
     const nRows = rows.length;
     const cssH  = HEATMAP_ROW_H * nRows + 12; // extra 12px for colour legend bar
     const cssW  = canvas.clientWidth;
     if (cssW <= 0) return;
 
-    canvas.width  = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssH * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(canvas, cssW, cssH);
     ctx.fillStyle = dark ? "#0e0e1a" : "#f5f5fa";
     ctx.fillRect(0, 0, cssW, cssH);
 
@@ -1574,7 +1546,7 @@ the Free Software Foundation, version 3 only. -->
               {#if dayStr}
                 <span class="absolute top-0.5 left-1 text-[5.5px] font-semibold text-muted-foreground/50
                              pointer-events-none uppercase tracking-wide">
-                  {new Date((anchor + 43200) * 1000).toLocaleDateString("default",{weekday:"short",month:"short",day:"numeric"})}
+                  {fromUnix(anchor + 43200).toLocaleDateString("default",{weekday:"short",month:"short",day:"numeric"})}
                 </span>
               {/if}
               <!-- Day 2 label at 50% -->
@@ -1582,7 +1554,7 @@ the Free Software Foundation, version 3 only. -->
                 <span class="absolute top-0.5 text-[5.5px] font-semibold text-muted-foreground/50
                              pointer-events-none uppercase tracking-wide"
                       style="left:50%; transform:translateX(2px)">
-                  {new Date((day2Utc + 43200) * 1000).toLocaleDateString("default",{weekday:"short",month:"short",day:"numeric"})}
+                  {fromUnix(day2Utc + 43200).toLocaleDateString("default",{weekday:"short",month:"short",day:"numeric"})}
                 </span>
               {/if}
               <!-- Hour ticks every 3h across 48h — labels read from local clock -->

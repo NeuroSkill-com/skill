@@ -10,6 +10,7 @@ the Free Software Foundation, version 3 only. -->
   import { Button } from "$lib/components/ui/button";
   import { Card, CardContent } from "$lib/components/ui/card";
   import { t } from "$lib/i18n/index.svelte";
+  import { fmtDateTimeLocale } from "$lib/format";
 
   interface HookRule {
     name: string;
@@ -223,7 +224,7 @@ the Free Software Foundation, version 3 only. -->
   function fmtUtc(tsUtc: number): string {
     const unix = tsToUnix(tsUtc);
     if (!unix || Number.isNaN(unix)) return "—";
-    return new Date(unix * 1000).toLocaleString();
+    return fmtDateTimeLocale(unix);
   }
 
   function relativeAge(tsUtc: number): string {

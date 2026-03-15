@@ -13,6 +13,7 @@
   import { onMount, tick } from "svelte";
   import { invoke }        from "@tauri-apps/api/core";
   import { t }             from "$lib/i18n/index.svelte";
+  import { fmtDate }       from "$lib/format";
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -153,7 +154,7 @@
     const d = Math.floor(h / 24);
     if (d === 1) return t("chat.sidebar.yesterday");
     if (d < 7)  return `${d}d ago`;
-    return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return fmtDate(Math.floor(ms / 1000));
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
