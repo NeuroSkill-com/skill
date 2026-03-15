@@ -6,14 +6,14 @@
 
 use std::{path::PathBuf, sync::Mutex};
 
-use openbci::board::ganglion::{GanglionBoard, GanglionConfig};
-use openbci::board::cyton::CytonBoard;
-use openbci::board::cyton_daisy::CytonDaisyBoard;
-use openbci::board::cyton_wifi::{CytonWifiBoard, CytonWifiConfig};
-use openbci::board::cyton_daisy_wifi::{CytonDaisyWifiBoard, CytonDaisyWifiConfig};
-use openbci::board::ganglion_wifi::{GanglionWifiBoard, GanglionWifiConfig};
-use openbci::board::galea::GaleaBoard;
-use openbci::board::Board as OpenBciBoard;
+use skill_devices::openbci::board::ganglion::{GanglionBoard, GanglionConfig};
+use skill_devices::openbci::board::cyton::CytonBoard;
+use skill_devices::openbci::board::cyton_daisy::CytonDaisyBoard;
+use skill_devices::openbci::board::cyton_wifi::{CytonWifiBoard, CytonWifiConfig};
+use skill_devices::openbci::board::cyton_daisy_wifi::{CytonDaisyWifiBoard, CytonDaisyWifiConfig};
+use skill_devices::openbci::board::ganglion_wifi::{GanglionWifiBoard, GanglionWifiConfig};
+use skill_devices::openbci::board::galea::GaleaBoard;
+use skill_devices::openbci::board::Board as OpenBciBoard;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
@@ -34,7 +34,7 @@ pub(crate) async fn run_openbci_ganglion_session(
     csv_path:     PathBuf,
     preferred_id: Option<String>,
 ) {
-    use openbci::board::ganglion::GanglionFilter;
+    use skill_devices::openbci::board::ganglion::GanglionFilter;
     tokio::pin!(cancel_rx);
 
     // 0. BT check (same as Muse path)
@@ -151,7 +151,7 @@ pub(crate) async fn run_openbci_ganglion_session(
     };
 
     // 7. Bridge blocking mpsc → async
-    let (sample_tx, mut sample_rx) = tokio::sync::mpsc::channel::<openbci::sample::Sample>(256);
+    let (sample_tx, mut sample_rx) = tokio::sync::mpsc::channel::<skill_devices::openbci::sample::Sample>(256);
     let bridge_handle = tokio::task::spawn_blocking(move || {
         while let Some(s) = stream_handle.recv() {
             if sample_tx.blocking_send(s).is_err() { break; }
@@ -297,7 +297,7 @@ pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
         }
     }
 
-    let board: Box<dyn openbci::board::Board> = match board_kind.clone() {
+    let board: Box<dyn skill_devices::openbci::board::Board> = match board_kind.clone() {
         Brd::GanglionWifi => Box::new(GanglionWifiBoard::new(GanglionWifiConfig {
             shield_ip: cfg.wifi_shield_ip.clone(), local_port: cfg.wifi_local_port, http_timeout: 10,
         })),
@@ -354,7 +354,7 @@ async fn run_openbci_board_session(
     app:         AppHandle,
     cancel_rx:   tokio::sync::oneshot::Receiver<()>,
     csv_path:    PathBuf,
-    board:       Box<dyn openbci::board::Board>,
+    board:       Box<dyn skill_devices::openbci::board::Board>,
     ch_count:    usize,
     sample_rate: f64,
 ) {
@@ -407,7 +407,7 @@ async fn run_openbci_board_session(
     };
 
     // 5. Bridge blocking mpsc → async
-    let (sample_tx, mut sample_rx) = tokio::sync::mpsc::channel::<openbci::sample::Sample>(256);
+    let (sample_tx, mut sample_rx) = tokio::sync::mpsc::channel::<skill_devices::openbci::sample::Sample>(256);
     let bridge = tokio::task::spawn_blocking(move || {
         while let Some(s) = stream_handle.recv() {
             if sample_tx.blocking_send(s).is_err() { break; }

@@ -6,6 +6,9 @@
 //! composite EEG score computation (meditation, cognitive load, drowsiness),
 //! battery EMA smoothing, and band-snapshot enrichment.
 
+pub use muse_rs;
+pub use openbci;
+
 use std::collections::VecDeque;
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::artifact_detection::ArtifactMetrics;

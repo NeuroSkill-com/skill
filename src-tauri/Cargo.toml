@@ -102,14 +102,8 @@ tauri-plugin-process         = "2"
 tauri-plugin-notification    = "2"
 libc                         = "0.2"
 
-# Muse EEG – library only, no TUI feature
-muse-rs   = { version = "0.1.0", default-features = false }
-
-# BLE adapter — same version as muse-rs; already compiled, zero extra cost
+# BLE adapter — same version as muse-rs (via skill-devices); already compiled, zero extra cost
 btleplug = "0.11"
-
-# OpenBCI board drivers (Ganglion BLE, Cyton serial, …)
-openbci = { version = "0.0.1", features = ["ble"] }
 
 # Serial port enumeration (for Cyton board selection in settings)
 serialport = "4"

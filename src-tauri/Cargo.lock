@@ -9283,14 +9283,12 @@ dependencies = [
  "llmfit-core",
  "macos-focus",
  "mdns-sd",
- "muse-rs",
  "ndarray 0.17.2",
  "neutts",
  "objc2 0.6.4",
  "objc2-app-kit",
  "objc2-foundation 0.3.2",
  "ocrs",
- "openbci",
  "ort",
  "png 0.17.16",
  "regex",
@@ -9380,6 +9378,8 @@ dependencies = [
 name = "skill-devices"
 version = "0.0.1"
 dependencies = [
+ "muse-rs",
+ "openbci",
  "serde",
  "serde_json",
  "skill-constants",

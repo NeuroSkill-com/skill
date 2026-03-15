@@ -9,7 +9,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use muse_rs::prelude::*;
+use skill_devices::muse_rs::prelude::*;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
