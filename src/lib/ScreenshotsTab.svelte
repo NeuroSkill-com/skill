@@ -83,10 +83,50 @@ the Free Software Foundation, version 3 only. -->
   let pipeMetrics = $state<PipelineMetrics | null>(null);
   let metricsTimer: ReturnType<typeof setInterval> | null = null;
 
+  // ── Rolling history for charts (last 60 samples @ 2s = 2 minutes) ─────
+  const HISTORY_LEN = 60;
+  let captureHistory   = $state<number[]>([]);   // capture_total_us in ms
+  let embedHistory     = $state<number[]>([]);   // embed_total_us in ms
+  let queueHistory     = $state<number[]>([]);   // queue_depth
+  let dropsHistory     = $state<number[]>([]);   // cumulative drops
+  let captureBreakdown = $state<{capture: number; ocr: number; resize: number; save: number}>({capture:0,ocr:0,resize:0,save:0});
+  let embedBreakdown   = $state<{vision: number; text: number}>({vision:0,text:0});
+
+  function pushHistory(arr: number[], val: number): number[] {
+    const next = [...arr, val];
+    return next.length > HISTORY_LEN ? next.slice(next.length - HISTORY_LEN) : next;
+  }
+
   function fmtUs(us: number): string {
     if (us < 1000) return `${us}µs`;
     if (us < 1_000_000) return `${(us / 1000).toFixed(1)}ms`;
     return `${(us / 1_000_000).toFixed(2)}s`;
+  }
+
+  function fmtMs(ms: number): string {
+    if (ms < 1) return `${(ms * 1000).toFixed(0)}µs`;
+    if (ms < 1000) return `${ms.toFixed(1)}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+  }
+
+  /// Build an SVG polyline `points` string from an array of values.
+  /// Maps values into a viewBox of width×height with optional Y padding.
+  function sparklinePath(data: number[], w: number, h: number, pad = 2): string {
+    if (data.length < 2) return "";
+    const maxV = Math.max(...data, 1);
+    const usableH = h - pad * 2;
+    return data.map((v, i) => {
+      const x = (i / (data.length - 1)) * w;
+      const y = pad + usableH - (v / maxV) * usableH;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+  }
+
+  /// Build an SVG polygon points string for a filled area chart.
+  function areaPath(data: number[], w: number, h: number, pad = 2): string {
+    if (data.length < 2) return "";
+    const line = sparklinePath(data, w, h, pad);
+    return `0,${h} ${line} ${w},${h}`;
   }
 
   // ── Recommended image size for current model ──────────────────────────────
@@ -189,7 +229,25 @@ the Free Software Foundation, version 3 only. -->
   }
 
   async function refreshMetrics() {
-    try { pipeMetrics = await invoke<PipelineMetrics>("get_screenshot_metrics"); } catch {}
+    try {
+      const m = await invoke<PipelineMetrics>("get_screenshot_metrics");
+      pipeMetrics = m;
+      // Push to rolling history (convert µs → ms)
+      captureHistory = pushHistory(captureHistory, m.capture_total_us / 1000);
+      embedHistory   = pushHistory(embedHistory, m.embed_total_us / 1000);
+      queueHistory   = pushHistory(queueHistory, m.queue_depth);
+      dropsHistory   = pushHistory(dropsHistory, m.drops);
+      captureBreakdown = {
+        capture: m.capture_us / 1000,
+        ocr:     m.ocr_us / 1000,
+        resize:  m.resize_us / 1000,
+        save:    m.save_us / 1000,
+      };
+      embedBreakdown = {
+        vision: m.vision_embed_us / 1000,
+        text:   m.text_embed_us / 1000,
+      };
+    } catch {}
   }
 
   onMount(async () => {
@@ -716,6 +774,9 @@ the Free Software Foundation, version 3 only. -->
 
   <!-- ── Pipeline Performance ──────────────────────────────────────────── -->
   {#if config.enabled && pipeMetrics && pipeMetrics.captures > 0}
+  {#if true}
+  {@const CW = 280}
+  {@const CH = 56}
   <div class="flex items-center gap-2 px-0.5 pt-2">
     <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
       {t("screenshots.perfTitle")}
@@ -727,39 +788,60 @@ the Free Software Foundation, version 3 only. -->
   </div>
 
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-    <CardContent class="px-4 py-3.5 flex flex-col gap-3">
+    <CardContent class="px-4 py-3.5 flex flex-col gap-4">
 
-      <!-- Capture thread -->
+      <!-- ── Capture thread chart + breakdown ─────────────────────────── -->
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center gap-2">
           <span class="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0"></span>
           <span class="text-[0.66rem] font-semibold text-foreground">{t("screenshots.perfCapture")}</span>
           <span class="ml-auto text-[0.54rem] text-muted-foreground tabular-nums">
             {pipeMetrics.captures} {t("screenshots.perfTotal")}
+            {#if pipeMetrics.capture_errors > 0}
+              · <span class="text-red-500">{pipeMetrics.capture_errors} {t("screenshots.perfErrors")}</span>
+            {/if}
           </span>
         </div>
-        <div class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-[0.58rem] pl-3.5">
-          <span class="text-muted-foreground">{t("screenshots.perfWindowCapture")}</span>
-          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.capture_us)}</span>
-          {#if pipeMetrics.ocr_us > 0}
-          <span class="text-muted-foreground">{t("screenshots.perfOcr")}</span>
-          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.ocr_us)}</span>
-          {/if}
-          <span class="text-muted-foreground">{t("screenshots.perfResize")}</span>
-          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.resize_us)}</span>
-          <span class="text-muted-foreground">{t("screenshots.perfSave")}</span>
-          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.save_us)}</span>
-          <span class="text-muted-foreground font-semibold">{t("screenshots.perfIterTotal")}</span>
-          <span class="text-foreground tabular-nums text-right font-semibold">{fmtUs(pipeMetrics.capture_total_us)}</span>
+
+        <!-- Area chart -->
+        <div class="rounded-lg bg-muted/30 dark:bg-white/[0.02] border border-border/50 dark:border-white/[0.04] overflow-hidden">
+          <svg viewBox="0 0 {CW} {CH}" class="w-full h-14" preserveAspectRatio="none">
+            {#if captureHistory.length >= 2}
+              <polygon points={areaPath(captureHistory, CW, CH)}
+                       fill="currentColor" class="text-emerald-500/15 dark:text-emerald-400/10" />
+              <polyline points={sparklinePath(captureHistory, CW, CH)}
+                        fill="none" stroke="currentColor" stroke-width="1.5"
+                        class="text-emerald-500 dark:text-emerald-400" />
+            {/if}
+          </svg>
         </div>
-        {#if pipeMetrics.capture_errors > 0}
-          <span class="text-[0.54rem] text-red-500 pl-3.5">{pipeMetrics.capture_errors} {t("screenshots.perfErrors")}</span>
+
+        <!-- Stacked breakdown bar -->
+        {#if (captureBreakdown.capture + captureBreakdown.ocr + captureBreakdown.resize + captureBreakdown.save) > 0}
+          {@const capTotal = captureBreakdown.capture + captureBreakdown.ocr + captureBreakdown.resize + captureBreakdown.save}
+          <div class="flex h-2 rounded-full overflow-hidden bg-muted/40 dark:bg-white/[0.04]">
+            <div class="bg-blue-500" style="width:{(captureBreakdown.capture / capTotal * 100).toFixed(1)}%"
+                 title="{t('screenshots.perfWindowCapture')}: {fmtMs(captureBreakdown.capture)}"></div>
+            <div class="bg-violet-500" style="width:{(captureBreakdown.ocr / capTotal * 100).toFixed(1)}%"
+                 title="{t('screenshots.perfOcr')}: {fmtMs(captureBreakdown.ocr)}"></div>
+            <div class="bg-amber-500" style="width:{(captureBreakdown.resize / capTotal * 100).toFixed(1)}%"
+                 title="{t('screenshots.perfResize')}: {fmtMs(captureBreakdown.resize)}"></div>
+            <div class="bg-emerald-500" style="width:{(captureBreakdown.save / capTotal * 100).toFixed(1)}%"
+                 title="{t('screenshots.perfSave')}: {fmtMs(captureBreakdown.save)}"></div>
+          </div>
+          <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.5rem] text-muted-foreground">
+            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-blue-500 shrink-0"></span>{t("screenshots.perfWindowCapture")} {fmtMs(captureBreakdown.capture)}</span>
+            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-violet-500 shrink-0"></span>{t("screenshots.perfOcr")} {fmtMs(captureBreakdown.ocr)}</span>
+            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-amber-500 shrink-0"></span>{t("screenshots.perfResize")} {fmtMs(captureBreakdown.resize)}</span>
+            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-emerald-500 shrink-0"></span>{t("screenshots.perfSave")} {fmtMs(captureBreakdown.save)}</span>
+            <span class="font-semibold text-foreground/70">{t("screenshots.perfIterTotal")} {fmtUs(pipeMetrics.capture_total_us)}</span>
+          </div>
         {/if}
       </div>
 
       <Separator class="bg-border dark:bg-white/[0.05]" />
 
-      <!-- Embed thread -->
+      <!-- ── Embed thread chart + breakdown ───────────────────────────── -->
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center gap-2">
           <span class="w-1.5 h-1.5 rounded-full shrink-0
@@ -769,36 +851,76 @@ the Free Software Foundation, version 3 only. -->
             {pipeMetrics.embeds} {t("screenshots.perfTotal")}
           </span>
         </div>
-        <div class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-[0.58rem] pl-3.5">
-          <span class="text-muted-foreground">{t("screenshots.perfVisionEmbed")}</span>
-          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.vision_embed_us)}</span>
-          {#if pipeMetrics.text_embed_us > 0}
-          <span class="text-muted-foreground">{t("screenshots.perfTextEmbed")}</span>
-          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.text_embed_us)}</span>
-          {/if}
-          <span class="text-muted-foreground font-semibold">{t("screenshots.perfIterTotal")}</span>
-          <span class="text-foreground tabular-nums text-right font-semibold">{fmtUs(pipeMetrics.embed_total_us)}</span>
+
+        <!-- Area chart -->
+        <div class="rounded-lg bg-muted/30 dark:bg-white/[0.02] border border-border/50 dark:border-white/[0.04] overflow-hidden">
+          <svg viewBox="0 0 {CW} {CH}" class="w-full h-14" preserveAspectRatio="none">
+            {#if embedHistory.length >= 2}
+              <polygon points={areaPath(embedHistory, CW, CH)}
+                       fill="currentColor" class="text-blue-500/15 dark:text-blue-400/10" />
+              <polyline points={sparklinePath(embedHistory, CW, CH)}
+                        fill="none" stroke="currentColor" stroke-width="1.5"
+                        class="text-blue-500 dark:text-blue-400" />
+            {/if}
+          </svg>
         </div>
+
+        <!-- Stacked breakdown bar -->
+        {#if (embedBreakdown.vision + embedBreakdown.text) > 0}
+          {@const embTotal = embedBreakdown.vision + embedBreakdown.text}
+          <div class="flex h-2 rounded-full overflow-hidden bg-muted/40 dark:bg-white/[0.04]">
+            <div class="bg-blue-500" style="width:{(embedBreakdown.vision / embTotal * 100).toFixed(1)}%"
+                 title="{t('screenshots.perfVisionEmbed')}: {fmtMs(embedBreakdown.vision)}"></div>
+            <div class="bg-violet-500" style="width:{(embedBreakdown.text / embTotal * 100).toFixed(1)}%"
+                 title="{t('screenshots.perfTextEmbed')}: {fmtMs(embedBreakdown.text)}"></div>
+          </div>
+          <div class="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.5rem] text-muted-foreground">
+            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-blue-500 shrink-0"></span>{t("screenshots.perfVisionEmbed")} {fmtMs(embedBreakdown.vision)}</span>
+            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-sm bg-violet-500 shrink-0"></span>{t("screenshots.perfTextEmbed")} {fmtMs(embedBreakdown.text)}</span>
+            <span class="font-semibold text-foreground/70">{t("screenshots.perfIterTotal")} {fmtUs(pipeMetrics.embed_total_us)}</span>
+          </div>
+        {/if}
       </div>
 
       <Separator class="bg-border dark:bg-white/[0.05]" />
 
-      <!-- Queue + drops -->
-      <div class="flex items-center gap-4 text-[0.58rem]">
-        <div class="flex items-center gap-1.5">
-          <span class="text-muted-foreground">{t("screenshots.perfQueue")}</span>
-          <span class="tabular-nums font-semibold
+      <!-- ── Queue depth chart + drops ────────────────────────────────── -->
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center gap-2">
+          <span class="text-[0.62rem] font-semibold text-foreground">{t("screenshots.perfQueue")}</span>
+          <span class="text-[0.58rem] tabular-nums font-semibold
                        {pipeMetrics.queue_depth > 2 ? 'text-amber-500' : 'text-foreground'}">
             {pipeMetrics.queue_depth}/4
           </span>
-        </div>
-        <div class="flex items-center gap-1.5">
-          <span class="text-muted-foreground">{t("screenshots.perfDrops")}</span>
-          <span class="tabular-nums font-semibold
+          <span class="text-[0.54rem] text-muted-foreground ml-2">{t("screenshots.perfDrops")}</span>
+          <span class="text-[0.58rem] tabular-nums font-semibold
                        {pipeMetrics.drops > 0 ? 'text-red-500' : 'text-foreground'}">
             {pipeMetrics.drops}
           </span>
         </div>
+
+        <!-- Queue depth chart (step-style) -->
+        <div class="rounded-lg bg-muted/30 dark:bg-white/[0.02] border border-border/50 dark:border-white/[0.04] overflow-hidden">
+          <svg viewBox="0 0 {CW} 32" class="w-full h-8" preserveAspectRatio="none">
+            <!-- Capacity line at y = 4/4 = top -->
+            <line x1="0" y1="4" x2={CW} y2="4" stroke="currentColor" stroke-width="0.5"
+                  stroke-dasharray="4 3" class="text-red-500/30" />
+            {#if queueHistory.length >= 2}
+              {@const qPoints = queueHistory.map((v, i) => {
+                const maxQ = 4;
+                const x = (i / (queueHistory.length - 1)) * CW;
+                const y = 30 - (Math.min(v, maxQ) / maxQ) * 26;
+                return `${x.toFixed(1)},${y.toFixed(1)}`;
+              }).join(" ")}
+              <polygon points="0,32 {qPoints} {CW},32"
+                       fill="currentColor" class="text-amber-500/15 dark:text-amber-400/10" />
+              <polyline points={qPoints}
+                        fill="none" stroke="currentColor" stroke-width="1.5"
+                        class="text-amber-500 dark:text-amber-400" />
+            {/if}
+          </svg>
+        </div>
+
         {#if pipeMetrics.drops > 0}
           <span class="text-[0.5rem] text-red-500/70">
             {t("screenshots.perfDropsHint")}
@@ -808,6 +930,7 @@ the Free Software Foundation, version 3 only. -->
 
     </CardContent>
   </Card>
+  {/if}
   {/if}
 
   <!-- ── Privacy note ────────────────────────────────────────────────────── -->
