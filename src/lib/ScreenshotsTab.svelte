@@ -328,7 +328,7 @@ the Free Software Foundation, version 3 only. -->
       <div class="flex gap-2 mt-1">
         <Button size="sm" onclick={reembed} disabled={reembedding}
                 class="text-[0.62rem] h-7 px-3">
-          {reembedding ? t("screenshots.reembedding") : t("screenshots.reembedBtn")}
+          {reembedding ? t("screenshots.reembedding") : t("screenshots.reembedNowBtn")}
         </Button>
         <Button size="sm" variant="ghost" onclick={() => { modelChanged = false; }}
                 class="text-[0.62rem] h-7 px-3 text-muted-foreground">
@@ -338,59 +338,57 @@ the Free Software Foundation, version 3 only. -->
     </div>
   {/if}
 
-  <!-- ── Re-embed section ────────────────────────────────────────────────── -->
-  {#if estimate && (estimate.stale > 0 || estimate.unembedded > 0)}
-    <div class="flex flex-col gap-2">
-      <div class="flex items-center justify-between">
-        <div class="flex flex-col gap-0.5">
-          <div class="flex items-center gap-2">
-            <span class="text-[0.72rem] font-semibold text-foreground">
-              {t("screenshots.reembed")}
+  <!-- ── Re-embed & Reindex section (always visible) ─────────────────────── -->
+  <div class="flex flex-col gap-2">
+    <div class="flex items-center justify-between">
+      <div class="flex flex-col gap-0.5">
+        <div class="flex items-center gap-2">
+          <span class="text-[0.72rem] font-semibold text-foreground">
+            {t("screenshots.reembed")}
+          </span>
+          {#if estimate && estimate.stale > 0}
+            <span class="rounded-full px-1.5 py-0 text-[0.55rem] font-semibold
+                         bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+              {estimate.stale} {t("screenshots.stale")}
             </span>
-            {#if estimate.stale > 0}
-              <span class="rounded-full px-1.5 py-0 text-[0.55rem] font-semibold
-                           bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
-                {estimate.stale} {t("screenshots.stale")}
-              </span>
-            {/if}
-            {#if estimate.unembedded > 0}
-              <span class="rounded-full px-1.5 py-0 text-[0.55rem] font-semibold
-                           bg-primary/15 text-primary border border-primary/25">
-                {estimate.unembedded} {t("screenshots.unembedded")}
-              </span>
-            {/if}
-          </div>
-          <span class="text-[0.6rem] text-muted-foreground/60">
-            {t("screenshots.reembedDesc")}
-            {#if estimate.eta_secs > 0}
-              — {t("screenshots.estimate")} ~{fmtEta(estimate.eta_secs)}
-            {/if}
-          </span>
+          {/if}
+          {#if estimate && estimate.unembedded > 0}
+            <span class="rounded-full px-1.5 py-0 text-[0.55rem] font-semibold
+                         bg-primary/15 text-primary border border-primary/25">
+              {estimate.unembedded} {t("screenshots.unembedded")}
+            </span>
+          {/if}
         </div>
-        <Button size="sm" variant="outline" onclick={reembed} disabled={reembedding}
-                class="text-[0.65rem] h-7 px-3 shrink-0">
-          {reembedding ? t("screenshots.reembedding") : t("screenshots.reembedBtn")}
-        </Button>
+        <span class="text-[0.6rem] text-muted-foreground/60">
+          {t("screenshots.reembedDesc")}
+          {#if estimate && estimate.eta_secs > 0}
+            — {t("screenshots.estimate")} ~{fmtEta(estimate.eta_secs)}
+          {/if}
+        </span>
       </div>
-
-      <!-- Progress bar -->
-      {#if progress !== null}
-        {@const pct = progress.total > 0 ? Math.round(progress.done / progress.total * 100) : 0}
-        <div class="flex flex-col gap-1">
-          <div class="h-1.5 rounded-full bg-muted dark:bg-white/[0.06] overflow-hidden">
-            <div class="h-full rounded-full bg-primary transition-all duration-300"
-                 style="width: {pct}%"></div>
-          </div>
-          <span class="text-[0.58rem] text-muted-foreground/60 tabular-nums">
-            {progress.done} / {progress.total} — {pct}%
-            {#if progress.eta_secs > 0}
-              — ETA {fmtEta(progress.eta_secs)}
-            {/if}
-          </span>
-        </div>
-      {/if}
+      <Button size="sm" variant="outline" onclick={reembed} disabled={reembedding}
+              class="text-[0.65rem] h-7 px-3 shrink-0">
+        {reembedding ? t("screenshots.reembedding") : t("screenshots.reembedBtn")}
+      </Button>
     </div>
-  {/if}
+
+    <!-- Progress bar -->
+    {#if progress !== null}
+      {@const pct = progress.total > 0 ? Math.round(progress.done / progress.total * 100) : 0}
+      <div class="flex flex-col gap-1">
+        <div class="h-1.5 rounded-full bg-muted dark:bg-white/[0.06] overflow-hidden">
+          <div class="h-full rounded-full bg-primary transition-all duration-300"
+               style="width: {pct}%"></div>
+        </div>
+        <span class="text-[0.58rem] text-muted-foreground/60 tabular-nums">
+          {progress.done} / {progress.total} — {pct}%
+          {#if progress.eta_secs > 0}
+            — ETA {fmtEta(progress.eta_secs)}
+          {/if}
+        </span>
+      </div>
+    {/if}
+  </div>
 
   <!-- ── Stats ───────────────────────────────────────────────────────────── -->
   {#if estimate}
