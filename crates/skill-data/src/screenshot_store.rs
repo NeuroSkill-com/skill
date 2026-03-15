@@ -146,7 +146,7 @@ pub struct ScreenshotStore {
 impl ScreenshotStore {
     /// Open (or create) the screenshot database inside `skill_dir`.
     pub fn open(skill_dir: &Path) -> Option<Self> {
-        let db_path = skill_dir.join("screenshots.sqlite");
+        let db_path = skill_dir.join(skill_constants::SCREENSHOTS_SQLITE);
         let conn = match Connection::open(&db_path) {
             Ok(c) => c,
             Err(e) => {
