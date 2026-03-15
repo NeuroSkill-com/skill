@@ -248,9 +248,9 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
 
 /// Stop the background BLE scanner if it is running.
 ///
-/// Should be called before starting a device session that creates its own
-/// btleplug Manager (like MW75) to avoid two CoreBluetooth central managers
-/// competing for main-queue delegate callbacks on macOS.
+/// Useful if a device session needs exclusive access to the BLE adapter.
+/// Currently unused — MW75 sessions coexist with the background scanner.
+#[allow(dead_code)]
 pub(crate) fn stop_background_scanner(app: &AppHandle) {
     let s_ref = app.state::<Mutex<Box<AppState>>>();
     let tx = s_ref.lock_or_recover().scanner.take().map(|sh| sh.cancel_tx);
