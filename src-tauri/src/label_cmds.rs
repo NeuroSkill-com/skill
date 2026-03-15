@@ -17,101 +17,126 @@ use crate::skill_log::SkillLogger;
 
 /// List all labels, optionally filtered by time range.
 /// If both timestamps are absent, all labels are returned.
+///
+/// Runs on a blocking thread — SQLite queries can stall the IPC executor.
 #[tauri::command]
-pub fn query_annotations(
+pub async fn query_annotations(
     start_utc: Option<u64>,
     end_utc:   Option<u64>,
     state:     tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<serde_json::Value> {
-    let s = state.lock_or_recover();
-    let skill_dir = s.skill_dir.clone();
-    drop(s);
-    let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
-    if !labels_db.exists() { return vec![]; }
-    let conn = match rusqlite::Connection::open_with_flags(
-        &labels_db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ) { Ok(c) => c, Err(_) => return vec![] };
-    let query = if start_utc.is_some() && end_utc.is_some() {
-        "SELECT id, eeg_start, eeg_end, label_start, label_end, text, context, created_at \
-         FROM labels WHERE eeg_end >= ?1 AND eeg_start <= ?2 ORDER BY created_at DESC"
-    } else {
-        "SELECT id, eeg_start, eeg_end, label_start, label_end, text, context, created_at \
-         FROM labels ORDER BY created_at DESC"
+) -> Result<Vec<serde_json::Value>, String> {
+    let skill_dir = {
+        let s = state.lock_or_recover();
+        s.skill_dir.clone()
     };
-    let mut stmt = match conn.prepare(query) { Ok(s) => s, Err(_) => return vec![] };
-    let params: Vec<Box<dyn rusqlite::types::ToSql>> = if let (Some(s), Some(e)) = (start_utc, end_utc) {
-        vec![Box::new(s as i64), Box::new(e as i64)]
-    } else { vec![] };
-    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|b| b.as_ref()).collect();
-    stmt.query_map(param_refs.as_slice(), |row| {
-        Ok(serde_json::json!({
-            "id":          row.get::<_, i64>(0)?,
-            "eeg_start":   row.get::<_, i64>(1)?,
-            "eeg_end":     row.get::<_, i64>(2)?,
-            "label_start": row.get::<_, i64>(3)?,
-            "label_end":   row.get::<_, i64>(4)?,
-            "text":        row.get::<_, String>(5)?,
-            "context":     row.get::<_, Option<String>>(6)?.unwrap_or_default(),
-            "created_at":  row.get::<_, i64>(7)?,
-        }))
-    }).map(|rows| rows.flatten().collect()).unwrap_or_default()
+    tokio::task::spawn_blocking(move || {
+        let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
+        if !labels_db.exists() { return vec![]; }
+        let conn = match rusqlite::Connection::open_with_flags(
+            &labels_db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        ) { Ok(c) => c, Err(_) => return vec![] };
+        let query = if start_utc.is_some() && end_utc.is_some() {
+            "SELECT id, eeg_start, eeg_end, label_start, label_end, text, context, created_at \
+             FROM labels WHERE eeg_end >= ?1 AND eeg_start <= ?2 ORDER BY created_at DESC"
+        } else {
+            "SELECT id, eeg_start, eeg_end, label_start, label_end, text, context, created_at \
+             FROM labels ORDER BY created_at DESC"
+        };
+        let mut stmt = match conn.prepare(query) { Ok(s) => s, Err(_) => return vec![] };
+        let params: Vec<Box<dyn rusqlite::types::ToSql>> = if let (Some(s), Some(e)) = (start_utc, end_utc) {
+            vec![Box::new(s as i64), Box::new(e as i64)]
+        } else { vec![] };
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|b| b.as_ref()).collect();
+        stmt.query_map(param_refs.as_slice(), |row| {
+            Ok(serde_json::json!({
+                "id":          row.get::<_, i64>(0)?,
+                "eeg_start":   row.get::<_, i64>(1)?,
+                "eeg_end":     row.get::<_, i64>(2)?,
+                "label_start": row.get::<_, i64>(3)?,
+                "label_end":   row.get::<_, i64>(4)?,
+                "text":        row.get::<_, String>(5)?,
+                "context":     row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+                "created_at":  row.get::<_, i64>(7)?,
+            }))
+        }).map(|rows| rows.flatten().collect()).unwrap_or_default()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
+/// Return the most-recently used label texts (deduplicated, newest first).
+///
+/// Runs on a blocking thread — SQLite queries can stall the IPC executor.
 #[tauri::command]
-pub fn get_recent_labels(
+pub async fn get_recent_labels(
     limit: Option<usize>,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<String> {
-    let s = state.lock_or_recover();
-    let skill_dir = s.skill_dir.clone();
-    drop(s);
-
-    let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
-    if !labels_db.exists() { return vec![]; }
-
-    let conn = match rusqlite::Connection::open_with_flags(
-        &labels_db,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ) {
-        Ok(c) => c,
-        Err(_) => return vec![],
+) -> Result<Vec<String>, String> {
+    let skill_dir = {
+        let s = state.lock_or_recover();
+        s.skill_dir.clone()
     };
-
     let max_rows = limit.unwrap_or(12).clamp(1, 100) as i64;
-    let mut stmt = match conn.prepare(
-        "SELECT text FROM labels
-         WHERE length(trim(text)) > 0
-         GROUP BY text
-         ORDER BY MAX(created_at) DESC
-         LIMIT ?1",
-    ) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
 
-    stmt.query_map(rusqlite::params![max_rows], |row| row.get::<_, String>(0))
-        .map(|rows| {
-            rows.flatten()
-                .map(|s| s.trim().to_owned())
-                .filter(|s| !s.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
+    tokio::task::spawn_blocking(move || {
+        let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
+        if !labels_db.exists() { return vec![]; }
+
+        let conn = match rusqlite::Connection::open_with_flags(
+            &labels_db,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        ) {
+            Ok(c) => c,
+            Err(_) => return vec![],
+        };
+
+        let mut stmt = match conn.prepare(
+            "SELECT text FROM labels
+             WHERE length(trim(text)) > 0
+             GROUP BY text
+             ORDER BY MAX(created_at) DESC
+             LIMIT ?1",
+        ) {
+            Ok(s) => s,
+            Err(_) => return vec![],
+        };
+
+        stmt.query_map(rusqlite::params![max_rows], |row| row.get::<_, String>(0))
+            .map(|rows| {
+                rows.flatten()
+                    .map(|s| s.trim().to_owned())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
+/// Delete a label by ID from `labels.sqlite`.
+///
+/// Runs on a blocking thread — SQLite write can stall the IPC executor.
 #[tauri::command]
-pub fn delete_label(label_id: i64, state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<(), String> {
+pub async fn delete_label(label_id: i64, state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<(), String> {
     let skill_dir = crate::skill_dir(&state);
-    let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
-    if !labels_db.exists() { return Err("labels db not found".into()); }
-    let conn = rusqlite::Connection::open(&labels_db).map_err(|e| e.to_string())?;
-    conn.execute("DELETE FROM labels WHERE id = ?1", rusqlite::params![label_id])
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    tokio::task::spawn_blocking(move || {
+        let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
+        if !labels_db.exists() { return Err("labels db not found".into()); }
+        let conn = rusqlite::Connection::open(&labels_db).map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM labels WHERE id = ?1", rusqlite::params![label_id])
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
+/// Update a label's text and context by ID.
+///
+/// Runs on a blocking thread — SQLite write can stall the IPC executor.
 #[tauri::command]
-pub fn update_label(
+pub async fn update_label(
     label_id: i64, text: String, context: Option<String>,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
@@ -119,15 +144,19 @@ pub fn update_label(
     let context = context.unwrap_or_default().trim().to_owned();
     if text.is_empty() { return Err("label text is empty".into()); }
     let skill_dir = crate::skill_dir(&state);
-    let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
-    if !labels_db.exists() { return Err("labels db not found".into()); }
-    let conn = rusqlite::Connection::open(&labels_db).map_err(|e| e.to_string())?;
-    let n = conn.execute(
-        "UPDATE labels SET text = ?1, context = ?2 WHERE id = ?3",
-        rusqlite::params![text, context, label_id],
-    ).map_err(|e| e.to_string())?;
-    if n == 0 { return Err(format!("label {label_id} not found")); }
-    Ok(())
+    tokio::task::spawn_blocking(move || {
+        let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
+        if !labels_db.exists() { return Err("labels db not found".into()); }
+        let conn = rusqlite::Connection::open(&labels_db).map_err(|e| e.to_string())?;
+        let n = conn.execute(
+            "UPDATE labels SET text = ?1, context = ?2 WHERE id = ?3",
+            rusqlite::params![text, context, label_id],
+        ).map_err(|e| e.to_string())?;
+        if n == 0 { return Err(format!("label {label_id} not found")); }
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -328,15 +357,22 @@ pub async fn set_embedding_model(
     Ok(())
 }
 
+/// Count labels that need re-embedding with the current model.
+///
+/// Runs on a blocking thread — opens and queries SQLite.
 #[tauri::command]
-pub fn get_stale_label_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> usize {
-    let s = state.lock_or_recover();
-    let model_code = s.text_embedding_model.clone();
-    let skill_dir  = s.skill_dir.clone();
-    drop(s);
-    crate::label_store::LabelStore::open(&skill_dir)
-        .map(|store| store.rows_needing_embed(&model_code).len())
-        .unwrap_or(0)
+pub async fn get_stale_label_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<usize, String> {
+    let (model_code, skill_dir) = {
+        let s = state.lock_or_recover();
+        (s.text_embedding_model.clone(), s.skill_dir.clone())
+    };
+    tokio::task::spawn_blocking(move || {
+        crate::label_store::LabelStore::open(&skill_dir)
+            .map(|store| store.rows_needing_embed(&model_code).len())
+            .unwrap_or(0)
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

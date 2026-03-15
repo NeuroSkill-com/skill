@@ -614,12 +614,28 @@ pub async fn open_session_for_timestamp(
     crate::window_cmds::open_session_window(app, csv_path).await
 }
 
+/// Return daily recording minutes for the last N days.
+///
+/// Runs on a blocking thread — reads up to 30 day-directories and parses
+/// JSON sidecar files, which can be slow on spinning disks or large histories.
 #[tauri::command]
-pub fn get_daily_recording_mins(
+pub async fn get_daily_recording_mins(
     days:  Option<u32>,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<(String, u32)> {
+) -> Result<Vec<(String, u32)>, String> {
     let skill_dir = skill_dir(&state);
+    tokio::task::spawn_blocking(move || {
+        get_daily_recording_mins_sync(&skill_dir, days)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+/// Synchronous implementation extracted for `spawn_blocking`.
+fn get_daily_recording_mins_sync(
+    skill_dir: &std::path::Path,
+    days: Option<u32>,
+) -> Vec<(String, u32)> {
     let n = days.unwrap_or(30).min(365) as i64;
     let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -785,13 +801,20 @@ pub fn set_openbci_config(
 }
 
 /// List available serial ports on the host (for Cyton board selection).
+///
+/// Runs on a blocking thread — serial port enumeration can take hundreds of
+/// milliseconds on some platforms (especially Windows with USB-serial drivers).
 #[tauri::command]
-pub fn list_serial_ports() -> Vec<String> {
-    serialport::available_ports()
-        .unwrap_or_default()
-        .into_iter()
-        .map(|p| p.port_name)
-        .collect()
+pub async fn list_serial_ports() -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(|| {
+        serialport::available_ports()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| p.port_name)
+            .collect()
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 // ── NeuTTS configuration ───────────────────────────────────────────────────────
@@ -1239,13 +1262,27 @@ pub struct HookDistanceSuggestion {
 /// 3. Sample up to 300 recent EEG embeddings from `eeg.sqlite` daily files.
 /// 4. Compute cosine distance from every sample to every label reference.
 /// 5. Return a percentile breakdown + suggested threshold.
+/// Suggest a `distance_threshold` value by analysing real HNSW and SQLite data.
+///
+/// Runs on a blocking thread — involves SQLite queries, EEG embedding sampling,
+/// and pairwise distance computation which can take several seconds.
 #[tauri::command]
-pub fn suggest_hook_distances(
+pub async fn suggest_hook_distances(
     keywords: Vec<String>,
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
-) -> HookDistanceSuggestion {
+) -> Result<HookDistanceSuggestion, String> {
     let skill_dir = skill_dir(&state);
+    tokio::task::spawn_blocking(move || {
+        suggest_hook_distances_sync(keywords, &skill_dir)
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
 
+fn suggest_hook_distances_sync(
+    keywords: Vec<String>,
+    skill_dir: &std::path::Path,
+) -> HookDistanceSuggestion {
     let empty = HookDistanceSuggestion {
         label_n: 0, ref_n: 0, sample_n: 0,
         eeg_min: 0.0, eeg_p25: 0.0, eeg_p50: 0.0, eeg_p75: 0.0, eeg_max: 0.0,
@@ -1427,26 +1464,38 @@ fn sample_recent_eeg_embeddings(skill_dir: &std::path::Path, max: usize) -> Vec<
 // ── Hook audit log ────────────────────────────────────────────────────────────
 
 /// Return the most-recent hook-fire events from `hooks.sqlite`.
+///
+/// Runs on a blocking thread — opens and queries a SQLite database.
 #[tauri::command]
-pub fn get_hook_log(
+pub async fn get_hook_log(
     limit:  Option<i64>,
     offset: Option<i64>,
     state:  tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<crate::hooks_log::HookLogRow> {
+) -> Result<Vec<crate::hooks_log::HookLogRow>, String> {
     let skill_dir = skill_dir(&state);
-    let Some(log) = crate::hooks_log::HooksLog::open(&skill_dir) else {
-        return vec![];
-    };
-    log.query(limit.unwrap_or(50).clamp(1, 500), offset.unwrap_or(0).max(0))
+    tokio::task::spawn_blocking(move || {
+        let Some(log) = crate::hooks_log::HooksLog::open(&skill_dir) else {
+            return vec![];
+        };
+        log.query(limit.unwrap_or(50).clamp(1, 500), offset.unwrap_or(0).max(0))
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 /// Return the total number of hook-fire events in the audit log.
+///
+/// Runs on a blocking thread — opens and queries a SQLite database.
 #[tauri::command]
-pub fn get_hook_log_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> i64 {
+pub async fn get_hook_log_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<i64, String> {
     let skill_dir = skill_dir(&state);
-    crate::hooks_log::HooksLog::open(&skill_dir)
-        .map(|l| l.count())
-        .unwrap_or(0)
+    tokio::task::spawn_blocking(move || {
+        crate::hooks_log::HooksLog::open(&skill_dir)
+            .map(|l| l.count())
+            .unwrap_or(0)
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 // ── Screenshot config ─────────────────────────────────────────────────────────
