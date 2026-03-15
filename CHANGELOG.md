@@ -8,7 +8,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### All Windows
 
-- **Rounded window corners**: all windows now have rounded corners (10px border-radius). Enabled via transparent Tauri windows (`transparent: true` on every `WebviewWindowBuilder`) combined with CSS `border-radius` and `overflow: hidden` on the root `<html>` element. Applies to the main window, settings, help, history, chat, about, calibration, downloads, search, session detail, labels, focus timer, onboarding, What's New, compare, and API windows.
+- **Rounded window corners**: all windows now have rounded corners (10px border-radius). Enabled via transparent Tauri windows (`transparent: true` on every `WebviewWindowBuilder`) combined with CSS `border-radius` and `overflow: hidden` on the root `<html>` element. On macOS, requires the `macos-private-api` feature flag (`macOSPrivateApi: true` in tauri.conf.json). Applies to the main window, settings, help, history, chat, about, calibration, downloads, search, session detail, labels, focus timer, onboarding, What's New, compare, and API windows.
 
 ### Chat History
 
