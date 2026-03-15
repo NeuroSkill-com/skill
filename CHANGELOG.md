@@ -32,6 +32,14 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Tools removed from parameters panel**: the tool allow-list and execution mode selector have been removed from the parameters/settings slide-in panel. Tools are now configured exclusively via the dedicated tools panel opened by the tools badge button in the header, eliminating duplicate UI.
 
+- **Expandable tool-call cards with rich detail views**: tool-call bubbles are now always expandable (like thinking bubbles) whenever any details are available. Each tool type has a purpose-built expanded view:
+  - **Bash**: shows the full command under a "Command" header in a prominent monospace block
+  - **File tools** (`read_file`/`write_file`/`edit_file`): shows the file path; `edit_file` shows find/replace diffs in red/green blocks; `write_file` shows file content
+  - **Web search**: shows the search query
+  - **Web fetch**: shows the URL
+  - **Other tools**: shows raw JSON arguments as before
+  - All detail blocks support text selection for easy copying
+
 - **Fix LLM not calling tools**: strengthened the tool-calling system prompt to explicitly instruct the model to never show commands in code blocks and always use `[TOOL_CALL]` blocks instead. Added a fallback extraction layer that catches bare `` ```bash ``/`` ```sh `` code fences emitted by small models and automatically converts them into proper bash tool calls. The fallback is suppressed when a proper `[TOOL_CALL]` is already present. Added more examples to the prompt (listing files, checking location). 21 Rust tests pass including 3 new fallback tests.
 
 - **Chat session archive (soft-delete)**: the default action on chat sessions is now "archive" (box icon) instead of permanent delete. Archived sessions are hidden from the main conversation list and collected in a collapsible "Archive" section at the bottom of the sidebar. From the archive, users can restore a session back to the main list or permanently delete it. Backend adds an `archived` column to `chat_sessions` with seamless migration of existing databases.
