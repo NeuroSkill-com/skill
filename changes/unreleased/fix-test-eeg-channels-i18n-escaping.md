@@ -1,3 +1,0 @@
-### Bugfixes
-
-- **Fix 12 failing tests after EEG_CHANNELS bump to 12**: Updated `constants.test.ts` to expect `EEG_CHANNELS = 12` (matching Rust `skill-constants`), decoupled `EEG_CH`/`EEG_COLOR` length assertions from `EEG_CHANNELS` (they are Muse-specific with 4 entries), and updated `BAND_CANVAS_H` expected value from 290 to 642. Fixed over-escaped `\\\"` sequences in `helpTts.apiBody`, `helpFaq.a33`, and `helpSettings.calibrationTtsBody` across de/fr/he/uk locale files that caused the i18n key-extraction regex to detect spurious extra keys (`command\`, `text\`). Updated stale comment in `constants.ts`.
