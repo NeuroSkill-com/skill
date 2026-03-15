@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Chat UI
+
+- **Fixed settings/tools panel not scrollable**: the parameters panel (system prompt, EEG bands, tool toggles, thinking level, sliders) had no overflow handling and no max-height constraint. When its content exceeded the window height, it pushed the message list off-screen entirely. Now capped at `max-h-[50vh]` with `overflow-y-auto` so it scrolls internally while always leaving room for the chat messages.
+
 ### Chat History
 
 - **Fixed chat history not preserving full responses**: assistant messages that included `leadIn` text (what the model says before calling tools, e.g. "I'll check that for you") were not fully saved — only the final `content` was persisted, and `leadIn` was discarded. Additionally, the save condition required non-empty `content`, so messages with only lead-in text or thinking were skipped entirely. Now `leadIn` and `content` are combined into a single string before saving, ensuring the complete response is visible when loading old conversations.

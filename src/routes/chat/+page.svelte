@@ -1429,8 +1429,9 @@
 
   <!-- ── Parameters sidebar (slide-in) ────────────────────────────────────── -->
   {#if showSettings}
-    <div class="shrink-0 border-b border-border dark:border-white/[0.06]
-                bg-slate-50/60 dark:bg-[#111118] px-4 py-3 flex flex-col gap-3">
+    <div class="min-h-0 max-h-[50vh] overflow-y-auto border-b border-border dark:border-white/[0.06]
+                bg-slate-50/60 dark:bg-[#111118] px-4 py-3 flex flex-col gap-3
+                scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border">
 
       <!-- ── System prompt ─────────────────────────────────────────────────── -->
       <div class="flex flex-col gap-1.5">
