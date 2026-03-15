@@ -2109,6 +2109,165 @@ fn llm_logs(app: &AppHandle) -> Result<Value, String> {
     Ok(serde_json::json!({ "logs": logs, "count": logs.len() }))
 }
 
+/// `llm_select_model` — set the active text model by filename.
+///
+/// ```json
+/// { "command": "llm_select_model", "filename": "Qwen_Qwen3.5-4B-Q4_K_M.gguf" }
+/// → { "command": "llm_select_model", "ok": true, "filename": "...", "active_model": "..." }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_select_model(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let filename = msg["filename"]
+        .as_str()
+        .ok_or_else(|| "llm_select_model: 'filename' field required (string)".to_string())?
+        .to_string();
+    crate::llm::cmds::set_llm_active_model(
+        filename.clone(),
+        app.clone(),
+        app.state::<Mutex<Box<AppState>>>(),
+    );
+    let state = app.state::<Mutex<Box<AppState>>>();
+    let s = state.lock_or_recover();
+    Ok(serde_json::json!({
+        "filename": filename,
+        "active_model": s.llm.catalog.active_model,
+        "active_mmproj": s.llm.catalog.active_mmproj,
+    }))
+}
+
+/// `llm_select_mmproj` — set the active vision projector by filename (empty to disable).
+///
+/// ```json
+/// { "command": "llm_select_mmproj", "filename": "mmproj-Qwen_Qwen3.5-4B-BF16.gguf" }
+/// → { "command": "llm_select_mmproj", "ok": true, "filename": "...", "active_mmproj": "..." }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_select_mmproj(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let filename = msg["filename"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    crate::llm::cmds::set_llm_active_mmproj(
+        filename.clone(),
+        app.clone(),
+        app.state::<Mutex<Box<AppState>>>(),
+    );
+    let state = app.state::<Mutex<Box<AppState>>>();
+    let s = state.lock_or_recover();
+    Ok(serde_json::json!({
+        "filename": filename,
+        "active_model": s.llm.catalog.active_model,
+        "active_mmproj": s.llm.catalog.active_mmproj,
+    }))
+}
+
+/// `llm_pause_download` — pause an in-progress model download.
+///
+/// ```json
+/// { "command": "llm_pause_download", "filename": "Qwen3-1.7B-Q4_K_M.gguf" }
+/// → { "command": "llm_pause_download", "ok": true, "filename": "..." }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_pause_download(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let filename = msg["filename"]
+        .as_str()
+        .ok_or_else(|| "llm_pause_download: 'filename' field required".to_string())?
+        .to_string();
+    crate::llm::cmds::pause_llm_download(
+        filename.clone(),
+        app.state::<Mutex<Box<AppState>>>(),
+    );
+    Ok(serde_json::json!({ "filename": filename }))
+}
+
+/// `llm_resume_download` — resume a paused model download.
+///
+/// ```json
+/// { "command": "llm_resume_download", "filename": "Qwen3-1.7B-Q4_K_M.gguf" }
+/// → { "command": "llm_resume_download", "ok": true, "filename": "..." }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_resume_download(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let filename = msg["filename"]
+        .as_str()
+        .ok_or_else(|| "llm_resume_download: 'filename' field required".to_string())?
+        .to_string();
+    crate::llm::cmds::resume_llm_download(
+        filename.clone(),
+        app.clone(),
+        app.state::<Mutex<Box<AppState>>>(),
+    );
+    Ok(serde_json::json!({ "filename": filename }))
+}
+
+/// `llm_refresh_catalog` — re-probe the HF Hub cache and update download states.
+///
+/// ```json
+/// { "command": "llm_refresh_catalog" }
+/// → { "command": "llm_refresh_catalog", "ok": true }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_refresh_catalog(app: &AppHandle) -> Result<Value, String> {
+    crate::llm::cmds::refresh_llm_catalog(
+        app.clone(),
+        app.state::<Mutex<Box<AppState>>>(),
+    );
+    Ok(serde_json::json!({}))
+}
+
+/// `llm_downloads` — list all downloads (active, paused, completed, failed).
+///
+/// ```json
+/// { "command": "llm_downloads" }
+/// → { "command": "llm_downloads", "ok": true, "downloads": [...] }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_downloads(app: &AppHandle) -> Result<Value, String> {
+    let items = crate::llm::cmds::get_llm_downloads(
+        app.state::<Mutex<Box<AppState>>>(),
+    );
+    Ok(serde_json::json!({ "downloads": items, "count": items.len() }))
+}
+
+/// `llm_set_autoload_mmproj` — toggle whether the vision projector auto-loads on start.
+///
+/// ```json
+/// { "command": "llm_set_autoload_mmproj", "enabled": true }
+/// → { "command": "llm_set_autoload_mmproj", "ok": true, "enabled": true }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_set_autoload_mmproj(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let enabled = msg["enabled"]
+        .as_bool()
+        .ok_or_else(|| "llm_set_autoload_mmproj: 'enabled' field required (bool)".to_string())?;
+    crate::llm::cmds::set_llm_autoload_mmproj(
+        enabled,
+        app.clone(),
+        app.state::<Mutex<Box<AppState>>>(),
+    );
+    Ok(serde_json::json!({ "enabled": enabled }))
+}
+
+/// `llm_hardware_fit` — check if a model will fit in available memory.
+///
+/// ```json
+/// { "command": "llm_hardware_fit", "filename": "Qwen_Qwen3.5-27B-Q4_K_M.gguf" }
+/// → { "command": "llm_hardware_fit", "ok": true, "filename": "...",
+///     "fits": true, "model_size_gb": 16.5, "available_memory_gb": 32.0, ... }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_hardware_fit(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let filename = msg["filename"]
+        .as_str()
+        .ok_or_else(|| "llm_hardware_fit: 'filename' field required (string)".to_string())?
+        .to_string();
+    let result = crate::llm::cmds::get_model_hardware_fit(
+        filename,
+        app.state::<Mutex<Box<AppState>>>(),
+    );
+    Ok(serde_json::to_value(result).unwrap_or_else(|_| serde_json::json!({})))
+}
+
 // ── Central dispatcher ────────────────────────────────────────────────────────
 
 /// Dispatch a named command to the appropriate handler function.
@@ -2167,6 +2326,22 @@ pub async fn dispatch(
         "llm_delete"          => llm_delete(app, msg),
         #[cfg(feature = "llm")]
         "llm_logs"            => llm_logs(app),
+        #[cfg(feature = "llm")]
+        "llm_select_model"    => llm_select_model(app, msg),
+        #[cfg(feature = "llm")]
+        "llm_select_mmproj"   => llm_select_mmproj(app, msg),
+        #[cfg(feature = "llm")]
+        "llm_pause_download"  => llm_pause_download(app, msg),
+        #[cfg(feature = "llm")]
+        "llm_resume_download" => llm_resume_download(app, msg),
+        #[cfg(feature = "llm")]
+        "llm_refresh_catalog" => llm_refresh_catalog(app),
+        #[cfg(feature = "llm")]
+        "llm_downloads"       => llm_downloads(app),
+        #[cfg(feature = "llm")]
+        "llm_set_autoload_mmproj" => llm_set_autoload_mmproj(app, msg),
+        #[cfg(feature = "llm")]
+        "llm_hardware_fit"    => llm_hardware_fit(app, msg),
         other                 => Err(format!("unknown command: \"{other}\"")),
     }
 }

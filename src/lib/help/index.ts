@@ -13,3 +13,5 @@ export { default as HelpApi }        from "./HelpApi.svelte";
 export { default as HelpFaqTab }     from "./HelpFaqTab.svelte";
 export { default as HelpPrivacy }    from "./HelpPrivacy.svelte";
 export { default as HelpReferences } from "./HelpReferences.svelte";
+export { default as HelpLlm }        from "./HelpLlm.svelte";
+export { default as HelpHooks }      from "./HelpHooks.svelte";

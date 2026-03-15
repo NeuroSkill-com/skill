@@ -18,16 +18,18 @@ the Free Software Foundation, version 3 only. -->
   import HelpElectrodes         from "$lib/help/HelpElectrodes.svelte";
   import HelpReferences         from "$lib/help/HelpReferences.svelte";
   import HelpTts                from "$lib/help/HelpTts.svelte";
+  import HelpLlm                from "$lib/help/HelpLlm.svelte";
+  import HelpHooks              from "$lib/help/HelpHooks.svelte";
   import { t }                  from "$lib/i18n/index.svelte";
   import { useWindowTitle }     from "$lib/window-title.svelte";
   import { helpTitlebarState }  from "$lib/help-search-state.svelte";
   import DisclaimerFooter       from "$lib/DisclaimerFooter.svelte";
 
-  type Tab = "dashboard" | "electrodes" | "settings" | "windows" | "api" | "tts" | "privacy" | "references" | "faq";
+  type Tab = "dashboard" | "electrodes" | "settings" | "windows" | "api" | "tts" | "llm" | "hooks" | "privacy" | "references" | "faq";
   let tab = $state<Tab>("dashboard");
   let searchQuery = $derived(helpTitlebarState.query);
 
-  const TAB_IDS: Tab[] = ["dashboard", "electrodes", "settings", "windows", "api", "tts", "privacy", "references", "faq"];
+  const TAB_IDS: Tab[] = ["dashboard", "electrodes", "settings", "windows", "api", "tts", "llm", "hooks", "privacy", "references", "faq"];
   const helpTabLabel = (id: Tab) => t(`helpTabs.${id}`);
   const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.userAgent);
   const modKey = isMac ? "⌘" : "Ctrl+";
@@ -40,6 +42,8 @@ the Free Software Foundation, version 3 only. -->
     windows:    `<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>`,
     api:        `<path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/><path d="m9 9 6 6M15 9l-6 6"/>`,
     tts:        `<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>`,
+    llm:        `<path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/>`,
+    hooks:      `<path d="M10 2v4M14 2v4"/><path d="M6 6h12a2 2 0 0 1 2 2v2a6 6 0 0 1-6 6h0a6 6 0 0 1-6-6V8a2 2 0 0 1 2-2z"/><path d="M12 16v4M8 22h8"/>`,
     privacy:    `<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>`,
     references: `<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>`,
     faq:        `<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>`,
@@ -345,6 +349,10 @@ the Free Software Foundation, version 3 only. -->
           <HelpApi />
         {:else if tab === "tts"}
           <HelpTts />
+        {:else if tab === "llm"}
+          <HelpLlm />
+        {:else if tab === "hooks"}
+          <HelpHooks />
         {:else if tab === "privacy"}
           <HelpPrivacy />
         {:else if tab === "references"}

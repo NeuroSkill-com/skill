@@ -15,6 +15,7 @@ All notable changes to NeuroSkill™ are documented here.
   - `hooks enable <name>` / `hooks disable <name>` — toggle a hook on or off
   - `hooks update <name> [--keywords …] [--scenario …] [--threshold …] …` — modify fields on an existing hook
 - **New WS commands**: `hooks_get` (return raw hook rules) and `hooks_set` (replace all hooks with sanitised input) added to the WebSocket API, reusing the same `sanitize_hook` validation as the Tauri IPC path.
+- **Comprehensive hooks test coverage**: `testHooksGetSet` in test.ts expanded from basic add/restore to 15+ test cases covering: add, add-second, enable/disable toggle, update all fields (keywords, threshold, scenario, command, text, recent_limit), remove by omission, sanitization (empty name filtered, invalid scenario clamped to "any", threshold clamped to [0.01,1.0], recent_limit clamped to [10,20], keyword trimming + empty filtering), clear all hooks, missing field defaults, and hooks_status interplay verification.
 
 ### Chat
 

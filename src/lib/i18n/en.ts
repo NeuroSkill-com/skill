@@ -2719,6 +2719,138 @@ const en: Record<string, string> = {
   "helpFaq.a54":  "Keyboard and mouse activity timestamps will not be recorded and will remain at zero. All other features — EEG streaming, band powers, calibration, TTS, search — continue to work normally. You can disable the feature entirely in Settings → Activity Tracking.",
   "helpFaq.q55":  "Can I revoke permissions after granting them?",
   "helpFaq.a55":  "Yes. Open System Settings → Privacy & Security → Accessibility (or Notifications) and toggle off {app}. The relevant feature will stop working immediately without requiring a restart.",
+
+  // ── Help: LLM tab ────────────────────────────────────────────────────────
+  "helpTabs.llm":                        "LLM",
+
+  "helpLlm.overviewSection":             "Overview",
+  "helpLlm.overviewSectionDesc":         "NeuroSkill ships an optional local LLM server that gives you a private, OpenAI-compatible AI assistant without sending any data to the cloud.",
+
+  "helpLlm.whatIsTitle":                 "What is the LLM feature?",
+  "helpLlm.whatIsBody":                  "The LLM feature embeds a llama.cpp-backed inference server directly inside the app. When enabled, it serves OpenAI-compatible endpoints (/v1/chat/completions, /v1/completions, /v1/embeddings, /v1/models, /health) on the same local port as the WebSocket API. You can point any OpenAI-compatible client — Chatbot UI, Continue, Open Interpreter, or your own scripts — at it.",
+
+  "helpLlm.privacyTitle":               "Privacy & Offline Use",
+  "helpLlm.privacyBody":                "All inference runs on your machine. No tokens, prompts, or completions ever leave localhost. The only network activity is the initial model download from HuggingFace Hub. Once a model is cached locally you can disconnect from the internet entirely.",
+
+  "helpLlm.compatTitle":                "OpenAI-Compatible API",
+  "helpLlm.compatBody":                 "The server speaks the same protocol as the OpenAI API. Any library that accepts a base_url parameter (openai-python, openai-node, LangChain, LlamaIndex, etc.) works out of the box. Set base_url to http://localhost:<port>/v1 and leave the API key empty unless you configured one in Inference Settings.",
+
+  "helpLlm.modelsSection":              "Model Management",
+  "helpLlm.modelsSectionDesc":          "Browse, download, and activate GGUF-quantised language models from the built-in catalog.",
+
+  "helpLlm.catalogTitle":               "Model Catalog",
+  "helpLlm.catalogBody":                "The catalog lists curated model families (e.g. Qwen, Llama, Gemma, Phi) with multiple quantisation variants per family. Use the family dropdown to browse, then pick a specific quant to download. Models marked with ★ are the recommended default for that family.",
+
+  "helpLlm.quantsTitle":                "Quantisation Levels",
+  "helpLlm.quantsBody":                 "Each model is available in several GGUF quantisation levels (Q4_K_M, Q5_K_M, Q6_K, Q8_0, etc.). Lower quants are smaller and faster but sacrifice some quality. Q4_K_M is usually the best trade-off. Q8_0 is near-lossless but requires roughly twice the memory. BF16/F16/F32 are unquantised reference weights.",
+
+  "helpLlm.hardwareFitTitle":           "Hardware Fit Badges",
+  "helpLlm.hardwareFitBody":            "Each quant row shows a colour-coded badge estimating how well it fits your hardware: 🟢 Runs great — fits fully in GPU VRAM with headroom. 🟡 Runs well — fits in VRAM with a tight margin. 🟠 Tight fit — may need partial CPU offload or reduced context size. 🔴 Won't fit — too large for available memory. The estimate considers GPU VRAM, system RAM, model size, and context overhead.",
+
+  "helpLlm.visionTitle":                "Vision / Multimodal Models",
+  "helpLlm.visionBody":                 "Families tagged Vision or Multimodal include an optional multimodal projector (mmproj) file. Download both the text model and its projector to enable image input in the chat window. The projector extends the text model — it is not a standalone model.",
+
+  "helpLlm.downloadTitle":              "Downloading & Deleting",
+  "helpLlm.downloadBody":               "Click 'Download' to fetch a model from HuggingFace Hub. A progress bar shows real-time download status. You can cancel at any time. Downloaded models are stored locally and can be deleted to free disk space. Use the 'Refresh cache' button to re-scan the catalog if you manually modify the model directory.",
+
+  "helpLlm.inferenceSection":           "Inference Settings",
+  "helpLlm.inferenceSectionDesc":       "Fine-tune how the server loads and runs models.",
+
+  "helpLlm.gpuLayersTitle":             "GPU Layers",
+  "helpLlm.gpuLayersBody":              "Controls how many transformer layers are offloaded to GPU. Set to 'All' for maximum speed if the model fits in VRAM. Set to 0 for CPU-only inference. Intermediate values split the model across GPU and CPU — useful when the model barely exceeds VRAM capacity.",
+
+  "helpLlm.ctxSizeTitle":               "Context Size",
+  "helpLlm.ctxSizeBody":                "The KV-cache size in tokens. 'Auto' uses the model's default. Larger contexts let the model remember more conversation history but consume more memory. If you run into out-of-memory errors, try reducing context size to 4K or 2K.",
+
+  "helpLlm.parallelTitle":              "Parallel Requests",
+  "helpLlm.parallelBody":               "Maximum number of concurrent decode loops. Higher values let multiple clients share the server but increase peak memory usage. For most single-user setups, 1 is fine.",
+
+  "helpLlm.apiKeyTitle":                "API Key",
+  "helpLlm.apiKeyBody":                 "An optional Bearer token required on every /v1/* request. Leave empty for open access on localhost. Set a key if you expose the port on a local network and want to restrict access.",
+
+  "helpLlm.toolsSection":               "Built-in Tools",
+  "helpLlm.toolsSectionDesc":           "The LLM chat can call local tools to gather information or take actions on your behalf.",
+
+  "helpLlm.toolsOverviewTitle":         "How Tools Work",
+  "helpLlm.toolsOverviewBody":          "When tool use is enabled, the model can request to call one or more tools during a conversation. The app executes the tool locally and feeds the result back to the model so it can incorporate real-world information into its response. Tools are only invoked when the model explicitly requests them — they never run in the background.",
+
+  "helpLlm.toolsSafeTitle":             "Safe Tools",
+  "helpLlm.toolsSafeBody":              "Date, Location, Web Search, Web Fetch, and Read File are read-only tools that cannot modify your system. Date returns the current local date and time. Location provides approximate IP-based geolocation. Web Search runs a DuckDuckGo instant-answer query. Web Fetch retrieves the text body of a public URL. Read File reads local files with optional pagination.",
+
+  "helpLlm.toolsDangerTitle":           "Privileged Tools (⚠️)",
+  "helpLlm.toolsDangerBody":            "Bash, Write File, and Edit File can modify your system. Bash executes shell commands with the same permissions as the app. Write File creates or overwrites files on disk. Edit File performs find-and-replace edits. These are disabled by default and show a warning badge. Enable them only if you understand the risks.",
+
+  "helpLlm.toolsExecModeTitle":         "Execution Mode & Limits",
+  "helpLlm.toolsExecModeBody":          "Parallel mode lets the model call multiple tools at once (faster). Sequential mode runs them one at a time (safer for tools with side-effects). 'Max rounds' limits how many tool-call / tool-result round trips are allowed per message. 'Max calls per round' caps the number of simultaneous tool invocations.",
+
+  "helpLlm.chatSection":                "Chat & Logs",
+  "helpLlm.chatSectionDesc":            "Interact with the model and monitor server activity.",
+
+  "helpLlm.chatWindowTitle":            "Chat Window",
+  "helpLlm.chatWindowBody":             "Open the chat window from the LLM server card or the tray menu. It provides a familiar chat interface with markdown rendering, code highlighting, and tool-call visualisation. Conversations are ephemeral — they are not saved to disk. Vision-capable models accept image attachments via drag-and-drop or the attachment button.",
+
+  "helpLlm.chatApiTitle":               "Using External Clients",
+  "helpLlm.chatApiBody":                "Because the server is OpenAI-compatible, you can use any external chat frontend. Point it at http://localhost:<port>/v1, set an API key if you configured one, and select any model name from /v1/models. Popular options include Open WebUI, Chatbot UI, Continue (VS Code), and curl / httpie for scripting.",
+
+  "helpLlm.serverLogsTitle":            "Server Logs",
+  "helpLlm.serverLogsBody":             "The log viewer at the bottom of the LLM settings panel streams server output in real time. It shows model loading progress, token generation speed, and any errors. Enable 'Verbose' mode in the advanced section for detailed llama.cpp diagnostic output. Logs auto-scroll but you can pause by scrolling up manually.",
+
+  // ── Help: Proactive Hooks tab ────────────────────────────────────────────
+  "helpTabs.hooks":                      "Hooks",
+
+  "helpHooks.overviewSection":           "Overview",
+  "helpHooks.overviewSectionDesc":       "Proactive Hooks let the app automatically trigger actions when your recent EEG patterns match specific keywords or brain states.",
+
+  "helpHooks.whatIsTitle":               "What are Proactive Hooks?",
+  "helpHooks.whatIsBody":                "A Proactive Hook is a rule that monitors your recent EEG label embeddings in real time. When the cosine distance between your recent brain-state embeddings and the hook's keyword embeddings drops below a configured threshold, the hook fires — sending a command, displaying a notification, triggering TTS, or broadcasting a WebSocket event. Hooks let you build closed-loop neuro-feedback automations without writing code.",
+
+  "helpHooks.howItWorksTitle":           "How It Works",
+  "helpHooks.howItWorksBody":            "Every few seconds the app computes EEG embeddings from your most recent brain data. These are compared against the keyword embeddings defined in each active hook using cosine similarity over the HNSW index. If any hook's distance threshold is met, the hook fires. A cooldown prevents the same hook from firing repeatedly in rapid succession. The matching is purely local — no data leaves your machine.",
+
+  "helpHooks.scenariosTitle":            "Scenarios",
+  "helpHooks.scenariosBody":             "Each hook can be scoped to a scenario — Cognitive, Emotional, Physical, or Any. Cognitive hooks target mental states like focus, distraction, or mental fatigue. Emotional hooks target affective states like stress, calm, or frustration. Physical hooks target bodily states like drowsiness or physical fatigue. 'Any' matches regardless of the inferred scenario category.",
+
+  "helpHooks.configSection":             "Configuring a Hook",
+  "helpHooks.configSectionDesc":         "Each hook has several fields that control when and how it fires.",
+
+  "helpHooks.nameTitle":                 "Hook Name",
+  "helpHooks.nameBody":                  "A descriptive name for the hook (e.g. 'Deep Work Guard', 'Calm Recovery'). The name is used in the history log and WebSocket events. It must be unique across all hooks.",
+
+  "helpHooks.keywordsTitle":             "Keywords",
+  "helpHooks.keywordsBody":              "One or more keywords or short phrases that describe the brain state you want to detect (e.g. 'focus', 'deep work', 'stress', 'tired'). These are embedded using the same sentence-transformer model as your EEG labels. The hook fires when recent EEG embeddings are close to these keyword embeddings in the shared vector space.",
+
+  "helpHooks.keywordSugTitle":           "Keyword Suggestions",
+  "helpHooks.keywordSugBody":            "As you type a keyword, the app suggests related terms from your existing label history using both fuzzy string matching and semantic embedding similarity. Suggestions show a source badge — 'fuzzy' for string-based matches, 'semantic' for embedding-based matches, or 'fuzzy+semantic' for both. Use ↑/↓ arrow keys and Enter to quickly accept a suggestion.",
+
+  "helpHooks.distanceTitle":             "Distance Threshold",
+  "helpHooks.distanceBody":              "The maximum cosine distance (0–1) between recent EEG embeddings and the hook's keyword embeddings for the hook to fire. Lower values require a closer match (more strict), higher values fire more often (more lenient). Typical values range from 0.08 (very strict) to 0.25 (loose). Start around 0.12–0.16 and tune based on the suggestion tool.",
+
+  "helpHooks.distanceSugTitle":          "Distance Suggestion Tool",
+  "helpHooks.distanceSugBody":           "Click 'Suggest threshold' to analyse your recorded EEG data against the hook's keywords. The tool computes the distance distribution (min, p25, p50, p75, max) and recommends a threshold that balances sensitivity and specificity. A visual percentile bar shows where your current and suggested thresholds fall in the distribution. Click 'Apply' to use the suggested value.",
+
+  "helpHooks.recentLimitTitle":          "Recent Refs",
+  "helpHooks.recentLimitBody":           "The number of most-recent EEG embedding samples to compare against the hook's keywords (default: 12). Higher values smooth out transient spikes but increase detection latency. Lower values react faster but may fire on brief artifacts. Valid range: 10–20.",
+
+  "helpHooks.commandTitle":              "Command",
+  "helpHooks.commandBody":               "An optional command string broadcast in the WebSocket event when the hook fires (e.g. 'focus_reset', 'calm_breath'). External automation tools listening on the WebSocket can react to this command to trigger app-specific actions, notifications, or scripts.",
+
+  "helpHooks.textTitle":                 "Payload Text",
+  "helpHooks.textBody":                  "An optional human-readable message included in the hook's fire event (e.g. 'Take a 2-minute break.'). This text is shown in notifications and can be spoken aloud via TTS if voice guidance is enabled.",
+
+  "helpHooks.advancedSection":           "Advanced",
+  "helpHooks.advancedSectionDesc":       "Tips, history, and integration with external tools.",
+
+  "helpHooks.examplesTitle":             "Quick Examples",
+  "helpHooks.examplesBody":              "The 'Quick examples' panel provides ready-made hook templates for common use cases: Deep Work Guard (cognitive focus reset), Calm Recovery (emotional stress relief), and Body Break (physical fatigue). Click any example to add it as a new hook with pre-filled keywords, scenario, threshold, and payload. Adjust the values to match your personal EEG patterns.",
+
+  "helpHooks.historyTitle":              "Hook Fire History",
+  "helpHooks.historyBody":               "The collapsible history log at the bottom of the Hooks panel records every hook fire event with timestamp, matched label, cosine distance, command, and keywords at the time of firing. Use it to audit hook behaviour, verify thresholds, and debug false positives. Expand any row to see full details. Pagination controls let you browse older events.",
+
+  "helpHooks.wsEventsTitle":             "WebSocket Events",
+  "helpHooks.wsEventsBody":              "When a hook fires, the app broadcasts a JSON event over the WebSocket API containing the hook name, command, text, matched label, distance, and timestamp. External clients can listen for these events to build custom automations — for example, dimming lights, pausing music, sending a Slack message, or logging to a personal dashboard.",
+
+  "helpHooks.tipsTitle":                 "Tuning Tips",
+  "helpHooks.tipsBody":                  "Start with one hook and a few keywords that match labels you have already recorded. Use the distance suggestion tool to set an initial threshold. Monitor the history log for a day and adjust: lower the threshold if you see false positives, raise it if the hook never fires. Adding more specific keywords (e.g. 'deep focus reading' vs. 'focus') generally improves precision. Avoid very short or generic single-word keywords unless you want broad matching.",
 };
 
 export default en;

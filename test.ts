@@ -865,52 +865,414 @@ async function testHooksSuggest(): Promise<void> {
 }
 
 async function testHooksGetSet(): Promise<void> {
-  heading("hooks_get / hooks_set");
+  heading("hooks_get / hooks_set — full CRUD");
+  info("Tests the hooks_get and hooks_set WS commands used by the CLI for full hook management.");
+  info("All mutations are wrapped in save/restore of the original hook list to avoid side-effects.");
+
+  let original: any[] = [];
+
+  // ── hooks_get — baseline ──────────────────────────────────────────────────
   try {
-    // Get current hooks
     const r0 = await send({ command: "hooks_get" });
     if (r0.ok === true) ok("hooks_get returns ok=true");
     else fail(`hooks_get failed: ${r0.error ?? "unknown"}`);
     if (Array.isArray(r0.hooks)) ok(`hooks array present (${r0.hooks.length})`);
     else fail("hooks field is not an array");
+    original = Array.isArray(r0.hooks) ? r0.hooks : [];
+  } catch (e: any) {
+    fail(`hooks_get baseline failed: ${e.message}`);
+    return; // can't continue without baseline
+  }
 
-    const original = Array.isArray(r0.hooks) ? r0.hooks : [];
+  // ── hooks_get — response shape validation ─────────────────────────────────
+  try {
+    info("Validating hooks_get response shape…");
+    const r = await send({ command: "hooks_get" });
+    if (r.command === "hooks_get") ok("command field echoed: 'hooks_get'");
+    else fail(`command not echoed: "${r.command}"`);
 
-    // Add a test hook
+    for (const h of (r.hooks ?? [])) {
+      const required = ["name", "enabled", "keywords", "scenario", "command", "text", "distance_threshold", "recent_limit"];
+      const missing = required.filter(f => h[f] === undefined);
+      if (missing.length > 0) {
+        fail(`hook "${h.name}" missing fields: ${missing.join(", ")}`);
+      }
+    }
+    if ((r.hooks ?? []).length > 0) ok("all hooks have required fields");
+    else info("no hooks to validate shape on");
+  } catch (e: any) { fail(`hooks_get shape validation failed: ${e.message}`); }
+
+  // ── hooks_set — add a new hook ────────────────────────────────────────────
+  try {
+    info("Testing hooks_set: add a new hook…");
     const testHook = {
-      name: "__cli_test_hook__",
+      name: "__test_hook_A__",
       enabled: true,
-      keywords: ["test", "cli"],
+      keywords: ["focus", "deep work"],
       scenario: "cognitive",
-      command: "test_cmd",
-      text: "test text",
+      command: "test_cmd_a",
+      text: "test text A",
       distance_threshold: 0.15,
       recent_limit: 12,
     };
-    const withTest = [...original, testHook];
-    const r1 = await send({ command: "hooks_set", hooks: withTest });
-    if (r1.ok === true) ok("hooks_set (add) returns ok=true");
-    else fail(`hooks_set (add) failed: ${r1.error ?? "unknown"}`);
+    const r = await send({ command: "hooks_set", hooks: [...original, testHook] });
+    if (r.ok === true) ok("hooks_set (add) returns ok=true");
+    else fail(`hooks_set (add) failed: ${r.error ?? "unknown"}`);
 
-    // Verify the hook was added
+    // hooks_set returns the saved hooks
+    if (Array.isArray(r.hooks)) {
+      const found = r.hooks.find((h: any) => h.name === "__test_hook_A__");
+      if (found) {
+        ok("new hook present in hooks_set response");
+        found.scenario === "cognitive"
+          ? ok("scenario preserved: cognitive")
+          : fail(`scenario mismatch: ${found.scenario}`);
+        found.distance_threshold === 0.15
+          ? ok("distance_threshold preserved: 0.15")
+          : fail(`threshold mismatch: ${found.distance_threshold}`);
+        Array.isArray(found.keywords) && found.keywords.length === 2
+          ? ok("keywords preserved: 2 items")
+          : fail(`keywords mismatch: ${JSON.stringify(found.keywords)}`);
+      } else {
+        fail("new hook not found in hooks_set response");
+      }
+    } else {
+      fail("hooks_set response missing hooks array");
+    }
+
+    // Verify via hooks_get
     const r2 = await send({ command: "hooks_get" });
-    const found = Array.isArray(r2.hooks) && r2.hooks.some((h: any) => h.name === "__cli_test_hook__");
-    if (found) ok("test hook found after set");
-    else fail("test hook not found after set");
+    const found = Array.isArray(r2.hooks) && r2.hooks.some((h: any) => h.name === "__test_hook_A__");
+    found ? ok("new hook confirmed via hooks_get") : fail("new hook not found via hooks_get");
+  } catch (e: any) { fail(`hooks_set add failed: ${e.message}`); }
 
-    // Clean up — restore original hooks
-    const r3 = await send({ command: "hooks_set", hooks: original });
-    if (r3.ok === true) ok("hooks_set (restore) returns ok=true");
-    else fail(`hooks_set (restore) failed: ${r3.error ?? "unknown"}`);
+  // ── hooks_set — add a second hook ─────────────────────────────────────────
+  try {
+    info("Testing hooks_set: add a second hook…");
+    const r0 = await send({ command: "hooks_get" });
+    const current = r0.hooks ?? [];
+    const testHookB = {
+      name: "__test_hook_B__",
+      enabled: false,
+      keywords: ["stress", "anxiety"],
+      scenario: "emotional",
+      command: "test_cmd_b",
+      text: "test text B",
+      distance_threshold: 0.18,
+      recent_limit: 14,
+    };
+    const r = await send({ command: "hooks_set", hooks: [...current, testHookB] });
+    r.ok === true ? ok("hooks_set (add B) ok") : fail(`hooks_set (add B) failed: ${r.error}`);
+    const r2 = await send({ command: "hooks_get" });
+    const countA = (r2.hooks ?? []).filter((h: any) => h.name === "__test_hook_A__").length;
+    const countB = (r2.hooks ?? []).filter((h: any) => h.name === "__test_hook_B__").length;
+    countA === 1 && countB === 1
+      ? ok("both test hooks present (A + B)")
+      : fail(`expected 1 A + 1 B, got A=${countA} B=${countB}`);
+  } catch (e: any) { fail(`hooks_set add B failed: ${e.message}`); }
 
-    // Verify cleanup
-    const r4 = await send({ command: "hooks_get" });
-    const still = Array.isArray(r4.hooks) && r4.hooks.some((h: any) => h.name === "__cli_test_hook__");
-    if (!still) ok("test hook removed after restore");
-    else fail("test hook still present after restore");
-  } catch (e: any) {
-    fail(`hooks_get/set request failed: ${e.message}`);
-  }
+  // ── hooks_set — enable/disable toggle ─────────────────────────────────────
+  try {
+    info("Testing hooks_set: disable hook A…");
+    const r0 = await send({ command: "hooks_get" });
+    const current: any[] = r0.hooks ?? [];
+    const hookA = current.find((h: any) => h.name === "__test_hook_A__");
+    if (!hookA) { fail("hook A not found for disable test"); }
+    else {
+      hookA.enabled = false;
+      const r = await send({ command: "hooks_set", hooks: current });
+      r.ok === true ? ok("hooks_set (disable A) ok") : fail(`hooks_set failed: ${r.error}`);
+
+      const r2 = await send({ command: "hooks_get" });
+      const a = (r2.hooks ?? []).find((h: any) => h.name === "__test_hook_A__");
+      a?.enabled === false
+        ? ok("hook A disabled successfully")
+        : fail(`hook A enabled state: ${a?.enabled}`);
+    }
+
+    info("Testing hooks_set: re-enable hook A…");
+    const r3 = await send({ command: "hooks_get" });
+    const current2: any[] = r3.hooks ?? [];
+    const hookA2 = current2.find((h: any) => h.name === "__test_hook_A__");
+    if (hookA2) {
+      hookA2.enabled = true;
+      const r = await send({ command: "hooks_set", hooks: current2 });
+      r.ok === true ? ok("hooks_set (re-enable A) ok") : fail(`hooks_set failed: ${r.error}`);
+      const r4 = await send({ command: "hooks_get" });
+      const a = (r4.hooks ?? []).find((h: any) => h.name === "__test_hook_A__");
+      a?.enabled === true
+        ? ok("hook A re-enabled successfully")
+        : fail(`hook A enabled state: ${a?.enabled}`);
+    }
+  } catch (e: any) { fail(`hooks enable/disable test failed: ${e.message}`); }
+
+  // ── hooks_set — update fields on existing hook ────────────────────────────
+  try {
+    info("Testing hooks_set: update hook A fields (keywords, threshold, scenario)…");
+    const r0 = await send({ command: "hooks_get" });
+    const current: any[] = r0.hooks ?? [];
+    const hookA = current.find((h: any) => h.name === "__test_hook_A__");
+    if (!hookA) { fail("hook A not found for update test"); }
+    else {
+      hookA.keywords = ["meditation", "breath", "calm"];
+      hookA.distance_threshold = 0.22;
+      hookA.scenario = "physical";
+      hookA.command = "updated_cmd";
+      hookA.text = "updated text";
+      hookA.recent_limit = 16;
+
+      const r = await send({ command: "hooks_set", hooks: current });
+      r.ok === true ? ok("hooks_set (update A) ok") : fail(`hooks_set failed: ${r.error}`);
+
+      const r2 = await send({ command: "hooks_get" });
+      const a = (r2.hooks ?? []).find((h: any) => h.name === "__test_hook_A__");
+      if (!a) { fail("hook A not found after update"); }
+      else {
+        a.keywords.length === 3
+          ? ok("keywords updated: 3 items")
+          : fail(`keywords length: ${a.keywords.length}`);
+        a.keywords.includes("meditation")
+          ? ok("keyword 'meditation' present")
+          : fail("keyword 'meditation' missing");
+        a.distance_threshold === 0.22
+          ? ok("threshold updated to 0.22")
+          : fail(`threshold: ${a.distance_threshold}`);
+        a.scenario === "physical"
+          ? ok("scenario updated to 'physical'")
+          : fail(`scenario: ${a.scenario}`);
+        a.command === "updated_cmd"
+          ? ok("command updated")
+          : fail(`command: ${a.command}`);
+        a.text === "updated text"
+          ? ok("text updated")
+          : fail(`text: ${a.text}`);
+        a.recent_limit === 16
+          ? ok("recent_limit updated to 16")
+          : fail(`recent_limit: ${a.recent_limit}`);
+      }
+    }
+  } catch (e: any) { fail(`hooks_set update test failed: ${e.message}`); }
+
+  // ── hooks_set — remove a hook by omission ─────────────────────────────────
+  try {
+    info("Testing hooks_set: remove hook B (by omitting it from the list)…");
+    const r0 = await send({ command: "hooks_get" });
+    const current: any[] = r0.hooks ?? [];
+    const beforeCount = current.length;
+    const filtered = current.filter((h: any) => h.name !== "__test_hook_B__");
+    filtered.length === beforeCount - 1
+      ? ok(`filtered list: ${beforeCount} → ${filtered.length}`)
+      : fail(`filter mismatch: ${beforeCount} → ${filtered.length}`);
+
+    const r = await send({ command: "hooks_set", hooks: filtered });
+    r.ok === true ? ok("hooks_set (remove B) ok") : fail(`hooks_set failed: ${r.error}`);
+
+    const r2 = await send({ command: "hooks_get" });
+    const bStill = (r2.hooks ?? []).some((h: any) => h.name === "__test_hook_B__");
+    !bStill ? ok("hook B removed successfully") : fail("hook B still present after removal");
+
+    const aStill = (r2.hooks ?? []).some((h: any) => h.name === "__test_hook_A__");
+    aStill ? ok("hook A still present (not affected by B removal)") : fail("hook A missing after B removal");
+  } catch (e: any) { fail(`hooks_set remove test failed: ${e.message}`); }
+
+  // ── hooks_set — sanitization: empty name filtered out ─────────────────────
+  try {
+    info("Testing sanitization: hook with empty name is filtered out…");
+    const r0 = await send({ command: "hooks_get" });
+    const current: any[] = r0.hooks ?? [];
+    const badHook = { name: "", enabled: true, keywords: ["x"], scenario: "any", command: "c", text: "t", distance_threshold: 0.1, recent_limit: 12 };
+    const r = await send({ command: "hooks_set", hooks: [...current, badHook] });
+    r.ok === true ? ok("hooks_set accepts list with empty-name hook") : fail(`hooks_set failed: ${r.error}`);
+
+    const r2 = await send({ command: "hooks_get" });
+    const emptyNames = (r2.hooks ?? []).filter((h: any) => h.name === "");
+    emptyNames.length === 0
+      ? ok("empty-name hook was filtered out by sanitize_hook")
+      : fail(`empty-name hook still present: ${emptyNames.length}`);
+  } catch (e: any) { fail(`sanitization empty-name test failed: ${e.message}`); }
+
+  // ── hooks_set — sanitization: scenario clamping ───────────────────────────
+  try {
+    info("Testing sanitization: invalid scenario clamped to 'any'…");
+    const r0 = await send({ command: "hooks_get" });
+    const current: any[] = r0.hooks ?? [];
+    const badScenario = {
+      name: "__test_bad_scenario__",
+      enabled: true, keywords: ["x"], scenario: "invalid_scenario_xyz",
+      command: "c", text: "t", distance_threshold: 0.1, recent_limit: 12,
+    };
+    const r = await send({ command: "hooks_set", hooks: [...current, badScenario] });
+    r.ok === true ? ok("hooks_set accepted bad scenario") : fail(`hooks_set failed: ${r.error}`);
+
+    const r2 = await send({ command: "hooks_get" });
+    const h = (r2.hooks ?? []).find((h: any) => h.name === "__test_bad_scenario__");
+    if (h) {
+      h.scenario === "any"
+        ? ok("invalid scenario clamped to 'any'")
+        : fail(`scenario not clamped: ${h.scenario}`);
+    } else {
+      fail("bad-scenario hook not found after set");
+    }
+  } catch (e: any) { fail(`sanitization scenario test failed: ${e.message}`); }
+
+  // ── hooks_set — sanitization: threshold clamping ──────────────────────────
+  try {
+    info("Testing sanitization: threshold clamped to [0.01, 1.0]…");
+    const r0 = await send({ command: "hooks_get" });
+    const current: any[] = r0.hooks ?? [];
+    const lowThreshold = {
+      name: "__test_low_thresh__",
+      enabled: true, keywords: ["x"], scenario: "any",
+      command: "c", text: "t", distance_threshold: -5.0, recent_limit: 12,
+    };
+    const highThreshold = {
+      name: "__test_high_thresh__",
+      enabled: true, keywords: ["x"], scenario: "any",
+      command: "c", text: "t", distance_threshold: 99.0, recent_limit: 12,
+    };
+    const r = await send({ command: "hooks_set", hooks: [...current, lowThreshold, highThreshold] });
+    r.ok === true ? ok("hooks_set accepted extreme thresholds") : fail(`hooks_set failed: ${r.error}`);
+
+    const r2 = await send({ command: "hooks_get" });
+    const low = (r2.hooks ?? []).find((h: any) => h.name === "__test_low_thresh__");
+    const high = (r2.hooks ?? []).find((h: any) => h.name === "__test_high_thresh__");
+    if (low) {
+      low.distance_threshold >= 0.01
+        ? ok(`low threshold clamped: ${low.distance_threshold}`)
+        : fail(`low threshold not clamped: ${low.distance_threshold}`);
+    } else { fail("low-threshold hook not found"); }
+    if (high) {
+      high.distance_threshold <= 1.0
+        ? ok(`high threshold clamped: ${high.distance_threshold}`)
+        : fail(`high threshold not clamped: ${high.distance_threshold}`);
+    } else { fail("high-threshold hook not found"); }
+  } catch (e: any) { fail(`sanitization threshold test failed: ${e.message}`); }
+
+  // ── hooks_set — sanitization: recent_limit clamping ───────────────────────
+  try {
+    info("Testing sanitization: recent_limit clamped to [10, 20]…");
+    const r0 = await send({ command: "hooks_get" });
+    const current: any[] = r0.hooks ?? [];
+    const lowRecent = {
+      name: "__test_low_recent__",
+      enabled: true, keywords: ["x"], scenario: "any",
+      command: "c", text: "t", distance_threshold: 0.1, recent_limit: 1,
+    };
+    const highRecent = {
+      name: "__test_high_recent__",
+      enabled: true, keywords: ["x"], scenario: "any",
+      command: "c", text: "t", distance_threshold: 0.1, recent_limit: 999,
+    };
+    const r = await send({ command: "hooks_set", hooks: [...current, lowRecent, highRecent] });
+    r.ok === true ? ok("hooks_set accepted extreme recent_limit") : fail(`hooks_set failed: ${r.error}`);
+
+    const r2 = await send({ command: "hooks_get" });
+    const low = (r2.hooks ?? []).find((h: any) => h.name === "__test_low_recent__");
+    const high = (r2.hooks ?? []).find((h: any) => h.name === "__test_high_recent__");
+    if (low) {
+      low.recent_limit >= 10
+        ? ok(`low recent_limit clamped: ${low.recent_limit}`)
+        : fail(`low recent_limit not clamped: ${low.recent_limit}`);
+    } else { fail("low-recent hook not found"); }
+    if (high) {
+      high.recent_limit <= 20
+        ? ok(`high recent_limit clamped: ${high.recent_limit}`)
+        : fail(`high recent_limit not clamped: ${high.recent_limit}`);
+    } else { fail("high-recent hook not found"); }
+  } catch (e: any) { fail(`sanitization recent_limit test failed: ${e.message}`); }
+
+  // ── hooks_set — sanitization: keyword trimming + empty filter ─────────────
+  try {
+    info("Testing sanitization: keywords trimmed and empty strings filtered…");
+    const r0 = await send({ command: "hooks_get" });
+    const current: any[] = r0.hooks ?? [];
+    const padded = {
+      name: "__test_kw_trim__",
+      enabled: true, keywords: ["  focus  ", "", "  ", "deep work", ""], scenario: "any",
+      command: "c", text: "t", distance_threshold: 0.1, recent_limit: 12,
+    };
+    const r = await send({ command: "hooks_set", hooks: [...current, padded] });
+    r.ok === true ? ok("hooks_set accepted padded keywords") : fail(`hooks_set failed: ${r.error}`);
+
+    const r2 = await send({ command: "hooks_get" });
+    const h = (r2.hooks ?? []).find((h: any) => h.name === "__test_kw_trim__");
+    if (h) {
+      const kw = h.keywords ?? [];
+      kw.length === 2
+        ? ok(`empty keywords filtered: ${kw.length} remain`)
+        : fail(`expected 2 keywords, got ${kw.length}: ${JSON.stringify(kw)}`);
+      kw.includes("focus")
+        ? ok("keyword trimmed: 'focus'")
+        : fail(`expected trimmed 'focus' in: ${JSON.stringify(kw)}`);
+      kw.includes("deep work")
+        ? ok("keyword preserved: 'deep work'")
+        : fail(`expected 'deep work' in: ${JSON.stringify(kw)}`);
+    } else { fail("kw-trim hook not found"); }
+  } catch (e: any) { fail(`sanitization keyword test failed: ${e.message}`); }
+
+  // ── hooks_set — empty list clears all hooks ───────────────────────────────
+  try {
+    info("Testing hooks_set: setting empty list clears all hooks…");
+    const r = await send({ command: "hooks_set", hooks: [] });
+    r.ok === true ? ok("hooks_set (empty) ok") : fail(`hooks_set failed: ${r.error}`);
+
+    const r2 = await send({ command: "hooks_get" });
+    (r2.hooks ?? []).length === 0
+      ? ok("all hooks cleared")
+      : fail(`expected 0 hooks, got ${(r2.hooks ?? []).length}`);
+  } catch (e: any) { fail(`hooks_set clear test failed: ${e.message}`); }
+
+  // ── hooks_set — missing hooks field treated as empty ──────────────────────
+  try {
+    info("Testing hooks_set: missing 'hooks' field defaults to empty list…");
+    const r = await send({ command: "hooks_set" });
+    r.ok === true ? ok("hooks_set (no field) ok") : fail(`hooks_set failed: ${r.error}`);
+
+    const r2 = await send({ command: "hooks_get" });
+    (r2.hooks ?? []).length === 0
+      ? ok("hooks remain empty when 'hooks' field omitted")
+      : fail(`expected 0 hooks, got ${(r2.hooks ?? []).length}`);
+  } catch (e: any) { fail(`hooks_set missing-field test failed: ${e.message}`); }
+
+  // ── hooks_status — verify interplay with hooks_get ────────────────────────
+  try {
+    info("Testing hooks_status reflects hooks_get state…");
+    // Set a known hook
+    const testHook = {
+      name: "__status_check__",
+      enabled: true, keywords: ["check"], scenario: "any",
+      command: "c", text: "t", distance_threshold: 0.1, recent_limit: 12,
+    };
+    await send({ command: "hooks_set", hooks: [testHook] });
+
+    const rStatus = await send({ command: "hooks_status" });
+    if (rStatus.ok === true) {
+      const statusHooks: any[] = rStatus.hooks ?? [];
+      const found = statusHooks.find((h: any) => h.hook?.name === "__status_check__");
+      found
+        ? ok("hooks_status includes hook set via hooks_set")
+        : fail("hooks_status does not reflect hooks_set change");
+      if (found) {
+        found.last_trigger === null || found.last_trigger === undefined
+          ? ok("last_trigger is null for new hook (never fired)")
+          : ok(`last_trigger present: ${JSON.stringify(found.last_trigger)}`);
+      }
+    } else {
+      fail(`hooks_status failed: ${rStatus.error}`);
+    }
+  } catch (e: any) { fail(`hooks_status interplay test failed: ${e.message}`); }
+
+  // ── Restore original hooks ────────────────────────────────────────────────
+  try {
+    info("Restoring original hook configuration…");
+    const r = await send({ command: "hooks_set", hooks: original });
+    r.ok === true ? ok("hooks restored") : fail(`restore failed: ${r.error}`);
+
+    const r2 = await send({ command: "hooks_get" });
+    (r2.hooks ?? []).length === original.length
+      ? ok(`hook count restored: ${original.length}`)
+      : fail(`expected ${original.length} hooks, got ${(r2.hooks ?? []).length}`);
+  } catch (e: any) { fail(`hooks restore failed: ${e.message}`); }
 }
 
 async function testHooksLog(): Promise<void> {
