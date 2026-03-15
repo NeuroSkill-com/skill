@@ -1,0 +1,3 @@
+### Performance
+
+- **Unblock main & settings window startup by moving I/O-heavy Tauri commands to async threads**: Converted 12 synchronous `#[tauri::command]` handlers that performed directory scanning, JSON parsing, or SQLite queries on the Tauri IPC executor thread to `async` commands using `tokio::task::spawn_blocking`. This prevents those operations from stalling window rendering and other IPC calls during startup. Affected commands: `list_sessions`, `delete_session`, `list_embedding_sessions` (history_cmds); `get_daily_recording_mins`, `suggest_hook_distances`, `get_hook_log`, `get_hook_log_count`, `list_serial_ports` (settings_cmds); `query_annotations`, `get_recent_labels`, `delete_label`, `update_label`, `get_stale_label_count` (label_cmds).
