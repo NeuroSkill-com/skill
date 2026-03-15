@@ -1367,11 +1367,21 @@ the Free Software Foundation, version 3 only. -->
   });
 
   /** Show the fixed label tooltip near the cursor for a given label dot. */
-  function showLabelTooltip(e: MouseEvent, label: LabelRow, showEnd = false) {
+  function showLabelTooltip(e: MouseEvent | FocusEvent, label: LabelRow, showEnd = false) {
     hoveredLabelId = label.id;
+    let x: number, y: number;
+    if ("clientX" in e) {
+      x = e.clientX;
+      y = e.clientY;
+    } else {
+      // FocusEvent: position tooltip near the element
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      x = rect.left + rect.width / 2;
+      y = rect.top;
+    }
     labelTooltip = {
-      x: e.clientX,
-      y: e.clientY,
+      x,
+      y,
       text: label.text,
       time: fmtTimeShort(label.eeg_start),
       timeEnd: showEnd ? fmtTime(label.eeg_end) : undefined,
@@ -1899,16 +1909,21 @@ the Free Software Foundation, version 3 only. -->
                       {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
                       {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
                       {@const isHoveredSelf = hoveredLabelId === label.id}
-                      <span
+                      <button
+                        type="button"
+                        aria-label={label.text}
                         class="block w-1.5 h-1.5 rounded-full cursor-default transition-all duration-150
+                               p-0 border-0 appearance-none bg-transparent
                                {isHoveredSelf ? 'scale-[2] ring-1 ring-white/50 shadow-md' :
                                 isExact ? 'scale-[1.6] ring-[0.5px] ring-white/40' :
                                 isClose ? 'scale-[1.3] brightness-125' : ''}"
                         style="background:{lColor};
                                {isExact && !isHoveredSelf ? `box-shadow: 0 0 4px 1px ${lColor}` : ''}"
                         onmouseenter={(e) => showLabelTooltip(e, label)}
-                        onmouseleave={hideLabelTooltip}>
-                      </span>
+                        onmouseleave={hideLabelTooltip}
+                        onfocus={(e) => showLabelTooltip(e, label)}
+                        onblur={hideLabelTooltip}>
+                      </button>
                     {/each}
                   </div>
                 {/if}
@@ -2040,14 +2055,18 @@ the Free Software Foundation, version 3 only. -->
                   {/if}
 
                   {#if session.labels.length > 0}
-                    <div class="flex items-center gap-0.5 shrink-0" onclick={(e) => e.stopPropagation()}>
+                    <!-- svelte-ignore a11y_click_events_have_key_events -->
+                    <div class="flex items-center gap-0.5 shrink-0" role="group" aria-label="Labels" onclick={(e) => e.stopPropagation()}>
                       {#each session.labels as label (label.id)}
                         {@const lColor = dayLabelColors.get(label.id) ?? "#f59e0b"}
                         {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
                         {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
                         {@const isHoveredSelf = hoveredLabelId === label.id}
-                        <span
+                        <button
+                          type="button"
+                          aria-label={label.text}
                           class="block w-2 h-2 rounded-full cursor-default transition-all duration-150
+                                 p-0 border-0 appearance-none bg-transparent
                                  {isHoveredSelf ? 'scale-[1.8] ring-2 ring-white/50 shadow-lg' :
                                   isExact ? 'scale-150 ring-[1.5px] ring-white/40 shadow-md' :
                                   isClose ? 'scale-125 brightness-125' : ''}"
@@ -2055,8 +2074,10 @@ the Free Software Foundation, version 3 only. -->
                                  {isExact && !isHoveredSelf ? `box-shadow: 0 0 6px 1px ${lColor}` : ''}
                                  {isClose && !isExact ? `box-shadow: 0 0 4px 0px ${lColor}` : ''}"
                           onmouseenter={(e) => showLabelTooltip(e, label)}
-                          onmouseleave={hideLabelTooltip}>
-                        </span>
+                          onmouseleave={hideLabelTooltip}
+                          onfocus={(e) => showLabelTooltip(e, label)}
+                          onblur={hideLabelTooltip}>
+                        </button>
                       {/each}
                     </div>
                   {/if}
@@ -2130,9 +2151,11 @@ the Free Software Foundation, version 3 only. -->
                             {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
                             {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
                             {@const isHoveredSelf = hoveredLabelId === label.id}
-                            <span
+                            <button
+                              type="button"
+                              aria-label={label.text}
                               class="block w-3 h-3 rounded-full cursor-default ring-1 ring-white/20 shadow-sm
-                                     transition-all duration-150
+                                     transition-all duration-150 p-0 border-0 appearance-none bg-transparent
                                      {isHoveredSelf ? 'scale-[2] ring-2 ring-white/60 shadow-lg z-10' :
                                       isExact ? 'scale-[1.7] ring-[1.5px] ring-white/50 shadow-md z-10' :
                                       isClose ? 'scale-[1.4] brightness-130' : 'hover:scale-150'}"
@@ -2140,8 +2163,10 @@ the Free Software Foundation, version 3 only. -->
                                      {isExact && !isHoveredSelf ? `box-shadow: 0 0 8px 2px ${lColor}` : ''}
                                      {isClose && !isExact ? `box-shadow: 0 0 5px 1px ${lColor}` : ''}"
                               onmouseenter={(e) => showLabelTooltip(e, label, true)}
-                              onmouseleave={hideLabelTooltip}>
-                            </span>
+                              onmouseleave={hideLabelTooltip}
+                              onfocus={(e) => showLabelTooltip(e, label, true)}
+                              onblur={hideLabelTooltip}>
+                            </button>
                           {/each}
                         </div>
                       </div>

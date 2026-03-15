@@ -107,7 +107,7 @@ pub(crate) async fn run_hermes_session(
 
     // 4. Open CSV with Hermes channel labels.
     let ch_labels = skill_constants::HERMES_CHANNEL_NAMES;
-    let label_refs: Vec<&str> = ch_labels.iter().copied().collect();
+    let label_refs: Vec<&str> = ch_labels.to_vec();
     let mut csv = match CsvState::open_with_labels(&csv_path, &label_refs) {
         Ok(c)  => c,
         Err(e) => {

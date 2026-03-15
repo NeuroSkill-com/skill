@@ -215,14 +215,14 @@ fn infer_is_mmproj(filename: &str) -> bool {
 /// Derive a family name from a repo string like `"bartowski/Qwen_Qwen3.5-4B-GGUF"`.
 fn infer_family_name(repo: &str) -> String {
     // Take the part after `/`, strip `-GGUF` suffix and any `_` prefix
-    let name = repo.split('/').last().unwrap_or(repo);
+    let name = repo.split('/').next_back().unwrap_or(repo);
     let name = name.strip_suffix("-GGUF").or_else(|| name.strip_suffix("-gguf")).unwrap_or(name);
-    name.replace('_', " ").replace('-', " ")
+    name.replace(['_', '-'], " ")
 }
 
 /// Derive a family_id from a repo string (lowercase, hyphenated).
 fn infer_family_id(repo: &str) -> String {
-    let name = repo.split('/').last().unwrap_or(repo);
+    let name = repo.split('/').next_back().unwrap_or(repo);
     let name = name.strip_suffix("-GGUF").or_else(|| name.strip_suffix("-gguf")).unwrap_or(name);
     name.to_lowercase().replace(' ', "-")
 }

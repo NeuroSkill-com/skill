@@ -1339,7 +1339,7 @@ fn suggest_hook_distances_sync(
     // ── Step 2: get mean EEG embeddings for matched labels ───────────────────
     let refs: Vec<Vec<f32>> = matched.iter()
         .filter_map(|(_, _, eeg_start, eeg_end)| {
-            crate::label_index::mean_eeg_for_window(&skill_dir, *eeg_start, *eeg_end)
+            crate::label_index::mean_eeg_for_window(skill_dir, *eeg_start, *eeg_end)
         })
         .collect();
 
@@ -1356,7 +1356,7 @@ fn suggest_hook_distances_sync(
     }
 
     // ── Step 3: sample recent EEG embeddings ─────────────────────────────────
-    let samples = sample_recent_eeg_embeddings(&skill_dir, 300);
+    let samples = sample_recent_eeg_embeddings(skill_dir, 300);
     let sample_n = samples.len();
     if sample_n == 0 {
         return HookDistanceSuggestion {

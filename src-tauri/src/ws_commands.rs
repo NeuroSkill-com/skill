@@ -104,8 +104,7 @@ fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
     let skill_dir = {
         let st = app.state::<Mutex<Box<AppState>>>();
-        let dir = skill_dir(&st);
-        dir
+        skill_dir(&st)
     };
 
     // Keep this implementation parallel to settings_cmds::suggest_hook_distances.
@@ -318,8 +317,7 @@ fn hooks_log(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
     let skill_dir = {
         let st = app.state::<Mutex<Box<AppState>>>();
-        let dir = skill_dir(&st);
-        dir
+        skill_dir(&st)
     };
     let Some(log) = crate::hooks_log::HooksLog::open(&skill_dir) else {
         return Ok(serde_json::json!({ "rows": [], "total": 0, "limit": limit, "offset": offset }));
