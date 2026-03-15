@@ -63,11 +63,11 @@ custom-protocol = ["tauri/custom-protocol"]
 # `llm-cuda`   — CUDA GPU offload (NVIDIA)
 # `llm-vulkan` — Vulkan GPU offload (cross-platform)
 # `llm-mtmd`   — multimodal: image/audio inputs via libmtmd
-llm        = ["dep:llama-cpp-4", "axum/multipart", "llm-mtmd"]
-llm-metal  = ["llm", "llama-cpp-4?/metal"]
-llm-cuda   = ["llm", "llama-cpp-4?/cuda"]
-llm-vulkan = ["llm", "llama-cpp-4?/vulkan"]
-llm-mtmd   = ["llm", "llama-cpp-4?/mtmd"]
+llm        = ["dep:llama-cpp-4", "axum/multipart", "llm-mtmd", "skill-llm/llm"]
+llm-metal  = ["llm", "llama-cpp-4?/metal", "skill-llm/llm-metal"]
+llm-cuda   = ["llm", "llama-cpp-4?/cuda", "skill-llm/llm-cuda"]
+llm-vulkan = ["llm", "llama-cpp-4?/vulkan", "skill-llm/llm-vulkan"]
+llm-mtmd   = ["llm", "llama-cpp-4?/mtmd", "skill-llm/llm-mtmd"]
 
 [lib]
 name = "skill_lib"
@@ -177,6 +177,7 @@ image = { version = "0.25", default-features = false, features = ["png", "webp",
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 jsonschema = "0.28"
+skill-llm  = { path = "../crates/skill-llm" }
 chrono     = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 # PNG encoding for the About-window icon data URL
