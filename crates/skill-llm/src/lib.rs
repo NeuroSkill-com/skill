@@ -4,18 +4,21 @@
 //!
 //! This crate contains the core LLM logic:
 //!
-//! - **config** — `LlmConfig`, `LlmToolConfig`, `ToolExecutionMode`
-//! - **engine** — actor-based inference, HTTP router, tool calling
+//! - **config** — `LlmConfig` (LLM server config), re-exports `LlmToolConfig`
+//! - **engine** — actor-based inference, HTTP router, tool orchestration
 //! - **catalog** — model catalog management
 //! - **chat_store** — SQLite chat history persistence
-//! - **tools** — tool-call extraction, parsing, validation
+//! - **tools** — re-export of `skill_tools::parse` (tool-call extraction, parsing, validation)
 //! - **event** — event emitter trait (abstracts tauri::AppHandle)
 
 pub mod config;
 pub mod event;
-pub mod tools;
 pub mod catalog;
 pub mod chat_store;
+
+/// Re-export the `skill_tools::parse` module as `tools` for backwards compatibility.
+/// All tool-call parsing, extraction, validation, and injection lives in `skill-tools`.
+pub use skill_tools::parse as tools;
 
 #[cfg(feature = "llm")]
 pub mod engine;
