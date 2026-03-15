@@ -675,8 +675,16 @@ the Free Software Foundation, version 3 only. -->
                        bg-white dark:bg-[#14141e] px-3 py-2
                        text-[0.72rem] text-foreground
                        focus:outline-none focus:ring-1 focus:ring-ring/50">
+          {#if isMac}
+            <option value="apple-vision">{t("screenshots.ocrEngineAppleVision")}</option>
+          {/if}
           <option value="ocrs">{t("screenshots.ocrEngineOcrs")}</option>
         </select>
+        {#if isMac && config.ocr_engine !== "apple-vision"}
+          <span class="text-[0.5rem] text-amber-600 dark:text-amber-400">
+            {t("screenshots.ocrAppleVisionHint")}
+          </span>
+        {/if}
       </div>
 
       <Separator class="bg-border dark:bg-white/[0.05]" />

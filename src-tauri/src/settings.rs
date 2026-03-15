@@ -775,7 +775,12 @@ pub(crate) fn default_screenshot_session_only()    -> bool   { true }
 pub(crate) fn default_screenshot_embed_backend()   -> String { "fastembed".into() }
 pub(crate) fn default_screenshot_fastembed_model() -> String { "clip-vit-b-32".into() }
 pub(crate) fn default_screenshot_ocr_enabled()     -> bool   { true }
-pub(crate) fn default_screenshot_ocr_engine()      -> String { "ocrs".into() }
+pub(crate) fn default_screenshot_ocr_engine()      -> String {
+    #[cfg(target_os = "macos")]
+    { "apple-vision".into() }
+    #[cfg(not(target_os = "macos"))]
+    { "ocrs".into() }
+}
 pub(crate) fn default_screenshot_ocr_text_model()  -> String { "bge-small-en-v1.5".into() }
 pub(crate) fn default_screenshot_use_gpu()         -> bool   { true }
 
