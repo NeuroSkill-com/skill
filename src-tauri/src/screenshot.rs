@@ -1138,7 +1138,16 @@ fn run_embed_thread(
     // ── Startup backfill: process any screenshots that were saved but
     // not yet embedded (e.g. app crashed mid-embed, or features were
     // disabled when the screenshot was captured).
-    {
+    // Only runs when screenshots are enabled and not session-gated
+    // (or a session is active).
+    let should_backfill = {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let g = r.lock_or_recover();
+        let cfg = &g.screenshot_config;
+        cfg.enabled && !(cfg.session_only && g.session_start_utc.is_none())
+    };
+
+    if should_backfill {
         let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
 
         // Backfill vision embeddings
@@ -1210,6 +1219,8 @@ fn run_embed_thread(
             }
             eprintln!("[screenshot-embed] backfill: OCR done");
         }
+    } else if !should_backfill {
+        eprintln!("[screenshot-embed] skipping backfill (disabled or session-gated with no active session)");
     }
 
     while let Ok(job) = rx.recv() {
