@@ -71,6 +71,7 @@ the Free Software Foundation, version 3 only. -->
   let ocrResults   = $state<Array<{timestamp: number; unix_ts: number; filename: string; app_name: string; window_title: string; ocr_text: string; similarity: number}>>([]);
   let ocrSearching = $state(false);
   let ocrSearched  = $state(false);
+  let ocrSearchMode = $state<"substring" | "semantic">("substring");
 
   // ── Pipeline metrics ──────────────────────────────────────────────────────
   interface PipelineMetrics {
@@ -219,7 +220,7 @@ the Free Software Foundation, version 3 only. -->
       ocrResults = await invoke<typeof ocrResults>("search_screenshots_by_text", {
         query: ocrQuery.trim(),
         k: 20,
-        mode: "semantic",
+        mode: ocrSearchMode,
       });
       ocrSearched = true;
     } catch {
@@ -746,7 +747,27 @@ the Free Software Foundation, version 3 only. -->
 
       <!-- OCR search -->
       <div class="flex flex-col gap-1.5">
-        <span class="text-[0.68rem] font-semibold text-foreground">{t("screenshots.ocrSearchTitle")}</span>
+        <div class="flex items-center justify-between">
+          <span class="text-[0.68rem] font-semibold text-foreground">{t("screenshots.ocrSearchTitle")}</span>
+          <div class="flex rounded-lg border border-border dark:border-white/[0.08] overflow-hidden">
+            <button
+              onclick={() => { ocrSearchMode = "substring"; }}
+              class="px-2 py-0.5 text-[0.52rem] font-medium transition-colors
+                     {ocrSearchMode === 'substring'
+                       ? 'bg-primary text-primary-foreground'
+                       : 'text-muted-foreground hover:text-foreground'}">
+              {t("screenshots.ocrModeSubstring")}
+            </button>
+            <button
+              onclick={() => { ocrSearchMode = "semantic"; }}
+              class="px-2 py-0.5 text-[0.52rem] font-medium transition-colors
+                     {ocrSearchMode === 'semantic'
+                       ? 'bg-primary text-primary-foreground'
+                       : 'text-muted-foreground hover:text-foreground'}">
+              {t("screenshots.ocrModeSemantic")}
+            </button>
+          </div>
+        </div>
         <div class="flex gap-2">
           <input
             type="text"

@@ -2709,6 +2709,8 @@ const de: Record<string, string> = {
   "screenshots.ocrSearchTitle": "Nach Bildschirmtext suchen",
   "screenshots.ocrSearchPlaceholder": "Text in Screenshots suchen…",
   "screenshots.ocrSearchBtn": "Suchen",
+  "screenshots.ocrModeSubstring": "Textsuche",
+  "screenshots.ocrModeSemantic": "Semantisch",
   "screenshots.ocrNoResults": "Keine passenden Screenshots gefunden.",
 
   "screenshots.perfTitle": "Pipeline-Leistung",
