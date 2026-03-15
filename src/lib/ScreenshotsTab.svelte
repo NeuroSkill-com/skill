@@ -23,6 +23,10 @@ the Free Software Foundation, version 3 only. -->
     session_only:    boolean;
     embed_backend:   string;
     fastembed_model: string;
+    ocr_enabled:     boolean;
+    ocr_engine:      string;
+    ocr_text_model:  string;
+    use_gpu:         boolean;
   }
   interface ConfigChangeResult {
     model_changed: boolean;
@@ -45,6 +49,10 @@ the Free Software Foundation, version 3 only. -->
     session_only: true,
     embed_backend: "fastembed",
     fastembed_model: "clip-vit-b-32",
+    ocr_enabled: true,
+    ocr_engine: "ocrs",
+    ocr_text_model: "bge-small-en-v1.5",
+    use_gpu: true,
   });
 
   let saving      = $state(false);
@@ -104,6 +112,14 @@ the Free Software Foundation, version 3 only. -->
   }
   async function toggleSessionOnly() {
     config.session_only = !config.session_only;
+    await save();
+  }
+  async function toggleOcr() {
+    config.ocr_enabled = !config.ocr_enabled;
+    await save();
+  }
+  async function toggleGpu() {
+    config.use_gpu = !config.use_gpu;
     await save();
   }
 
@@ -265,6 +281,58 @@ the Free Software Foundation, version 3 only. -->
         <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
                      {config.session_only ? 'text-primary' : 'text-muted-foreground/50'}">
           {config.session_only ? t("common.on") : t("common.off")}
+        </span>
+      </button>
+
+      <Separator class="bg-border dark:bg-white/[0.05]" />
+
+      <!-- OCR toggle -->
+      <button
+        onclick={toggleOcr}
+        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
+               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
+                    {config.ocr_enabled ? 'bg-primary' : 'bg-muted dark:bg-white/[0.08]'}">
+          <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
+                      {config.ocr_enabled ? 'translate-x-4' : 'translate-x-0.5'}"></div>
+        </div>
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
+            {t("screenshots.ocrToggle")}
+          </span>
+          <span class="text-[0.58rem] text-muted-foreground leading-tight">
+            {t("screenshots.ocrToggleDesc")}
+          </span>
+        </div>
+        <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
+                     {config.ocr_enabled ? 'text-primary' : 'text-muted-foreground/50'}">
+          {config.ocr_enabled ? t("common.on") : t("common.off")}
+        </span>
+      </button>
+
+      <Separator class="bg-border dark:bg-white/[0.05]" />
+
+      <!-- GPU toggle -->
+      <button
+        onclick={toggleGpu}
+        class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
+               hover:bg-slate-50 dark:hover:bg-white/[0.02]">
+        <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
+                    {config.use_gpu ? 'bg-primary' : 'bg-muted dark:bg-white/[0.08]'}">
+          <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
+                      {config.use_gpu ? 'translate-x-4' : 'translate-x-0.5'}"></div>
+        </div>
+        <div class="flex flex-col gap-0.5 min-w-0">
+          <span class="text-[0.72rem] font-semibold text-foreground leading-tight">
+            {t("screenshots.gpuToggle")}
+          </span>
+          <span class="text-[0.58rem] text-muted-foreground leading-tight">
+            {t("screenshots.gpuToggleDesc")}
+          </span>
+        </div>
+        <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
+                     {config.use_gpu ? 'text-primary' : 'text-muted-foreground/50'}">
+          {config.use_gpu ? 'GPU' : 'CPU'}
         </span>
       </button>
 
@@ -482,6 +550,7 @@ the Free Software Foundation, version 3 only. -->
   {/if}
 
   <!-- ── OCR Text Extraction ─────────────────────────────────────────────── -->
+  {#if config.ocr_enabled}
   <div class="flex items-center gap-2 px-0.5 pt-2">
     <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
       {t("screenshots.ocrTitle")}
@@ -512,17 +581,61 @@ the Free Software Foundation, version 3 only. -->
 
       <Separator class="bg-border dark:bg-white/[0.05]" />
 
+      <!-- OCR engine select -->
+      <div class="flex flex-col gap-1.5">
+        <span class="text-[0.72rem] font-semibold text-foreground">{t("screenshots.ocrEngineSelect")}</span>
+        <select bind:value={config.ocr_engine}
+                class="w-full rounded-lg border border-border dark:border-white/[0.08]
+                       bg-white dark:bg-[#14141e] px-3 py-2
+                       text-[0.72rem] text-foreground
+                       focus:outline-none focus:ring-1 focus:ring-ring/50">
+          <option value="ocrs">{t("screenshots.ocrEngineOcrs")}</option>
+        </select>
+      </div>
+
+      <Separator class="bg-border dark:bg-white/[0.05]" />
+
+      <!-- OCR text embedding model select -->
+      <div class="flex flex-col gap-1.5">
+        <span class="text-[0.72rem] font-semibold text-foreground">{t("screenshots.ocrTextModelSelect")}</span>
+        <span class="text-[0.54rem] text-muted-foreground/60">{t("screenshots.ocrTextModelDesc")}</span>
+        <select bind:value={config.ocr_text_model}
+                class="w-full rounded-lg border border-border dark:border-white/[0.08]
+                       bg-white dark:bg-[#14141e] px-3 py-2
+                       text-[0.72rem] text-foreground
+                       focus:outline-none focus:ring-1 focus:ring-ring/50">
+          <option value="bge-small-en-v1.5">{t("screenshots.ocrModelBgeSmall")}</option>
+          <option value="all-minilm-l6-v2">{t("screenshots.ocrModelMiniLM")}</option>
+          <option value="bge-base-en-v1.5">{t("screenshots.ocrModelBgeBase")}</option>
+        </select>
+      </div>
+
+      <!-- Apply button for OCR config changes -->
+      <div class="flex justify-end">
+        <Button size="sm" onclick={save} disabled={saving}
+                class="text-[0.65rem] h-7 px-4">
+          {saving ? t("common.saving") : t("common.apply")}
+        </Button>
+      </div>
+
+      <Separator class="bg-border dark:bg-white/[0.05]" />
+
       <!-- OCR model info -->
       <div class="flex flex-col gap-2">
+        <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground/50">
+          {t("screenshots.ocrActiveModels")}
+        </span>
         <div class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-[0.62rem]">
           <span class="text-muted-foreground">{t("screenshots.ocrDetModel")}</span>
           <span class="text-foreground font-mono text-[0.58rem]">text-detection.rten</span>
           <span class="text-muted-foreground">{t("screenshots.ocrRecModel")}</span>
           <span class="text-foreground font-mono text-[0.58rem]">text-recognition.rten</span>
           <span class="text-muted-foreground">{t("screenshots.ocrTextEmbed")}</span>
-          <span class="text-foreground font-mono text-[0.58rem]">BGE-Small-EN-v1.5 — 384d</span>
+          <span class="text-foreground font-mono text-[0.58rem]">{config.ocr_text_model}</span>
           <span class="text-muted-foreground">{t("screenshots.ocrIndex")}</span>
           <span class="text-foreground font-mono text-[0.58rem]">screenshots_ocr.hnsw</span>
+          <span class="text-muted-foreground">{t("screenshots.ocrInference")}</span>
+          <span class="text-foreground font-mono text-[0.58rem]">{config.use_gpu ? 'GPU' : 'CPU'}</span>
         </div>
       </div>
 
@@ -571,6 +684,7 @@ the Free Software Foundation, version 3 only. -->
 
     </CardContent>
   </Card>
+  {/if}
 
   <!-- ── Privacy note ────────────────────────────────────────────────────── -->
   <div class="rounded-xl border border-primary/20 bg-primary/5

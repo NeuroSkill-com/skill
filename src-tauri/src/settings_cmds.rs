@@ -1635,11 +1635,15 @@ pub fn search_screenshots_by_text(
         Some(s) => s,
         None => return vec![],
     };
+    let config = {
+        let g = state.lock_or_recover();
+        g.screenshot_config.clone()
+    };
     let k = k.unwrap_or(20);
     let mode = mode.unwrap_or_else(|| "semantic".into());
     match mode.as_str() {
         "substring" => crate::screenshot::search_by_ocr_text_like(&store, &query, k),
-        _ => crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k),
+        _ => crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k, &config),
     }
 }
 

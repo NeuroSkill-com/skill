@@ -774,6 +774,10 @@ pub(crate) fn default_screenshot_quality()         -> u8     { 60 }
 pub(crate) fn default_screenshot_session_only()    -> bool   { true }
 pub(crate) fn default_screenshot_embed_backend()   -> String { "fastembed".into() }
 pub(crate) fn default_screenshot_fastembed_model() -> String { "clip-vit-b-32".into() }
+pub(crate) fn default_screenshot_ocr_enabled()     -> bool   { true }
+pub(crate) fn default_screenshot_ocr_engine()      -> String { "ocrs".into() }
+pub(crate) fn default_screenshot_ocr_text_model()  -> String { "bge-small-en-v1.5".into() }
+pub(crate) fn default_screenshot_use_gpu()         -> bool   { true }
 
 /// Screenshot capture + vision-encoder embedding configuration.
 ///
@@ -814,6 +818,30 @@ pub struct ScreenshotConfig {
     ///            `"nomic-embed-vision-v1.5"` (768-dim).
     #[serde(default = "default_screenshot_fastembed_model")]
     pub fastembed_model: String,
+
+    /// Enable OCR text extraction from screenshots (default: true).
+    /// When disabled, screenshots are still captured and vision-embedded
+    /// but no text is extracted or text-embedded.
+    #[serde(default = "default_screenshot_ocr_enabled")]
+    pub ocr_enabled: bool,
+
+    /// OCR engine to use.  `"ocrs"` (default, local rten-based).
+    /// Future: `"tesseract"`, `"apple-vision"`, etc.
+    #[serde(default = "default_screenshot_ocr_engine")]
+    pub ocr_engine: String,
+
+    /// Text embedding model for OCR output.
+    /// Supported: `"bge-small-en-v1.5"` (384-dim, default, fast),
+    ///            `"all-minilm-l6-v2"` (384-dim),
+    ///            `"bge-base-en-v1.5"` (768-dim, richer).
+    #[serde(default = "default_screenshot_ocr_text_model")]
+    pub ocr_text_model: String,
+
+    /// Run image embeddings and OCR on GPU when available (default: true).
+    /// When false, forces CPU inference.  Useful on machines where GPU
+    /// resources should be reserved for other workloads (LLM, EEG model).
+    #[serde(default = "default_screenshot_use_gpu")]
+    pub use_gpu: bool,
 }
 
 impl Default for ScreenshotConfig {
@@ -826,6 +854,10 @@ impl Default for ScreenshotConfig {
             session_only:    default_screenshot_session_only(),
             embed_backend:   default_screenshot_embed_backend(),
             fastembed_model: default_screenshot_fastembed_model(),
+            ocr_enabled:     default_screenshot_ocr_enabled(),
+            ocr_engine:      default_screenshot_ocr_engine(),
+            ocr_text_model:  default_screenshot_ocr_text_model(),
+            use_gpu:         default_screenshot_use_gpu(),
         }
     }
 }
@@ -851,6 +883,15 @@ impl ScreenshotConfig {
             },
             "mmproj" => "mmproj".into(),
             other    => other.into(),
+        }
+    }
+
+    /// Return the fastembed `EmbeddingModel` enum for the OCR text embedding model.
+    pub fn ocr_text_model_enum(&self) -> fastembed::EmbeddingModel {
+        match self.ocr_text_model.as_str() {
+            "all-minilm-l6-v2"  => fastembed::EmbeddingModel::AllMiniLML6V2,
+            "bge-base-en-v1.5"  => fastembed::EmbeddingModel::BGEBaseENV15,
+            _                   => fastembed::EmbeddingModel::BGESmallENV15,
         }
     }
 

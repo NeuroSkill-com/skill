@@ -642,11 +642,10 @@ fn run_ocr(engine: &ocrs::OcrEngine, raw_bytes: &[u8]) -> Option<String> {
     if text.is_empty() { None } else { Some(text) }
 }
 
-/// Embed OCR text using the existing fastembed text embedder.
-fn embed_ocr_text(text: &str, skill_dir: &Path) -> Option<Vec<f32>> {
+/// Embed OCR text using fastembed text embedder with the configured model.
+fn embed_ocr_text(text: &str, skill_dir: &Path, config: &ScreenshotConfig) -> Option<Vec<f32>> {
     let cache = skill_dir.join("fastembed_cache");
-    // Use the default text embedding model (small, fast)
-    let model = fastembed::EmbeddingModel::BGESmallENV15;
+    let model = config.ocr_text_model_enum();
     let mut embedder = fastembed::TextEmbedding::try_new(
         fastembed::InitOptions::new(model).with_cache_dir(cache)
     ).ok()?;
@@ -739,21 +738,30 @@ pub fn run_screenshot_worker(
     // Load fastembed model if configured
     let mut fe_encoder = load_fastembed_image(&config, &skill_dir);
 
-    // Load OCR engine (downloads models on first use)
-    let ocr_engine = load_ocr_engine(&skill_dir);
-    if ocr_engine.is_some() {
-        eprintln!("[screenshot] OCR engine loaded");
+    // Load OCR engine if enabled (downloads models on first use)
+    let ocr_engine = if config.ocr_enabled {
+        let engine = load_ocr_engine(&skill_dir);
+        if engine.is_some() {
+            eprintln!("[screenshot] OCR engine ({}) loaded", config.ocr_engine);
+        } else {
+            eprintln!("[screenshot] OCR engine not available — text extraction disabled");
+        }
+        engine
     } else {
-        eprintln!("[screenshot] OCR engine not available — text extraction disabled");
-    }
+        eprintln!("[screenshot] OCR disabled by config");
+        None
+    };
 
     // Load text embedder for OCR text (reuse fastembed cache)
-    let mut text_embedder: Option<fastembed::TextEmbedding> = {
+    let mut text_embedder: Option<fastembed::TextEmbedding> = if config.ocr_enabled {
         let cache = skill_dir.join("fastembed_cache");
+        let model = config.ocr_text_model_enum();
+        eprintln!("[screenshot] OCR text model: {}", config.ocr_text_model);
         fastembed::TextEmbedding::try_new(
-            fastembed::InitOptions::new(fastembed::EmbeddingModel::BGESmallENV15)
-                .with_cache_dir(cache)
+            fastembed::InitOptions::new(model).with_cache_dir(cache)
         ).ok()
+    } else {
+        None
     };
 
     let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
@@ -802,8 +810,12 @@ pub fn run_screenshot_worker(
         };
 
         // ── OCR on full-resolution image (before downsizing) ──
-        let ocr_text = if let Some(ref engine) = ocr_engine {
-            run_ocr(engine, &captured.raw_bytes).unwrap_or_default()
+        let ocr_text = if config.ocr_enabled {
+            if let Some(ref engine) = ocr_engine {
+                run_ocr(engine, &captured.raw_bytes).unwrap_or_default()
+            } else {
+                String::new()
+            }
         } else {
             String::new()
         };
@@ -993,9 +1005,10 @@ pub fn search_by_ocr_text_embedding(
     store: &ScreenshotStore,
     query: &str,
     k: usize,
+    config: &ScreenshotConfig,
 ) -> Vec<ScreenshotResult> {
     // Embed the query text
-    let query_emb = embed_ocr_text(query, skill_dir);
+    let query_emb = embed_ocr_text(query, skill_dir, config);
     let query_emb = match query_emb {
         Some(v) => v,
         None => return vec![],
