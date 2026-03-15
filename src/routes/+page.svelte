@@ -15,7 +15,7 @@ the Free Software Foundation, version 3 only. -->
   import PpgChart,  { type PpgPacket }         from "$lib/PpgChart.svelte";
   import ImuChart,  { type ImuPacket }         from "$lib/ImuChart.svelte";
   import GpuChart                              from "$lib/GpuChart.svelte";
-  import { EEG_CH, EEG_COLOR, MW75_CH, MW75_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
+  import { EEG_CH, EEG_COLOR, MW75_CH, MW75_COLOR, HERMES_CH, HERMES_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
   import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
   import {
     BrainStateScores, FaaGauge, EegIndices, CompositeScores,
@@ -351,12 +351,17 @@ the Free Software Foundation, version 3 only. -->
   const isMuse      = $derived(status.device_kind === "muse" || status.device_kind === "unknown");
   const isGanglion  = $derived(status.device_kind === "ganglion");
   const isMw75      = $derived(status.device_kind === "mw75");
+  const isHermes    = $derived(status.device_kind === "hermes");
   const hasPpg      = $derived(isMuse);
   const hasBattery  = $derived(isMuse || isMw75);
 
   // Channel labels and colours — dynamic based on connected device.
-  const chLabels = $derived(isMw75 ? MW75_CH : EEG_CH);
-  const chColors = $derived(isMw75 ? MW75_COLOR : EEG_COLOR);
+  const chLabels = $derived(
+    isMw75 ? MW75_CH : isHermes ? HERMES_CH : EEG_CH
+  );
+  const chColors = $derived(
+    isMw75 ? MW75_COLOR : isHermes ? HERMES_COLOR : EEG_COLOR
+  );
   /**
    * Athena = Muse S gen 2.
    * Detected by hardware_version "p50" (arrives a few seconds after connect)

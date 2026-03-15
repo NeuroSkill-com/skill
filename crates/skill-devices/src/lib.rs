@@ -6,6 +6,7 @@
 //! composite EEG score computation (meditation, cognitive load, drowsiness),
 //! battery EMA smoothing, and band-snapshot enrichment.
 
+pub use hermes_ble;
 pub use muse_rs;
 pub use mw75;
 pub use openbci;

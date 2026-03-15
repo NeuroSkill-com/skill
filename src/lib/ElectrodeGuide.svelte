@@ -70,17 +70,19 @@ the Free Software Foundation, version 3 only. -->
   });
 
   // ── Electrode system tabs ──────────────────────────────────────────────────
-  type ActiveTab = "muse" | "mw75" | "ganglion" | "10-20" | "10-10" | "10-5";
+  type ActiveTab = "muse" | "mw75" | "hermes" | "ganglion" | "10-20" | "10-10" | "10-5";
   const TABS: { id: ActiveTab; label: string; count: string }[] = [
     { id: "muse",     label: "Muse",     count: "4"  },
     { id: "mw75",     label: "MW75",     count: "12" },
+    { id: "hermes",   label: "Hermes",   count: "8"  },
     { id: "ganglion", label: "Ganglion", count: "4"  },
     { id: "10-20",    label: "10-20",    count: "21" },
     { id: "10-10",    label: "10-10",    count: "64" },
     { id: "10-5",     label: "10-5",     count: "345" },
   ];
   let activeTab: ActiveTab = $state(
-    device === "mw75" ? "mw75" : device === "ganglion" ? "ganglion" : "muse"
+    device === "mw75" ? "mw75" : device === "hermes" ? "hermes"
+    : device === "ganglion" ? "ganglion" : "muse"
   );
 
   // Device-specific electrode sets
@@ -90,7 +92,7 @@ the Free Software Foundation, version 3 only. -->
 
   // System used for the 3D view (device tabs still need a valid system for raycasting)
   let system: ElectrodeSystem = $derived(
-    (activeTab === "muse" || activeTab === "mw75" || activeTab === "ganglion")
+    (activeTab === "muse" || activeTab === "mw75" || activeTab === "hermes" || activeTab === "ganglion")
       ? "10-10" : activeTab as ElectrodeSystem
   );
 
@@ -98,6 +100,7 @@ the Free Software Foundation, version 3 only. -->
   const electrodes3D = $derived(
     activeTab === "muse" ? museElectrodes
     : activeTab === "mw75" ? mw75Electrodes
+    : activeTab === "hermes" ? [] // Hermes positions depend on montage
     : activeTab === "ganglion" ? [] // Ganglion has configurable positions
     : getElectrodes(activeTab as ElectrodeSystem)
   );
@@ -243,7 +246,7 @@ the Free Software Foundation, version 3 only. -->
     {#if Head3D}
       <Canvas {createRenderer}>
         <Head3D bind:this={head3DRef} {system}
-                electrodesOverride={activeTab === "muse" ? museElectrodes : activeTab === "mw75" ? mw75Electrodes : null}
+                electrodesOverride={activeTab === "muse" ? museElectrodes : activeTab === "mw75" ? mw75Electrodes : activeTab === "hermes" ? [] : null}
                 {onSelect} selectedName={selectedElectrode?.name} />
       </Canvas>
     {:else}

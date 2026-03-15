@@ -26,6 +26,22 @@ export const EEG_CH = ["TP9", "AF7", "AF8", "TP10"] as const;
 /** Per-channel accent colours for the default 4-channel view. */
 export const EEG_COLOR = ["#22c55e", "#60a5fa", "#c084fc", "#fb923c"] as const;
 
+// ── Hermes V1 (8-channel) ────────────────────────────────────────────────────
+
+/** Hermes V1 EEG channel count (8-channel ADS1299). */
+export const HERMES_EEG_CHANNELS = 8;
+
+/** Hermes V1 channel labels (generic — depends on montage). */
+export const HERMES_CH = [
+  "Ch1", "Ch2", "Ch3", "Ch4", "Ch5", "Ch6", "Ch7", "Ch8",
+] as const;
+
+/** Hermes V1 per-channel colours. */
+export const HERMES_COLOR = [
+  "#22c55e", "#60a5fa", "#c084fc", "#fb923c",
+  "#16a34a", "#3b82f6", "#a855f7", "#f97316",
+] as const;
+
 // ── MW75 Neuro (12-channel) ──────────────────────────────────────────────────
 
 /** MW75 total EEG channel count (6 per ear cup). */

@@ -92,6 +92,17 @@ pub const IMU_SAMPLE_RATE: f64 = 52.0;
 /// OpenBCI Ganglion channel labels (default 10-20 sites when unset).
 pub const GANGLION_CHANNEL_NAMES: [&str; 4] = ["Ch1", "Ch2", "Ch3", "Ch4"];
 
+/// Hermes V1 EEG channel count (8-channel ADS1299 at 250 Hz).
+pub const HERMES_EEG_CHANNELS: usize = 8;
+
+/// Hermes V1 hardware sample rate (Hz).
+pub const HERMES_SAMPLE_RATE: f64 = 250.0;
+
+/// Hermes V1 channel labels (generic — exact placement depends on montage).
+pub const HERMES_CHANNEL_NAMES: [&str; HERMES_EEG_CHANNELS] = [
+    "Fp1", "Fp2", "AF3", "AF4", "F3", "F4", "FC1", "FC2",
+];
+
 /// Neurable MW75 Neuro EEG channel count (12 channels at 500 Hz).
 pub const MW75_EEG_CHANNELS: usize = 12;
 

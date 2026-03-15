@@ -218,6 +218,7 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
                                             || n.starts_with("ganglion")
                                             || n.starts_with("simblee")
                                             || n.contains("mw75")
+                                            || n.starts_with("hermes")
                                     }).unwrap_or(false);
 
                                     // Match MW75 by GATT service UUID — on macOS,

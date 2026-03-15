@@ -95,6 +95,9 @@ pub(crate) use ble_scanner::start_background_scanner;
 /// Muse BLE session loop and per-event handler.
 mod muse_session;
 
+/// Hermes V1 EEG headset session (8-channel ADS1299, BLE).
+mod hermes_session;
+
 /// Neurable MW75 Neuro EEG headphone session (BLE + RFCOMM).
 mod mw75_session;
 
@@ -1128,12 +1131,15 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     let is_mw75 = target_lower.as_deref().map(|n| {
         n.contains("mw75")
     }).unwrap_or(false);
+    let is_hermes = target_lower.as_deref().map(|n| {
+        n.starts_with("hermes")
+    }).unwrap_or(false);
 
     app.state::<Mutex<Box<AppState>>>().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
     let csv  = new_csv_path(app);
     let app2 = app.clone();
 
-    app_log!(app, "bluetooth", "[session] routing: target={target:?} name={target_name:?} ganglion={is_ganglion} mw75={is_mw75}");
+    app_log!(app, "bluetooth", "[session] routing: target={target:?} name={target_name:?} ganglion={is_ganglion} mw75={is_mw75} hermes={is_hermes}");
 
     if is_ganglion {
         tauri::async_runtime::spawn(async move {
@@ -1142,6 +1148,10 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     } else if is_mw75 {
         tauri::async_runtime::spawn(async move {
             mw75_session::run_mw75_session(app2, rx, csv, target).await;
+        });
+    } else if is_hermes {
+        tauri::async_runtime::spawn(async move {
+            hermes_session::run_hermes_session(app2, rx, csv, target).await;
         });
     } else {
         tauri::async_runtime::spawn(async move {

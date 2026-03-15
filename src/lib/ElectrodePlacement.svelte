@@ -68,8 +68,22 @@ the Free Software Foundation, version 3 only. -->
     { id: "C6",  label: "C6",  cx: 146, cy: 110, side: "right" },
   ];
 
+  // Hermes V1: 8 channels, positions depend on user's montage.
+  // Default placement assumes a standard research headband layout.
+  const HERMES_ELECTRODES: ElectrodePos[] = [
+    { id: "Fp1", label: "Fp1", cx: 62,  cy: 62,  side: "left"   },
+    { id: "Fp2", label: "Fp2", cx: 138, cy: 62,  side: "right"  },
+    { id: "AF3", label: "AF3", cx: 50,  cy: 90,  side: "left"   },
+    { id: "AF4", label: "AF4", cx: 150, cy: 90,  side: "right"  },
+    { id: "F3",  label: "F3",  cx: 50,  cy: 120, side: "left"   },
+    { id: "F4",  label: "F4",  cx: 150, cy: 120, side: "right"  },
+    { id: "FC1", label: "FC1", cx: 62,  cy: 148, side: "left"   },
+    { id: "FC2", label: "FC2", cx: 138, cy: 148, side: "right"  },
+  ];
+
   const ELECTRODES = $derived(
     device === "mw75" ? MW75_ELECTRODES
+    : device === "hermes" ? HERMES_ELECTRODES
     : device === "ganglion" ? GANGLION_ELECTRODES
     : MUSE_ELECTRODES
   );
@@ -102,7 +116,8 @@ the Free Software Foundation, version 3 only. -->
   const isMw75 = $derived(device === "mw75");
 
   const deviceLabel = $derived(
-    device === "mw75" ? "MW75 Neuro" : device === "ganglion" ? "Ganglion" : "Muse"
+    device === "mw75" ? "MW75 Neuro" : device === "hermes" ? "Hermes V1"
+    : device === "ganglion" ? "Ganglion" : "Muse"
   );
 </script>
 
