@@ -9341,7 +9341,9 @@ version = "0.0.1"
 name = "skill-data"
 version = "0.0.1"
 dependencies = [
+ "libc",
  "llmfit-core",
+ "macos-focus",
  "rusqlite",
  "serde",
  "serde_json",
