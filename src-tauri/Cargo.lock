@@ -9311,6 +9311,7 @@ dependencies = [
  "serde_json",
  "serialport",
  "sha2",
+ "skill-commands",
  "skill-constants",
  "skill-data",
  "skill-eeg",
@@ -9335,6 +9336,17 @@ dependencies = [
  "tower-http",
  "ureq 2.12.1",
  "zuna-rs",
+]
+
+[[package]]
+name = "skill-commands"
+version = "0.0.1"
+dependencies = [
+ "fast-hnsw",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "skill-constants",
 ]
 
 [[package]]
