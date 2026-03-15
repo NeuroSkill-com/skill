@@ -821,6 +821,8 @@ pub enum ChatChunk {
     /// Rich tool-execution lifecycle events (pi-mono style).
     ToolExecutionStart  { tool_call_id: String, tool_name: String, args: serde_json::Value },
     ToolExecutionEnd    { tool_call_id: String, tool_name: String, result: serde_json::Value, is_error: bool },
+    /// A tool call was cancelled by the user.
+    ToolCancelled       { tool_call_id: String, tool_name: String },
     Done     { finish_reason: String, prompt_tokens: usize, completion_tokens: usize, n_ctx: usize },
     Error    { message: String },
 }
@@ -856,6 +858,12 @@ pub async fn chat_completions_ipc(
     }, move |event: super::ToolEvent| {
         match event {
             super::ToolEvent::Status { tool_name, status, detail } => {
+                if status.as_str() == "cancelled" {
+                    let _ = tool_channel.send(ChatChunk::ToolCancelled {
+                        tool_call_id: String::new(),
+                        tool_name: tool_name.clone(),
+                    });
+                }
                 let _ = tool_channel.send(ChatChunk::ToolUse {
                     tool:   tool_name,
                     status,
@@ -926,6 +934,28 @@ pub fn abort_llm_stream(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let guard = cell.lock().unwrap();
     if let Some(srv) = guard.as_ref() {
         srv.abort_tx.send_modify(|v| *v = v.wrapping_add(1));
+    }
+}
+
+/// Cancel a specific tool call by its `tool_call_id`.
+///
+/// Adds the ID to the server's cancelled-tool-call set. The tool execution
+/// functions check this set before and during execution. If the tool is
+/// already running (e.g. a long bash command), the cancellation takes effect
+/// the next time the runner checks; for tools that haven't started yet,
+/// execution is skipped entirely.
+///
+/// Safe to call even when no generation is in progress — it is a no-op if
+/// the server is stopped or the ID doesn't match any pending call.
+#[tauri::command]
+pub fn cancel_tool_call(
+    tool_call_id: String,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let cell = { let g = state.lock_or_recover(); g.llm.state_cell.clone() };
+    let guard = cell.lock().unwrap();
+    if let Some(srv) = guard.as_ref() {
+        srv.cancelled_tool_calls.lock().unwrap().insert(tool_call_id);
     }
 }
 

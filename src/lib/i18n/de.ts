@@ -2445,6 +2445,8 @@ const de: Record<string, string> = {
   "chat.tools.write_fileDesc":          "Dateien erstellen oder überschreiben",
   "chat.tools.edit_file":               "Datei bearbeiten",
   "chat.tools.edit_fileDesc":           "Suchen-und-Ersetzen-Bearbeitungen",
+  "chat.tools.argsLabel":               "Argumente",
+  "chat.tools.resultLabel":             "Ergebnis",
   "chat.tools.unsupported":             "Werkzeuge erfordern einen laufenden Server",
   "chat.tools.calling":                 "{tool} wird aufgerufen…",
   "chat.tools.done":                    "{tool} abgeschlossen",
@@ -2453,6 +2455,12 @@ const de: Record<string, string> = {
   "chat.tools.executionMode":           "Ausführungsmodus",
   "chat.tools.parallel":                "Parallel",
   "chat.tools.sequential":             "Sequentiell",
+  "chat.tools.cancel":                  "Abbrechen",
+  "chat.tools.cancelled":              "Abgebrochen",
+  "chat.tools.cancelConfirm":          "Diesen Tool-Aufruf abbrechen?",
+  "chat.tools.dangerWarning":          "⚠ Potenziell gefährlich",
+  "chat.tools.dangerBash":             "Dieser Befehl kann Dateien ändern oder löschen",
+  "chat.tools.dangerPath":             "Zugriff auf einen sensiblen Systempfad",
 
   // ── Prompt-Bibliothek ────────────────────────────────────────────────────
   "chat.prompts.btn":                   "Prompt-Vorlagen",

@@ -24,7 +24,15 @@
   type Role = "user" | "assistant" | "system";
   type ServerStatus = "stopped" | "loading" | "running";
 
-  interface ToolUseEvent { tool: string; status: string; detail?: string; }
+  interface ToolUseEvent {
+    tool: string;
+    status: string;           // "calling" | "done" | "error" | "approval_required"
+    detail?: string;
+    toolCallId?: string;
+    args?: any;               // structured arguments from tool_execution_start
+    result?: any;             // structured result from tool_execution_end
+    expanded?: boolean;       // UI toggle
+  }
 
   interface Message {
     id:           number;
@@ -159,6 +167,12 @@
       return match;
     });
 
+    // 4. Complete [TOOL_CALL]…[/TOOL_CALL] blocks
+    s = s.replace(/\[TOOL_CALL\][\s\S]*?\[\/TOOL_CALL\]/g, "");
+
+    // 5. Incomplete [TOOL_CALL] at end of string (mid-stream): [TOOL_CA, [TOOL_CALL]{...
+    s = s.replace(/\[TOOL_C[\s\S]*$/g, "");
+
     return s;
   }
 
@@ -180,6 +194,69 @@
     }
 
     return s.trim();
+  }
+
+  // ── Danger detection ────────────────────────────────────────────────────
+
+  /** Bash patterns that indicate a potentially dangerous command (mirrored from Rust). */
+  const DANGEROUS_BASH_PATTERNS = [
+    "rm ", "rm\t", "rmdir", "shred",
+    "mkfs", "dd if=", "dd of=",
+    "sudo ", "su -", "su\t",
+    "> /dev/", "chmod", "chown",
+    "kill ", "killall", "pkill",
+    "shutdown", "reboot", "halt", "poweroff",
+    "systemctl stop", "systemctl disable",
+    ":(){ :|:& };:",
+    "/etc/", "/boot/", "/usr/", "/var/", "/sys/", "/proc/",
+  ];
+
+  /** Sensitive path prefixes (mirrored from Rust). */
+  const SENSITIVE_PATH_PREFIXES = [
+    "/etc/", "/boot/", "/usr/", "/var/", "/sys/", "/proc/",
+    "/bin/", "/sbin/", "/lib/", "/opt/",
+  ];
+
+  /**
+   * Check if a tool call looks dangerous based on its name and arguments.
+   * Returns a danger reason string, or null if safe.
+   */
+  function detectToolDanger(tu: ToolUseEvent): string | null {
+    if (tu.tool === "bash" && tu.args?.command) {
+      const cmd = tu.args.command.toLowerCase();
+      for (const pat of DANGEROUS_BASH_PATTERNS) {
+        if (cmd.includes(pat)) {
+          return `chat.tools.dangerBash`;
+        }
+      }
+    }
+    if (["write_file", "edit_file", "read_file"].includes(tu.tool) && tu.args?.path) {
+      const path = tu.args.path;
+      for (const prefix of SENSITIVE_PATH_PREFIXES) {
+        if (path.startsWith(prefix)) {
+          return `chat.tools.dangerPath`;
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Cancel a specific tool call by its tool_call_id. */
+  async function cancelToolCall(msgId: number, tuIdx: number, toolCallId: string | undefined) {
+    if (!toolCallId) return;
+    try {
+      await invoke("cancel_tool_call", { toolCallId });
+    } catch { /* server not running */ }
+
+    // Immediately update the UI to show cancelled status
+    messages = messages.map(m => {
+      if (m.id !== msgId) return m;
+      const uses = [...(m.toolUses ?? [])];
+      if (uses[tuIdx] && uses[tuIdx].status === "calling") {
+        uses[tuIdx] = { ...uses[tuIdx], status: "cancelled" };
+      }
+      return { ...m, toolUses: uses };
+    });
   }
 
   /**
@@ -246,6 +323,7 @@
   interface ChatChunkToolUse { type: "tool_use"; tool: string; status: string; detail?: string; }
   interface ChatChunkToolExecStart { type: "tool_execution_start"; tool_call_id: string; tool_name: string; args: any; }
   interface ChatChunkToolExecEnd   { type: "tool_execution_end";   tool_call_id: string; tool_name: string; result: any; is_error: boolean; }
+  interface ChatChunkToolCancelled { type: "tool_cancelled"; tool_call_id: string; tool_name: string; }
   interface ChatChunkDone  {
     type:              "done";
     finish_reason:     string;
@@ -254,7 +332,7 @@
     n_ctx:             number;
   }
   interface ChatChunkError { type: "error"; message: string; }
-  type ChatChunk = ChatChunkDelta | ChatChunkToolUse | ChatChunkToolExecStart | ChatChunkToolExecEnd | ChatChunkDone | ChatChunkError;
+  type ChatChunk = ChatChunkDelta | ChatChunkToolUse | ChatChunkToolExecStart | ChatChunkToolExecEnd | ChatChunkToolCancelled | ChatChunkDone | ChatChunkError;
 
   /** Thinking budget levels: token limit for <think> block. null = unlimited. */
   type ThinkingLevel = "minimal" | "normal" | "extended" | "unlimited";
@@ -891,14 +969,46 @@
         await scrollBottom();
 
       } else if (chunk.type === "tool_execution_start") {
-        // Rich lifecycle event: tool execution is beginning (after validation).
-        // Already handled by the legacy "tool_use/calling" event above.
-        // This event carries structured args for advanced UI use.
+        // Enrich the existing "calling" pill with structured args.
+        messages = messages.map(m => {
+          if (m.id !== assistantMsg.id) return m;
+          const existing = m.toolUses ?? [];
+          const idx = existing.findIndex(e => e.tool === chunk.tool_name && e.status === "calling");
+          if (idx >= 0) {
+            const updated = [...existing];
+            updated[idx] = { ...updated[idx], toolCallId: chunk.tool_call_id, args: chunk.args };
+            return { ...m, toolUses: updated };
+          }
+          return m;
+        });
 
       } else if (chunk.type === "tool_execution_end") {
-        // Rich lifecycle event: tool execution finished.
-        // Already handled by the legacy "tool_use/done|error" event above.
-        // This event carries the full result JSON and is_error flag.
+        // Enrich the tool pill with the result.
+        messages = messages.map(m => {
+          if (m.id !== assistantMsg.id) return m;
+          const existing = m.toolUses ?? [];
+          const idx = existing.findIndex(e => e.tool === chunk.tool_name && (e.toolCallId === chunk.tool_call_id || e.status === "calling"));
+          if (idx >= 0) {
+            const updated = [...existing];
+            updated[idx] = { ...updated[idx], result: chunk.result, status: chunk.is_error ? "error" : "done" };
+            return { ...m, toolUses: updated };
+          }
+          return m;
+        });
+
+      } else if (chunk.type === "tool_cancelled") {
+        // Mark a tool call as cancelled in the UI.
+        messages = messages.map(m => {
+          if (m.id !== assistantMsg.id) return m;
+          const existing = m.toolUses ?? [];
+          const idx = existing.findIndex(e => e.tool === chunk.tool_name && (e.toolCallId === chunk.tool_call_id || e.status === "calling"));
+          if (idx >= 0) {
+            const updated = [...existing];
+            updated[idx] = { ...updated[idx], status: "cancelled" };
+            return { ...m, toolUses: updated };
+          }
+          return m;
+        });
 
       } else if (chunk.type === "done") {
         const elapsed = performance.now() - t0;
@@ -1185,8 +1295,8 @@
   <div class="min-h-0 flex flex-col flex-1 min-w-0 overflow-hidden">
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
-  <header class="flex items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
-                  bg-white dark:bg-[#0f0f18] shrink-0"
+  <header class="flex flex-nowrap items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
+                  bg-white dark:bg-[#0f0f18] shrink-0 overflow-hidden min-h-0"
           data-tauri-drag-region>
 
     <!-- Sidebar toggle -->
@@ -1454,7 +1564,7 @@
           </span>
           {#if supportsTools}
             <span class="text-[0.55rem] tabular-nums text-muted-foreground/40 select-none">
-              {enabledToolCount}/4
+              {enabledToolCount}/8
             </span>
           {/if}
         </div>
@@ -1724,38 +1834,196 @@
                 </div>
               {/if}
 
-              <!-- Tool-use pills -->
+              <!-- Tool-use expandable cards -->
               {#if msg.toolUses?.length}
-                <div class="flex flex-wrap gap-1.5">
-                  {#each msg.toolUses as tu}
+                <div class="flex flex-col gap-1.5">
+                  {#each msg.toolUses as tu, tuIdx}
                     {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐", bash: "💻", read_file: "📄", write_file: "✏️", edit_file: "🔧" }}
                     {@const icon = icons[tu.tool] ?? "🔧"}
-                    <div class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[0.65rem]
-                                font-medium select-none border
-                                {tu.status === 'calling'
-                                  ? 'border-primary/30 bg-primary/8 text-primary'
-                                  : tu.status === 'done'
-                                    ? 'border-emerald-500/30 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300'
-                                    : 'border-red-500/30 bg-red-500/8 text-red-700 dark:text-red-300'}">
-                      <span class="text-sm">{icon}</span>
-                      <span>{t(`chat.tools.${tu.tool}`)}</span>
-                      {#if tu.status === "calling"}
-                        <span class="flex gap-0.5 ml-0.5">
-                          {#each [0,1,2] as i}
-                            <span class="w-1 h-1 rounded-full bg-current animate-bounce"
-                                  style="animation-delay:{i*0.1}s"></span>
-                          {/each}
-                        </span>
-                      {:else if tu.status === "done"}
-                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
-                             stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-                          <polyline points="2 6 5 9 10 3"/>
-                        </svg>
-                      {:else}
-                        <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
-                             stroke-linecap="round" class="w-3 h-3">
-                          <line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/>
-                        </svg>
+                    {@const hasDetails = !!(tu.args || tu.result)}
+                    {@const dangerKey = detectToolDanger(tu)}
+                    {@const isDangerous = !!dangerKey}
+                    {@const borderColor =
+                        tu.status === 'cancelled' ? 'border-amber-500/30'
+                      : tu.status === 'calling' && isDangerous ? 'border-red-500/40'
+                      : tu.status === 'calling'   ? 'border-primary/25'
+                      : tu.status === 'done'      ? 'border-emerald-500/25'
+                      :                             'border-red-500/25'}
+                    {@const bgColor =
+                        tu.status === 'cancelled' ? 'bg-amber-500/5'
+                      : tu.status === 'calling' && isDangerous ? 'bg-red-500/8'
+                      : tu.status === 'calling'   ? 'bg-primary/5'
+                      : tu.status === 'done'      ? 'bg-emerald-500/5'
+                      :                             'bg-red-500/5'}
+
+                    <div class="rounded-xl border {borderColor} {bgColor} overflow-hidden text-[0.68rem]">
+                      <!-- Header row: clickable to expand -->
+                      <div class="flex items-center">
+                        <button
+                          onclick={() => {
+                            if (!hasDetails) return;
+                            messages = messages.map(m => {
+                              if (m.id !== msg.id) return m;
+                              const uses = [...(m.toolUses ?? [])];
+                              uses[tuIdx] = { ...uses[tuIdx], expanded: !uses[tuIdx].expanded };
+                              return { ...m, toolUses: uses };
+                            });
+                          }}
+                          class="flex-1 min-w-0 flex items-center gap-1.5 px-3 py-1.5 text-left
+                                 transition-colors
+                                 {hasDetails ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : 'cursor-default'}
+                                 {tu.status === 'cancelled' ? 'text-amber-600 dark:text-amber-400'
+                                : tu.status === 'calling' && isDangerous ? 'text-red-600 dark:text-red-400'
+                                : tu.status === 'calling'   ? 'text-primary'
+                                : tu.status === 'done'      ? 'text-emerald-700 dark:text-emerald-300'
+                                :                             'text-red-700 dark:text-red-300'}">
+                          <!-- Expand chevron -->
+                          {#if hasDetails}
+                            <svg viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 shrink-0 opacity-50
+                                 transition-transform {tu.expanded ? 'rotate-90' : ''}">
+                              <path d="M6 3l5 5-5 5V3z"/>
+                            </svg>
+                          {/if}
+                          <span class="text-sm">{icon}</span>
+                          <span class="font-medium">{t(`chat.tools.${tu.tool}`)}</span>
+
+                          <!-- Danger badge (inline, visible even when collapsed) -->
+                          {#if isDangerous && (tu.status === 'calling' || tu.status === 'cancelled')}
+                            <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md
+                                         text-[0.55rem] font-semibold shrink-0
+                                         bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/20">
+                              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+                                   stroke-linecap="round" stroke-linejoin="round" class="w-2.5 h-2.5 shrink-0">
+                                <path d="M7.15 2.43L1.41 12a1 1 0 0 0 .86 1.5h11.46a1 1 0 0 0 .86-1.5L8.85 2.43a1 1 0 0 0-1.7 0z"/>
+                                <line x1="8" y1="6" x2="8" y2="9"/><line x1="8" y1="11" x2="8.01" y2="11"/>
+                              </svg>
+                              {t("chat.tools.dangerWarning")}
+                            </span>
+                          {/if}
+
+                          <!-- Brief summary of args in header -->
+                          {#if tu.args}
+                            <span class="text-[0.6rem] text-muted-foreground/60 truncate ml-1 flex-1 min-w-0 font-mono">
+                              {#if tu.tool === "bash" && tu.args.command}
+                                {tu.args.command.length > 60 ? tu.args.command.slice(0, 60) + "…" : tu.args.command}
+                              {:else if (tu.tool === "read_file" || tu.tool === "write_file" || tu.tool === "edit_file") && tu.args.path}
+                                {tu.args.path}
+                              {:else if tu.tool === "web_search" && tu.args.query}
+                                {tu.args.query}
+                              {:else if tu.tool === "web_fetch" && tu.args.url}
+                                {tu.args.url}
+                              {/if}
+                            </span>
+                          {/if}
+
+                          <!-- Status indicator -->
+                          <span class="ml-auto shrink-0 flex items-center gap-1">
+                            {#if tu.status === "calling"}
+                              <span class="flex gap-0.5">
+                                {#each [0,1,2] as i}
+                                  <span class="w-1 h-1 rounded-full bg-current animate-bounce"
+                                        style="animation-delay:{i*0.1}s"></span>
+                                {/each}
+                              </span>
+                            {:else if tu.status === "cancelled"}
+                              <!-- Slash-circle icon for cancelled -->
+                              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"
+                                   stroke-linecap="round" class="w-3 h-3">
+                                <circle cx="6" cy="6" r="4.5"/>
+                                <line x1="3.2" y1="8.8" x2="8.8" y2="3.2"/>
+                              </svg>
+                            {:else if tu.status === "done"}
+                              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                                   stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
+                                <polyline points="2 6 5 9 10 3"/>
+                              </svg>
+                            {:else}
+                              <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2"
+                                   stroke-linecap="round" class="w-3 h-3">
+                                <line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/>
+                              </svg>
+                            {/if}
+                          </span>
+                        </button>
+
+                        <!-- Cancel button (only shown while calling) -->
+                        {#if tu.status === "calling"}
+                          <button
+                            onclick={(e) => { e.stopPropagation(); cancelToolCall(msg.id, tuIdx, tu.toolCallId); }}
+                            title={t("chat.tools.cancel")}
+                            class="shrink-0 flex items-center gap-1 px-2 py-1 mr-1.5
+                                   rounded-lg text-[0.6rem] font-semibold transition-all cursor-pointer
+                                   {isDangerous
+                                     ? 'bg-red-500/15 text-red-600 dark:text-red-400 hover:bg-red-500/25 border border-red-500/30'
+                                     : 'bg-muted text-muted-foreground/70 hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 border border-border'}">
+                            <!-- Stop/cancel icon -->
+                            <svg viewBox="0 0 12 12" fill="currentColor" class="w-2.5 h-2.5">
+                              <rect x="2" y="2" width="8" height="8" rx="1"/>
+                            </svg>
+                            {t("chat.tools.cancel")}
+                          </button>
+                        {/if}
+                      </div>
+
+                      <!-- Danger detail banner (shown below header when dangerous + calling) -->
+                      {#if isDangerous && tu.status === 'calling' && dangerKey}
+                        <div class="flex items-center gap-2 mx-3 mb-1.5 px-2 py-1 rounded-lg
+                                    bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                               stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 shrink-0">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                          </svg>
+                          <span class="text-[0.58rem] font-medium leading-snug">
+                            {t(dangerKey)}
+                          </span>
+                        </div>
+                      {/if}
+
+                      <!-- Expanded detail panel -->
+                      {#if tu.expanded && hasDetails}
+                        <div class="border-t border-current/10 px-3 py-2 flex flex-col gap-2
+                                    text-[0.63rem] text-muted-foreground">
+                          <!-- Arguments -->
+                          {#if tu.args}
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                                {t("chat.tools.argsLabel")}
+                              </span>
+                              <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
+                                          bg-black/5 dark:bg-white/5 rounded-lg px-2 py-1.5 max-h-48 overflow-y-auto">{JSON.stringify(tu.args, null, 2)}</pre>
+                            </div>
+                          {/if}
+                          <!-- Result -->
+                          {#if tu.result}
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                                {t("chat.tools.resultLabel")}
+                              </span>
+                              <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
+                                          bg-black/5 dark:bg-white/5 rounded-lg px-2 py-1.5 max-h-64 overflow-y-auto
+                                          {tu.status === 'error' ? 'text-red-500' : ''}">{#if typeof tu.result === "string"}{tu.result}{:else}{JSON.stringify(tu.result, null, 2)}{/if}</pre>
+                            </div>
+                          {/if}
+
+                          <!-- Cancel button in expanded view too (for tools with details) -->
+                          {#if tu.status === "calling"}
+                            <div class="flex justify-end pt-1">
+                              <button
+                                onclick={() => cancelToolCall(msg.id, tuIdx, tu.toolCallId)}
+                                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[0.62rem]
+                                       font-semibold transition-all cursor-pointer
+                                       {isDangerous
+                                         ? 'bg-red-500 text-white hover:bg-red-600'
+                                         : 'bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 border border-red-500/30'}">
+                                <svg viewBox="0 0 12 12" fill="currentColor" class="w-2.5 h-2.5">
+                                  <rect x="2" y="2" width="8" height="8" rx="1"/>
+                                </svg>
+                                {t("chat.tools.cancel")}
+                              </button>
+                            </div>
+                          {/if}
+                        </div>
                       {/if}
                     </div>
                   {/each}

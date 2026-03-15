@@ -288,6 +288,11 @@ pub struct LlmServerState {
     pub n_ctx:        Arc<std::sync::atomic::AtomicUsize>,
     /// Whether a vision projector (mmproj) was loaded — enables image input.
     pub vision_ready: Arc<AtomicBool>,
+    /// Set of tool_call_ids that the user has cancelled from the UI.
+    /// Checked before each tool execution; cancelled calls return an error
+    /// result instead of running.
+    pub cancelled_tool_calls: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+
     /// Abort signal for IPC-streamed chat (`chat_completions_ipc`).
     ///
     /// Increment the value to cancel a running IPC generation:
@@ -822,6 +827,67 @@ fn truncate_tool_output_head(content: &str, max_lines: usize, max_bytes: usize) 
     }
 }
 
+// ── Dangerous operation detection ──────────────────────────────────────────
+
+/// Patterns that indicate a potentially dangerous bash command.
+const DANGEROUS_BASH_PATTERNS: &[&str] = &[
+    "rm ", "rm\t", "rmdir", "shred",
+    "mkfs", "dd if=", "dd of=",
+    "sudo ", "su -", "su\t",
+    "> /dev/", "chmod", "chown",
+    "kill ", "killall", "pkill",
+    "shutdown", "reboot", "halt", "poweroff",
+    "systemctl stop", "systemctl disable",
+    ":(){ :|:& };:", // fork bomb
+    "/etc/", "/boot/", "/usr/", "/var/", "/sys/", "/proc/",
+];
+
+/// Sensitive path prefixes that require approval for file write/edit.
+const SENSITIVE_PATH_PREFIXES: &[&str] = &[
+    "/etc/", "/boot/", "/usr/", "/var/", "/sys/", "/proc/",
+    "/bin/", "/sbin/", "/lib/", "/opt/",
+];
+
+/// Check if a bash command looks dangerous and return a human-readable reason.
+fn check_bash_safety(command: &str) -> Option<String> {
+    let lower = command.to_lowercase();
+    for pat in DANGEROUS_BASH_PATTERNS {
+        if lower.contains(pat) {
+            return Some(format!("Command contains `{}`", pat.trim()));
+        }
+    }
+    None
+}
+
+/// Check if a file path is in a sensitive location.
+fn check_path_safety(path: &std::path::Path) -> Option<String> {
+    let path_str = path.to_string_lossy();
+    for prefix in SENSITIVE_PATH_PREFIXES {
+        if path_str.starts_with(prefix) {
+            return Some(format!("Path is in sensitive location `{}`", prefix));
+        }
+    }
+    None
+}
+
+/// Show a blocking approval dialog for a dangerous tool operation.
+/// Returns `true` if the user approves, `false` if they deny.
+async fn request_tool_approval(tool_name: &str, reason: &str, detail: &str) -> bool {
+    let message = format!(
+        "The LLM wants to use the {} tool.\n\n⚠️ {}\n\n{}\n\nAllow this operation?",
+        tool_name, reason, detail
+    );
+
+    tokio::task::spawn_blocking(move || {
+        rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Warning)
+            .set_title("NeuroSkill — Tool Approval Required")
+            .set_description(&message)
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .show() == rfd::MessageDialogResult::Yes
+    }).await.unwrap_or(false)
+}
+
 fn format_utc_offset(offset_seconds: i32) -> String {
     let sign = if offset_seconds >= 0 { '+' } else { '-' };
     let total = offset_seconds.unsigned_abs();
@@ -1010,6 +1076,14 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
             }
             let timeout_secs = args.get("timeout").and_then(|v| v.as_f64()).map(|t| t as u64);
 
+            // Safety check: require user approval for dangerous commands
+            if let Some(reason) = check_bash_safety(&command) {
+                let approved = request_tool_approval("bash", &reason, &command).await;
+                if !approved {
+                    return json!({ "ok": false, "tool": "bash", "error": "operation denied by user" });
+                }
+            }
+
             tokio::task::spawn_blocking(move || {
                 use std::process::Command;
 
@@ -1153,6 +1227,16 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
                 return json!({ "ok": false, "tool": "write_file", "error": "missing path" });
             }
 
+            // Safety check: require approval for sensitive paths
+            let resolved_check = resolve_tool_path(&path);
+            if let Some(reason) = check_path_safety(&resolved_check) {
+                let detail = format!("Write to: {}", resolved_check.display());
+                let approved = request_tool_approval("write_file", &reason, &detail).await;
+                if !approved {
+                    return json!({ "ok": false, "tool": "write_file", "error": "operation denied by user" });
+                }
+            }
+
             tokio::task::spawn_blocking(move || {
                 let resolved = resolve_tool_path(&path);
 
@@ -1184,6 +1268,16 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
             }
             if old_text.is_empty() {
                 return json!({ "ok": false, "tool": "edit_file", "error": "missing old_text" });
+            }
+
+            // Safety check: require approval for sensitive paths
+            let resolved_check = resolve_tool_path(&path);
+            if let Some(reason) = check_path_safety(&resolved_check) {
+                let detail = format!("Edit: {}", resolved_check.display());
+                let approved = request_tool_approval("edit_file", &reason, &detail).await;
+                if !approved {
+                    return json!({ "ok": false, "tool": "edit_file", "error": "operation denied by user" });
+                }
             }
 
             tokio::task::spawn_blocking(move || {
@@ -1320,6 +1414,9 @@ where
     F: FnMut(&str),
     G: FnMut(ToolEvent),
 {
+    let cancelled_set = state.cancelled_tool_calls.clone();
+    // Clear cancelled set at the start of a new chat request.
+    { cancelled_set.lock().unwrap().clear(); }
     let allowed_tools = state.allowed_tools.lock().unwrap().clone();
 
     let max_rounds         = allowed_tools.max_rounds;
@@ -1374,12 +1471,14 @@ where
                 execute_tool_calls_sequential(
                     &selected_calls, &tool_defs, &allowed_tools,
                     &mut messages, &mut on_tool_event,
+                    &cancelled_set,
                 ).await;
             }
             crate::settings::ToolExecutionMode::Parallel => {
                 execute_tool_calls_parallel(
                     &selected_calls, &tool_defs, &allowed_tools,
                     &mut messages, &mut on_tool_event,
+                    &cancelled_set,
                 ).await;
             }
         }
@@ -1423,11 +1522,34 @@ async fn execute_tool_calls_sequential<G>(
     allowed_tools: &crate::settings::LlmToolConfig,
     messages: &mut Vec<Value>,
     on_tool_event: &mut G,
+    cancelled_set: &Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
 )
 where
     G: FnMut(ToolEvent),
 {
     for tc in calls {
+        // Check if this tool call was cancelled by the user before execution.
+        if cancelled_set.lock().unwrap().contains(&tc.id) {
+            let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
+            on_tool_event(ToolEvent::Status {
+                tool_name: tc.function.name.clone(),
+                status: "cancelled".into(),
+                detail: Some("cancelled by user".into()),
+            });
+            on_tool_event(ToolEvent::ExecutionEnd {
+                tool_call_id: tc.id.clone(),
+                tool_name: tc.function.name.clone(),
+                result: cancel_result.clone(),
+                is_error: true,
+            });
+            messages.push(json!({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": cancel_result.to_string(),
+            }));
+            continue;
+        }
+
         let args_result = validate_and_prepare(tc, tool_defs, allowed_tools);
 
         let args_for_event = match &args_result {
@@ -1450,12 +1572,17 @@ where
             args: args_for_event,
         });
 
-        let (tool_result, is_error) = match args_result {
-            Err(err_val) => (err_val, true),
-            Ok(_) => {
-                let result = execute_builtin_tool_call(tc, allowed_tools).await;
-                let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
-                (result, !ok)
+        // Re-check cancellation after emitting start (user may cancel while waiting).
+        let (tool_result, is_error) = if cancelled_set.lock().unwrap().contains(&tc.id) {
+            (json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }), true)
+        } else {
+            match args_result {
+                Err(err_val) => (err_val, true),
+                Ok(_) => {
+                    let result = execute_builtin_tool_call(tc, allowed_tools).await;
+                    let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+                    (result, !ok)
+                }
             }
         };
 
@@ -1490,6 +1617,7 @@ async fn execute_tool_calls_parallel<G>(
     allowed_tools: &crate::settings::LlmToolConfig,
     messages: &mut Vec<Value>,
     on_tool_event: &mut G,
+    cancelled_set: &Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
 )
 where
     G: FnMut(ToolEvent),
@@ -1502,6 +1630,28 @@ where
 
     let mut prepared = Vec::with_capacity(calls.len());
     for tc in calls {
+        // Check if already cancelled before validation.
+        if cancelled_set.lock().unwrap().contains(&tc.id) {
+            let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
+            on_tool_event(ToolEvent::Status {
+                tool_name: tc.function.name.clone(),
+                status: "cancelled".into(),
+                detail: Some("cancelled by user".into()),
+            });
+            on_tool_event(ToolEvent::ExecutionEnd {
+                tool_call_id: tc.id.clone(),
+                tool_name: tc.function.name.clone(),
+                result: cancel_result.clone(),
+                is_error: true,
+            });
+            messages.push(json!({
+                "role": "tool",
+                "tool_call_id": tc.id,
+                "content": cancel_result.to_string(),
+            }));
+            continue;
+        }
+
         let args_result = validate_and_prepare(tc, tool_defs, allowed_tools);
 
         let args_for_event = match &args_result {
@@ -1527,14 +1677,20 @@ where
     }
 
     // Phase 2: Execute valid calls concurrently, immediately resolve errors.
+    // Cancelled calls are short-circuited.
     let mut futures = Vec::with_capacity(prepared.len());
     for p in &prepared {
         let tc = p.tc.clone();
         let allowed = allowed_tools.clone();
         let is_valid = p.validation.is_ok();
+        let cancel_check = cancelled_set.clone();
 
         if is_valid {
             futures.push(tokio::spawn(async move {
+                // Check cancellation before executing.
+                if cancel_check.lock().unwrap().contains(&tc.id) {
+                    return (tc.clone(), json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }), true);
+                }
                 let result = execute_builtin_tool_call(&tc, &allowed).await;
                 let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
                 (tc, result, !ok)
@@ -2480,6 +2636,7 @@ pub fn init(
         model_name,
         api_key:      config.api_key.clone(),
         allowed_tools,
+        cancelled_tool_calls: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         ready:        ready_flag,
         n_ctx:        n_ctx_flag,
         vision_ready: vision_flag,

@@ -159,27 +159,80 @@ pub struct ImageUrl {
 
 // ── Tool injection / extraction ───────────────────────────────────────────────
 
-/// Inject tool definitions as a system prompt prefix that llama.cpp can parse.
+/// Inject tool definitions and calling instructions into the system prompt.
 ///
-/// llama-server v0.0.x does not natively support function calling in all
-/// builds; injecting a system prompt with JSON schema is a portable fallback.
+/// llama.cpp local models do not have native function-calling support in all
+/// builds; we inject a system prompt block that:
+///   1. Lists available tools with their JSON Schema parameters.
+///   2. Tells the model the exact format to emit a tool call.
+///   3. Explains the tool-result flow so the model waits for results.
+///
+/// The extractor (`extract_tool_calls`) accepts several formats, but we teach
+/// the model the `[TOOL_CALL]…[/TOOL_CALL]` format which is the most reliable
+/// for local models (unambiguous delimiters, no fence/JSON confusion).
 pub fn inject_tools_into_system_prompt(
     messages: &mut Vec<Value>,
     tools:    &[Tool],
 ) {
     if tools.is_empty() { return; }
 
-    let schema: Vec<Value> = tools.iter().map(|t| {
-        serde_json::json!({
-            "name":        t.function.name,
-            "description": t.function.description,
-            "parameters":  t.function.parameters,
-        })
-    }).collect();
+    // ── Build per-tool descriptions ──────────────────────────────────────
+
+    let mut tool_lines = String::new();
+    for t in tools {
+        let name = &t.function.name;
+        let desc = t.function.description.as_deref().unwrap_or("");
+        tool_lines.push_str(&format!("- **{name}**: {desc}\n"));
+
+        // Show required parameters inline so the model knows the shape.
+        if let Some(ref params) = t.function.parameters {
+            if let Some(props) = params.get("properties").and_then(|p| p.as_object()) {
+                let required: Vec<&str> = params.get("required")
+                    .and_then(|r| r.as_array())
+                    .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+                    .unwrap_or_default();
+                for (pname, pval) in props {
+                    let ptype = pval.get("type").and_then(|t| t.as_str()).unwrap_or("any");
+                    let pdesc = pval.get("description").and_then(|d| d.as_str()).unwrap_or("");
+                    let req_marker = if required.contains(&pname.as_str()) { " (required)" } else { " (optional)" };
+                    tool_lines.push_str(&format!("  - `{pname}` ({ptype}{req_marker}): {pdesc}\n"));
+                }
+            }
+        }
+    }
+
+    // ── Build the instruction block ──────────────────────────────────────
 
     let tool_block = format!(
-        "[TOOL_SCHEMA]\n{}\n[/TOOL_SCHEMA]",
-        serde_json::to_string_pretty(&schema).unwrap_or_default()
+r#"# Tools
+
+You have access to the following tools:
+
+{tool_lines}
+## How to call a tool
+
+When you need to use a tool, output a tool-call block in exactly this format:
+
+[TOOL_CALL]{{"name":"<tool_name>","arguments":{{"<param>":"<value>"}}}}[/TOOL_CALL]
+
+Rules:
+- The JSON inside [TOOL_CALL]…[/TOOL_CALL] must be valid JSON on a single line.
+- You may call multiple tools by emitting multiple [TOOL_CALL]…[/TOOL_CALL] blocks.
+- After emitting tool calls, STOP generating and wait. The system will execute the tool(s) and provide results in a follow-up message.
+- Use the tool results to formulate your final answer to the user.
+- Do NOT fabricate tool results. Always call the tool and use the actual result.
+- Do NOT describe what you would do — actually call the tool.
+
+## Examples
+
+User: "What time is it?"
+Assistant: [TOOL_CALL]{{"name":"date","arguments":{{}}}}[/TOOL_CALL]
+
+User: "How much disk space is left?"
+Assistant: [TOOL_CALL]{{"name":"bash","arguments":{{"command":"df -h"}}}}[/TOOL_CALL]
+
+User: "Read the file config.toml"
+Assistant: [TOOL_CALL]{{"name":"read_file","arguments":{{"path":"config.toml"}}}}[/TOOL_CALL]"#
     );
 
     // Prepend to or create the first system message.

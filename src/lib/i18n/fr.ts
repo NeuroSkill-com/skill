@@ -2445,6 +2445,8 @@ const fr: Record<string, string> = {
   "chat.tools.write_fileDesc":          "Créer ou écraser des fichiers",
   "chat.tools.edit_file":               "Modifier un fichier",
   "chat.tools.edit_fileDesc":           "Modifications rechercher-remplacer",
+  "chat.tools.argsLabel":               "Arguments",
+  "chat.tools.resultLabel":             "Résultat",
   "chat.tools.unsupported":             "Les outils nécessitent un modèle en cours d'exécution",
   "chat.tools.calling":                 "Appel de {tool}…",
   "chat.tools.done":                    "{tool} terminé",
@@ -2453,6 +2455,12 @@ const fr: Record<string, string> = {
   "chat.tools.executionMode":           "Mode d'exécution",
   "chat.tools.parallel":                "Parallèle",
   "chat.tools.sequential":             "Séquentiel",
+  "chat.tools.cancel":                  "Annuler",
+  "chat.tools.cancelled":              "Annulé",
+  "chat.tools.cancelConfirm":          "Annuler cet appel d'outil ?",
+  "chat.tools.dangerWarning":          "⚠ Potentiellement dangereux",
+  "chat.tools.dangerBash":             "Cette commande peut modifier ou supprimer des fichiers",
+  "chat.tools.dangerPath":             "Accès à un chemin système sensible",
 
   // ── Bibliothèque de prompts ──────────────────────────────────────────────
   "chat.prompts.btn":                   "Modèles de prompt",

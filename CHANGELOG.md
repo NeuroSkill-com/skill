@@ -15,7 +15,21 @@ All notable changes to NeuroSkill™ are documented here.
 - All four tools are **disabled by default** and marked with an "Advanced" warning badge in the UI — they must be explicitly enabled per-tool in Settings → LLM or the Chat sidebar.
 - Path resolution supports `~` home-directory expansion and relative paths (resolved against home).
 - Updated `KNOWN_TOOL_NAMES` for tool-call extraction and stripping in both Rust and frontend.
+- **Expandable tool-call cards**: tool pills are now clickable cards (similar to the thinking expand/collapse) that show the command/path in the header and expand to reveal structured arguments and full results. Bash commands show the command inline; file tools show the path. The expanded panel displays formatted JSON with scrollable pre blocks.
+- **Safety approval for dangerous operations**: bash commands containing destructive patterns (`rm`, `sudo`, `chmod`, system paths like `/etc/`, `/usr/`) trigger an OS-native approval dialog before execution. File write/edit to sensitive system paths also require approval. Denied operations return a clean error to the LLM. Patterns are defined in `DANGEROUS_BASH_PATTERNS` and `SENSITIVE_PATH_PREFIXES` for easy extension.
+- **Fixed leaked `[TOOL_CALL]` markup**: `stripToolCallFences()` now strips complete `[TOOL_CALL]…[/TOOL_CALL]` blocks and incomplete `[TOOL_C…` prefixes during streaming, preventing raw tool-call tags from appearing in chat bubbles.
+- **Fixed tool calling not executing**: the system prompt injected tool JSON schemas but gave the model no instructions on how to emit a call, so it described tool usage in prose instead of invoking tools. Rewrote `inject_tools_into_system_prompt` to include per-tool parameter documentation, explicit `[TOOL_CALL]…[/TOOL_CALL]` format instructions with rules (valid JSON, stop-and-wait, don't fabricate results), and concrete examples (date, bash, read_file).
 - Full i18n for all 5 locales (en, de, fr, he, uk).
+- **Per-tool-call cancel/stop button**: each tool-call card now displays a cancel button while the tool is actively executing. Clicking cancel sends a `cancel_tool_call` command to the backend, which adds the `tool_call_id` to a shared cancellation set. Both sequential and parallel execution paths check this set before and during tool execution, returning a clean `"cancelled by user"` error to the LLM if the tool was cancelled.
+- **Danger detection and warnings**: tool-call cards now detect dangerous operations at the UI level — bash commands containing `rm`, `sudo`, `chmod`, system paths (`/etc/`, `/usr/`, `/var/`, etc.), and file operations targeting sensitive paths (`/boot/`, `/bin/`, `/sbin/`, etc.) show an inline `⚠ Potentially dangerous` badge with a red-highlighted card border. The danger banner with a specific description appears below the card header while the tool is running.
+- **Cancelled status display**: cancelled tool calls show an amber-tinted card with a slash-circle icon and "Cancelled" label, distinct from both error (red) and success (green) states.
+- **`ToolCancelled` IPC chunk**: new `tool_cancelled` chunk type sent through the Tauri IPC channel for real-time cancel feedback to the frontend.
+- The expanded detail panel for running tools includes a prominent cancel button — styled as a filled red button for dangerous operations and a subtle bordered button for safe ones.
+
+### Chat History Storage
+
+- **Moved chat history into `chats/` subdirectory**: the LLM chat history database (`chat_history.sqlite`) is now stored under `skill_dir/chats/` instead of directly in `skill_dir`. The `chats/` directory is created automatically on first use.
+- **Automatic migration**: existing `chat_history.sqlite` files in the old location are automatically moved to the new `chats/` subdirectory on startup, including WAL and SHM sidecar files. No manual action required.
 
 ### i18n
 

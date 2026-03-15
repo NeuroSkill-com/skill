@@ -2278,6 +2278,8 @@ const he: Record<string, string> = {
   "chat.tools.write_fileDesc":          "יצירה או דריסה של קבצים",
   "chat.tools.edit_file":               "עריכת קובץ",
   "chat.tools.edit_fileDesc":           "עריכות חיפוש-והחלפה",
+  "chat.tools.argsLabel":               "פרמטרים",
+  "chat.tools.resultLabel":             "תוצאה",
   "chat.tools.unsupported":             "כלים דורשים שרת פעיל",
   "chat.tools.calling":                 "קורא ל-{tool}…",
   "chat.tools.done":                    "{tool} הושלם",
@@ -2286,6 +2288,12 @@ const he: Record<string, string> = {
   "chat.tools.executionMode":           "מצב ביצוע",
   "chat.tools.parallel":                "מקבילי",
   "chat.tools.sequential":             "סדרתי",
+  "chat.tools.cancel":                  "ביטול",
+  "chat.tools.cancelled":              "בוטל",
+  "chat.tools.cancelConfirm":          "לבטל קריאת כלי זו?",
+  "chat.tools.dangerWarning":          "⚠ עלול להיות מסוכן",
+  "chat.tools.dangerBash":             "פקודה זו עלולה לשנות או למחוק קבצים",
+  "chat.tools.dangerPath":             "גישה לנתיב מערכת רגיש",
 
   // ── ספריית תבניות ────────────────────────────────────────────────────────
   "chat.prompts.btn":                   "תבניות פרומפט",

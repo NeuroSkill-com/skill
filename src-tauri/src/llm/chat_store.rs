@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-//! Persistent LLM chat history — `~/.skill/chat_history.sqlite`.
+//! Persistent LLM chat history — `~/.skill/chats/chat_history.sqlite`.
 //!
 //! Schema
 //! ------
@@ -70,10 +70,41 @@ pub struct ChatStore {
 }
 
 impl ChatStore {
-    /// Open (or create) the chat history database inside `skill_dir`.
+    /// Open (or create) the chat history database inside `skill_dir/chats/`.
     /// Returns `None` on any error so callers can degrade gracefully.
+    ///
+    /// If a legacy `chat_history.sqlite` exists directly in `skill_dir`
+    /// (pre-migration location) it is moved into the new `chats/` subdirectory
+    /// automatically.
     pub fn open(skill_dir: &Path) -> Option<Self> {
-        let db_path = skill_dir.join("chat_history.sqlite");
+        let chats_dir = skill_dir.join("chats");
+        if let Err(e) = std::fs::create_dir_all(&chats_dir) {
+            eprintln!("[chat_store] failed to create {}: {e}", chats_dir.display());
+            return None;
+        }
+
+        // Migrate legacy DB from skill_dir root into chats/ subdirectory.
+        let legacy_path = skill_dir.join("chat_history.sqlite");
+        let db_path     = chats_dir.join("chat_history.sqlite");
+        if legacy_path.exists() && !db_path.exists() {
+            if let Err(e) = std::fs::rename(&legacy_path, &db_path) {
+                eprintln!(
+                    "[chat_store] migration rename {} -> {} failed: {e}",
+                    legacy_path.display(),
+                    db_path.display()
+                );
+                // Fall through — we'll create a fresh DB at the new path.
+            } else {
+                // Also move WAL/SHM sidecar files if they exist.
+                for suffix in &["-wal", "-shm"] {
+                    let src = skill_dir.join(format!("chat_history.sqlite{suffix}"));
+                    let dst = chats_dir.join(format!("chat_history.sqlite{suffix}"));
+                    let _ = std::fs::rename(&src, &dst);
+                }
+                eprintln!("[chat_store] migrated legacy DB to {}", db_path.display());
+            }
+        }
+
         let conn = match Connection::open(&db_path) {
             Ok(c)  => c,
             Err(e) => {

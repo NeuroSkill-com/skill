@@ -2636,6 +2636,8 @@ const en: Record<string, string> = {
   "chat.tools.write_fileDesc":          "Create or overwrite files",
   "chat.tools.edit_file":               "Edit file",
   "chat.tools.edit_fileDesc":           "Find-and-replace edits",
+  "chat.tools.argsLabel":               "Arguments",
+  "chat.tools.resultLabel":             "Result",
   "chat.tools.unsupported":             "Tools require the model to be running",
   "chat.tools.calling":                 "Calling {tool}…",
   "chat.tools.done":                    "{tool} completed",
@@ -2644,6 +2646,12 @@ const en: Record<string, string> = {
   "chat.tools.executionMode":           "Execution mode",
   "chat.tools.parallel":                "Parallel",
   "chat.tools.sequential":             "Sequential",
+  "chat.tools.cancel":                  "Cancel",
+  "chat.tools.cancelled":              "Cancelled",
+  "chat.tools.cancelConfirm":          "Cancel this tool call?",
+  "chat.tools.dangerWarning":          "⚠ Potentially dangerous",
+  "chat.tools.dangerBash":             "This command may modify or delete files",
+  "chat.tools.dangerPath":             "Accessing a sensitive system path",
 
   // ── Prompt library ───────────────────────────────────────────────────────
   "chat.prompts.btn":                   "Prompt templates",

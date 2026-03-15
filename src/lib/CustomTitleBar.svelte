@@ -302,12 +302,14 @@ the Free Software Foundation, version 3 only. -->
     background: var(--color-surface);
     user-select: none;
     display: flex;
+    flex-wrap: nowrap;
     align-items: center;
     position: fixed;
     top: 0; left: 0; right: 0;
     z-index: 1000;
     border-bottom: 1px solid var(--color-border);
     gap: 0;
+    overflow: hidden;
   }
   .titlebar--bt-off {
     background: color-mix(in oklab, var(--color-error, #ef4444) 18%, var(--color-surface));

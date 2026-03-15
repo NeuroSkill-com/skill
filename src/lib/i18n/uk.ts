@@ -2444,6 +2444,8 @@ const uk: Record<string, string> = {
   "chat.tools.write_fileDesc":          "Створення або перезапис файлів",
   "chat.tools.edit_file":               "Редагування файлу",
   "chat.tools.edit_fileDesc":           "Зміни пошук-і-заміна",
+  "chat.tools.argsLabel":               "Аргументи",
+  "chat.tools.resultLabel":             "Результат",
   "chat.tools.unsupported":             "Інструменти потребують запущеного сервера",
   "chat.tools.calling":                 "Виклик {tool}…",
   "chat.tools.done":                    "{tool} завершено",
@@ -2452,6 +2454,12 @@ const uk: Record<string, string> = {
   "chat.tools.executionMode":           "Режим виконання",
   "chat.tools.parallel":                "Паралельний",
   "chat.tools.sequential":             "Послідовний",
+  "chat.tools.cancel":                  "Скасувати",
+  "chat.tools.cancelled":              "Скасовано",
+  "chat.tools.cancelConfirm":          "Скасувати цей виклик інструменту?",
+  "chat.tools.dangerWarning":          "⚠ Потенційно небезпечно",
+  "chat.tools.dangerBash":             "Ця команда може змінити або видалити файли",
+  "chat.tools.dangerPath":             "Доступ до чутливого системного шляху",
 
   // ── Бібліотека шаблонів ──────────────────────────────────────────────────
   "chat.prompts.btn":                   "Шаблони запитів",

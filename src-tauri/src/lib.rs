@@ -284,7 +284,7 @@ use llm::cmds::{
     set_llm_autoload_mmproj,
     get_llm_logs, start_llm_server, stop_llm_server, get_llm_server_status, open_chat_window,
     open_downloads_window,
-    chat_completions_ipc, abort_llm_stream,
+    chat_completions_ipc, abort_llm_stream, cancel_tool_call,
     get_last_chat_session, save_chat_message, new_chat_session,
     load_chat_session, list_chat_sessions, rename_chat_session, delete_chat_session,
     get_model_hardware_fit,
@@ -605,7 +605,7 @@ pub struct LlmState {
     #[cfg(feature = "llm")]
     pub start_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
 
-    /// Persistent chat history store — `~/.skill/chat_history.sqlite`.
+    /// Persistent chat history store — `~/.skill/chats/chat_history.sqlite`.
     /// `None` when the database could not be opened (degraded gracefully).
     #[cfg(feature = "llm")]
     pub chat_store: Option<crate::llm::chat_store::ChatStore>,
@@ -1907,6 +1907,8 @@ pub fn run() {
             chat_completions_ipc,
             #[cfg(feature = "llm")]
             abort_llm_stream,
+            #[cfg(feature = "llm")]
+            cancel_tool_call,
             #[cfg(feature = "llm")]
             get_model_hardware_fit,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
