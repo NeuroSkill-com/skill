@@ -1,19 +1,34 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //
-// Neurable MW75 Neuro EEG headphone session — BLE activation + data streaming.
+// Neurable MW75 Neuro EEG headphone session.
 //
-// The MW75 has 12 EEG channels at 500 Hz.  The first `min(12, EEG_CHANNELS)`
-// channels are routed through the existing filter / band / embedding pipeline;
-// all 12 channels are written to the session CSV.
+// The MW75 has a two-phase connection model:
+//
+// 0. **Power on + pairing** — hold the power button for 4+ seconds until a
+//    sound is heard.  On first use, continue holding to enter pairing mode,
+//    then pair the headphones via the OS Bluetooth settings (required for
+//    audio playback and RFCOMM data transport).
+//
+// 1. **BLE activation** — a short BLE handshake enables EEG mode and queries
+//    the battery level.  After activation, BLE is disconnected.
+//
+// 2. **RFCOMM streaming** — EEG data (12 channels at 500 Hz) flows over
+//    Bluetooth Classic RFCOMM channel 25.  The `mw75` crate's `rfcomm`
+//    feature handles the platform-specific socket connection.
+//
+// The first `min(12, EEG_CHANNELS)` channels are routed through the existing
+// filter / band / embedding pipeline; all 12 channels are written to the
+// session CSV.
 
 use std::{
     path::PathBuf,
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use skill_devices::mw75::prelude::*;
+use skill_devices::mw75::rfcomm::start_rfcomm_stream;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
@@ -55,7 +70,9 @@ pub(crate) async fn run_mw75_session(
     refresh_tray(&app);
     emit_status(&app);
 
-    // 2. Scan
+    // 2. Scan — the MW75 must already be paired via the OS Bluetooth settings
+    //    (for audio / RFCOMM).  The BLE scan here finds the device by its
+    //    MW75 GATT service UUID or advertised name.
     let config = Mw75ClientConfig {
         scan_timeout_secs: 10,
         ..Default::default()
@@ -93,20 +110,31 @@ pub(crate) async fn run_mw75_session(
     let device = match device {
         Some(d) => d,
         None => {
-            crate::go_disconnected(&app, Some("NO_MW75_NEARBY".into()), false);
+            crate::go_disconnected(
+                &app,
+                Some("NO_MW75_NEARBY\n\n\
+                      Make sure the MW75 headphones are:\n\
+                      • Powered on (hold power button 4+ seconds until you hear a sound)\n\
+                      • Paired via System Bluetooth Settings \
+                        (hold power button 4+ seconds to enter pairing mode)\n\
+                      • In range".into()),
+                false,
+            );
             return;
         }
     };
 
     // 3b. Pin the real BLE ID into status before connect_to() takes ownership.
+    let ble_peripheral_id = device.id.clone();
+    let _device_name = device.name.clone();
     {
         let sr = app.state::<Mutex<Box<AppState>>>();
         let mut g = sr.lock_or_recover();
-        g.status.device_id = Some(device.id.clone());
+        g.status.device_id = Some(ble_peripheral_id.clone());
         g.retry_attempt    = 0;
     }
 
-    // 4. Connect
+    // 4. BLE connect
     let (mut rx, handle) = tokio::select! {
         biased;
         _ = &mut cancel_rx => { crate::go_disconnected(&app, None, false); return; }
@@ -120,7 +148,7 @@ pub(crate) async fn run_mw75_session(
         }
     };
 
-    // 5. Start BLE activation (enables EEG + raw mode, queries battery)
+    // 5. BLE activation — enables EEG + raw mode, queries battery
     tokio::select! {
         biased;
         _ = &mut cancel_rx => {
@@ -130,18 +158,56 @@ pub(crate) async fn run_mw75_session(
         }
         r = handle.start() => {
             if let Err(e) = r {
-                app_log!(app, "bluetooth", "[mw75] start: {e}");
+                app_log!(app, "bluetooth", "[mw75] BLE activation failed: {e}");
+                let _ = handle.disconnect().await;
+                crate::go_disconnected(&app, Some(format!("MW75 activation failed: {e}")), false);
+                return;
             }
         }
     }
 
-    // 6. Open CSV with MW75 channel labels
+    // 6. Disconnect BLE — required before RFCOMM on macOS, recommended on Linux
+    app_log!(app, "bluetooth", "[mw75] BLE activation complete, disconnecting BLE for RFCOMM…");
+    if let Err(e) = handle.disconnect_ble().await {
+        app_log!(app, "bluetooth", "[mw75] BLE disconnect warning: {e}");
+        // Non-fatal — continue to RFCOMM anyway
+    }
+
+    // 7. Start RFCOMM data stream
+    let handle = Arc::new(handle);
+    let rfcomm = tokio::select! {
+        biased;
+        _ = &mut cancel_rx => {
+            crate::go_disconnected(&app, None, false);
+            return;
+        }
+        r = start_rfcomm_stream(handle.clone(), &ble_peripheral_id) => match r {
+            Err(e) => {
+                app_log!(app, "bluetooth", "[mw75] RFCOMM connection failed: {e}");
+                crate::go_disconnected(
+                    &app,
+                    Some(format!(
+                        "MW75 RFCOMM failed: {e}\n\n\
+                         Make sure the headphones are paired in System Bluetooth Settings.\n\
+                         To pair: hold the power button for 4+ seconds to enter pairing mode."
+                    )),
+                    false,
+                );
+                return;
+            }
+            Ok(r) => r,
+        }
+    };
+
+    app_log!(app, "bluetooth", "[mw75] RFCOMM connected — EEG data streaming at 500 Hz");
+
+    // 8. Open CSV with MW75 channel labels
     let ch_labels = skill_constants::MW75_CHANNEL_NAMES;
     let label_refs: Vec<&str> = ch_labels.iter().copied().collect();
     let mut csv = match CsvState::open_with_labels(&csv_path, &label_refs) {
         Ok(c)  => c,
         Err(e) => {
-            let _ = handle.disconnect().await;
+            rfcomm.shutdown();
             write_session_meta(&app, &csv_path);
             crate::go_disconnected(&app, Some(format!("CSV error: {e}")), false);
             return;
@@ -149,17 +215,17 @@ pub(crate) async fn run_mw75_session(
     };
     write_session_meta(&app, &csv_path);
 
-    // 7. Create session-local DSP (lock-free after this point for all DSP).
+    // 9. Create session-local DSP (lock-free after this point for all DSP).
     let mut dsp = SessionDsp::new(&app);
     let pipeline_ch = skill_constants::MW75_EEG_CHANNELS.min(EEG_CHANNELS);
 
-    // 8. Event loop
+    // 10. Event loop — data arrives as Mw75Event::Eeg from the RFCOMM reader
     let mut user_cancelled = false;
     loop {
         tokio::select! {
             biased;
             _ = &mut cancel_rx => {
-                let _ = handle.disconnect().await;
+                rfcomm.shutdown();
                 user_cancelled = true;
                 break;
             }
@@ -169,14 +235,14 @@ pub(crate) async fn run_mw75_session(
                         let is_disconnect = matches!(e, Mw75Event::Disconnected);
                         handle_mw75_event(e, &app, &mut csv, &csv_path, &mut dsp, pipeline_ch).await;
                         if is_disconnect {
-                            app_log!(app, "bluetooth", "[mw75] event loop: received Mw75Event::Disconnected, breaking");
-                            let _ = handle.disconnect().await;
+                            app_log!(app, "bluetooth", "[mw75] RFCOMM disconnected");
+                            rfcomm.shutdown();
                             break;
                         }
                     }
                     None => {
-                        app_log!(app, "bluetooth", "[mw75] event loop: channel closed");
-                        let _ = handle.disconnect().await;
+                        app_log!(app, "bluetooth", "[mw75] event channel closed");
+                        rfcomm.shutdown();
                         break;
                     }
                 }
@@ -184,10 +250,10 @@ pub(crate) async fn run_mw75_session(
         }
     }
 
-    // Yield so BLE delegate callbacks can drain.
+    // Yield so platform-specific cleanup can complete.
     tokio::time::sleep(Duration::from_millis(250)).await;
 
-    // 9. Finalise
+    // 11. Finalise
     csv.flush();
     write_session_meta(&app, &csv_path);
 
@@ -205,11 +271,11 @@ pub(crate) async fn run_mw75_session(
 // ── Per-event handler ─────────────────────────────────────────────────────────
 
 async fn handle_mw75_event(
-    event:      Mw75Event,
-    app:        &AppHandle,
-    csv:        &mut CsvState,
-    csv_path:   &std::path::Path,
-    dsp:        &mut SessionDsp,
+    event:       Mw75Event,
+    app:         &AppHandle,
+    csv:         &mut CsvState,
+    csv_path:    &std::path::Path,
+    dsp:         &mut SessionDsp,
     pipeline_ch: usize,
 ) {
     match event {
