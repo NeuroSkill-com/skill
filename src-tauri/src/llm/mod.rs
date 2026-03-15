@@ -1774,10 +1774,15 @@ where
         }
 
         let cleaned = tools::strip_tool_call_blocks(&assistant_text);
-        messages.push(json!({
-            "role": "assistant",
-            "content": cleaned,
-        }));
+        // Only push the assistant message if it has non-empty text after
+        // stripping tool calls.  Empty assistant messages break some chat
+        // templates and waste context.
+        if !cleaned.trim().is_empty() {
+            messages.push(json!({
+                "role": "assistant",
+                "content": cleaned,
+            }));
+        }
 
         let selected_calls: Vec<tools::ToolCall> = tool_calls.into_iter().take(max_calls_per_round).collect();
 
@@ -2721,8 +2726,18 @@ fn run_actor(
                 let chat_msgs: Vec<llama_cpp_4::model::LlamaChatMessage> = messages
                     .iter()
                     .filter_map(|m| {
-                        let role    = m.get("role")?.as_str()?.to_string();
-                        let content = extract_fn(m.get("content")?, marker);
+                        let mut role = m.get("role")?.as_str()?.to_string();
+                        let raw_content = extract_fn(m.get("content")?, marker);
+
+                        // Map "tool" role to "user" with a wrapper — most local
+                        // model chat templates only support system/user/assistant.
+                        let content = if role == "tool" {
+                            role = "user".to_string();
+                            format!("[Tool Result]\n{}", raw_content)
+                        } else {
+                            raw_content
+                        };
+
                         llama_cpp_4::model::LlamaChatMessage::new(role, content).ok()
                     })
                     .collect();

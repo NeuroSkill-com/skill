@@ -445,6 +445,7 @@
 
   let status         = $state<ServerStatus>("stopped");
   let modelName      = $state("");
+  let nCtx           = $state(0);      // context window size from server
   let supportsVision = $state(false);
   let supportsTools  = $state(false);
   let toolConfig     = $state<ToolConfig>({
@@ -651,6 +652,7 @@
 
   // Settings panel
   let showSettings   = $state(false);
+  let showTools      = $state(false);
   let temperature    = $state(0.8);
   let maxTokens      = $state(2048);
   let topK           = $state(40);
@@ -1169,9 +1171,10 @@
   onMount(async () => {
     // Initial status
     try {
-      const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean; supports_tools: boolean }>("get_llm_server_status");
+      const s = await invoke<{ status: ServerStatus; model_name: string; n_ctx: number; supports_vision: boolean; supports_tools: boolean }>("get_llm_server_status");
       status         = s.status;
       modelName      = s.model_name;
+      nCtx           = s.n_ctx ?? 0;
       supportsVision = s.supports_vision ?? false;
       supportsTools  = s.supports_tools ?? false;
     } catch {}
@@ -1209,9 +1212,12 @@
         if ((ev.payload as any).supports_tools !== undefined) {
           supportsTools = (ev.payload as any).supports_tools;
         }
+        if ((ev.payload as any).n_ctx !== undefined) {
+          nCtx = (ev.payload as any).n_ctx;
+        }
         if (status === "running") clearInterval(pollTimer!);
         // When the server stops, capabilities reset.
-        if (status === "stopped") { supportsVision = false; supportsTools = false; }
+        if (status === "stopped") { supportsVision = false; supportsTools = false; nCtx = 0; }
       });
     } catch {}
 
@@ -1227,9 +1233,10 @@
       }
       if (status === "running") ranAfterRunning = true;
       try {
-        const s = await invoke<{ status: ServerStatus; model_name: string; supports_vision: boolean; supports_tools: boolean }>("get_llm_server_status");
+        const s = await invoke<{ status: ServerStatus; model_name: string; n_ctx: number; supports_vision: boolean; supports_tools: boolean }>("get_llm_server_status");
         status         = s.status;
         modelName      = s.model_name;
+        nCtx           = s.n_ctx ?? 0;
         supportsVision = s.supports_vision ?? false;
         supportsTools  = s.supports_tools ?? false;
       } catch {}
@@ -1333,13 +1340,17 @@
     </div>
 
     <!-- Tools badge -->
-    {#if supportsTools && enabledToolCount > 0}
+    {#if supportsTools}
       <button
-        onclick={() => showSettings = true}
+        onclick={() => { showTools = !showTools; if (showTools) showSettings = false; }}
         title="{enabledToolCount} tool{enabledToolCount !== 1 ? 's' : ''} enabled"
         class="flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer
                shrink-0 text-[0.6rem] font-semibold
-               bg-primary/10 text-primary hover:bg-primary/20">
+               {showTools
+                 ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
+                 : enabledToolCount > 0
+                   ? 'bg-primary/10 text-primary hover:bg-primary/20'
+                   : 'bg-muted text-muted-foreground/50 hover:bg-muted/80'}">
         <!-- Wrench icon -->
         <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
              stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 shrink-0">
@@ -1348,7 +1359,9 @@
           <path d="M2 18l4-1 9.3-9.3-3-3L3 14z"/>
         </svg>
         <span>{t("chat.tools.badge")}</span>
-        <span class="tabular-nums opacity-70">{enabledToolCount}</span>
+        {#if enabledToolCount > 0}
+          <span class="tabular-nums opacity-70">{enabledToolCount}</span>
+        {/if}
       </button>
     {/if}
 
@@ -1412,7 +1425,7 @@
 
     <!-- Settings toggle -->
     <button
-      onclick={() => showSettings = !showSettings}
+      onclick={() => { showSettings = !showSettings; if (showSettings) showTools = false; }}
       title={t("chat.btn.params")}
       class="p-1.5 rounded-lg transition-colors cursor-pointer
              {showSettings
@@ -1688,6 +1701,118 @@
               class="w-full accent-violet-500 h-1 cursor-pointer" />
           </div>
         {/each}
+      </div>
+    </div>
+  {/if}
+
+  <!-- ── Tools panel (slide-in) ──────────────────────────────────────────── -->
+  {#if showTools}
+    <div class="min-h-0 max-h-[50vh] overflow-y-auto border-b border-border dark:border-white/[0.06]
+                bg-slate-50/60 dark:bg-[#111118] px-4 py-3 flex flex-col gap-3
+                scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border">
+
+      <!-- Context length -->
+      {#if nCtx > 0}
+        {@const lastUsage = [...messages].reverse().find(m => m.role === "assistant" && m.usage)?.usage}
+        {@const usedTokens = lastUsage?.total_tokens ?? 0}
+        {@const usedPct = usedTokens > 0 ? Math.round((usedTokens / nCtx) * 100) : 0}
+        {@const barColor = usedPct >= 90 ? "bg-red-500"
+                         : usedPct >= 70 ? "bg-amber-500"
+                         :                 "bg-primary"}
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
+              {t("chat.ctxUsage")}
+            </span>
+            <span class="text-[0.58rem] tabular-nums text-muted-foreground/60 font-medium">
+              {#if usedTokens > 0}
+                {usedTokens.toLocaleString()} / {nCtx.toLocaleString()} {t("chat.tok")} ({usedPct}%)
+              {:else}
+                {nCtx.toLocaleString()} {t("chat.tok")}
+              {/if}
+            </span>
+          </div>
+          <div class="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div class="h-full rounded-full {barColor} transition-all duration-300"
+                 style="width: {Math.min(usedPct, 100)}%"></div>
+          </div>
+        </div>
+      {/if}
+
+      <!-- Tools allow-list -->
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
+            {t("chat.tools.label")}
+          </span>
+          <span class="text-[0.55rem] tabular-nums text-muted-foreground/40 select-none">
+            {enabledToolCount}/8
+          </span>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          {#each [
+            { key: "date"       as const, icon: "🕐" },
+            { key: "location"   as const, icon: "📍" },
+            { key: "web_search" as const, icon: "🔍" },
+            { key: "web_fetch"  as const, icon: "🌐" },
+            { key: "bash"       as const, icon: "💻" },
+            { key: "read_file"  as const, icon: "📄" },
+            { key: "write_file" as const, icon: "✏️" },
+            { key: "edit_file"  as const, icon: "🔧" },
+          ] as tool}
+            <button
+              onclick={() => updateToolConfig({ [tool.key]: !toolConfig[tool.key] })}
+              class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border transition-all
+                     cursor-pointer select-none text-left
+                     {toolConfig[tool.key]
+                       ? 'border-primary/40 bg-primary/8 text-foreground'
+                       : 'border-border bg-background text-muted-foreground/50 hover:border-muted-foreground/30'}">
+              <span class="text-sm shrink-0">{tool.icon}</span>
+              <div class="flex flex-col gap-0 min-w-0">
+                <span class="text-[0.63rem] font-medium truncate">
+                  {t(`chat.tools.${tool.key}`)}
+                </span>
+                <span class="text-[0.5rem] text-muted-foreground/50 truncate leading-tight">
+                  {t(`chat.tools.${tool.key}Desc`)}
+                </span>
+              </div>
+              <!-- Toggle indicator -->
+              <div class="ml-auto shrink-0 w-3 h-3 rounded-full border-2 flex items-center justify-center
+                          {toolConfig[tool.key]
+                            ? 'border-primary bg-primary'
+                            : 'border-muted-foreground/30 bg-transparent'}">
+                {#if toolConfig[tool.key]}
+                  <svg viewBox="0 0 10 10" fill="none" stroke="white" stroke-width="2"
+                       stroke-linecap="round" stroke-linejoin="round" class="w-2 h-2">
+                    <polyline points="2 5 4 7 8 3"/>
+                  </svg>
+                {/if}
+              </div>
+            </button>
+          {/each}
+        </div>
+
+        <!-- Tool execution mode toggle -->
+        <div class="mt-1.5">
+          <div class="flex items-center justify-between gap-2 mb-1">
+            <span class="text-[0.53rem] text-muted-foreground/60">{t("chat.tools.executionMode")}</span>
+          </div>
+          <div class="flex rounded-md overflow-hidden border border-border text-[0.6rem] font-medium">
+            {#each [
+              { key: "parallel"   as ToolExecutionMode, labelKey: "chat.tools.parallel" },
+              { key: "sequential" as ToolExecutionMode, labelKey: "chat.tools.sequential" },
+            ] as mode}
+              <button
+                onclick={() => updateToolConfig({ execution_mode: mode.key })}
+                class="flex-1 py-1 transition-colors cursor-pointer
+                       {toolConfig.execution_mode === mode.key
+                         ? 'bg-primary text-primary-foreground'
+                         : 'bg-background text-muted-foreground hover:bg-muted'}">
+                {t(mode.labelKey)}
+              </button>
+            {/each}
+          </div>
+        </div>
       </div>
     </div>
   {/if}

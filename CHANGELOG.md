@@ -8,6 +8,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Chat UI
 
+- **Tools badge now toggles a dedicated tools panel**: clicking the wrench/tools badge in the chat header now opens and closes a dedicated tools-only panel instead of opening the full settings drawer. The panel displays the tool allow-list grid, execution mode toggle, and a context-length progress bar showing the model's `n_ctx` window size with token usage from the most recent assistant message. The badge is always visible when the model supports tools (even with 0 tools enabled) and highlights when the panel is open. The tools panel and settings panel are mutually exclusive — opening one closes the other.
+
 - **Added LLM accuracy warning banner**: a persistent amber-tinted warning is now displayed above the footer hint in the chat window, reminding users that LLM output can be inaccurate and to always verify tool results and generated content. Fully localised across all 5 supported languages (en/de/fr/uk/he).
 
 - **Fixed settings/tools panel not scrollable**: the parameters panel (system prompt, EEG bands, tool toggles, thinking level, sliders) had no overflow handling and no max-height constraint. When its content exceeded the window height, it pushed the message list off-screen entirely. Now capped at `max-h-[50vh]` with `overflow-y-auto` so it scrolls internally while always leaving room for the chat messages.
@@ -23,6 +25,7 @@ All notable changes to NeuroSkill™ are documented here.
 ### LLM — Coding-Agent Tools
 
 - **Bash tool** (`bash`): execute shell commands from the LLM chat with configurable timeout. Output is tail-truncated to 2 000 lines / 50 KB (keeps the end where errors appear). Commands run in the user's home directory.
+- **Fixed tool results not visible to model**: tool result messages used `"role": "tool"` which most local model chat templates (Qwen, Llama, etc.) do not support — only `system`, `user`, and `assistant` are recognized. Tool results are now mapped to `"role": "user"` with a `[Tool Result]` prefix so the model can see and use them. Additionally, empty assistant messages (when the model only emitted tool calls with no prose) are no longer pushed to history, avoiding broken chat template output and wasted context.
 - **Bash output saved to file**: the `bash` tool now always saves full command output to a timestamped text file (`output_<ts>.txt`) in the session scripts directory. Instead of returning the full output inline (which consumed context), it returns a compact summary — first 20 + last 20 lines for outputs over 200 lines, with the full `output_file` path for follow-up queries.
 - **New `search_output` tool** 🔎: lets the LLM search and navigate large bash outputs without loading them into context. Supports:
   - **Regex search** (`pattern`): case-insensitive regex with configurable context lines around matches
