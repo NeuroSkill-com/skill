@@ -40,9 +40,9 @@ macro_rules! app_log {
 }
 
 /// GPU stats reading is macOS-only (IOKit + CoreFoundation frameworks).
-mod gpu_stats;
+mod gpu_stats { #[allow(unused_imports)] pub use skill_data::gpu_stats::*; }
 
-mod eeg_model_config;
+mod eeg_model_config { #[allow(unused_imports)] pub use skill_eeg::eeg_model_config::*; }
 use eeg_model_config::{EegModelConfig, EegModelStatus, load_model_config};
 
 mod eeg_embeddings;
@@ -50,13 +50,13 @@ mod global_eeg_index;
 use global_eeg_index::GlobalEegIndex;
 
 
-mod eeg_filter;
+mod eeg_filter { #[allow(unused_imports)] pub use skill_eeg::eeg_filter::*; }
 use eeg_filter::FilterConfig;
 
-mod eeg_bands;
+mod eeg_bands { #[allow(unused_imports)] pub use skill_eeg::eeg_bands::*; }
 use eeg_bands::BandSnapshot;
 
-mod eeg_quality;
+mod eeg_quality { #[allow(unused_imports)] pub use skill_eeg::eeg_quality::*; }
 use eeg_quality::SignalQuality;
 
 mod session_dsp;
@@ -64,17 +64,17 @@ pub(crate) use session_dsp::SessionDsp;
 
 mod commands;
 mod job_queue;
-mod label_store;
-mod artifact_detection;
-mod head_pose;
-mod ppg_analysis;
+mod label_store { #[allow(unused_imports)] pub use skill_data::label_store::*; }
+mod artifact_detection { #[allow(unused_imports)] pub use skill_eeg::artifact_detection::*; }
+mod head_pose { #[allow(unused_imports)] pub use skill_eeg::head_pose::*; }
+mod ppg_analysis { #[allow(unused_imports)] pub use skill_data::ppg_analysis::*; }
 mod ws_commands;
 mod label_index;
 mod ws_server;
 mod api;
-pub(crate) mod hooks_log;
+pub(crate) mod hooks_log { #[allow(unused_imports)] pub use skill_data::hooks_log::*; }
 mod screenshot;
-mod screenshot_store;
+mod screenshot_store { #[allow(unused_imports)] pub use skill_data::screenshot_store::*; }
 
 /// OpenAI-compatible LLM inference server — same port as WebSocket API.
 /// Enabled by the `llm` Cargo feature; no-op when the feature is absent.
@@ -126,7 +126,7 @@ use session_analysis::{
 mod autostart;
 
 mod tts;
-pub mod device;
+pub mod device { #[allow(unused_imports)] pub use skill_data::device::*; }
 use tts::{tts_init, tts_speak, tts_unload, tts_list_voices, tts_list_neutts_voices, tts_get_voice, tts_set_voice};
 pub(crate) use tts::{neutts_apply_config, init_tts_dirs, init_neutts_samples_dir,
                      init_espeak_bundled_data_path, tts_shutdown};
@@ -145,7 +145,7 @@ pub(crate) use settings::{
     DoNotDisturbConfig, ScreenshotConfig,
 };
 
-mod dnd;
+mod dnd { #[allow(unused_imports)] pub use skill_data::dnd::*; }
 
 #[cfg(feature = "llm")]
 pub(crate) use settings::default_chat_shortcut;
@@ -212,7 +212,7 @@ use shortcut_cmds::{get_chat_shortcut, set_chat_shortcut};
 mod active_window;
 pub(crate) use active_window::ActiveWindowInfo;
 
-mod activity_store;
+mod activity_store { #[allow(unused_imports)] pub use skill_data::activity_store::*; }
 pub(crate) use activity_store::ActivityStore;
 
 mod about;
@@ -446,6 +446,42 @@ impl Default for MuseStatus {
             temperature_raw:    0,
             device_kind:        "unknown".into(),
         }
+    }
+}
+
+impl MuseStatus {
+    /// Reset transient fields for a new scanning cycle.
+    ///
+    /// `device_kind` is set to the supplied value; `csv_path` is set from the
+    /// provided path; `target_name` is resolved from `preferred_id` against the
+    /// current paired-devices list.  All other identity/telemetry fields are
+    /// cleared to defaults.
+    pub fn reset_for_scanning(
+        &mut self,
+        device_kind: &str,
+        csv_path: &std::path::Path,
+        preferred_id: Option<&str>,
+    ) {
+        self.state               = "scanning".into();
+        self.device_kind         = device_kind.into();
+        self.device_name         = None;
+        self.device_id           = None;
+        self.serial_number       = None;
+        self.mac_address         = None;
+        self.firmware_version    = None;
+        self.hardware_version    = None;
+        self.bootloader_version  = None;
+        self.headset_preset      = None;
+        self.csv_path            = Some(csv_path.to_string_lossy().into_owned());
+        self.bt_error            = None;
+        self.battery             = 0.0;
+        self.eeg                 = vec![f64::NAN; 4];
+        self.sample_count        = 0;
+        self.ppg                 = vec![0.0; 3];
+        self.ppg_sample_count    = 0;
+        self.target_name         = preferred_id.and_then(|id| {
+            self.paired_devices.iter().find(|d| d.id == id).map(|d| d.name.clone())
+        });
     }
 }
 

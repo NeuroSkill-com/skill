@@ -24,6 +24,9 @@ pub const CHANNEL_NAMES: [&str; EEG_CHANNELS] = ["TP9", "AF7", "AF8", "TP10"];
 /// EEG hardware sample rate (Hz) — Muse and Ganglion both run at 256 Hz.
 pub const MUSE_SAMPLE_RATE: f32 = 256.0;
 
+/// PPG hardware sample rate (Hz) — Muse PPG stream runs at 64 Hz.
+pub const PPG_SAMPLE_RATE: f32 = 64.0;
+
 /// OpenBCI Ganglion channel labels (default 10-20 sites when unset).
 pub const GANGLION_CHANNEL_NAMES: [&str; 4] = ["Ch1", "Ch2", "Ch3", "Ch4"];
 

@@ -12,7 +12,9 @@
 //! - **artifact_detection** — EEG artifact detection (blink, jaw clench, etc.)
 //! - **head_pose** — accelerometer-based head pose tracking
 
-pub mod constants;
+/// Re-export all constants from the canonical `skill-constants` crate so
+/// `crate::constants::*` keeps working throughout `skill-eeg`.
+pub mod constants { pub use skill_constants::*; }
 pub mod eeg_bands;
 pub mod eeg_filter;
 pub mod eeg_quality;

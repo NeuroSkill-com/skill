@@ -13,9 +13,10 @@ use crate::ppg_analysis::PpgMetrics;
 use skill_eeg::eeg_bands::BandSnapshot;
 
 // ── Sample-rate constants ─────────────────────────────────────────────────────
+// Canonical values live in skill-constants; re-exported here as f64 for CSV use.
 
-pub const EEG_SAMPLE_RATE: f64 = 256.0;
-pub const PPG_SAMPLE_RATE: f64 = 64.0;
+pub const EEG_SAMPLE_RATE: f64 = skill_constants::MUSE_SAMPLE_RATE as f64;
+pub const PPG_SAMPLE_RATE: f64 = skill_constants::PPG_SAMPLE_RATE as f64;
 
 // ── CSV path helpers ──────────────────────────────────────────────────────────
 

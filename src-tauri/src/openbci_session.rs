@@ -46,27 +46,8 @@ pub(crate) async fn run_openbci_ganglion_session(
     {
         let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();
-        s.session_start_utc         = Some(unix_secs());
-        s.status.state              = "scanning".into();
-        s.status.device_kind        = "ganglion".into();
-        s.status.device_name        = None;
-        s.status.device_id          = None;
-        s.status.serial_number      = None;
-        s.status.mac_address        = None;
-        s.status.firmware_version   = None;
-        s.status.hardware_version   = None;
-        s.status.bootloader_version = None;
-        s.status.headset_preset     = None;
-        s.status.csv_path           = Some(csv_path.to_string_lossy().into_owned());
-        s.status.bt_error           = None;
-        s.status.battery            = 0.0;
-        s.status.eeg                = vec![f64::NAN; 4];
-        s.status.sample_count       = 0;
-        s.status.ppg                = vec![0.0; 3];
-        s.status.ppg_sample_count   = 0;
-        s.status.target_name        = preferred_id.as_ref().and_then(|id|
-            s.status.paired_devices.iter().find(|d| &d.id == id).map(|d| d.name.clone())
-        );
+        s.session_start_utc = Some(unix_secs());
+        s.status.reset_for_scanning("ganglion", &csv_path, preferred_id.as_deref());
     }
     refresh_tray(&app); emit_status(&app);
 

@@ -1,0 +1,3 @@
+### Refactor
+
+- **Deduplicate Rust and frontend code**: replaced duplicated `MutexExt` trait in `src-tauri` with re-export from `skill-data::util`; removed duplicated `unix_secs_now()` in `eeg_embeddings.rs`; exported `rgba()` from `theme.ts` and removed duplicate in `GpuChart.svelte`; extracted `MuseStatus::reset_for_scanning()` to replace ~20-line identical status reset blocks in `muse_session.rs` and `openbci_session.rs`; converted 14 pure re-export shim files to inline module declarations in `lib.rs` and deleted the files; added `PPG_SAMPLE_RATE` to `skill-constants` and derived sample-rate constants in `session_csv` from the canonical source; eliminated `skill-eeg/src/constants.rs` shim file.
