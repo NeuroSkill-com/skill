@@ -840,6 +840,36 @@ the Free Software Foundation, version 3 only. -->
     return colorMap;
   }
 
+  /** Proximity threshold in seconds — labels within this window are "close". */
+  const LABEL_PROXIMITY_SEC = 300; // 5 minutes
+
+  /** Given a hovered label and all labels in context, returns:
+   *  - exactIds:  set of label ids with the exact same text
+   *  - closeIds:  set of label ids temporally close (within LABEL_PROXIMITY_SEC)
+   *  The hovered label itself is in both sets. */
+  function labelRelations(hovered: LabelRow, all: LabelRow[]): { exactIds: Set<number>; closeIds: Set<number> } {
+    const exactIds = new Set<number>();
+    const closeIds = new Set<number>();
+    for (const l of all) {
+      if (l.text === hovered.text) exactIds.add(l.id);
+      if (Math.abs(l.eeg_start - hovered.eeg_start) <= LABEL_PROXIMITY_SEC) closeIds.add(l.id);
+    }
+    return { exactIds, closeIds };
+  }
+
+  /** Collect ALL labels across every session on the current day, for cross-session matching. */
+  const allDayLabels = $derived.by((): LabelRow[] => sessions.flatMap(s => s.labels));
+  /** Rainbow color map for all labels across the current day. */
+  const dayLabelColors = $derived(assignLabelRainbowColors(allDayLabels));
+
+  /** Reactive relations for the currently hovered label. */
+  const hoveredLabelRelations = $derived.by(() => {
+    if (hoveredLabelId == null) return null;
+    const lbl = allDayLabels.find(l => l.id === hoveredLabelId);
+    if (!lbl) return null;
+    return labelRelations(lbl, allDayLabels);
+  });
+
   /** Svelte action: draw a mini sparkline on a canvas element. */
   function drawSparkline(canvas: HTMLCanvasElement, ts: EpochRow[]) {
     renderSparkline(canvas, ts);
@@ -1337,9 +1367,38 @@ the Free Software Foundation, version 3 only. -->
                     {/if}
                   {/each}
                   {#if dayLbls.length > 0}
-                    <span class="text-[0.46rem] text-amber-500/60 ml-auto">
-                      ▲ {dayLbls.length} {dayLbls.length === 1 ? t("history.label") : t("history.labels")}
-                    </span>
+                    <div class="flex items-center gap-1 ml-auto">
+                      {#each dayLbls as label (label.id)}
+                        {@const lColor = dayLabelColors.get(label.id) ?? "#f59e0b"}
+                        {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
+                        {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
+                        {@const isHoveredSelf = hoveredLabelId === label.id}
+                        <div class="group/lbl relative">
+                          <span
+                            class="block w-1.5 h-1.5 rounded-full cursor-default transition-all duration-150
+                                   {isHoveredSelf ? 'scale-[2] ring-1 ring-white/50 shadow-md' :
+                                    isExact ? 'scale-[1.6] ring-[0.5px] ring-white/40' :
+                                    isClose ? 'scale-[1.3] brightness-125' : ''}"
+                            style="background:{lColor};
+                                   {isExact && !isHoveredSelf ? `box-shadow: 0 0 4px 1px ${lColor}` : ''}"
+                            onmouseenter={() => hoveredLabelId = label.id}
+                            onmouseleave={() => hoveredLabelId = null}>
+                          </span>
+                          <!-- Hover tooltip -->
+                          <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5
+                                      opacity-0 group-hover/lbl:opacity-100 transition-opacity duration-150 z-50
+                                      whitespace-nowrap max-w-[180px]">
+                            <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
+                                        shadow-lg px-1.5 py-1 text-popover-foreground">
+                              <span class="block text-[0.55rem] font-medium leading-tight truncate">{label.text}</span>
+                              <span class="block text-[0.42rem] text-muted-foreground/60 tabular-nums mt-0.5">
+                                {fmtTimeShort(label.eeg_start)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
                   {/if}
                 </div>
               </div>
@@ -1425,11 +1484,39 @@ the Free Software Foundation, version 3 only. -->
                   {/if}
 
                   {#if session.labels.length > 0}
-                    <Badge variant="outline"
-                      class="text-[0.46rem] font-semibold px-1 py-0 rounded-full shrink-0
-                             bg-primary/10 text-primary border-primary/20">
-                      {session.labels.length} {session.labels.length === 1 ? t("history.label") : t("history.labels")}
-                    </Badge>
+                    <div class="flex items-center gap-0.5 shrink-0" onclick={(e) => e.stopPropagation()}>
+                      {#each session.labels as label (label.id)}
+                        {@const lColor = dayLabelColors.get(label.id) ?? "#f59e0b"}
+                        {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
+                        {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
+                        {@const isHoveredSelf = hoveredLabelId === label.id}
+                        <div class="group/lbl relative">
+                          <span
+                            class="block w-2 h-2 rounded-full cursor-default transition-all duration-150
+                                   {isHoveredSelf ? 'scale-[1.8] ring-2 ring-white/50 shadow-lg' :
+                                    isExact ? 'scale-150 ring-[1.5px] ring-white/40 shadow-md' :
+                                    isClose ? 'scale-125 brightness-125' : ''}"
+                            style="background:{lColor};
+                                   {isExact && !isHoveredSelf ? `box-shadow: 0 0 6px 1px ${lColor}` : ''}
+                                   {isClose && !isExact ? `box-shadow: 0 0 4px 0px ${lColor}` : ''}"
+                            onmouseenter={() => hoveredLabelId = label.id}
+                            onmouseleave={() => hoveredLabelId = null}>
+                          </span>
+                          <!-- Hover tooltip -->
+                          <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+                                      opacity-0 group-hover/lbl:opacity-100 transition-opacity duration-150 z-50
+                                      whitespace-nowrap max-w-[200px]">
+                            <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
+                                        shadow-lg px-2 py-1.5 text-popover-foreground">
+                              <span class="block text-[0.6rem] font-medium leading-tight truncate">{label.text}</span>
+                              <span class="block text-[0.46rem] text-muted-foreground/60 tabular-nums mt-0.5">
+                                {fmtTimeShort(label.eeg_start)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      {/each}
+                    </div>
                   {/if}
 
                   <span class="flex-1"></span>
@@ -1489,29 +1576,50 @@ the Free Software Foundation, version 3 only. -->
                       metrics={getMetrics(session.csv_path)}
                       timeseries={getTs(session.csv_path)} />
 
-                    <!-- Labels -->
+                    <!-- Labels (rainbow circles with hover interaction) -->
                     {#if session.labels.length > 0}
                       <div class="flex flex-col gap-1.5">
                         <span class="text-[0.48rem] font-semibold tracking-widest uppercase text-muted-foreground/50">
                           {t("history.labels")}
                         </span>
-                        {#each session.labels as label}
-                          <div class="flex items-start gap-2 rounded-lg border border-border dark:border-white/[0.06]
-                                      bg-muted/50 dark:bg-white/[0.02] px-2.5 py-2">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                                 class="w-3 h-3 shrink-0 text-blue-500 dark:text-blue-400 mt-0.5">
-                              <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
-                              <line x1="7" y1="7" x2="7.01" y2="7"/>
-                            </svg>
-                            <div class="flex flex-col gap-0.5 min-w-0">
-                              <span class="text-[0.65rem] text-foreground leading-relaxed break-words">{label.text}</span>
-                              <span class="text-[0.52rem] text-muted-foreground/50 tabular-nums">
-                                {fmtTime(label.eeg_start)} – {fmtTime(label.eeg_end)}
+                        <div class="flex flex-wrap items-center gap-2">
+                          {#each session.labels as label (label.id)}
+                            {@const lColor = dayLabelColors.get(label.id) ?? "#f59e0b"}
+                            {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
+                            {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
+                            {@const isHoveredSelf = hoveredLabelId === label.id}
+                            <div class="group/lbl relative">
+                              <span
+                                class="block w-3 h-3 rounded-full cursor-default ring-1 ring-white/20 shadow-sm
+                                       transition-all duration-150
+                                       {isHoveredSelf ? 'scale-[2] ring-2 ring-white/60 shadow-lg z-10' :
+                                        isExact ? 'scale-[1.7] ring-[1.5px] ring-white/50 shadow-md z-10' :
+                                        isClose ? 'scale-[1.4] brightness-130' : 'hover:scale-150'}"
+                                style="background:{lColor};
+                                       {isExact && !isHoveredSelf ? `box-shadow: 0 0 8px 2px ${lColor}` : ''}
+                                       {isClose && !isExact ? `box-shadow: 0 0 5px 1px ${lColor}` : ''}"
+                                onmouseenter={() => hoveredLabelId = label.id}
+                                onmouseleave={() => hoveredLabelId = null}>
                               </span>
+                              <!-- Hover tooltip -->
+                              <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2
+                                          opacity-0 group-hover/lbl:opacity-100 transition-opacity duration-150 z-50
+                                          whitespace-nowrap max-w-[220px]">
+                                <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
+                                            shadow-lg px-2.5 py-1.5 text-popover-foreground">
+                                  <span class="block text-[0.62rem] font-medium leading-tight truncate">{label.text}</span>
+                                  <span class="block text-[0.48rem] text-muted-foreground/60 tabular-nums mt-0.5">
+                                    {fmtTime(label.eeg_start)} – {fmtTime(label.eeg_end)}
+                                  </span>
+                                </div>
+                                <!-- Arrow -->
+                                <div class="absolute top-full left-1/2 -translate-x-1/2 -mt-px
+                                            w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px]
+                                            border-l-transparent border-r-transparent border-t-popover"></div>
+                              </div>
                             </div>
-                          </div>
-                        {/each}
+                          {/each}
+                        </div>
                       </div>
                     {/if}
 
