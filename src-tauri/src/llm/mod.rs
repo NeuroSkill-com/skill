@@ -158,7 +158,7 @@ macro_rules! llm_error { ($app:expr, $buf:expr, $file:expr, $($t:tt)*) => { push
 
 // ── Wire protocol between axum handlers and the actor ─────────────────────────
 
-enum InferRequest {
+pub(crate) enum InferRequest {
     /// Generate a chat completion from a list of `{"role","content"}` messages.
     /// The actor applies `model.apply_chat_template()` so the correct EOS/stop
     /// tokens are always used regardless of the model family.
@@ -180,6 +180,13 @@ enum InferRequest {
     Embed {
         inputs:    Vec<String>,
         result_tx: tokio::sync::oneshot::Sender<Result<Vec<Vec<f32>>, String>>,
+    },
+    /// Embed a single image via the loaded mmproj vision projector.
+    /// Used by the screenshot worker for visual-similarity embeddings.
+    /// Returns `None` if no mmproj is loaded or encoding fails.
+    EmbedImage {
+        bytes:     Vec<u8>,
+        result_tx: tokio::sync::oneshot::Sender<Option<Vec<f32>>>,
     },
     /// Simple liveness probe (kept for future use; status now via `AtomicBool`).
     #[allow(dead_code)]
@@ -273,7 +280,7 @@ struct EmbeddingsRequest {
 
 pub struct LlmServerState {
     /// Channel to the inference actor.
-    req_tx:           tokio::sync::mpsc::UnboundedSender<InferRequest>,
+    pub(crate) req_tx: tokio::sync::mpsc::UnboundedSender<InferRequest>,
     /// Display name shown in `/v1/models`.
     model_name:       String,
     /// Optional Bearer token required on every request.
@@ -2862,6 +2869,71 @@ fn run_actor(
                     llm_info!(&app, &log_buf, log_file, "embeddings done — {} vector(s)", vecs.len());
                 }
                 result_tx.send(embed_result).ok();
+            }
+
+            InferRequest::EmbedImage { bytes, result_tx } => {
+                // Embed a single image via the mmproj vision projector.
+                // Used by the screenshot worker for visual-similarity embeddings.
+                #[cfg(feature = "llm-mtmd")]
+                {
+                    if let Some(ref mtmd) = mtmd_ctx {
+                        use llama_cpp_4::mtmd::{MtmdBitmap, MtmdContext, MtmdInputChunks, MtmdInputText, MtmdInputChunkType};
+
+                        let embedding = (|| -> Option<Vec<f32>> {
+                            let bitmap = MtmdBitmap::from_buf(mtmd, &bytes).ok()?;
+                            let bitmap_refs = [&bitmap];
+
+                            let text = MtmdInputText::new(
+                                MtmdContext::default_marker(),
+                                false, false,
+                            );
+                            let mut chunks = MtmdInputChunks::new();
+                            mtmd.tokenize(&text, &bitmap_refs, &mut chunks).ok()?;
+
+                            // Find the image chunk and encode it
+                            for chunk in chunks.iter() {
+                                if chunk.chunk_type() == MtmdInputChunkType::Image {
+                                    mtmd.encode_chunk(&chunk).ok()?;
+                                    let n_tokens = chunk.n_tokens();
+                                    let n_embd = model.n_embd() as usize;
+                                    let n_elements = n_tokens * n_embd;
+                                    let embd = mtmd.output_embd(n_elements);
+                                    // Mean-pool across tokens to get a single vector
+                                    let mut pooled = vec![0.0f32; n_embd];
+                                    for t in 0..n_tokens {
+                                        for d in 0..n_embd {
+                                            pooled[d] += embd[t * n_embd + d];
+                                        }
+                                    }
+                                    if n_tokens > 0 {
+                                        for d in 0..n_embd {
+                                            pooled[d] /= n_tokens as f32;
+                                        }
+                                    }
+                                    // L2-normalize
+                                    let norm: f32 = pooled.iter().map(|x| x * x).sum::<f32>().sqrt();
+                                    if norm > 0.0 {
+                                        for v in &mut pooled {
+                                            *v /= norm;
+                                        }
+                                    }
+                                    return Some(pooled);
+                                }
+                            }
+                            None
+                        })();
+
+                        result_tx.send(embedding).ok();
+                    } else {
+                        llm_warn!(&app, &log_buf, log_file,
+                            "EmbedImage: no mmproj loaded — returning None");
+                        result_tx.send(None).ok();
+                    }
+                }
+                #[cfg(not(feature = "llm-mtmd"))]
+                {
+                    result_tx.send(None).ok();
+                }
             }
         }
     }

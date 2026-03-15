@@ -1504,11 +1504,11 @@ pub fn set_screenshot_config(
 pub fn estimate_screenshot_reembed(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Option<crate::screenshot_store::ReembedEstimate> {
-    let (config, skill_dir) = {
+    let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
-        (g.screenshot_config.clone(), g.skill_dir.clone())
+        (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
     };
-    let store = crate::screenshot_store::ScreenshotStore::open(&skill_dir)?;
+    let store = store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
     Some(crate::screenshot::estimate_reembed(&store, &config, &skill_dir))
 }
 
@@ -1519,11 +1519,11 @@ pub fn rebuild_screenshot_embeddings(
     app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Option<crate::screenshot_store::ReembedResult> {
-    let (config, skill_dir) = {
+    let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
-        (g.screenshot_config.clone(), g.skill_dir.clone())
+        (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
     };
-    let store = crate::screenshot_store::ScreenshotStore::open(&skill_dir)?;
+    let store = store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
     Some(crate::screenshot::rebuild_embeddings(&store, &config, &skill_dir, &app))
 }
 
@@ -1534,12 +1534,53 @@ pub fn get_screenshots_around(
     window_secs: i32,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<crate::screenshot_store::ScreenshotResult> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
-    let store = match crate::screenshot_store::ScreenshotStore::open(&skill_dir) {
+    let (skill_dir, store) = {
+        let g = state.lock_or_recover();
+        (g.skill_dir.clone(), g.screenshot_store.clone())
+    };
+    let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
         Some(s) => s,
         None => return vec![],
     };
     crate::screenshot::get_around(&store, timestamp, window_secs)
+}
+
+/// Find screenshots visually similar to a query image.
+/// Embeds the query image with the current model, then searches HNSW.
+#[tauri::command]
+pub fn search_screenshots_by_image(
+    image_bytes: Vec<u8>,
+    k: usize,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Vec<crate::screenshot_store::ScreenshotResult> {
+    let (config, skill_dir, store) = {
+        let g = state.lock_or_recover();
+        (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
+    };
+
+    // Embed the query image
+    let mut encoder = crate::screenshot::load_fastembed_image_pub(&config, &skill_dir);
+    let query_emb = if let Some(ref mut fe) = encoder {
+        crate::screenshot::fastembed_embed_pub(fe, &image_bytes)
+    } else {
+        None
+    };
+
+    let query = match query_emb {
+        Some(v) => v,
+        None => return vec![],
+    };
+
+    let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+        Some(s) => s,
+        None => return vec![],
+    };
+    let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
+    let hnsw = match fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) {
+        Ok(idx) => idx,
+        Err(_) => return vec![],
+    };
+    crate::screenshot::search_by_vector(&hnsw, &store, &query, k)
 }
 
 /// Find screenshots visually similar to a query embedding vector.
@@ -1549,8 +1590,11 @@ pub fn search_screenshots_by_vector(
     k: usize,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<crate::screenshot_store::ScreenshotResult> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
-    let store = match crate::screenshot_store::ScreenshotStore::open(&skill_dir) {
+    let (skill_dir, store) = {
+        let g = state.lock_or_recover();
+        (g.skill_dir.clone(), g.screenshot_store.clone())
+    };
+    let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
         Some(s) => s,
         None => return vec![],
     };

@@ -277,7 +277,7 @@ use settings_cmds::{
     get_llm_config, set_llm_config, pick_gguf_file,
     get_screenshot_config, set_screenshot_config,
     estimate_screenshot_reembed, rebuild_screenshot_embeddings,
-    get_screenshots_around, search_screenshots_by_vector,
+    get_screenshots_around, search_screenshots_by_vector, search_screenshots_by_image,
 };
 
 // LLM catalog commands (feature-gated)
@@ -560,6 +560,9 @@ pub struct AppState {
 
     /// Screenshot capture + vision embedding configuration.
     pub screenshot_config: ScreenshotConfig,
+    /// Shared screenshot store — opened at startup, used by both the
+    /// background worker and Tauri query commands.
+    pub screenshot_store: Option<std::sync::Arc<screenshot_store::ScreenshotStore>>,
 
     /// All LLM-related runtime state, heap-allocated to keep `AppState` small.
     pub llm: Box<LlmState>,
@@ -728,6 +731,7 @@ impl Default for AppState {
             dnd_score_history:  std::collections::VecDeque::new(),
             dnd_snr_low_ticks:  0,
             screenshot_config:  ScreenshotConfig::default(),
+            screenshot_store:   None,
         }
     }
 }
@@ -1649,13 +1653,19 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // ── Screenshot capture worker ────────────────────────────────────
+    // ── Screenshot store + capture worker ──────────────────────────────
     {
+        let ss_store = screenshot_store::ScreenshotStore::open(&skill_dir)
+            .map(std::sync::Arc::new);
+        {
+            let r = app.state::<Mutex<Box<AppState>>>();
+            r.lock_or_recover().screenshot_store = ss_store.clone();
+        }
         let app_ss = app.handle().clone();
         let sd = skill_dir.clone();
         std::thread::Builder::new()
             .name("screenshot-worker".into())
-            .spawn(move || screenshot::run_screenshot_worker(app_ss, sd))
+            .spawn(move || screenshot::run_screenshot_worker(app_ss, sd, ss_store))
             .expect("[screenshot] failed to spawn worker thread");
     }
 
@@ -1957,6 +1967,7 @@ pub fn run() {
             get_screenshot_config, set_screenshot_config,
             estimate_screenshot_reembed, rebuild_screenshot_embeddings,
             get_screenshots_around, search_screenshots_by_vector,
+            search_screenshots_by_image,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,

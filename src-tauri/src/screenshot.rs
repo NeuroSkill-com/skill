@@ -60,14 +60,50 @@ fn capture_active_window() -> Option<CapturedImage> {
 fn capture_macos() -> Option<CapturedImage> {
     use std::process::Command;
 
-    // Use screencapture to capture the frontmost window.
-    // -x = no sound, -C = include cursor, -t png = format
     let tmp = std::env::temp_dir().join("skill_screenshot.png");
-    let status = Command::new("screencapture")
-        .args(["-x", "-t", "png", "-o"])
-        .arg(&tmp)
-        .status()
-        .ok()?;
+
+    // Try to get the frontmost window ID via CGWindowListCopyWindowInfo.
+    // We use a small osascript snippet to get the window ID, then pass
+    // it to screencapture -l <wid> to capture only that window.
+    let window_id = Command::new("osascript")
+        .args(["-e", r#"
+            use framework "AppKit"
+            set wlist to current application's NSWorkspace's sharedWorkspace()'s frontmostApplication()'s processIdentifier() as integer
+            -- Get all windows for the frontmost app's PID via CGWindowListCopyWindowInfo
+            set output to do shell script "python3 -c \"
+import Quartz, sys
+pid = " & wlist & "
+wl = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements, Quartz.kCGNullWindowID)
+for w in wl:
+    if w.get('kCGWindowOwnerPID', 0) == pid and w.get('kCGWindowLayer', 0) == 0:
+        print(w['kCGWindowNumber'])
+        sys.exit(0)
+\""
+            return output
+        "#])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| {
+            String::from_utf8_lossy(&o.stdout).trim().parse::<u64>().ok()
+        });
+
+    let status = if let Some(wid) = window_id {
+        // Capture the specific window by ID
+        Command::new("screencapture")
+            .args(["-x", "-t", "png", "-l"])
+            .arg(wid.to_string())
+            .arg(&tmp)
+            .status()
+            .ok()?
+    } else {
+        // Fallback: capture the interactive frontmost window
+        Command::new("screencapture")
+            .args(["-x", "-t", "png", "-w", "-o"])
+            .arg(&tmp)
+            .status()
+            .ok()?
+    };
     if !status.success() { return None; }
 
     let raw_bytes = std::fs::read(&tmp).ok()?;
@@ -85,7 +121,9 @@ fn capture_macos() -> Option<CapturedImage> {
 fn capture_linux() -> Option<CapturedImage> {
     use std::process::Command;
 
-    // Try xdotool + import (ImageMagick) for X11
+    let tmp = std::env::temp_dir().join("skill_screenshot.png");
+
+    // Try xdotool + import (ImageMagick) for X11 — captures active window
     let win_id = Command::new("xdotool")
         .arg("getactivewindow")
         .output()
@@ -93,36 +131,65 @@ fn capture_linux() -> Option<CapturedImage> {
         .filter(|o| o.status.success())
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
 
-    let tmp = std::env::temp_dir().join("skill_screenshot.png");
+    let mut captured = false;
 
-    let ok = if let Some(wid) = win_id {
-        // X11: use import -window
-        Command::new("import")
-            .args(["-window", &wid, "png:-"])
+    if let Some(ref wid) = win_id {
+        // X11 path 1: import -window <wid> (writes PNG to stdout)
+        if let Some(output) = Command::new("import")
+            .args(["-window", wid.as_str(), "png:-"])
             .output()
             .ok()
-            .filter(|o| o.status.success())
-            .map(|o| { let _ = std::fs::write(&tmp, &o.stdout); true })
-            .unwrap_or(false)
-    } else {
-        // Wayland fallback: try grim
-        Command::new("grim")
+            .filter(|o| o.status.success() && !o.stdout.is_empty())
+        {
+            if std::fs::write(&tmp, &output.stdout).is_ok() {
+                captured = true;
+            }
+        }
+    }
+
+    if !captured {
+        if let Some(ref _wid) = win_id {
+            // X11 path 2: scrot -u (focused window)
+            captured = Command::new("scrot")
+                .args(["-u", "-o", &tmp.to_string_lossy()])
+                .status()
+                .ok()
+                .map(|s| s.success())
+                .unwrap_or(false);
+        }
+    }
+
+    if !captured {
+        // Wayland: try swaymsg + grim with geometry for focused window
+        let geo = Command::new("sh")
+            .args(["-c", r#"swaymsg -t get_tree | jq -r '.. | select(.focused?) | .rect | "\(.x),\(.y) \(.width)x\(.height)"'"#])
+            .output()
+            .ok()
+            .filter(|o| o.status.success() && !o.stdout.is_empty())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+
+        if let Some(geo) = geo {
+            captured = Command::new("grim")
+                .args(["-g", &geo])
+                .arg(&tmp)
+                .status()
+                .ok()
+                .map(|s| s.success())
+                .unwrap_or(false);
+        }
+    }
+
+    if !captured {
+        // Last resort: grim full screen
+        captured = Command::new("grim")
             .arg(&tmp)
             .status()
             .ok()
             .map(|s| s.success())
-            .unwrap_or(false)
-    };
-    if !ok {
-        // Last resort: scrot -u (focused window)
-        let scrot_ok = Command::new("scrot")
-            .args(["-u", &tmp.to_string_lossy()])
-            .status()
-            .ok()
-            .map(|s| s.success())
             .unwrap_or(false);
-        if !scrot_ok { return None; }
     }
+
+    if !captured { return None; }
 
     let raw_bytes = std::fs::read(&tmp).ok()?;
     let _ = std::fs::remove_file(&tmp);
@@ -139,16 +206,33 @@ fn capture_linux() -> Option<CapturedImage> {
 fn capture_windows() -> Option<CapturedImage> {
     use std::process::Command;
 
-    // Use PowerShell snippet to capture the foreground window via .NET
+    // Capture the foreground window (not full screen) via PowerShell + Win32.
+    // Uses GetForegroundWindow → GetWindowRect → CopyFromScreen with the
+    // window's bounding rectangle, matching the plan's specification.
     let tmp = std::env::temp_dir().join("skill_screenshot.png");
     let ps_script = format!(
         r#"
-        Add-Type -AssemblyName System.Windows.Forms
         Add-Type -AssemblyName System.Drawing
-        $screen = [System.Windows.Forms.Screen]::PrimaryScreen
-        $bmp = New-Object System.Drawing.Bitmap($screen.Bounds.Width, $screen.Bounds.Height)
+        Add-Type @"
+            using System;
+            using System.Runtime.InteropServices;
+            public class Win32 {{
+                [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+                [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+            }}
+            public struct RECT {{
+                public int Left, Top, Right, Bottom;
+            }}
+"@
+        $hwnd = [Win32]::GetForegroundWindow()
+        $rect = New-Object RECT
+        [Win32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
+        $w = $rect.Right - $rect.Left
+        $h = $rect.Bottom - $rect.Top
+        if ($w -le 0 -or $h -le 0) {{ exit 1 }}
+        $bmp = New-Object System.Drawing.Bitmap($w, $h)
         $g = [System.Drawing.Graphics]::FromImage($bmp)
-        $g.CopyFromScreen($screen.Bounds.Location, [System.Drawing.Point]::Empty, $screen.Bounds.Size)
+        $g.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
         $bmp.Save("{}")
         $g.Dispose()
         $bmp.Dispose()
@@ -287,6 +371,11 @@ fn save_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
 
 // ── fastembed image embedder ──────────────────────────────────────────────────
 
+/// Try to create a fastembed `ImageEmbedding` instance.  Public alias for Tauri commands.
+pub fn load_fastembed_image_pub(config: &ScreenshotConfig, skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
+    load_fastembed_image(config, skill_dir)
+}
+
 /// Try to create a fastembed `ImageEmbedding` instance.
 fn load_fastembed_image(config: &ScreenshotConfig, skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
     if config.embed_backend != "fastembed" { return None; }
@@ -304,6 +393,11 @@ fn load_fastembed_image(config: &ScreenshotConfig, skill_dir: &Path) -> Option<f
             None
         }
     }
+}
+
+/// Embed a single image (PNG bytes) using fastembed.  Public alias for Tauri commands.
+pub fn fastembed_embed_pub(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) -> Option<Vec<f32>> {
+    fastembed_embed(encoder, png_bytes)
 }
 
 /// Embed a single image (PNG bytes) using fastembed.
@@ -333,10 +427,11 @@ struct ScreenshotCapturedEvent {
 pub fn run_screenshot_worker(
     app: AppHandle,
     skill_dir: PathBuf,
+    shared_store: Option<Arc<ScreenshotStore>>,
 ) {
-    // Open the store
-    let store = match ScreenshotStore::open(&skill_dir) {
-        Some(s) => Arc::new(s),
+    // Use the shared store or open a new one
+    let store = match shared_store.or_else(|| ScreenshotStore::open(&skill_dir).map(Arc::new)) {
+        Some(s) => s,
         None => {
             eprintln!("[screenshot] failed to open store — worker exiting");
             return;
@@ -439,12 +534,39 @@ pub fn run_screenshot_worker(
                     (None, String::new(), String::new())
                 }
             }
-            // mmproj embedding — would go through LLM actor channel.
-            // For now, fallback to no embedding if mmproj is selected
-            // but not integrated yet.
+            // mmproj embedding — send through the LLM actor's request channel.
             "mmproj" => {
-                // TODO: send EmbedImage request to LLM actor when integrated
-                (None, String::new(), String::new())
+                #[cfg(feature = "llm")]
+                {
+                    let result = (|| -> Option<Vec<f32>> {
+                        let cell = {
+                            let r = app.state::<Mutex<Box<AppState>>>();
+                            let g = r.lock_or_recover();
+                            g.llm.state_cell.clone()
+                        };
+                        let state = cell.lock().ok()?.as_ref()?.clone();
+                        if !state.vision_ready.load(std::sync::atomic::Ordering::Relaxed) {
+                            return None;
+                        }
+                        let (tx, rx) = tokio::sync::oneshot::channel();
+                        state.req_tx.send(crate::llm::InferRequest::EmbedImage {
+                            bytes: resized_png.clone(),
+                            result_tx: tx,
+                        }).ok()?;
+                        // Wait up to 30 seconds for the embedding
+                        rx.blocking_recv().ok()?
+                    })();
+                    let mid = config.model_id();
+                    if result.is_some() {
+                        (result, "mmproj".to_string(), mid)
+                    } else {
+                        (None, String::new(), String::new())
+                    }
+                }
+                #[cfg(not(feature = "llm"))]
+                {
+                    (None, String::new(), String::new())
+                }
             }
             _ => (None, String::new(), String::new()),
         };
