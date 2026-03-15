@@ -94,10 +94,14 @@ pub const MW75_EEG_CHANNELS: usize = 12;
 /// Neurable MW75 hardware sample rate (Hz).
 pub const MW75_SAMPLE_RATE: f64 = 500.0;
 
-/// Neurable MW75 channel labels (Ch1–Ch12).
+/// Neurable MW75 channel labels — approximate 10-20 extended positions.
+///
+/// 6 electrodes are spread equidistantly around each ear cup:
+///   Left  (Ch1–Ch6):  FT7, T7, TP7, CP5, P7, C5
+///   Right (Ch7–Ch12): FT8, T8, TP8, CP6, P8, C6
 pub const MW75_CHANNEL_NAMES: [&str; MW75_EEG_CHANNELS] = [
-    "Ch1", "Ch2", "Ch3", "Ch4", "Ch5", "Ch6",
-    "Ch7", "Ch8", "Ch9", "Ch10", "Ch11", "Ch12",
+    "FT7", "T7", "TP7", "CP5", "P7", "C5",
+    "FT8", "T8", "TP8", "CP6", "P8", "C6",
 ];
 
 // ── Signal filter (overlap-save, GPU fft_batch) ───────────────────────────────
