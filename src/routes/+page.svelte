@@ -399,6 +399,7 @@ the Free Software Foundation, version 3 only. -->
     if (isMuse2)    return "/devices/muse-2.jpg";
     if (isMuse)     return "/devices/muse-1.jpg";       // Muse 1 / generic Muse
     if (isGanglion) return "/devices/ganglion.jpg";
+    if (isMw75)    return "/devices/mw75.jpg";
     return null;
   })());
   const deviceImageAlt = $derived((() => {
@@ -407,6 +408,7 @@ the Free Software Foundation, version 3 only. -->
     if (isMuse2)    return "Muse 2";
     if (isMuse)     return "Muse";
     if (isGanglion) return "OpenBCI Ganglion";
+    if (isMw75)    return "MW75 Neuro";
     return status.device_name ?? "";
   })());
   const csvName   = (p: string | null) => p ? (p.split(/[\\/]/).pop() ?? p) : "";

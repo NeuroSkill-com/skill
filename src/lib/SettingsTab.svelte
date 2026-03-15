@@ -318,6 +318,7 @@ the Free Software Foundation, version 3 only. -->
     if (n.includes("muse-s") || n.includes("muse s"))                         return "/devices/muse-s.jpg";
     if (n.includes("muse-2") || n.includes("muse2") || n.includes("muse 2")) return "/devices/muse-2.jpg";
     if (n.includes("muse"))                                                    return "/devices/muse-1.jpg";
+    if (n.includes("mw75") || n.includes("neurable"))                         return "/devices/mw75.jpg";
     return null;
   }
 
