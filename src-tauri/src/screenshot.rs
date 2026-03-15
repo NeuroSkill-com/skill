@@ -736,16 +736,36 @@ struct ScreenshotCapturedEvent {
     filename: String,
 }
 
+// ── Embed job sent from capture thread → embed thread ─────────────────────────
+
+struct EmbedJob {
+    row_id:      i64,
+    ts_i64:      i64,
+    resized_png: Vec<u8>,
+    ocr_text:    String,
+    config:      ScreenshotConfig,
+}
+
 // ── Background worker ─────────────────────────────────────────────────────────
 
 /// Run the screenshot capture worker in a dedicated thread.
 /// Called from `lib.rs :: setup_app`.
+///
+/// Architecture: two threads connected by a bounded channel.
+///
+/// **Capture thread** (this function) — fast, never blocks on ML:
+///   capture → OCR → resize → save WebP → insert SQLite → notify → send job
+///
+/// **Embed thread** (spawned below) — slow, GPU-bound:
+///   receive job → vision embed → HNSW insert → text embed → HNSW insert → UPDATE SQLite
+///
+/// This ensures the capture cadence is never delayed by slow embedding work
+/// and screenshots are always persisted immediately.
 pub fn run_screenshot_worker(
     app: AppHandle,
     skill_dir: PathBuf,
     shared_store: Option<Arc<ScreenshotStore>>,
 ) {
-    // Use the shared store or open a new one
     let store = match shared_store.or_else(|| ScreenshotStore::open(&skill_dir).map(Arc::new)) {
         Some(s) => s,
         None => {
@@ -761,20 +781,16 @@ pub fn run_screenshot_worker(
         g.screenshot_config.clone()
     };
 
-    // Load HNSW indexes
-    let mut hnsw = load_or_rebuild_hnsw(&skill_dir, &store);
-    let mut ocr_hnsw = load_or_rebuild_ocr_hnsw(&skill_dir, &store);
-
-    // Load fastembed model if configured
-    let mut fe_encoder = load_fastembed_image(&config, &skill_dir);
-
-    // Load OCR engine if enabled (downloads models on first use)
+    // Load OCR engine if enabled (downloads models on first use).
+    // OCR runs in the capture thread because it needs the full-res image
+    // before downsizing, and it's fast enough (~50-200 ms) to not block
+    // the 5 s cadence.
     let ocr_engine = if config.ocr_enabled {
         let engine = load_ocr_engine(&skill_dir);
         if engine.is_some() {
             eprintln!("[screenshot] OCR engine ({}) loaded", config.ocr_engine);
         } else {
-            eprintln!("[screenshot] OCR engine not available — text extraction disabled");
+            eprintln!("[screenshot] OCR engine not available");
         }
         engine
     } else {
@@ -782,59 +798,43 @@ pub fn run_screenshot_worker(
         None
     };
 
-    // Load text embedder for OCR text (reuse fastembed cache)
-    let mut text_embedder: Option<fastembed::TextEmbedding> = if config.ocr_enabled {
-        let cache = skill_dir.join("fastembed_cache");
-        let model = config.ocr_text_model_enum();
-        let eps = build_execution_providers(config.use_gpu);
-        eprintln!("[screenshot] OCR text model: {} (gpu={})", config.ocr_text_model, config.use_gpu);
-        fastembed::TextEmbedding::try_new(
-            fastembed::InitOptions::new(model)
-                .with_cache_dir(cache)
-                .with_execution_providers(eps)
-        ).ok()
-    } else {
-        None
-    };
+    // ── Spawn the embed thread ──
+    // Bounded channel (capacity 4) provides backpressure: if the embed
+    // thread falls behind, the capture thread blocks on send rather than
+    // accumulating unbounded memory.
+    let (embed_tx, embed_rx) = crossbeam_channel::bounded::<EmbedJob>(4);
+    let embed_store  = Arc::clone(&store);
+    let embed_dir    = skill_dir.clone();
+    let embed_app    = app.clone();
+    let embed_config = config.clone();
 
+    std::thread::Builder::new()
+        .name("screenshot-embed".into())
+        .spawn(move || {
+            run_embed_thread(embed_app, embed_dir, embed_store, embed_rx, embed_config);
+        })
+        .expect("[screenshot] failed to spawn embed thread");
+
+    // ── Capture loop ──
     let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
     let _ = std::fs::create_dir_all(&screenshots_dir);
 
-    let mut inserts_since_save: usize = 0;
-    let mut ocr_inserts_since_save: usize = 0;
-    let mut last_config = config;
-
     loop {
-        // Re-read config each iteration (it may change via settings UI)
-        let config = {
+        // Re-read config + session state in a single lock acquisition
+        let (config, session_active) = {
             let r = app.state::<Mutex<Box<AppState>>>();
             let g = r.lock_or_recover();
-            g.screenshot_config.clone()
+            let cfg = g.screenshot_config.clone();
+            let active = g.session_start_utc.is_some();
+            (cfg, active)
         };
 
         let interval = Duration::from_secs(config.interval_secs.max(1) as u64);
         std::thread::sleep(interval);
 
-        // ── Gate checks ──
+        // Gate checks
         if !config.enabled { continue; }
-
-        if config.session_only {
-            let session_active = {
-                let r = app.state::<Mutex<Box<AppState>>>();
-                let g = r.lock_or_recover();
-                g.session_start_utc.is_some()
-            };
-            if !session_active { continue; }
-        }
-
-        // Reload encoder if model changed
-        if config.embed_backend != last_config.embed_backend
-            || config.fastembed_model != last_config.fastembed_model
-        {
-            eprintln!("[screenshot] model changed — reloading encoder");
-            fe_encoder = load_fastembed_image(&config, &skill_dir);
-        }
-        last_config = config.clone();
+        if config.session_only && !session_active { continue; }
 
         // ── Capture active window ──
         let captured = match capture_active_window() {
@@ -858,8 +858,10 @@ pub fn run_screenshot_worker(
             Some(r) => r,
             None => continue,
         };
+        // Drop the full-res capture immediately to free memory
+        drop(captured);
 
-        // ── Save to disk as WebP FIRST (before any slow embedding work) ──
+        // ── Save to disk as WebP ──
         let (ts_str, unix_ts) = yyyymmddhhmmss_utc();
         let date_str = &ts_str[..8];
         let date_dir = screenshots_dir.join(date_str);
@@ -871,7 +873,7 @@ pub fn run_screenshot_worker(
             None => continue,
         };
 
-        // ── Active window context ──
+        // ── Active window context (single lock, already read above) ──
         let (app_name, window_title) = {
             let r = app.state::<Mutex<Box<AppState>>>();
             let g = r.lock_or_recover();
@@ -883,10 +885,7 @@ pub fn run_screenshot_worker(
 
         let ts_i64: i64 = ts_str.parse().unwrap_or(0);
 
-        // ── Insert SQLite row IMMEDIATELY with NULL embeddings ──
-        // The screenshot file is already saved to disk.  Embeddings are
-        // computed below and backfilled via UPDATE.  This guarantees the
-        // screenshot is persisted even if embedding crashes or takes long.
+        // ── Insert SQLite row with NULL embeddings ──
         let row_id = store.insert(&ScreenshotRow {
             timestamp: ts_i64,
             unix_ts,
@@ -909,16 +908,77 @@ pub fn run_screenshot_worker(
             ocr_hnsw_id: None,
         });
 
-        // ── Notify frontend (screenshot saved, embedding in progress) ──
+        // ── Notify frontend ──
         let _ = app.emit("screenshot-captured", ScreenshotCapturedEvent {
-            ts: ts_str.clone(), filename: webp_name,
+            ts: ts_str, filename: webp_name,
         });
 
-        // ── Vision embedding (may be slow — runs AFTER save) ──
+        // ── Send to embed thread (non-blocking if capacity available) ──
+        if let Some(row_id) = row_id {
+            let _ = embed_tx.try_send(EmbedJob {
+                row_id,
+                ts_i64,
+                resized_png,
+                ocr_text,
+                config: config.clone(),
+            });
+        }
+    }
+}
+
+/// Embedding thread — processes jobs from the capture thread.
+/// Runs vision embedding + OCR text embedding on GPU (when available)
+/// and backfills results into SQLite + HNSW.
+fn run_embed_thread(
+    app: AppHandle,
+    skill_dir: PathBuf,
+    store: Arc<ScreenshotStore>,
+    rx: crossbeam_channel::Receiver<EmbedJob>,
+    initial_config: ScreenshotConfig,
+) {
+    // Load HNSW indexes
+    let mut hnsw = load_or_rebuild_hnsw(&skill_dir, &store);
+    let mut ocr_hnsw = load_or_rebuild_ocr_hnsw(&skill_dir, &store);
+
+    // Load vision encoder
+    let mut fe_encoder = load_fastembed_image(&initial_config, &skill_dir);
+    let mut last_backend = initial_config.embed_backend.clone();
+    let mut last_model   = initial_config.fastembed_model.clone();
+
+    // Load text embedder for OCR
+    let mut text_embedder: Option<fastembed::TextEmbedding> = if initial_config.ocr_enabled {
+        let cache = skill_dir.join("fastembed_cache");
+        let model = initial_config.ocr_text_model_enum();
+        let eps = build_execution_providers(initial_config.use_gpu);
+        eprintln!("[screenshot-embed] OCR text model: {} (gpu={})", initial_config.ocr_text_model, initial_config.use_gpu);
+        fastembed::TextEmbedding::try_new(
+            fastembed::InitOptions::new(model)
+                .with_cache_dir(cache)
+                .with_execution_providers(eps)
+        ).ok()
+    } else {
+        None
+    };
+
+    let mut inserts_since_save: usize = 0;
+    let mut ocr_inserts_since_save: usize = 0;
+
+    while let Ok(job) = rx.recv() {
+        let config = &job.config;
+
+        // Hot-reload vision encoder if model changed
+        if config.embed_backend != last_backend || config.fastembed_model != last_model {
+            eprintln!("[screenshot-embed] model changed — reloading encoder");
+            fe_encoder = load_fastembed_image(config, &skill_dir);
+            last_backend = config.embed_backend.clone();
+            last_model   = config.fastembed_model.clone();
+        }
+
+        // ── Vision embedding ──
         let (embedding, model_backend, model_id) = match config.embed_backend.as_str() {
             "fastembed" => {
                 if let Some(ref mut fe) = fe_encoder {
-                    let emb = fastembed_embed(fe, &resized_png);
+                    let emb = fastembed_embed(fe, &job.resized_png);
                     let mid = config.model_id();
                     (emb, "fastembed".to_string(), mid)
                 } else {
@@ -940,7 +1000,7 @@ pub fn run_screenshot_worker(
                         }
                         let (tx, rx) = tokio::sync::oneshot::channel();
                         state.req_tx.send(crate::llm::InferRequest::EmbedImage {
-                            bytes: resized_png.clone(),
+                            bytes: job.resized_png.clone(),
                             result_tx: tx,
                         }).ok()?;
                         rx.blocking_recv().ok()?
@@ -953,56 +1013,49 @@ pub fn run_screenshot_worker(
                     }
                 }
                 #[cfg(not(feature = "llm"))]
-                {
-                    (None, String::new(), String::new())
-                }
+                { (None, String::new(), String::new()) }
             }
             _ => (None, String::new(), String::new()),
         };
 
-        // ── Backfill vision embedding into SQLite + HNSW ──
-        let hnsw_id = if let Some(ref emb) = embedding {
+        // ── Backfill vision embedding ──
+        if let Some(ref emb) = embedding {
             let id = hnsw.len() as u64;
-            hnsw.insert(emb.clone(), ts_i64);
+            hnsw.insert(emb.clone(), job.ts_i64);
             inserts_since_save += 1;
             if inserts_since_save >= SCREENSHOT_HNSW_SAVE_EVERY {
                 save_hnsw(&hnsw, &skill_dir);
                 inserts_since_save = 0;
             }
-            Some(id)
-        } else {
-            None
-        };
-
-        if let (Some(row_id), Some(ref emb)) = (row_id, &embedding) {
             store.update_embedding(
-                row_id, emb, hnsw_id,
+                job.row_id, emb, Some(id),
                 &model_backend, &model_id, config.image_size,
             );
         }
 
-        // ── Backfill OCR text embedding into SQLite + HNSW ──
-        if !ocr_text.is_empty() {
+        // ── Backfill OCR text embedding ──
+        if !job.ocr_text.is_empty() {
             if let Some(ref mut te) = text_embedder {
-                match te.embed(vec![ocr_text.as_str()], None) {
-                    Ok(mut vecs) if !vecs.is_empty() => {
-                        let emb = vecs.remove(0);
+                if let Ok(mut vecs) = te.embed(vec![job.ocr_text.as_str()], None) {
+                    if let Some(emb) = vecs.pop() {
                         let id = ocr_hnsw.len() as u64;
-                        ocr_hnsw.insert(emb.clone(), ts_i64);
+                        ocr_hnsw.insert(emb.clone(), job.ts_i64);
                         ocr_inserts_since_save += 1;
                         if ocr_inserts_since_save >= SCREENSHOT_HNSW_SAVE_EVERY {
                             save_ocr_hnsw(&ocr_hnsw, &skill_dir);
                             ocr_inserts_since_save = 0;
                         }
-                        if let Some(row_id) = row_id {
-                            store.update_ocr(row_id, &ocr_text, Some(&emb), Some(id));
-                        }
+                        store.update_ocr(job.row_id, &job.ocr_text, Some(&emb), Some(id));
                     }
-                    _ => {}
                 }
             }
         }
     }
+
+    // Channel closed — save indexes before exit
+    save_hnsw(&hnsw, &skill_dir);
+    save_ocr_hnsw(&ocr_hnsw, &skill_dir);
+    eprintln!("[screenshot-embed] thread exiting — indexes saved");
 }
 
 // ── Public query functions (called from Tauri commands) ───────────────────────
