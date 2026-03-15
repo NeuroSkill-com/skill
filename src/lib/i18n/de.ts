@@ -2294,7 +2294,7 @@ const de: Record<string, string> = {
   "helpTts.calibrationTitle": "Kalibrierungsintegration",
   "helpTts.calibrationBody": "Wenn eine Kalibrierungssitzung beginnt, wird die Engine im Hintergrund vorgewärmt (bei Bedarf wird das Modell heruntergeladen). In jeder Phase ruft das Kalibrierungsfenster tts_speak mit dem Aktionslabel, der Pausenansage, der Abschlussmeldung oder dem Abbruchhinweis auf. Sprache blockiert nie die Kalibrierung — alle TTS-Aufrufe sind Fire-and-Forget.",
   "helpTts.apiTitle": "API — say-Befehl",
-  "helpTts.apiBody": "Sprachausgabe von jedem externen Skript, Automatisierungstool oder LLM-Agenten auslösen. Der Befehl kehrt sofort zurück, während Audio abgespielt wird. WebSocket: {\\\"command\\\":\\\"say\\\",\\\"text\\\":\\\"Ihre Nachricht\\\"}. HTTP: POST /say mit Body {\\\"text\\\":\\\"Ihre Nachricht\\\"}. CLI (curl): curl -X POST http://localhost:<port>/say -d '{\\\"text\\\":\\\"hallo\\\"}' -H 'Content-Type: application/json'.",
+  "helpTts.apiBody": "Sprachausgabe von jedem externen Skript, Automatisierungstool oder LLM-Agenten auslösen. Der Befehl kehrt sofort zurück, während Audio abgespielt wird. WebSocket: {\"command\":\"say\",\"text\":\"Ihre Nachricht\"}. HTTP: POST /say mit Body {\"text\":\"Ihre Nachricht\"}. CLI (curl): curl -X POST http://localhost:<port>/say -d '{\"text\":\"hallo\"}' -H 'Content-Type: application/json'.",
   "helpTts.loggingTitle": "Debug-Protokollierung",
   "helpTts.loggingBody": "Aktivieren Sie die TTS-Synthese-Protokollierung unter Einstellungen → Sprache, um Ereignisse (gesprochener Text, Sampleanzahl, Inferenzlatenz) in die NeuroSkill™-Protokolldatei zu schreiben. Nützlich zur Latenzmessung und Fehlerdiagnose.",
   "helpTts.testTitle": "Hier testen",
@@ -2303,7 +2303,7 @@ const de: Record<string, string> = {
   "helpApi.cmdSayParams": "text: string (erforderlich)",
   "helpApi.cmdSayDesc": "Text per geräteeigener TTS sprechen. Fire-and-Forget — kehrt sofort zurück, während Audio im Hintergrund abgespielt wird. Initialisiert die TTS-Engine beim ersten Aufruf.",
   "helpFaq.q33": "Wie löse ich TTS-Sprache aus einem Skript oder Automatisierungstool aus?",
-  "helpFaq.a33": "Verwenden Sie die WebSocket- oder HTTP-API. WebSocket: {\\\"command\\\":\\\"say\\\",\\\"text\\\":\\\"Ihre Nachricht\\\"}. HTTP (curl): curl -X POST http://localhost:<port>/say -H 'Content-Type: application/json' -d '{\\\"text\\\":\\\"Ihre Nachricht\\\"}'. Der say-Befehl ist Fire-and-Forget — antwortet sofort, während Audio im Hintergrund abgespielt wird.",
+  "helpFaq.a33": "Verwenden Sie die WebSocket- oder HTTP-API. WebSocket: {\"command\":\"say\",\"text\":\"Ihre Nachricht\"}. HTTP (curl): curl -X POST http://localhost:<port>/say -H 'Content-Type: application/json' -d '{\"text\":\"Ihre Nachricht\"}'. Der say-Befehl ist Fire-and-Forget — antwortet sofort, während Audio im Hintergrund abgespielt wird.",
   "helpFaq.q34": "Warum gibt es keinen Ton von TTS?",
   "helpFaq.a34": "Prüfen Sie, ob espeak-ng installiert und im PATH ist (brew install espeak-ng auf macOS, apt install espeak-ng auf Ubuntu). Prüfen Sie, ob der Audioausgang nicht stummgeschaltet ist. Beim ersten Start muss das Modell (~30 MB) erst heruntergeladen werden. Aktivieren Sie die TTS-Debug-Protokollierung unter Einstellungen → Sprache.",
   "helpFaq.q35": "Kann ich die TTS-Stimme oder Sprache ändern?",
@@ -2759,3 +2759,4 @@ const de: Record<string, string> = {
 };
 
 export default de;
+ult de;
