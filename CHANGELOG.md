@@ -8,7 +8,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Chat
 
-- **Auto-label typed text every 5 seconds**: when the user types (not pastes) in the chat input, a 5-second interval — matching the EXG model's epoch window size (`EPOCH_S`) — accumulates only keyboard-originated characters using the `beforeinput` event's `inputType`. At the end of each 5-second window, if any recognisable words were typed, a label is automatically submitted via `submit_label` with the typed words as label text and the current chat session summary (session ID, model name, last 6 messages) as context. Paste, drop, and autocomplete inputs are excluded so only genuine typing is captured. The timer starts on component mount and flushes any remaining typed text on destroy.
+- **Auto-label typed text every 5 seconds**: when the user types (not pastes) in the chat input, a 5-second interval — matching the EXG model's epoch window size (`EPOCH_S`) — accumulates only keyboard-originated characters using the `beforeinput` event's `inputType`. At the end of each 5-second window, if any recognisable words were typed, a label is automatically submitted via `submit_label` with the typed words as label text and the current chat session summary (session ID, model name, last 6 messages) as context. Paste, drop, and autocomplete inputs are excluded so only genuine typing is captured. The timer starts on component mount and flushes any remaining typed text on destroy. **Word-boundary aware**: if the 5-second window ends mid-word, the flush is deferred until the user types the next word-boundary character (space, punctuation, Enter), so labels always contain complete words; a 1.5-second safety timeout forces the flush if the user stops typing mid-word.
 
 ### All Windows
 

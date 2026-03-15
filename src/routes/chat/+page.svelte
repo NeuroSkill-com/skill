@@ -1285,19 +1285,35 @@
   // paste/drop (`insertFromPaste`, `insertFromDrop`).
 
   const TYPING_LABEL_INTERVAL_MS = 5_000;      // 5 s — matches EPOCH_S
+  const WORD_BOUNDARY_TIMEOUT_MS = 1_500;      // max wait for word to finish
   let typedCharsInWindow   = $state("");        // accumulates typed chars
   let typingLabelTimer: ReturnType<typeof setInterval> | undefined;
+  let windowStartUtc       = 0;                 // UTC second when window opened
+  let pendingFlush         = false;             // true = 5 s fired, waiting for word boundary
+  let wordBoundaryTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  /** Is `ch` a word-boundary character (space, punctuation, newline)? */
+  function isWordBoundary(ch: string): boolean {
+    return /[\s\p{P}]/u.test(ch);
+  }
 
   /** Called from the textarea `beforeinput` handler. */
   function onChatBeforeInput(e: InputEvent) {
     // Only count keyboard-originated insertions (not paste/drop/autocomplete).
     if (e.inputType === "insertText" && e.data) {
       typedCharsInWindow += e.data;
+      // If we're waiting for a word boundary to flush, check each character.
+      if (pendingFlush && isWordBoundary(e.data)) {
+        commitTypingLabel();
+      }
     } else if (
       e.inputType === "insertLineBreak" ||
       e.inputType === "insertParagraph"
     ) {
       typedCharsInWindow += " ";
+      if (pendingFlush) {
+        commitTypingLabel();
+      }
     }
   }
 
@@ -1322,11 +1338,20 @@
     return parts.join("\n");
   }
 
-  /** Flush the current typing window: submit a label if there are typed words. */
-  async function flushTypingLabel() {
+  /**
+   * Actually submit the label for the current window.
+   * Called either at a word boundary after the 5 s timer, or by the safety
+   * timeout if the user pauses mid-word.
+   */
+  async function commitTypingLabel() {
+    pendingFlush = false;
+    if (wordBoundaryTimeout) { clearTimeout(wordBoundaryTimeout); wordBoundaryTimeout = undefined; }
+
     const raw = typedCharsInWindow.trim();
     typedCharsInWindow = "";
-    if (!raw) return;                             // nothing typed this window
+    const labelStartUtc = windowStartUtc;
+    windowStartUtc = Math.floor(Date.now() / 1000);   // new window starts now
+    if (!raw) return;
 
     // Extract recognisable words (strip stray punctuation-only tokens).
     const words = raw.split(/\s+/).filter(w => /[a-zA-Z0-9\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF]/.test(w));
@@ -1334,12 +1359,11 @@
 
     const labelText = words.join(" ");
     const context   = buildSessionContext();
-    const now       = Math.floor(Date.now() / 1000);
 
     try {
       await invoke("submit_label", {
-        labelStartUtc: now - 5,     // label covers the past 5 s window
-        text:          labelText,
+        labelStartUtc,
+        text:    labelText,
         context,
       });
     } catch {
@@ -1347,16 +1371,45 @@
     }
   }
 
+  /**
+   * Called by the 5 s interval.  If the buffer ends mid-word, defer the
+   * flush until the next word boundary (space/punctuation/Enter) or a
+   * safety timeout.
+   */
+  function onTypingWindowTick() {
+    if (!typedCharsInWindow) {
+      // Nothing typed — just reset the window start.
+      windowStartUtc = Math.floor(Date.now() / 1000);
+      return;
+    }
+
+    const lastChar = typedCharsInWindow.at(-1) ?? "";
+    if (isWordBoundary(lastChar) || !lastChar) {
+      // Buffer ends at a clean word boundary — flush immediately.
+      commitTypingLabel();
+    } else {
+      // Mid-word — wait for the next boundary character.
+      pendingFlush = true;
+      // Safety: if no further typing arrives within 1.5 s, flush anyway
+      // (the user may have stopped typing mid-word or switched focus).
+      wordBoundaryTimeout = setTimeout(() => commitTypingLabel(), WORD_BOUNDARY_TIMEOUT_MS);
+    }
+  }
+
   function startTypingLabelTimer() {
     stopTypingLabelTimer();
     typedCharsInWindow = "";
-    typingLabelTimer = setInterval(flushTypingLabel, TYPING_LABEL_INTERVAL_MS);
+    pendingFlush = false;
+    windowStartUtc = Math.floor(Date.now() / 1000);
+    typingLabelTimer = setInterval(onTypingWindowTick, TYPING_LABEL_INTERVAL_MS);
   }
 
   function stopTypingLabelTimer() {
     if (typingLabelTimer) { clearInterval(typingLabelTimer); typingLabelTimer = undefined; }
+    if (wordBoundaryTimeout) { clearTimeout(wordBoundaryTimeout); wordBoundaryTimeout = undefined; }
+    pendingFlush = false;
     // Flush any remaining typed text before stopping.
-    flushTypingLabel();
+    commitTypingLabel();
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
