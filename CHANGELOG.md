@@ -14,6 +14,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### CLI
 
+- **Calibration profile CRUD**: new `calibrations create`, `calibrations update`, and `calibrations delete` subcommands. Create a profile with `calibrations create "My Protocol" --actions "Eyes Open:20,Eyes Closed:20" --loops 3 --break 5 --auto-start`. Update by name or UUID with `calibrations update "My Protocol" --loops 5 --name "Renamed"`. Delete with `calibrations delete "My Protocol"`. Actions use compact `"Label:seconds"` format; profiles are resolved by exact UUID or case-insensitive name substring match.
+
 - **Latest hook trigger in `status`**: the `status` summary now includes a Hooks section showing total/enabled hook count, the name of the last-triggered hook, when it fired (with time-ago), cosine distance, and the matched label text/id. Available via `node cli.ts status --json | jq '.hooks.latest_trigger'`.
 
 - **Hook trigger display in `listen`**: the `listen` command now renders a dedicated 🪝 Hook Triggers section when hook events are received during the listen window. Shows hook name, scenario, cosine distance, matched label text/id, and configured command/text. Makes it easy to observe and debug Proactive Hook behavior from the terminal.
