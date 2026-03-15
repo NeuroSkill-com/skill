@@ -159,8 +159,9 @@ pub struct ImageUrl {
 
 // ── Tool injection / extraction ───────────────────────────────────────────────
 
-/// Build a compact tool block for small context windows (≤ 4096 tokens).
-/// Minimal instructions, no examples, terse parameter listing.
+/// Build a compact tool block for very small context windows (≤ 2048 tokens).
+/// Concise instructions with key examples so even small models understand the
+/// call format.
 fn build_compact_tool_block(tools: &[Tool]) -> String {
     let mut names = Vec::new();
     for t in tools {
@@ -179,7 +180,10 @@ fn build_compact_tool_block(tools: &[Tool]) -> String {
     format!(
 r#"Tools: {}
 ALWAYS use tools when applicable. Do NOT show commands in code blocks — call them.
-Call: [TOOL_CALL]{{"name":"<tool>","arguments":{{...}}}}[/TOOL_CALL]
+Format: [TOOL_CALL]{{"name":"<tool>","arguments":{{...}}}}[/TOOL_CALL]
+Examples:
+[TOOL_CALL]{{"name":"date","arguments":{{}}}}[/TOOL_CALL]
+[TOOL_CALL]{{"name":"bash","arguments":{{"command":"ls ~/Desktop/"}}}}[/TOOL_CALL]
 Wait for results. Do NOT fabricate results."#,
         names.join(", ")
     )
@@ -297,9 +301,10 @@ pub fn inject_tools_into_system_prompt(
 ) {
     if tools.is_empty() { return; }
 
-    // Use a compact tool prompt for small context windows (≤ 4096 tokens)
+    // Use a compact tool prompt for very small context windows (≤ 2048 tokens)
     // to leave room for conversation history and the model's response.
-    let compact = n_ctx > 0 && n_ctx <= 4096;
+    // At 4096+ tokens the full prompt with parameter docs and examples easily fits.
+    let compact = n_ctx > 0 && n_ctx <= 2048;
 
     let mut tool_block = if compact {
         build_compact_tool_block(tools)

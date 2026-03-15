@@ -44,6 +44,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Cross-round tool call dedup**: the model can no longer re-execute the exact same tool call (same name + same arguments) across multiple inference rounds. A `(name, args)` set tracks all executed calls; duplicate re-invocations are filtered out. If all calls in a round are filtered, the model's text is returned directly without entering an empty tool-execution phase.
 
+- **Fix model not calling tools on 4096 context**: the compact tool prompt was used for context windows ≤4096 tokens, giving models like Qwen3.5-4B a terse 4-line prompt with no examples — causing them to think about tools but never emit `[TOOL_CALL]` blocks. Threshold lowered to ≤2048 so 4096+ context models get the full prompt with parameter docs, explicit instructions, and concrete examples. The compact prompt (for ≤2048) was also improved with inline examples.
+
 - **Expandable tool-call cards with rich detail views**: tool-call bubbles are now always expandable (like thinking bubbles) whenever any details are available. Each tool type has a purpose-built expanded view:
   - **Bash**: shows the full command under a "Command" header in a prominent monospace block
   - **File tools** (`read_file`/`write_file`/`edit_file`): shows the file path; `edit_file` shows find/replace diffs in red/green blocks; `write_file` shows file content
