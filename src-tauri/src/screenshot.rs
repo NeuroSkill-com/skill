@@ -935,12 +935,16 @@ pub fn run_screenshot_worker(
             (cfg, active)
         };
 
+        // Gate checks BEFORE sleep — don't waste time sleeping when
+        // capture is disabled or gated by session.
+        if !config.enabled || (config.session_only && !session_active) {
+            // Sleep a short interval and re-check (responsive to config changes)
+            std::thread::sleep(Duration::from_secs(1));
+            continue;
+        }
+
         let interval = Duration::from_secs(config.interval_secs.max(1) as u64);
         std::thread::sleep(interval);
-
-        // Gate checks
-        if !config.enabled { continue; }
-        if config.session_only && !session_active { continue; }
 
         let iter_start = Instant::now();
 
@@ -1173,6 +1177,22 @@ fn run_embed_thread(
 
     while let Ok(job) = rx.recv() {
         metrics.queue_depth.fetch_sub(1, Ordering::Relaxed);
+
+        // Check the LIVE config (not the job's snapshot) — the user may
+        // have disabled capture or enabled session_only since this job
+        // was enqueued.  Skip stale jobs to avoid wasting GPU time.
+        {
+            let r = app.state::<Mutex<Box<AppState>>>();
+            let g = r.lock_or_recover();
+            let live = &g.screenshot_config;
+            if !live.enabled {
+                continue; // capture disabled entirely
+            }
+            if live.session_only && g.session_start_utc.is_none() {
+                continue; // session-gated and no session running
+            }
+        }
+
         let embed_start = Instant::now();
         let config = &job.config;
 
