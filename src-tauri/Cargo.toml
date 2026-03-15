@@ -165,6 +165,10 @@ ort = { version = "=2.0.0-rc.11", default-features = false }
 ocrs = "0.12.1"
 rten = "0.24.0"
 
+# Apple Vision framework OCR — compiled ObjC FFI, runs on GPU/ANE.
+# No-op on non-macOS platforms.
+apple-ocr = { path = "../crates/apple-ocr" }
+
 # Image processing — resize/pad screenshots before saving and embedding.
 # Already compiled transitively via fastembed; listing it here gives
 # screenshot.rs direct access to DynamicImage, GenericImageView, etc.

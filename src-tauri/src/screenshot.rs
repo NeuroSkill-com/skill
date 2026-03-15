@@ -660,16 +660,15 @@ fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
 
 /// Run OCR on an already-resized PNG image.  Returns the extracted text.
 ///
-/// On macOS: uses Apple Vision framework (`VNRecognizeTextRequest`) which
-/// runs on the Neural Engine / GPU — typically <50 ms, much better than
-/// the CPU-only `ocrs` engine.
+/// On macOS: uses `apple-ocr` crate (compiled ObjC, Vision framework,
+/// GPU / Neural Engine) — typically <50 ms.
 ///
-/// On other platforms: uses `ocrs` (rten-based, CPU).
+/// On other platforms (or if Apple Vision fails): uses `ocrs` (rten, CPU).
 fn run_ocr(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
     // Try Apple Vision first on macOS (GPU/ANE, <50ms)
     #[cfg(target_os = "macos")]
     {
-        if let Some(text) = run_ocr_apple_vision(png_bytes) {
+        if let Some(text) = apple_ocr::recognize_text_from_png(png_bytes) {
             return Some(text);
         }
         // Fall through to ocrs if Vision framework fails
@@ -688,202 +687,6 @@ fn run_ocr_rten(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
     let text = engine.get_text(&input).ok()?;
     let text = text.trim().to_string();
     if text.is_empty() { None } else { Some(text) }
-}
-
-/// OCR via Apple Vision framework — runs on GPU / Neural Engine.
-/// Uses `VNRecognizeTextRequest` which is available on macOS 10.15+.
-/// Typically completes in <50 ms for a 768px image.
-///
-/// Implementation: raw ObjC message sends via `objc2` (already linked).
-/// No subprocess, no Swift compilation, zero startup cost.
-#[cfg(target_os = "macos")]
-fn run_ocr_apple_vision(png_bytes: &[u8]) -> Option<String> {
-    use std::ffi::c_void;
-
-    // All the ObjC runtime types we need
-    type Id = *mut c_void;
-    type Class = *const c_void;
-    type SEL = *const c_void;
-    type BOOL = i8;
-
-    #[link(name = "objc", kind = "dylib")]
-    extern "C" {
-        fn objc_getClass(name: *const u8) -> Class;
-        fn sel_registerName(name: *const u8) -> SEL;
-        fn objc_msgSend() -> !; // variadic — called via transmute
-    }
-
-    #[link(name = "Vision", kind = "framework")]
-    extern "C" {}
-
-    #[link(name = "CoreGraphics", kind = "framework")]
-    extern "C" {
-        fn CGDataProviderCreateWithData(
-            info: *mut c_void, data: *const u8, size: usize,
-            releaseData: *const c_void,
-        ) -> Id;
-        fn CGImageCreate(
-            width: usize, height: usize, bitsPerComponent: usize,
-            bitsPerPixel: usize, bytesPerRow: usize,
-            space: Id, bitmapInfo: u32, provider: Id,
-            decode: *const c_void, shouldInterpolate: bool,
-            intent: u32,
-        ) -> Id;
-        fn CGColorSpaceCreateDeviceRGB() -> Id;
-        fn CGImageRelease(image: Id);
-        fn CGColorSpaceRelease(space: Id);
-        fn CGDataProviderRelease(provider: Id);
-    }
-
-    // Helper for sending ObjC messages (simplified — only used for safe patterns)
-    macro_rules! msg {
-        ($obj:expr, $sel:expr $(,)?) => {{
-            let f: unsafe extern "C" fn(Id, SEL) -> Id =
-                unsafe { std::mem::transmute(objc_msgSend as *const c_void) };
-            unsafe { f($obj, sel_registerName(concat!($sel, "\0").as_ptr())) }
-        }};
-        ($obj:expr, $sel:expr, $a1:expr $(,)?) => {{
-            let f: unsafe extern "C" fn(Id, SEL, Id) -> Id =
-                unsafe { std::mem::transmute(objc_msgSend as *const c_void) };
-            unsafe { f($obj, sel_registerName(concat!($sel, "\0").as_ptr()), $a1) }
-        }};
-    }
-    macro_rules! msg_bool {
-        ($obj:expr, $sel:expr, $a1:expr, $a2:expr $(,)?) => {{
-            let f: unsafe extern "C" fn(Id, SEL, Id, Id) -> BOOL =
-                unsafe { std::mem::transmute(objc_msgSend as *const c_void) };
-            unsafe { f($obj, sel_registerName(concat!($sel, "\0").as_ptr()), $a1, $a2) }
-        }};
-    }
-    macro_rules! msg_usize {
-        ($obj:expr, $sel:expr $(,)?) => {{
-            let f: unsafe extern "C" fn(Id, SEL) -> usize =
-                unsafe { std::mem::transmute(objc_msgSend as *const c_void) };
-            unsafe { f($obj, sel_registerName(concat!($sel, "\0").as_ptr())) }
-        }};
-    }
-    macro_rules! msg_set_long {
-        ($obj:expr, $sel:expr, $val:expr $(,)?) => {{
-            let f: unsafe extern "C" fn(Id, SEL, i64) -> () =
-                unsafe { std::mem::transmute(objc_msgSend as *const c_void) };
-            unsafe { f($obj, sel_registerName(concat!($sel, "\0").as_ptr()), $val) }
-        }};
-    }
-    macro_rules! msg_set_bool {
-        ($obj:expr, $sel:expr, $val:expr $(,)?) => {{
-            let f: unsafe extern "C" fn(Id, SEL, BOOL) -> () =
-                unsafe { std::mem::transmute(objc_msgSend as *const c_void) };
-            unsafe { f($obj, sel_registerName(concat!($sel, "\0").as_ptr()), $val) }
-        }};
-    }
-
-    // Decode PNG → RGB pixels using the `image` crate (already decoded for OCR)
-    let img = image::load_from_memory(png_bytes).ok()?.into_rgba8();
-    let (w, h) = img.dimensions();
-    let pixels = img.as_raw();
-
-    unsafe {
-        // Create CGImage from raw RGBA pixels
-        let color_space = CGColorSpaceCreateDeviceRGB();
-        let provider = CGDataProviderCreateWithData(
-            std::ptr::null_mut(), pixels.as_ptr(), pixels.len(), std::ptr::null(),
-        );
-        // kCGImageAlphaPremultipliedLast = 1, kCGBitmapByteOrderDefault = 0
-        let cgimage = CGImageCreate(
-            w as usize, h as usize, 8, 32, (w as usize) * 4,
-            color_space, 1, provider,
-            std::ptr::null(), false, 0,
-        );
-        CGColorSpaceRelease(color_space);
-        CGDataProviderRelease(provider);
-
-        if cgimage.is_null() { return None; }
-
-        // VNRecognizeTextRequest *req = [[VNRecognizeTextRequest alloc] init];
-        let vn_cls = objc_getClass(b"VNRecognizeTextRequest\0".as_ptr());
-        if vn_cls.is_null() {
-            CGImageRelease(cgimage);
-            return None;
-        }
-        let req = msg!(msg!(vn_cls as Id, "alloc"), "init");
-        // req.recognitionLevel = VNRequestTextRecognitionLevelFast (1)
-        msg_set_long!(req, "setRecognitionLevel:", 1);
-        // req.usesLanguageCorrection = NO
-        msg_set_bool!(req, "setUsesLanguageCorrection:", 0);
-
-        // VNImageRequestHandler *handler = [[VNImageRequestHandler alloc]
-        //     initWithCGImage:cgimage options:@{}];
-        let handler_cls = objc_getClass(b"VNImageRequestHandler\0".as_ptr());
-        let empty_dict = msg!(objc_getClass(b"NSDictionary\0".as_ptr()) as Id, "dictionary");
-        let handler: Id = {
-            let f: unsafe extern "C" fn(Id, SEL, Id, Id) -> Id =
-                std::mem::transmute(objc_msgSend as *const c_void);
-            f(
-                msg!(handler_cls as Id, "alloc"),
-                sel_registerName(b"initWithCGImage:options:\0".as_ptr()),
-                cgimage, empty_dict,
-            )
-        };
-
-        // [handler performRequests:@[req] error:nil]
-        let arr_cls = objc_getClass(b"NSArray\0".as_ptr()) as Id;
-        let req_array: Id = {
-            let f: unsafe extern "C" fn(Id, SEL, *const Id, usize) -> Id =
-                std::mem::transmute(objc_msgSend as *const c_void);
-            let objs = [req];
-            f(arr_cls, sel_registerName(b"arrayWithObjects:count:\0".as_ptr()),
-              objs.as_ptr(), 1)
-        };
-        let mut err: Id = std::ptr::null_mut();
-        let ok = msg_bool!(handler, "performRequests:error:",
-                           req_array, &mut err as *mut Id as Id);
-
-        CGImageRelease(cgimage);
-
-        if ok == 0 { return None; }
-
-        // Extract text from results
-        let results = msg!(req, "results");
-        let count = msg_usize!(results, "count");
-        if count == 0 { return None; }
-
-        let mut lines = Vec::with_capacity(count);
-        for i in 0..count {
-            let obs: Id = {
-                let f: unsafe extern "C" fn(Id, SEL, usize) -> Id =
-                    std::mem::transmute(objc_msgSend as *const c_void);
-                f(results, sel_registerName(b"objectAtIndex:\0".as_ptr()), i)
-            };
-            // [obs topCandidates:1]
-            let candidates: Id = {
-                let f: unsafe extern "C" fn(Id, SEL, usize) -> Id =
-                    std::mem::transmute(objc_msgSend as *const c_void);
-                f(obs, sel_registerName(b"topCandidates:\0".as_ptr()), 1)
-            };
-            let cand_count = msg_usize!(candidates, "count");
-            if cand_count > 0 {
-                let candidate: Id = {
-                    let f: unsafe extern "C" fn(Id, SEL, usize) -> Id =
-                        std::mem::transmute(objc_msgSend as *const c_void);
-                    f(candidates, sel_registerName(b"objectAtIndex:\0".as_ptr()), 0)
-                };
-                let nsstring = msg!(candidate, "string");
-                let cstr: *const u8 = {
-                    let f: unsafe extern "C" fn(Id, SEL) -> *const u8 =
-                        std::mem::transmute(objc_msgSend as *const c_void);
-                    f(nsstring, sel_registerName(b"UTF8String\0".as_ptr()))
-                };
-                if !cstr.is_null() {
-                    let s = std::ffi::CStr::from_ptr(cstr as *const _).to_string_lossy();
-                    let s = s.trim();
-                    if !s.is_empty() { lines.push(s.to_string()); }
-                }
-            }
-        }
-
-        let text = lines.join("\n");
-        if text.is_empty() { None } else { Some(text) }
-    }
 }
 
 /// Embed OCR text using fastembed text embedder with the configured model.

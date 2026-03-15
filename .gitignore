@@ -19,5 +19,8 @@ src-tauri/keys/.env.keys
 **/*.gguf
 **/*.safetensors
 
+# Rust build artifacts (main crate + workspace crates)
+**/target/
+
 rust_out
 TODO.md

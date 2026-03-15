@@ -1,0 +1,12 @@
+[package]
+name = "apple-ocr"
+version = "0.1.0"
+edition = "2021"
+description = "Apple Vision framework OCR via compiled ObjC FFI"
+license = "GPL-3.0-only"
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"] }
+
+[build-dependencies]
+cc = "1"
