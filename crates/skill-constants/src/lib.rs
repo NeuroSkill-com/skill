@@ -67,11 +67,15 @@ pub const ONBOARDING_MODEL_DOWNLOAD_ORDER: [&str; 5] = [
 
 // ── Hardware ──────────────────────────────────────────────────────────────────
 
-/// Number of EEG channels in the primary pipeline (matches Muse and Ganglion).
-pub const EEG_CHANNELS: usize = 4;
+/// Maximum number of EEG channels in the DSP pipeline.
+///
+/// Set to 12 to accommodate the MW75 Neuro (12 channels).  Muse and Ganglion
+/// sessions only push data to the first 4 channels; the remaining 8 stay
+/// silent (zero / no_signal) with negligible overhead.
+pub const EEG_CHANNELS: usize = 12;
 
-/// Human-readable label for each channel index (TP9=0, AF7=1, AF8=2, TP10=3).
-pub const CHANNEL_NAMES: [&str; EEG_CHANNELS] = ["TP9", "AF7", "AF8", "TP10"];
+/// Default channel labels for 4-channel devices (Muse: TP9, AF7, AF8, TP10).
+pub const CHANNEL_NAMES: [&str; 4] = ["TP9", "AF7", "AF8", "TP10"];
 
 /// EEG hardware sample rate (Hz) — Muse and Ganglion both run at 256 Hz.
 pub const MUSE_SAMPLE_RATE: f32 = 256.0;

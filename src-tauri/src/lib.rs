@@ -432,7 +432,7 @@ impl Default for MuseStatus {
             csv_path:           None,
             sample_count:       0,
             battery:            0.0,
-            eeg:                vec![f64::NAN; 4],
+            eeg:                vec![f64::NAN; crate::constants::EEG_CHANNELS],
             paired_devices:     Vec::new(),
             bt_error:           None,
             target_name:        None,

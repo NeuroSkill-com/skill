@@ -1,7 +1,9 @@
 ### Features
 
-- **Neurable MW75 Neuro headphone support**: Added full session support for the Master & Dynamic MW75 Neuro EEG headphones (12 channels at 500 Hz). The `mw75` crate is added to `skill-devices` and re-exported. Connection follows the `mw75` CLI binary lifecycle: BLE discover → connect → activate (EEG + raw mode) → disconnect BLE → RFCOMM stream on channel 25. Headphones must first be paired via OS Bluetooth Settings (hold power button 4+ seconds). BLE scanner discovers MW75 by name and GATT service UUID. RFCOMM transport is behind the `mw75-rfcomm` feature flag (disabled by default) because linking IOBluetooth.framework on macOS adds ~2 s to process startup. Without it, EEG data arrives via BLE GATT notifications. DSP pipeline processes first 4 of 12 channels; all written to CSV. Battery, DND, band enrichment fully integrated.
+- **Neurable MW75 Neuro headphone support**: Full 12-channel EEG session at 500 Hz. BLE activation + RFCOMM data streaming (behind `mw75-rfcomm` feature flag). Electrode placement guide shows MW75 ear-cup layout with 6 electrodes per ear (FT7/T7/TP7/CP5/P7/C5 left, FT8/T8/TP8/CP6/P8/C6 right). All 12 channels render in the dashboard: signal quality dots, EEG waveforms, spectrogram, and band powers. DSP pipeline processes all active channels. Device presets for Muse (4ch), Ganglion (4ch), and MW75 (12ch) in electrode guides.
 
-### Performance
+### Refactor
 
-- **MW75 RFCOMM feature flag**: The `mw75-rfcomm` Cargo feature is opt-in to avoid linking IOBluetooth.framework on macOS, which `dyld` loads at process launch adding ~2 s startup latency. Enable with `--features mw75-rfcomm` when RFCOMM streaming is needed.
+- **Dynamic multi-channel DSP pipeline**: `EEG_CHANNELS` raised from 4 to 12 (max across all devices). `EegFilter` and `BandAnalyzer` track active channels and only wait for channels that have received data before firing GPU batches. Muse/Ganglion sessions use channels 0–3; MW75 uses all 12. Inactive channels have zero overhead.
+
+- **Dynamic channel rendering**: EegChart, BandChart, signal quality, and EEG channel values all accept dynamic channel count/labels/colors via props. MW75 renders 12 channels in a 3-column grid; Muse/Ganglion render 4 in 2 columns.

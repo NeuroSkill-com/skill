@@ -14,8 +14,11 @@
 
 // ── Hardware / signal ─────────────────────────────────────────────────────────
 
-/** Number of EEG channels in the DSP pipeline.  Mirrors `EEG_CHANNELS` in constants.rs. */
-export const EEG_CHANNELS = 4;
+/** Maximum number of EEG channels in the DSP pipeline.  Mirrors `EEG_CHANNELS` in constants.rs. */
+export const EEG_CHANNELS = 12;
+
+/** Number of EEG channels for 4-channel devices (Muse, Ganglion). */
+export const EEG_CHANNELS_4 = 4;
 
 /** Muse channel labels (default), index-matched to all per-channel arrays. */
 export const EEG_CH = ["TP9", "AF7", "AF8", "TP10"] as const;

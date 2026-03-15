@@ -29,9 +29,11 @@ the Free Software Foundation, version 3 only. -->
     quality?: [number, number, number, number] | null;
     /** Optional per-channel quality labels ["good","fair","poor","no_signal"]. */
     qualityLabels?: string[] | null;
+    /** Connected device kind for selecting the default tab. */
+    device?: string;
   }
 
-  let { quality = null, qualityLabels = null }: Props = $props();
+  let { quality = null, qualityLabels = null, device = "muse" }: Props = $props();
 
   /** Convert string quality labels to numeric values. */
   function labelToNum(label: string): number {
@@ -68,26 +70,36 @@ the Free Software Foundation, version 3 only. -->
   });
 
   // ── Electrode system tabs ──────────────────────────────────────────────────
-  type ActiveTab = "muse" | "10-20" | "10-10" | "10-5";
+  type ActiveTab = "muse" | "mw75" | "ganglion" | "10-20" | "10-10" | "10-5";
   const TABS: { id: ActiveTab; label: string; count: string }[] = [
-    { id: "muse",  label: "Muse",  count: "4" },
-    { id: "10-20", label: "10-20", count: "21" },
-    { id: "10-10", label: "10-10", count: "64" },
-    { id: "10-5",  label: "10-5",  count: "345" },
+    { id: "muse",     label: "Muse",     count: "4"  },
+    { id: "mw75",     label: "MW75",     count: "12" },
+    { id: "ganglion", label: "Ganglion", count: "4"  },
+    { id: "10-20",    label: "10-20",    count: "21" },
+    { id: "10-10",    label: "10-10",    count: "64" },
+    { id: "10-5",     label: "10-5",     count: "345" },
   ];
-  let activeTab: ActiveTab = $state("muse");
+  let activeTab: ActiveTab = $state(
+    device === "mw75" ? "mw75" : device === "ganglion" ? "ganglion" : "muse"
+  );
 
-  // Muse electrodes (TP9, AF7, AF8, TP10)
+  // Device-specific electrode sets
   const museElectrodes = allElectrodes.filter(e => e.muse);
+  const MW75_LABELS = ["FT7","T7","TP7","CP5","P7","C5","FT8","T8","TP8","CP6","P8","C6"];
+  const mw75Electrodes = allElectrodes.filter(e => MW75_LABELS.includes(e.name));
 
-  // System used for the 3D view (Muse tab still needs a valid system for raycasting)
+  // System used for the 3D view (device tabs still need a valid system for raycasting)
   let system: ElectrodeSystem = $derived(
-    activeTab === "muse" ? "10-10" : activeTab as ElectrodeSystem
+    (activeTab === "muse" || activeTab === "mw75" || activeTab === "ganglion")
+      ? "10-10" : activeTab as ElectrodeSystem
   );
 
   // Electrodes shown in the 3D view
   const electrodes3D = $derived(
-    activeTab === "muse" ? museElectrodes : getElectrodes(activeTab as ElectrodeSystem)
+    activeTab === "muse" ? museElectrodes
+    : activeTab === "mw75" ? mw75Electrodes
+    : activeTab === "ganglion" ? [] // Ganglion has configurable positions
+    : getElectrodes(activeTab as ElectrodeSystem)
   );
 
   let selectedElectrode: Electrode | null = $state(null);

@@ -57,13 +57,13 @@ mod tests {
     }
 
     #[test]
-    fn eeg_channels_is_four() {
-        assert_eq!(EEG_CHANNELS, 4);
+    fn eeg_channels_is_twelve() {
+        assert_eq!(EEG_CHANNELS, 12);
     }
 
     #[test]
-    fn channel_names_match_eeg_channels() {
-        assert_eq!(CHANNEL_NAMES.len(), EEG_CHANNELS);
+    fn channel_names_has_four_default_labels() {
+        assert_eq!(CHANNEL_NAMES.len(), 4);
     }
 
     #[test]

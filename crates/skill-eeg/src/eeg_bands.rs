@@ -337,6 +337,8 @@ pub struct BandAnalyzer {
     window: [VecDeque<f32>; EEG_CHANNELS],
     /// Per-channel queue of new unprocessed samples (drained in BAND_HOP batches).
     queued: [VecDeque<f32>; EEG_CHANNELS],
+    /// Tracks which channels have received at least one sample.
+    active: [bool; EEG_CHANNELS],
     /// Precomputed Hann window coefficients, length = BAND_WINDOW.
     hann: Vec<f32>,
     /// Σ wᵢ² — sum of squared Hann coefficients, used for PSD normalisation.
@@ -364,6 +366,7 @@ impl BandAnalyzer {
         Self {
             window:      std::array::from_fn(|_| VecDeque::new()),
             queued:      std::array::from_fn(|_| VecDeque::new()),
+            active:      [false; EEG_CHANNELS],
             hann,
             hann_sum_sq,
             latest: None,
@@ -382,12 +385,18 @@ impl BandAnalyzer {
         if channel >= EEG_CHANNELS || samples.is_empty() {
             return false;
         }
+        self.active[channel] = true;
         for &v in samples {
             self.queued[channel].push_back(v as f32);
         }
-        // Fire one or more hops while every channel has ≥ BAND_HOP queued samples.
+        // Fire one or more hops while every *active* channel has ≥ BAND_HOP
+        // queued samples.  Inactive channels (never pushed to) are skipped.
         let mut fired = false;
-        while self.queued.iter().all(|q| q.len() >= BAND_HOP) {
+        while self.active.iter().enumerate().all(|(ch, &on)| {
+            !on || self.queued[ch].len() >= BAND_HOP
+        }) {
+            // Need at least one active channel to fire.
+            if !self.active.iter().any(|&on| on) { break; }
             self.compute_snapshot();
             fired = true;
         }
@@ -402,6 +411,7 @@ impl BandAnalyzer {
             self.window[ch].clear();
             self.queued[ch].clear();
         }
+        self.active = [false; EEG_CHANNELS];
         self.latest = None;
         self.alpha_baseline = 0.0;
         self.snapshot_count = 0;
@@ -482,7 +492,8 @@ impl BandAnalyzer {
             .unwrap_or_default()
             .as_secs_f64();
 
-        let mut ch_powers: Vec<BandPowers> = Vec::with_capacity(EEG_CHANNELS);
+        let active_count = self.active.iter().filter(|&&a| a).count();
+        let mut ch_powers: Vec<BandPowers> = Vec::with_capacity(active_count);
         // Per-channel alpha peak freq accumulator and PSD-derived data for
         // cross-channel metrics computed after the loop.
         let mut ch_apf_sum   = 0.0f32;
@@ -492,6 +503,7 @@ impl BandAnalyzer {
         let mut ch_alpha_abs_sum = 0.0f32;
 
         for ch in 0..EEG_CHANNELS {
+            if !self.active[ch] { continue; }
             let (real, imag) = &spectra[ch];
 
             // One-sided raw PSD (length n_oneside = 257).
@@ -598,7 +610,8 @@ impl BandAnalyzer {
             ch_alpha_abs_sum += abs_pwr[2]; // alpha band
 
             ch_powers.push(BandPowers {
-                channel:        CHANNEL_NAMES[ch].to_string(),
+                channel:        CHANNEL_NAMES.get(ch).copied()
+                                    .unwrap_or("Ch?").to_string(),
                 delta:          abs_pwr[0],
                 theta:          abs_pwr[1],
                 alpha:          abs_pwr[2],
@@ -1175,11 +1188,21 @@ mod tests {
             .collect()
     }
 
-    /// Push identical `signal` to all 4 channels and return the latest snapshot.
+    /// Push identical `signal` to all active channels interleaved (sample by
+    /// sample, round-robin across channels) and return the latest snapshot.
     fn run(signal: &[f64]) -> BandSnapshot {
+        run_n(EEG_CHANNELS, signal)
+    }
+
+    /// Push identical `signal` to `n_ch` channels interleaved.
+    fn run_n(n_ch: usize, signal: &[f64]) -> BandSnapshot {
         let mut a = BandAnalyzer::new();
-        for ch in 0..EEG_CHANNELS {
-            a.push(ch, signal);
+        // Push one sample at a time, round-robin, so all channels accumulate
+        // equally and the batch fires with all channels populated.
+        for i in 0..signal.len() {
+            for ch in 0..n_ch {
+                a.push(ch, &signal[i..i+1]);
+            }
         }
         a.latest.expect("signal was long enough but snapshot is None")
     }
@@ -1229,16 +1252,23 @@ mod tests {
     // ── Output shape ──────────────────────────────────────────────────────────
 
     #[test]
-    fn snapshot_has_four_channels() {
+    fn snapshot_has_all_active_channels() {
         let s = run(&vec![0.0_f64; BAND_WINDOW * 2]);
+        // run() pushes to all EEG_CHANNELS, so all should be in the snapshot.
         assert_eq!(s.channels.len(), EEG_CHANNELS);
     }
 
     #[test]
     fn channel_labels_are_correct() {
         let s = run(&vec![0.0_f64; BAND_WINDOW * 2]);
-        let labels: Vec<&str> = s.channels.iter().map(|c| c.channel.as_str()).collect();
-        assert_eq!(labels, CHANNEL_NAMES);
+        // First 4 channels have CHANNEL_NAMES labels; rest get "Ch?" fallback.
+        for (i, ch) in s.channels.iter().enumerate() {
+            if i < CHANNEL_NAMES.len() {
+                assert_eq!(ch.channel, CHANNEL_NAMES[i]);
+            } else {
+                assert_eq!(ch.channel, "Ch?");
+            }
+        }
     }
 
     #[test]
@@ -1372,12 +1402,15 @@ mod tests {
         let expected = ["alpha", "beta", "theta", "delta"];
 
         let mut a = BandAnalyzer::new();
-        for (ch, sig) in signals.iter().enumerate().take(EEG_CHANNELS) {
-            a.push(ch, sig);
+        // Push interleaved so all 4 channels accumulate equally.
+        for i in 0..n {
+            for (ch, sig) in signals.iter().enumerate() {
+                a.push(ch, &sig[i..i+1]);
+            }
         }
         let s = a.latest.expect("snapshot should exist");
         let freqs = [10, 20, 6, 2];
-        for (ch, exp) in expected.iter().enumerate().take(EEG_CHANNELS) {
+        for (ch, exp) in expected.iter().enumerate() {
             assert_eq!(
                 s.channels[ch].dominant, *exp,
                 "ch{ch} ({} Hz): expected '{exp}', got '{}'",

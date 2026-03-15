@@ -28,7 +28,7 @@ the Free Software Foundation, version 3 only. -->
   import { cn } from "$lib/utils";
   import {
     CHART_H, TIME_H, WAVE_H, ROW_PAD as PAD,
-    EEG_CH, EEG_COLOR, EEG_CHANNELS as N_CH,
+    EEG_CH, EEG_COLOR, EEG_CHANNELS as N_CH, EEG_CHANNELS_4,
     N_EPOCHS, EPOCH_S, SAMPLE_RATE, EPOCH_SAMP, BUF_SIZE, EEG_RANGE_UV as EEG_RANGE,
     SPEC_N_FREQ, FILTER_HOP as HOP, SPEC_COLS,
     SPEC_CMAP_STOPS_DARK, SPEC_CMAP_STOPS_LIGHT,
@@ -38,6 +38,17 @@ the Free Software Foundation, version 3 only. -->
   } from "$lib/constants";
   import { getResolved } from "$lib/theme-store.svelte";
   import { getDpr } from "$lib/format";
+
+  // ── Props ──────────────────────────────────────────────────────────────────
+  /** Number of channels to render (defaults to 4 for Muse/Ganglion). */
+  let { numChannels = EEG_CHANNELS_4, chLabels = EEG_CH as readonly string[], chColors: propColors = EEG_COLOR as readonly string[] }: {
+    numChannels?: number;
+    chLabels?: readonly string[];
+    chColors?: readonly string[];
+  } = $props();
+
+  /** Visible channel count — clamped to [1, N_CH]. */
+  const VIS_CH = $derived(Math.max(1, Math.min(numChannels, N_CH)));
 
   // ── Spectrogram colormap LUT ─────────────────────────────────────────────────
   // 256-entry RGBA lookup table; index = Math.round(normalised_power × 255).
@@ -261,7 +272,7 @@ the Free Software Foundation, version 3 only. -->
     isDark: true,
     cBg: "#0d0d1a", cBgStrip: "#111120", cGrid: "rgba(255,255,255,0.07)",
     cBase: "rgba(255,255,255,0.12)", cLabel: "rgba(255,255,255,0.4)",
-    chColors: [...EEG_COLOR],
+    chColors: [...propColors],
     version: 0,
   };
   let themeVersion = 0;   // bumped by MutationObserver
@@ -269,6 +280,12 @@ the Free Software Foundation, version 3 only. -->
 
   function refreshThemeCache(canvas: HTMLCanvasElement) {
     const cs = getComputedStyle(canvas);
+    // Try CSS custom properties for channel colors, fall back to prop colors.
+    const colors: string[] = [];
+    for (let i = 0; i < VIS_CH; i++) {
+      const cssColor = cs.getPropertyValue(`--ch-color-${i}`).trim();
+      colors.push(cssColor || (propColors[i] ?? EEG_COLOR[i % EEG_COLOR.length]));
+    }
     themeCache = {
       isDark:    getResolved() === "dark",
       cBg:       cs.getPropertyValue("--chart-bg").trim()        || "#0d0d1a",
@@ -276,12 +293,7 @@ the Free Software Foundation, version 3 only. -->
       cGrid:     cs.getPropertyValue("--chart-grid").trim()       || "rgba(255,255,255,0.07)",
       cBase:     cs.getPropertyValue("--chart-baseline").trim()   || "rgba(255,255,255,0.12)",
       cLabel:    cs.getPropertyValue("--chart-label").trim()      || "rgba(255,255,255,0.4)",
-      chColors: [
-        cs.getPropertyValue("--ch-color-0").trim() || EEG_COLOR[0],
-        cs.getPropertyValue("--ch-color-1").trim() || EEG_COLOR[1],
-        cs.getPropertyValue("--ch-color-2").trim() || EEG_COLOR[2],
-        cs.getPropertyValue("--ch-color-3").trim() || EEG_COLOR[3],
-      ],
+      chColors: colors,
       version: themeVersion,
     };
     frameThemeVersion = themeVersion;
@@ -329,7 +341,7 @@ the Free Software Foundation, version 3 only. -->
 
       const W = cssW;
       const H = CHART_H;
-      const ROW_H = WAVE_H / N_CH;   // ≈ 38.5 px
+      const ROW_H = WAVE_H / VIS_CH;   // ≈ 38.5 px
 
       // ── EWMA write head ──────────────────────────────────────────────────
       const dt    = lastFrameNow < 0 ? 0 : now - lastFrameNow;
@@ -381,11 +393,11 @@ the Free Software Foundation, version 3 only. -->
         ctx.imageSmoothingQuality = "low";
         ctx.save();
 
-        const ROW_H_F = WAVE_H / N_CH;
+        const ROW_H_F = WAVE_H / VIS_CH;
         const filled  = Math.min(specWriteCol, SPEC_COLS);
         const tapeX   = specWriteCol % SPEC_COLS; // oldest column in the ring
 
-        for (let ch = 0; ch < N_CH; ch++) {
+        for (let ch = 0; ch < VIS_CH; ch++) {
           const rowY = ch * ROW_H_F;
           const tape = specTapes[ch];
 
@@ -457,7 +469,7 @@ the Free Software Foundation, version 3 only. -->
       }
 
       // ── Channel rows ─────────────────────────────────────────────────────
-      for (let ch = 0; ch < N_CH; ch++) {
+      for (let ch = 0; ch < VIS_CH; ch++) {
         const y0  = ch * ROW_H;
         const mid = y0 + ROW_H / 2;
 
@@ -490,10 +502,10 @@ the Free Software Foundation, version 3 only. -->
           ctx.lineWidth   = 3;
           ctx.strokeStyle = "rgba(255,255,255,0.85)";
           ctx.lineJoin    = "round";
-          ctx.strokeText(EEG_CH[ch], 6, y0 + 13);
+          ctx.strokeText(chLabels[ch] ?? `Ch${ch+1}`, 6, y0 + 13);
         }
         ctx.fillStyle = chColors[ch];
-        ctx.fillText(EEG_CH[ch], 6, y0 + 13);
+        ctx.fillText(chLabels[ch] ?? `Ch${ch+1}`, 6, y0 + 13);
 
         // ── Waveform — min-max decimation (O(W) path ops, no allocations) ──
         //

@@ -669,7 +669,7 @@ the Free Software Foundation, version 3 only. -->
           {t("onboarding.fitBody")}
         </p>
 
-        <ElectrodeGuide qualityLabels={status.channel_quality} />
+        <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} />
 
         {#if !isConnected}
           <p class="text-[0.62rem] text-amber-600 dark:text-amber-400">⚠ {t("onboarding.fitNeedsBt")}</p>

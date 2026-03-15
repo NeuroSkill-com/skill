@@ -1119,7 +1119,7 @@ the Free Software Foundation, version 3 only. -->
 
         {#if showElectrodes}
           <div id="electrode-guide" class="-mt-0.5">
-            <ElectrodeGuide qualityLabels={status.channel_quality} />
+            <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} />
           </div>
         {/if}
 
@@ -1442,7 +1442,7 @@ the Free Software Foundation, version 3 only. -->
             <span class="text-[0.5rem] text-green-500 live-blink">●</span>
           {/if}
         </div>
-        <BandChart bind:this={bandChartEl} />
+        <BandChart bind:this={bandChartEl} chNames={chLabels} chColors={chColors} />
       </div>
 
       <!-- ════ EEG Waveforms (always in DOM) ════════════════════════════════ -->
@@ -1455,7 +1455,7 @@ the Free Software Foundation, version 3 only. -->
             <span class="text-[0.5rem] text-red-500 live-blink">●</span>
           {/if}
         </div>
-        <EegChart bind:this={chartEl} />
+        <EegChart bind:this={chartEl} numChannels={chLabels.length} chLabels={chLabels} chColors={chColors} />
       </div>
 
     </CardContent>

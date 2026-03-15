@@ -90,16 +90,22 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
   import {
-    EEG_CH as CH_NAMES, EEG_COLOR as CH_COLORS,
+    EEG_CH, EEG_COLOR,
     BANDS, NUM_BANDS as NBAND,
     BAND_TILE_H   as TILE_H,
     BAND_TILE_GAP as TILE_GAP,
-    BAND_CANVAS_H as CANVAS_H,
     BAND_TILE_ML  as ML,
     BAND_TILE_MR  as MR,
     BAND_TAU_MS   as TAU_MS,
   } from "$lib/constants";
   import { animatedCanvas } from "$lib/use-canvas";
+
+  let { chNames = EEG_CH as readonly string[], chColors = EEG_COLOR as readonly string[] }: {
+    chNames?: readonly string[];
+    chColors?: readonly string[];
+  } = $props();
+
+  const CANVAS_H = $derived(chNames.length * TILE_H + (chNames.length - 1) * TILE_GAP);
 
   // ── Band metadata + canvas layout ─────────────────────────────────────────
   // Each channel gets one "tile" — a full-width rectangle whose background is
@@ -121,10 +127,11 @@ the Free Software Foundation, version 3 only. -->
   // ── Canvas state ───────────────────────────────────────────────────────────
 
   // Smoothed display values — [channel][band] relative powers.
-  const displayed = Array.from({ length: 4 }, () =>
+  const MAX_CH = 12;
+  const displayed = Array.from({ length: MAX_CH }, () =>
     new Float64Array(NBAND).fill(1 / NBAND)
   );
-  const domIdx = new Int8Array(4).fill(2); // 2 = alpha, initial default
+  const domIdx = new Int8Array(MAX_CH).fill(2); // 2 = alpha, initial default
 
   let lastNow = -1;
 
@@ -139,7 +146,7 @@ the Free Software Foundation, version 3 only. -->
 
     // ── Interpolate toward target ─────────────────────────────────────────
     if (target) {
-      for (let ci = 0; ci < 4; ci++) {
+      for (let ci = 0; ci < target.channels.length; ci++) {
         const ch = target.channels[ci];
         if (!ch) continue;
         const vals = [
@@ -157,7 +164,8 @@ the Free Software Foundation, version 3 only. -->
 
     ctx.clearRect(0, 0, W, CANVAS_H);
 
-    for (let ci = 0; ci < 4; ci++) {
+    const numCh = target ? target.channels.length : 4;
+    for (let ci = 0; ci < numCh; ci++) {
       const ty = ci * (TILE_H + TILE_GAP); // top-y of this tile
 
       // Normalise so proportions always sum to 1 even during warmup.
@@ -196,12 +204,12 @@ the Free Software Foundation, version 3 only. -->
 
       // Channel label — top-left, coloured with the channel accent.
       ctx.font         = `bold 9px ui-monospace, "JetBrains Mono", monospace`;
-      const chColor = CH_COLORS[ci];
+      const chColor = chColors[ci % chColors.length];
       ctx.fillStyle    = chColor;
       ctx.textAlign    = "left";
       ctx.textBaseline = "top";
       ctx.globalAlpha  = 1;
-      ctx.fillText(CH_NAMES[ci], ML, ty + 9);
+      ctx.fillText(chNames[ci] ?? `Ch${ci+1}`, ML, ty + 9);
 
       // Dominant band percentage — top-right, large bold white.
       ctx.font         = `bold 20px ui-sans-serif, system-ui, sans-serif`;
