@@ -19,6 +19,7 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Permission status ───────────────────────────────────────────────────────
   let accessibilityGranted = $state<boolean | null>(null);
+  let screenRecordingGranted = $state<boolean | null>(null);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
 
   async function refreshAccessibility() {
@@ -29,10 +30,22 @@ the Free Software Foundation, version 3 only. -->
     }
   }
 
+  async function refreshScreenRecording() {
+    try {
+      screenRecordingGranted = await invoke<boolean>("check_screen_recording_permission");
+    } catch {
+      screenRecordingGranted = null;
+    }
+  }
+
   onMount(() => {
     refreshAccessibility();
+    refreshScreenRecording();
     // Poll every 3 s so the status updates after the user grants it in System Settings
-    pollTimer = setInterval(refreshAccessibility, 3000);
+    pollTimer = setInterval(() => {
+      refreshAccessibility();
+      refreshScreenRecording();
+    }, 3000);
   });
   onDestroy(() => { if (pollTimer) clearInterval(pollTimer); });
 
@@ -44,6 +57,9 @@ the Free Software Foundation, version 3 only. -->
   }
   async function openNotificationsSettings() {
     await invoke("open_notifications_settings");
+  }
+  async function openScreenRecordingSettings() {
+    await invoke("open_screen_recording_settings");
   }
 
   // ── Status badge helper ─────────────────────────────────────────────────────
@@ -77,6 +93,12 @@ the Free Software Foundation, version 3 only. -->
   const accessStatus = $derived<Status>(
     accessibilityGranted === null ? "unknown"
       : accessibilityGranted       ? "granted"
+      : "denied"
+  );
+
+  const screenRecordingStatus = $derived<Status>(
+    screenRecordingGranted === null ? "unknown"
+      : screenRecordingGranted       ? "granted"
       : "denied"
   );
 
@@ -158,6 +180,73 @@ the Free Software Foundation, version 3 only. -->
                   class="text-[0.7rem] h-7"
                   onclick={openAccessibilitySettings}>
             {t("perm.openAccessibilitySettings")}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 class="w-3 h-3 ml-1 shrink-0">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+              <polyline points="15 3 21 3 21 9"/>
+              <line x1="10" y1="14" x2="21" y2="3"/>
+            </svg>
+          </Button>
+        </div>
+
+      </CardContent>
+    </Card>
+  </section>
+  {/if}
+
+  <!-- ── Screen Recording ────────────────────────────────────────────────── -->
+  {#if isMac}
+  <section class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      {t("perm.screenRecording")}
+    </span>
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="px-4 py-3.5 flex flex-col gap-3">
+
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🖥️</span>
+            <span class="text-[0.8rem] font-semibold text-foreground">{t("perm.screenRecording")}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold
+                         {statusClass(screenRecordingStatus)}">
+              <span class="w-1.5 h-1.5 rounded-full {statusDot(screenRecordingStatus)}"></span>
+              {statusLabel(screenRecordingStatus)}
+            </span>
+            <Button size="sm" variant="outline"
+                    class="h-6 px-2 text-[0.65rem]"
+                    onclick={refreshScreenRecording}>
+              {t("common.retry")}
+            </Button>
+          </div>
+        </div>
+
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
+          {t("perm.screenRecordingDesc")}
+        </p>
+
+        {#if screenRecordingStatus === "denied"}
+        <div class="rounded-lg bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 px-3 py-2.5
+                    text-[0.68rem] text-red-800 dark:text-red-300 leading-relaxed flex flex-col gap-1">
+          <strong>{t("perm.howToGrant")}</strong>
+          <ol class="flex flex-col gap-0.5 list-decimal list-inside">
+            <li>{t("perm.screenRecordingStep1")}</li>
+            <li>{t("perm.screenRecordingStep2")}</li>
+            <li>{t("perm.screenRecordingStep3")}</li>
+          </ol>
+        </div>
+        {:else if screenRecordingStatus === "granted"}
+        <p class="text-[0.67rem] text-green-700 dark:text-green-400 leading-relaxed">
+          {t("perm.screenRecordingOk")}
+        </p>
+        {/if}
+
+        <div class="flex items-center gap-2">
+          <Button size="sm" variant="outline"
+                  class="text-[0.7rem] h-7"
+                  onclick={openScreenRecordingSettings}>
+            {t("perm.openScreenRecordingSettings")}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                  class="w-3 h-3 ml-1 shrink-0">
               <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
@@ -281,6 +370,7 @@ the Free Software Foundation, version 3 only. -->
               [t("perm.matrixKeyboardMouse"),     "🔑 " + t("perm.matrixAccessibility"), "✅ libxtst", "✅ " + t("perm.matrixNone")],
               [t("perm.matrixActiveWindow"),      "✅ " + t("perm.matrixNone"), "✅ xdotool", "✅ " + t("perm.matrixNone")],
               [t("perm.matrixNotifications"),     "⚙️ " + t("perm.matrixOsPrompt"), "✅ " + t("perm.matrixNone"), "⚙️ " + t("perm.matrixOsPrompt")],
+              [t("perm.matrixScreenRecording"),  "🔑 " + t("perm.matrixScreenRecordingReq"), "✅ " + t("perm.matrixNone"), "✅ " + t("perm.matrixNone")],
             ] as [feat, mac, linux, win]}
               <tr class="divide-x divide-border dark:divide-white/[0.04]">
                 <td class="px-3 py-2 text-foreground/80">{feat}</td>
@@ -313,6 +403,7 @@ the Free Software Foundation, version 3 only. -->
           <p>🔵 <strong class="text-foreground">{t("perm.whyBluetooth")}</strong> — {t("perm.whyBluetoothDesc")}</p>
           <p>⌨️ <strong class="text-foreground">{t("perm.whyAccessibility")}</strong> — {t("perm.whyAccessibilityDesc")}</p>
           <p>🔔 <strong class="text-foreground">{t("perm.whyNotifications")}</strong> — {t("perm.whyNotificationsDesc")}</p>
+          <p>🖥️ <strong class="text-foreground">{t("perm.whyScreenRecording")}</strong> — {t("perm.whyScreenRecordingDesc")}</p>
           <p class="pt-1 text-[0.62rem]">{t("perm.privacyNote")}</p>
         </div>
       </CardContent>

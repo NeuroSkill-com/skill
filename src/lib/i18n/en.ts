@@ -2464,6 +2464,18 @@ const en: Record<string, string> = {
   "perm.whyNotificationsDesc":        "To notify you when you hit your daily recording goal and when updates are ready.",
   "perm.privacyNote":                 "All data is stored locally on your device and is never transmitted to any server. You can disable any feature in Settings → Activity Tracking.",
 
+  "perm.screenRecording":              "Screen Recording",
+  "perm.screenRecordingDesc":          "Required to capture other application windows for the screenshot embedding system. macOS redacts window content without this permission.",
+  "perm.screenRecordingOk":            "Screen recording permission is granted. Screenshot capture will work correctly.",
+  "perm.screenRecordingStep1":         "Open System Settings → Privacy & Security → Screen & System Audio Recording",
+  "perm.screenRecordingStep2":         "Find NeuroSkill™ in the list and enable it",
+  "perm.screenRecordingStep3":         "You may need to quit and relaunch the app for the change to take effect",
+  "perm.openScreenRecordingSettings":  "Open Screen Recording Settings",
+  "perm.whyScreenRecording":           "Screen Recording",
+  "perm.whyScreenRecordingDesc":       "To capture the active window for visual-similarity search and cross-modal EEG correlation. Only opt-in screenshots are stored — never continuous recording.",
+  "perm.matrixScreenRecording":        "Screenshot capture",
+  "perm.matrixScreenRecordingReq":     "Screen Recording required",
+
   // ── LLM tab ───────────────────────────────────────────────────────────────
   "settingsTabs.llm":                   "LLM",
 
@@ -2897,6 +2909,10 @@ const en: Record<string, string> = {
 
   "screenshots.privacyNote":                     "All screenshots are stored locally only and never transmitted. Opt-in, session-gated by default.",
   "screenshots.storagePath":                     "Storage: ~/.skill/screenshots/",
+  "screenshots.permissionRequired":              "Screen Recording Permission Required",
+  "screenshots.permissionDesc":                  "macOS requires Screen & System Audio Recording permission to capture other application windows. Without it, screenshots may be blank or only show your own app.",
+  "screenshots.permissionGranted":               "Screen recording permission granted.",
+  "screenshots.openPermissionSettings":          "Open Screen Recording Settings",
 
   "screenshots.stats":                           "Statistics",
   "screenshots.totalCount":                      "Total screenshots",

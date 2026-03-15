@@ -61,41 +61,69 @@ fn capture_macos() -> Option<CapturedImage> {
     use std::process::Command;
 
     let tmp = std::env::temp_dir().join("skill_screenshot.png");
+    let _ = std::fs::remove_file(&tmp); // clean slate
 
-    // Get the frontmost window ID via CoreGraphics FFI — completely silent,
-    // no cursor change, no user interaction.  Falls back to full-screen
-    // capture (also silent via `screencapture -x`) if the window ID cannot
-    // be determined.
+    // ── Attempt 1: capture the specific frontmost window by CGWindowID.
+    // Completely silent — no cursor change, no user interaction.
     let window_id = macos_frontmost_window_id();
-
-    let status = if let Some(wid) = window_id {
-        // Capture the specific window by ID — silent, non-interactive.
-        // -x = no sound, -l <wid> = capture window by CGWindowID
-        Command::new("screencapture")
+    if let Some(wid) = window_id {
+        let ok = Command::new("screencapture")
             .args(["-x", "-t", "png", "-l"])
             .arg(wid.to_string())
             .arg(&tmp)
             .status()
-            .ok()?
-    } else {
-        // Fallback: capture the full screen silently.
-        // -x = no sound, no user interaction.
-        Command::new("screencapture")
-            .args(["-x", "-t", "png"])
-            .arg(&tmp)
-            .status()
-            .ok()?
-    };
-    if !status.success() { return None; }
+            .ok()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if ok && tmp.exists() {
+            if let Some(img) = read_captured_image(&tmp) { return Some(img); }
+        }
+    }
 
-    let raw_bytes = std::fs::read(&tmp).ok()?;
+    // ── Attempt 2: full-screen capture via screencapture (silent).
     let _ = std::fs::remove_file(&tmp);
+    let ok = Command::new("screencapture")
+        .args(["-x", "-t", "png"])
+        .arg(&tmp)
+        .status()
+        .ok()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if ok && tmp.exists() {
+        if let Some(img) = read_captured_image(&tmp) { return Some(img); }
+    }
 
+    // ── Attempt 3: osascript fallback — full-screen screenshot via
+    // AppleScript.  Works on older macOS or when screencapture is
+    // restricted but osascript retains screen access.
+    let _ = std::fs::remove_file(&tmp);
+    let script = format!(
+        "do shell script \"screencapture -x -t png {}\"",
+        tmp.to_string_lossy()
+    );
+    let ok = Command::new("osascript")
+        .args(["-e", &script])
+        .status()
+        .ok()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if ok && tmp.exists() {
+        if let Some(img) = read_captured_image(&tmp) { return Some(img); }
+    }
+
+    None
+}
+
+/// Read a captured PNG from disk, decode it, clean up the temp file.
+#[cfg(target_os = "macos")]
+fn read_captured_image(path: &std::path::Path) -> Option<CapturedImage> {
+    let raw_bytes = std::fs::read(path).ok()?;
+    let _ = std::fs::remove_file(path);
+    if raw_bytes.is_empty() { return None; }
     let img = ImageReader::new(Cursor::new(&raw_bytes))
         .with_guessed_format().ok()?
         .decode().ok()?;
     let (w, h) = img.dimensions();
-
     Some(CapturedImage { raw_bytes, width: w, height: h })
 }
 
