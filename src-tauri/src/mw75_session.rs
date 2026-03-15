@@ -181,17 +181,47 @@ pub(crate) async fn run_mw75_session(
         };
         app_log!(app, "bluetooth", "[mw75] RFCOMM connected — streaming EEG at {MW75_SAMPLE_RATE} Hz");
 
-        // Drain any garbled EEG events from BLE notifications that arrived
-        // during the BLE→RFCOMM transition.  BLE GATT notifications from
-        // non-EEG characteristics can be misinterpreted as EEG packets with
-        // wrong channel counts or extreme values.
+        // Drain ALL stale BLE events (Connected, Eeg, Disconnected, etc.)
+        // that arrived during the BLE→RFCOMM transition.  The BLE Connected
+        // event is now stale (RFCOMM is the active transport), and BLE GATT
+        // notifications from non-EEG characteristics can be misinterpreted
+        // as garbled EEG packets.
         let mut drained = 0u32;
-        while let Ok(ev) = rx.try_recv() {
-            if matches!(ev, Mw75Event::Eeg(_)) { drained += 1; }
-        }
+        while rx.try_recv().is_ok() { drained += 1; }
         if drained > 0 {
-            app_log!(app, "bluetooth", "[mw75] drained {drained} stale BLE EEG events");
+            app_log!(app, "bluetooth", "[mw75] drained {drained} stale BLE events");
         }
+
+        // Set status to "connected" now that RFCOMM is active.
+        // (The BLE Connected event was drained above.)
+        {
+            let dev_name = handle.device_name().to_string();
+            let dev_id = handle.peripheral_id();
+            let sr = app.state::<Mutex<Box<AppState>>>();
+            let mut s = sr.lock_or_recover();
+            s.status.state       = "connected".into();
+            s.status.device_name = Some(dev_name.clone());
+            s.status.device_id   = Some(dev_id.clone());
+            s.status.bt_error    = None;
+            s.status.target_name = None;
+            s.retry_attempt               = 0;
+            s.status.retry_attempt        = 0;
+            s.status.retry_countdown_secs = 0;
+        }
+        upsert_paired(&app, &handle.peripheral_id(), handle.device_name());
+        refresh_tray(&app);
+        emit_status(&app);
+        crate::emit_devices(&app);
+
+        let connect_payload = serde_json::json!({
+            "device_name": handle.device_name(),
+            "device_id":   handle.peripheral_id(),
+            "timestamp":   unix_secs(),
+        });
+        let _ = app.emit("device-connected", &connect_payload);
+        app.state::<WsBroadcaster>().send("device-connected", &connect_payload);
+        send_toast(&app, ToastLevel::Success, "Connected",
+            &format!("{} is now streaming EEG data.", handle.device_name()));
 
         Some(rfcomm)
     };
