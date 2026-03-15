@@ -1,0 +1,16 @@
+[package]
+name = "skill-data"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Pure data/utility modules for NeuroSkill — extracted workspace crate"
+
+[dependencies]
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite    = { version = "0.37", features = ["bundled"] }
+llmfit-core = "0.6.6"
+sysinfo     = "0.38"
+
+[dev-dependencies]
+tempfile = "3"
