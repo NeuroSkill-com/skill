@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Build
+
+- **sccache + mold linker for faster builds**: configured `sccache` as the `rustc-wrapper` in `.cargo/config.toml` to cache both Rust and C/C++ compilation outputs (llama-cpp-sys, libsqlite3-sys, onig_sys, etc.) across clean builds. Added `mold` linker configuration for `aarch64-unknown-linux-gnu` and `x86_64-unknown-linux-gnu` targets via `clang` + `-fuse-ld=mold` for significantly faster linking. Added missing `protocol-asset` feature to the `tauri` dependency to match the `assetProtocol` allowlist in `tauri.conf.json`. Clean release rebuild time reduced from ~6 minutes to ~2m45s (54% faster).
+
 ### Documentation
 
 - **README badges**: added Discord community invite badge, Homebrew cask install badge, and one-click download buttons for macOS (Apple Silicon DMG), Windows (x86_64 EXE), and Linux (x86_64 AppImage) at the top of README.md — all download links point to the latest GitHub release.

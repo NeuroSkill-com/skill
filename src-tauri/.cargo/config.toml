@@ -39,6 +39,7 @@
 
 [build]
 # target intentionally omitted — defaults to the host triple
+rustc-wrapper = "sccache"
 
 # ── espeak-ng static library ──────────────────────────────────────────────────
 #
@@ -99,6 +100,19 @@ CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 # NOTE: [target.aarch64-apple-darwin] and [target.x86_64-apple-darwin]
 # sections are intentionally absent here because macOS needs no target-wide
 # rustflags.  The stack size is handled exclusively by build.rs.
+
+# ── Linux: use mold linker for faster linking ─────────────────────────────────
+#
+# mold is a drop-in replacement for ld/lld that is significantly faster for
+# large binaries.  The -fuse-ld=mold flag tells clang to delegate to mold.
+# Install: apt install mold (or cargo install mold)
+[target.aarch64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 # ── Windows MSVC: increase main-thread stack size ────────────────────────────
 #
