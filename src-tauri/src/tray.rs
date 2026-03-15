@@ -5,6 +5,9 @@
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
 //! System tray icon, tooltip and context menu.
+//!
+//! Pure helpers (progress-ring overlay, shortcut formatting, bucketing) live
+//! in the `skill-tray` crate.  This module wires them to the Tauri runtime.
 
 use std::sync::Mutex;
 use crate::MutexExt;
@@ -15,6 +18,12 @@ use tauri::{
 };
 
 use crate::{AppState, MuseStatus};
+
+// ── Re-exports from skill-tray ────────────────────────────────────────────────
+pub use skill_tray::{
+    progress_bucket, progress_percent,
+    ellipsize_middle, with_shortcut,
+};
 
 // ── Tray-update deduplication ─────────────────────────────────────────────────
 //
@@ -36,10 +45,7 @@ static LAST_ICON_STATE: Mutex<String> = Mutex::new(String::new());
 /// synchronously.
 static LAST_MENU_REBUILD_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Minimum interval between menu rebuilds (ms).  Prevents multiple rapid
-/// state changes (disconnect → scan → disconnect) from blocking the main
-/// thread with repeated native menu teardown/rebuild cycles.
-const MENU_REBUILD_MIN_MS: u64 = 300;
+use skill_tray::MENU_REBUILD_MIN_MS;
 
 /// Fingerprint of the last menu content pushed to the OS tray.
 /// Encodes every piece of data that `build_menu` uses so a rebuild is
@@ -60,33 +66,6 @@ struct TrayDownloadItem {
     filename:   String,
     progress:   f32,
     status_msg: Option<String>,
-}
-
-fn progress_bucket(progress: f32) -> u8 {
-    ((progress.clamp(0.0, 1.0) * 20.0).round() as u8).min(20)
-}
-
-fn progress_percent(progress: f32) -> u8 {
-    ((progress.clamp(0.0, 1.0) * 100.0).round() as u8).min(100)
-}
-
-#[cfg(feature = "llm")]
-fn ellipsize_middle(text: &str, max_chars: usize) -> String {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.len() <= max_chars {
-        return text.to_string();
-    }
-    if max_chars <= 3 {
-        return "...".to_string();
-    }
-
-    let head = (max_chars - 3) / 2;
-    let tail = max_chars - 3 - head;
-    format!(
-        "{}...{}",
-        chars[..head].iter().collect::<String>(),
-        chars[chars.len() - tail..].iter().collect::<String>(),
-    )
 }
 
 #[cfg(feature = "llm")]
@@ -214,23 +193,7 @@ fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
     format!("{}|{}", structure_key(st, app), status_key(st))
 }
 
-fn shortcut_suffix(shortcut: &str) -> String {
-    if shortcut.trim().is_empty() {
-        return String::new();
-    }
-
-    let mut s = shortcut.trim().replace("CmdOrCtrl", if cfg!(target_os = "macos") { "Cmd" } else { "Ctrl" });
-    s = s.replace("Command", "Cmd");
-    s = s.replace("Meta", "Cmd");
-    s = s.replace("Option", "Alt");
-    s = s.replace("Plus", "+");
-    s = s.replace("Arrow", "");
-    format!("  ({s})")
-}
-
-fn with_shortcut(label: &str, shortcut: &str) -> String {
-    format!("{label}{}", shortcut_suffix(shortcut))
-}
+// shortcut_suffix, with_shortcut — re-exported from skill_tray above.
 
 // ── Embedded icons ────────────────────────────────────────────────────────────
 
@@ -247,107 +210,7 @@ fn icon_bt_off()                -> Image<'static> { Image::from_bytes(ICON_BT_OF
 fn overlay_progress_bar(base: Image<'static>, progress: f32) -> Image<'static> {
     let width = base.width();
     let height = base.height();
-    let mut rgba = base.rgba().to_vec();
-    let progress = progress.clamp(0.0, 1.0);
-
-    if width < 8 || height < 8 {
-        return base;
-    }
-
-    let cx = (width as f32 - 1.0) * 0.5;
-    let cy = (height as f32 - 1.0) * 0.5;
-    let outer = (width.min(height) as f32 * 0.5) - 0.75;
-    let thickness = ((width.min(height) as f32) * 0.24).clamp(2.0, 5.0);
-    let inner = (outer - thickness).max(0.0);
-    let start_angle = -std::f32::consts::FRAC_PI_2;
-    let end_angle = start_angle + progress * std::f32::consts::TAU;
-
-    fn blend(rgba: &mut [u8], idx: usize, color: [u8; 4]) {
-        let alpha = color[3] as u16;
-        let inv = 255u16.saturating_sub(alpha);
-        rgba[idx] = (((rgba[idx] as u16 * inv) + (color[0] as u16 * alpha)) / 255) as u8;
-        rgba[idx + 1] = (((rgba[idx + 1] as u16 * inv) + (color[1] as u16 * alpha)) / 255) as u8;
-        rgba[idx + 2] = (((rgba[idx + 2] as u16 * inv) + (color[2] as u16 * alpha)) / 255) as u8;
-        rgba[idx + 3] = rgba[idx + 3].max(color[3]);
-    }
-
-    fn angle_in_arc(angle: f32, start: f32, end: f32) -> bool {
-        if end >= std::f32::consts::TAU + start {
-            return true;
-        }
-        if end <= start {
-            return false;
-        }
-        if angle >= start {
-            angle <= end
-        } else {
-            angle + std::f32::consts::TAU <= end
-        }
-    }
-
-    // Draw a high-contrast circular progress ring around the icon:
-    // dark track + bright filled arc, clockwise from top.
-    for y in 0..height {
-        for x in 0..width {
-            let dx = x as f32 - cx;
-            let dy = y as f32 - cy;
-            let dist = (dx * dx + dy * dy).sqrt();
-            if dist < inner || dist > outer {
-                continue;
-            }
-
-            let mut angle = dy.atan2(dx);
-            if angle < start_angle {
-                angle += std::f32::consts::TAU;
-            }
-            let in_progress_arc = angle_in_arc(angle, start_angle, end_angle);
-
-            let idx = ((y * width + x) * 4) as usize;
-
-            // Ring track.
-            blend(&mut rgba, idx, [12, 16, 22, 220]);
-
-            // Bright progress arc.
-            if in_progress_arc && progress > 0.0 {
-                blend(&mut rgba, idx, [255, 255, 255, 245]);
-            }
-
-            // Outer halo for prominence.
-            if dist > outer - 0.8 {
-                if in_progress_arc && progress > 0.0 {
-                    blend(&mut rgba, idx, [255, 255, 255, 210]);
-                } else {
-                    blend(&mut rgba, idx, [0, 0, 0, 190]);
-                }
-            }
-        }
-    }
-
-    // Subtle dim of the unfinished interior sector for extra visibility.
-    if progress < 1.0 {
-        let interior_radius = (inner - 0.8).max(0.0);
-        for y in 0..height {
-            for x in 0..width {
-                let dx = x as f32 - cx;
-                let dy = y as f32 - cy;
-                let dist = (dx * dx + dy * dy).sqrt();
-                if dist > interior_radius {
-                    continue;
-                }
-                let mut angle = dy.atan2(dx);
-                if angle < start_angle {
-                    angle += std::f32::consts::TAU;
-                }
-                if !angle_in_arc(angle, start_angle, end_angle) {
-                    let idx = ((y * width + x) * 4) as usize;
-                    rgba[idx] = ((rgba[idx] as u16 * 72) / 100) as u8;
-                    rgba[idx + 1] = ((rgba[idx + 1] as u16 * 72) / 100) as u8;
-                    rgba[idx + 2] = ((rgba[idx + 2] as u16 * 72) / 100) as u8;
-                }
-            }
-        }
-    }
-
+    let rgba = skill_tray::overlay_progress_bar(base.rgba(), width, height, progress);
     Image::new_owned(rgba, width, height)
 }
 

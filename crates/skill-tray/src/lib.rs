@@ -1,0 +1,262 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 NeuroSkill.com
+//! Pure-logic helpers for the system tray: progress-ring icon overlay,
+//! shortcut label formatting, and download-progress bucketing.
+//!
+//! Everything in this crate is platform-agnostic and has **zero** Tauri
+//! dependencies.  The Tauri-specific menu building, icon loading, and
+//! refresh logic remain in `src-tauri/src/tray.rs`.
+
+// ── Progress helpers ──────────────────────────────────────────────────────────
+
+/// Quantise a 0.0–1.0 progress value into 5 %-point buckets (0..=20).
+/// Used as a deduplication key so the tray icon is only re-rendered when
+/// the visible progress ring actually changes.
+pub fn progress_bucket(progress: f32) -> u8 {
+    ((progress.clamp(0.0, 1.0) * 20.0).round() as u8).min(20)
+}
+
+/// Convert a 0.0–1.0 progress value into a display percentage (0..=100).
+pub fn progress_percent(progress: f32) -> u8 {
+    ((progress.clamp(0.0, 1.0) * 100.0).round() as u8).min(100)
+}
+
+// ── Text helpers ──────────────────────────────────────────────────────────────
+
+/// Truncate `text` in the middle to at most `max_chars`, inserting `...`.
+///
+/// ```
+/// # use skill_tray::ellipsize_middle;
+/// assert_eq!(ellipsize_middle("abcdefghij", 7), "ab...ij");
+/// assert_eq!(ellipsize_middle("short", 10), "short");
+/// ```
+pub fn ellipsize_middle(text: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max_chars {
+        return text.to_string();
+    }
+    if max_chars <= 3 {
+        return "...".to_string();
+    }
+
+    let head = (max_chars - 3) / 2;
+    let tail = max_chars - 3 - head;
+    format!(
+        "{}...{}",
+        chars[..head].iter().collect::<String>(),
+        chars[chars.len() - tail..].iter().collect::<String>(),
+    )
+}
+
+/// Format a keyboard shortcut string for display in a menu label.
+///
+/// Returns `"  (Cmd+Shift+O)"` on macOS, `"  (Ctrl+Shift+O)"` on other
+/// platforms, or an empty string if `shortcut` is blank.
+pub fn shortcut_suffix(shortcut: &str) -> String {
+    if shortcut.trim().is_empty() {
+        return String::new();
+    }
+
+    let mut s = shortcut.trim().replace(
+        "CmdOrCtrl",
+        if cfg!(target_os = "macos") { "Cmd" } else { "Ctrl" },
+    );
+    s = s.replace("Command", "Cmd");
+    s = s.replace("Meta", "Cmd");
+    s = s.replace("Option", "Alt");
+    s = s.replace("Plus", "+");
+    s = s.replace("Arrow", "");
+    format!("  ({s})")
+}
+
+/// Append the formatted shortcut suffix to a menu label.
+///
+/// ```
+/// # use skill_tray::with_shortcut;
+/// let label = with_shortcut("Open", "CmdOrCtrl+O");
+/// // On macOS: "Open  (Cmd+O)"
+/// // On Linux: "Open  (Ctrl+O)"
+/// ```
+pub fn with_shortcut(label: &str, shortcut: &str) -> String {
+    format!("{label}{}", shortcut_suffix(shortcut))
+}
+
+// ── Icon progress-ring overlay ────────────────────────────────────────────────
+
+/// Render a circular progress ring around an RGBA icon image.
+///
+/// `base_rgba` is the raw RGBA pixel buffer; `width` / `height` are the
+/// image dimensions.  `progress` is clamped to `0.0..=1.0`.
+///
+/// Returns a new owned RGBA buffer with the ring composited on top.
+/// The caller is responsible for wrapping it in the platform's `Image` type.
+pub fn overlay_progress_bar(
+    base_rgba: &[u8],
+    width: u32,
+    height: u32,
+    progress: f32,
+) -> Vec<u8> {
+    let mut rgba = base_rgba.to_vec();
+    let progress = progress.clamp(0.0, 1.0);
+
+    if width < 8 || height < 8 {
+        return rgba;
+    }
+
+    let cx = (width as f32 - 1.0) * 0.5;
+    let cy = (height as f32 - 1.0) * 0.5;
+    let outer = (width.min(height) as f32 * 0.5) - 0.75;
+    let thickness = ((width.min(height) as f32) * 0.24).clamp(2.0, 5.0);
+    let inner = (outer - thickness).max(0.0);
+    let start_angle = -std::f32::consts::FRAC_PI_2;
+    let end_angle = start_angle + progress * std::f32::consts::TAU;
+
+    fn blend(rgba: &mut [u8], idx: usize, color: [u8; 4]) {
+        let alpha = color[3] as u16;
+        let inv = 255u16.saturating_sub(alpha);
+        rgba[idx]     = (((rgba[idx]     as u16 * inv) + (color[0] as u16 * alpha)) / 255) as u8;
+        rgba[idx + 1] = (((rgba[idx + 1] as u16 * inv) + (color[1] as u16 * alpha)) / 255) as u8;
+        rgba[idx + 2] = (((rgba[idx + 2] as u16 * inv) + (color[2] as u16 * alpha)) / 255) as u8;
+        rgba[idx + 3] = rgba[idx + 3].max(color[3]);
+    }
+
+    fn angle_in_arc(angle: f32, start: f32, end: f32) -> bool {
+        if end >= std::f32::consts::TAU + start {
+            return true;
+        }
+        if end <= start {
+            return false;
+        }
+        if angle >= start {
+            angle <= end
+        } else {
+            angle + std::f32::consts::TAU <= end
+        }
+    }
+
+    // Draw high-contrast circular progress ring: dark track + bright filled arc.
+    for y in 0..height {
+        for x in 0..width {
+            let dx = x as f32 - cx;
+            let dy = y as f32 - cy;
+            let dist = (dx * dx + dy * dy).sqrt();
+            if dist < inner || dist > outer {
+                continue;
+            }
+
+            let mut angle = dy.atan2(dx);
+            if angle < start_angle {
+                angle += std::f32::consts::TAU;
+            }
+            let in_progress_arc = angle_in_arc(angle, start_angle, end_angle);
+
+            let idx = ((y * width + x) * 4) as usize;
+
+            // Ring track.
+            blend(&mut rgba, idx, [12, 16, 22, 220]);
+
+            // Bright progress arc.
+            if in_progress_arc && progress > 0.0 {
+                blend(&mut rgba, idx, [255, 255, 255, 245]);
+            }
+
+            // Outer halo.
+            if dist > outer - 0.8 {
+                if in_progress_arc && progress > 0.0 {
+                    blend(&mut rgba, idx, [255, 255, 255, 210]);
+                } else {
+                    blend(&mut rgba, idx, [0, 0, 0, 190]);
+                }
+            }
+        }
+    }
+
+    // Dim unfinished interior sector.
+    if progress < 1.0 {
+        let interior_radius = (inner - 0.8).max(0.0);
+        for y in 0..height {
+            for x in 0..width {
+                let dx = x as f32 - cx;
+                let dy = y as f32 - cy;
+                let dist = (dx * dx + dy * dy).sqrt();
+                if dist > interior_radius {
+                    continue;
+                }
+                let mut angle = dy.atan2(dx);
+                if angle < start_angle {
+                    angle += std::f32::consts::TAU;
+                }
+                if !angle_in_arc(angle, start_angle, end_angle) {
+                    let idx = ((y * width + x) * 4) as usize;
+                    rgba[idx]     = ((rgba[idx]     as u16 * 72) / 100) as u8;
+                    rgba[idx + 1] = ((rgba[idx + 1] as u16 * 72) / 100) as u8;
+                    rgba[idx + 2] = ((rgba[idx + 2] as u16 * 72) / 100) as u8;
+                }
+            }
+        }
+    }
+
+    rgba
+}
+
+// ── Minimum rebuild interval ──────────────────────────────────────────────────
+
+/// Minimum interval between full native menu rebuilds (ms).
+/// Prevents multiple rapid state changes from blocking the main thread.
+pub const MENU_REBUILD_MIN_MS: u64 = 300;
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn progress_bucket_boundaries() {
+        assert_eq!(progress_bucket(0.0), 0);
+        assert_eq!(progress_bucket(0.5), 10);
+        assert_eq!(progress_bucket(1.0), 20);
+        assert_eq!(progress_bucket(1.5), 20); // clamped
+    }
+
+    #[test]
+    fn progress_percent_boundaries() {
+        assert_eq!(progress_percent(0.0), 0);
+        assert_eq!(progress_percent(0.5), 50);
+        assert_eq!(progress_percent(1.0), 100);
+    }
+
+    #[test]
+    fn ellipsize_short_string_unchanged() {
+        assert_eq!(ellipsize_middle("hello", 10), "hello");
+    }
+
+    #[test]
+    fn ellipsize_long_string() {
+        assert_eq!(ellipsize_middle("abcdefghij", 7), "ab...ij");
+    }
+
+    #[test]
+    fn ellipsize_tiny_max() {
+        assert_eq!(ellipsize_middle("abcdefghij", 3), "...");
+    }
+
+    #[test]
+    fn shortcut_suffix_empty() {
+        assert_eq!(shortcut_suffix(""), "");
+        assert_eq!(shortcut_suffix("   "), "");
+    }
+
+    #[test]
+    fn with_shortcut_appends() {
+        let s = with_shortcut("Open", "");
+        assert_eq!(s, "Open");
+    }
+
+    #[test]
+    fn overlay_tiny_image_passthrough() {
+        let rgba = vec![0u8; 4 * 4 * 4]; // 4×4
+        let out = overlay_progress_bar(&rgba, 4, 4, 0.5);
+        assert_eq!(out.len(), rgba.len()); // no panic, returns unchanged
+    }
+}

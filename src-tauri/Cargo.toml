@@ -186,6 +186,7 @@ skill-tts  = { path = "../crates/skill-tts" }
 skill-data      = { path = "../crates/skill-data" }
 skill-commands  = { path = "../crates/skill-commands" }
 skill-router    = { path = "../crates/skill-router" }
+skill-tray      = { path = "../crates/skill-tray" }
 skill-constants    = { path = "../crates/skill-constants" }
 skill-screenshots  = { path = "../crates/skill-screenshots" }
 chrono     = { version = "0.4", default-features = false, features = ["clock", "std"] }

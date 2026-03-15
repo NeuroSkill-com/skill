@@ -9321,6 +9321,7 @@ dependencies = [
  "skill-screenshots",
  "skill-settings",
  "skill-tools",
+ "skill-tray",
  "skill-tts",
  "stacker",
  "sysinfo 0.38.4",
@@ -9470,6 +9471,10 @@ dependencies = [
  "ureq 2.12.1",
  "urlencoding",
 ]
+
+[[package]]
+name = "skill-tray"
+version = "0.0.1"
 
 [[package]]
 name = "skill-tts"
