@@ -17,3 +17,6 @@ muse-rs = { version = "0.1.0", default-features = false }
 
 # OpenBCI board drivers (Ganglion BLE, Cyton serial, …)
 openbci = { version = "0.0.1", features = ["ble"] }
+
+# Neurable MW75 Neuro EEG headphones (BLE activation + RFCOMM streaming)
+mw75 = { version = "0.0.2", default-features = false }

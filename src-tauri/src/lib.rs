@@ -95,6 +95,9 @@ pub(crate) use ble_scanner::start_background_scanner;
 /// Muse BLE session loop and per-event handler.
 mod muse_session;
 
+/// Neurable MW75 Neuro EEG headphone session (BLE + RFCOMM).
+mod mw75_session;
+
 /// OpenBCI device sessions (Ganglion BLE and generic boards).
 mod openbci_session;
 pub(crate) use openbci_session::connect_openbci;
@@ -1118,9 +1121,12 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
             .find(|d| &d.id == id).map(|d| d.name.clone())
             .or_else(|| s.discovered.iter().find(|d| &d.id == id).map(|d| d.name.clone()))
     });
-    let is_ganglion = target_name.as_deref().map(|n| {
-        let n = n.to_lowercase();
+    let target_lower = target_name.as_deref().map(|n| n.to_lowercase());
+    let is_ganglion = target_lower.as_deref().map(|n| {
         n.starts_with("ganglion") || n.starts_with("simblee")
+    }).unwrap_or(false);
+    let is_mw75 = target_lower.as_deref().map(|n| {
+        n.contains("mw75")
     }).unwrap_or(false);
 
     app.state::<Mutex<Box<AppState>>>().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
@@ -1130,6 +1136,10 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     if is_ganglion {
         tauri::async_runtime::spawn(async move {
             run_openbci_ganglion_session(app2, rx, csv, target).await;
+        });
+    } else if is_mw75 {
+        tauri::async_runtime::spawn(async move {
+            mw75_session::run_mw75_session(app2, rx, csv, target).await;
         });
     } else {
         tauri::async_runtime::spawn(async move {

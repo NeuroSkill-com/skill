@@ -1,0 +1,3 @@
+### Features
+
+- **Neurable MW75 Neuro headphone support**: Added full session support for the Master & Dynamic MW75 Neuro EEG headphones (12 channels at 500 Hz). The `mw75` crate is added to `skill-devices` and re-exported. BLE scanner now recognises MW75 devices, and `start_session` routes them to the new `mw75_session` module which handles BLE activation, EEG data streaming, DSP pipeline integration (first 4 channels), full 12-channel CSV logging, battery monitoring, DND focus-mode automation, and band snapshot enrichment. MW75 constants (`MW75_EEG_CHANNELS`, `MW75_SAMPLE_RATE`, `MW75_CHANNEL_NAMES`) added to `skill-constants`.

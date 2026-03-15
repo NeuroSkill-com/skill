@@ -88,6 +88,18 @@ pub const IMU_SAMPLE_RATE: f64 = 52.0;
 /// OpenBCI Ganglion channel labels (default 10-20 sites when unset).
 pub const GANGLION_CHANNEL_NAMES: [&str; 4] = ["Ch1", "Ch2", "Ch3", "Ch4"];
 
+/// Neurable MW75 Neuro EEG channel count (12 channels at 500 Hz).
+pub const MW75_EEG_CHANNELS: usize = 12;
+
+/// Neurable MW75 hardware sample rate (Hz).
+pub const MW75_SAMPLE_RATE: f64 = 500.0;
+
+/// Neurable MW75 channel labels (Ch1–Ch12).
+pub const MW75_CHANNEL_NAMES: [&str; MW75_EEG_CHANNELS] = [
+    "Ch1", "Ch2", "Ch3", "Ch4", "Ch5", "Ch6",
+    "Ch7", "Ch8", "Ch9", "Ch10", "Ch11", "Ch12",
+];
+
 // ── Signal filter (overlap-save, GPU fft_batch) ───────────────────────────────
 
 /// FFT analysis window length (samples).  Must be a power of two.

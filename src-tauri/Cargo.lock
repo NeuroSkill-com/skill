@@ -6153,6 +6153,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "mw75"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e0a3f1af072ce314868ae1468e3aaac0f86baf8e118f851580ee36bdd0ce072"
+dependencies = [
+ "anyhow",
+ "btleplug",
+ "env_logger",
+ "futures",
+ "libc",
+ "log",
+ "rand 0.9.2",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "naga"
 version = "26.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9379,6 +9398,7 @@ name = "skill-devices"
 version = "0.0.1"
 dependencies = [
  "muse-rs",
+ "mw75",
  "openbci",
  "serde",
  "serde_json",

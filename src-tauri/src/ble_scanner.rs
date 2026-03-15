@@ -209,7 +209,8 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
                                         let n = name.to_lowercase();
                                         let is_known = n.starts_with("muse")
                                             || n.starts_with("ganglion")
-                                            || n.starts_with("simblee");
+                                            || n.starts_with("simblee")
+                                            || n.contains("mw75");
                                         if is_known {
                                             let id   = p.id().to_string();
                                             let rssi = props.rssi.unwrap_or(0);

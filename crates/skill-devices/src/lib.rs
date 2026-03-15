@@ -7,6 +7,7 @@
 //! battery EMA smoothing, and band-snapshot enrichment.
 
 pub use muse_rs;
+pub use mw75;
 pub use openbci;
 
 use std::collections::VecDeque;
