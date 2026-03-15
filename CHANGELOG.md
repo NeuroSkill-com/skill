@@ -8,13 +8,31 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.39] — 2026-03-15
+
+### Bugfixes
+
+- **Fix syntax error in German locale**: Removed corrupted duplicate fragment (`ult de;`) at the end of `src/lib/i18n/de.ts` that caused a build failure.
+
+- **Fix LLM catalog crash on Windows**: Replaced the `llm_catalog.json` symlink in `skill-llm` with a direct `include_str!` path to the source file. Git on Windows checks out symlinks as plain-text files (containing the target path), which caused an invalid-JSON panic at startup.
+
+- **Fix mw75 RFCOMM Send bound violation on Windows**: Bumped `mw75` to 0.0.6 which wraps the RFCOMM `tokio::spawn` future with an `AssertSend` adapter. WinRT COM objects (`IInputStream`, `DataReader`, `StreamSocket`, `IVectorView`, etc.) are thread-safe under MTA but not marked `Send` by the `windows` crate.
+
+- **Fix mw75 RFCOMM build on Windows**: Vendored `mw75` crate with fix for `READ_BUF_SIZE` constant that was gated behind `#[cfg(target_os = "linux")]` but used in the Windows RFCOMM code path, causing compilation failure.
+
+- **Fix mw75 Windows RFCOMM build**: Updated to mw75 v0.0.4 which fixes compatibility with `windows` crate v0.62 by replacing removed `.get()` calls with async/await.
+
+- **Fix 12 failing tests after EEG_CHANNELS bump to 12**: Updated `constants.test.ts` to expect `EEG_CHANNELS = 12` (matching Rust `skill-constants`), decoupled `EEG_CH`/`EEG_COLOR` length assertions from `EEG_CHANNELS` (they are Muse-specific with 4 entries), and updated `BAND_CANVAS_H` expected value from 290 to 642. Fixed over-escaped `\\\"` sequences in `helpTts.apiBody`, `helpFaq.a33`, and `helpSettings.calibrationTtsBody` across de/fr/he/uk locale files that caused the i18n key-extraction regex to detect spurious extra keys (`command\`, `text\`). Updated stale comment in `constants.ts`.
+
+- **Fix Windows CI PowerShell parse errors**: Added UTF-8 BOM to `create-windows-nsis.ps1`, `release-windows.ps1`, and `setup-build-cache.ps1` so Windows PowerShell 5.1 correctly reads non-ASCII characters (™, —). Replaced `?.` null-conditional operator (PowerShell 7+ only) in `release-windows.ps1` with a PS 5.1-compatible alternative.
+
+### Refactor
+
+- **Remove vendored mw75 crate**: Migrated from a local vendored copy of `mw75` to the published crates.io version (0.0.3). The Windows RFCOMM `READ_BUF_SIZE` fix was upstreamed and published.
+
 ## [0.0.38] — 2026-03-15
 
 ### Features
-
-- **Hermes 10-20 electrode labels**: Replaced generic `Ch1`–`Ch8` channel names with standard 10-20 positions (`Fp1`, `Fp2`, `AF3`, `AF4`, `F3`, `F4`, `FC1`, `FC2`) in `skill-constants` and the electrode placement SVG guide.
-
-- **Hermes V1 EEG headset support**: Added full session support for the Hermes V1 headset (8-channel ADS1299 at 250 Hz, 9-DOF IMU). The `hermes-ble` crate is added to `skill-devices` and re-exported. All data streams over BLE GATT — no RFCOMM needed. BLE scanner recognises devices whose name starts with "Hermes". Session handles EEG (8 channels through DSP pipeline), IMU (accel + gyro → head pose), and packet-drop detection. Dashboard renders 8 channels dynamically with device-specific labels and colours. Electrode placement guide and 3D electrode guide include Hermes V1 tab. Constants added to `skill-constants` (`HERMES_EEG_CHANNELS`, `HERMES_SAMPLE_RATE`, `HERMES_CHANNEL_NAMES`).
 
 - **Proactive Hooks**: background EEG monitoring that triggers actions when brain-state matches configured labels. Per-hook scenarios (cognitive/emotional/physical), keyword suggestions, distance threshold, fire history, WebSocket events, and full CLI CRUD.
 
@@ -27,6 +45,10 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 - **Chat session archive (soft-delete)**: archive instead of permanent delete, with restore and permanent-delete from archive section.
 
 - **Neurable MW75 Neuro headphone support**: Full 12-channel EEG session at 500 Hz. BLE activation + RFCOMM data streaming (behind `mw75-rfcomm` feature flag). Electrode placement guide shows MW75 ear-cup layout with 6 electrodes per ear (FT7/T7/TP7/CP5/P7/C5 left, FT8/T8/TP8/CP6/P8/C6 right). All 12 channels render in the dashboard: signal quality dots, EEG waveforms, spectrogram, and band powers. DSP pipeline processes all active channels. Device presets for Muse (4ch), Ganglion (4ch), and MW75 (12ch) in electrode guides.
+
+- **Hermes 10-20 electrode labels**: Replaced generic `Ch1`–`Ch8` channel names with standard 10-20 positions (`Fp1`, `Fp2`, `AF3`, `AF4`, `F3`, `F4`, `FC1`, `FC2`) in `skill-constants` and the electrode placement SVG guide.
+
+- **Hermes V1 EEG headset support**: Added full session support for the Hermes V1 headset (8-channel ADS1299 at 250 Hz, 9-DOF IMU). The `hermes-ble` crate is added to `skill-devices` and re-exported. All data streams over BLE GATT — no RFCOMM needed. BLE scanner recognises devices whose name starts with "Hermes". Session handles EEG (8 channels through DSP pipeline), IMU (accel + gyro → head pose), and packet-drop detection. Dashboard renders 8 channels dynamically with device-specific labels and colours. Electrode placement guide and 3D electrode guide include Hermes V1 tab. Constants added to `skill-constants` (`HERMES_EEG_CHANNELS`, `HERMES_SAMPLE_RATE`, `HERMES_CHANNEL_NAMES`).
 
 - **Screenshot capture + vision embedding system**: periodic active-window capture with CLIP vision embedding (ONNX) and HNSW index. macOS CoreGraphics FFI, Linux X11/Wayland, Windows GDI. Configurable interval, size, quality, and embedding backend.
 
