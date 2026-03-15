@@ -111,16 +111,20 @@ fn macos_frontmost_window_id() -> Option<u64> {
     use std::ffi::c_void;
 
     // ── CoreFoundation / CoreGraphics C types ──
-    type CFTypeRef     = *const c_void;
-    type CFArrayRef    = *const c_void;
-    type CFDictionaryRef = *const c_void;
-    type CFStringRef   = *const c_void;
-    type CFNumberRef   = *const c_void;
-    type CFIndex       = isize;
-    type CGWindowID    = u32;
+    use std::os::raw::c_char;
 
-    const K_CF_NUMBER_SINT32_TYPE: CFIndex = 3;
-    const K_CF_NUMBER_SINT64_TYPE: CFIndex = 4;
+    type CFTypeRef       = *const c_void;
+    type CFAllocatorRef  = *const c_void;
+    type CFArrayRef      = *const c_void;
+    type CFDictionaryRef = *const c_void;
+    type CFStringRef     = *const c_void;
+    type CFIndex         = isize;
+    type CGWindowID      = u32;
+    // CFNumberType constants (i32 to match gpu_stats.rs)
+    type CFNumberType    = i32;
+
+    const K_CF_NUMBER_SINT32_TYPE: CFNumberType = 3;
+    const K_CF_NUMBER_SINT64_TYPE: CFNumberType = 4;
 
     // CGWindowListOption flags
     const ON_SCREEN_ONLY: u32 = 1 << 0;
@@ -132,17 +136,18 @@ fn macos_frontmost_window_id() -> Option<u64> {
         fn CGWindowListCopyWindowInfo(option: u32, relativeToWindow: CGWindowID) -> CFArrayRef;
     }
 
+    // Signatures match gpu_stats.rs exactly to avoid clashing_extern_declarations.
     #[link(name = "CoreFoundation", kind = "framework")]
     extern "C" {
         fn CFArrayGetCount(theArray: CFArrayRef) -> CFIndex;
         fn CFArrayGetValueAtIndex(theArray: CFArrayRef, idx: CFIndex) -> CFTypeRef;
-        fn CFDictionaryGetValue(theDict: CFDictionaryRef, key: CFTypeRef) -> CFTypeRef;
-        fn CFNumberGetValue(number: CFNumberRef, theType: CFIndex, valuePtr: *mut c_void) -> bool;
+        fn CFDictionaryGetValue(dict: CFDictionaryRef, key: CFStringRef) -> CFTypeRef;
+        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64) -> bool;
         fn CFRelease(cf: CFTypeRef);
-
-        // Create a CFString from a C string literal — used for dictionary keys.
         fn CFStringCreateWithCString(
-            alloc: CFTypeRef, cStr: *const u8, encoding: u32,
+            alloc:    CFAllocatorRef,
+            c_str:    *const c_char,
+            encoding: u32,
         ) -> CFStringRef;
     }
 
@@ -150,15 +155,15 @@ fn macos_frontmost_window_id() -> Option<u64> {
 
     /// Helper: create a CFString from a `&[u8]` C-string literal.
     unsafe fn cfstr(s: &[u8]) -> CFStringRef {
-        CFStringCreateWithCString(std::ptr::null(), s.as_ptr(), K_CF_STRING_ENCODING_UTF8)
+        CFStringCreateWithCString(std::ptr::null(), s.as_ptr() as *const c_char, K_CF_STRING_ENCODING_UTF8)
     }
 
     /// Helper: get an i32 from a CFNumber.
     unsafe fn cfnum_i32(n: CFTypeRef) -> Option<i32> {
         if n.is_null() { return None; }
-        let mut v: i32 = 0;
-        if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v as *mut _ as *mut c_void) {
-            Some(v)
+        let mut v: i64 = 0;
+        if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) {
+            Some(v as i32)
         } else { None }
     }
 
@@ -166,13 +171,12 @@ fn macos_frontmost_window_id() -> Option<u64> {
     unsafe fn cfnum_i64(n: CFTypeRef) -> Option<i64> {
         if n.is_null() { return None; }
         let mut v: i64 = 0;
-        if CFNumberGetValue(n, K_CF_NUMBER_SINT64_TYPE, &mut v as *mut _ as *mut c_void) {
+        if CFNumberGetValue(n, K_CF_NUMBER_SINT64_TYPE, &mut v) {
             Some(v)
         } else {
             // Fall back to i32
-            let mut v32: i32 = 0;
-            if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v32 as *mut _ as *mut c_void) {
-                Some(v32 as i64)
+            if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) {
+                Some(v)
             } else { None }
         }
     }
