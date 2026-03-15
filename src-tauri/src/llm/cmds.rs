@@ -803,6 +803,21 @@ pub fn new_chat_session(
     store.new_session()
 }
 
+/// Save tool calls associated with a chat message.
+///
+/// `message_id` must be the row id returned by `save_chat_message`.
+/// `tool_calls` is a JSON array of objects matching `StoredToolCall` fields.
+#[tauri::command]
+pub fn save_chat_tool_calls(
+    message_id: i64,
+    tool_calls: Vec<super::chat_store::StoredToolCall>,
+    state:      tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    store.save_tool_calls(message_id, &tool_calls);
+}
+
 // ── IPC chat streaming ────────────────────────────────────────────────────────
 
 /// One message delivered through the Tauri IPC `Channel` for `chat_completions_ipc`.

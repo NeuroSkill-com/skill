@@ -18,6 +18,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Chat UI
 
+- **Model name centered in titlebar**: the active model name and status indicator are now centered in the chat window titlebar using absolute positioning, instead of being left-aligned next to the sidebar toggle. This gives the chat window a cleaner, more balanced titlebar appearance.
+
 - **Context usage always visible**: the context-window usage bar (tokens used / n_ctx) is now permanently displayed below the chat header instead of being hidden inside the tools panel. Shows a colour-coded progress bar (green → amber → red) with token counts.
 
 - **Model name moved to titlebar**: the active model name is now shown in the header drag region (acting as the window title), freeing horizontal space for badges and controls. The footer hint no longer repeats the model name.

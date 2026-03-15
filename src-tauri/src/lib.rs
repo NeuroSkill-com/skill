@@ -285,7 +285,7 @@ use llm::cmds::{
     get_llm_logs, start_llm_server, stop_llm_server, get_llm_server_status, open_chat_window,
     open_downloads_window,
     chat_completions_ipc, abort_llm_stream, cancel_tool_call,
-    get_last_chat_session, save_chat_message, new_chat_session,
+    get_last_chat_session, save_chat_message, save_chat_tool_calls, new_chat_session,
     load_chat_session, list_chat_sessions, rename_chat_session, delete_chat_session,
     get_model_hardware_fit,
 };
@@ -1907,6 +1907,8 @@ pub fn run() {
             delete_chat_session,
             #[cfg(feature = "llm")]
             save_chat_message,
+            #[cfg(feature = "llm")]
+            save_chat_tool_calls,
             #[cfg(feature = "llm")]
             new_chat_session,
             #[cfg(feature = "llm")]

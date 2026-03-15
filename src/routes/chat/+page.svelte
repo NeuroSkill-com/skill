@@ -348,6 +348,18 @@
 
   // ── Stored-message type (mirrors Rust StoredMessage) ──────────────────────
 
+  interface StoredToolCallRow {
+    id:           number;
+    message_id:   number;
+    tool:         string;
+    status:       string;
+    detail?:      string | null;
+    tool_call_id?: string | null;
+    args?:        any;
+    result?:      any;
+    created_at:   number;
+  }
+
   interface StoredMessage {
     id:         number;
     session_id: number;
@@ -355,6 +367,7 @@
     content:    string;
     thinking:   string | null;
     created_at: number;
+    tool_calls: StoredToolCallRow[];
   }
 
   interface ChatSessionResponse {
@@ -363,7 +376,7 @@
   }
 
   function storedToMessage(sm: StoredMessage): Message {
-    return {
+    const msg: Message = {
       id:        ++msgId,
       role:      sm.role as Role,
       content:   sm.content,
@@ -371,6 +384,19 @@
       thinkOpen: false,
       pending:   false,
     };
+    // Restore persisted tool calls.
+    if (sm.tool_calls && sm.tool_calls.length > 0) {
+      msg.toolUses = sm.tool_calls.map((tc: StoredToolCallRow): ToolUseEvent => ({
+        tool:       tc.tool,
+        status:     tc.status,
+        detail:     tc.detail ?? undefined,
+        toolCallId: tc.tool_call_id ?? undefined,
+        args:       tc.args ?? undefined,
+        result:     tc.result ?? undefined,
+        expanded:   false,
+      }));
+    }
+    return msg;
   }
 
   // ── EEG band snapshot type (mirrors Rust BandSnapshot) ────────────────────
@@ -1139,12 +1165,28 @@
         if (finalAssistant.leadIn?.trim())  parts.push(finalAssistant.leadIn.trim());
         if (finalAssistant.content?.trim()) parts.push(finalAssistant.content.trim());
         const fullContent = parts.join("\n\n");
-        if (fullContent) {
-          invoke("save_chat_message", {
+        if (fullContent || (finalAssistant.toolUses?.length ?? 0) > 0) {
+          invoke<number>("save_chat_message", {
             sessionId,
             role:       "assistant",
-            content:    fullContent,
+            content:    fullContent || "",
             thinking:   finalAssistant.thinking ?? null,
+          }).then((messageId: number) => {
+            // Persist tool calls associated with this assistant message.
+            if (messageId > 0 && finalAssistant.toolUses?.length) {
+              const toolCalls = finalAssistant.toolUses.map(tu => ({
+                id:           0,
+                message_id:   messageId,
+                tool:         tu.tool,
+                status:       tu.status,
+                detail:       tu.detail ?? null,
+                tool_call_id: tu.toolCallId ?? null,
+                args:         tu.args ?? null,
+                result:       tu.result ?? null,
+                created_at:   0,
+              }));
+              invoke("save_chat_tool_calls", { messageId, toolCalls }).catch(() => {});
+            }
           }).catch(() => {});
         }
       }
@@ -1358,7 +1400,7 @@
   <div class="min-h-0 flex flex-col flex-1 min-w-0 overflow-hidden">
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
-  <header class="flex flex-nowrap items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
+  <header class="relative flex flex-nowrap items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
                   bg-white dark:bg-[#0f0f18] shrink-0 overflow-hidden min-h-0"
           data-tauri-drag-region>
 
@@ -1378,20 +1420,25 @@
       </svg>
     </button>
 
-    <!-- Status indicator + model name (acts as titlebar text) -->
-    <div class="flex items-center gap-1.5 flex-1 min-w-0" data-tauri-drag-region>
-      <!-- Live indicator -->
-      <span class="w-2 h-2 rounded-full shrink-0
-                    {status === 'running'  ? 'bg-emerald-500'
-                    : status === 'loading' ? 'bg-amber-500 animate-pulse'
-                    :                       'bg-slate-400/50'}"></span>
-      <span class="text-[0.72rem] font-semibold truncate {statusColor}" data-tauri-drag-region>
-        {#if status === 'running' && modelName}
-          {modelName}
-        {:else}
-          {statusLabel}
-        {/if}
-      </span>
+    <!-- Spacer to push right-side controls to the end -->
+    <div class="flex-1 min-w-0" data-tauri-drag-region></div>
+
+    <!-- Status indicator + model name (centered in titlebar via absolute positioning) -->
+    <div class="absolute inset-x-0 flex items-center justify-center pointer-events-none" data-tauri-drag-region>
+      <div class="flex items-center gap-1.5 max-w-[50%]" data-tauri-drag-region>
+        <!-- Live indicator -->
+        <span class="w-2 h-2 rounded-full shrink-0
+                      {status === 'running'  ? 'bg-emerald-500'
+                      : status === 'loading' ? 'bg-amber-500 animate-pulse'
+                      :                       'bg-slate-400/50'}"></span>
+        <span class="text-[0.72rem] font-semibold truncate {statusColor}" data-tauri-drag-region>
+          {#if status === 'running' && modelName}
+            {modelName}
+          {:else}
+            {statusLabel}
+          {/if}
+        </span>
+      </div>
     </div>
 
     <!-- Tools badge -->
