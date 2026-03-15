@@ -72,6 +72,11 @@ const EXEMPT_KEY_PREFIXES = [
   "dashboard.imu",
   "dashboard.gyro",
   "dashboard.consciousness.",
+  "helpRef.authors",            // academic citations — not translatable
+  "helpRef.journal",
+  "helpRef.title",
+  "helpRef.metrics",
+  "helpRef.doi",
 ];
 
 /** Exact keys that are always the same across locales. */

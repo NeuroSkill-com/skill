@@ -3491,6 +3491,24 @@ async function cmdListen(seconds: number): Promise<void> {
     print(`  ${CYAN}${type}${RESET} ${DIM}×${evts.length}${RESET}`);
   }
 
+  // ── Highlight hook triggers ─────────────────────────────────────────────
+  const hookEvents = byType["hook"] ?? [];
+  if (hookEvents.length > 0) {
+    print("");
+    print(`  ${BOLD}🪝 Hook Triggers${RESET}`);
+    for (const e of hookEvents) {
+      const p = e.payload ?? e;
+      const distStr = typeof p.distance === "number" ? p.distance.toFixed(4) : "?";
+      const distColor = typeof p.distance === "number" && p.distance < 0.1 ? GREEN : CYAN;
+      print(`  ${YELLOW}${p.hook ?? "(unnamed)"}${RESET}  ${DIM}[${p.scenario ?? "any"}]${RESET}  ${DIM}dist:${RESET} ${distColor}${distStr}${RESET}`);
+      if (p.label_text) {
+        print(`    ${DIM}matched label:${RESET} ${GREEN}"${p.label_text}"${RESET}  ${DIM}id:${RESET} ${CYAN}${p.label_id ?? "?"}${RESET}`);
+      }
+      if (p.command) print(`    ${DIM}command:${RESET} ${p.command}`);
+      if (p.text)    print(`    ${DIM}text:${RESET} ${p.text}`);
+    }
+  }
+
   print("");
   printResult(events);
 }

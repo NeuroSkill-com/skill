@@ -1023,7 +1023,7 @@ struct HookBroadcastPayload {
     distance: f32,
     label_id: i64,
     label_text: String,
-    triggered_at_utc: f64,
+    triggered_at_utc: u64,
 }
 
 struct HookReferenceSet {
@@ -1262,6 +1262,11 @@ impl HookMatcher {
                 context: "labels".to_owned(),
                 command: entry.hook.command.clone(),
                 text: entry.hook.text.clone(),
+                scenario: entry.hook.scenario.clone(),
+                distance: min_dist,
+                label_id: best_ref.label_id,
+                label_text: best_ref.label_text.clone(),
+                triggered_at_utc: ts_utc,
             };
             self.ws_broadcaster.send("hook", &payload);
 
