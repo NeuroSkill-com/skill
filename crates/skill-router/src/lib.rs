@@ -120,9 +120,7 @@ pub fn load_embeddings_range(
         let rows = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
             let ts: i64 = row.get(0)?;
             let blob: Vec<u8> = row.get(1)?;
-            let emb: Vec<f32> = blob.chunks_exact(4)
-                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-                .collect();
+            let emb: Vec<f32> = skill_data::util::blob_to_f32(&blob);
             Ok((ts_to_unix(ts), emb))
         });
         if let Ok(rows) = rows {

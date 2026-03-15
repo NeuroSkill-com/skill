@@ -169,12 +169,8 @@ impl ScreenshotStore {
     /// Insert a new screenshot record.
     pub fn insert(&self, row: &ScreenshotRow) -> Option<i64> {
         let conn = self.conn.lock_or_recover();
-        let emb_blob: Option<Vec<u8>> = row.embedding.as_ref().map(|v| {
-            v.iter().flat_map(|f| f.to_le_bytes()).collect()
-        });
-        let ocr_blob: Option<Vec<u8>> = row.ocr_embedding.as_ref().map(|v| {
-            v.iter().flat_map(|f| f.to_le_bytes()).collect()
-        });
+        let emb_blob: Option<Vec<u8>> = row.embedding.as_ref().map(|v| crate::util::f32_to_blob(v));
+        let ocr_blob: Option<Vec<u8>> = row.ocr_embedding.as_ref().map(|v| crate::util::f32_to_blob(v));
         conn.execute(
             "INSERT INTO screenshots (
                 timestamp, unix_ts, filename, width, height, file_size,
@@ -268,7 +264,7 @@ impl ScreenshotStore {
         image_size: u32,
     ) {
         let conn = self.conn.lock_or_recover();
-        let blob: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
+        let blob: Vec<u8> = crate::util::f32_to_blob(embedding);
         let _ = conn.execute(
             "UPDATE screenshots SET
                 embedding = ?1, embedding_dim = ?2, hnsw_id = ?3,
@@ -298,9 +294,7 @@ impl ScreenshotStore {
             let ts: i64 = r.get(0)?;
             let blob: Vec<u8> = r.get(1)?;
             let dim: i64 = r.get(2)?;
-            let floats: Vec<f32> = blob.chunks_exact(4)
-                .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-                .collect();
+            let floats: Vec<f32> = crate::util::blob_to_f32(&blob);
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
         }).unwrap().filter_map(|r| r.ok()).collect()
@@ -361,9 +355,7 @@ impl ScreenshotStore {
             let ts: i64 = r.get(0)?;
             let blob: Vec<u8> = r.get(1)?;
             let dim: i64 = r.get(2)?;
-            let floats: Vec<f32> = blob.chunks_exact(4)
-                .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-                .collect();
+            let floats: Vec<f32> = crate::util::blob_to_f32(&blob);
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
         }).unwrap().filter_map(|r| r.ok()).collect()
@@ -378,9 +370,7 @@ impl ScreenshotStore {
         ocr_hnsw_id: Option<u64>,
     ) {
         let conn = self.conn.lock_or_recover();
-        let blob: Option<Vec<u8>> = ocr_embedding.map(|emb| {
-            emb.iter().flat_map(|f| f.to_le_bytes()).collect()
-        });
+        let blob: Option<Vec<u8>> = ocr_embedding.map(|emb| crate::util::f32_to_blob(emb));
         let dim = ocr_embedding.map_or(0i64, |e| e.len() as i64);
         let _ = conn.execute(
             "UPDATE screenshots SET

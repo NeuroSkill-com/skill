@@ -39,6 +39,25 @@ pub fn open_readonly(path: &Path) -> Result<rusqlite::Connection, rusqlite::Erro
     )
 }
 
+// ── Blob ↔ f32 conversion ─────────────────────────────────────────────────────
+
+/// Deserialise a SQLite `BLOB` (little-endian packed `f32` values) into a `Vec<f32>`.
+///
+/// This replaces the `chunks_exact(4).map(…)` pattern that was duplicated in
+/// skill-commands, skill-label-index, skill-router, and skill-data/screenshot_store.
+#[inline]
+pub fn blob_to_f32(blob: &[u8]) -> Vec<f32> {
+    blob.chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect()
+}
+
+/// Serialise a `&[f32]` slice into a `Vec<u8>` (little-endian) for SQLite storage.
+#[inline]
+pub fn f32_to_blob(v: &[f32]) -> Vec<u8> {
+    v.iter().flat_map(|f| f.to_le_bytes()).collect()
+}
+
 // ── Date-directory scanning ───────────────────────────────────────────────────
 
 /// Scan `skill_dir` for `YYYYMMDD` sub-directories and return them sorted.
@@ -182,6 +201,19 @@ pub fn fmt_unix_utc(ts: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blob_f32_roundtrip() {
+        let v = vec![1.0f32, -2.5, 3.14159, 0.0];
+        let blob = f32_to_blob(&v);
+        let v2 = blob_to_f32(&blob);
+        assert_eq!(v, v2);
+    }
+
+    #[test]
+    fn blob_to_f32_empty() {
+        assert!(blob_to_f32(&[]).is_empty());
+    }
 
     #[test]
     fn civil_epoch() {

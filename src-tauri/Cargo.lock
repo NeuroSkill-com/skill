@@ -9309,6 +9309,7 @@ dependencies = [
  "skill-devices",
  "skill-eeg",
  "skill-exg",
+ "skill-history",
  "skill-jobs",
  "skill-label-index",
  "skill-llm",
@@ -9408,6 +9409,19 @@ dependencies = [
  "skill-data",
  "skill-eeg",
  "ureq 2.12.1",
+]
+
+[[package]]
+name = "skill-history"
+version = "0.0.1"
+dependencies = [
+ "csv",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "skill-commands",
+ "skill-constants",
+ "skill-data",
 ]
 
 [[package]]

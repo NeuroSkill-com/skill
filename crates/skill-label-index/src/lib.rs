@@ -25,7 +25,7 @@
 //! joined back to `labels.sqlite` for full hydration.
 
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::Mutex,
 };
 
@@ -128,20 +128,8 @@ pub struct RebuildStats {
 
 // ── Low-level helpers ─────────────────────────────────────────────────────────
 
-/// Deserialise a raw `BLOB` column into a `Vec<f32>` (little-endian f32 pairs).
-fn blob_to_f32s(b: Vec<u8>) -> Vec<f32> {
-    b.chunks_exact(4)
-     .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-     .collect()
-}
-
-/// List all valid `YYYYMMDD` sub-directories under `skill_dir`.
-///
-/// Delegates to [`skill_data::util::date_dirs`].
-#[inline]
-fn date_dirs(skill_dir: &Path) -> Vec<(String, PathBuf)> {
-    skill_data::util::date_dirs(skill_dir)
-}
+// Shared blob→f32 helper from skill-data; also removes the date_dirs wrapper.
+use skill_data::util::blob_to_f32;
 
 /// Fetch EEG embeddings from every `eeg.sqlite` whose date overlaps
 /// `[eeg_start, eeg_end]` (unix seconds) and return their component-wise mean.
@@ -155,7 +143,7 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64)
     let mut sum: Vec<f32> = Vec::new();
     let mut count = 0usize;
 
-    for (_date, dir) in date_dirs(skill_dir) {
+    for (_date, dir) in skill_data::util::date_dirs(skill_dir) {
         let db_path = dir.join(SQLITE_FILE);
         if !db_path.exists() { continue; }
         let Ok(conn) = skill_data::util::open_readonly(&db_path) else { continue };
@@ -176,7 +164,7 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64)
          .collect();
 
         for blob in rows {
-            let v = blob_to_f32s(blob);
+            let v = blob_to_f32(&blob);
             if v.is_empty() { continue; }
             if sum.is_empty() { sum.resize(v.len(), 0.0); }
             if v.len() != sum.len() { continue; } // dimension mismatch — skip
@@ -207,7 +195,7 @@ fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64)
     let mut rel_alpha = 0f64; let mut rel_beta = 0f64; let mut rel_theta = 0f64;
     let mut count = 0u64;
 
-    for (_date, dir) in date_dirs(skill_dir) {
+    for (_date, dir) in skill_data::util::date_dirs(skill_dir) {
         let db_path = dir.join(SQLITE_FILE);
         if !db_path.exists() { continue; }
         let Ok(conn) = skill_data::util::open_readonly(&db_path) else { continue };
@@ -298,8 +286,8 @@ fn read_label_rows(labels_db: &Path) -> Vec<LabelRow> {
             eeg_end:           row.get::<_, i64>(4)? as u64,
             created_at:        row.get::<_, i64>(5)? as u64,
             embedding_model:   row.get(6)?,
-            text_embedding:    row.get::<_, Option<Vec<u8>>>(7)?.map(blob_to_f32s),
-            context_embedding: row.get::<_, Option<Vec<u8>>>(8)?.map(blob_to_f32s),
+            text_embedding:    row.get::<_, Option<Vec<u8>>>(7)?.map(|b| blob_to_f32(&b)),
+            context_embedding: row.get::<_, Option<Vec<u8>>>(8)?.map(|b| blob_to_f32(&b)),
         })
     })
     .map(|rows| rows.filter_map(|r| r.ok()).collect())
@@ -321,8 +309,8 @@ fn fetch_label_by_id(labels_db: &Path, label_id: i64) -> Option<LabelRow> {
             eeg_end:           row.get::<_, i64>(4)? as u64,
             created_at:        row.get::<_, i64>(5)? as u64,
             embedding_model:   row.get(6)?,
-            text_embedding:    row.get::<_, Option<Vec<u8>>>(7)?.map(blob_to_f32s),
-            context_embedding: row.get::<_, Option<Vec<u8>>>(8)?.map(blob_to_f32s),
+            text_embedding:    row.get::<_, Option<Vec<u8>>>(7)?.map(|b| blob_to_f32(&b)),
+            context_embedding: row.get::<_, Option<Vec<u8>>>(8)?.map(|b| blob_to_f32(&b)),
         }),
     ).ok()
 }

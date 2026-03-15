@@ -216,10 +216,7 @@ fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<R
         let hnsw_id:   i64    = row.get(0)?;
         let timestamp: i64    = row.get(1)?;
         let blob:      Vec<u8> = row.get(2)?;
-        let embedding = blob
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-            .collect();
+        let embedding = skill_data::util::blob_to_f32(&blob);
         Ok(RawEmb { hnsw_id, timestamp, embedding })
     })
     .map(|rows| rows.flatten().collect())
@@ -1604,9 +1601,7 @@ pub fn get_found_label_embedding(labels_db: &Path, label_id: i64) -> Option<Vec<
     ).ok()?;
     let blob = blob?;
     if blob.len() < 4 { return None; }
-    Some(blob.chunks_exact(4)
-         .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
-         .collect())
+    Some(skill_data::util::blob_to_f32(&blob))
 }
 
 /// 2-component PCA via covariance-free power iteration.

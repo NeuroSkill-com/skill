@@ -179,8 +179,8 @@ impl LabelStore {
         context_emb:     &[f32],
         model_code:      &str,
     ) -> bool {
-        let text_blob:    Vec<u8> = text_emb.iter().flat_map(|f| f.to_le_bytes()).collect();
-        let context_blob: Vec<u8> = context_emb.iter().flat_map(|f| f.to_le_bytes()).collect();
+        let text_blob:    Vec<u8> = crate::util::f32_to_blob(text_emb);
+        let context_blob: Vec<u8> = crate::util::f32_to_blob(context_emb);
         match self.conn.execute(
             "UPDATE labels \
              SET text_embedding = ?1, context_embedding = ?2, embedding_model = ?3 \

@@ -1,0 +1,15 @@
+[package]
+name = "skill-history"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Session history, metrics, time-series, sleep staging, and analysis — extracted workspace crate"
+
+[dependencies]
+skill-constants = { path = "../skill-constants" }
+skill-data      = { path = "../skill-data" }
+skill-commands  = { path = "../skill-commands" }
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite   = { version = "0.37", features = ["bundled"] }
+csv        = "1"
