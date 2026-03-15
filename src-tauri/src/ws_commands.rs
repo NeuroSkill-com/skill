@@ -2248,24 +2248,19 @@ fn llm_set_autoload_mmproj(app: &AppHandle, msg: &Value) -> Result<Value, String
     Ok(serde_json::json!({ "enabled": enabled }))
 }
 
-/// `llm_hardware_fit` — check if a model will fit in available memory.
+/// `llm_hardware_fit` — check which models fit in available memory.
 ///
 /// ```json
-/// { "command": "llm_hardware_fit", "filename": "Qwen_Qwen3.5-27B-Q4_K_M.gguf" }
-/// → { "command": "llm_hardware_fit", "ok": true, "filename": "...",
-///     "fits": true, "model_size_gb": 16.5, "available_memory_gb": 32.0, ... }
+/// { "command": "llm_hardware_fit" }
+/// → { "command": "llm_hardware_fit", "ok": true,
+///     "fits": [{ "filename": "...", "fit_level": "good", "run_mode": "gpu", ... }, …] }
 /// ```
 #[cfg(feature = "llm")]
-fn llm_hardware_fit(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let filename = msg["filename"]
-        .as_str()
-        .ok_or_else(|| "llm_hardware_fit: 'filename' field required (string)".to_string())?
-        .to_string();
+fn llm_hardware_fit(app: &AppHandle, _msg: &Value) -> Result<Value, String> {
     let result = crate::llm::cmds::get_model_hardware_fit(
-        filename,
         app.state::<Mutex<Box<AppState>>>(),
     );
-    Ok(serde_json::to_value(result).unwrap_or_else(|_| serde_json::json!({})))
+    Ok(serde_json::json!({ "fits": result }))
 }
 
 // ── Central dispatcher ────────────────────────────────────────────────────────

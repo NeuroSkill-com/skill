@@ -6,6 +6,11 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Help Window
+
+- **LLM help section**: new "LLM" tab in the Help window documenting the local inference server, model catalog and quantisation levels, hardware fit badges, vision/multimodal models, downloading workflow, GPU layers, context size, parallel requests, API key, built-in tools (safe vs. privileged), execution mode & limits, chat window, external client usage, and server logs. 19 searchable help items across 5 sections.
+- **Proactive Hooks help section**: new "Hooks" tab in the Help window documenting what Proactive Hooks are, how EEG-driven similarity matching works, scenarios (cognitive/emotional/physical), and all configuration fields (name, keywords, keyword suggestions, distance threshold, distance suggestion tool, recent refs, command, payload text). Also covers quick examples, hook fire history log, WebSocket events for external automation, and tuning tips. 15 searchable help items across 3 sections.
+
 ### CLI — Proactive Hooks CRUD
 
 - **Full hook management from the CLI**: hooks can now be fully created, listed, updated, enabled/disabled, and deleted from the command line, matching the UI's capabilities. New subcommands:
