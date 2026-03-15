@@ -76,6 +76,7 @@ the Free Software Foundation, version 3 only. -->
     vision_embed_us: number; text_embed_us: number; embed_total_us: number;
     queue_depth: number;
     last_capture_unix: number; last_embed_unix: number;
+    backoff_multiplier: number;
   }
   let pipeMetrics = $state<PipelineMetrics | null>(null);
   let metricsTimer: ReturnType<typeof setInterval> | null = null;
@@ -877,6 +878,14 @@ the Free Software Foundation, version 3 only. -->
           </svg>
         </div>
 
+        {#if pipeMetrics.backoff_multiplier > 1}
+          <div class="flex items-center gap-1.5">
+            <span class="text-muted-foreground">{t("screenshots.perfBackoff")}</span>
+            <span class="tabular-nums font-semibold text-amber-500">
+              {pipeMetrics.backoff_multiplier}×
+            </span>
+          </div>
+        {/if}
         {#if pipeMetrics.drops > 0}
           <span class="text-[0.5rem] text-red-500/70">
             {t("screenshots.perfDropsHint")}

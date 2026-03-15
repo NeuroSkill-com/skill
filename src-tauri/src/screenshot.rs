@@ -784,6 +784,9 @@ pub struct ScreenshotMetrics {
     // ── Throughput (rolling) ──
     pub last_capture_unix: AtomicU64,   // unix-ms of last capture
     pub last_embed_unix:   AtomicU64,   // unix-ms of last embed completion
+
+    // ── Adaptive backoff ──
+    pub backoff_multiplier: AtomicU64,  // current interval multiplier (1 = no backoff)
 }
 
 impl ScreenshotMetrics {
@@ -805,6 +808,7 @@ impl ScreenshotMetrics {
             queue_depth:      AtomicI64::new(0),
             last_capture_unix: AtomicU64::new(0),
             last_embed_unix:  AtomicU64::new(0),
+            backoff_multiplier: AtomicU64::new(1),
         }
     }
 
@@ -827,6 +831,7 @@ impl ScreenshotMetrics {
             queue_depth:      self.queue_depth.load(Ordering::Relaxed),
             last_capture_unix: self.last_capture_unix.load(Ordering::Relaxed),
             last_embed_unix:  self.last_embed_unix.load(Ordering::Relaxed),
+            backoff_multiplier: self.backoff_multiplier.load(Ordering::Relaxed),
         }
     }
 }
@@ -849,6 +854,7 @@ pub struct MetricsSnapshot {
     pub queue_depth:      i64,
     pub last_capture_unix: u64,
     pub last_embed_unix:  u64,
+    pub backoff_multiplier: u64,
 }
 
 /// Convenience: current time in milliseconds since epoch.
@@ -925,6 +931,13 @@ pub fn run_screenshot_worker(
     let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
     let _ = std::fs::create_dir_all(&screenshots_dir);
 
+    // Adaptive backoff: when drops occur, double the effective interval
+    // (up to 4× the configured value).  When the queue drains, recover
+    // back to the configured interval over 3 successful sends.
+    let mut backoff_multiplier: u64 = 1;
+    let mut consecutive_ok: u32 = 0;
+    const MAX_BACKOFF: u64 = 4;
+
     loop {
         // Re-read config + session state in a single lock acquisition
         let (config, session_active) = {
@@ -943,8 +956,9 @@ pub fn run_screenshot_worker(
             continue;
         }
 
-        let interval = Duration::from_secs(config.interval_secs.max(1) as u64);
-        std::thread::sleep(interval);
+        let base_secs = config.interval_secs.max(1) as u64;
+        let effective_secs = base_secs * backoff_multiplier;
+        std::thread::sleep(Duration::from_secs(effective_secs));
 
         let iter_start = Instant::now();
 
@@ -1033,9 +1047,25 @@ pub fn run_screenshot_worker(
             }) {
                 Ok(()) => {
                     metrics.queue_depth.fetch_add(1, Ordering::Relaxed);
+                    // Successful send — recover toward base interval
+                    consecutive_ok += 1;
+                    if consecutive_ok >= 3 && backoff_multiplier > 1 {
+                        backoff_multiplier = (backoff_multiplier / 2).max(1);
+                        consecutive_ok = 0;
+                        eprintln!("[screenshot] backoff recovered → {}× base interval",
+                            backoff_multiplier);
+                    }
                 }
                 Err(_) => {
                     metrics.drops.fetch_add(1, Ordering::Relaxed);
+                    // Drop — embed thread can't keep up.  Double the interval
+                    // to release pressure (up to MAX_BACKOFF × base).
+                    consecutive_ok = 0;
+                    if backoff_multiplier < MAX_BACKOFF {
+                        backoff_multiplier = (backoff_multiplier * 2).min(MAX_BACKOFF);
+                        eprintln!("[screenshot] embed queue full — backing off to {}× base interval ({}s)",
+                            backoff_multiplier, config.interval_secs as u64 * backoff_multiplier);
+                    }
                 }
             }
         }
@@ -1043,6 +1073,7 @@ pub fn run_screenshot_worker(
         metrics.captures.fetch_add(1, Ordering::Relaxed);
         metrics.capture_total_us.store(iter_start.elapsed().as_micros() as u64, Ordering::Relaxed);
         metrics.last_capture_unix.store(now_ms(), Ordering::Relaxed);
+        metrics.backoff_multiplier.store(backoff_multiplier, Ordering::Relaxed);
     }
 }
 

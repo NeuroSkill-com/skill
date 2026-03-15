@@ -2736,7 +2736,8 @@ const de: Record<string, string> = {
   "screenshots.perfTextEmbed": "Text-Einbettung",
   "screenshots.perfQueue": "Warteschlangentiefe",
   "screenshots.perfDrops": "Verworfen",
-  "screenshots.perfDropsHint": "Einbettungs-Thread zu langsam — Intervall oder Bildgröße verringern",
+  "screenshots.perfBackoff": "Drosselung",
+  "screenshots.perfDropsHint": "Einbettungs-Thread zu langsam — Intervall automatisch erhöht, erholt sich bei leerer Warteschlange",
   "screenshots.perfErrors": "Fehler",
 
   "screenshots.stats": "Statistiken",

@@ -2972,7 +2972,8 @@ const en: Record<string, string> = {
   "screenshots.perfTextEmbed":                   "Text embedding",
   "screenshots.perfQueue":                       "Queue depth",
   "screenshots.perfDrops":                       "Dropped",
-  "screenshots.perfDropsHint":                   "embed thread too slow — consider lowering interval or image size",
+  "screenshots.perfBackoff":                      "Backoff",
+  "screenshots.perfDropsHint":                   "embed thread too slow — interval auto-increased, will recover when queue drains",
   "screenshots.perfErrors":                      "errors",
 
   "screenshots.stats":                           "Statistics",
