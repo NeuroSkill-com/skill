@@ -20,6 +20,10 @@ use crate::{
     ToastLevel,
 };
 
+/// MW75 GATT service UUID — used to discover paired MW75 devices on macOS
+/// where `local_name` is often `None` for already-paired Classic BT devices.
+use skill_devices::mw75::protocol::MW75_SERVICE_UUID;
+
 // ── Bluetooth availability ────────────────────────────────────────────────────
 
 /// Classify a raw btleplug error string into a user-visible message and a flag
@@ -172,6 +176,7 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
         }
 
         let mut poll_tick = tokio::time::interval(Duration::from_secs(3));
+        let mut poll_count: u64 = 0;
         loop {
             tokio::select! {
                 biased;
@@ -200,25 +205,61 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
                 }
 
                 _ = poll_tick.tick(), if scanning => {
+                    poll_count += 1;
+
+                    // Every 5th poll (~15 s), restart the scan with the MW75
+                    // service UUID filter.  On macOS CoreBluetooth, a service-
+                    // filtered scan is the only way to discover already-paired
+                    // Classic BT devices (like MW75) that aren't actively
+                    // advertising their name.  We then immediately restart the
+                    // generic scan so Muse / Ganglion devices remain visible.
+                    if poll_count % 5 == 0 {
+                        let _ = adapter.stop_scan().await;
+                        let mw75_filter = ScanFilter {
+                            services: vec![MW75_SERVICE_UUID],
+                        };
+                        if adapter.start_scan(mw75_filter).await.is_ok() {
+                            // Brief pause to let CoreBluetooth discover MW75 peripherals
+                            tokio::time::sleep(Duration::from_millis(500)).await;
+                            let _ = adapter.stop_scan().await;
+                        }
+                        // Restart generic scan
+                        if adapter.start_scan(ScanFilter::default()).await.is_err() {
+                            scanning = false;
+                            continue;
+                        }
+                    }
+
                     match adapter.peripherals().await {
                         Err(_) => { let _ = adapter.stop_scan().await; continue 'outer; }
                         Ok(peripherals) => {
                             for p in peripherals {
                                 if let Ok(Some(props)) = p.properties().await {
-                                    if let Some(ref name) = props.local_name {
-                                        let n = name.to_lowercase();
-                                        let is_known = n.starts_with("muse")
+                                    let name_lower = props.local_name.as_deref()
+                                        .map(|n| n.to_lowercase());
+
+                                    // Match by advertised name
+                                    let name_match = name_lower.as_deref().map(|n| {
+                                        n.starts_with("muse")
                                             || n.starts_with("ganglion")
                                             || n.starts_with("simblee")
-                                            || n.contains("mw75");
-                                        if is_known {
-                                            let id   = p.id().to_string();
-                                            let rssi = props.rssi.unwrap_or(0);
-                                            upsert_discovered(&app, &id, name, rssi);
-                                            app_log!(app, "bluetooth",
-                                                "[scanner] {name} id={id} rssi={rssi} dBm"
-                                            );
-                                        }
+                                            || n.contains("mw75")
+                                    }).unwrap_or(false);
+
+                                    // Match MW75 by GATT service UUID — on macOS,
+                                    // paired Classic BT devices often have no
+                                    // local_name in BLE advertisements.
+                                    let uuid_match = props.services.contains(&MW75_SERVICE_UUID);
+
+                                    if name_match || uuid_match {
+                                        let id   = p.id().to_string();
+                                        let rssi = props.rssi.unwrap_or(0);
+                                        let display_name = props.local_name.as_deref()
+                                            .unwrap_or(if uuid_match { "MW75 Neuro" } else { "Unknown" });
+                                        upsert_discovered(&app, &id, display_name, rssi);
+                                        app_log!(app, "bluetooth",
+                                            "[scanner] {display_name} id={id} rssi={rssi} dBm"
+                                        );
                                     }
                                 }
                             }
