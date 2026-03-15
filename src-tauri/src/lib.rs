@@ -73,6 +73,8 @@ mod label_index;
 mod ws_server;
 mod api;
 pub(crate) mod hooks_log;
+mod screenshot;
+mod screenshot_store;
 
 /// OpenAI-compatible LLM inference server — same port as WebSocket API.
 /// Enabled by the `llm` Cargo feature; no-op when the feature is absent.
@@ -140,7 +142,7 @@ pub(crate) use settings::{
     default_theme, default_accent_color, default_daily_goal_min, default_embedding_model,
     default_ws_host, default_ws_port, default_update_check_interval, UserSettings,
     NeuttsConfig, HookRule, HookLastTrigger, default_track_active_window, default_track_input_activity,
-    DoNotDisturbConfig,
+    DoNotDisturbConfig, ScreenshotConfig,
 };
 
 mod dnd;
@@ -273,6 +275,9 @@ use settings_cmds::{
     get_input_buckets,
     get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status, test_dnd, list_focus_modes,
     get_llm_config, set_llm_config, pick_gguf_file,
+    get_screenshot_config, set_screenshot_config,
+    estimate_screenshot_reembed, rebuild_screenshot_embeddings,
+    get_screenshots_around, search_screenshots_by_vector,
 };
 
 // LLM catalog commands (feature-gated)
@@ -553,6 +558,9 @@ pub struct AppState {
     /// When this reaches ~240 (≈ 1 minute at 4 Hz), focus mode is dropped.
     pub dnd_snr_low_ticks:  u32,
 
+    /// Screenshot capture + vision embedding configuration.
+    pub screenshot_config: ScreenshotConfig,
+
     /// All LLM-related runtime state, heap-allocated to keep `AppState` small.
     pub llm: Box<LlmState>,
 }
@@ -719,6 +727,7 @@ impl Default for AppState {
             dnd_below_ticks:    0,
             dnd_score_history:  std::collections::VecDeque::new(),
             dnd_snr_low_ticks:  0,
+            screenshot_config:  ScreenshotConfig::default(),
         }
     }
 }
@@ -787,6 +796,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         track_input_activity:   s.track_input_activity,
         do_not_disturb:         s.dnd_config.clone(),
         llm:                    s.llm.config.clone(),
+        screenshot:             s.screenshot_config.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
@@ -1280,6 +1290,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
         s.dnd_config  = data.do_not_disturb;
         s.llm.config  = data.llm;
+        s.screenshot_config = data.screenshot;
         if let Some(os_active) = crate::dnd::query_os_active() {
             if !os_active { s.dnd_active = false; }
         }
@@ -1638,6 +1649,16 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // ── Screenshot capture worker ────────────────────────────────────
+    {
+        let app_ss = app.handle().clone();
+        let sd = skill_dir.clone();
+        std::thread::Builder::new()
+            .name("screenshot-worker".into())
+            .spawn(move || screenshot::run_screenshot_worker(app_ss, sd))
+            .expect("[screenshot] failed to spawn worker thread");
+    }
+
     setup_background_tasks(app);
     Ok(())
 }
@@ -1933,6 +1954,9 @@ pub fn run() {
             cancel_tool_call,
             #[cfg(feature = "llm")]
             get_model_hardware_fit,
+            get_screenshot_config, set_screenshot_config,
+            estimate_screenshot_reembed, rebuild_screenshot_embeddings,
+            get_screenshots_around, search_screenshots_by_vector,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,

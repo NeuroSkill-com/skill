@@ -201,6 +201,20 @@ pub const UMAP_CONFIG_FILE: &str = "umap_config.json";
 /// SQLite database that stores user-authored labels (`~/.skill/labels.sqlite`).
 pub const LABELS_FILE: &str = "labels.sqlite";
 
+// ── Screenshot capture + vision embedding ─────────────────────────────────────
+
+/// Directory name under `~/.skill/` for captured screenshot images.
+pub const SCREENSHOTS_DIR: &str = "screenshots";
+
+/// SQLite database for screenshot metadata and embedding blobs.
+pub const SCREENSHOTS_SQLITE: &str = "screenshots.sqlite";
+
+/// HNSW index file for visual-similarity search over screenshot embeddings.
+pub const SCREENSHOTS_HNSW: &str = "screenshots.hnsw";
+
+/// Number of new screenshot embeddings between periodic HNSW saves.
+pub const SCREENSHOT_HNSW_SAVE_EVERY: usize = 10;
+
 // ── Calibration ───────────────────────────────────────────────────────────────
 
 /// Default label for the first calibration action.

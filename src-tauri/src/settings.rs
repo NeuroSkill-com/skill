@@ -756,11 +756,116 @@ pub(crate) struct UserSettings {
     /// on the same TCP port as the WebSocket API when enabled.
     #[serde(default)]
     pub llm: LlmConfig,
+
+    /// Screenshot capture + vision embedding configuration.
+    #[serde(default)]
+    pub screenshot: ScreenshotConfig,
 }
 
 fn default_tts_preload() -> bool { true }
 pub(crate) fn default_track_active_window() -> bool { true }
 pub(crate) fn default_track_input_activity() -> bool { true }
+
+// ── Screenshot capture + vision embedding ─────────────────────────────────────
+
+pub(crate) fn default_screenshot_interval()        -> u32    { 5 }
+pub(crate) fn default_screenshot_image_size()      -> u32    { 224 }
+pub(crate) fn default_screenshot_quality()         -> u8     { 60 }
+pub(crate) fn default_screenshot_session_only()    -> bool   { true }
+pub(crate) fn default_screenshot_embed_backend()   -> String { "fastembed".into() }
+pub(crate) fn default_screenshot_fastembed_model() -> String { "clip-vit-b-32".into() }
+
+/// Screenshot capture + vision-encoder embedding configuration.
+///
+/// Every `interval_secs` seconds (aligned with the EEG epoch cadence) the
+/// active application window is captured, resized to `image_size × image_size`,
+/// saved as WebP, embedded via the selected vision model, and inserted into
+/// `screenshots.sqlite` + `screenshots.hnsw`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScreenshotConfig {
+    /// Master enable — opt-in only (default: false).
+    pub enabled: bool,
+
+    /// Capture interval in seconds (default: 5, aligned with EEG epoch).
+    #[serde(default = "default_screenshot_interval")]
+    pub interval_secs: u32,
+
+    /// Intermediate image size in pixels (square).  Captured window is
+    /// resized to fit within this square (aspect-ratio-preserving + center-pad)
+    /// before saving and embedding.  Default: 224 (CLIP ViT-B/32 native).
+    #[serde(default = "default_screenshot_image_size")]
+    pub image_size: u32,
+
+    /// WebP quality for saved thumbnails (0–100).  Default: 60.
+    #[serde(default = "default_screenshot_quality")]
+    pub quality: u8,
+
+    /// Only capture during active EEG sessions (default: true).
+    #[serde(default = "default_screenshot_session_only")]
+    pub session_only: bool,
+
+    /// Embedding backend: `"fastembed"` (default) or `"mmproj"`.
+    #[serde(default = "default_screenshot_embed_backend")]
+    pub embed_backend: String,
+
+    /// fastembed model code (when `embed_backend == "fastembed"`).
+    /// Supported: `"clip-vit-b-32"` (512-dim, default),
+    ///            `"nomic-embed-vision-v1.5"` (768-dim).
+    #[serde(default = "default_screenshot_fastembed_model")]
+    pub fastembed_model: String,
+}
+
+impl Default for ScreenshotConfig {
+    fn default() -> Self {
+        Self {
+            enabled:         false,
+            interval_secs:   default_screenshot_interval(),
+            image_size:      default_screenshot_image_size(),
+            quality:         default_screenshot_quality(),
+            session_only:    default_screenshot_session_only(),
+            embed_backend:   default_screenshot_embed_backend(),
+            fastembed_model: default_screenshot_fastembed_model(),
+        }
+    }
+}
+
+impl ScreenshotConfig {
+    /// Return the fastembed `ImageEmbeddingModel` enum matching
+    /// `self.fastembed_model`, or `None` if unrecognised.
+    pub fn fastembed_model_enum(&self) -> Option<fastembed::ImageEmbeddingModel> {
+        match self.fastembed_model.as_str() {
+            "clip-vit-b-32"           => Some(fastembed::ImageEmbeddingModel::ClipVitB32),
+            "nomic-embed-vision-v1.5" => Some(fastembed::ImageEmbeddingModel::NomicEmbedVisionV15),
+            _                         => None,
+        }
+    }
+
+    /// Model-ID string stored alongside embeddings for provenance tracking.
+    pub fn model_id(&self) -> String {
+        match self.embed_backend.as_str() {
+            "fastembed" => match self.fastembed_model.as_str() {
+                "clip-vit-b-32"           => "Qdrant/clip-ViT-B-32-vision".into(),
+                "nomic-embed-vision-v1.5" => "nomic-ai/nomic-embed-vision-v1.5".into(),
+                other                     => other.into(),
+            },
+            "mmproj" => "mmproj".into(),
+            other    => other.into(),
+        }
+    }
+
+    /// Recommended `image_size` for the selected model.
+    pub fn recommended_image_size(&self) -> u32 {
+        match self.embed_backend.as_str() {
+            "fastembed" => match self.fastembed_model.as_str() {
+                "nomic-embed-vision-v1.5" => 384,
+                _                         => 224,
+            },
+            "mmproj" => 384,
+            _        => 224,
+        }
+    }
+}
 
 // ── Do Not Disturb automation ─────────────────────────────────────────────────
 
@@ -892,6 +997,7 @@ impl Default for UserSettings {
             last_seen_whats_new_version:   String::new(),
             llm:                           LlmConfig::default(),
             accent_color:                  default_accent_color(),
+            screenshot:                    ScreenshotConfig::default(),
         }
     }
 }

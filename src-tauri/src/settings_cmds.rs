@@ -1452,3 +1452,112 @@ pub fn get_hook_log_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> i64 
         .map(|l| l.count())
         .unwrap_or(0)
 }
+
+// ── Screenshot config ─────────────────────────────────────────────────────────
+
+/// Get current screenshot configuration.
+#[tauri::command]
+pub fn get_screenshot_config(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> crate::settings::ScreenshotConfig {
+    state.lock_or_recover().screenshot_config.clone()
+}
+
+/// Update screenshot configuration.  Returns whether the embedding model
+/// changed (so the frontend can prompt re-embedding).
+#[tauri::command]
+pub fn set_screenshot_config(
+    config: crate::settings::ScreenshotConfig,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> crate::screenshot_store::ConfigChangeResult {
+    let (old_backend, old_model, skill_dir) = {
+        let g = state.lock_or_recover();
+        (g.screenshot_config.embed_backend.clone(),
+         g.screenshot_config.model_id(),
+         g.skill_dir.clone())
+    };
+
+    let new_backend = config.embed_backend.clone();
+    let new_model = config.model_id();
+    let model_changed = old_backend != new_backend || old_model != new_model;
+
+    {
+        let mut g = state.lock_or_recover();
+        g.screenshot_config = config;
+    }
+    crate::save_settings(&app);
+
+    let stale_count = if model_changed {
+        crate::screenshot_store::ScreenshotStore::open(&skill_dir)
+            .map(|s| s.count_stale(&new_backend, &new_model))
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
+    crate::screenshot_store::ConfigChangeResult { model_changed, stale_count }
+}
+
+/// Count screenshots needing (re-)embedding and estimate wall-clock time.
+#[tauri::command]
+pub fn estimate_screenshot_reembed(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Option<crate::screenshot_store::ReembedEstimate> {
+    let (config, skill_dir) = {
+        let g = state.lock_or_recover();
+        (g.screenshot_config.clone(), g.skill_dir.clone())
+    };
+    let store = crate::screenshot_store::ScreenshotStore::open(&skill_dir)?;
+    Some(crate::screenshot::estimate_reembed(&store, &config, &skill_dir))
+}
+
+/// Re-embed all screenshots with the current model.
+/// Emits `screenshot-reembed-progress` events.
+#[tauri::command]
+pub fn rebuild_screenshot_embeddings(
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Option<crate::screenshot_store::ReembedResult> {
+    let (config, skill_dir) = {
+        let g = state.lock_or_recover();
+        (g.screenshot_config.clone(), g.skill_dir.clone())
+    };
+    let store = crate::screenshot_store::ScreenshotStore::open(&skill_dir)?;
+    Some(crate::screenshot::rebuild_embeddings(&store, &config, &skill_dir, &app))
+}
+
+/// Find screenshots by timestamp range (for EEG correlation).
+#[tauri::command]
+pub fn get_screenshots_around(
+    timestamp: i64,
+    window_secs: i32,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Vec<crate::screenshot_store::ScreenshotResult> {
+    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let store = match crate::screenshot_store::ScreenshotStore::open(&skill_dir) {
+        Some(s) => s,
+        None => return vec![],
+    };
+    crate::screenshot::get_around(&store, timestamp, window_secs)
+}
+
+/// Find screenshots visually similar to a query embedding vector.
+#[tauri::command]
+pub fn search_screenshots_by_vector(
+    vector: Vec<f32>,
+    k: usize,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Vec<crate::screenshot_store::ScreenshotResult> {
+    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let store = match crate::screenshot_store::ScreenshotStore::open(&skill_dir) {
+        Some(s) => s,
+        None => return vec![],
+    };
+    let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
+    let hnsw = match fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) {
+        Ok(idx) => idx,
+        Err(_) => return vec![],
+    };
+    crate::screenshot::search_by_vector(&hnsw, &store, &vector, k)
+}

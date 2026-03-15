@@ -9143,6 +9143,7 @@ dependencies = [
  "gpu-fft",
  "hf-hub 0.5.0",
  "hound",
+ "image",
  "jsonschema",
  "kittentts",
  "libc",

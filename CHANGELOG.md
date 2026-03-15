@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Features
+
+- **Screenshot capture + vision-encoder embedding system**: new periodic active-window capture system aligned with EEG epoch cadence (~5 s). Captures the frontmost window (macOS `screencapture`, Linux `xdotool`/`import`/`grim`/`scrot`, Windows `PowerShell`), resizes with aspect-ratio-preserving fit + center-pad to configurable intermediate resolution (default 224×224 for CLIP), saves as WebP to `~/.skill/screenshots/YYYYMMDD/`, and embeds via fastembed CLIP ViT-B/32 (512-dim) or Nomic Embed Vision v1.5 (768-dim). Embeddings stored in `screenshots.sqlite` (with full provenance: model, image size, quality, app name, window title) and indexed in `screenshots.hnsw` for visual-similarity search. Opt-in via `ScreenshotConfig` in settings (disabled by default, session-gated). Cross-modal search supported via shared `YYYYMMDDHHmmss` timestamp join key to EEG embeddings. Re-embedding on model change with progress events and time estimation. Six new Tauri commands: `get_screenshot_config`, `set_screenshot_config`, `estimate_screenshot_reembed`, `rebuild_screenshot_embeddings`, `get_screenshots_around`, `search_screenshots_by_vector`.
+
 ### Server
 
 - **Hooks summary in `status` response**: the `status` WebSocket command now includes a `hooks` object with `total` (configured hooks), `enabled` (active hooks), and `latest_trigger` — the most recent hook trigger across all hooks, containing hook name, `triggered_at_utc`, cosine `distance`, `label_id`, and `label_text`. Returns `null` for `latest_trigger` if no hook has ever fired.
