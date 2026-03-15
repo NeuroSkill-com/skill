@@ -32,6 +32,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Tools removed from parameters panel**: the tool allow-list and execution mode selector have been removed from the parameters/settings slide-in panel. Tools are now configured exclusively via the dedicated tools panel opened by the tools badge button in the header, eliminating duplicate UI.
 
+- **Fix bash tool calls with empty arguments**: small models often emit a `[TOOL_CALL]` with empty `{}` arguments alongside a `` ```bash `` code fence containing the actual command. The extractor now post-processes bash calls with empty args and fills them from the first bash/sh code fence found in the text. Also accept `"tool"` as alias for `"name"` and `"parameters"` as alias for `"arguments"` in `[TOOL_CALL]` blocks for broader model compatibility.
+
 - **Fix scripts storage**: tool script and output files were stored in per-server-start timestamp directories under `chats/scripts/<ts>/`, creating empty directories on every LLM server start even when no tools were used. Now `scripts_dir` is the base `chats/scripts/` path and `run_<ts>/` subdirectories are created lazily only when a tool actually writes a file.
 
 - **Expandable tool-call cards with rich detail views**: tool-call bubbles are now always expandable (like thinking bubbles) whenever any details are available. Each tool type has a purpose-built expanded view:

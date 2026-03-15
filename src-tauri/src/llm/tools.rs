@@ -343,8 +343,12 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
         if let Some(e) = after_start.find(END) {
             let block = after_start[..e].trim();
             if let Ok(v) = serde_json::from_str::<Value>(block) {
-                let name = v.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
+                let name = v.get("name")
+                    .or_else(|| v.get("tool"))
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("").to_string();
                 let args = v.get("arguments")
+                    .or_else(|| v.get("parameters"))
                     .map(|a| if a.is_string() {
                         a.as_str().unwrap().to_string()
                     } else {
@@ -362,7 +366,58 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
 
     extract_tool_calls_from_json_text(content, &mut calls, &mut dedup);
 
+    // Post-process: if any bash call has empty arguments, try to fill from
+    // a ```bash/sh code fence in the content (common with small models that
+    // emit the command in a code block AND a [TOOL_CALL] with empty args).
+    let bash_fence_cmd = extract_bash_fence_command(content);
+    if let Some(cmd) = bash_fence_cmd {
+        for tc in &mut calls {
+            if tc.function.name == "bash" {
+                let args: Value = serde_json::from_str(&tc.function.arguments).unwrap_or(Value::Object(Default::default()));
+                if args.get("command").and_then(|c| c.as_str()).unwrap_or("").is_empty() {
+                    tc.function.arguments = format!(
+                        r#"{{"command":{}}}"#,
+                        serde_json::to_string(&cmd).unwrap_or_else(|_| format!("\"{}\"", cmd))
+                    );
+                }
+            }
+        }
+    }
+
+    // If no tool calls were found at all but there's a bash fence, create one.
+    if calls.is_empty() {
+        if let Some(cmd) = extract_bash_fence_command(content) {
+            push_tool_call(
+                &mut calls, &mut dedup, "bash".into(),
+                format!(r#"{{"command":{}}}"#, serde_json::to_string(&cmd).unwrap_or_else(|_| format!("\"{}\"", cmd))),
+            );
+        }
+    }
+
     calls
+}
+
+/// Extract the first bash/sh/shell/zsh code fence body from content.
+fn extract_bash_fence_command(content: &str) -> Option<String> {
+    let mut cursor = 0usize;
+    while let Some(rel) = content[cursor..].find("```") {
+        let after_open = cursor + rel + 3;
+        let Some(nl_rel) = content[after_open..].find('\n') else { break; };
+        let header_end = after_open + nl_rel;
+        let header = content[after_open..header_end].trim().to_ascii_lowercase();
+        let body_start = header_end + 1;
+        let Some(close_rel) = content[body_start..].find("```") else { break; };
+        let body_end = body_start + close_rel;
+        let body = content[body_start..body_end].trim();
+
+        if (header == "bash" || header == "sh" || header == "shell" || header == "zsh")
+            && !body.is_empty()
+        {
+            return Some(body.to_string());
+        }
+        cursor = body_end + 3;
+    }
+    None
 }
 
 fn push_tool_call(
@@ -497,18 +552,6 @@ fn extract_tool_calls_from_json_text(
             if let Ok(v) = serde_json::from_str::<Value>(body) {
                 extract_calls_from_value(&v, calls, dedup);
             }
-        }
-
-        // Fallback: if the model emits a ```bash or ```sh code fence instead
-        // of a [TOOL_CALL], treat the body as a bash tool call.  This catches
-        // the common case where small models show the command in a code block
-        // rather than using the proper tool-call format.
-        if (header == "bash" || header == "sh" || header == "shell" || header == "zsh")
-            && !body.is_empty()
-            && calls.is_empty()
-        {
-            let cmd = body.to_string();
-            push_tool_call(calls, dedup, "bash".into(), format!(r#"{{"command":{}}}"#, serde_json::to_string(&cmd).unwrap_or_else(|_| format!("\"{}\"", cmd))));
         }
 
         cursor = body_end + 3;
@@ -1165,7 +1208,7 @@ Done."#;
 
     #[test]
     fn bash_fence_fallback_skipped_when_tool_call_present() {
-        // If a proper [TOOL_CALL] is already present, bash fence should not add duplicates
+        // If a proper [TOOL_CALL] is already present with args, bash fence should not add duplicates
         let msg = r#"[TOOL_CALL]{"name":"bash","arguments":{"command":"ls"}}[/TOOL_CALL]
 Also:
 ```bash
@@ -1175,5 +1218,43 @@ echo hello
         // Should only have the explicit tool call, not the code fence
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].function.arguments, r#"{"command":"ls"}"#);
+    }
+
+    #[test]
+    fn bash_empty_args_filled_from_code_fence() {
+        // Model emits [TOOL_CALL] with empty args AND a bash code fence — fill args from fence
+        let msg = r#"I'll list your desktop files.
+[TOOL_CALL]{"name":"bash","arguments":{}}[/TOOL_CALL]
+```bash
+ls ~/Desktop/
+```"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "bash");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "ls ~/Desktop/");
+    }
+
+    #[test]
+    fn bash_empty_args_filled_from_code_fence_parameters_key() {
+        // Model uses "parameters" instead of "arguments"
+        let msg = r#"[TOOL_CALL]{"name":"bash","parameters":{}}[/TOOL_CALL]
+```bash
+df -h
+```"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "bash");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "df -h");
+    }
+
+    #[test]
+    fn tool_key_alias_in_tool_call_block() {
+        // Model uses "tool" key instead of "name"
+        let msg = r#"[TOOL_CALL]{"tool":"date","arguments":{}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "date");
     }
 }
