@@ -23,6 +23,14 @@
 //    Bluetooth Classic RFCOMM channel 25.
 //
 // The entire session runs on a spawned async task — it never blocks the UI.
+//
+// ## Cargo feature: `mw75-rfcomm`
+//
+// The RFCOMM transport (IOBluetooth on macOS, bluer on Linux) is behind the
+// `mw75-rfcomm` feature flag because linking IOBluetooth.framework adds ~2 s
+// to process startup (dyld loads the framework before `main()`).  Without
+// the feature, the session receives EEG data via BLE GATT notifications
+// (lower throughput but no framework startup cost).
 
 use std::{
     path::PathBuf,
@@ -31,7 +39,6 @@ use std::{
 };
 
 use skill_devices::mw75::prelude::*;
-use skill_devices::mw75::rfcomm::start_rfcomm_stream;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
@@ -79,11 +86,6 @@ pub(crate) async fn run_mw75_session(
     stop_background_scanner(&app);
 
     // 3. BLE discover + connect.
-    //
-    //    If we have a preferred_id we scan_all + connect_to so we pair to
-    //    the exact peripheral.  Otherwise use the simpler connect() which
-    //    finds and connects the first MW75 in one step — just like the mw75
-    //    CLI binary does.
     let config = Mw75ClientConfig {
         scan_timeout_secs: 10,
         ..Default::default()
@@ -109,7 +111,6 @@ pub(crate) async fn run_mw75_session(
     };
 
     let connect_result = if let Some(ref pref_id) = preferred_id {
-        // Targeted connect — scan_all then pick by ID.
         let scan_res = tokio::select! {
             biased;
             _ = &mut cancel_rx => { start_background_scanner(&app); crate::go_disconnected(&app, None, false); return; }
@@ -122,7 +123,6 @@ pub(crate) async fn run_mw75_session(
                 for d in &devs {
                     app_log!(app, "bluetooth", "[mw75]   → name={:?} id={}", d.name, d.id);
                 }
-                // Try preferred ID first, then first available MW75.
                 let device = devs.iter().find(|d| &d.id == pref_id).cloned()
                     .or_else(|| devs.into_iter().next());
                 match device {
@@ -142,7 +142,6 @@ pub(crate) async fn run_mw75_session(
             }
         }
     } else {
-        // No preferred ID — use connect() which scans + connects in one step.
         tokio::select! {
             biased;
             _ = &mut cancel_rx => { start_background_scanner(&app); crate::go_disconnected(&app, None, false); return; }
@@ -181,55 +180,68 @@ pub(crate) async fn run_mw75_session(
     }
     app_log!(app, "bluetooth", "[mw75] activation complete");
 
-    // 5. Disconnect BLE before RFCOMM — required on macOS (CoreBluetooth and
-    //    IOBluetooth share the radio), recommended on Linux.
+    // 5. Disconnect BLE before RFCOMM — required on macOS.
     let bt_address = handle.peripheral_id();
     app_log!(app, "bluetooth", "[mw75] disconnecting BLE (addr={bt_address})…");
     if let Err(e) = handle.disconnect_ble().await {
         app_log!(app, "bluetooth", "[mw75] BLE disconnect warning: {e}");
     }
 
-    // 6. Start RFCOMM data stream.
+    // 6. Start RFCOMM data stream (if feature enabled) or stay on BLE
+    //    notifications for EEG data.
+    #[allow(unused_variables)]
     let handle = Arc::new(handle);
-    app_log!(app, "bluetooth", "[mw75] starting RFCOMM stream…");
-    let rfcomm = tokio::select! {
-        biased;
-        _ = &mut cancel_rx => {
-            start_background_scanner(&app);
-            crate::go_disconnected(&app, None, false);
-            return;
-        }
-        r = start_rfcomm_stream(handle.clone(), &bt_address) => match r {
-            Err(e) => {
-                app_log!(app, "bluetooth", "[mw75] RFCOMM failed: {e}");
+
+    #[cfg(feature = "mw75-rfcomm")]
+    let _rfcomm_guard = {
+        app_log!(app, "bluetooth", "[mw75] starting RFCOMM stream…");
+        let rfcomm = tokio::select! {
+            biased;
+            _ = &mut cancel_rx => {
                 start_background_scanner(&app);
-                crate::go_disconnected(
-                    &app,
-                    Some(format!(
-                        "MW75 RFCOMM failed: {e}\n\n\
-                         Make sure the headphones are paired in System Bluetooth Settings.\n\
-                         To pair: hold the power button for 4+ seconds to enter pairing mode."
-                    )),
-                    false,
-                );
+                crate::go_disconnected(&app, None, false);
                 return;
             }
-            Ok(r) => r,
-        }
+            r = skill_devices::mw75::rfcomm::start_rfcomm_stream(handle.clone(), &bt_address) => match r {
+                Err(e) => {
+                    app_log!(app, "bluetooth", "[mw75] RFCOMM failed: {e}");
+                    start_background_scanner(&app);
+                    crate::go_disconnected(
+                        &app,
+                        Some(format!(
+                            "MW75 RFCOMM failed: {e}\n\n\
+                             Make sure the headphones are paired in System Bluetooth Settings.\n\
+                             To pair: hold the power button for 4+ seconds to enter pairing mode."
+                        )),
+                        false,
+                    );
+                    return;
+                }
+                Ok(r) => r,
+            }
+        };
+        app_log!(app, "bluetooth", "[mw75] RFCOMM connected — streaming EEG at {MW75_SAMPLE_RATE} Hz");
+        Some(rfcomm)
     };
 
-    app_log!(app, "bluetooth", "[mw75] RFCOMM connected — streaming EEG at {MW75_SAMPLE_RATE} Hz");
+    #[cfg(not(feature = "mw75-rfcomm"))]
+    let _rfcomm_guard: Option<()> = {
+        app_log!(app, "bluetooth",
+            "[mw75] RFCOMM feature disabled — receiving EEG via BLE notifications");
+        None
+    };
 
     // BLE is now disconnected — safe to restart the background scanner.
     start_background_scanner(&app);
 
-    // 6. Open CSV with MW75 channel labels.
+    // 7. Open CSV with MW75 channel labels.
     let ch_labels = skill_constants::MW75_CHANNEL_NAMES;
     let label_refs: Vec<&str> = ch_labels.iter().copied().collect();
     let mut csv = match CsvState::open_with_labels(&csv_path, &label_refs) {
         Ok(c)  => c,
         Err(e) => {
-            rfcomm.shutdown();
+            #[cfg(feature = "mw75-rfcomm")]
+            if let Some(ref r) = _rfcomm_guard { r.shutdown(); }
             write_session_meta(&app, &csv_path);
             crate::go_disconnected(&app, Some(format!("CSV error: {e}")), false);
             return;
@@ -237,17 +249,18 @@ pub(crate) async fn run_mw75_session(
     };
     write_session_meta(&app, &csv_path);
 
-    // 7. Session-local DSP (lock-free after this point).
+    // 8. Session-local DSP (lock-free after this point).
     let mut dsp = SessionDsp::new(&app);
     let pipeline_ch = skill_constants::MW75_EEG_CHANNELS.min(EEG_CHANNELS);
 
-    // 8. Event loop — data arrives as Mw75Event::Eeg from RFCOMM.
+    // 9. Event loop — data arrives as Mw75Event::Eeg from RFCOMM or BLE.
     let mut user_cancelled = false;
     loop {
         tokio::select! {
             biased;
             _ = &mut cancel_rx => {
-                rfcomm.shutdown();
+                #[cfg(feature = "mw75-rfcomm")]
+                if let Some(ref r) = _rfcomm_guard { r.shutdown(); }
                 user_cancelled = true;
                 break;
             }
@@ -257,14 +270,16 @@ pub(crate) async fn run_mw75_session(
                         let is_disconnect = matches!(e, Mw75Event::Disconnected);
                         handle_mw75_event(e, &app, &mut csv, &csv_path, &mut dsp, pipeline_ch).await;
                         if is_disconnect {
-                            app_log!(app, "bluetooth", "[mw75] RFCOMM disconnected");
-                            rfcomm.shutdown();
+                            app_log!(app, "bluetooth", "[mw75] disconnected");
+                            #[cfg(feature = "mw75-rfcomm")]
+                            if let Some(ref r) = _rfcomm_guard { r.shutdown(); }
                             break;
                         }
                     }
                     None => {
                         app_log!(app, "bluetooth", "[mw75] event channel closed");
-                        rfcomm.shutdown();
+                        #[cfg(feature = "mw75-rfcomm")]
+                        if let Some(ref r) = _rfcomm_guard { r.shutdown(); }
                         break;
                     }
                 }
@@ -272,10 +287,9 @@ pub(crate) async fn run_mw75_session(
         }
     }
 
-    // Yield so platform-specific cleanup can complete.
     tokio::time::sleep(Duration::from_millis(250)).await;
 
-    // 9. Finalise.
+    // 10. Finalise.
     csv.flush();
     write_session_meta(&app, &csv_path);
 
@@ -301,7 +315,6 @@ async fn handle_mw75_event(
     pipeline_ch: usize,
 ) {
     match event {
-        // ── Connected ────────────────────────────────────────────────────────
         Mw75Event::Connected(name) => {
             let dev_id = {
                 let sr = app.state::<Mutex<Box<AppState>>>();
@@ -360,7 +373,6 @@ async fn handle_mw75_event(
                 &format!("{name} disconnected."));
         }
 
-        // ── EEG ──────────────────────────────────────────────────────────────
         Mw75Event::Eeg(pkt) => {
             let packet_ts_s = if pkt.timestamp > 0.0 {
                 pkt.timestamp
@@ -407,21 +419,15 @@ async fn handle_mw75_event(
                     .map(|ch| (ch, dsp.filter.drain(ch)))
                     .filter(|(_, v)| !v.is_empty())
                     .collect()
-            } else {
-                Vec::new()
-            };
+            } else { Vec::new() };
 
             let spec_col = dsp.filter.take_spec_col();
 
             let band_snap: Option<BandSnapshot> = if band_fired {
                 let snap = dsp.band_analyzer.latest.clone();
-                if let Some(ref sn) = snap {
-                    dsp.accumulator.update_bands(sn.clone());
-                }
+                if let Some(ref sn) = snap { dsp.accumulator.update_bands(sn.clone()); }
                 snap
-            } else {
-                None
-            };
+            } else { None };
 
             if filter_fired {
                 let qualities = dsp.quality.all_qualities();
@@ -432,9 +438,7 @@ async fn handle_mw75_event(
             if !drained.is_empty() {
                 for (ch, samples) in drained {
                     let pkt = EegPacket { electrode: ch, samples, timestamp: ts_ms };
-                    if let Some(ref ipc_ch) = ipc_ch {
-                        let _ = ipc_ch.send(pkt);
-                    }
+                    if let Some(ref ipc_ch) = ipc_ch { let _ = ipc_ch.send(pkt); }
                 }
             }
 
@@ -451,10 +455,8 @@ async fn handle_mw75_event(
                     gpu:             crate::gpu_stats::read(),
                 };
                 skill_devices::enrich_band_snapshot(&mut snap, &enrich_ctx);
-
                 csv.push_metrics(csv_path, &snap);
 
-                // ── Auto Do Not Disturb ──────────────────────────────────────
                 let engage_raw = skill_devices::compute_engagement_raw(&snap);
                 let focus_score = skill_devices::focus_score(engage_raw);
                 let snr_db = snap.snr;
@@ -500,8 +502,7 @@ async fn handle_mw75_event(
                         let _ = app.emit("dnd-state-changed", enable);
                         app.state::<WsBroadcaster>().send("dnd-state-changed", &enable);
                         if !enable && d.send_exit_notification {
-                            send_toast(app, ToastLevel::Info,
-                                "Focus mode exited", d.exit_body);
+                            send_toast(app, ToastLevel::Info, "Focus mode exited", d.exit_body);
                         }
                     }
                 }
@@ -511,9 +512,7 @@ async fn handle_mw75_event(
                     if emit_active && d.avg_score < d.threshold && !d.exit_held {
                         let remaining = d.exit_window.saturating_sub(d.below_ticks as usize);
                         remaining as f64 / 4.0
-                    } else {
-                        0.0
-                    };
+                    } else { 0.0 };
 
                 {
                     let sr = app.state::<Mutex<Box<AppState>>>();
@@ -548,12 +547,9 @@ async fn handle_mw75_event(
                 let c = sr.lock_or_recover().status.sample_count;
                 c
             };
-            if count % 256 == 0 {
-                emit_status(app);
-            }
+            if count % 256 == 0 { emit_status(app); }
         }
 
-        // ── Battery ──────────────────────────────────────────────────────────
         Mw75Event::Battery(bat) => {
             app_log!(app, "bluetooth", "[mw75] battery: {}%", bat.level);
             let level = bat.level as f32;
@@ -569,9 +565,7 @@ async fn handle_mw75_event(
             s.status.battery = smoothed;
             drop(s);
             emit_status(app);
-            if first_reading {
-                write_session_meta(app, csv_path);
-            }
+            if first_reading { write_session_meta(app, csv_path); }
             if smoothed < 10.0 && prev_battery >= 10.0 {
                 send_toast(app, ToastLevel::Error, "Battery Critical",
                     &format!("Battery at {:.0}% — charge soon.", smoothed));
@@ -581,14 +575,12 @@ async fn handle_mw75_event(
             }
         }
 
-        // ── Activated ────────────────────────────────────────────────────────
         Mw75Event::Activated(status) => {
             app_log!(app, "bluetooth",
                 "[mw75] activated: eeg={} raw={}",
                 status.eeg_enabled, status.raw_mode_enabled);
         }
 
-        // ── Raw data / other events — ignore ─────────────────────────────────
         _ => {}
     }
 }
