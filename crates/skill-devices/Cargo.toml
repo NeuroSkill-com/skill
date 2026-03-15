@@ -19,7 +19,7 @@ muse-rs = { version = "0.1.0", default-features = false }
 openbci = { version = "0.0.1", features = ["ble"] }
 
 # Neurable MW75 Neuro EEG headphones (BLE activation + RFCOMM data streaming)
-mw75 = { version = "0.0.3", default-features = false }
+mw75 = { version = "0.0.4", default-features = false }
 
 # Hermes V1 EEG headset (8-channel ADS1299, BLE)
 hermes-ble = { version = "0.0.1", default-features = false }
