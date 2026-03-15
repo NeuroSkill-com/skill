@@ -20,6 +20,7 @@ the Free Software Foundation, version 3 only. -->
     website:          string;
     websiteLabel:     string;
     repoUrl:          string;
+    discordUrl:       string;
     license:          string;
     licenseName:      string;
     licenseUrl:       string;
@@ -77,6 +78,12 @@ the Free Software Foundation, version 3 only. -->
              class="flex items-center gap-1.5 text-[0.8rem] text-blue-500 dark:text-blue-400
                     hover:underline underline-offset-2 transition-colors">
             <span class="text-[0.7rem] opacity-60">📦</span>{t("about.sourceCode")}
+          </a>
+          <a href={info.discordUrl}
+             target="_blank" rel="noreferrer"
+             class="flex items-center gap-1.5 text-[0.8rem] text-blue-500 dark:text-blue-400
+                    hover:underline underline-offset-2 transition-colors">
+            <span class="text-[0.7rem] opacity-60">💬</span>{t("about.discord")}
           </a>
         </div>
       </section>

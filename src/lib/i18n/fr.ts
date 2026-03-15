@@ -772,6 +772,9 @@ const fr: Record<string, string> = {
   "helpDash.trayGreenDesc":      "Transmission de données EEG en direct depuis votre appareil BCI.",
   "helpDash.trayRed":            "Rouge - Bluetooth désactivé",
   "helpDash.trayRedDesc":        "Le Bluetooth est désactivé. Aucune recherche ni connexion n'est possible.",
+  "helpDash.community":          "Communauté",
+  "helpDash.communityDesc":      "Rejoignez la communauté Discord NeuroSkill pour poser des questions, partager vos retours et échanger avec d'autres utilisateurs et développeurs.",
+  "helpDash.discordLink":        "Rejoindre notre Discord",
   "helpDash.faa":                "Asymétrie Alpha Frontale (FAA)",
   "helpDash.faaBody":            "Une jauge ancrée au centre montrant l'index FAA en temps réel : ln(AF8 α) - ln(AF7 α). Les valeurs positives indiquent une puissance alpha fronto-droite plus élevée, associée à une motivation d'approche de l'hémisphère gauche. Les valeurs négatives indiquent une tendance au retrait. La valeur est lissée par une moyenne mobile exponentielle et varie typiquement de -1 à +1. La FAA est stockée avec chaque époque d'embedding de 5 secondes dans eeg.sqlite.",
 
@@ -2043,6 +2046,7 @@ const fr: Record<string, string> = {
   "about.authors":            "Auteurs",
   "about.license":            "Licence",
   "about.acknowledgements":   "Remerciements",
+  "about.discord":            "Discord",
 
   // ── Auto-synced from en.ts (2026-03-03) ──
   "common.connect": "Connecter",

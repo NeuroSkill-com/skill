@@ -17,7 +17,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::constants::{
     APP_DISPLAY_NAME, APP_TAGLINE,
-    APP_WEBSITE, APP_WEBSITE_LABEL, APP_REPO_URL,
+    APP_WEBSITE, APP_WEBSITE_LABEL, APP_REPO_URL, APP_DISCORD_URL,
     APP_LICENSE, APP_LICENSE_NAME, APP_LICENSE_URL,
     APP_COPYRIGHT, APP_AUTHORS, APP_ACKNOWLEDGEMENTS,
 };
@@ -35,6 +35,7 @@ pub struct AboutInfo {
     pub website:          String,
     pub website_label:    String,
     pub repo_url:         String,
+    pub discord_url:      String,
     pub license:          String,
     pub license_name:     String,
     pub license_url:      String,
@@ -86,6 +87,7 @@ pub fn get_about_info(app: AppHandle) -> AboutInfo {
         website:          APP_WEBSITE.into(),
         website_label:    APP_WEBSITE_LABEL.into(),
         repo_url:         APP_REPO_URL.into(),
+        discord_url:      APP_DISCORD_URL.into(),
         license:          APP_LICENSE.into(),
         license_name:     APP_LICENSE_NAME.into(),
         license_url:      APP_LICENSE_URL.into(),
