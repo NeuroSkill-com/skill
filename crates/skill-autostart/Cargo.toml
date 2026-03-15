@@ -1,0 +1,9 @@
+[package]
+name = "skill-autostart"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Platform-specific launch-at-login (autostart) registration — extracted workspace crate"
+
+[dependencies]
+skill-constants = { path = "../skill-constants" }

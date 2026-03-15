@@ -1,0 +1,14 @@
+[package]
+name = "skill-label-index"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Cross-modal label HNSW indices (text, context, EEG) — extracted workspace crate"
+
+[dependencies]
+skill-constants = { path = "../skill-constants" }
+skill-commands  = { path = "../skill-commands" }
+skill-data      = { path = "../skill-data" }
+fast-hnsw  = "1.0.1"
+rusqlite   = { version = "0.37", features = ["bundled"] }
+serde      = { version = "1", features = ["derive"] }

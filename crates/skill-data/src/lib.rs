@@ -4,6 +4,9 @@
 //!
 //! This crate contains modules with zero tauri/AppState coupling:
 //!
+//! - **active_window** — `ActiveWindowInfo` data type
+//! - **activity_store** — SQLite activity persistence (windows, input buckets)
+//! - **session_csv** — CSV writer for EEG/PPG/metrics recording sessions
 //! - **label_store** — SQLite label persistence
 //! - **screenshot_store** — SQLite screenshot metadata + embedding store
 //! - **hooks_log** — SQLite hook-fire audit log
@@ -14,6 +17,9 @@
 //! - **util** — shared utilities (MutexExt)
 
 pub mod util;
+pub mod active_window;
+pub mod activity_store;
+pub mod session_csv;
 pub mod label_store;
 pub mod screenshot_store;
 pub mod hooks_log;

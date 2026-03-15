@@ -26,7 +26,6 @@
 //! updates `AtomicU64` timestamps, and every 60 s flushes a bucket row to
 //! `activity.sqlite` with the count of active seconds in that minute.
 
-use serde::{Deserialize, Serialize};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, AtomicU64, Ordering},
@@ -36,21 +35,9 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{AppState, MutexExt, activity_store::ActivityStore};
 
-// ── Data type ─────────────────────────────────────────────────────────────────
-
-/// Everything we know about the currently active window.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ActiveWindowInfo {
-    /// Display name of the application (e.g. `"Safari"`, `"code"`).
-    pub app_name: String,
-    /// Filesystem path to the application bundle / executable.
-    /// Empty string when the OS doesn't provide it.
-    pub app_path: String,
-    /// Title of the focused window / document (empty if unavailable).
-    pub window_title: String,
-    /// Unix-second timestamp at which this window became active.
-    pub activated_at: u64,
-}
+// Re-export the shared data type from skill-data so existing `crate::active_window::ActiveWindowInfo`
+// imports keep working throughout the Tauri app.
+pub use skill_data::active_window::ActiveWindowInfo;
 
 // ── Platform OS queries ───────────────────────────────────────────────────────
 

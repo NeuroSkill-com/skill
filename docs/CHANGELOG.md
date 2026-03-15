@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Docs
+
+- **Add `README.md` to every workspace crate**: created README files for all 19 crates that were missing one (`skill-label-index`, `skill-exg`, `skill-settings`, `skill-router`, `skill-tts`, `skill-autostart`, `skill-commands`, `skill-data`, `skill-jobs`, `skill-devices`, `skill-screenshots`, `skill-constants`, `skill-eeg`, `skill-llm`, `skill-tray`, `skill-tools`, `apple-ocr`, `rdev`, `src-tauri`); each README contains the crate name as heading and its description from `Cargo.toml`; `fast-hnsw` already had one.
+
 ### Refactor
 
 - **Deduplicate frontend types and formatting helpers**: extracted shared TypeScript interfaces (`MuseStatus`, `SleepEpoch`, `SleepSummary`, `SleepStages`, `LabelRow`, `DiscoveredDevice`, `FilterConfig`, `PairedDevice`, `MUSE_CHANNELS`, `MUSE_POSITIONS`) into `$lib/types.ts`; extracted 12 formatting functions (`fmtTime`, `fmtTimeShort`, `fmtDate`, `fmtDateIso`, `fmtDateTime`, `fmtDateTimeSecs`, `fmtDateTimeLocale`, `fmtDuration`, `fmtDurationRange`, `fmtSecs`, `fmtUtcDay`, `fmtDayKey`, `fmtMs`, `fmtElapsed`, `pad`) into `$lib/format.ts`; extracted `SleepAnalysis` interface and `analyzeSleep()` function into `$lib/sleep-analysis.ts`; updated 15 consumer files across routes and lib components to import from shared modules instead of re-declaring locally; eliminates ~30 duplicate interface definitions and ~20 duplicate utility functions.

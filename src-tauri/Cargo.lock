@@ -9311,6 +9311,7 @@ dependencies = [
  "serde_json",
  "serialport",
  "sha2",
+ "skill-autostart",
  "skill-commands",
  "skill-constants",
  "skill-data",
@@ -9318,6 +9319,7 @@ dependencies = [
  "skill-eeg",
  "skill-exg",
  "skill-jobs",
+ "skill-label-index",
  "skill-llm",
  "skill-router",
  "skill-screenshots",
@@ -9343,6 +9345,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "skill-autostart"
+version = "0.0.1"
+dependencies = [
+ "skill-constants",
+]
+
+[[package]]
 name = "skill-commands"
 version = "0.0.1"
 dependencies = [
@@ -9361,6 +9370,7 @@ version = "0.0.1"
 name = "skill-data"
 version = "0.0.1"
 dependencies = [
+ "csv",
  "libc",
  "llmfit-core",
  "macos-focus",
@@ -9368,6 +9378,7 @@ dependencies = [
  "serde",
  "serde_json",
  "skill-constants",
+ "skill-eeg",
  "sysinfo 0.38.4",
 ]
 
@@ -9410,6 +9421,18 @@ version = "0.0.1"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "skill-label-index"
+version = "0.0.1"
+dependencies = [
+ "fast-hnsw",
+ "rusqlite",
+ "serde",
+ "skill-commands",
+ "skill-constants",
+ "skill-data",
 ]
 
 [[package]]
