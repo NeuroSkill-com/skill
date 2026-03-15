@@ -302,13 +302,18 @@ fn encode_webp(raw_bytes: &[u8], _quality: u8, out_path: &Path) -> Option<u64> {
 // ── Timestamp helpers ─────────────────────────────────────────────────────────
 
 /// Generate `YYYYMMDDHHmmss` timestamp (UTC) from current time.
+///
+/// All timestamps in the screenshot system are **UTC** — matching the EEG
+/// embedding pipeline's `YYYYMMDDHHmmss` convention.  `chrono::DateTime::from_timestamp`
+/// returns `DateTime<Utc>`, so the formatted string is always in UTC regardless
+/// of the system's local timezone.
 fn yyyymmddhhmmss_utc() -> (String, u64) {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     let unix_ts = now.as_secs();
 
-    // Use chrono for reliable formatting
+    // chrono::DateTime::from_timestamp returns DateTime<Utc> — always UTC.
     let dt = chrono::DateTime::from_timestamp(unix_ts as i64, 0)
         .unwrap_or_default();
     let ts_str = dt.format("%Y%m%d%H%M%S").to_string();
