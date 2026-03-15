@@ -1774,15 +1774,19 @@ where
         }
 
         let cleaned = tools::strip_tool_call_blocks(&assistant_text);
-        // Only push the assistant message if it has non-empty text after
-        // stripping tool calls.  Empty assistant messages break some chat
-        // templates and waste context.
-        if !cleaned.trim().is_empty() {
-            messages.push(json!({
-                "role": "assistant",
-                "content": cleaned,
-            }));
-        }
+        // Always push an assistant message to maintain user/assistant alternation.
+        // If the model only emitted tool calls (no prose), use a short placeholder.
+        // This prevents consecutive user messages (original query + tool result)
+        // which break most local model chat templates.
+        let assistant_content = if cleaned.trim().is_empty() {
+            "[Calling tools…]".to_string()
+        } else {
+            cleaned
+        };
+        messages.push(json!({
+            "role": "assistant",
+            "content": assistant_content,
+        }));
 
         let selected_calls: Vec<tools::ToolCall> = tool_calls.into_iter().take(max_calls_per_round).collect();
 
