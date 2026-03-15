@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Chat
+
+- **Auto-label typed text every 5 seconds**: when the user types (not pastes) in the chat input, a 5-second interval — matching the EXG model's epoch window size (`EPOCH_S`) — accumulates only keyboard-originated characters using the `beforeinput` event's `inputType`. At the end of each 5-second window, if any recognisable words were typed, a label is automatically submitted via `submit_label` with the typed words as label text and the current chat session summary (session ID, model name, last 6 messages) as context. Paste, drop, and autocomplete inputs are excluded so only genuine typing is captured. The timer starts on component mount and flushes any remaining typed text on destroy.
+
 ### All Windows
 
 - **Rounded window corners**: all windows now have rounded corners (10px border-radius). Enabled via transparent Tauri windows (`transparent: true` on every `WebviewWindowBuilder`) combined with CSS `border-radius` and `overflow: hidden` on the root `<html>` element. On macOS, requires the `macos-private-api` feature flag (`macOSPrivateApi: true` in tauri.conf.json). Applies to the main window, settings, help, history, chat, about, calibration, downloads, search, session detail, labels, focus timer, onboarding, What's New, compare, and API windows.

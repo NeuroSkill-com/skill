@@ -1275,6 +1275,90 @@
     } catch {}
   }
 
+  // ── Typing-label auto-labeller ───────────────────────────────────────────
+  // Every 5 seconds (EPOCH_S from the EXG model window size), if the user
+  // *typed* (not pasted) any text in the chat input, we submit a label
+  // containing only the typed words.  Context = current chat session summary.
+  //
+  // We use the `beforeinput` event's `inputType` to distinguish physical
+  // keyboard strokes (`insertText`, `deleteContentBackward`, etc.) from
+  // paste/drop (`insertFromPaste`, `insertFromDrop`).
+
+  const TYPING_LABEL_INTERVAL_MS = 5_000;      // 5 s — matches EPOCH_S
+  let typedCharsInWindow   = $state("");        // accumulates typed chars
+  let typingLabelTimer: ReturnType<typeof setInterval> | undefined;
+
+  /** Called from the textarea `beforeinput` handler. */
+  function onChatBeforeInput(e: InputEvent) {
+    // Only count keyboard-originated insertions (not paste/drop/autocomplete).
+    if (e.inputType === "insertText" && e.data) {
+      typedCharsInWindow += e.data;
+    } else if (
+      e.inputType === "insertLineBreak" ||
+      e.inputType === "insertParagraph"
+    ) {
+      typedCharsInWindow += " ";
+    }
+  }
+
+  /**
+   * Build a compact context string from the current chat session for the
+   * auto-label's context field.
+   */
+  function buildSessionContext(): string {
+    const parts: string[] = [];
+    parts.push(`Chat session #${sessionId}`);
+    if (modelName) parts.push(`Model: ${modelName}`);
+    // Include a compact digest of the last few messages (up to ~2 KB).
+    const recent = messages.slice(-6);
+    if (recent.length > 0) {
+      parts.push("Recent messages:");
+      for (const m of recent) {
+        const prefix = m.role === "user" ? "User" : "Assistant";
+        const snippet = (m.content || "").slice(0, 300).replace(/\n+/g, " ").trim();
+        if (snippet) parts.push(`  [${prefix}] ${snippet}`);
+      }
+    }
+    return parts.join("\n");
+  }
+
+  /** Flush the current typing window: submit a label if there are typed words. */
+  async function flushTypingLabel() {
+    const raw = typedCharsInWindow.trim();
+    typedCharsInWindow = "";
+    if (!raw) return;                             // nothing typed this window
+
+    // Extract recognisable words (strip stray punctuation-only tokens).
+    const words = raw.split(/\s+/).filter(w => /[a-zA-Z0-9\u00C0-\u024F\u0400-\u04FF\u0590-\u05FF\u0600-\u06FF]/.test(w));
+    if (words.length === 0) return;
+
+    const labelText = words.join(" ");
+    const context   = buildSessionContext();
+    const now       = Math.floor(Date.now() / 1000);
+
+    try {
+      await invoke("submit_label", {
+        labelStartUtc: now - 5,     // label covers the past 5 s window
+        text:          labelText,
+        context,
+      });
+    } catch {
+      // Label store might be unavailable — silently ignore.
+    }
+  }
+
+  function startTypingLabelTimer() {
+    stopTypingLabelTimer();
+    typedCharsInWindow = "";
+    typingLabelTimer = setInterval(flushTypingLabel, TYPING_LABEL_INTERVAL_MS);
+  }
+
+  function stopTypingLabelTimer() {
+    if (typingLabelTimer) { clearInterval(typingLabelTimer); typingLabelTimer = undefined; }
+    // Flush any remaining typed text before stopping.
+    flushTypingLabel();
+  }
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   let unlistenStatus: (() => void) | undefined;
@@ -1380,6 +1464,9 @@
 
     // Sidebar loads its own session list via onMount; no extra call needed.
 
+    // Start the typing-label auto-labeller (5 s windows).
+    startTypingLabelTimer();
+
     await tick();
     inputEl?.focus();
   });
@@ -1388,6 +1475,7 @@
     unlistenStatus?.();
     unlistenBands?.();
     clearInterval(pollTimer);
+    stopTypingLabelTimer();
     if (generating) invoke("abort_llm_stream").catch(() => {});
   });
 
@@ -2475,6 +2563,7 @@
         bind:this={inputEl}
         bind:value={input}
         onkeydown={inputKeydown}
+        onbeforeinput={onChatBeforeInput}
         oninput={autoResizeInput}
         placeholder={status === "running" ? t("chat.inputPlaceholder")
                      : status === "loading" ? t("chat.status.loading")
