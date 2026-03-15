@@ -389,8 +389,8 @@ pub(crate) async fn handle_event(
                 // SNR threshold below which signal quality is too poor to
                 // sustain focus mode.  After SNR_LOW_TICKS consecutive ticks
                 // (~1 minute at 4 Hz) below this level the focus mode exits.
-                const SNR_LOW_DB:    f32 = 5.0;
-                const SNR_LOW_TICKS: u32 = 240; // 60 s × 4 Hz
+                const SNR_LOW_DB: f32 = crate::constants::SNR_LOW_DB;
+                const SNR_LOW_TICKS: u32 = crate::constants::SNR_LOW_TICKS;
 
                 // Read DND config + current state, update rolling windows,
                 // decide action — all in one brief lock.

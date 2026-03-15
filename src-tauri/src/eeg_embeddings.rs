@@ -711,7 +711,7 @@ impl DayStore {
 
 /// Sliding-window EEG accumulator that triggers ZUNA embedding on 5-second
 /// epochs with configurable overlap.
-const PPG_CHANNELS: usize = 3;
+const PPG_CHANNELS: usize = crate::constants::PPG_CHANNELS;
 
 pub struct EegAccumulator {
     bufs:        [VecDeque<f32>; EEG_CHANNELS],

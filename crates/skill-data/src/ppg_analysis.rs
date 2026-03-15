@@ -14,14 +14,15 @@
 
 use serde::Serialize;
 use std::collections::VecDeque;
+use skill_constants::{PPG_SAMPLE_RATE, PPG_IBI_MIN_S, PPG_IBI_MAX_S};
 
 /// PPG sample rate on Muse 2/S (Hz).
-const PPG_SR: f64 = 64.0;
+const PPG_SR: f64 = PPG_SAMPLE_RATE as f64;
 
 /// Minimum IBI in seconds (~200 bpm).
-const IBI_MIN: f64 = 0.3;
+const IBI_MIN: f64 = PPG_IBI_MIN_S;
 /// Maximum IBI in seconds (~30 bpm).
-const IBI_MAX: f64 = 2.0;
+const IBI_MAX: f64 = PPG_IBI_MAX_S;
 
 // ── PPG Metrics struct ────────────────────────────────────────────────────────
 

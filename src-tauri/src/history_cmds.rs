@@ -710,7 +710,7 @@ pub(crate) struct EmbeddingSession {
 /// new session).  This makes the picker independent of CSV sidecar files.
 #[tauri::command]
 pub(crate) fn list_embedding_sessions(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<EmbeddingSession> {
-    const GAP_SECS: u64 = 120;
+    const GAP_SECS: u64 = crate::constants::SESSION_GAP_SECS;
 
     let skill_dir = state.lock_or_recover().skill_dir.clone();
 

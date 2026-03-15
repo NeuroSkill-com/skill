@@ -85,7 +85,7 @@ pub fn tts_log(msg: &str) {
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
-pub const TAIL_SILENCE_SECS: f32 = 0.25;
+pub use skill_constants::TTS_TAIL_SILENCE_SECS as TAIL_SILENCE_SECS;
 
 // ─── Progress event ───────────────────────────────────────────────────────────
 
@@ -98,7 +98,7 @@ pub struct TtsProgressEvent {
     pub label: String,
 }
 
-pub const TTS_PROGRESS_EVENT: &str = "tts-progress";
+pub use skill_constants::TTS_PROGRESS_EVENT;
 
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 impl TtsProgressEvent {

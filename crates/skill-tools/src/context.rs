@@ -31,7 +31,7 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize) {
     let budget = n_ctx * 3 / 4; // 75% of context for prompt
 
     // Phase 1: Truncate long tool results in history to save context space.
-    const MAX_TOOL_RESULT_CHARS: usize = 2000;
+    const MAX_TOOL_RESULT_CHARS: usize = skill_constants::TOOL_MAX_RESULT_CHARS;
     for msg in messages.iter_mut() {
         let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
         if role == "tool" {

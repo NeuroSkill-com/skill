@@ -93,7 +93,7 @@ pub struct LlmLogEntry {
 pub type LlmLogBuffer = Arc<Mutex<VecDeque<LlmLogEntry>>>;
 
 /// Maximum number of log lines kept in memory.
-const LOG_CAP: usize = 500;
+const LOG_CAP: usize = skill_constants::LLM_LOG_CAP;
 
 /// Create a new, empty log buffer.
 pub fn new_log_buffer() -> LlmLogBuffer {
@@ -106,7 +106,7 @@ pub fn new_log_buffer() -> LlmLogBuffer {
 /// and `run_actor` (which creates it) can hold a reference.
 pub type LlmLogFile = Arc<Mutex<std::io::BufWriter<std::fs::File>>>;
 
-const LLM_LOG_DIR: &str = "llm_logs";
+const LLM_LOG_DIR: &str = skill_constants::LLM_LOG_DIR;
 
 /// Append a log entry to the in-memory buffer, emit a `llm:log` Tauri event,
 /// and optionally write to the per-session log file.

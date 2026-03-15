@@ -35,20 +35,17 @@ use serde::Serialize;
 
 use skill_data::util::MutexExt;
 use skill_commands::{unix_to_ts, NeighborMetrics};
-use skill_constants::{LABELS_FILE, SQLITE_FILE};
+use skill_constants::{
+    LABELS_FILE, SQLITE_FILE,
+    LABEL_TEXT_INDEX_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_EEG_INDEX_FILE,
+    HNSW_M, HNSW_EF_CONSTRUCTION,
+};
 
-// ── File names ────────────────────────────────────────────────────────────────
-
-const TEXT_INDEX_FILE:    &str = "label_text_index.hnsw";
-const CONTEXT_INDEX_FILE: &str = "label_context_index.hnsw";
-const EEG_INDEX_FILE:     &str = "label_eeg_index.hnsw";
-
-// ── HNSW hyper-parameters ─────────────────────────────────────────────────────
-
-/// Bi-directional link count — higher = better recall, more memory.
-const HNSW_M:  usize = 16;
-/// ef at construction time — higher = better quality, slower build.
-const HNSW_EF: usize = 200;
+// Local aliases for readability.
+const TEXT_INDEX_FILE:    &str = LABEL_TEXT_INDEX_FILE;
+const CONTEXT_INDEX_FILE: &str = LABEL_CONTEXT_INDEX_FILE;
+const EEG_INDEX_FILE:     &str = LABEL_EEG_INDEX_FILE;
+const HNSW_EF: usize           = HNSW_EF_CONSTRUCTION;
 
 fn fresh_index() -> LabeledIndex<Cosine, i64> {
     Builder::new().m(HNSW_M).ef_construction(HNSW_EF).build_labeled(Cosine)

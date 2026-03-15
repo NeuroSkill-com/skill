@@ -37,29 +37,20 @@
 use serde::Serialize;
 use std::collections::VecDeque;
 
-// ── Thresholds ────────────────────────────────────────────────────────────────
+use skill_constants::{
+    QUALITY_WINDOW, QUALITY_NO_SIGNAL_RMS, QUALITY_POOR_RMS,
+    QUALITY_CLIP_UV, QUALITY_POOR_CLIPS, QUALITY_FAIR_RMS,
+};
 
-/// Rolling window length in samples (1 second at 256 Hz).
-const WINDOW: usize = 256;
+// ── Thresholds (from skill-constants) ─────────────────────────────────────────
 
-/// Minimum samples required before making a quality judgement (~250 ms).
-const MIN_SAMPLES: usize = WINDOW / 4;
-
-/// RMS below this → electrode not in contact (µV).
-const THRESH_NO_SIGNAL_RMS: f64 = 5.0;
-
-/// RMS above this → gross movement or sustained saturation (µV).
-const THRESH_POOR_RMS: f64 = 400.0;
-
-/// Samples whose absolute value exceeds this are counted as clips (µV).
-/// Set near (but below) the actual ±1500 µV ADC rail.
-const THRESH_CLIP_UV: f64 = 1200.0;
-
-/// Eight or more clips per window → Poor quality.
-const THRESH_POOR_CLIPS: usize = 8;
-
-/// RMS above this → noticeable artifact or poor contact / Fair (µV).
-const THRESH_FAIR_RMS: f64 = 100.0;
+const WINDOW: usize            = QUALITY_WINDOW;
+const MIN_SAMPLES: usize       = WINDOW / 4;
+const THRESH_NO_SIGNAL_RMS: f64 = QUALITY_NO_SIGNAL_RMS;
+const THRESH_POOR_RMS: f64     = QUALITY_POOR_RMS;
+const THRESH_CLIP_UV: f64      = QUALITY_CLIP_UV;
+const THRESH_POOR_CLIPS: usize = QUALITY_POOR_CLIPS;
+const THRESH_FAIR_RMS: f64     = QUALITY_FAIR_RMS;
 
 // ── SignalQuality ─────────────────────────────────────────────────────────────
 

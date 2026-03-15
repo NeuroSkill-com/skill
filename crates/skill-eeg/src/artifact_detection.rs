@@ -16,16 +16,12 @@
 //!   Electroencephalography and Clinical Neurophysiology, 55(4), 468–484.
 
 use std::collections::VecDeque;
+use skill_constants::{
+    MUSE_SAMPLE_RATE, BLINK_THRESHOLD_UV, BLINK_REFRACTORY_S, BLINK_RATE_WINDOW_S,
+};
 
-/// EEG sample rate (Hz).
-const SR: f64 = 256.0;
-
-/// Blink detection: minimum µV spike amplitude on AF7/AF8.
-const BLINK_THRESHOLD_UV: f64 = 80.0;
-/// Blink refractory period — minimum gap between consecutive blinks (seconds).
-const BLINK_REFRACTORY_S: f64 = 0.3;
-/// Blink rate window (seconds) — sliding window for blinks/min calculation.
-const BLINK_RATE_WINDOW_S: f64 = 60.0;
+/// EEG sample rate (Hz) — derived from the canonical constant.
+const SR: f64 = MUSE_SAMPLE_RATE as f64;
 
 // ── Public metrics ────────────────────────────────────────────────────────────
 

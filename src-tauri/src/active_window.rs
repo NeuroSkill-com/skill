@@ -241,7 +241,7 @@ pub fn poll_active_window() -> Option<ActiveWindowInfo> {
 /// within the last `ACTIVE_THRESHOLD_SECS` seconds.
 ///
 /// Uses permission-free platform APIs; no Accessibility / XRecord / hooks.
-const ACTIVE_THRESHOLD_SECS: f64 = 2.0;
+const ACTIVE_THRESHOLD_SECS: f64 = crate::constants::ACTIVE_WINDOW_IDLE_THRESHOLD_SECS;
 
 #[cfg(target_os = "macos")]
 fn poll_input_activity() -> (bool, bool) {

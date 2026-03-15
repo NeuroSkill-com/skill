@@ -15,9 +15,9 @@ use crate::{play_f32_audio, tts_log, init_espeak_data_path};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-pub const HF_REPO:       &str = "KittenML/kitten-tts-mini-0.8";
-pub const VOICE_DEFAULT: &str = "Jasper";
-const SPEED:                    f32  = 1.0;
+pub use skill_constants::KITTEN_TTS_HF_REPO as HF_REPO;
+pub use skill_constants::KITTEN_TTS_VOICE_DEFAULT as VOICE_DEFAULT;
+const SPEED: f32 = skill_constants::KITTEN_TTS_SPEED;
 pub const SAMPLE_RATE:   u32  = kittentts::SAMPLE_RATE;
 
 // ─── Statics ──────────────────────────────────────────────────────────────────

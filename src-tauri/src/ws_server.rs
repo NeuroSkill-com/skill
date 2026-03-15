@@ -246,7 +246,7 @@ use crate::constants::{
 // ── Client & request tracking ─────────────────────────────────────────────────
 
 /// Maximum number of request log entries kept in memory.
-const MAX_REQUEST_LOG: usize = 200;
+const MAX_REQUEST_LOG: usize = skill_constants::WS_MAX_REQUEST_LOG;
 
 /// A connected WebSocket client tracked for the API status panel.
 #[derive(Clone, Serialize)]
