@@ -1583,6 +1583,15 @@ pub fn search_screenshots_by_image(
     crate::screenshot::search_by_vector(&hnsw, &store, &query, k)
 }
 
+/// Get screenshot pipeline metrics (capture + embed thread performance).
+#[tauri::command]
+pub fn get_screenshot_metrics(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> crate::screenshot::MetricsSnapshot {
+    let metrics = state.lock_or_recover().screenshot_metrics.clone();
+    metrics.snapshot()
+}
+
 /// Check whether OCR models are downloaded and ready.
 #[tauri::command]
 pub fn check_ocr_models_ready(

@@ -281,6 +281,7 @@ use settings_cmds::{
     get_screenshots_around, search_screenshots_by_vector, search_screenshots_by_image,
     search_screenshots_by_text,
     check_ocr_models_ready, download_ocr_models,
+    get_screenshot_metrics,
 };
 
 // LLM catalog commands (feature-gated)
@@ -566,6 +567,8 @@ pub struct AppState {
     /// Shared screenshot store — opened at startup, used by both the
     /// background worker and Tauri query commands.
     pub screenshot_store: Option<std::sync::Arc<screenshot_store::ScreenshotStore>>,
+    /// Shared screenshot pipeline metrics (lock-free atomics).
+    pub screenshot_metrics: std::sync::Arc<screenshot::ScreenshotMetrics>,
 
     /// All LLM-related runtime state, heap-allocated to keep `AppState` small.
     pub llm: Box<LlmState>,
@@ -735,6 +738,7 @@ impl Default for AppState {
             dnd_snr_low_ticks:  0,
             screenshot_config:  ScreenshotConfig::default(),
             screenshot_store:   None,
+            screenshot_metrics: std::sync::Arc::new(screenshot::ScreenshotMetrics::new()),
         }
     }
 }
@@ -1666,9 +1670,11 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
         let app_ss = app.handle().clone();
         let sd = skill_dir.clone();
+        let ss_metrics = app.state::<Mutex<Box<AppState>>>()
+            .lock_or_recover().screenshot_metrics.clone();
         std::thread::Builder::new()
             .name("screenshot-worker".into())
-            .spawn(move || screenshot::run_screenshot_worker(app_ss, sd, ss_store))
+            .spawn(move || screenshot::run_screenshot_worker(app_ss, sd, ss_store, ss_metrics))
             .expect("[screenshot] failed to spawn worker thread");
     }
 
@@ -1974,6 +1980,7 @@ pub fn run() {
             search_screenshots_by_image,
             search_screenshots_by_text,
             check_ocr_models_ready, download_ocr_models,
+            get_screenshot_metrics,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,

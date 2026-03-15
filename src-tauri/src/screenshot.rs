@@ -736,6 +736,106 @@ struct ScreenshotCapturedEvent {
     filename: String,
 }
 
+// ── Pipeline metrics (lock-free atomics) ──────────────────────────────────────
+
+use std::sync::atomic::{AtomicU64, AtomicI64, Ordering};
+
+/// Shared metrics updated by both capture and embed threads.
+/// All times are in microseconds.  All counters are monotonic.
+pub struct ScreenshotMetrics {
+    // ── Capture thread ──
+    pub captures:          AtomicU64,
+    pub capture_errors:    AtomicU64,
+    pub drops:             AtomicU64,   // try_send failures
+    pub capture_us:        AtomicU64,   // last window-capture time
+    pub ocr_us:            AtomicU64,   // last OCR time
+    pub resize_us:         AtomicU64,   // last resize+pad time
+    pub save_us:           AtomicU64,   // last WebP save + SQLite insert
+    pub capture_total_us:  AtomicU64,   // last full capture-thread iteration
+
+    // ── Embed thread ──
+    pub embeds:            AtomicU64,
+    pub embed_errors:      AtomicU64,
+    pub vision_embed_us:   AtomicU64,   // last vision embedding time
+    pub text_embed_us:     AtomicU64,   // last OCR text embedding time
+    pub embed_total_us:    AtomicU64,   // last full embed iteration
+    pub queue_depth:       AtomicI64,   // current channel occupancy (inc on send, dec on recv)
+
+    // ── Throughput (rolling) ──
+    pub last_capture_unix: AtomicU64,   // unix-ms of last capture
+    pub last_embed_unix:   AtomicU64,   // unix-ms of last embed completion
+}
+
+impl ScreenshotMetrics {
+    pub fn new() -> Self {
+        Self {
+            captures:         AtomicU64::new(0),
+            capture_errors:   AtomicU64::new(0),
+            drops:            AtomicU64::new(0),
+            capture_us:       AtomicU64::new(0),
+            ocr_us:           AtomicU64::new(0),
+            resize_us:        AtomicU64::new(0),
+            save_us:          AtomicU64::new(0),
+            capture_total_us: AtomicU64::new(0),
+            embeds:           AtomicU64::new(0),
+            embed_errors:     AtomicU64::new(0),
+            vision_embed_us:  AtomicU64::new(0),
+            text_embed_us:    AtomicU64::new(0),
+            embed_total_us:   AtomicU64::new(0),
+            queue_depth:      AtomicI64::new(0),
+            last_capture_unix: AtomicU64::new(0),
+            last_embed_unix:  AtomicU64::new(0),
+        }
+    }
+
+    /// Snapshot all metrics into a serializable struct.
+    pub fn snapshot(&self) -> MetricsSnapshot {
+        MetricsSnapshot {
+            captures:         self.captures.load(Ordering::Relaxed),
+            capture_errors:   self.capture_errors.load(Ordering::Relaxed),
+            drops:            self.drops.load(Ordering::Relaxed),
+            capture_us:       self.capture_us.load(Ordering::Relaxed),
+            ocr_us:           self.ocr_us.load(Ordering::Relaxed),
+            resize_us:        self.resize_us.load(Ordering::Relaxed),
+            save_us:          self.save_us.load(Ordering::Relaxed),
+            capture_total_us: self.capture_total_us.load(Ordering::Relaxed),
+            embeds:           self.embeds.load(Ordering::Relaxed),
+            embed_errors:     self.embed_errors.load(Ordering::Relaxed),
+            vision_embed_us:  self.vision_embed_us.load(Ordering::Relaxed),
+            text_embed_us:    self.text_embed_us.load(Ordering::Relaxed),
+            embed_total_us:   self.embed_total_us.load(Ordering::Relaxed),
+            queue_depth:      self.queue_depth.load(Ordering::Relaxed),
+            last_capture_unix: self.last_capture_unix.load(Ordering::Relaxed),
+            last_embed_unix:  self.last_embed_unix.load(Ordering::Relaxed),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct MetricsSnapshot {
+    pub captures:         u64,
+    pub capture_errors:   u64,
+    pub drops:            u64,
+    pub capture_us:       u64,
+    pub ocr_us:           u64,
+    pub resize_us:        u64,
+    pub save_us:          u64,
+    pub capture_total_us: u64,
+    pub embeds:           u64,
+    pub embed_errors:     u64,
+    pub vision_embed_us:  u64,
+    pub text_embed_us:    u64,
+    pub embed_total_us:   u64,
+    pub queue_depth:      i64,
+    pub last_capture_unix: u64,
+    pub last_embed_unix:  u64,
+}
+
+/// Convenience: current time in milliseconds since epoch.
+fn now_ms() -> u64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
+}
+
 // ── Embed job sent from capture thread → embed thread ─────────────────────────
 
 struct EmbedJob {
@@ -765,6 +865,7 @@ pub fn run_screenshot_worker(
     app: AppHandle,
     skill_dir: PathBuf,
     shared_store: Option<Arc<ScreenshotStore>>,
+    metrics: Arc<ScreenshotMetrics>,
 ) {
     let store = match shared_store.or_else(|| ScreenshotStore::open(&skill_dir).map(Arc::new)) {
         Some(s) => s,
@@ -803,15 +904,16 @@ pub fn run_screenshot_worker(
     // thread falls behind, the capture thread blocks on send rather than
     // accumulating unbounded memory.
     let (embed_tx, embed_rx) = crossbeam_channel::bounded::<EmbedJob>(4);
-    let embed_store  = Arc::clone(&store);
-    let embed_dir    = skill_dir.clone();
-    let embed_app    = app.clone();
-    let embed_config = config.clone();
+    let embed_store   = Arc::clone(&store);
+    let embed_dir     = skill_dir.clone();
+    let embed_app     = app.clone();
+    let embed_config  = config.clone();
+    let embed_metrics = Arc::clone(&metrics);
 
     std::thread::Builder::new()
         .name("screenshot-embed".into())
         .spawn(move || {
-            run_embed_thread(embed_app, embed_dir, embed_store, embed_rx, embed_config);
+            run_embed_thread(embed_app, embed_dir, embed_store, embed_rx, embed_config, embed_metrics);
         })
         .expect("[screenshot] failed to spawn embed thread");
 
@@ -836,13 +938,21 @@ pub fn run_screenshot_worker(
         if !config.enabled { continue; }
         if config.session_only && !session_active { continue; }
 
+        let iter_start = Instant::now();
+
         // ── Capture active window ──
+        let t0 = Instant::now();
         let captured = match capture_active_window() {
             Some(c) => c,
-            None => continue,
+            None => {
+                metrics.capture_errors.fetch_add(1, Ordering::Relaxed);
+                continue;
+            }
         };
+        metrics.capture_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         // ── OCR on full-resolution image (before downsizing) ──
+        let t0 = Instant::now();
         let ocr_text = if config.ocr_enabled {
             if let Some(ref engine) = ocr_engine {
                 run_ocr(engine, &captured.raw_bytes).unwrap_or_default()
@@ -852,16 +962,20 @@ pub fn run_screenshot_worker(
         } else {
             String::new()
         };
+        metrics.ocr_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         // ── Resize + pad ──
+        let t0 = Instant::now();
         let (resized_png, w, h) = match resize_fit_pad(&captured.raw_bytes, config.image_size) {
             Some(r) => r,
             None => continue,
         };
         // Drop the full-res capture immediately to free memory
         drop(captured);
+        metrics.resize_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
-        // ── Save to disk as WebP ──
+        // ── Save to disk as WebP + SQLite + context ──
+        let t0 = Instant::now();
         let (ts_str, unix_ts) = yyyymmddhhmmss_utc();
         let date_str = &ts_str[..8];
         let date_dir = screenshots_dir.join(date_str);
@@ -873,7 +987,6 @@ pub fn run_screenshot_worker(
             None => continue,
         };
 
-        // ── Active window context (single lock, already read above) ──
         let (app_name, window_title) = {
             let r = app.state::<Mutex<Box<AppState>>>();
             let g = r.lock_or_recover();
@@ -885,7 +998,6 @@ pub fn run_screenshot_worker(
 
         let ts_i64: i64 = ts_str.parse().unwrap_or(0);
 
-        // ── Insert SQLite row with NULL embeddings ──
         let row_id = store.insert(&ScreenshotRow {
             timestamp: ts_i64,
             unix_ts,
@@ -908,6 +1020,8 @@ pub fn run_screenshot_worker(
             ocr_hnsw_id: None,
         });
 
+        metrics.save_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+
         // ── Notify frontend ──
         let _ = app.emit("screenshot-captured", ScreenshotCapturedEvent {
             ts: ts_str, filename: webp_name,
@@ -915,14 +1029,25 @@ pub fn run_screenshot_worker(
 
         // ── Send to embed thread (non-blocking if capacity available) ──
         if let Some(row_id) = row_id {
-            let _ = embed_tx.try_send(EmbedJob {
+            match embed_tx.try_send(EmbedJob {
                 row_id,
                 ts_i64,
                 resized_png,
                 ocr_text,
                 config: config.clone(),
-            });
+            }) {
+                Ok(()) => {
+                    metrics.queue_depth.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(_) => {
+                    metrics.drops.fetch_add(1, Ordering::Relaxed);
+                }
+            }
         }
+
+        metrics.captures.fetch_add(1, Ordering::Relaxed);
+        metrics.capture_total_us.store(iter_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics.last_capture_unix.store(now_ms(), Ordering::Relaxed);
     }
 }
 
@@ -935,6 +1060,7 @@ fn run_embed_thread(
     store: Arc<ScreenshotStore>,
     rx: crossbeam_channel::Receiver<EmbedJob>,
     initial_config: ScreenshotConfig,
+    metrics: Arc<ScreenshotMetrics>,
 ) {
     // Load HNSW indexes
     let mut hnsw = load_or_rebuild_hnsw(&skill_dir, &store);
@@ -964,6 +1090,8 @@ fn run_embed_thread(
     let mut ocr_inserts_since_save: usize = 0;
 
     while let Ok(job) = rx.recv() {
+        metrics.queue_depth.fetch_sub(1, Ordering::Relaxed);
+        let embed_start = Instant::now();
         let config = &job.config;
 
         // Hot-reload vision encoder if model changed
@@ -975,6 +1103,7 @@ fn run_embed_thread(
         }
 
         // ── Vision embedding ──
+        let t0 = Instant::now();
         let (embedding, model_backend, model_id) = match config.embed_backend.as_str() {
             "fastembed" => {
                 if let Some(ref mut fe) = fe_encoder {
@@ -1018,6 +1147,8 @@ fn run_embed_thread(
             _ => (None, String::new(), String::new()),
         };
 
+        metrics.vision_embed_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+
         // ── Backfill vision embedding ──
         if let Some(ref emb) = embedding {
             let id = hnsw.len() as u64;
@@ -1034,6 +1165,7 @@ fn run_embed_thread(
         }
 
         // ── Backfill OCR text embedding ──
+        let t0 = Instant::now();
         if !job.ocr_text.is_empty() {
             if let Some(ref mut te) = text_embedder {
                 if let Ok(mut vecs) = te.embed(vec![job.ocr_text.as_str()], None) {
@@ -1050,6 +1182,11 @@ fn run_embed_thread(
                 }
             }
         }
+        metrics.text_embed_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
+
+        metrics.embeds.fetch_add(1, Ordering::Relaxed);
+        metrics.embed_total_us.store(embed_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+        metrics.last_embed_unix.store(now_ms(), Ordering::Relaxed);
     }
 
     // Channel closed — save indexes before exit

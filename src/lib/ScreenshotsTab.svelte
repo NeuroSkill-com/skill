@@ -71,6 +71,24 @@ the Free Software Foundation, version 3 only. -->
   let ocrSearching = $state(false);
   let ocrSearched  = $state(false);
 
+  // ── Pipeline metrics ──────────────────────────────────────────────────────
+  interface PipelineMetrics {
+    captures: number; capture_errors: number; drops: number;
+    capture_us: number; ocr_us: number; resize_us: number; save_us: number; capture_total_us: number;
+    embeds: number; embed_errors: number;
+    vision_embed_us: number; text_embed_us: number; embed_total_us: number;
+    queue_depth: number;
+    last_capture_unix: number; last_embed_unix: number;
+  }
+  let pipeMetrics = $state<PipelineMetrics | null>(null);
+  let metricsTimer: ReturnType<typeof setInterval> | null = null;
+
+  function fmtUs(us: number): string {
+    if (us < 1000) return `${us}µs`;
+    if (us < 1_000_000) return `${(us / 1000).toFixed(1)}ms`;
+    return `${(us / 1_000_000).toFixed(2)}s`;
+  }
+
   // ── Recommended image size for current model ──────────────────────────────
   const recommendedSize = $derived.by(() => {
     if (config.embed_backend === "mmproj") return 768;
@@ -170,13 +188,23 @@ the Free Software Foundation, version 3 only. -->
     return `${m}m ${s}s`;
   }
 
+  async function refreshMetrics() {
+    try { pipeMetrics = await invoke<PipelineMetrics>("get_screenshot_metrics"); } catch {}
+  }
+
   onMount(async () => {
     await load();
+    await refreshMetrics();
     unlisten = await listen<{ done: number; total: number; elapsed_secs: number; eta_secs: number }>(
       "screenshot-reembed-progress", e => { progress = e.payload; }
     );
+    // Poll metrics every 2s when enabled
+    metricsTimer = setInterval(() => { if (config.enabled) refreshMetrics(); }, 2000);
   });
-  onDestroy(() => unlisten?.());
+  onDestroy(() => {
+    unlisten?.();
+    if (metricsTimer) clearInterval(metricsTimer);
+  });
 </script>
 
 <section class="flex flex-col gap-5">
@@ -679,6 +707,102 @@ the Free Software Foundation, version 3 only. -->
           </div>
         {:else if ocrSearched}
           <span class="text-[0.58rem] text-muted-foreground/50 italic">{t("screenshots.ocrNoResults")}</span>
+        {/if}
+      </div>
+
+    </CardContent>
+  </Card>
+  {/if}
+
+  <!-- ── Pipeline Performance ──────────────────────────────────────────── -->
+  {#if config.enabled && pipeMetrics && pipeMetrics.captures > 0}
+  <div class="flex items-center gap-2 px-0.5 pt-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      {t("screenshots.perfTitle")}
+    </span>
+    <button onclick={refreshMetrics}
+            class="text-[0.48rem] text-muted-foreground/40 hover:text-muted-foreground transition-colors">
+      ↻
+    </button>
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="px-4 py-3.5 flex flex-col gap-3">
+
+      <!-- Capture thread -->
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0"></span>
+          <span class="text-[0.66rem] font-semibold text-foreground">{t("screenshots.perfCapture")}</span>
+          <span class="ml-auto text-[0.54rem] text-muted-foreground tabular-nums">
+            {pipeMetrics.captures} {t("screenshots.perfTotal")}
+          </span>
+        </div>
+        <div class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-[0.58rem] pl-3.5">
+          <span class="text-muted-foreground">{t("screenshots.perfWindowCapture")}</span>
+          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.capture_us)}</span>
+          {#if pipeMetrics.ocr_us > 0}
+          <span class="text-muted-foreground">{t("screenshots.perfOcr")}</span>
+          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.ocr_us)}</span>
+          {/if}
+          <span class="text-muted-foreground">{t("screenshots.perfResize")}</span>
+          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.resize_us)}</span>
+          <span class="text-muted-foreground">{t("screenshots.perfSave")}</span>
+          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.save_us)}</span>
+          <span class="text-muted-foreground font-semibold">{t("screenshots.perfIterTotal")}</span>
+          <span class="text-foreground tabular-nums text-right font-semibold">{fmtUs(pipeMetrics.capture_total_us)}</span>
+        </div>
+        {#if pipeMetrics.capture_errors > 0}
+          <span class="text-[0.54rem] text-red-500 pl-3.5">{pipeMetrics.capture_errors} {t("screenshots.perfErrors")}</span>
+        {/if}
+      </div>
+
+      <Separator class="bg-border dark:bg-white/[0.05]" />
+
+      <!-- Embed thread -->
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full shrink-0
+                       {pipeMetrics.queue_depth > 2 ? 'bg-amber-500' : 'bg-green-500'}"></span>
+          <span class="text-[0.66rem] font-semibold text-foreground">{t("screenshots.perfEmbed")}</span>
+          <span class="ml-auto text-[0.54rem] text-muted-foreground tabular-nums">
+            {pipeMetrics.embeds} {t("screenshots.perfTotal")}
+          </span>
+        </div>
+        <div class="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-[0.58rem] pl-3.5">
+          <span class="text-muted-foreground">{t("screenshots.perfVisionEmbed")}</span>
+          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.vision_embed_us)}</span>
+          {#if pipeMetrics.text_embed_us > 0}
+          <span class="text-muted-foreground">{t("screenshots.perfTextEmbed")}</span>
+          <span class="text-foreground tabular-nums text-right">{fmtUs(pipeMetrics.text_embed_us)}</span>
+          {/if}
+          <span class="text-muted-foreground font-semibold">{t("screenshots.perfIterTotal")}</span>
+          <span class="text-foreground tabular-nums text-right font-semibold">{fmtUs(pipeMetrics.embed_total_us)}</span>
+        </div>
+      </div>
+
+      <Separator class="bg-border dark:bg-white/[0.05]" />
+
+      <!-- Queue + drops -->
+      <div class="flex items-center gap-4 text-[0.58rem]">
+        <div class="flex items-center gap-1.5">
+          <span class="text-muted-foreground">{t("screenshots.perfQueue")}</span>
+          <span class="tabular-nums font-semibold
+                       {pipeMetrics.queue_depth > 2 ? 'text-amber-500' : 'text-foreground'}">
+            {pipeMetrics.queue_depth}/4
+          </span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-muted-foreground">{t("screenshots.perfDrops")}</span>
+          <span class="tabular-nums font-semibold
+                       {pipeMetrics.drops > 0 ? 'text-red-500' : 'text-foreground'}">
+            {pipeMetrics.drops}
+          </span>
+        </div>
+        {#if pipeMetrics.drops > 0}
+          <span class="text-[0.5rem] text-red-500/70">
+            {t("screenshots.perfDropsHint")}
+          </span>
         {/if}
       </div>
 
