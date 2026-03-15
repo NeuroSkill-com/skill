@@ -8,6 +8,12 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### All Windows
 
+- **Real-time context usage prediction**: the context usage bar now updates live instead of only after inference completes:
+  - **Before sending**: estimates prompt tokens from all messages + system prompt + tool prompt overhead + current input text (~4 chars/token heuristic)
+  - **During streaming**: completion tokens are counted in real-time as deltas arrive
+  - **After completion**: snaps to real token counts from llama.cpp (`done` chunk)
+  - Shows `~` prefix when displaying estimated values vs. real ones
+  - Bar animation reduced from 300ms to 150ms for more responsive feel
 - **Cmd/Ctrl+W now closes windows**: added a global keydown handler in the root layout that calls `getCurrentWindow().close()` on ⌘W (macOS) or Ctrl+W (Linux/Windows). The main window is hidden (existing behavior), while secondary windows (chat, settings, help, about, etc.) are closed.
 
 ### Chat UI

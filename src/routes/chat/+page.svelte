@@ -564,6 +564,11 @@
 
   let generating     = $state(false);
   let aborting       = $state(false);   // true while abort_llm_stream is in flight
+  /** Live estimated context usage — updated in real-time as messages change.
+   *  Snaps to real values when a `done` chunk arrives from llama.cpp.
+   *  `null` means "use estimate", otherwise holds real usage from the server. */
+  let realPromptTokens     = $state<number | null>(null);
+  let streamCompletionToks = $state(0);  // completion tokens counted during streaming
   let msgId          = $state(0);
   let msgsEl         = $state<HTMLElement | null>(null);
   let inputEl        = $state<HTMLTextAreaElement | null>(null);
@@ -682,6 +687,41 @@
     : status === "loading" ? "text-amber-500 animate-pulse"
     : "text-muted-foreground/40"
   );
+
+  // ── Live context usage estimation ────────────────────────────────────────
+  // Rough estimate: ~4 chars per token, ~10 tokens overhead per message for
+  // role tags / separators / chat template markup.
+  function estimateTokens(text: string): number {
+    return Math.ceil(text.length / 4) + 1;
+  }
+
+  /** Estimated prompt tokens based on current messages + system prompt. */
+  const estimatedPromptTokens = $derived.by(() => {
+    let total = estimateTokens(systemPrompt) + 10; // system message
+    // Tool prompt overhead (compact ~30 tok, full ~500 tok)
+    if (supportsTools) {
+      const enabledCount = [toolConfig.date, toolConfig.location, toolConfig.web_search,
+        toolConfig.web_fetch, toolConfig.bash, toolConfig.read_file,
+        toolConfig.write_file, toolConfig.edit_file].filter(Boolean).length;
+      if (enabledCount > 0) total += nCtx <= 4096 ? 30 : 500;
+    }
+    for (const m of messages) {
+      total += estimateTokens(m.content) + 10;
+      if (m.thinking) total += estimateTokens(m.thinking) + 5;
+      if (m.leadIn) total += estimateTokens(m.leadIn);
+    }
+    // Include the current input being typed
+    if (input.trim()) total += estimateTokens(input) + 10;
+    return total;
+  });
+
+  /** Best-available context usage: real values when available, estimate otherwise. */
+  const liveUsedTokens = $derived.by(() => {
+    if (realPromptTokens !== null) {
+      return realPromptTokens + streamCompletionToks;
+    }
+    return estimatedPromptTokens + streamCompletionToks;
+  });
 
   // ── Scroll pinning ─────────────────────────────────────────────────────────
   // When the user scrolls up we stop auto-scrolling; as soon as they return
@@ -861,6 +901,8 @@
     await scrollBottom(true);   // force — user just sent, must see response start
 
     generating = true;
+    realPromptTokens     = null;  // reset — use estimates until done chunk arrives
+    streamCompletionToks = 0;
     const t0   = performance.now();
     let   ttft: number | undefined;
 
@@ -928,6 +970,8 @@
         // handler; just clear the hadToolUse flag so we know we're back in streaming.
         if (hadToolUse) hadToolUse = false;
         rawAcc += chunk.content;
+        // Approximate completion token count from streamed text (~4 chars/token)
+        streamCompletionToks = Math.ceil(rawAcc.length / 4);
         const { leadIn, thinking, content } = mergeWithFrozen(parseAssistantOutput(rawAcc));
         messages = messages.map(m =>
           m.id === assistantMsg.id
@@ -1022,6 +1066,10 @@
           total_tokens:      chunk.prompt_tokens + chunk.completion_tokens,
           n_ctx:             chunk.n_ctx,
         };
+        // Snap to real values from llama.cpp
+        realPromptTokens     = chunk.prompt_tokens;
+        streamCompletionToks = chunk.completion_tokens;
+        if (chunk.n_ctx > 0) nCtx = chunk.n_ctx;
         messages = messages.map(m =>
           m.id === assistantMsg.id
             ? { ...m, pending: false, leadIn, content, thinking, ttft, elapsed, usage }
@@ -1449,24 +1497,23 @@
 
   <!-- ── Always-visible context usage bar ─────────────────────────────────── -->
   {#if nCtx > 0}
-    {@const lastUsage = [...messages].reverse().find(m => m.role === "assistant" && m.usage)?.usage}
-    {@const usedTokens = lastUsage?.total_tokens ?? 0}
-    {@const usedPct = usedTokens > 0 ? Math.round((usedTokens / nCtx) * 100) : 0}
+    {@const usedPct = liveUsedTokens > 0 ? Math.round((liveUsedTokens / nCtx) * 100) : 0}
     {@const barColor = usedPct >= 90 ? "bg-red-500"
                      : usedPct >= 70 ? "bg-amber-500"
                      :                 "bg-primary"}
+    {@const isEstimate = realPromptTokens === null && liveUsedTokens > 0}
     <div class="flex items-center gap-2 px-3 py-1 border-b border-border dark:border-white/[0.06]
                 bg-slate-50/40 dark:bg-[#111118]/60 shrink-0">
       <span class="text-[0.5rem] font-semibold uppercase tracking-widest text-muted-foreground/50 shrink-0">
         {t("chat.ctxUsage")}
       </span>
       <div class="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-        <div class="h-full rounded-full {barColor} transition-all duration-300"
+        <div class="h-full rounded-full {barColor} transition-all duration-150"
              style="width: {Math.min(usedPct, 100)}%"></div>
       </div>
       <span class="text-[0.5rem] tabular-nums text-muted-foreground/50 shrink-0 font-medium">
-        {#if usedTokens > 0}
-          {usedTokens.toLocaleString()}/{nCtx.toLocaleString()} ({usedPct}%)
+        {#if liveUsedTokens > 0}
+          {isEstimate ? "~" : ""}{liveUsedTokens.toLocaleString()}/{nCtx.toLocaleString()} ({usedPct}%)
         {:else}
           0/{nCtx.toLocaleString()}
         {/if}
