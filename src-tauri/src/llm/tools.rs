@@ -178,6 +178,7 @@ fn build_compact_tool_block(tools: &[Tool]) -> String {
     }
     format!(
 r#"Tools: {}
+ALWAYS use tools when applicable. Do NOT show commands in code blocks — call them.
 Call: [TOOL_CALL]{{"name":"<tool>","arguments":{{...}}}}[/TOOL_CALL]
 Wait for results. Do NOT fabricate results."#,
         names.join(", ")
@@ -214,19 +215,25 @@ r#"# Tools
 You have access to the following tools:
 
 {tool_lines}
+## IMPORTANT: You MUST use tools — do NOT just show commands
+
+When the user asks you to do something that requires a tool (run a command, read a file, check the time, search the web, etc.), you MUST actually call the tool using the format below. NEVER just show the command or code in a code block — that does nothing. You must emit a [TOOL_CALL] block so the system executes it for you.
+
 ## How to call a tool
 
-When you need to use a tool, output a tool-call block in exactly this format:
+Output a tool-call block in exactly this format:
 
 [TOOL_CALL]{{"name":"<tool_name>","arguments":{{"<param>":"<value>"}}}}[/TOOL_CALL]
 
 Rules:
-- The JSON inside [TOOL_CALL]…[/TOOL_CALL] must be valid JSON on a single line.
+- The JSON inside [TOOL_CALL]…[/TOOL_CALL] MUST be valid JSON on a single line.
 - You may call multiple tools by emitting multiple [TOOL_CALL]…[/TOOL_CALL] blocks.
 - After emitting tool calls, STOP generating and wait. The system will execute the tool(s) and provide results in a follow-up message.
 - Use the tool results to formulate your final answer to the user.
-- Do NOT fabricate tool results. Always call the tool and use the actual result.
+- Do NOT fabricate or guess tool results. Always call the tool and use the actual result.
 - Do NOT describe what you would do — actually call the tool.
+- Do NOT show commands in code blocks (```bash ...```) — use [TOOL_CALL] instead.
+- If the user asks to list files, run a command, check something, etc. — ALWAYS use the appropriate tool.
 
 ## Examples
 
@@ -236,8 +243,14 @@ Assistant: [TOOL_CALL]{{"name":"date","arguments":{{}}}}[/TOOL_CALL]
 User: "How much disk space is left?"
 Assistant: [TOOL_CALL]{{"name":"bash","arguments":{{"command":"df -h"}}}}[/TOOL_CALL]
 
+User: "What files are on my desktop?"
+Assistant: [TOOL_CALL]{{"name":"bash","arguments":{{"command":"ls ~/Desktop/"}}}}[/TOOL_CALL]
+
 User: "Read the file config.toml"
-Assistant: [TOOL_CALL]{{"name":"read_file","arguments":{{"path":"config.toml"}}}}[/TOOL_CALL]"#
+Assistant: [TOOL_CALL]{{"name":"read_file","arguments":{{"path":"config.toml"}}}}[/TOOL_CALL]
+
+User: "Where am I located?"
+Assistant: [TOOL_CALL]{{"name":"location","arguments":{{}}}}[/TOOL_CALL]"#
     )
 }
 
@@ -435,7 +448,7 @@ fn extract_tool_calls_from_json_text(
     calls: &mut Vec<ToolCall>,
     dedup: &mut HashSet<(String, String)>,
 ) {
-    // 1) JSON code fences (```json ... ``` and ``` ... ```)
+    // 1) Code fences: JSON tool calls + bash/sh command fallback
     let mut cursor = 0usize;
     while let Some(rel) = content[cursor..].find("```") {
         let fence_start = cursor + rel;
@@ -456,6 +469,18 @@ fn extract_tool_calls_from_json_text(
             if let Ok(v) = serde_json::from_str::<Value>(body) {
                 extract_calls_from_value(&v, calls, dedup);
             }
+        }
+
+        // Fallback: if the model emits a ```bash or ```sh code fence instead
+        // of a [TOOL_CALL], treat the body as a bash tool call.  This catches
+        // the common case where small models show the command in a code block
+        // rather than using the proper tool-call format.
+        if (header == "bash" || header == "sh" || header == "shell" || header == "zsh")
+            && !body.is_empty()
+            && calls.is_empty()
+        {
+            let cmd = body.to_string();
+            push_tool_call(calls, dedup, "bash".into(), format!(r#"{{"command":{}}}"#, serde_json::to_string(&cmd).unwrap_or_else(|_| format!("\"{}\"", cmd))));
         }
 
         cursor = body_end + 3;
@@ -1090,5 +1115,37 @@ Done."#;
         assert!(!stripped.contains("\"name\": \"date\""));
         assert!(stripped.contains("<think>thinking</think>"));
         assert!(stripped.contains("Final answer."));
+    }
+
+    #[test]
+    fn extract_bash_code_fence_fallback() {
+        let msg = "To list files on your desktop:\n```bash\nls ~/Desktop/\n```";
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1, "should extract one bash tool call");
+        assert_eq!(calls[0].function.name, "bash");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "ls ~/Desktop/");
+    }
+
+    #[test]
+    fn extract_sh_code_fence_fallback() {
+        let msg = "```sh\ndf -h\n```";
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "bash");
+    }
+
+    #[test]
+    fn bash_fence_fallback_skipped_when_tool_call_present() {
+        // If a proper [TOOL_CALL] is already present, bash fence should not add duplicates
+        let msg = r#"[TOOL_CALL]{"name":"bash","arguments":{"command":"ls"}}[/TOOL_CALL]
+Also:
+```bash
+echo hello
+```"#;
+        let calls = extract_tool_calls(msg);
+        // Should only have the explicit tool call, not the code fence
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.arguments, r#"{"command":"ls"}"#);
     }
 }
