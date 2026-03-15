@@ -1082,13 +1082,20 @@
       inputEl?.focus();
 
       // Persist the completed assistant message (fire-and-forget).
-      if (sessionId > 0 && finalAssistant && !finalAssistant.pending && finalAssistant.content) {
-        invoke("save_chat_message", {
-          sessionId,
-          role:       "assistant",
-          content:    finalAssistant.content,
-          thinking:   finalAssistant.thinking ?? null,
-        }).catch(() => {});
+      // Combine leadIn + content so the full response is preserved on reload.
+      if (sessionId > 0 && finalAssistant && !finalAssistant.pending) {
+        const parts: string[] = [];
+        if (finalAssistant.leadIn?.trim())  parts.push(finalAssistant.leadIn.trim());
+        if (finalAssistant.content?.trim()) parts.push(finalAssistant.content.trim());
+        const fullContent = parts.join("\n\n");
+        if (fullContent) {
+          invoke("save_chat_message", {
+            sessionId,
+            role:       "assistant",
+            content:    fullContent,
+            thinking:   finalAssistant.thinking ?? null,
+          }).catch(() => {});
+        }
       }
     }
   }

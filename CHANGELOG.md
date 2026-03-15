@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Chat History
+
+- **Fixed chat history not preserving full responses**: assistant messages that included `leadIn` text (what the model says before calling tools, e.g. "I'll check that for you") were not fully saved — only the final `content` was persisted, and `leadIn` was discarded. Additionally, the save condition required non-empty `content`, so messages with only lead-in text or thinking were skipped entirely. Now `leadIn` and `content` are combined into a single string before saving, ensuring the complete response is visible when loading old conversations.
+
 ### macOS
 
 - **Fixed copy/paste in chat window**: added the standard Edit menu (Undo, Redo, Cut, Copy, Paste, Select All) to the macOS app menu bar. Without this menu, macOS Tauri webviews do not route ⌘C / ⌘V / ⌘X / ⌘A to the web content, making text selection and clipboard operations non-functional.
