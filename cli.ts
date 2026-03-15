@@ -11,6 +11,9 @@ const CLI_VERSION = "1.1.0";
 /**
  * cli.ts — Command-line interface for the Skill WebSocket API.
  *
+ * Supported devices: Muse (4ch), OpenBCI Ganglion (4ch), Neurable MW75 Neuro (12ch), Hermes V1 (8ch).
+ * All commands work identically regardless of which device is connected.
+ *
  * Usage:
  *   npx tsx cli.ts <command> [options]
  *
@@ -64,6 +67,10 @@ const CLI_VERSION = "1.1.0";
  *   llm chat                       Interactive multi-turn chat REPL (WebSocket only)
  *   llm chat "message"             Single-shot: send one message and stream the reply
  *   llm chat "describe" --image a.jpg --image b.png   Vision: attach images to message
+ *
+ *   The LLM supports built-in tool calling (bash, read/write/edit, web search/fetch)
+ *   which are executed server-side and results fed back into the conversation.
+ *
  *   raw '{"command":"..."}'        Send arbitrary JSON, print full response
  *
  * Transport selection (default: try WebSocket, fall back to HTTP):
@@ -1519,8 +1526,13 @@ async function cmdStatus(args: Args): Promise<void> {
         v != null ? `${DIM}${label}:${RESET} ${qColor(v)}${(v * 100).toFixed(0)}%${RESET}` : "";
       print("");
       print(`  ${BOLD}Signal Quality${RESET}`);
-      print(`  ${[qFmt("tp9", q.tp9), qFmt("af7", q.af7), qFmt("af8", q.af8), qFmt("tp10", q.tp10)]
-               .filter(Boolean).join("   ")}`);
+      // Dynamically render all channel quality keys (works for Muse 4ch, Hermes 8ch, MW75 12ch)
+      const channelKeys = Object.keys(q).filter(k => typeof q[k] === "number");
+      const cols = Math.min(channelKeys.length, 4);
+      for (let i = 0; i < channelKeys.length; i += cols) {
+        const row = channelKeys.slice(i, i + cols).map(k => qFmt(k, q[k])).filter(Boolean);
+        if (row.length > 0) print(`  ${row.join("   ")}`);
+      }
     }
 
     // ── Scores ───────────────────────────────────────────────────────────

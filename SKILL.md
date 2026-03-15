@@ -8,16 +8,17 @@ automation pipeline.
 
 ## Contents
 
-1. [Transport — WebSocket & HTTP](#transport--websocket--http)
-2. [Quick Start](#quick-start)
-3. [Output Modes](#output-modes)
+1. [Supported Devices](#supported-devices)
+2. [Transport — WebSocket & HTTP](#transport--websocket--http)
+3. [Quick Start](#quick-start)
+4. [Output Modes](#output-modes)
    - [Default — summary only](#default-no-flag--human-readable-summary-only)
    - [`--json` — raw JSON, pipe-safe](#--json--raw-json-only-pipe-safe)
    - [`--full` — summary and JSON](#--full--human-readable-summary-and-colorized-json)
    - [What `--full` reveals](#what---full-reveals)
-4. [Global Options](#global-options)
-5. [Polling with `status`](#polling-with-status)
-6. [Commands](#commands)
+5. [Global Options](#global-options)
+6. [Polling with `status`](#polling-with-status)
+7. [Commands](#commands)
    - [status](#status)
    - [session](#session)
    - [sessions](#sessions)
@@ -37,7 +38,8 @@ automation pipeline.
    - [timer](#timer)
    - [dnd](#dnd)
    - [raw](#raw)
-7. [Data Reference](#data-reference)
+8. [Screenshots (UI-only Feature)](#screenshots-ui-only-feature)
+9. [Data Reference](#data-reference)
    - [EEG Band Powers](#eeg-band-powers)
    - [EEG Ratios & Indices](#eeg-ratios--indices)
    - [Core Scores](#core-scores)
@@ -47,7 +49,7 @@ automation pipeline.
    - [Sleep Stages](#sleep-stages)
    - [Headache & Migraine EEG Correlates](#headache--migraine-eeg-correlates)
    - [Consciousness Metrics](#consciousness-metrics)
-7. [Use-Case Recipes](#use-case-recipes)
+10. [Use-Case Recipes](#use-case-recipes)
    - [Focus & Productivity](#focus--productivity)
    - [Stress & Anxiety](#stress--anxiety)
    - [Sleep Quality](#sleep-quality)
@@ -56,6 +58,24 @@ automation pipeline.
    - [Comparing Two Sessions](#comparing-two-sessions)
    - [Time-Range Queries](#time-range-queries)
    - [Automation & Scripting](#automation--scripting)
+
+---
+
+## Supported Devices
+
+NeuroSkill™ supports multiple EEG headsets.  The CLI and API work identically
+regardless of which device is connected — all commands, scores, and metrics are
+device-agnostic.
+
+| Device | Channels | Sample Rate | Connection | Notes |
+|---|---|---|---|---|
+| **Muse** (S, 2, 2016) | 4 (TP9, AF7, AF8, TP10) | 256 Hz | BLE | Default device. PPG + IMU included. |
+| **OpenBCI Ganglion** | 4 | 200 Hz | BLE | Open-source research-grade board. |
+| **Neurable MW75 Neuro** | 12 (FT7/T7/TP7/CP5/P7/C5, FT8/T8/TP8/CP6/P8/C6) | 500 Hz | BLE + RFCOMM | Noise-cancelling headphones with EEG. Behind `mw75-rfcomm` feature flag. |
+| **Hermes V1** | 8 (Fp1, Fp2, AF3, AF4, F3, F4, FC1, FC2) | 250 Hz | BLE GATT | ADS1299 + 9-DOF IMU. BLE scanner recognises "Hermes" prefix. |
+
+The DSP pipeline dynamically scales to the active channel count (4, 8, or 12).
+Inactive channels have zero overhead.
 
 ---
 
@@ -634,12 +654,13 @@ done
   "ok": true,
   "device": {
     "state": "connected",          // "connected" | "connecting" | "disconnected"
-    "name": "Muse-A1B2",
+    "name": "Muse-A1B2",          // or "MW75-Neuro-XXXX", "Hermes-XXXX", "Ganglion-XXXX"
     "battery": 73,                 // percent
     "firmware": "1.3.4",
     "eeg_samples": 195840,         // cumulative samples this run
-    "ppg_samples": 30600,
-    "imu_samples": 122400
+    "ppg_samples": 30600,          // Muse only (PPG sensor)
+    "imu_samples": 122400,
+    "eeg_channels": 4              // 4 (Muse/Ganglion), 8 (Hermes), or 12 (MW75)
   },
   "session": {
     "start_utc": 1740412800,       // Unix seconds (UTC)
@@ -647,6 +668,8 @@ done
     "n_epochs": 369                // 5-second embedding epochs computed so far
   },
   "signal_quality": {
+    // Keys vary by device — Muse: tp9/af7/af8/tp10; Hermes: fp1/fp2/af3/af4/f3/f4/fc1/fc2
+    // MW75: ft7/t7/tp7/cp5/p7/c5/ft8/t8/tp8/cp6/p8/c6
     "tp9": 0.95,                   // 0–1; ≥0.9 = good, ≥0.7 = acceptable
     "af7": 0.88,
     "af8": 0.91,
@@ -2591,6 +2614,33 @@ ws.send(JSON.stringify({
 | `max_tokens` | uint | 2048 | Maximum tokens to generate |
 | `thinking_budget` | uint \| null | 512 | Max tokens in `<think>…</think>` block (`0` = skip thinking, `null` = unlimited) |
 
+#### Built-in Tool Calling
+
+When the LLM server is running, `llm_chat` supports **automatic tool calling** — the
+model can invoke built-in tools to perform actions and return results within the
+conversation.  Tools are injected into the system prompt automatically when enabled.
+
+| Tool | Description |
+|---|---|
+| `bash` | Execute shell commands (with safety approval for dangerous operations) |
+| `read` | Read file contents from disk |
+| `write` | Write / create files |
+| `edit` | Surgical find-and-replace edits in files |
+| `web_search` | Search the web (DuckDuckGo JSON + HTML fallback) |
+| `web_fetch` | Fetch a URL and return its content |
+| `search_output` | Navigate large tool outputs (paginated) |
+
+Tool calls are detected in the model's output, executed server-side, and results are
+fed back into the conversation automatically.  The CLI's `llm chat` command handles
+this transparently — you'll see tool-call cards in the interactive REPL and results
+streamed back inline.
+
+**Safety:** Dangerous operations (e.g. `rm -rf`, writing to system paths) trigger an
+approval dialog before execution.  The tool system also enforces output size limits
+and automatic history trimming to stay within the model's context window.
+
+---
+
 **LLM server status values:**
 
 | `status` | Meaning |
@@ -2680,6 +2730,27 @@ ws.on("message", (raw) => {
   }
 });
 ```
+
+---
+
+## Screenshots (UI-only Feature)
+
+NeuroSkill™ can periodically capture screenshots of the active window, embed them
+with CLIP vision (ONNX), run OCR text extraction, and index both modalities in
+separate HNSW indices for similarity search.
+
+> **Note:** Screenshots are a UI/Settings feature — there are no CLI commands for
+> screenshot capture or search.  The screenshot images are served via
+> `GET /screenshots/<day>/<filename>` on the API server and appear as indicators
+> on the History day-view heatmap grid.
+
+**Capabilities:**
+- **Capture:** macOS (CoreGraphics FFI), Linux (X11/Wayland), Windows (GDI)
+- **Vision embedding:** CLIP model via ONNX Runtime (GPU or CPU)
+- **OCR:** on-device via `ocrs` crate (Linux/Windows) or Apple Vision (macOS)
+- **Search:** dual HNSW architecture — visual similarity and OCR text similarity
+- **Configuration:** interval, image size, quality, embedding backend, OCR engine,
+  GPU/CPU toggle — all in Settings → Screenshots
 
 ---
 
