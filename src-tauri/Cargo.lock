@@ -9317,6 +9317,7 @@ dependencies = [
  "serde_json",
  "serialport",
  "sha2",
+ "skill-llm",
  "stacker",
  "sysinfo 0.38.4",
  "tauri",
@@ -9332,6 +9333,28 @@ dependencies = [
  "tower-http",
  "ureq 2.12.1",
  "zuna-rs",
+]
+
+[[package]]
+name = "skill-llm"
+version = "0.0.1"
+dependencies = [
+ "async-stream",
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "dirs",
+ "hf-hub 0.5.0",
+ "jsonschema",
+ "llama-cpp-4",
+ "log",
+ "regex",
+ "rfd",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tokio",
+ "ureq 2.12.1",
 ]
 
 [[package]]

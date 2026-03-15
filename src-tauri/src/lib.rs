@@ -1220,7 +1220,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let app_handle = app.handle().clone();
             let cell2 = cell.clone();
             std::thread::spawn(move || {
-                if let Some(state) = llm::init(&llm_cfg, &catalog, app_handle, log_buf, &skill_dir) {
+                let emitter: std::sync::Arc<dyn llm::LlmEventEmitter> = std::sync::Arc::new(llm::TauriEmitter(app_handle));
+                if let Some(state) = llm::init(&llm_cfg, &catalog, emitter, log_buf, &skill_dir) {
                     *cell2.lock().unwrap() = Some(state);
                 }
             });

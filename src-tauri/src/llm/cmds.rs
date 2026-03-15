@@ -718,21 +718,23 @@ pub fn start_llm_server(
     *start_error.lock().unwrap() = None;
     loading.store(true, Ordering::Relaxed);
 
-    push_log(&app, &log_buf, "info", "start_llm_server: spawning background load");
+    let emitter = super::TauriEmitter(app.clone());
+    push_log(&emitter, &log_buf, "info", "start_llm_server: spawning background load");
 
     // If no mmproj is explicitly set but autoload is on, resolve the best one.
     if config.mmproj.is_none() {
         config.mmproj = catalog.resolve_mmproj_path(config.autoload_mmproj);
         if let Some(ref p) = config.mmproj {
-            push_log(&app, &log_buf, "info",
+            push_log(&emitter, &log_buf, "info",
                 &format!("autoload_mmproj: selected {}", p.display()));
         }
     }
 
     // Spawn a background task — load the model without blocking the UI thread.
     tauri::async_runtime::spawn(async move {
+        let emitter_arc: std::sync::Arc<dyn super::LlmEventEmitter> = std::sync::Arc::new(super::TauriEmitter(app));
         let result = tokio::task::spawn_blocking(move || {
-            crate::llm::init(&config, &catalog, app, log_buf, &skill_dir)
+            crate::llm::init(&config, &catalog, emitter_arc, log_buf, &skill_dir)
         }).await;
 
         loading.store(false, Ordering::Relaxed);
@@ -783,7 +785,8 @@ pub fn stop_llm_server(
     // from the UI's perspective before the actor thread finishes joining.
     let server_state = { cell.lock().unwrap().take() };
     if let Some(server_state) = server_state {
-        push_log(&app, &log_buf, "info", "stopping LLM server — freeing resources in background…");
+        let emitter = super::TauriEmitter(app);
+        push_log(&emitter, &log_buf, "info", "stopping LLM server — freeing resources in background…");
         // Join the actor thread on a blocking thread so the caller returns
         // immediately without freezing the UI or the Tauri IPC channel.
         tauri::async_runtime::spawn(async move {
@@ -792,7 +795,7 @@ pub fn stop_llm_server(
                     Ok(owned) => owned.shutdown(),
                     Err(arc)  => drop(arc),
                 }
-                push_log(&app, &log_buf, "info", "LLM server stopped");
+                push_log(&emitter, &log_buf, "info", "LLM server stopped");
             }).await.ok();
         });
     }

@@ -1987,11 +1987,12 @@ async fn llm_start(app: &AppHandle) -> Result<Value, String> {
         config.mmproj = catalog.resolve_mmproj_path(config.autoload_mmproj);
     }
 
-    crate::llm::push_log(app, &log_buf, "info", "llm_start command received via WebSocket");
+    let emitter = crate::llm::TauriEmitter(app.clone());
+    crate::llm::push_log(&emitter, &log_buf, "info", "llm_start command received via WebSocket");
 
-    let app2 = app.clone();
+    let emitter_arc: std::sync::Arc<dyn crate::llm::LlmEventEmitter> = std::sync::Arc::new(emitter);
     let new_state = tokio::task::spawn_blocking(move || {
-        crate::llm::init(&config, &catalog, app2, log_buf, &skill_dir)
+        crate::llm::init(&config, &catalog, emitter_arc, log_buf, &skill_dir)
     }).await.map_err(|e| e.to_string())?;
 
     match new_state {
@@ -2021,12 +2022,13 @@ fn llm_stop(app: &AppHandle) -> Result<Value, String> {
     };
     let server_state = { cell.lock().unwrap().take() };
     if let Some(server_state) = server_state {
-        crate::llm::push_log(app, &log_buf, "info", "llm_stop command received via WebSocket");
+        let emitter = crate::llm::TauriEmitter(app.clone());
+        crate::llm::push_log(&emitter, &log_buf, "info", "llm_stop command received via WebSocket");
         match std::sync::Arc::try_unwrap(server_state) {
             Ok(owned) => owned.shutdown(),
             Err(arc)  => drop(arc),
         }
-        crate::llm::push_log(app, &log_buf, "info", "LLM server stopped");
+        crate::llm::push_log(&emitter, &log_buf, "info", "LLM server stopped");
         Ok(serde_json::json!({ "result": "stopped" }))
     } else {
         Ok(serde_json::json!({ "result": "not_running" }))
