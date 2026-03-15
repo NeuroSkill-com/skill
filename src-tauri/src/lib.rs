@@ -437,7 +437,7 @@ impl Default for MuseStatus {
             bt_error:           None,
             target_name:        None,
             filter_config:      FilterConfig::default(),
-            channel_quality:    vec![SignalQuality::default(); 4],
+            channel_quality:    vec![SignalQuality::default(); crate::constants::EEG_CHANNELS],
             embedding_overlap_secs: EMBEDDING_OVERLAP_SECS,
             retry_attempt:      0,
             retry_countdown_secs: 0,
@@ -1059,7 +1059,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
         // DSP objects live in SessionDsp (session-local, lock-free).
         // They are dropped when the session task exits; the next session
         // creates a fresh set.  No reset needed here.
-        s.status.channel_quality = vec![SignalQuality::default(); 4];
+        s.status.channel_quality = vec![SignalQuality::default(); crate::constants::EEG_CHANNELS];
     }
     refresh_tray(app);
     emit_status(app);

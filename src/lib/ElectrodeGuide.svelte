@@ -243,7 +243,7 @@ the Free Software Foundation, version 3 only. -->
     {#if Head3D}
       <Canvas {createRenderer}>
         <Head3D bind:this={head3DRef} {system}
-                electrodesOverride={activeTab === "muse" ? museElectrodes : null}
+                electrodesOverride={activeTab === "muse" ? museElectrodes : activeTab === "mw75" ? mw75Electrodes : null}
                 {onSelect} selectedName={selectedElectrode?.name} />
       </Canvas>
     {:else}

@@ -154,7 +154,7 @@ export const WP_TAU_MS = 80;
 // ── BandChart canvas layout ───────────────────────────────────────────────────
 
 /** Height of one channel tile in the band power chart (CSS px). */
-export const BAND_TILE_H = 68;
+export const BAND_TILE_H = 48;
 
 /** Gap between adjacent channel tiles (CSS px). */
 export const BAND_TILE_GAP = 6;
