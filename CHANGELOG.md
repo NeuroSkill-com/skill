@@ -32,6 +32,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Tools removed from parameters panel**: the tool allow-list and execution mode selector have been removed from the parameters/settings slide-in panel. Tools are now configured exclusively via the dedicated tools panel opened by the tools badge button in the header, eliminating duplicate UI.
 
+- **Fix scripts storage**: tool script and output files were stored in per-server-start timestamp directories under `chats/scripts/<ts>/`, creating empty directories on every LLM server start even when no tools were used. Now `scripts_dir` is the base `chats/scripts/` path and `run_<ts>/` subdirectories are created lazily only when a tool actually writes a file.
+
 - **Expandable tool-call cards with rich detail views**: tool-call bubbles are now always expandable (like thinking bubbles) whenever any details are available. Each tool type has a purpose-built expanded view:
   - **Bash**: shows the full command under a "Command" header in a prominent monospace block
   - **File tools** (`read_file`/`write_file`/`edit_file`): shows the file path; `edit_file` shows find/replace diffs in red/green blocks; `write_file` shows file content

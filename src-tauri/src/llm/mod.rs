@@ -292,8 +292,9 @@ pub struct LlmServerState {
     /// Checked before each tool execution; cancelled calls return an error
     /// result instead of running.
     pub cancelled_tool_calls: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
-    /// Directory for storing tool-generated script files (per-session).
-    /// Located at `skill_dir/chats/scripts/<session_ts>/`.
+    /// Base directory for storing tool-generated script and output files.
+    /// Located at `skill_dir/chats/scripts/`. Subdirectories are created
+    /// lazily per tool invocation timestamp.
     pub scripts_dir: std::path::PathBuf,
 
     /// Abort signal for IPC-streamed chat (`chat_completions_ipc`).
@@ -1208,12 +1209,13 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
                 // to avoid ARG_MAX / "prompt too long" errors.
                 const SCRIPT_THRESHOLD: usize = 8 * 1024;
                 let (actual_arg, script_path) = if command.len() > SCRIPT_THRESHOLD {
-                    let _ = std::fs::create_dir_all(&scripts_dir);
                     let ts = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default();
+                    let run_dir = scripts_dir.join(format!("run_{}", ts.as_secs()));
+                    let _ = std::fs::create_dir_all(&run_dir);
                     let filename = format!("cmd_{}_{}.sh", ts.as_secs(), ts.subsec_millis());
-                    let path = scripts_dir.join(&filename);
+                    let path = run_dir.join(&filename);
                     let script_content = format!("#!/usr/bin/env bash\nset -euo pipefail\n\n{}\n", command);
                     if let Err(e) = std::fs::write(&path, &script_content) {
                         return json!({ "ok": false, "tool": "bash", "error": format!("failed to write script: {}", e) });
@@ -1278,12 +1280,13 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
 
                                 // Always save full output to a file for later search_output queries.
                                 let output_file = {
-                                    let _ = std::fs::create_dir_all(&scripts_dir);
                                     let ts = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default();
+                                    let run_dir = scripts_dir.join(format!("run_{}", ts.as_secs()));
+                                    let _ = std::fs::create_dir_all(&run_dir);
                                     let fname = format!("output_{}_{}.txt", ts.as_secs(), ts.subsec_millis());
-                                    let p = scripts_dir.join(&fname);
+                                    let p = run_dir.join(&fname);
                                     let _ = std::fs::write(&p, &combined);
                                     p
                                 };
@@ -2968,12 +2971,8 @@ pub fn init(
 
     let _ = app.emit("llm:status", json!({"status":"loading","model":model_name}));
 
-    // Create per-session scripts directory under skill_dir/chats/scripts/<unix_ts>/
-    let session_ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    let scripts_dir = skill_dir.join("chats").join("scripts").join(session_ts.to_string());
+    // Base scripts directory — subdirectories created lazily per tool invocation.
+    let scripts_dir = skill_dir.join("chats").join("scripts");
     let _ = std::fs::create_dir_all(&scripts_dir);
 
     Some(Arc::new(LlmServerState {
