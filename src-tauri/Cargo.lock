@@ -6262,7 +6262,9 @@ dependencies = [
 
 [[package]]
 name = "mw75"
-version = "0.0.2"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "641e977d18041b988182d879333573247f023d5fe19640eab2fad1ae910b197e"
 dependencies = [
  "anyhow",
  "bluer",
