@@ -21,6 +21,7 @@ automation pipeline.
    - [status](#status)
    - [session](#session)
    - [sessions](#sessions)
+   - [say](#say)
    - [label](#label)
    - [hooks](#hooks)
    - [search-labels](#search-labels)
@@ -31,8 +32,10 @@ automation pipeline.
    - [umap](#umap)
    - [listen](#listen)
    - [notify](#notify)
+   - [calibrations](#calibrations)
    - [calibrate](#calibrate)
    - [timer](#timer)
+   - [dnd](#dnd)
    - [raw](#raw)
 7. [Data Reference](#data-reference)
    - [EEG Band Powers](#eeg-band-powers)
@@ -345,6 +348,61 @@ node cli.ts interactive "relaxed" --json | jq '.dot' -r | dot -Tsvg > graph.svg 
 
 ---
 
+#### `say`
+
+Like `notify`, `say` produces only a one-line confirmation in default mode.
+
+| Hidden field | Type | Contents |
+|---|---|---|
+| `ok` | boolean | Confirmation that the utterance was enqueued |
+| `spoken` | string | Echo of the text that was sent to TTS |
+| `voice` | string | Voice name used (only present when `--voice` was specified) |
+
+```bash
+node cli.ts say "Eyes open" --json
+# → { "command": "say", "ok": true, "spoken": "Eyes open" }
+```
+
+---
+
+#### `calibrations`
+
+The `calibrations` summary formats profiles into a table but the JSON contains
+the full profile objects with all actions, durations, and settings.
+
+| Hidden field | Type | Contents |
+|---|---|---|
+| `profiles[].actions[]` | array | Full ordered list of action objects (name, duration_secs) |
+| `profiles[].break_duration_secs` | number | Break between action loops |
+| `profiles[].auto_start` | boolean | Whether the profile auto-starts on window open |
+
+```bash
+node cli.ts calibrations --json | jq '.profiles[0].actions'
+node cli.ts calibrations get 3 --json | jq '.profile'
+```
+
+---
+
+#### `dnd`
+
+The `dnd` summary prints a rich visual status (bars, scores, tips) but several
+raw fields are only visible via `--json`.
+
+| Hidden field | Type | Contents |
+|---|---|---|
+| `avg_score` | number | Current rolling average focus score (0–100) |
+| `sample_count` | number | How many focus score samples have been collected |
+| `window_size` | number | Target number of samples for the rolling window |
+| `mode_identifier` | string | DND automation mode identifier |
+| `dnd_active` | boolean | Whether this app activated DND |
+| `os_active` | boolean | Whether the OS reports DND as active |
+
+```bash
+node cli.ts dnd --json | jq '{avg: .avg_score, threshold: .threshold, active: .dnd_active}'
+```
+
+---
+
 #### `notify`
 
 `notify` has almost no human-readable summary — only a one-line echo of the title and body.
@@ -493,6 +551,10 @@ node cli.ts listen --seconds 5  --json | jq '.[0]'   # first event in full
 | `--http` | Force HTTP REST; no live-event commands |
 | `--json` | Raw JSON only — no summary, no colors, pipe-safe |
 | `--full` | Human-readable summary **and** colorized full JSON appended below |
+| `--no-color` | Disable ANSI color output (also honoured via `NO_COLOR` env var or non-TTY stdout) |
+| `--version`, `-v` | Print CLI version and exit |
+| `--help`, `-h` | Show full help and exit |
+| `--poll <n>` | (`status` only) Re-poll every N seconds; keeps the socket open |
 | `--dot` | (`interactive` only) Graphviz DOT to stdout — pipe to `dot -Tsvg` |
 | `--trends` | (`sessions` only) Show first-half → second-half deltas |
 | `--mode <m>` | (`search-labels`) `text` \| `context` \| `both` |
@@ -504,7 +566,22 @@ node cli.ts listen --seconds 5  --json | jq '.[0]'   # first event in full
 | `--ef <n>` | HNSW ef parameter (`search-labels`; default `max(k×4, 64)`) |
 | `--seconds <n>` | Duration for `listen` (default 5) |
 | `--profile <p>` | Profile name or UUID for `calibrate` |
-| `--help` | Show full help and exit |
+| `--context "..."` | (`label`) Long-form annotation body; used by `search-labels --mode context` |
+| `--at <utc>` | (`label`) Backdate to a specific unix second (default: now) |
+| `--voice <name>` | (`say`) Voice name to use (e.g. `Jasper`); omit for server default |
+| `--keywords <csv>` | (`hooks add`/`update`) Comma-separated keywords |
+| `--scenario <s>` | (`hooks add`/`update`) `any` \| `cognitive` \| `emotional` \| `physical` |
+| `--command <cmd>` | (`hooks add`/`update`) Command to run on trigger |
+| `--hook-text <txt>` | (`hooks add`/`update`) Payload text |
+| `--threshold <f>` | (`hooks add`/`update`) Distance threshold (0.01–1.0) |
+| `--recent <n>` | (`hooks add`/`update`) Recent-refs limit (10–20) |
+| `--limit <n>` | (`hooks log`) Page size (default: 20) |
+| `--offset <n>` | (`hooks log`) Row offset (default: 0) |
+| `--system "..."` | (`llm chat`) Prepend a system prompt |
+| `--temperature <f>` | (`llm chat`) Sampling temperature 0–2 (default 0.8) |
+| `--max-tokens <n>` | (`llm chat`) Maximum tokens to generate per turn (default 2048) |
+| `--image <path>` | (`llm chat`) Attach image file (can repeat: `--image a.jpg --image b.png`) |
+| `--mmproj <file>` | (`llm add`) Also download a vision projector from the same repo |
 
 ---
 
@@ -513,11 +590,18 @@ node cli.ts listen --seconds 5  --json | jq '.[0]'   # first event in full
 `status` is the single fastest call to get a complete system snapshot.
 Poll it periodically from any script or external tool to react to EEG state changes.
 
+The `--poll <n>` flag keeps the WebSocket connection open and re-polls every N seconds
+with a live timestamp header — no need for a shell loop:
+
 ```bash
+# Built-in polling (single connection, live updates):
+node cli.ts status --poll 5              # refresh every 5 s
+node cli.ts status --poll 10 --json      # JSON snapshot every 10 s (Ctrl+C to stop)
+
 # One-shot snapshot:
 node cli.ts status --json
 
-# Poll every 5 seconds and print focus score:
+# Manual shell loop (opens a new connection each time):
 while true; do
   node cli.ts status --json | jq '.scores.relaxation'
   sleep 5
@@ -629,6 +713,9 @@ done
 Full snapshot: device state, session, signal quality, scores, bands, embeddings, labels,
 sleep summary, and recording history.
 
+Use `--poll <n>` to re-poll every N seconds over the same open connection
+(keeps the socket open; press Ctrl+C to stop).
+
 ```bash
 node cli.ts status
 node cli.ts status --json
@@ -638,6 +725,8 @@ node cli.ts status --json | jq '.device.battery'
 node cli.ts status --json | jq '.signal_quality'
 node cli.ts status --json | jq '.sleep'
 node cli.ts status --json | jq '.history.current_streak_days'
+node cli.ts status --poll 5              # refresh every 5 seconds
+node cli.ts status --poll 10 --json      # JSON snapshot every 10 seconds
 ```
 
 **HTTP:**
@@ -794,10 +883,54 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 ---
 
+### `say`
+
+Speak text aloud via the on-device KittenTTS engine (fire-and-forget).
+The server enqueues the utterance on a dedicated TTS thread and returns immediately —
+the response arrives before audio playback begins.
+
+Requires `espeak-ng` on PATH.  First run downloads a ~30 MB TTS model from HuggingFace Hub.
+
+```bash
+node cli.ts say "Eyes open. Starting calibration."
+node cli.ts say "Break time. Next: Eyes Closed." --voice Jasper
+node cli.ts say "Calibration complete." --http
+node cli.ts say "Hello!" --json
+```
+
+**HTTP:**
+```bash
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"say","text":"Eyes open. Starting calibration."}'
+
+# With a specific voice:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"say","text":"Break time.","voice":"Jasper"}'
+```
+
+**Response:**
+```jsonc
+{ "command": "say", "ok": true, "spoken": "Eyes open. Starting calibration." }
+// With --voice Jasper:
+{ "command": "say", "ok": true, "spoken": "Break time.", "voice": "Jasper" }
+```
+
+> **Note:** `--voice` is optional; omitting it uses the voice last selected in Settings → Voice.
+
+---
+
 ### `label`
 
 Create a timestamped text annotation on the current EEG moment.
 Labels are stored in the database, shown in the dashboard, and searchable via `search-labels`.
+
+Optional flags:
+- `--context "..."` — long-form body stored alongside the short text; used by
+  `search-labels --mode context` and `--mode both`.
+- `--at <utc>` — backdate the label to a specific unix second instead of using
+  the current time (useful for retrospective annotation).
 
 ```bash
 node cli.ts label "meditation start"
@@ -807,6 +940,8 @@ node cli.ts label "coffee just finished"
 node cli.ts label "task switch: coding → email"
 node cli.ts label "phone notification distracted me"
 node cli.ts label --json "focus block start"   # just print the label_id
+node cli.ts label "breathwork" --context "box breathing 4-4-4-4, 10 min"
+node cli.ts label "retrospective note" --at 1740412800
 ```
 
 **HTTP:**
@@ -814,6 +949,16 @@ node cli.ts label --json "focus block start"   # just print the label_id
 curl -s -X POST http://127.0.0.1:8375/ \
   -H "Content-Type: application/json" \
   -d '{"command":"label","text":"meditation start"}'
+
+# With long-form context:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"label","text":"eyes closed","context":"4-7-8 breathing exercise"}'
+
+# Backdated to a specific timestamp:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"label","text":"retrospective note","label_start_utc":1740412800}'
 
 # Save the label_id for later reference:
 LABEL_ID=$(curl -s -X POST http://127.0.0.1:8375/ \
@@ -833,18 +978,58 @@ echo "Created label #$LABEL_ID"
 
 List configured Proactive Hooks with scenario + last-trigger metadata.
 
-Also supports:
-- `hooks suggest` — suggest a threshold from current labels + EEG embeddings
-- `hooks log` — list trigger audit rows from `hooks.sqlite`
+Supports the following subcommands:
+
+| Subcommand | Description |
+|---|---|
+| `hooks` (or `hooks status`) | List hooks with scenario + last-trigger metadata |
+| `hooks list` | List raw hook rules (name, keywords, threshold, enabled, …) |
+| `hooks add <name> [opts]` | Add a new hook rule |
+| `hooks remove <name>` | Delete a hook by name |
+| `hooks enable <name>` | Enable a hook |
+| `hooks disable <name>` | Disable a hook |
+| `hooks update <name> [opts]` | Update fields on an existing hook |
+| `hooks suggest "kw1,kw2"` | Suggest threshold from matching labels + recent EEG embeddings |
+| `hooks log [--limit N --offset M]` | View paginated hook trigger audit log rows |
+
+**Hook mutation flags** (for `hooks add` and `hooks update`):
+
+| Flag | Description |
+|---|---|
+| `--keywords <csv>` | Comma-separated keywords (e.g. `"focus,deep work,flow"`) |
+| `--scenario <s>` | `any` \| `cognitive` \| `emotional` \| `physical` |
+| `--command <cmd>` | Command to run on trigger |
+| `--hook-text <txt>` | Payload text |
+| `--threshold <f>` | Distance threshold (0.01–1.0) |
+| `--recent <n>` | Recent-refs limit (10–20) |
 
 ```bash
+# Status (default) — hooks with scenario + last trigger
 node cli.ts hooks
 node cli.ts hooks --json
 node cli.ts hooks --json | jq '.hooks[] | {name: .hook.name, scenario: .hook.scenario, last: .last_trigger.triggered_at_utc}'
+
+# List raw hook rules
+node cli.ts hooks list
+node cli.ts hooks list --json
+
+# Add a new hook
+node cli.ts hooks add "Deep Work Guard" --keywords "focus,deep work,flow" --scenario cognitive --threshold 0.14
+node cli.ts hooks add "Stress Alert" --keywords "stress,anxious,overwhelmed" --scenario emotional --threshold 0.12
+
+# Update an existing hook
+node cli.ts hooks update "Deep Work Guard" --keywords "focus,flow" --threshold 0.12
+
+# Enable / disable
+node cli.ts hooks enable "Deep Work Guard"
+node cli.ts hooks disable "Deep Work Guard"
+
+# Remove
+node cli.ts hooks remove "Deep Work Guard"
+
+# Suggest threshold from real EEG/label data
 node cli.ts hooks suggest "focus,deep work"
 node cli.ts hooks suggest "focus" --json | jq '.suggestion.suggested'
-node cli.ts hooks log --limit 20 --offset 0
-node cli.ts hooks log --json | jq '.rows[] | {ts: .triggered_at_utc, hook: (.hook_json|fromjson).name, scenario: (.hook_json|fromjson).scenario}'
 
 # Scenario-focused quick examples:
 # cognitive: deep work overload guard
@@ -853,18 +1038,35 @@ node cli.ts hooks suggest "focus,deep work"
 node cli.ts hooks suggest "stress,anxious,overwhelmed"
 # physical: fatigue/body-state style labels
 node cli.ts hooks suggest "fatigue,tired,slump"
+
+# View hook trigger audit log
+node cli.ts hooks log --limit 20 --offset 0
+node cli.ts hooks log --json | jq '.rows[] | {ts: .triggered_at_utc, hook: (.hook_json|fromjson).name, scenario: (.hook_json|fromjson).scenario}'
 ```
 
 **HTTP:**
 ```bash
+# Status
 curl -s -X POST http://127.0.0.1:8375/ \
   -H "Content-Type: application/json" \
   -d '{"command":"hooks_status"}'
 
+# List raw rules
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"hooks_get"}'
+
+# Set hooks (add/remove/update — sends the full array)
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"hooks_set","hooks":[...]}'
+
+# Suggest threshold
 curl -s -X POST http://127.0.0.1:8375/ \
   -H "Content-Type: application/json" \
   -d '{"command":"hooks_suggest","keywords":["focus","deep work"]}'
 
+# Audit log
 curl -s -X POST http://127.0.0.1:8375/ \
   -H "Content-Type: application/json" \
   -d '{"command":"hooks_log","limit":20,"offset":0}'
@@ -1571,6 +1773,65 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 ---
 
+### `calibrations`
+
+List or inspect calibration profiles stored on the server.
+
+```bash
+node cli.ts calibrations                         # list all profiles
+node cli.ts calibrations list                    # same as above
+node cli.ts calibrations get 3                   # full detail for profile id=3
+node cli.ts calibrations --json | jq '.profiles[].name'
+node cli.ts calibrations get 3 --json | jq '.profile.actions'
+```
+
+**HTTP:**
+```bash
+# List all profiles:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"list_calibrations"}' | jq '.profiles[].name'
+
+# Get a specific profile:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"get_calibration","id":3}'
+```
+
+**Example output (list):**
+```
+⚡ calibrations
+
+  id     name                           actions  loop
+  ──────────────────────────────────────────────────────────
+  1      Eyes Open/Closed               4        2
+  2      Relaxation                     3        1
+  3      Focus Baseline                 5        1
+```
+
+**JSON response (list):**
+```jsonc
+{
+  "command": "list_calibrations",
+  "ok": true,
+  "profiles": [
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Eyes Open/Closed",
+      "loop_count": 3,
+      "break_duration_secs": 5,
+      "auto_start": true,
+      "actions": [
+        { "name": "Eyes Open",  "duration_secs": 20 },
+        { "name": "Eyes Closed", "duration_secs": 20 }
+      ]
+    }
+  ]
+}
+```
+
+---
+
 ### `calibrate`
 
 Open the calibration window and start a profile immediately.
@@ -1621,6 +1882,87 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 ---
 
+### `dnd`
+
+Show Do Not Disturb automation status, or force-override it.
+
+With no subcommand, shows the full DND config and live state: automation enabled/disabled,
+focus threshold, rolling average score, sample window fill, and OS-level Focus state.
+
+With `on` or `off`, immediately activates or deactivates DND, bypassing the EEG threshold.
+
+```bash
+node cli.ts dnd                                 # show config + live eligibility state
+node cli.ts dnd on                              # force-enable DND (bypass EEG threshold)
+node cli.ts dnd off                             # force-disable DND
+node cli.ts dnd --json                          # raw JSON (pipe to jq)
+node cli.ts dnd --json | jq '{enabled: .enabled, avg_score: .avg_score, threshold: .threshold}'
+```
+
+**HTTP:**
+```bash
+# Status:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"dnd"}'
+
+# Force on:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"dnd_set","enabled":true}'
+
+# Force off:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"dnd_set","enabled":false}'
+```
+
+**Example output (status):**
+```
+⚡ dnd  automation status
+
+  DND automation
+    enabled        yes
+    threshold      60  avg focus score (0–100) required to activate
+    window         60s  (≈ 240 samples at ~4 Hz)
+    mode           standard
+
+  Rolling average  (avg of last 240 focus scores)
+    ████████████████████░░░░  72.5 / 60
+    ▶ above threshold — DND is active
+
+  Sample window
+    ████████████████████████  240 / 240 samples
+
+  State
+    app activated  yes  (this app set DND)
+    OS active      yes  (macOS Assertions.json / defaults read)
+```
+
+**JSON response (status):**
+```jsonc
+{
+  "command": "dnd",
+  "ok": true,
+  "enabled": true,
+  "threshold": 60,
+  "duration_secs": 60,
+  "window_size": 240,
+  "mode_identifier": "standard",
+  "avg_score": 72.5,
+  "sample_count": 240,
+  "dnd_active": true,
+  "os_active": true
+}
+```
+
+**JSON response (dnd on/off):**
+```jsonc
+{ "command": "dnd_set", "ok": true }
+```
+
+---
+
 ### `raw`
 
 Send any JSON payload to the server and print the raw response.
@@ -1657,9 +1999,20 @@ All subcommands route to the WebSocket/HTTP API — no GPU dependency for status
 | `llm start` | Load the active model and start the inference server |
 | `llm stop` | Stop the server and free GPU/CPU memory |
 | `llm catalog` | List all GGUF models with download states and active selections |
+| `llm add <repo> <filename>` | Add an external HF model to the catalog and download it |
+| `llm add <hf-url>` | Add from a full HuggingFace URL |
+| `llm add ... --mmproj <file>` | Also add and download a vision projector from the same repo |
+| `llm select <filename>` | Set the active text model |
+| `llm mmproj <filename\|none>` | Set the active vision projector (or `none` to disable) |
+| `llm autoload-mmproj <on\|off>` | Toggle auto-loading of vision projector on start |
 | `llm download <filename>` | Download a model by filename (fire-and-forget; poll catalog for progress) |
+| `llm pause <filename>` | Pause an in-progress model download |
+| `llm resume <filename>` | Resume a paused model download |
 | `llm cancel <filename>` | Cancel an in-progress download |
 | `llm delete <filename>` | Delete a locally-cached model file |
+| `llm downloads` | List all downloads with status and progress |
+| `llm refresh` | Re-probe the HF Hub cache for externally downloaded models |
+| `llm fit` | Check which models fit in available RAM/VRAM |
 | `llm logs` | Print the last 500 LLM server log lines |
 | `llm chat` | **Interactive multi-turn REPL** — type `exit` to quit (**WebSocket only**) |
 | `llm chat "message"` | Single-shot: send one message, stream the reply, and exit (**WebSocket only**) |
@@ -1670,12 +2023,24 @@ node cli.ts llm status
 node cli.ts llm start          # loads model — may take several seconds
 node cli.ts llm stop
 
-# Model management
+# Model management — catalog, add, select, download
 node cli.ts llm catalog
 node cli.ts llm catalog --json | jq '.entries[] | select(.state == "downloaded")'
+node cli.ts llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf
+node cli.ts llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf --mmproj mmproj-Phi-4-mini-reasoning-BF16.gguf
+node cli.ts llm add https://huggingface.co/bartowski/Phi-4-mini-reasoning-GGUF/blob/main/Phi-4-mini-reasoning-Q4_K_M.gguf
+node cli.ts llm select "Qwen_Qwen3.5-4B-Q4_K_M.gguf"
+node cli.ts llm mmproj "mmproj-Qwen_Qwen3.5-4B-BF16.gguf"
+node cli.ts llm mmproj none                    # disable vision projector
+node cli.ts llm autoload-mmproj on
 node cli.ts llm download "Qwen3-1.7B-Q4_K_M.gguf"   # fire-and-forget
-node cli.ts llm catalog     # poll for download progress
+node cli.ts llm pause "Qwen3-1.7B-Q4_K_M.gguf"
+node cli.ts llm resume "Qwen3-1.7B-Q4_K_M.gguf"
+node cli.ts llm cancel "Qwen3-1.7B-Q4_K_M.gguf"
 node cli.ts llm delete "Qwen3-1.7B-Q4_K_M.gguf"
+node cli.ts llm downloads                      # list all downloads with progress
+node cli.ts llm refresh                        # re-probe HF Hub cache
+node cli.ts llm fit                            # check which models fit in RAM/VRAM
 
 # Logs
 node cli.ts llm logs
@@ -1772,18 +2137,48 @@ curl -s -X POST http://127.0.0.1:8375/llm/stop
 # Catalog
 curl -s http://127.0.0.1:8375/llm/catalog | jq '.entries[] | select(.state == "downloaded") | .filename'
 
+# Add an external model (via WebSocket/universal tunnel)
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"llm_add_model","repo":"bartowski/Phi-4-mini-reasoning-GGUF","filename":"Phi-4-mini-reasoning-Q4_K_M.gguf","download":true}'
+
+# Select active model / mmproj
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"llm_select_model","filename":"Qwen_Qwen3.5-4B-Q4_K_M.gguf"}'
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"llm_select_mmproj","filename":"mmproj-Qwen_Qwen3.5-4B-BF16.gguf"}'
+
 # Download a model (fire-and-forget; poll /llm/catalog for progress)
 curl -s -X POST http://127.0.0.1:8375/llm/download \
   -H "Content-Type: application/json" \
   -d '{"filename":"Qwen3-1.7B-Q4_K_M.gguf"}'
 
-# Cancel / delete
+# Pause / resume / cancel / delete
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"llm_pause_download","filename":"Qwen3-1.7B-Q4_K_M.gguf"}'
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"llm_resume_download","filename":"Qwen3-1.7B-Q4_K_M.gguf"}'
 curl -s -X POST http://127.0.0.1:8375/llm/cancel_download \
   -H "Content-Type: application/json" \
   -d '{"filename":"Qwen3-1.7B-Q4_K_M.gguf"}'
 curl -s -X POST http://127.0.0.1:8375/llm/delete \
   -H "Content-Type: application/json" \
   -d '{"filename":"Qwen3-1.7B-Q4_K_M.gguf"}'
+
+# Downloads list / refresh / hardware fit
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"llm_downloads"}'
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"llm_refresh_catalog"}'
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"llm_hardware_fit"}'
 
 # Logs
 curl -s http://127.0.0.1:8375/llm/logs | jq '.logs[-10:]'
@@ -1906,9 +2301,18 @@ ws.send(JSON.stringify({
 | `llm_start` | — | — | Start inference server (blocks until model loaded) |
 | `llm_stop` | — | — | Stop server + free resources |
 | `llm_catalog` | — | — | Full model catalog with live download progress |
+| `llm_add_model` | `repo` (string), `filename` (string) | `download` (bool), `mmproj` (string) | Add an external HF model to the catalog |
+| `llm_select_model` | `filename` (string) | — | Set the active text model |
+| `llm_select_mmproj` | `filename` (string) | — | Set the active vision projector (`""` to disable) |
+| `llm_set_autoload_mmproj` | `enabled` (bool) | — | Toggle auto-loading of vision projector on start |
 | `llm_download` | `filename` (string) | — | Start model download |
+| `llm_pause_download` | `filename` (string) | — | Pause an in-progress download |
+| `llm_resume_download` | `filename` (string) | — | Resume a paused download |
 | `llm_cancel_download` | `filename` (string) | — | Cancel in-progress download |
 | `llm_delete` | `filename` (string) | — | Delete cached model file |
+| `llm_downloads` | — | — | List all downloads with status and progress |
+| `llm_refresh_catalog` | — | — | Re-probe HF Hub cache for externally downloaded models |
+| `llm_hardware_fit` | — | — | Check which models fit in available RAM/VRAM |
 | `llm_logs` | — | — | Last ≤500 log entries |
 | `llm_chat` | `messages` (array) **or** `message` (string) | `temperature`, `top_k`, `top_p`, `repeat_penalty`, `seed`, `max_tokens`, `thinking_budget` | Streaming chat (multi-frame response; `messages` grows per turn for multi-turn) |
 

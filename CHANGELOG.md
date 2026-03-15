@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Documentation
+
+- **SKILL.md comprehensive coverage**: updated SKILL.md to document all cli.ts functionality. Added missing commands: `say` (TTS with `--voice`), `calibrations` (list/get profiles), `dnd` (status/on/off automation control). Expanded `hooks` to cover all CRUD subcommands (list, add, remove, enable, disable, update) with mutation flags (`--keywords`, `--scenario`, `--command`, `--hook-text`, `--threshold`, `--recent`). Added all new LLM subcommands (`add`, `select`, `mmproj`, `autoload-mmproj`, `pause`, `resume`, `downloads`, `refresh`, `fit`). Documented missing global options: `--poll <n>` (status), `--context`/`--at` (label), `--no-color`, `--version`. Added WebSocket command table entries, HTTP examples, `--full` reveals sections for say/calibrations/dnd, and updated Global Options table and Table of Contents.
+
 ### CLI
 
 - **Add external HF models to catalog**: new `llm add <repo> <filename>` CLI command and `llm_add_model` WebSocket API command allow downloading any GGUF model from HuggingFace that isn't in the bundled catalog. Supports two forms: explicit repo + filename (`llm add bartowski/Phi-4-GGUF Phi-4-Q4_K_M.gguf`) and full HuggingFace URL (`llm add https://huggingface.co/…/blob/main/model.gguf`). Optional `--mmproj <filename>` flag downloads a vision projector from the same repo alongside the model (both entries are created and downloaded in parallel). Metadata (quant type, mmproj detection, family name) is auto-inferred from the filename. The entry is persisted to `llm_catalog.json` and download starts immediately. Duplicate entries are detected and skipped. Also exposed as a Tauri command (`add_llm_model`) for the frontend.
