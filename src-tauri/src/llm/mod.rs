@@ -791,6 +791,7 @@ fn resolve_tool_path(path: &str) -> std::path::PathBuf {
     }
 }
 
+#[allow(dead_code)]
 struct TruncatedOutput {
     text: String,
     was_truncated: bool,
