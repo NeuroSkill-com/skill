@@ -1500,90 +1500,98 @@ pub fn set_screenshot_config(
 }
 
 /// Count screenshots needing (re-)embedding and estimate wall-clock time.
+/// Runs on a background thread to avoid blocking the UI.
 #[tauri::command]
-pub fn estimate_screenshot_reembed(
+pub async fn estimate_screenshot_reembed(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Option<crate::screenshot_store::ReembedEstimate> {
+) -> Result<Option<crate::screenshot_store::ReembedEstimate>, String> {
     let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
     };
-    let store = store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
-    Some(crate::screenshot::estimate_reembed(&store, &config, &skill_dir))
+    Ok(tokio::task::spawn_blocking(move || {
+        let store = store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
+        Some(crate::screenshot::estimate_reembed(&store, &config, &skill_dir))
+    }).await.unwrap_or(None))
 }
 
 /// Re-embed all screenshots with the current model.
 /// Emits `screenshot-reembed-progress` events.
+/// Runs on a background thread to avoid blocking the UI.
 #[tauri::command]
-pub fn rebuild_screenshot_embeddings(
+pub async fn rebuild_screenshot_embeddings(
     app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Option<crate::screenshot_store::ReembedResult> {
+) -> Result<Option<crate::screenshot_store::ReembedResult>, String> {
     let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
     };
-    let store = store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
-    Some(crate::screenshot::rebuild_embeddings(&store, &config, &skill_dir, &app))
+    Ok(tokio::task::spawn_blocking(move || {
+        let store = store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
+        Some(crate::screenshot::rebuild_embeddings(&store, &config, &skill_dir, &app))
+    }).await.unwrap_or(None))
 }
 
 /// Find screenshots by timestamp range (for EEG correlation).
 #[tauri::command]
-pub fn get_screenshots_around(
+pub async fn get_screenshots_around(
     timestamp: i64,
     window_secs: i32,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<crate::screenshot_store::ScreenshotResult> {
+) -> Result<Vec<crate::screenshot_store::ScreenshotResult>, String> {
     let (skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.skill_dir.clone(), g.screenshot_store.clone())
     };
-    let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
-        Some(s) => s,
-        None => return vec![],
-    };
-    crate::screenshot::get_around(&store, timestamp, window_secs)
+    Ok(tokio::task::spawn_blocking(move || {
+        let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+            Some(s) => s,
+            None => return vec![],
+        };
+        crate::screenshot::get_around(&store, timestamp, window_secs)
+    }).await.unwrap_or_default())
 }
 
 /// Find screenshots visually similar to a query image.
 /// Embeds the query image with the current model, then searches HNSW.
+/// Runs on a background thread (model loading + inference is heavy).
 #[tauri::command]
-pub fn search_screenshots_by_image(
+pub async fn search_screenshots_by_image(
     image_bytes: Vec<u8>,
     k: usize,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<crate::screenshot_store::ScreenshotResult> {
+) -> Result<Vec<crate::screenshot_store::ScreenshotResult>, String> {
     let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
     };
-
-    // Embed the query image
-    let mut encoder = crate::screenshot::load_fastembed_image_pub(&config, &skill_dir);
-    let query_emb = if let Some(ref mut fe) = encoder {
-        crate::screenshot::fastembed_embed_pub(fe, &image_bytes)
-    } else {
-        None
-    };
-
-    let query = match query_emb {
-        Some(v) => v,
-        None => return vec![],
-    };
-
-    let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
-        Some(s) => s,
-        None => return vec![],
-    };
-    let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
-    let hnsw = match fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) {
-        Ok(idx) => idx,
-        Err(_) => return vec![],
-    };
-    crate::screenshot::search_by_vector(&hnsw, &store, &query, k)
+    Ok(tokio::task::spawn_blocking(move || {
+        let mut encoder = crate::screenshot::load_fastembed_image_pub(&config, &skill_dir);
+        let query_emb = if let Some(ref mut fe) = encoder {
+            crate::screenshot::fastembed_embed_pub(fe, &image_bytes)
+        } else {
+            None
+        };
+        let query = match query_emb {
+            Some(v) => v,
+            None => return vec![],
+        };
+        let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+            Some(s) => s,
+            None => return vec![],
+        };
+        let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
+        let hnsw = match fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) {
+            Ok(idx) => idx,
+            Err(_) => return vec![],
+        };
+        crate::screenshot::search_by_vector(&hnsw, &store, &query, k)
+    }).await.unwrap_or_default())
 }
 
 /// Get screenshot pipeline metrics (capture + embed thread performance).
+/// Lightweight — just reads atomics, no spawn_blocking needed.
 #[tauri::command]
 pub fn get_screenshot_metrics(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
@@ -1605,76 +1613,79 @@ pub fn check_ocr_models_ready(
 
 /// Download OCR models (text-detection.rten + text-recognition.rten).
 /// Returns true if both models are now available.
+/// Runs on a background thread (network download).
 #[tauri::command]
-pub fn download_ocr_models(
+pub async fn download_ocr_models(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> bool {
+) -> Result<bool, String> {
     let skill_dir = state.lock_or_recover().skill_dir.clone();
-    let ocr_dir = skill_dir.join("ocr_models");
-    let _ = std::fs::create_dir_all(&ocr_dir);
-
-    let det_path = ocr_dir.join(crate::constants::OCR_DETECTION_MODEL_FILE);
-    let rec_path = ocr_dir.join(crate::constants::OCR_RECOGNITION_MODEL_FILE);
-
-    let det_ok = crate::screenshot::download_ocr_model_pub(
-        crate::constants::OCR_DETECTION_MODEL_URL, &det_path,
-    );
-    let rec_ok = crate::screenshot::download_ocr_model_pub(
-        crate::constants::OCR_RECOGNITION_MODEL_URL, &rec_path,
-    );
-    det_ok && rec_ok
+    Ok(tokio::task::spawn_blocking(move || {
+        let ocr_dir = skill_dir.join("ocr_models");
+        let _ = std::fs::create_dir_all(&ocr_dir);
+        let det_path = ocr_dir.join(crate::constants::OCR_DETECTION_MODEL_FILE);
+        let rec_path = ocr_dir.join(crate::constants::OCR_RECOGNITION_MODEL_FILE);
+        let det_ok = crate::screenshot::download_ocr_model_pub(
+            crate::constants::OCR_DETECTION_MODEL_URL, &det_path,
+        );
+        let rec_ok = crate::screenshot::download_ocr_model_pub(
+            crate::constants::OCR_RECOGNITION_MODEL_URL, &rec_path,
+        );
+        det_ok && rec_ok
+    }).await.unwrap_or(false))
 }
 
 /// Search screenshots by OCR text — both semantic (embedding similarity)
 /// and substring (SQL LIKE) modes.
 /// `mode`: "semantic" (default) uses text embedding HNSW search,
 ///         "substring" uses SQL LIKE matching.
+/// Runs on a background thread (semantic mode loads an embedding model).
 #[tauri::command]
-pub fn search_screenshots_by_text(
+pub async fn search_screenshots_by_text(
     query: String,
     k: Option<usize>,
     mode: Option<String>,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<crate::screenshot_store::ScreenshotResult> {
-    let (skill_dir, store) = {
+) -> Result<Vec<crate::screenshot_store::ScreenshotResult>, String> {
+    let (skill_dir, store, config) = {
         let g = state.lock_or_recover();
-        (g.skill_dir.clone(), g.screenshot_store.clone())
+        (g.skill_dir.clone(), g.screenshot_store.clone(), g.screenshot_config.clone())
     };
-    let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
-        Some(s) => s,
-        None => return vec![],
-    };
-    let config = {
-        let g = state.lock_or_recover();
-        g.screenshot_config.clone()
-    };
-    let k = k.unwrap_or(20);
-    let mode = mode.unwrap_or_else(|| "semantic".into());
-    match mode.as_str() {
-        "substring" => crate::screenshot::search_by_ocr_text_like(&store, &query, k),
-        _ => crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k, &config),
-    }
+    Ok(tokio::task::spawn_blocking(move || {
+        let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+            Some(s) => s,
+            None => return vec![],
+        };
+        let k = k.unwrap_or(20);
+        let mode = mode.unwrap_or_else(|| "semantic".into());
+        match mode.as_str() {
+            "substring" => crate::screenshot::search_by_ocr_text_like(&store, &query, k),
+            _ => crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k, &config),
+        }
+    }).await.unwrap_or_default())
 }
 
 /// Find screenshots visually similar to a query embedding vector.
+/// Runs on a background thread (HNSW load + search).
 #[tauri::command]
-pub fn search_screenshots_by_vector(
+pub async fn search_screenshots_by_vector(
     vector: Vec<f32>,
     k: usize,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<crate::screenshot_store::ScreenshotResult> {
+) -> Result<Vec<crate::screenshot_store::ScreenshotResult>, String> {
     let (skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.skill_dir.clone(), g.screenshot_store.clone())
     };
-    let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
-        Some(s) => s,
-        None => return vec![],
-    };
-    let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
-    let hnsw = match fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) {
-        Ok(idx) => idx,
-        Err(_) => return vec![],
-    };
-    crate::screenshot::search_by_vector(&hnsw, &store, &vector, k)
+    Ok(tokio::task::spawn_blocking(move || {
+        let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+            Some(s) => s,
+            None => return vec![],
+        };
+        let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
+        let hnsw = match fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) {
+            Ok(idx) => idx,
+            Err(_) => return vec![],
+        };
+        crate::screenshot::search_by_vector(&hnsw, &store, &vector, k)
+    }).await.unwrap_or_default())
 }
