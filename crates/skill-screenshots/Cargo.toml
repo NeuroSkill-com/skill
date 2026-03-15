@@ -1,0 +1,22 @@
+[package]
+name = "skill-screenshots"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "Screenshot capture + vision embedding for NeuroSkill"
+
+[dependencies]
+skill-constants = { path = "../skill-constants" }
+skill-data      = { path = "../skill-data" }
+serde           = { version = "1", features = ["derive"] }
+serde_json      = "1"
+image           = { version = "0.25", default-features = false, features = ["png", "webp", "jpeg"] }
+fast-hnsw       = "1.0.1"
+ocrs            = "0.12.1"
+rten            = "0.24.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+fastembed = { version = "5.11.0", features = ["metal"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+fastembed = { version = "5.11.0" }

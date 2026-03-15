@@ -29,6 +29,7 @@ rfd        = { version = "0.17", default-features = false, features = ["file-han
 ureq       = { version = "2", features = ["native-tls", "json"] }
 hf-hub     = "0.5"
 dirs       = "6"
+urlencoding = "2"
 
 llama-cpp-4 = { version = "0.2.12", optional = true }
 

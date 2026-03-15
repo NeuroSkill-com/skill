@@ -1,5 +1,7 @@
 # TODO
 
+- [x] improve web_search tool with DuckDuckGo JSON + HTML fallback — replaced the limited DuckDuckGo Instant Answer API with a two-strategy approach: primary uses `api.duckduckgo.com/?format=json` (instant answers, answer box, related topics including nested topic groups); fallback scrapes `html.duckduckgo.com/html/` for actual web search results when JSON API returns nothing; HTML scraper extracts titles, URLs, and snippets from result blocks, resolves DDG redirect URLs to real targets, strips HTML tags and decodes entities; results capped at 10; added `urlencoding` crate dependency for URL encoding/decoding
+
 - [x] Discord link in Help & About — added Discord community invite link to the About window Links section and Help window Dashboard tab Community section; `APP_DISCORD_URL` constant, `discordUrl` on `AboutInfo`, Discord SVG icon, i18n keys in all 5 locales
 
 - [x] apple-ocr crate — new `crates/apple-ocr/` workspace crate with compiled ObjC FFI for Apple Vision framework OCR; `vision_ocr.m` compiled with `-fobjc-arc` via `cc` build script, links Vision + CoreGraphics + Foundation frameworks; exports `recognize_text(rgba, w, h)` and `recognize_text_from_png(bytes)` safe Rust wrappers; `apple_vision_ocr()` C function creates CGImage from raw RGBA pixels, runs VNRecognizeTextRequest with fast recognition level, returns malloc'd UTF-8 string; no-op on non-macOS; replaces 200+ lines of inline raw objc_msgSend FFI in screenshot.rs; ort CoreML feature enabled on macOS for GPU-accelerated fastembed embeddings

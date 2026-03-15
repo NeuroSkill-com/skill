@@ -24,6 +24,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **README badges**: added Discord community invite badge, Homebrew cask install badge, and one-click download buttons for macOS (Apple Silicon DMG), Windows (x86_64 EXE), and Linux (x86_64 AppImage) at the top of README.md — all download links point to the latest GitHub release.
 
+### LLM
+
+- **Improved `web_search` tool with DuckDuckGo JSON + HTML fallback**: the web search tool now uses a two-strategy approach for much better results. Primary strategy queries the DuckDuckGo JSON API (`api.duckduckgo.com/?format=json`) for instant answers, answer boxes, and related topics (including nested topic groups). When the JSON API returns no results (common for general queries), it falls back to scraping DuckDuckGo's HTML lite search page (`html.duckduckgo.com/html/`) to extract actual web search results with titles, URLs, and snippets. The HTML scraper resolves DDG's redirect-wrapped URLs to real targets, strips HTML tags, and decodes entities. Results are capped at 10. Added `urlencoding` crate dependency.
+
 ### UI
 
 - **Discord link in Help & About**: added Discord community invite link (`https://discord.gg/nA6Xk5MV`) to the About window Links section and to the Help window Dashboard tab as a new Community section with Discord icon. New `APP_DISCORD_URL` constant in Rust backend, `discordUrl` field on `AboutInfo`, and full i18n across all 5 locales (en/de/fr/uk/he).
