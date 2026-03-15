@@ -1094,6 +1094,83 @@ fn run_embed_thread(
     let mut inserts_since_save: usize = 0;
     let mut ocr_inserts_since_save: usize = 0;
 
+    // ── Startup backfill: process any screenshots that were saved but
+    // not yet embedded (e.g. app crashed mid-embed, or features were
+    // disabled when the screenshot was captured).
+    {
+        let screenshots_dir = skill_dir.join(SCREENSHOTS_DIR);
+
+        // Backfill vision embeddings
+        let unembedded = store.rows_without_embedding();
+        if !unembedded.is_empty() {
+            eprintln!("[screenshot-embed] backfill: {} screenshots without vision embedding", unembedded.len());
+            for row in &unembedded {
+                let webp_path = screenshots_dir.join(&row.filename);
+                if !webp_path.exists() { continue; }
+                let raw = match std::fs::read(&webp_path) { Ok(b) => b, Err(_) => continue };
+                let resized = match resize_fit_pad(&raw, initial_config.image_size) {
+                    Some((png, _, _)) => png, None => continue,
+                };
+                if let Some(ref mut fe) = fe_encoder {
+                    if let Some(emb) = fastembed_embed(fe, &resized) {
+                        let ts = store.get_timestamp(row.id).unwrap_or(0);
+                        let id = hnsw.len() as u64;
+                        hnsw.insert(emb.clone(), ts);
+                        inserts_since_save += 1;
+                        store.update_embedding(
+                            row.id, &emb, Some(id),
+                            &initial_config.embed_backend,
+                            &initial_config.model_id(),
+                            initial_config.image_size,
+                        );
+                    }
+                }
+            }
+            if inserts_since_save > 0 {
+                save_hnsw(&hnsw, &skill_dir);
+                inserts_since_save = 0;
+            }
+            eprintln!("[screenshot-embed] backfill: vision embeddings done");
+        }
+
+        // Backfill OCR text + OCR embeddings
+        let no_ocr = store.rows_without_ocr();
+        if !no_ocr.is_empty() && ocr_engine.is_some() {
+            eprintln!("[screenshot-embed] backfill: {} screenshots without OCR text", no_ocr.len());
+            for row in &no_ocr {
+                let webp_path = screenshots_dir.join(&row.filename);
+                if !webp_path.exists() { continue; }
+                let raw = match std::fs::read(&webp_path) { Ok(b) => b, Err(_) => continue };
+                // OCR on the saved WebP image
+                let ocr_text = if let Some(ref engine) = ocr_engine {
+                    run_ocr(engine, &raw).unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                if ocr_text.is_empty() { continue; }
+                // Embed the OCR text
+                if let Some(ref mut te) = text_embedder {
+                    if let Ok(mut vecs) = te.embed(vec![ocr_text.as_str()], None) {
+                        if let Some(emb) = vecs.pop() {
+                            let ts = store.get_timestamp(row.id).unwrap_or(0);
+                            let id = ocr_hnsw.len() as u64;
+                            ocr_hnsw.insert(emb.clone(), ts);
+                            ocr_inserts_since_save += 1;
+                            store.update_ocr(row.id, &ocr_text, Some(&emb), Some(id));
+                        }
+                    }
+                } else {
+                    store.update_ocr(row.id, &ocr_text, None, None);
+                }
+            }
+            if ocr_inserts_since_save > 0 {
+                save_ocr_hnsw(&ocr_hnsw, &skill_dir);
+                ocr_inserts_since_save = 0;
+            }
+            eprintln!("[screenshot-embed] backfill: OCR done");
+        }
+    }
+
     while let Ok(job) = rx.recv() {
         metrics.queue_depth.fetch_sub(1, Ordering::Relaxed);
         let embed_start = Instant::now();

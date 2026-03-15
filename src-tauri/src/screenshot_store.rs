@@ -420,6 +420,48 @@ impl ScreenshotStore {
         }).unwrap().filter_map(|r| r.ok()).collect()
     }
 
+    /// Get rows that have no vision embedding yet (captured but not embedded).
+    pub fn rows_without_embedding(&self) -> Vec<EmbeddableRow> {
+        let conn = self.conn.lock_or_recover();
+        let mut stmt = conn.prepare(
+            "SELECT id, filename FROM screenshots
+             WHERE embedding IS NULL
+             ORDER BY id"
+        ).unwrap();
+        stmt.query_map([], |r| {
+            Ok(EmbeddableRow {
+                id:       r.get(0)?,
+                filename: r.get(1)?,
+            })
+        }).unwrap().filter_map(|r| r.ok()).collect()
+    }
+
+    /// Get rows that have no OCR text yet (ocr_text is empty).
+    pub fn rows_without_ocr(&self) -> Vec<EmbeddableRow> {
+        let conn = self.conn.lock_or_recover();
+        let mut stmt = conn.prepare(
+            "SELECT id, filename FROM screenshots
+             WHERE ocr_text = '' OR ocr_text IS NULL
+             ORDER BY id"
+        ).unwrap();
+        stmt.query_map([], |r| {
+            Ok(EmbeddableRow {
+                id:       r.get(0)?,
+                filename: r.get(1)?,
+            })
+        }).unwrap().filter_map(|r| r.ok()).collect()
+    }
+
+    /// Get the timestamp for a row by id.
+    pub fn get_timestamp(&self, id: i64) -> Option<i64> {
+        let conn = self.conn.lock_or_recover();
+        conn.query_row(
+            "SELECT timestamp FROM screenshots WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        ).ok()
+    }
+
     /// Get total screenshot count.
     #[allow(dead_code)]
     pub fn count_all(&self) -> usize {
