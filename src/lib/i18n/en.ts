@@ -2886,7 +2886,8 @@ const en: Record<string, string> = {
 
   "screenshots.reembed":                         "Re-embed Screenshots",
   "screenshots.reembedDesc":                     "Recompute embeddings for all existing screenshots using the current model.",
-  "screenshots.reembedBtn":                      "Re-embed",
+  "screenshots.reembedBtn":                      "Re-embed & Reindex",
+  "screenshots.reembedNowBtn":                   "Re-embed now",
   "screenshots.reembedding":                     "Embedding…",
   "screenshots.stale":                           "stale",
   "screenshots.unembedded":                      "unembedded",

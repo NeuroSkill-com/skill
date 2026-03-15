@@ -2660,6 +2660,7 @@ const he: Record<string, string> = {
   "screenshots.reembed": "Screenshots",
   "screenshots.reembedDesc": "Screenshots",
   "screenshots.reembedBtn": "Screenshots",
+  "screenshots.reembedNowBtn": "Screenshots",
   "screenshots.reembedding": "Screenshots",
   "screenshots.stale": "stale",
   "screenshots.unembedded": "unembedded",
