@@ -21,7 +21,8 @@
  * ```
  */
 export function createTitlebarState<T extends Record<string, unknown>>(initial: T): T {
-  return $state(initial) as T;
+  let s: T = $state(initial) as T;
+  return s;
 }
 
 /**
