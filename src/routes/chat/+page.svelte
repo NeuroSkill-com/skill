@@ -2201,6 +2201,20 @@
       onSelect={selectPrompt}
     />
 
+    <!-- LLM accuracy warning -->
+    <div class="flex items-center justify-center gap-1.5 mb-1.5 px-2 py-1 rounded-md
+                bg-amber-500/8 border border-amber-500/15">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round"
+           class="w-3 h-3 shrink-0 text-amber-500/70">
+        <path d="M7.15 2.43L1.41 12a1 1 0 0 0 .86 1.5h11.46a1 1 0 0 0 .86-1.5L8.85 2.43a1 1 0 0 0-1.7 0z"/>
+        <line x1="8" y1="6" x2="8" y2="9"/><line x1="8" y1="11" x2="8.01" y2="11"/>
+      </svg>
+      <span class="text-[0.52rem] text-amber-600/70 dark:text-amber-400/70 leading-tight select-none">
+        {t("chat.hint.llmWarning")}
+      </span>
+    </div>
+
     <div class="flex items-end gap-2 rounded-xl border border-border dark:border-white/[0.08]
                 bg-background px-3 py-2
                 focus-within:ring-1 focus-within:ring-violet-500/50
@@ -2290,22 +2304,8 @@
       {/if}
     </div>
 
-    <!-- LLM accuracy warning -->
-    <div class="flex items-center justify-center gap-1.5 mt-1.5 px-2 py-1 rounded-md
-                bg-amber-500/8 border border-amber-500/15">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
-           stroke-linecap="round" stroke-linejoin="round"
-           class="w-3 h-3 shrink-0 text-amber-500/70">
-        <path d="M7.15 2.43L1.41 12a1 1 0 0 0 .86 1.5h11.46a1 1 0 0 0 .86-1.5L8.85 2.43a1 1 0 0 0-1.7 0z"/>
-        <line x1="8" y1="6" x2="8" y2="9"/><line x1="8" y1="11" x2="8.01" y2="11"/>
-      </svg>
-      <span class="text-[0.52rem] text-amber-600/70 dark:text-amber-400/70 leading-tight select-none">
-        {t("chat.hint.llmWarning")}
-      </span>
-    </div>
-
     <!-- Footer hint -->
-    <p class="text-[0.55rem] text-muted-foreground/30 text-center mt-1">
+    <p class="text-[0.55rem] text-muted-foreground/30 text-center mt-1.5">
       {#if status === "running"}
         {modelName} · {t("chat.hint.running")}
       {:else if status === "loading"}
