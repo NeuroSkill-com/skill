@@ -15,11 +15,16 @@ A single dedicated OS thread ("llm-actor") owns the `LlamaBackend`, `LlamaModel`
 
 | File | Role |
 |---|---|
-| `src-tauri/src/llm/mod.rs` | Actor thread, inference loop, tool execution, Axum routes, image decoding |
-| `src-tauri/src/llm/catalog.rs` | Model catalog (bundled JSON + HF Hub cache discovery + download logic) |
+| `src-tauri/src/llm/mod.rs` | Thin re-export layer over `skill-llm`; Tauri AppHandle adapter |
 | `src-tauri/src/llm/cmds.rs` | Tauri commands: start/stop server, download/delete models, chat history |
-| `src-tauri/src/llm/tools.rs` | Tool call parsing (XML `<tool_call>` blocks from model output) |
-| `src-tauri/src/llm/chat_store.rs` | SQLite persistence for chat sessions |
+| `crates/skill-llm/src/engine.rs` | Actor thread, inference loop, tool orchestration, Axum routes, image decoding |
+| `crates/skill-llm/src/catalog.rs` | Model catalog (bundled JSON + HF Hub cache discovery + download logic) |
+| `crates/skill-llm/src/chat_store.rs` | SQLite persistence for chat sessions |
+| `crates/skill-tools/src/parse.rs` | Tool call parsing, extraction, validation, prompt injection |
+| `crates/skill-tools/src/defs.rs` | Built-in tool definitions (JSON Schema specs) |
+| `crates/skill-tools/src/exec.rs` | Tool execution (each tool's runtime implementation) |
+| `crates/skill-tools/src/context.rs` | Context-aware history trimming |
+| `crates/skill-tools/src/types.rs` | `LlmToolConfig`, `ToolExecutionMode` |
 | `src-tauri/llm_catalog.json` | **Canonical model list** — add new models here only, no Rust changes needed |
 | `src-tauri/src/settings.rs` | `LlmConfig` struct (all config knobs) |
 
