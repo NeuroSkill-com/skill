@@ -254,6 +254,31 @@ Assistant: [TOOL_CALL]{{"name":"location","arguments":{{}}}}[/TOOL_CALL]"#
     )
 }
 
+/// Build a short OS/environment context line for the tool prompt.
+/// Helps the model use the right commands (e.g. `ls` vs `dir`, `brew` vs `apt`).
+fn build_os_context(tools: &[Tool]) -> String {
+    let has_shell_or_fs = tools.iter().any(|t| {
+        matches!(t.function.name.as_str(), "bash" | "read_file" | "write_file" | "edit_file" | "search_output")
+    });
+    if !has_shell_or_fs {
+        return String::new();
+    }
+
+    let os = match std::env::consts::OS {
+        "macos"   => "macOS",
+        "linux"   => "Linux",
+        "windows" => "Windows",
+        other     => other,
+    };
+    let arch = std::env::consts::ARCH;
+    let home = dirs::home_dir()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|| "~".into());
+    let shell = if cfg!(target_os = "windows") { "PowerShell" } else { "bash" };
+
+    format!("\n\nSystem: {os} ({arch}), shell: {shell}, home: {home}")
+}
+
 /// Inject tool definitions and calling instructions into the system prompt.
 ///
 /// llama.cpp local models do not have native function-calling support in all
@@ -276,11 +301,14 @@ pub fn inject_tools_into_system_prompt(
     // to leave room for conversation history and the model's response.
     let compact = n_ctx > 0 && n_ctx <= 4096;
 
-    let tool_block = if compact {
+    let mut tool_block = if compact {
         build_compact_tool_block(tools)
     } else {
         build_full_tool_block(tools)
     };
+
+    // Append OS/environment context when shell or filesystem tools are enabled.
+    tool_block.push_str(&build_os_context(tools));
 
     // Prepend to or create the first system message.
     let has_system = messages.first().and_then(|m| m.get("role")).and_then(|r| r.as_str()) == Some("system");

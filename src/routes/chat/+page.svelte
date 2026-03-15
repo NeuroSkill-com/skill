@@ -1041,7 +1041,8 @@
           const idx = existing.findIndex(e => e.tool === evt.tool && e.status === "calling");
           if (evt.status !== "calling" && idx >= 0) {
             const updated = [...existing];
-            updated[idx] = evt;
+            // Merge — preserve args/result/toolCallId from prior enrichment events
+            updated[idx] = { ...updated[idx], ...evt };
             return { ...m, toolUses: updated };
           }
           return { ...m, toolUses: [...existing, evt] };
@@ -1067,7 +1068,15 @@
         messages = messages.map(m => {
           if (m.id !== assistantMsg.id) return m;
           const existing = m.toolUses ?? [];
-          const idx = existing.findIndex(e => e.tool === chunk.tool_name && (e.toolCallId === chunk.tool_call_id || e.status === "calling"));
+          // Match by toolCallId first, then by tool name + any active status
+          const idx = existing.findIndex(e =>
+            e.tool === chunk.tool_name && (
+              e.toolCallId === chunk.tool_call_id ||
+              e.status === "calling" ||
+              // Also match entries that were already updated by tool_use(error/done)
+              (!e.result && e.tool === chunk.tool_name)
+            )
+          );
           if (idx >= 0) {
             const updated = [...existing];
             updated[idx] = { ...updated[idx], result: chunk.result, status: chunk.is_error ? "error" : "done" };
@@ -1081,7 +1090,13 @@
         messages = messages.map(m => {
           if (m.id !== assistantMsg.id) return m;
           const existing = m.toolUses ?? [];
-          const idx = existing.findIndex(e => e.tool === chunk.tool_name && (e.toolCallId === chunk.tool_call_id || e.status === "calling"));
+          const idx = existing.findIndex(e =>
+            e.tool === chunk.tool_name && (
+              e.toolCallId === chunk.tool_call_id ||
+              e.status === "calling" ||
+              (!e.result && e.tool === chunk.tool_name)
+            )
+          );
           if (idx >= 0) {
             const updated = [...existing];
             updated[idx] = { ...updated[idx], status: "cancelled" };
