@@ -536,6 +536,29 @@ fn save_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
 
 // ── fastembed image embedder ──────────────────────────────────────────────────
 
+/// Build execution providers based on the `use_gpu` config flag.
+/// On macOS: CoreML (GPU/ANE) when use_gpu=true, CPU-only otherwise.
+/// On other platforms: default (CPU) — ort picks the best available.
+fn build_execution_providers(use_gpu: bool) -> Vec<ort::execution_providers::ExecutionProviderDispatch> {
+    if use_gpu {
+        #[cfg(target_os = "macos")]
+        {
+            eprintln!("[screenshot] using CoreML execution provider (GPU/ANE)");
+            vec![ort::ep::CoreML::default().build()]
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            // On non-macOS, ort defaults to CPU; GPU EPs (CUDA, DirectML)
+            // require separate ort features that may not be compiled in.
+            eprintln!("[screenshot] using default execution provider");
+            vec![]
+        }
+    } else {
+        eprintln!("[screenshot] forcing CPU execution provider");
+        vec![ort::ep::CPU::default().build()]
+    }
+}
+
 /// Try to create a fastembed `ImageEmbedding` instance.  Public alias for Tauri commands.
 pub fn load_fastembed_image_pub(config: &ScreenshotConfig, skill_dir: &Path) -> Option<fastembed::ImageEmbedding> {
     load_fastembed_image(config, skill_dir)
@@ -546,11 +569,15 @@ fn load_fastembed_image(config: &ScreenshotConfig, skill_dir: &Path) -> Option<f
     if config.embed_backend != "fastembed" { return None; }
     let model = config.fastembed_model_enum()?;
     let cache = skill_dir.join("fastembed_cache");
+    let eps = build_execution_providers(config.use_gpu);
     match fastembed::ImageEmbedding::try_new(
-        fastembed::ImageInitOptions::new(model).with_cache_dir(cache)
+        fastembed::ImageInitOptions::new(model)
+            .with_cache_dir(cache)
+            .with_execution_providers(eps)
     ) {
         Ok(e) => {
-            eprintln!("[screenshot] fastembed image model loaded: {}", config.fastembed_model);
+            eprintln!("[screenshot] fastembed image model loaded: {} (gpu={})",
+                config.fastembed_model, config.use_gpu);
             Some(e)
         }
         Err(e) => {
@@ -646,8 +673,11 @@ fn run_ocr(engine: &ocrs::OcrEngine, raw_bytes: &[u8]) -> Option<String> {
 fn embed_ocr_text(text: &str, skill_dir: &Path, config: &ScreenshotConfig) -> Option<Vec<f32>> {
     let cache = skill_dir.join("fastembed_cache");
     let model = config.ocr_text_model_enum();
+    let eps = build_execution_providers(config.use_gpu);
     let mut embedder = fastembed::TextEmbedding::try_new(
-        fastembed::InitOptions::new(model).with_cache_dir(cache)
+        fastembed::InitOptions::new(model)
+            .with_cache_dir(cache)
+            .with_execution_providers(eps)
     ).ok()?;
     let mut results = embedder.embed(vec![text], None).ok()?;
     if results.is_empty() { None } else { Some(results.remove(0)) }
@@ -756,9 +786,12 @@ pub fn run_screenshot_worker(
     let mut text_embedder: Option<fastembed::TextEmbedding> = if config.ocr_enabled {
         let cache = skill_dir.join("fastembed_cache");
         let model = config.ocr_text_model_enum();
-        eprintln!("[screenshot] OCR text model: {}", config.ocr_text_model);
+        let eps = build_execution_providers(config.use_gpu);
+        eprintln!("[screenshot] OCR text model: {} (gpu={})", config.ocr_text_model, config.use_gpu);
         fastembed::TextEmbedding::try_new(
-            fastembed::InitOptions::new(model).with_cache_dir(cache)
+            fastembed::InitOptions::new(model)
+                .with_cache_dir(cache)
+                .with_execution_providers(eps)
         ).ok()
     } else {
         None
@@ -826,7 +859,7 @@ pub fn run_screenshot_worker(
             None => continue,
         };
 
-        // ── Save to disk as WebP ──
+        // ── Save to disk as WebP FIRST (before any slow embedding work) ──
         let (ts_str, unix_ts) = yyyymmddhhmmss_utc();
         let date_str = &ts_str[..8];
         let date_dir = screenshots_dir.join(date_str);
@@ -848,7 +881,40 @@ pub fn run_screenshot_worker(
             }
         };
 
-        // ── Embed ──
+        let ts_i64: i64 = ts_str.parse().unwrap_or(0);
+
+        // ── Insert SQLite row IMMEDIATELY with NULL embeddings ──
+        // The screenshot file is already saved to disk.  Embeddings are
+        // computed below and backfilled via UPDATE.  This guarantees the
+        // screenshot is persisted even if embedding crashes or takes long.
+        let row_id = store.insert(&ScreenshotRow {
+            timestamp: ts_i64,
+            unix_ts,
+            filename: webp_name.clone(),
+            width: w,
+            height: h,
+            file_size,
+            hnsw_id: None,
+            embedding: None,
+            embedding_dim: 0,
+            model_backend: String::new(),
+            model_id: String::new(),
+            image_size: config.image_size,
+            quality: config.quality,
+            app_name,
+            window_title,
+            ocr_text: ocr_text.clone(),
+            ocr_embedding: None,
+            ocr_embedding_dim: 0,
+            ocr_hnsw_id: None,
+        });
+
+        // ── Notify frontend (screenshot saved, embedding in progress) ──
+        let _ = app.emit("screenshot-captured", ScreenshotCapturedEvent {
+            ts: ts_str.clone(), filename: webp_name,
+        });
+
+        // ── Vision embedding (may be slow — runs AFTER save) ──
         let (embedding, model_backend, model_id) = match config.embed_backend.as_str() {
             "fastembed" => {
                 if let Some(ref mut fe) = fe_encoder {
@@ -859,7 +925,6 @@ pub fn run_screenshot_worker(
                     (None, String::new(), String::new())
                 }
             }
-            // mmproj embedding — send through the LLM actor's request channel.
             "mmproj" => {
                 #[cfg(feature = "llm")]
                 {
@@ -878,7 +943,6 @@ pub fn run_screenshot_worker(
                             bytes: resized_png.clone(),
                             result_tx: tx,
                         }).ok()?;
-                        // Wait up to 30 seconds for the embedding
                         rx.blocking_recv().ok()?
                     })();
                     let mid = config.model_id();
@@ -896,10 +960,7 @@ pub fn run_screenshot_worker(
             _ => (None, String::new(), String::new()),
         };
 
-        let embedding_dim = embedding.as_ref().map_or(0, |e| e.len());
-        let ts_i64: i64 = ts_str.parse().unwrap_or(0);
-
-        // ── HNSW insert ──
+        // ── Backfill vision embedding into SQLite + HNSW ──
         let hnsw_id = if let Some(ref emb) = embedding {
             let id = hnsw.len() as u64;
             hnsw.insert(emb.clone(), ts_i64);
@@ -913,13 +974,19 @@ pub fn run_screenshot_worker(
             None
         };
 
-        // ── OCR text embedding + HNSW ──
-        let (ocr_embedding, ocr_embedding_dim, ocr_hnsw_id) = if !ocr_text.is_empty() {
+        if let (Some(row_id), Some(ref emb)) = (row_id, &embedding) {
+            store.update_embedding(
+                row_id, emb, hnsw_id,
+                &model_backend, &model_id, config.image_size,
+            );
+        }
+
+        // ── Backfill OCR text embedding into SQLite + HNSW ──
+        if !ocr_text.is_empty() {
             if let Some(ref mut te) = text_embedder {
-                match te.embed(vec![&ocr_text], None) {
+                match te.embed(vec![ocr_text.as_str()], None) {
                     Ok(mut vecs) if !vecs.is_empty() => {
                         let emb = vecs.remove(0);
-                        let dim = emb.len();
                         let id = ocr_hnsw.len() as u64;
                         ocr_hnsw.insert(emb.clone(), ts_i64);
                         ocr_inserts_since_save += 1;
@@ -927,44 +994,14 @@ pub fn run_screenshot_worker(
                             save_ocr_hnsw(&ocr_hnsw, &skill_dir);
                             ocr_inserts_since_save = 0;
                         }
-                        (Some(emb), dim, Some(id))
+                        if let Some(row_id) = row_id {
+                            store.update_ocr(row_id, &ocr_text, Some(&emb), Some(id));
+                        }
                     }
-                    _ => (None, 0, None),
+                    _ => {}
                 }
-            } else {
-                (None, 0, None)
             }
-        } else {
-            (None, 0, None)
-        };
-
-        // ── SQLite insert ──
-        store.insert(&ScreenshotRow {
-            timestamp: ts_i64,
-            unix_ts,
-            filename: webp_name.clone(),
-            width: w,
-            height: h,
-            file_size,
-            hnsw_id,
-            embedding,
-            embedding_dim,
-            model_backend,
-            model_id,
-            image_size: config.image_size,
-            quality: config.quality,
-            app_name,
-            window_title,
-            ocr_text,
-            ocr_embedding,
-            ocr_embedding_dim,
-            ocr_hnsw_id,
-        });
-
-        // ── Notify frontend ──
-        let _ = app.emit("screenshot-captured", ScreenshotCapturedEvent {
-            ts: ts_str, filename: webp_name,
-        });
+        }
     }
 }
 
