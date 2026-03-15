@@ -121,7 +121,7 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -212,6 +212,9 @@ pub fn router(state: SharedState) -> Router {
         .route("/llm/chat",             post(llm_chat_post))
 
         // ── CORS: allow all origins so browsers / notebooks can call freely
+        // ── Static file serving for screenshot images ────────────────
+        .route("/screenshots/{*path}", get(screenshot_file_get))
+
         .layer(CorsLayer::new()
             .allow_origin(Any)
             .allow_methods(Any)
@@ -978,4 +981,58 @@ async fn handle_ws_text(state: &SharedState, peer: &str, text: &str) -> Option<S
     };
 
     serde_json::to_string(&response).ok()
+}
+
+// ── Screenshot static file serving ───────────────────────────────────────────
+
+/// Serve screenshot image files from `~/.skill/screenshots/`.
+/// URL: `GET /screenshots/20260315/20260315143025.webp`
+async fn screenshot_file_get(
+    State(state): State<SharedState>,
+    Path(path): Path<String>,
+) -> Response {
+    let skill_dir = {
+        let r = state.app.state::<std::sync::Mutex<Box<crate::AppState>>>();
+        let g = r.lock_or_recover();
+        g.skill_dir.clone()
+    };
+    let file_path = skill_dir
+        .join(crate::constants::SCREENSHOTS_DIR)
+        .join(&path);
+
+    // Security: ensure the resolved path is still under the screenshots dir
+    let screenshots_dir = skill_dir.join(crate::constants::SCREENSHOTS_DIR);
+    let canonical = match file_path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+    let canonical_base = match screenshots_dir.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+    if !canonical.starts_with(&canonical_base) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let bytes = match tokio::fs::read(&canonical).await {
+        Ok(b) => b,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    let content_type = if path.ends_with(".webp") {
+        "image/webp"
+    } else if path.ends_with(".png") {
+        "image/png"
+    } else if path.ends_with(".jpg") || path.ends_with(".jpeg") {
+        "image/jpeg"
+    } else {
+        "application/octet-stream"
+    };
+
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, content_type),
+         (axum::http::header::CACHE_CONTROL, "public, max-age=31536000, immutable")],
+        bytes,
+    ).into_response()
 }

@@ -93,7 +93,7 @@ sysinfo = "0.38"
 
 # Cross-platform global keyboard / mouse event listener (input activity tracking).
 # macOS: CGEventTap (requires Accessibility permission — degrades gracefully if absent).
-tauri                        = { version = "2", features = ["tray-icon", "image-png", "macos-private-api", "protocol-asset"] }
+tauri                        = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-opener          = "2"
 tauri-plugin-global-shortcut = "2"
