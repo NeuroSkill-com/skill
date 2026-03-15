@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Create a Windows NSIS installer from a pre-built release binary.
 

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
     Build, sign, package, and upload a NeuroSkill Windows release.
@@ -255,7 +255,8 @@ if (-not $SKIP_SIGN) {
     }
     if (-not $signtool) {
         # Fall back to PATH
-        $signtool = (Get-Command "signtool.exe" -ErrorAction SilentlyContinue)?.Source
+        $cmd = Get-Command "signtool.exe" -ErrorAction SilentlyContinue
+        if ($cmd) { $signtool = $cmd.Source }
     }
     if (-not $signtool) {
         Fail ("signtool.exe not found.  Install the Windows 10/11 SDK:" +

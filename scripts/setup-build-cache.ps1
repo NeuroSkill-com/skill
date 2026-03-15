@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Setup sccache for faster builds on Windows.
 
