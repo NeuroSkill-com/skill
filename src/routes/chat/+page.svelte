@@ -89,7 +89,7 @@
    */
   function stripToolCallFences(raw: string): string {
     // Known built-in tool names — must stay in sync with KNOWN_TOOL_NAMES in tools.rs
-    const KNOWN_TOOLS = new Set(["date", "location", "web_search", "web_fetch", "bash", "read_file", "write_file", "edit_file"]);
+    const KNOWN_TOOLS = new Set(["date", "location", "web_search", "web_fetch", "bash", "read_file", "write_file", "edit_file", "search_output"]);
 
     function isToolCallObject(v: Record<string, unknown>): boolean {
       // Standard single-call: has name/tool + parameters/arguments
@@ -1846,7 +1846,7 @@
               {#if msg.toolUses?.length}
                 <div class="flex flex-col gap-1.5">
                   {#each msg.toolUses as tu, tuIdx}
-                    {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐", bash: "💻", read_file: "📄", write_file: "✏️", edit_file: "🔧" }}
+                    {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐", bash: "💻", read_file: "📄", write_file: "✏️", edit_file: "🔧", search_output: "🔎" }}
                     {@const icon = icons[tu.tool] ?? "🔧"}
                     {@const hasDetails = !!(tu.args || tu.result)}
                     {@const dangerKey = detectToolDanger(tu)}
@@ -1920,6 +1920,10 @@
                                 {tu.args.query}
                               {:else if tu.tool === "web_fetch" && tu.args.url}
                                 {tu.args.url}
+                              {:else if tu.tool === "search_output" && tu.args.pattern}
+                                /{tu.args.pattern}/ in {tu.args.path?.split("/").pop() ?? tu.args.path}
+                              {:else if tu.tool === "search_output" && tu.args.path}
+                                {tu.args.path.split("/").pop() ?? tu.args.path}
                               {/if}
                             </span>
                           {/if}
@@ -2286,8 +2290,22 @@
       {/if}
     </div>
 
+    <!-- LLM accuracy warning -->
+    <div class="flex items-center justify-center gap-1.5 mt-1.5 px-2 py-1 rounded-md
+                bg-amber-500/8 border border-amber-500/15">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round"
+           class="w-3 h-3 shrink-0 text-amber-500/70">
+        <path d="M7.15 2.43L1.41 12a1 1 0 0 0 .86 1.5h11.46a1 1 0 0 0 .86-1.5L8.85 2.43a1 1 0 0 0-1.7 0z"/>
+        <line x1="8" y1="6" x2="8" y2="9"/><line x1="8" y1="11" x2="8.01" y2="11"/>
+      </svg>
+      <span class="text-[0.52rem] text-amber-600/70 dark:text-amber-400/70 leading-tight select-none">
+        {t("chat.hint.llmWarning")}
+      </span>
+    </div>
+
     <!-- Footer hint -->
-    <p class="text-[0.55rem] text-muted-foreground/30 text-center mt-1.5">
+    <p class="text-[0.55rem] text-muted-foreground/30 text-center mt-1">
       {#if status === "running"}
         {modelName} · {t("chat.hint.running")}
       {:else if status === "loading"}

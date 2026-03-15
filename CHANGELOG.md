@@ -8,6 +8,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Chat UI
 
+- **Added LLM accuracy warning banner**: a persistent amber-tinted warning is now displayed above the footer hint in the chat window, reminding users that LLM output can be inaccurate and to always verify tool results and generated content. Fully localised across all 5 supported languages (en/de/fr/uk/he).
+
 - **Fixed settings/tools panel not scrollable**: the parameters panel (system prompt, EEG bands, tool toggles, thinking level, sliders) had no overflow handling and no max-height constraint. When its content exceeded the window height, it pushed the message list off-screen entirely. Now capped at `max-h-[50vh]` with `overflow-y-auto` so it scrolls internally while always leaving room for the chat messages.
 
 ### Chat History
