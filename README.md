@@ -162,7 +162,7 @@ In-depth guides live in [`docs/`](docs/):
 
 | Document | Description |
 |---|---|
-| [`CHANGELOG.md`](docs/CHANGELOG.md) | All notable changes — features, fixes, refactors |
+| [`CHANGELOG.md`](CHANGELOG.md) | All notable changes — features, fixes, refactors |
 | [`METRICS.md`](docs/METRICS.md) | Full metrics & indices reference — band powers, derived scores, PPG, composites, with formulas and citations |
 | [`HOOKS.md`](docs/HOOKS.md) | Proactive Hooks architecture — background brain-state monitoring and automated actions |
 | [`LLM.md`](docs/LLM.md) | LLM engine architecture — actor pattern, model lifecycle, chat, function calling |
