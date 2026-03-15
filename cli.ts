@@ -46,6 +46,8 @@ const CLI_VERSION = "1.1.0";
  *   llm start                      Load active model and start LLM inference server
  *   llm stop                       Stop LLM inference server and free GPU memory
  *   llm catalog                    Show model catalog with download states
+ *   llm add <repo> <filename>      Add an external HF model to the catalog and download it
+ *   llm add <hf-url>               Add from a full HuggingFace URL
  *   llm select <filename>          Set the active text model
  *   llm mmproj <filename|none>     Set the active vision projector (or "none" to disable)
  *   llm autoload-mmproj <on|off>   Toggle auto-loading of vision projector on start
@@ -817,6 +819,12 @@ function parseArgs(): Args {
     else if (args.command === "llm" && args.subAction === "mmproj" && !args.text) {
       args.text = a; // mmproj filename (or "none" to disable)
     }
+    else if (args.command === "llm" && args.subAction === "add" && !args.text) {
+      args.text = a; // repo (first positional) or repo/filename combined
+    }
+    else if (args.command === "llm" && args.subAction === "add" && args.text && !args.body) {
+      args.body = a; // filename (second positional)
+    }
     else if (args.command === "llm" && args.subAction === "autoload-mmproj" && !args.text) {
       args.text = a; // on/off
     }
@@ -896,6 +904,8 @@ ${m("llm status",                                      "LLM server status (stopp
 ${m("llm start",                                     "load active model and start LLM inference server")}
 ${m("llm stop",                                      "stop LLM inference server and free GPU memory")}
 ${m("llm catalog",                                   "show model catalog with download states")}
+${m("llm add <repo> <filename>",                      "add an external HF model to the catalog and download it")}
+${m("llm add <hf-url>",                               "add from a full HuggingFace URL")}
 ${m("llm select <filename>",                         "set the active text model")}
 ${m("llm mmproj <filename|none>",                    "set the active vision projector (or 'none' to disable)")}
 ${m("llm autoload-mmproj <on|off>",                  "toggle auto-loading of vision projector on start")}
@@ -1183,6 +1193,8 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}$${RESET} npx tsx cli.ts llm start           ${DIM}# load active model (may take seconds)${RESET}
   ${DIM}$${RESET} npx tsx cli.ts llm stop
   ${DIM}$${RESET} npx tsx cli.ts llm catalog
+  ${DIM}$${RESET} npx tsx cli.ts llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf
+  ${DIM}$${RESET} npx tsx cli.ts llm add https://huggingface.co/bartowski/Phi-4-mini-reasoning-GGUF/blob/main/Phi-4-mini-reasoning-Q4_K_M.gguf
   ${DIM}$${RESET} npx tsx cli.ts llm select "Qwen_Qwen3.5-4B-Q4_K_M.gguf"
   ${DIM}$${RESET} npx tsx cli.ts llm mmproj "mmproj-Qwen_Qwen3.5-4B-BF16.gguf"
   ${DIM}$${RESET} npx tsx cli.ts llm mmproj none     ${DIM}# disable vision projector${RESET}
@@ -3982,6 +3994,56 @@ async function cmdLlm(args: Args): Promise<void> {
       break;
     }
 
+    // ── add ───────────────────────────────────────────────────────────────
+    case "add": {
+      // Supports two forms:
+      //   llm add <repo> <filename>          — explicit repo + filename
+      //   llm add <repo>/<filename>          — combined (split on last /)
+      //   llm add <url>                      — full HF URL
+      let repo: string;
+      let filename: string;
+      const raw = args.text;
+      if (!raw) printError(
+        "usage: cli.ts llm add <repo> <filename>\n" +
+        "       cli.ts llm add <hf-url>\n\n" +
+        "  Examples:\n" +
+        "    llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf\n" +
+        "    llm add https://huggingface.co/bartowski/Phi-4-mini-reasoning-GGUF/blob/main/Phi-4-mini-reasoning-Q4_K_M.gguf"
+      );
+
+      if (args.body) {
+        // Two positional args: repo + filename
+        repo = raw!;
+        filename = args.body;
+      } else if (raw!.startsWith("http://") || raw!.startsWith("https://")) {
+        // Full HF URL: https://huggingface.co/<org>/<repo>/blob/main/<filename>
+        // or          https://huggingface.co/<org>/<repo>/resolve/main/<filename>
+        const urlMatch = raw!.match(/huggingface\.co\/([^/]+\/[^/]+)\/(?:blob|resolve)\/[^/]+\/(.+?)(?:\?.*)?$/);
+        if (!urlMatch) printError(
+          "could not parse HuggingFace URL. Expected format:\n" +
+          "  https://huggingface.co/<org>/<repo>/blob/main/<filename>"
+        );
+        repo = urlMatch![1];
+        filename = decodeURIComponent(urlMatch![2]);
+      } else {
+        printError(
+          "usage: cli.ts llm add <repo> <filename>\n" +
+          "       cli.ts llm add <hf-url>\n\n" +
+          "  Examples:\n" +
+          "    llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf\n" +
+          "    llm add https://huggingface.co/bartowski/Phi-4-mini-reasoning-GGUF/blob/main/Phi-4-mini-reasoning-Q4_K_M.gguf"
+        );
+      }
+
+      print(`${BOLD}🤖 llm add${RESET} ${CYAN}${repo!}${RESET} / ${CYAN}${filename!}${RESET}`);
+      const r = await send({ command: "llm_add_model", repo: repo!, filename: filename!, download: true });
+      if (!r.ok) { printResult(r); printError(r.error ?? "llm_add_model failed"); }
+      print(`  ${GREEN}✓${RESET} added ${CYAN}${r.filename}${RESET} from ${DIM}${r.repo}${RESET}`);
+      print(`  ${DIM}download started — poll with: llm downloads${RESET}`);
+      printResult(r);
+      break;
+    }
+
     // ── select ─────────────────────────────────────────────────────────────
     case "select": {
       const filename = args.text;
@@ -4113,7 +4175,7 @@ async function cmdLlm(args: Args): Promise<void> {
     }
 
     default:
-      printError(`unknown llm subcommand: "${sub}". Valid: status start stop catalog select mmproj autoload-mmproj download pause resume cancel delete downloads refresh fit logs chat`);
+      printError(`unknown llm subcommand: "${sub}". Valid: status start stop catalog add select mmproj autoload-mmproj download pause resume cancel delete downloads refresh fit logs chat`);
   }
 }
 

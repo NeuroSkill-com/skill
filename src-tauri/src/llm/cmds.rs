@@ -120,6 +120,124 @@ fn save_catalog(app: &AppHandle, state: &AppState) {
     let _ = app; // suppress unused warning
 }
 
+// ── Add external model ────────────────────────────────────────────────────────
+
+/// Infer quant string from a GGUF filename.
+///
+/// Tries known quant substrings (e.g. `Q4_K_M`, `IQ3_XS`, `BF16`, `F16`, `F32`).
+/// Falls back to `"unknown"` if nothing matches.
+fn infer_quant(filename: &str) -> String {
+    let upper = filename.to_uppercase();
+    // Order matters — check longer strings first to avoid partial matches.
+    let quants = [
+        "IQ4_NL", "IQ4_XS",
+        "IQ3_XXS", "IQ3_XS", "IQ3_M", "IQ3_S",
+        "IQ2_XXS", "IQ2_XS", "IQ2_M", "IQ2_S",
+        "Q6_K_L", "Q6_K",
+        "Q5_K_L", "Q5_K_M", "Q5_K_S",
+        "Q4_K_L", "Q4_K_M", "Q4_K_S",
+        "Q4_0", "Q4_1",
+        "Q3_K_XL", "Q3_K_L", "Q3_K_M", "Q3_K_S",
+        "Q2_K_L", "Q2_K",
+        "Q8_0", "Q8_1",
+        "BF16", "F16", "F32",
+    ];
+    for q in &quants {
+        if upper.contains(q) { return q.to_string(); }
+    }
+    "unknown".to_string()
+}
+
+/// Infer whether a filename is a multimodal projector.
+fn infer_is_mmproj(filename: &str) -> bool {
+    let lower = filename.to_lowercase();
+    lower.contains("mmproj") || lower.contains("mm-proj") || lower.contains("vision-proj")
+}
+
+/// Derive a family name from a repo string like `"bartowski/Qwen_Qwen3.5-4B-GGUF"`.
+fn infer_family_name(repo: &str) -> String {
+    // Take the part after `/`, strip `-GGUF` suffix and any `_` prefix
+    let name = repo.split('/').last().unwrap_or(repo);
+    let name = name.strip_suffix("-GGUF").or_else(|| name.strip_suffix("-gguf")).unwrap_or(name);
+    name.replace('_', " ").replace('-', " ")
+}
+
+/// Derive a family_id from a repo string (lowercase, hyphenated).
+fn infer_family_id(repo: &str) -> String {
+    let name = repo.split('/').last().unwrap_or(repo);
+    let name = name.strip_suffix("-GGUF").or_else(|| name.strip_suffix("-gguf")).unwrap_or(name);
+    name.to_lowercase().replace(' ', "-")
+}
+
+/// Add an external model from any HuggingFace repo to the catalog and
+/// optionally start downloading it.
+///
+/// If the `filename` already exists in the catalog, returns its existing entry
+/// without creating a duplicate.  The `size_gb` can be 0.0 — the actual size
+/// will be discovered during download from the HF API.
+///
+/// Returns the created (or existing) entry's filename.
+#[tauri::command]
+pub fn add_llm_model(
+    repo:       String,
+    filename:   String,
+    size_gb:    Option<f32>,
+    download:   Option<bool>,
+    app:        AppHandle,
+    state:      tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Result<String, String> {
+    let should_download = download.unwrap_or(true);
+
+    {
+        let mut s = state.lock_or_recover();
+
+        // If already in catalog, skip creation.
+        if s.llm.catalog.entries.iter().any(|e| e.filename == filename) {
+            save_catalog(&app, &s);
+            drop(s);
+            if should_download {
+                download_llm_model(filename.clone(), app, state);
+            }
+            return Ok(filename);
+        }
+
+        let is_mmproj = infer_is_mmproj(&filename);
+        let quant     = infer_quant(&filename);
+        let family_id   = infer_family_id(&repo);
+        let family_name = infer_family_name(&repo);
+
+        let entry = super::catalog::LlmModelEntry {
+            repo:        repo.clone(),
+            filename:    filename.clone(),
+            quant,
+            size_gb:     size_gb.unwrap_or(0.0),
+            description: format!("Custom model from {repo}"),
+            family_id,
+            family_name,
+            family_desc: String::new(),
+            tags:        if is_mmproj { vec!["vision".into(), "multimodal".into()] }
+                         else { vec!["chat".into()] },
+            is_mmproj,
+            recommended: false,
+            advanced:    false,
+            local_path:  None,
+            state:       super::catalog::DownloadState::NotDownloaded,
+            status_msg:  None,
+            progress:    0.0,
+            initiated_at_unix: None,
+        };
+
+        s.llm.catalog.entries.push(entry);
+        save_catalog(&app, &s);
+    }
+
+    if should_download {
+        download_llm_model(filename.clone(), app, state);
+    }
+
+    Ok(filename)
+}
+
 // ── Active model selection ────────────────────────────────────────────────────
 
 /// Set the active LLM model (by filename).

@@ -2248,6 +2248,40 @@ fn llm_set_autoload_mmproj(app: &AppHandle, msg: &Value) -> Result<Value, String
     Ok(serde_json::json!({ "enabled": enabled }))
 }
 
+/// `llm_add_model` — add an external HuggingFace model to the catalog and optionally download it.
+///
+/// Creates a new catalog entry from the repo and filename if it doesn't already exist.
+/// Metadata (quant, mmproj, family) is inferred from the filename/repo.
+///
+/// ```json
+/// { "command": "llm_add_model", "repo": "bartowski/Phi-4-mini-reasoning-GGUF",
+///   "filename": "Phi-4-mini-reasoning-Q4_K_M.gguf", "download": true }
+/// → { "command": "llm_add_model", "ok": true, "filename": "...", "repo": "..." }
+/// ```
+#[cfg(feature = "llm")]
+fn llm_add_model(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let repo = msg["repo"]
+        .as_str()
+        .ok_or_else(|| "llm_add_model: 'repo' field required (string, e.g. \"bartowski/Phi-4-GGUF\")".to_string())?
+        .to_string();
+    let filename = msg["filename"]
+        .as_str()
+        .ok_or_else(|| "llm_add_model: 'filename' field required (string, e.g. \"Phi-4-Q4_K_M.gguf\")".to_string())?
+        .to_string();
+    let size_gb = msg["size_gb"].as_f64().map(|v| v as f32);
+    let download = msg.get("download").and_then(|v| v.as_bool());
+
+    let result = crate::llm::cmds::add_llm_model(
+        repo.clone(),
+        filename.clone(),
+        size_gb,
+        download,
+        app.clone(),
+        app.state::<Mutex<Box<AppState>>>(),
+    )?;
+    Ok(serde_json::json!({ "filename": result, "repo": repo }))
+}
+
 /// `llm_hardware_fit` — check which models fit in available memory.
 ///
 /// ```json
@@ -2335,6 +2369,8 @@ pub async fn dispatch(
         "llm_downloads"       => llm_downloads(app),
         #[cfg(feature = "llm")]
         "llm_set_autoload_mmproj" => llm_set_autoload_mmproj(app, msg),
+        #[cfg(feature = "llm")]
+        "llm_add_model"       => llm_add_model(app, msg),
         #[cfg(feature = "llm")]
         "llm_hardware_fit"    => llm_hardware_fit(app, msg),
         other                 => Err(format!("unknown command: \"{other}\"")),
