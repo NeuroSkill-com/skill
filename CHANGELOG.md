@@ -24,7 +24,7 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Model name in the custom titlebar**: the active model name and status indicator (green/amber/grey dot) have been moved from the in-page chat header into the shared custom titlebar at the very top of the window. The model name is centered in the titlebar with absolute positioning, matching the style used by other secondary windows (history, help, etc.). The in-page header no longer shows the model name, freeing space for tool and EEG badges.
 
-- **Context usage always visible**: the context-window usage bar (tokens used / n_ctx) is now permanently displayed below the chat header instead of being hidden inside the tools panel. Shows a colour-coded progress bar (green → amber → red) with token counts.
+- **Context usage as circular progress on tools button**: the separate context-usage bar below the chat header has been replaced by a compact circular SVG progress ring on the tools badge button. The ring fills proportionally (green → amber at 70% → red at 90%) with a percentage label; full token counts (`used/total`) shown in the button tooltip on hover. When no context info is available, the wrench icon is shown as fallback.
 
 - **Model name moved to titlebar**: the active model name is now shown in the header drag region (acting as the window title), freeing horizontal space for badges and controls. The footer hint no longer repeats the model name.
 
