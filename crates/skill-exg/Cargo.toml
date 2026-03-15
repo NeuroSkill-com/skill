@@ -1,0 +1,16 @@
+[package]
+name = "skill-exg"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "EEG embedding helpers — cosine distance, fuzzy text matching, timestamp formatting, HuggingFace weight resolution/download, cubecl cache setup, epoch metrics — extracted workspace crate"
+
+[dependencies]
+skill-constants = { path = "../skill-constants" }
+skill-eeg       = { path = "../skill-eeg" }
+skill-data      = { path = "../skill-data" }
+serde_json      = "1"
+dirs            = "6"
+hf-hub          = "0.5"
+ureq            = { version = "2.12", features = ["native-tls", "json"] }
+cubecl-runtime  = "0.9.0"

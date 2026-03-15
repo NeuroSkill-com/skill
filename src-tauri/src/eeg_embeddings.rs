@@ -52,7 +52,7 @@ use crate::{
         CHANNEL_NAMES, EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_HOP_SAMPLES,
         EMBEDDING_OVERLAP_MAX_SECS, EMBEDDING_OVERLAP_MIN_SECS,
         GLOBAL_HNSW_SAVE_EVERY, HNSW_INDEX_FILE, MUSE_SAMPLE_RATE, SQLITE_FILE,
-        ZUNA_CONFIG_FILE, ZUNA_WEIGHTS_FILE,
+
     },
     eeg_model_config::{EegModelConfig, EegModelStatus},
     global_eeg_index,
@@ -89,11 +89,6 @@ struct EpochMsg {
 /// initialisation prevents that `ENOENT` by ensuring at least the *parent*
 /// directory is present; cubecl can then safely stat/create individual cache
 /// entries without hitting the missing-ancestor case.
-// Simple eprintln-based log for use before a logger object is available.
-macro_rules! skill_log_plain {
-    ($fmt:literal $(, $arg:expr)*) => { eprintln!($fmt $(, $arg)*) };
-}
-
 /// Pre-create the cubecl kernel-cache directory tree before any wgpu operation.
 ///
 /// cubecl-common 0.9.0 uses:
@@ -133,40 +128,19 @@ macro_rules! skill_log_plain {
 /// `WgpuDevice::DefaultDevice` access (i.e. before the encoder load).
 /// It panics if called a second time, so we guard with `catch_unwind`
 /// to make subsequent worker restarts harmless.
-fn configure_cubecl_cache(skill_dir: &Path) {
-    use cubecl_runtime::config::{cache::CacheConfig, GlobalConfig};
-
-    let cache_dir = skill_dir.join("cubecl_cache");
-    match std::fs::create_dir_all(&cache_dir) {
-        Ok(_)  => skill_log_plain!("[embedder] cubecl cache dir: {}", cache_dir.display()),
-        Err(e) => skill_log_plain!("[embedder] warn: cubecl cache mkdir {}: {e}", cache_dir.display()),
-    }
-
-    let mut cfg = GlobalConfig::default();
-    cfg.autotune.cache = CacheConfig::File(cache_dir);
-
-    // set() panics if called after the first get().  Catch the panic so a
-    // second worker spawned in the same process is safe (the first call
-    // already set the config; the second is a no-op).
-    let _ = std::panic::catch_unwind(|| GlobalConfig::set(cfg));
-}
-
-/// Process-global flag: set to `true` after any GPU panic so that respawned
-/// workers don't attempt to use the wgpu device, whose internal mutexes are
-/// permanently poisoned for the rest of this process lifetime.
-static GPU_DEVICE_POISONED: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-/// Attempt to extract a human-readable message from a caught panic payload.
+// configure_cubecl_cache, GPU_DEVICE_POISONED, panic_msg — delegated to skill_exg.
+use skill_exg::configure_cubecl_cache;
+use skill_exg::GPU_DEVICE_POISONED;
 fn panic_msg(payload: &Box<dyn std::any::Any + Send>) -> &str {
-    payload.downcast_ref::<String>()
-        .map(|s| s.as_str())
-        .or_else(|| payload.downcast_ref::<&str>().copied())
-        .unwrap_or("(non-string panic payload)")
+    skill_exg::panic_msg(payload)
 }
 
-/// Per-epoch band-derived metrics stored alongside each embedding.
-struct EpochMetrics {
+// EpochMetrics — re-exported from skill_exg.
+use skill_exg::EpochMetrics;
+
+/// Original EpochMetrics definition removed — now in skill_exg.
+#[cfg(any())]
+struct _OriginalEpochMetrics {
     rel_delta:  f32,
     rel_theta:  f32,
     rel_alpha:  f32,
@@ -244,8 +218,8 @@ struct EpochMetrics {
     consciousness_integration:  f32,
 }
 
-impl EpochMetrics {
-    /// Derive metrics from a `BandSnapshot` by averaging across all channels.
+#[cfg(any())]
+impl _OriginalEpochMetrics {
     fn from_snapshot(snap: &crate::eeg_bands::BandSnapshot) -> Self {
         let n = snap.channels.len() as f32;
         if n < 1.0 {
@@ -346,7 +320,8 @@ impl EpochMetrics {
     }
 }
 
-impl Default for EpochMetrics {
+#[cfg(any())]
+impl Default for _OriginalEpochMetrics {
     fn default() -> Self {
         Self {
             rel_delta: 0.0, rel_theta: 0.0, rel_alpha: 0.0, rel_beta: 0.0, rel_gamma: 0.0, rel_high_gamma: 0.0,
@@ -1324,24 +1299,7 @@ fn unix_secs_now() -> u64 {
         .as_secs()
 }
 
-pub(crate) fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() || a.is_empty() {
-        return 2.0;
-    }
-    let mut dot = 0.0f32;
-    let mut na = 0.0f32;
-    let mut nb = 0.0f32;
-    for (&av, &bv) in a.iter().zip(b.iter()) {
-        dot += av * bv;
-        na += av * av;
-        nb += bv * bv;
-    }
-    if na <= f32::EPSILON || nb <= f32::EPSILON {
-        return 2.0;
-    }
-    let sim = dot / (na.sqrt() * nb.sqrt());
-    1.0 - sim.clamp(-1.0, 1.0)
-}
+pub(crate) use skill_exg::cosine_distance;
 
 fn load_recent_label_texts(skill_dir: &Path, limit: usize) -> Vec<String> {
     let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
@@ -1376,52 +1334,7 @@ fn load_recent_label_texts(skill_dir: &Path, limit: usize) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn normalize_text(s: &str) -> String {
-    s.to_lowercase()
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || c.is_whitespace())
-        .collect::<String>()
-}
-
-fn levenshtein(a: &str, b: &str) -> usize {
-    let a_chars: Vec<char> = a.chars().collect();
-    let b_chars: Vec<char> = b.chars().collect();
-    if a_chars.is_empty() {
-        return b_chars.len();
-    }
-    if b_chars.is_empty() {
-        return a_chars.len();
-    }
-
-    let mut prev: Vec<usize> = (0..=b_chars.len()).collect();
-    let mut curr = vec![0usize; b_chars.len() + 1];
-
-    for (i, &ac) in a_chars.iter().enumerate() {
-        curr[0] = i + 1;
-        for (j, &bc) in b_chars.iter().enumerate() {
-            let cost = if ac == bc { 0 } else { 1 };
-            curr[j + 1] = (curr[j] + 1)
-                .min(prev[j + 1] + 1)
-                .min(prev[j] + cost);
-        }
-        std::mem::swap(&mut prev, &mut curr);
-    }
-    prev[b_chars.len()]
-}
-
-pub(crate) fn fuzzy_match(keyword: &str, candidate: &str) -> bool {
-    let k = normalize_text(keyword);
-    let c = normalize_text(candidate);
-    if k.is_empty() || c.is_empty() {
-        return false;
-    }
-    if c.contains(&k) || k.contains(&c) {
-        return true;
-    }
-    let dist = levenshtein(&k, &c) as f32;
-    let max_len = k.chars().count().max(c.chars().count()) as f32;
-    (dist / max_len) <= 0.32
-}
+pub(crate) use skill_exg::fuzzy_match;
 
 // ── Background worker ─────────────────────────────────────────────────────────
 
@@ -2069,98 +1982,14 @@ fn store_metrics_only(
     }
 }
 
-/// Current UTC date as `"YYYYMMDD"`.
-fn yyyymmdd_utc() -> String {
-    let mut days = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        / 86_400;
-    let mut y = 1970u32;
-    loop {
-        let leap  = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-        let in_yr = if leap { 366u64 } else { 365 };
-        if days < in_yr { break; }
-        days -= in_yr; y += 1;
-    }
-    let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-    let ml: [u64; 12] = if leap { [31,29,31,30,31,30,31,31,30,31,30,31] }
-                        else    { [31,28,31,30,31,30,31,31,30,31,30,31] };
-    let mut m = 1u32;
-    for &l in &ml { if days < l { break; } days -= l; m += 1; }
-    format!("{y:04}{m:02}{d:02}", d = days + 1)
-}
+// yyyymmdd_utc, yyyymmddhhmmss_utc — delegated to skill_exg.
+use skill_exg::yyyymmdd_utc;
+pub use skill_exg::yyyymmddhhmmss_utc;
 
-/// Current UTC time as the integer `YYYYMMDDHHmmss`.
-pub fn yyyymmddhhmmss_utc() -> i64 {
-    let s    = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-    let sec  = (s % 60) as u32;
-    let min  = ((s / 60) % 60) as u32;
-    let hour = ((s / 3600) % 24) as u32;
-    let mut days = s / 86_400;
-    let mut y = 1970u32;
-    loop {
-        let leap  = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-        let in_yr = if leap { 366u64 } else { 365 };
-        if days < in_yr { break; }
-        days -= in_yr; y += 1;
-    }
-    let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-    let ml: [u64; 12] = if leap { [31,29,31,30,31,30,31,31,30,31,30,31] }
-                        else    { [31,28,31,30,31,30,31,31,30,31,30,31] };
-    let mut m = 1u32;
-    for &l in &ml { if days < l { break; } days -= l; m += 1; }
-    let d = days as u32 + 1;
-    (y as i64)*10_000_000_000 + (m as i64)*100_000_000 + (d as i64)*1_000_000
-        + (hour as i64)*10_000 + (min as i64)*100 + sec as i64
-}
+pub use skill_exg::probe_hf_weights;
 
-/// Public alias so `lib.rs` can call the weight probe at startup without
-/// starting a full embed worker.
-pub fn probe_hf_weights(hf_repo: &str) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
-    resolve_hf_weights(hf_repo)
-}
-
-/// Find ZUNA weights in the HuggingFace disk cache for the given `hf_repo`.
 fn resolve_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
-    // Mirror the hf-hub crate's cache resolution so the lookup always agrees
-    // with where Api::new() / repo.get() actually writes files:
-    //
-    //   1. $HUGGINGFACE_HUB_CACHE  — full path to the hub cache dir
-    //   2. $HF_HOME/hub            — HF_HOME is the *parent*; hub is the subdir
-    //   3. ~/.cache/huggingface/hub — platform default (dirs::home_dir on all OS)
-    //
-    // Previously only $HF_HOME was checked (without /hub), and
-    // $HUGGINGFACE_HUB_CACHE was ignored entirely.  That caused a path mismatch
-    // whenever either variable was set: weights were downloaded to the correct
-    // location by hf-hub but never found by this lookup, so the app would
-    // re-download on every launch and always show "Not found in HuggingFace cache".
-    let hf_home = std::env::var("HUGGINGFACE_HUB_CACHE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::var("HF_HOME")
-                .map(|p| PathBuf::from(p).join("hub"))
-                .unwrap_or_else(|_| {
-                    dirs::home_dir()
-                        .unwrap_or_else(std::env::temp_dir)
-                        .join(".cache/huggingface/hub")
-                })
-        });
-    let snaps = hf_home
-        .join(format!("models--{}", hf_repo.replace('/', "--")))
-        .join("snapshots");
-    let mut dirs: Vec<_> = std::fs::read_dir(&snaps).ok()?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
-        .collect();
-    dirs.sort_by_key(|e| e.metadata().and_then(|m| m.modified())
-        .unwrap_or(SystemTime::UNIX_EPOCH));
-    for snap in dirs.into_iter().rev() {
-        let w = snap.path().join(ZUNA_WEIGHTS_FILE);
-        let c = snap.path().join(ZUNA_CONFIG_FILE);
-        if w.exists() && c.exists() { return Some((w, c)); }
-    }
-    None
+    skill_exg::resolve_hf_weights(hf_repo)
 }
 
 /// Download ZUNA weights from HuggingFace Hub using the `hf-hub` crate.
@@ -2185,8 +2014,15 @@ pub(crate) fn download_hf_weights(
     status:             &Arc<Mutex<EegModelStatus>>,
     cancel:             &Arc<std::sync::atomic::AtomicBool>,
     mark_needs_restart: bool,
-    logger:             &Arc<SkillLogger>,
+    _logger:            &Arc<SkillLogger>,
 ) -> Option<(PathBuf, PathBuf)> {
+    // Delegate to skill_exg (logger replaced with eprintln! in the crate).
+    skill_exg::download_hf_weights(hf_repo, status, cancel, mark_needs_restart)
+}
+
+// Original download_hf_weights body moved to skill_exg crate.
+#[cfg(any())]
+fn _original_download_hf_weights() {
     use hf_hub::api::sync::Api;
     use std::io::{Read, Write};
     use std::sync::atomic::Ordering;
@@ -2561,17 +2397,9 @@ pub(crate) fn download_hf_weights(
     Some((weights_path, config_path))
 }
 
-/// Register a completed blob in the HF Hub snapshot directory structure so
-/// that `hf_hub::Cache::repo().get(filename)` and `resolve_hf_weights()`
-/// can both locate it through their normal offline-cache logic.
-///
-/// Creates or overwrites:
-/// - `{model_dir}/refs/main`                         ← `{commit_sha}`
-/// - `{model_dir}/snapshots/{commit_sha}/{filename}` ← symlink / hardlink / copy
-///   pointing to the blob
-///
-/// Returns the snapshot path (what `resolve_hf_weights` returns as the
-/// weights path).
+// register_hf_snapshot — moved to skill_exg crate.
+// Kept here only inside the dead #[cfg(any())] block above.
+#[allow(dead_code)]
 fn register_hf_snapshot(
     model_dir:  &Path,
     refs_dir:   &Path,

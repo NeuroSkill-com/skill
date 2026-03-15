@@ -9315,6 +9315,7 @@ dependencies = [
  "skill-constants",
  "skill-data",
  "skill-eeg",
+ "skill-exg",
  "skill-jobs",
  "skill-llm",
  "skill-router",
@@ -9377,6 +9378,20 @@ dependencies = [
  "serde",
  "serde_json",
  "skill-constants",
+]
+
+[[package]]
+name = "skill-exg"
+version = "0.0.1"
+dependencies = [
+ "cubecl-runtime",
+ "dirs",
+ "hf-hub 0.5.0",
+ "serde_json",
+ "skill-constants",
+ "skill-data",
+ "skill-eeg",
+ "ureq 2.12.1",
 ]
 
 [[package]]
