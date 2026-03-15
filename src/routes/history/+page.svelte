@@ -412,7 +412,18 @@ the Free Software Foundation, version 3 only. -->
 
   function toggleExpand(csvPath: string) {
     expanded[csvPath] = !expanded[csvPath];
-    if (expanded[csvPath]) { loadSleep(csvPath); loadMetrics(csvPath); }
+    if (expanded[csvPath]) {
+      loadSleep(csvPath);
+      loadMetrics(csvPath);
+      // Scroll expanded row into view after DOM update (#13)
+      requestAnimationFrame(() => {
+        const idx = sessions.findIndex(s => s.csv_path === csvPath);
+        if (idx >= 0) {
+          const el = document.getElementById(`session-row-${idx}`);
+          el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      });
+    }
   }
 
   // ── Quick-compare ───────────────────────────────────────────────────────
@@ -793,22 +804,28 @@ the Free Software Foundation, version 3 only. -->
   function drawDayGrid(canvas: HTMLCanvasElement, data: GridData) {
     renderDayGrid(canvas, data);
     let currentOnMove = (e: MouseEvent) => handleGridHover(canvas, e, data);
-    let currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; hoveredLabelId = null; labelTooltip = null; };
+    let currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; hoveredLabelId = null; labelTooltip = null; gridHoveredSessionIdx = null; };
+    let currentOnClick = () => { if (gridHoveredSessionIdx != null) focusSession(gridHoveredSessionIdx); };
     canvas.addEventListener("mousemove", currentOnMove);
     canvas.addEventListener("mouseleave", currentOnLeave);
+    canvas.addEventListener("click", currentOnClick);
     return {
       update(d: GridData) {
         renderDayGrid(canvas, d);
         canvas.removeEventListener("mousemove", currentOnMove);
         canvas.removeEventListener("mouseleave", currentOnLeave);
+        canvas.removeEventListener("click", currentOnClick);
         currentOnMove = (e: MouseEvent) => handleGridHover(canvas, e, d);
-        currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; hoveredLabelId = null; labelTooltip = null; };
+        currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; hoveredLabelId = null; labelTooltip = null; gridHoveredSessionIdx = null; };
+        currentOnClick = () => { if (gridHoveredSessionIdx != null) focusSession(gridHoveredSessionIdx); };
         canvas.addEventListener("mousemove", currentOnMove);
         canvas.addEventListener("mouseleave", currentOnLeave);
+        canvas.addEventListener("click", currentOnClick);
       },
       destroy() {
         canvas.removeEventListener("mousemove", currentOnMove);
         canvas.removeEventListener("mouseleave", currentOnLeave);
+        canvas.removeEventListener("click", currentOnClick);
       }
     };
   }
@@ -888,6 +905,18 @@ the Free Software Foundation, version 3 only. -->
       }
     }
     if (!foundScreenshot) screenshotPreview = null;
+
+    // Determine which session owns the hovered cell (for cross-highlighting)
+    let hovSIdx: number | null = null;
+    for (let sIdx = 0; sIdx < data.sessions.length; sIdx++) {
+      const ts = getTs(data.sessions[sIdx].csv_path);
+      if (!ts) continue;
+      for (const ep of ts) {
+        if (ep.t >= cellT && ep.t < cellEnd) { hovSIdx = sIdx; break; }
+      }
+      if (hovSIdx !== null) break;
+    }
+    gridHoveredSessionIdx = hovSIdx;
 
     gridTooltip = { x: e.clientX, y: e.clientY, hour: col, row, time: timeStr, values };
   }
@@ -985,7 +1014,32 @@ the Free Software Foundation, version 3 only. -->
       ctx.globalAlpha = 1.0;
     }
 
-    // ⑦ Draw screenshot indicators — small camera-icon diamonds at grid cells
+    // ⑦ Draw "now" marker if viewing today
+    const nowSec = Date.now() / 1000;
+    const nowOff = nowSec - dayStart;
+    if (nowOff >= 0 && nowOff < 86400) {
+      const nowCol = Math.floor(nowOff / 3600);
+      const nowRow = (nowOff % 3600) / GRID_BIN;
+      const nx = nowCol * colW;
+      const ny = nowRow * rowH;
+      // Horizontal hairline across the hour column
+      ctx.strokeStyle = "rgba(239,68,68,0.7)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(nx, ny);
+      ctx.lineTo(nx + colW, ny);
+      ctx.stroke();
+      // Small red triangle at left edge
+      ctx.fillStyle = "rgba(239,68,68,0.85)";
+      ctx.beginPath();
+      ctx.moveTo(nx, ny - 3);
+      ctx.lineTo(nx + 5, ny);
+      ctx.lineTo(nx, ny + 3);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // ⑧ Draw screenshot indicators — small camera-icon diamonds at grid cells
     if (data.screenshotTs.size > 0) {
       // Read the accent color from CSS custom properties (violet-500 is remapped by the accent system)
       const accentColor = getComputedStyle(document.documentElement).getPropertyValue("--color-violet-500").trim();
@@ -1015,6 +1069,38 @@ the Free Software Foundation, version 3 only. -->
       }
       ctx.globalAlpha = 1.0;
     }
+  }
+
+  /** Format a compact duration from total seconds (e.g. "2h 15m"). */
+  function fmtDurCompact(secs: number): string {
+    if (secs <= 0) return "";
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+  }
+
+  /** Total recording seconds for a list of sessions. */
+  function totalDurationSecs(sessionList: SessionEntry[]): number {
+    let total = 0;
+    for (const s of sessionList) {
+      if (s.session_start_utc && s.session_end_utc)
+        total += s.session_end_utc - s.session_start_utc;
+    }
+    return total;
+  }
+
+  /** Compute day-level aggregate metrics from loaded timeseries. */
+  function dayAggregateMetrics(sessionList: SessionEntry[]): { avgRelax: number; avgEngage: number; totalEpochs: number } | null {
+    let sumR = 0, sumE = 0, n = 0;
+    for (const s of sessionList) {
+      const ts = getTs(s.csv_path);
+      if (!ts) continue;
+      for (const ep of ts) { sumR += ep.relaxation; sumE += ep.engagement; n++; }
+    }
+    if (n === 0) return null;
+    return { avgRelax: sumR / n, avgEngage: sumE / n, totalEpochs: n };
   }
 
   /** Collect all labels for a day from sessions. */
@@ -1070,10 +1156,14 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Calendar-derived state (depends on localDays) ────────────────────────
 
-  /** Session counts per local day. */
+  /** Session counts per local day — uses cached session lists where available,
+   *  falls back to 1 for days we haven't loaded yet. */
   const daySessionCounts = $derived.by(() => {
     const counts = new Map<string, number>();
-    for (const d of localDays) counts.set(d, 1);
+    for (const d of localDays) {
+      const cached = readDayCache(d);
+      counts.set(d, cached ? cached.length : 1);
+    }
     return counts;
   });
 
@@ -1319,12 +1409,36 @@ the Free Software Foundation, version 3 only. -->
     drawLine(relaxVals, "#10b981"); drawLine(engageVals, "#f59e0b");
   }
 
+  // ── Grid↔session cross-highlighting (#8) ─────────────────────────────────
+  /** Session index (into `sessions[]`) hovered from the grid canvas.
+   *  Drives highlight on the session row below.                           */
+  let gridHoveredSessionIdx = $state<number | null>(null);
+
+  /** Scroll to and expand a session by index — triggered by clicking the grid. */
+  function focusSession(sIdx: number) {
+    const s = sessions[sIdx];
+    if (!s) return;
+    expanded[s.csv_path] = true;
+    loadSleep(s.csv_path);
+    loadMetrics(s.csv_path);
+    // Scroll to the session row after DOM update
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`session-row-${sIdx}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }
+
   // ── Keyboard navigation ──────────────────────────────────────────────────
   function handleKeydown(e: KeyboardEvent) {
     const tag = (e.target as HTMLElement)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA") return;
-    if (e.key === "ArrowLeft")  { e.preventDefault(); loadDay(currentDayIdx - 1); } // newer
-    if (e.key === "ArrowRight") { e.preventDefault(); loadDay(currentDayIdx + 1); } // older
+    if (e.key === "ArrowLeft")  { e.preventDefault(); if (viewMode === "day") loadDay(currentDayIdx - 1); else calendarNav(-1); }
+    if (e.key === "ArrowRight") { e.preventDefault(); if (viewMode === "day") loadDay(currentDayIdx + 1); else calendarNav(1); }
+    // View mode shortcuts: 1=year 2=month 3=week 4=day
+    if (e.key === "1") { e.preventDefault(); setViewMode("year"); }
+    if (e.key === "2") { e.preventDefault(); setViewMode("month"); }
+    if (e.key === "3") { e.preventDefault(); setViewMode("week"); }
+    if (e.key === "4") { e.preventDefault(); setViewMode("day"); }
   }
 
   // ── Mount ────────────────────────────────────────────────────────────────
@@ -1488,7 +1602,7 @@ the Free Software Foundation, version 3 only. -->
 
     <!-- ── Calendar heatmap views (year / month / week) ──────────────── -->
       {#if viewMode !== "day"}
-        <div class="flex flex-col gap-2">
+        <div class="flex flex-col gap-2" transition:fade={{ duration: 120 }}>
           {#if viewMode === "year"}
             <!-- Year heatmap (GitHub-style) -->
             <div class="rounded-xl border border-border dark:border-white/[0.06]
@@ -1503,7 +1617,7 @@ the Free Software Foundation, version 3 only. -->
                                  {cell.count > 0 ? heatColor(cell.count, maxCount) : 'bg-muted/40 dark:bg-white/[0.04]'}
                                  {cell.isToday ? 'ring-1 ring-primary/50' : ''}
                                  {cell.count > 0 ? 'cursor-pointer hover:ring-1 hover:ring-foreground/30' : 'cursor-default'}"
-                          title="{cell.dayKey}: {cell.count} {cell.count === 1 ? 'session' : 'sessions'}"
+                          title="{cell.dayKey}: {cell.count} {cell.count === 1 ? 'session' : 'sessions'}{(() => { const c = cell.count > 0 ? readDayCache(cell.dayKey) : null; return c ? ` (${fmtDurCompact(totalDurationSecs(c))})` : ''; })()}"
                           onclick={() => cell.count > 0 && navigateToDay(cell.dayKey)}>
                         </button>
                       {:else}
@@ -1543,15 +1657,18 @@ the Free Software Foundation, version 3 only. -->
                   </span>
                 {/each}
               </div>
-              <!-- Day cells -->
+              <!-- Day cells (#4: mini duration bars, #12: richer tooltip) -->
               <div class="grid grid-cols-7 gap-1">
                 {#each calendarCells as cell}
+                  {@const cached = cell.count > 0 ? readDayCache(cell.dayKey) : null}
+                  {@const durSecs = cached ? totalDurationSecs(cached) : 0}
+                  {@const maxDayDur = 4 * 3600}
                   <button
-                    class="aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 transition-colors text-[0.62rem]
+                    class="aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 transition-colors text-[0.62rem] relative overflow-hidden
                            {cell.inRange ? '' : 'opacity-30'}
                            {cell.count > 0 ? heatColor(cell.count, maxCount) + ' cursor-pointer hover:ring-1 hover:ring-foreground/30' : 'bg-muted/20 dark:bg-white/[0.02] cursor-default'}
                            {cell.isToday ? 'ring-1 ring-primary/50' : ''}"
-                    title="{cell.dayKey}: {cell.count} {cell.count === 1 ? 'session' : 'sessions'}"
+                    title="{cell.dayKey}: {cell.count} {cell.count === 1 ? 'session' : 'sessions'}{durSecs > 0 ? ` (${fmtDurCompact(durSecs)})` : ''}"
                     onclick={() => cell.count > 0 && navigateToDay(cell.dayKey)}>
                     <span class="font-semibold {cell.inRange ? 'text-foreground' : 'text-muted-foreground/50'}
                                  {cell.count > 0 ? 'text-violet-900 dark:text-violet-100' : ''}">
@@ -1561,6 +1678,13 @@ the Free Software Foundation, version 3 only. -->
                       <span class="text-[0.4rem] font-bold text-violet-700 dark:text-violet-300">
                         {cell.count}
                       </span>
+                    {/if}
+                    <!-- Mini duration bar at the bottom of the cell -->
+                    {#if durSecs > 0}
+                      <div class="absolute bottom-0 left-0 right-0 h-[2px] bg-violet-500/20 dark:bg-violet-400/15">
+                        <div class="h-full bg-violet-500/60 dark:bg-violet-400/50 rounded-r-full"
+                             style="width:{Math.min(100, (durSecs / maxDayDur) * 100)}%"></div>
+                      </div>
                     {/if}
                   </button>
                 {/each}
@@ -1576,7 +1700,7 @@ the Free Software Foundation, version 3 only. -->
                           bg-muted/20 dark:bg-white/[0.01] select-none">
                 {#each [0,3,6,9,12,15,18,21] as hr}
                   <span class="absolute top-0 text-[7px] text-muted-foreground/35 tabular-nums"
-                        style="left:{(hr/24)*100}%; transform:translateX({hr === 0 ? '2px' : hr >= 21 ? '-100%' : '-50%'})">
+                        style="left:calc(3.5rem + {(hr/24) * 100}% * (1 - 3.5rem / 100%)); transform:translateX({hr === 0 ? '2px' : hr >= 21 ? '-100%' : '-50%'})">
                     {String(hr).padStart(2,"0")}
                   </span>
                 {/each}
@@ -1588,14 +1712,23 @@ the Free Software Foundation, version 3 only. -->
                 {@const dayBounds   = localDayBounds(cell.dayKey)}
                 {@const hasData     = daySessions.length > 0}
                 {@const hasTsData   = hasTsForDay(daySessions)}
-                <div class="flex items-stretch border-b border-border/20 dark:border-white/[0.03] last:border-0
-                            {cell.isToday ? 'bg-primary/[0.03]' : ''}">
-                  <!-- Day label sidebar -->
-                  <button
+                {@const dayDur      = totalDurationSecs(daySessions)}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="flex items-stretch border-b border-border/20 dark:border-white/[0.03] last:border-0 relative
+                            {cell.isToday ? 'bg-primary/[0.04]' : ''}"
+                     role="button" tabindex="0"
+                     onclick={() => hasData && navigateToDay(cell.dayKey)}
+                     onkeydown={(e) => e.key === "Enter" && hasData && navigateToDay(cell.dayKey)}
+                     style="cursor:{hasData ? 'pointer' : 'default'}">
+                  <!-- #7: Today accent bar -->
+                  {#if cell.isToday}
+                    <div class="absolute left-0 top-0 bottom-0 w-[3px] bg-primary/60 rounded-r-sm"></div>
+                  {/if}
+                  <!-- Day label sidebar (#1: show duration) -->
+                  <div
                     class="w-14 shrink-0 flex flex-col items-center justify-center py-1 border-r border-border/20
                            dark:border-white/[0.04] transition-colors
-                           {hasData ? 'cursor-pointer hover:bg-accent/40' : 'cursor-default'}"
-                    onclick={() => hasData && navigateToDay(cell.dayKey)}>
+                           {hasData ? 'hover:bg-accent/40' : ''}">
                     <span class="text-[0.46rem] font-semibold text-muted-foreground/50 uppercase leading-none">
                       {cell.date.toLocaleDateString(undefined, { weekday: "short" })}
                     </span>
@@ -1603,12 +1736,12 @@ the Free Software Foundation, version 3 only. -->
                       {cell.date.getDate()}
                     </span>
                     {#if hasData}
-                      <span class="text-[0.4rem] text-muted-foreground/40 tabular-nums">
-                        {daySessions.length}
+                      <span class="text-[0.38rem] text-muted-foreground/40 tabular-nums leading-tight">
+                        {daySessions.length}s · {fmtDurCompact(dayDur)}
                       </span>
                     {/if}
-                  </button>
-                  <!-- Epoch dot canvas -->
+                  </div>
+                  <!-- Epoch dot canvas (#3: entire row clickable) -->
                   <div class="flex-1 relative min-h-[36px]"
                        style="--dot-grid:{'rgba(128,128,128,0.06)'}; --dot-hour-text:{'rgba(128,128,128,0.0)'}; --dot-label-text:{'rgba(245,158,11,0.75)'};">
                     {#if hasData && hasTsData}
@@ -1634,6 +1767,14 @@ the Free Software Foundation, version 3 only. -->
                       <!-- Empty day -->
                       <div class="absolute inset-0 flex items-center justify-center">
                         <span class="text-[0.45rem] text-muted-foreground/15 select-none">—</span>
+                      </div>
+                    {/if}
+                    <!-- #14: Session color dots legend (inline, right-aligned) -->
+                    {#if hasData && daySessions.length > 1}
+                      <div class="absolute right-1 top-0.5 flex items-center gap-0.5 pointer-events-none">
+                        {#each daySessions as _, sIdx}
+                          <span class="w-1 h-1 rounded-full opacity-60" style="background:{sessionColor(sIdx)}"></span>
+                        {/each}
                       </div>
                     {/if}
                   </div>
@@ -1679,7 +1820,7 @@ the Free Software Foundation, version 3 only. -->
 
       <!-- ── Current day view ──────────────────────────────────────────── -->
       {:else if currentLocalKey}
-        <div class="flex flex-col gap-1.5">
+        <div class="flex flex-col gap-1.5" transition:fade={{ duration: 120 }}>
 
           <!-- Date header row -->
           <div class="flex items-center gap-2">
@@ -1716,7 +1857,7 @@ the Free Software Foundation, version 3 only. -->
               <div class="overflow-y-auto max-h-[420px] scrollbar-thin relative">
                 {#if anyTs}
                   {#key sessions.map(s => tsCache[s.csv_path] === "loading" ? "l" : "r").join(",") + ":" + dayScreenshots.length}
-                    <canvas class="w-full" style="height:720px;"
+                    <canvas class="w-full cursor-crosshair" style="height:720px;"
                             use:drawDayGrid={{ sessions, dayStart: currentDayStart, labels: dayLbls, screenshotTs: screenshotTsSet }}>
                     </canvas>
                   {/key}
@@ -1780,6 +1921,42 @@ the Free Software Foundation, version 3 only. -->
             </div>
           {/if}
 
+          <!-- #10: Daily aggregate summary card -->
+          {#if sessions.length > 1}
+            {@const dayTotalDur = totalDurationSecs(sessions)}
+            {@const dayAgg = dayAggregateMetrics(sessions)}
+            {@const dayLblCount = sessions.reduce((a, s) => a + s.labels.length, 0)}
+            <div class="rounded-lg border border-border/50 dark:border-white/[0.06]
+                        bg-muted/20 dark:bg-white/[0.01] px-3 py-2
+                        flex items-center gap-4 text-[0.55rem]">
+              <div class="flex items-center gap-1">
+                <span class="text-muted-foreground/50">Total:</span>
+                <span class="font-semibold tabular-nums">{fmtDurCompact(dayTotalDur)}</span>
+              </div>
+              {#if dayAgg}
+                <div class="flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500/70"></span>
+                  <span class="text-muted-foreground/50">Avg relax:</span>
+                  <span class="font-semibold tabular-nums">{dayAgg.avgRelax.toFixed(2)}</span>
+                </div>
+                <div class="flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500/70"></span>
+                  <span class="text-muted-foreground/50">Avg engage:</span>
+                  <span class="font-semibold tabular-nums">{dayAgg.avgEngage.toFixed(2)}</span>
+                </div>
+              {/if}
+              {#if dayLblCount > 0}
+                <div class="flex items-center gap-1">
+                  <span class="text-muted-foreground/50">Labels:</span>
+                  <span class="font-semibold tabular-nums">{dayLblCount}</span>
+                </div>
+              {/if}
+              <div class="flex items-center gap-1 ml-auto">
+                <span class="text-muted-foreground/40">{sessions.length} sessions</span>
+              </div>
+            </div>
+          {/if}
+
           <!-- Session list (lazy chart rendering via IntersectionObserver) -->
           {#if dayLoading && sessions.length === 0}
             <div class="flex items-center gap-2 py-4 text-muted-foreground/50">
@@ -1798,16 +1975,20 @@ the Free Software Foundation, version 3 only. -->
               {@const color = sessionColor(idx)}
               {@const dur = fmtDuration(session.session_start_utc, session.session_end_utc)}
               {@const isHovered = hoveredSession === session.csv_path}
+              {@const isGridHighlighted = gridHoveredSessionIdx === idx}
 
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
+                id="session-row-{idx}"
                 use:inview={() => { renderedRows = new Set([...renderedRows, session.csv_path]); }}
                 class="rounded-lg border overflow-hidden transition-all duration-150
                        {isExpanded
                          ? 'border-border dark:border-white/[0.1] bg-white dark:bg-[#14141e]'
-                         : isHovered
-                           ? 'border-border/60 dark:border-white/[0.06] bg-muted/20 dark:bg-white/[0.015]'
-                           : 'border-transparent bg-transparent'}"
+                         : isGridHighlighted
+                           ? 'border-primary/40 dark:border-primary/30 bg-primary/[0.06] dark:bg-primary/[0.04] ring-1 ring-primary/20'
+                           : isHovered
+                             ? 'border-border/60 dark:border-white/[0.06] bg-muted/20 dark:bg-white/[0.015]'
+                             : 'border-transparent bg-transparent'}"
                 onmouseenter={() => hoveredSession = session.csv_path}
                 onmouseleave={() => hoveredSession = null}>
 
