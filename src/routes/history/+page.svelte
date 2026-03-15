@@ -2056,7 +2056,7 @@ the Free Software Foundation, version 3 only. -->
 
                   {#if session.labels.length > 0}
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
-                    <div class="flex items-center gap-0.5 shrink-0" role="group" aria-label="Labels" onclick={(e) => e.stopPropagation()}>
+                    <div class="flex items-center gap-0.5 shrink-0" role="toolbar" tabindex="-1" aria-label="Labels" onclick={(e) => e.stopPropagation()}>
                       {#each session.labels as label (label.id)}
                         {@const lColor = dayLabelColors.get(label.id) ?? "#f59e0b"}
                         {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}

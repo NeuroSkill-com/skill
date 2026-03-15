@@ -80,10 +80,14 @@ the Free Software Foundation, version 3 only. -->
     { id: "10-10",    label: "10-10",    count: "64" },
     { id: "10-5",     label: "10-5",     count: "345" },
   ];
-  let activeTab: ActiveTab = $state(
-    device === "mw75" ? "mw75" : device === "hermes" ? "hermes"
-    : device === "ganglion" ? "ganglion" : "muse"
-  );
+  function defaultTab(d: string): ActiveTab {
+    return d === "mw75" ? "mw75" : d === "hermes" ? "hermes"
+      : d === "ganglion" ? "ganglion" : "muse";
+  }
+  let activeTab: ActiveTab = $state("muse" as ActiveTab);
+
+  // Sync activeTab when device prop changes (also sets initial value)
+  $effect(() => { activeTab = defaultTab(device); });
 
   // Device-specific electrode sets
   const museElectrodes = allElectrodes.filter(e => e.muse);

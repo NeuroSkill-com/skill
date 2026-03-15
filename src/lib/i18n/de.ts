@@ -2742,6 +2742,20 @@ const de: Record<string, string> = {
   "screenshots.embeddedCount": "Eingebettet",
   "screenshots.unembeddedCount": "Noch nicht eingebettet",
   "screenshots.staleCount": "Veraltet (anderes Modell)",
+
+  // ── Auto-synced from en.ts (2026-03-15) ──
+  // TODO: translate the following 11 key(s) into de
+  "perm.screenRecording": "Screen Recording",
+  "perm.screenRecordingDesc": "Required to capture other application windows for the screenshot embedding system. macOS redacts window content without this permission.",
+  "perm.screenRecordingOk": "Screen recording permission is granted. Screenshot capture will work correctly.",
+  "perm.screenRecordingStep1": "Open System Settings → Privacy & Security → Screen & System Audio Recording",
+  "perm.screenRecordingStep2": "Find NeuroSkill™ in the list and enable it",
+  "perm.screenRecordingStep3": "You may need to quit and relaunch the app for the change to take effect",
+  "perm.openScreenRecordingSettings": "Open Screen Recording Settings",
+  "perm.whyScreenRecording": "Screen Recording",
+  "perm.whyScreenRecordingDesc": "To capture the active window for visual-similarity search and cross-modal EEG correlation. Only opt-in screenshots are stored — never continuous recording.",
+  "perm.matrixScreenRecording": "Screenshot capture",
+  "perm.matrixScreenRecordingReq": "Screen Recording required",
 };
 
 export default de;

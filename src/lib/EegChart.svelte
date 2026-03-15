@@ -279,7 +279,7 @@ the Free Software Foundation, version 3 only. -->
     isDark: true,
     cBg: "#0d0d1a", cBgStrip: "#111120", cGrid: "rgba(255,255,255,0.07)",
     cBase: "rgba(255,255,255,0.12)", cLabel: "rgba(255,255,255,0.4)",
-    chColors: [...propColors],
+    chColors: [...EEG_COLOR],
     version: 0,
   };
   let themeVersion = 0;   // bumped by MutationObserver
