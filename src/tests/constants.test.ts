@@ -13,6 +13,11 @@
  *  3. TypeScript-side values agree with the Rust mirrors documented in
  *     constants.rs (hard-coded expected values guard against accidental
  *     divergence).
+ *
+ * **Sync guard:** If you change a shared constant in
+ * `crates/skill-constants/src/lib.rs`, update `src/lib/constants.ts` AND
+ * update the hard-coded expectations below.  Running `npm test` will catch
+ * any drift between the two sides.
  */
 import { describe, it, expect } from "vitest";
 import {
