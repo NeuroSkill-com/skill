@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### All Windows
+
+- **Rounded window corners**: all windows now have rounded corners (10px border-radius). Enabled via transparent Tauri windows (`transparent: true` on every `WebviewWindowBuilder`) combined with CSS `border-radius` and `overflow: hidden` on the root `<html>` element. Applies to the main window, settings, help, history, chat, about, calibration, downloads, search, session detail, labels, focus timer, onboarding, What's New, compare, and API windows.
+
 ### Chat History
 
 - **Tool calls now persisted in SQLite**: tool-call events (tool name, status, arguments, results, tool_call_id) are now saved alongside assistant messages in a new `chat_tool_calls` table. When reloading a session, tool-call cards are fully restored with expandable details — previously tool calls were lost on reload and only the text content was preserved. The new Tauri command `save_chat_tool_calls` writes tool rows after the assistant message is saved; `load_session` joins them back in a single efficient query. Existing databases are migrated seamlessly via `CREATE TABLE IF NOT EXISTS`.
