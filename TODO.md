@@ -2,7 +2,11 @@
 
 - [ ] when you download first model, it does not get activated by default. Fix the `use` button. And streamline first onboarding with the first model. If user click start the LLM engine, if the model is not used, ask user to go and click `use` which one they want to run.
 
-- [ ] adopt `use-canvas.ts` action in chart components (EegChart, BandChart, PpgChart, GpuChart, ImuChart) to replace duplicated ResizeObserver + rAF + DPR boilerplate
+- [x] adopt `use-canvas.ts` action in chart components — migrated ImuChart, PpgChart, GpuChart, BandChart; EegChart left as-is (too complex — spectrogram tapes, MutationObserver, frame-skip logic)
+
+- [x] consolidate HuggingFace cache path resolution — added `hf_cache_root()`, `hf_model_dir()`, `hf_ensure_dirs()` to `skill-data::util`; replaced manual env-var resolution in `skill-exg`, duplicated `Cache::from_env().path()` + folder construction in `skill-exg` and `skill-llm`; removed `dirs` crate dependency from `skill-exg`
+
+- [x] deduplicate titlebar stores — added `createTitlebarState()` and `createTitlebarCallbacks()` factory in `titlebar-state.svelte.ts`; refactored chat-titlebar, history-titlebar, label-titlebar to use shared factory
 
 - [x] deduplicate cross-crate utilities — consolidated `date_dirs`, `MutexExt`, UTC timestamp formatters (`yyyymmdd_utc`, `yyyymmddhhmmss_utc`, `unix_to_ts`, `ts_to_unix`, `fmt_unix_utc`, `civil_from_unix`), and `open_readonly` SQLite helper into `skill-data::util`; replaced duplicate implementations across `skill-commands`, `skill-label-index`, `skill-exg`, `skill-screenshots`, `skill-router`; deduplicated screenshot HNSW vision/OCR pair into generic `load_or_rebuild_hnsw_generic`/`save_hnsw_to`; extracted `enrich_band_snapshot` + `SnapshotContext` into `skill-devices` eliminating ~90 lines of duplicate enrichment logic from both `muse_session.rs` and `openbci_session.rs`; replaced ~200-line inline DND decision block in `muse_session.rs` with the existing `skill_devices::dnd_tick()` pure function; fixed hardcoded `"labels.sqlite"` in `skill-data::label_store` to use `LABELS_FILE` from `skill-constants`
 

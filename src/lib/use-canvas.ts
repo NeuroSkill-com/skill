@@ -7,7 +7,7 @@
 //
 // Usage (Svelte action):
 //
-//   <canvas use:animatedCanvas={{ draw, heightPx: 160, container }} />
+//   <canvas use:animatedCanvas={{ draw, heightPx: 160 }} />
 //
 // The action:
 //   1. Scales the canvas for the current device-pixel-ratio.
@@ -25,8 +25,15 @@ export interface AnimatedCanvasOpts {
   heightPx: number;
 
   /**
+   * Fixed CSS width (logical px).  When set, the canvas is sized to this
+   * constant instead of tracking the container's width.  Used by ImuChart
+   * and PpgChart which render at a fixed resolution.
+   */
+  widthPx?: number;
+
+  /**
    * Element to observe for width changes.  Defaults to `canvas.parentElement`.
-   * Pass the outer wrapper div when the canvas itself is `width: 100%`.
+   * Ignored when `widthPx` is set (no need to track container width).
    */
   container?: HTMLElement;
 
@@ -37,15 +44,6 @@ export interface AnimatedCanvasOpts {
   manual?: boolean;
 }
 
-export interface AnimatedCanvasReturn {
-  /** Manually trigger a resize (e.g. after a visibility toggle). */
-  resize: () => void;
-  /** Start the RAF loop (only needed when `manual: true`). */
-  start: () => void;
-  /** Stop the RAF loop without destroying the action. */
-  stop: () => void;
-}
-
 /**
  * Svelte action that manages the RAF + ResizeObserver lifecycle for a `<canvas>`.
  */
@@ -53,20 +51,24 @@ export function animatedCanvas(
   canvas: HTMLCanvasElement,
   opts: AnimatedCanvasOpts,
 ): { destroy: () => void; update: (o: AnimatedCanvasOpts) => void } {
-  let { draw, heightPx, container, manual } = opts;
+  let { draw, heightPx, widthPx, container, manual } = opts;
   let raf: number | undefined;
   let ro: ResizeObserver | undefined;
   let running = false;
 
-  const observed = container ?? canvas.parentElement ?? canvas;
-
   function resize() {
     const dpr = getDpr();
-    const w = observed.clientWidth || canvas.clientWidth;
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(heightPx * dpr);
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${heightPx}px`;
+    if (widthPx != null) {
+      canvas.width  = Math.round(widthPx * dpr);
+      canvas.height = Math.round(heightPx * dpr);
+    } else {
+      const observed = container ?? canvas.parentElement ?? canvas;
+      const w = observed.clientWidth || canvas.clientWidth;
+      canvas.width  = Math.round(w * dpr);
+      canvas.height = Math.round(heightPx * dpr);
+      canvas.style.width  = `${w}px`;
+      canvas.style.height = `${heightPx}px`;
+    }
   }
 
   function tick() {
@@ -98,8 +100,11 @@ export function animatedCanvas(
   }
 
   // Initial setup
-  ro = new ResizeObserver(resize);
-  ro.observe(observed);
+  if (widthPx == null) {
+    const observed = container ?? canvas.parentElement ?? canvas;
+    ro = new ResizeObserver(resize);
+    ro.observe(observed);
+  }
   resize();
 
   if (!manual) start();
@@ -108,13 +113,17 @@ export function animatedCanvas(
     update(o: AnimatedCanvasOpts) {
       draw = o.draw;
       heightPx = o.heightPx;
+      widthPx  = o.widthPx;
       if (o.container !== container) {
         container = o.container;
         ro?.disconnect();
-        const newObs = container ?? canvas.parentElement ?? canvas;
-        ro = new ResizeObserver(resize);
-        ro.observe(newObs);
+        if (widthPx == null) {
+          const newObs = container ?? canvas.parentElement ?? canvas;
+          ro = new ResizeObserver(resize);
+          ro.observe(newObs);
+        }
       }
+      resize();
     },
     destroy() {
       stop();

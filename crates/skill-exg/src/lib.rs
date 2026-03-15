@@ -97,20 +97,7 @@ pub use skill_data::util::{yyyymmdd_utc, yyyymmddhhmmss_utc};
 
 /// Find ZUNA weights in the HuggingFace disk cache for the given `hf_repo`.
 pub fn resolve_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
-    let hf_home = std::env::var("HUGGINGFACE_HUB_CACHE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            std::env::var("HF_HOME")
-                .map(|p| PathBuf::from(p).join("hub"))
-                .unwrap_or_else(|_| {
-                    dirs::home_dir()
-                        .unwrap_or_else(std::env::temp_dir)
-                        .join(".cache/huggingface/hub")
-                })
-        });
-    let snaps = hf_home
-        .join(format!("models--{}", hf_repo.replace('/', "--")))
-        .join("snapshots");
+    let snaps = skill_data::util::hf_model_dir(hf_repo).join("snapshots");
     let mut dirs: Vec<_> = std::fs::read_dir(&snaps).ok()?
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
@@ -239,21 +226,16 @@ pub fn download_hf_weights(
         return None;
     }
 
-    let cache_root = hf_hub::Cache::from_env().path().to_path_buf();
-    let folder     = format!("models--{}", hf_repo.replace('/', "--"));
-    let model_dir  = cache_root.join(&folder);
-    let blobs_dir  = model_dir.join("blobs");
-    let refs_dir   = model_dir.join("refs");
-
-    if let Err(e) = std::fs::create_dir_all(&blobs_dir)
-        .and(std::fs::create_dir_all(&refs_dir))
-    {
-        let mut st = status.lock_or_recover();
-        st.downloading_weights = false;
-        st.download_progress   = 0.0;
-        st.download_status_msg = Some(format!("Failed to create cache dirs: {e}"));
-        return None;
-    }
+    let (model_dir, blobs_dir, refs_dir) = match skill_data::util::hf_ensure_dirs(hf_repo) {
+        Ok(dirs) => dirs,
+        Err(e) => {
+            let mut st = status.lock_or_recover();
+            st.downloading_weights = false;
+            st.download_progress   = 0.0;
+            st.download_status_msg = Some(format!("Failed to create cache dirs: {e}"));
+            return None;
+        }
+    };
 
     {
         let mut st = status.lock_or_recover();

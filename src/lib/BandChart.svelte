@@ -89,7 +89,6 @@ the Free Software Foundation, version 3 only. -->
 </script>
 
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
   import {
     EEG_CH as CH_NAMES, EEG_COLOR as CH_COLORS,
     BANDS, NUM_BANDS as NBAND,
@@ -100,22 +99,11 @@ the Free Software Foundation, version 3 only. -->
     BAND_TILE_MR  as MR,
     BAND_TAU_MS   as TAU_MS,
   } from "$lib/constants";
-  import { getDpr } from "$lib/format";
+  import { animatedCanvas } from "$lib/use-canvas";
 
   // ── Band metadata + canvas layout ─────────────────────────────────────────
-  // BANDS, CH_NAMES, CH_COLORS, NBAND, TILE_H, TILE_GAP, CANVAS_H, ML, MR
-  // are all imported from constants.ts (see import block at top of <script>).
-  //
   // Each channel gets one "tile" — a full-width rectangle whose background is
   // the stacked band-power proportions rendered as solid coloured segments.
-  // Over that background an opaque scrim improves text contrast, then three
-  // layers of text are composited on top:
-  //
-  //   TOP-LEFT   channel label (small, coloured with the channel accent)
-  //   TOP-RIGHT  dominant band relative % (large bold white)
-  //   MID-LEFT   dominant Greek symbol (very large white)
-  //   MID-RIGHT  dominant band name (medium white)
-  //   BOTTOM     all-band mini breakdown row (tiny, each band's own colour)
 
   // ── Public API ─────────────────────────────────────────────────────────────
   let target = $state<BandSnapshot | null>(null);
@@ -125,12 +113,12 @@ the Free Software Foundation, version 3 only. -->
     target = snap;
   }
 
+  /** No-op — the animatedCanvas action keeps the RAF loop alive. */
+  export function restartRender(): void {
+    // Kept for API compat — the action's RAF loop never stops.
+  }
+
   // ── Canvas state ───────────────────────────────────────────────────────────
-  let canvasEl!: HTMLCanvasElement;
-  let cssW      = 400;
-  let rendering = false;
-  let animFrame: number | undefined;
-  let ro: ResizeObserver | undefined;
 
   // Smoothed display values — [channel][band] relative powers.
   const displayed = Array.from({ length: 4 }, () =>
@@ -138,159 +126,126 @@ the Free Software Foundation, version 3 only. -->
   );
   const domIdx = new Int8Array(4).fill(2); // 2 = alpha, initial default
 
-  // TAU_MS (EWMA smoothing, ≈ 350 ms) imported from constants.ts as BAND_TAU_MS.
+  let lastNow = -1;
 
-  // ── Rendering ──────────────────────────────────────────────────────────────
+  // ── Draw — called every frame by the animatedCanvas action ─────────────────
+  function draw(ctx: CanvasRenderingContext2D, W: number, _H: number) {
+    const now = performance.now();
+    ctx.setTransform(ctx.canvas.width / W, 0, 0, ctx.canvas.height / CANVAS_H, 0, 0);
 
-  /** Restart the render loop if it was stopped (e.g. after wake-from-sleep). */
-  export function restartRender(): void {
-    if (!rendering) startRender();
-  }
+    const dt    = lastNow < 0 ? 0 : now - lastNow;
+    lastNow     = now;
+    const alpha = dt > 0 ? 1 - Math.exp(-dt / TAU_MS) : 0;
 
-  function startRender() {
-    if (rendering) return;
-    rendering = true;
-    let lastNow = -1;
-
-    function frame(now: DOMHighResTimeStamp) {
-      if (!rendering) return;
-      // Schedule next frame first so exceptions can never permanently kill the loop.
-      animFrame = requestAnimationFrame(frame);
-
-      try {
-      const ctx = canvasEl.getContext("2d");
-      if (!ctx) return;
-
-      ctx.setTransform(getDpr(), 0, 0, getDpr(), 0, 0);
-
-      const dt    = lastNow < 0 ? 0 : now - lastNow;
-      lastNow     = now;
-      const alpha = dt > 0 ? 1 - Math.exp(-dt / TAU_MS) : 0;
-
-      // ── Interpolate toward target ─────────────────────────────────────────
-      if (target) {
-        for (let ci = 0; ci < 4; ci++) {
-          const ch = target.channels[ci];
-          if (!ch) continue;
-          const vals = [
-            ch.rel_delta, ch.rel_theta, ch.rel_alpha,
-            ch.rel_beta,  ch.rel_gamma, ch.rel_high_gamma,
-          ];
-          let maxRel = -1, maxIdx = 2;
-          for (let b = 0; b < NBAND; b++) {
-            displayed[ci][b] += alpha * (vals[b] - displayed[ci][b]);
-            if (vals[b] > maxRel) { maxRel = vals[b]; maxIdx = b; }
-          }
-          domIdx[ci] = maxIdx;
-        }
-      }
-
-      const W = cssW;
-      ctx.clearRect(0, 0, W, CANVAS_H);
-
+    // ── Interpolate toward target ─────────────────────────────────────────
+    if (target) {
       for (let ci = 0; ci < 4; ci++) {
-        const ty = ci * (TILE_H + TILE_GAP); // top-y of this tile
-
-        // Normalise so proportions always sum to 1 even during warmup.
-        let sum = 0;
-        for (let b = 0; b < NBAND; b++) sum += displayed[ci][b];
-        if (sum < 1e-6) sum = 1;
-
-        // ── Background: stacked band segments clipped to rounded tile ────────
-        ctx.save();
-        ctx.beginPath();
-        roundRect(ctx, 0, ty, W, TILE_H, 10);
-        ctx.clip();
-
-        // Draw each band as a full-height rectangle proportional to its power.
-        let xc = 0;
+        const ch = target.channels[ci];
+        if (!ch) continue;
+        const vals = [
+          ch.rel_delta, ch.rel_theta, ch.rel_alpha,
+          ch.rel_beta,  ch.rel_gamma, ch.rel_high_gamma,
+        ];
+        let maxRel = -1, maxIdx = 2;
         for (let b = 0; b < NBAND; b++) {
-          const segW = (displayed[ci][b] / sum) * W;
-          ctx.fillStyle   = BANDS[b].color;
-          ctx.globalAlpha = 0.78;
-          // +0.5 px overlap prevents hairline gaps between segments.
-          ctx.fillRect(xc, ty, segW + 0.5, TILE_H);
-          xc += segW;
+          displayed[ci][b] += alpha * (vals[b] - displayed[ci][b]);
+          if (vals[b] > maxRel) { maxRel = vals[b]; maxIdx = b; }
         }
-
-        // Dark scrim — improves contrast for the white text overlay.
-        ctx.globalAlpha = 0.44;
-        ctx.fillStyle   = "#000";
-        ctx.fillRect(0, ty, W, TILE_H);
-        ctx.globalAlpha = 1;
-
-        ctx.restore(); // end clip (rounded corners applied)
-
-        // ── Text overlay ─────────────────────────────────────────────────────
-        const dom    = domIdx[ci];
-        const domPct = Math.round((displayed[ci][dom] / sum) * 100);
-
-        // Channel label — top-left, coloured with the channel accent.
-        ctx.font         = `bold 9px ui-monospace, "JetBrains Mono", monospace`;
-        const chColor = getComputedStyle(canvasEl).getPropertyValue(`--ch-color-${ci}`).trim() || CH_COLORS[ci];
-        ctx.fillStyle    = chColor;
-        ctx.textAlign    = "left";
-        ctx.textBaseline = "top";
-        ctx.globalAlpha  = 1;
-        ctx.fillText(CH_NAMES[ci], ML, ty + 9);
-
-        // Dominant band percentage — top-right, large bold white.
-        ctx.font         = `bold 20px ui-sans-serif, system-ui, sans-serif`;
-        ctx.fillStyle    = "#ffffff";
-        ctx.textAlign    = "right";
-        ctx.textBaseline = "top";
-        ctx.globalAlpha  = 0.95;
-        ctx.fillText(`${domPct}%`, W - MR, ty + 6);
-
-        // Dominant Greek symbol — left-centre, oversized.
-        ctx.font         = `bold 24px ui-monospace, "JetBrains Mono", monospace`;
-        ctx.fillStyle    = "#ffffff";
-        ctx.textAlign    = "left";
-        ctx.textBaseline = "middle";
-        ctx.globalAlpha  = 0.92;
-        ctx.fillText(BANDS[dom].sym, ML, ty + TILE_H / 2 + 1);
-
-        // Dominant band name — right-centre.
-        ctx.font         = `bold 10px ui-sans-serif, system-ui, sans-serif`;
-        ctx.fillStyle    = "#ffffff";
-        ctx.textAlign    = "right";
-        ctx.textBaseline = "middle";
-        ctx.globalAlpha  = 0.65;
-        ctx.fillText(BANDS[dom].name, W - MR, ty + TILE_H / 2 + 1);
-
-        // Bottom strip — compact all-band breakdown.
-        // Shows each band's Greek symbol + integer percentage, in the band's
-        // own colour, evenly spaced across the tile width.
-        ctx.textBaseline = "bottom";
-        ctx.textAlign    = "center";
-        ctx.font         = `bold 7.5px ui-monospace, "JetBrains Mono", monospace`;
-        const stripY  = ty + TILE_H - 6;
-        const stripL  = ML + 22;          // don't overlap the channel label
-        const stripR  = W - MR;
-        const colW    = (stripR - stripL) / NBAND;
-
-        for (let b = 0; b < NBAND; b++) {
-          const bPct = Math.round((displayed[ci][b] / sum) * 100);
-          const bx   = stripL + b * colW + colW / 2;
-          ctx.fillStyle   = BANDS[b].color;
-          ctx.globalAlpha = b === dom ? 1 : 0.72;
-          ctx.fillText(`${BANDS[b].sym} ${bPct}`, bx, stripY);
-        }
-
-        ctx.globalAlpha = 1;
-      }
-
-      } catch (err) {
-        console.error("[BandChart] render error (recovered):", err);
+        domIdx[ci] = maxIdx;
       }
     }
 
-    animFrame = requestAnimationFrame(frame);
-  }
+    ctx.clearRect(0, 0, W, CANVAS_H);
 
-  function stopRender() {
-    rendering = false;
-    if (animFrame !== undefined) { cancelAnimationFrame(animFrame); animFrame = undefined; }
+    for (let ci = 0; ci < 4; ci++) {
+      const ty = ci * (TILE_H + TILE_GAP); // top-y of this tile
+
+      // Normalise so proportions always sum to 1 even during warmup.
+      let sum = 0;
+      for (let b = 0; b < NBAND; b++) sum += displayed[ci][b];
+      if (sum < 1e-6) sum = 1;
+
+      // ── Background: stacked band segments clipped to rounded tile ────────
+      ctx.save();
+      ctx.beginPath();
+      roundRect(ctx, 0, ty, W, TILE_H, 10);
+      ctx.clip();
+
+      // Draw each band as a full-height rectangle proportional to its power.
+      let xc = 0;
+      for (let b = 0; b < NBAND; b++) {
+        const segW = (displayed[ci][b] / sum) * W;
+        ctx.fillStyle   = BANDS[b].color;
+        ctx.globalAlpha = 0.78;
+        // +0.5 px overlap prevents hairline gaps between segments.
+        ctx.fillRect(xc, ty, segW + 0.5, TILE_H);
+        xc += segW;
+      }
+
+      // Dark scrim — improves contrast for the white text overlay.
+      ctx.globalAlpha = 0.44;
+      ctx.fillStyle   = "#000";
+      ctx.fillRect(0, ty, W, TILE_H);
+      ctx.globalAlpha = 1;
+
+      ctx.restore(); // end clip (rounded corners applied)
+
+      // ── Text overlay ─────────────────────────────────────────────────────
+      const dom    = domIdx[ci];
+      const domPct = Math.round((displayed[ci][dom] / sum) * 100);
+
+      // Channel label — top-left, coloured with the channel accent.
+      ctx.font         = `bold 9px ui-monospace, "JetBrains Mono", monospace`;
+      const chColor = CH_COLORS[ci];
+      ctx.fillStyle    = chColor;
+      ctx.textAlign    = "left";
+      ctx.textBaseline = "top";
+      ctx.globalAlpha  = 1;
+      ctx.fillText(CH_NAMES[ci], ML, ty + 9);
+
+      // Dominant band percentage — top-right, large bold white.
+      ctx.font         = `bold 20px ui-sans-serif, system-ui, sans-serif`;
+      ctx.fillStyle    = "#ffffff";
+      ctx.textAlign    = "right";
+      ctx.textBaseline = "top";
+      ctx.globalAlpha  = 0.95;
+      ctx.fillText(`${domPct}%`, W - MR, ty + 6);
+
+      // Dominant Greek symbol — left-centre, oversized.
+      ctx.font         = `bold 24px ui-monospace, "JetBrains Mono", monospace`;
+      ctx.fillStyle    = "#ffffff";
+      ctx.textAlign    = "left";
+      ctx.textBaseline = "middle";
+      ctx.globalAlpha  = 0.92;
+      ctx.fillText(BANDS[dom].sym, ML, ty + TILE_H / 2 + 1);
+
+      // Dominant band name — right-centre.
+      ctx.font         = `bold 10px ui-sans-serif, system-ui, sans-serif`;
+      ctx.fillStyle    = "#ffffff";
+      ctx.textAlign    = "right";
+      ctx.textBaseline = "middle";
+      ctx.globalAlpha  = 0.65;
+      ctx.fillText(BANDS[dom].name, W - MR, ty + TILE_H / 2 + 1);
+
+      // Bottom strip — compact all-band breakdown.
+      ctx.textBaseline = "bottom";
+      ctx.textAlign    = "center";
+      ctx.font         = `bold 7.5px ui-monospace, "JetBrains Mono", monospace`;
+      const stripY  = ty + TILE_H - 6;
+      const stripL  = ML + 22;
+      const stripR  = W - MR;
+      const colW    = (stripR - stripL) / NBAND;
+
+      for (let b = 0; b < NBAND; b++) {
+        const bPct = Math.round((displayed[ci][b] / sum) * 100);
+        const bx   = stripL + b * colW + colW / 2;
+        ctx.fillStyle   = BANDS[b].color;
+        ctx.globalAlpha = b === dom ? 1 : 0.72;
+        ctx.fillText(`${BANDS[b].sym} ${bPct}`, bx, stripY);
+      }
+
+      ctx.globalAlpha = 1;
+    }
   }
 
   // ── Polyfill: roundRect ────────────────────────────────────────────────────
@@ -310,22 +265,6 @@ the Free Software Foundation, version 3 only. -->
     ctx.quadraticCurveTo(x,     y,     x + r,      y);
     ctx.closePath();
   }
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  onMount(() => {
-    const resize = () => {
-      const dpr = getDpr();
-      cssW = canvasEl.clientWidth;
-      canvasEl.width  = Math.round(cssW     * dpr);
-      canvasEl.height = Math.round(CANVAS_H * dpr);
-    };
-    ro = new ResizeObserver(resize);
-    ro.observe(canvasEl);
-    resize();
-    startRender();
-  });
-
-  onDestroy(() => { stopRender(); ro?.disconnect(); });
 </script>
 
 <!--
@@ -334,7 +273,7 @@ the Free Software Foundation, version 3 only. -->
 -->
 <div class="w-full overflow-hidden rounded-xl" style="line-height:0">
   <canvas
-    bind:this={canvasEl}
+    use:animatedCanvas={{ draw, heightPx: CANVAS_H }}
     class="block w-full"
     style="height:{CANVAS_H}px"
   ></canvas>

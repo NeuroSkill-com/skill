@@ -5,4 +5,6 @@
 // CustomTitleBar.svelte (reads). Keeps the live EEG window timer in the
 // shared titlebar instead of an extra in-page header row.
 
-export const labelTitlebarState = $state({ active: false, elapsed: "0s" });
+import { createTitlebarState } from "$lib/titlebar-state.svelte";
+
+export const labelTitlebarState = createTitlebarState({ active: false, elapsed: "0s" });

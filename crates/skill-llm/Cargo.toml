@@ -15,6 +15,7 @@ llm-mtmd   = ["llm", "llama-cpp-4?/mtmd"]
 
 [dependencies]
 skill-constants = { path = "../skill-constants" }
+skill-data      = { path = "../skill-data" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite   = { version = "0.37", features = ["bundled"] }

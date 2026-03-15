@@ -9402,7 +9402,6 @@ name = "skill-exg"
 version = "0.0.1"
 dependencies = [
  "cubecl-runtime",
- "dirs",
  "hf-hub 0.5.0",
  "serde_json",
  "skill-constants",
@@ -9458,6 +9457,7 @@ dependencies = [
  "serde",
  "serde_json",
  "skill-constants",
+ "skill-data",
  "skill-tools",
  "tokio",
  "ureq 2.12.1",

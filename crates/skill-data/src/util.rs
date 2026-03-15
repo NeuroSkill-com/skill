@@ -58,6 +58,59 @@ pub fn f32_to_blob(v: &[f32]) -> Vec<u8> {
     v.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
 
+// ── HuggingFace Hub cache helpers ──────────────────────────────────────────────
+
+/// Return the HuggingFace Hub cache root directory.
+///
+/// Resolution order (mirrors `hf_hub::Cache::from_env()`):
+/// 1. `$HUGGINGFACE_HUB_CACHE`
+/// 2. `$HF_HOME/hub`
+/// 3. `~/.cache/huggingface/hub`
+///
+/// This avoids pulling the `hf-hub` crate into `skill-data`.
+pub fn hf_cache_root() -> PathBuf {
+    if let Ok(p) = std::env::var("HUGGINGFACE_HUB_CACHE") {
+        return PathBuf::from(p);
+    }
+    if let Ok(hf_home) = std::env::var("HF_HOME") {
+        return PathBuf::from(hf_home).join("hub");
+    }
+    home_dir_or_tmp().join(".cache/huggingface/hub")
+}
+
+/// Best-effort home directory, falling back to the system temp dir.
+fn home_dir_or_tmp() -> PathBuf {
+    #[cfg(unix)]
+    {
+        std::env::var("HOME").ok().map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+    }
+    #[cfg(windows)]
+    {
+        std::env::var("USERPROFILE").ok().map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+    }
+}
+
+/// Return the model-specific directory under the HF cache for `repo_id`.
+///
+/// E.g. `hf_model_dir("Zyphra/ZUNA")` → `<cache>/models--Zyphra--ZUNA`.
+pub fn hf_model_dir(repo_id: &str) -> PathBuf {
+    let folder = format!("models--{}", repo_id.replace('/', "--"));
+    hf_cache_root().join(folder)
+}
+
+/// Ensure the standard `blobs/` and `refs/` directories exist under
+/// the model dir for `repo_id`.  Returns `(model_dir, blobs_dir, refs_dir)`.
+pub fn hf_ensure_dirs(repo_id: &str) -> std::io::Result<(PathBuf, PathBuf, PathBuf)> {
+    let model_dir = hf_model_dir(repo_id);
+    let blobs_dir = model_dir.join("blobs");
+    let refs_dir  = model_dir.join("refs");
+    std::fs::create_dir_all(&blobs_dir)?;
+    std::fs::create_dir_all(&refs_dir)?;
+    Ok((model_dir, blobs_dir, refs_dir))
+}
+
 // ── Date-directory scanning ───────────────────────────────────────────────────
 
 /// Scan `skill_dir` for `YYYYMMDD` sub-directories and return them sorted.
@@ -201,6 +254,19 @@ pub fn fmt_unix_utc(ts: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hf_model_dir_formats_correctly() {
+        let dir = hf_model_dir("Zyphra/ZUNA");
+        let name = dir.file_name().unwrap().to_string_lossy();
+        assert_eq!(name, "models--Zyphra--ZUNA");
+    }
+
+    #[test]
+    fn hf_cache_root_returns_nonempty() {
+        let root = hf_cache_root();
+        assert!(!root.as_os_str().is_empty());
+    }
 
     #[test]
     fn blob_f32_roundtrip() {

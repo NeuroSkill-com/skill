@@ -10,7 +10,6 @@ skill-constants = { path = "../skill-constants" }
 skill-eeg       = { path = "../skill-eeg" }
 skill-data      = { path = "../skill-data" }
 serde_json      = "1"
-dirs            = "6"
 hf-hub          = "0.5"
 ureq            = { version = "2.12", features = ["native-tls", "json"] }
 cubecl-runtime  = "0.9.0"

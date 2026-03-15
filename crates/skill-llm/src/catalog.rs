@@ -446,16 +446,8 @@ pub fn download_file(
     //     snapshots/
     //       {commit}/
     //         {filename}  ← symlink (Unix) / hardlink (Windows) → ../../blobs/{sha256}
-    let cache_root = hf_hub::Cache::from_env().path().to_path_buf();
-    let folder     = format!("models--{}", repo_id.replace('/', "--"));
-    let model_dir  = cache_root.join(&folder);
-    let blobs_dir  = model_dir.join("blobs");
-    let refs_dir   = model_dir.join("refs");
-
-    std::fs::create_dir_all(&blobs_dir)
-        .map_err(|e| format!("create blobs dir: {e}"))?;
-    std::fs::create_dir_all(&refs_dir)
-        .map_err(|e| format!("create refs dir: {e}"))?;
+    let (model_dir, blobs_dir, refs_dir) = skill_data::util::hf_ensure_dirs(repo_id)
+        .map_err(|e| format!("create HF cache dirs: {e}"))?;
 
     // ── 3. Build HTTP agents ──────────────────────────────────────────────────
     // Separate agents for metadata (short timeout) and download (long timeout).

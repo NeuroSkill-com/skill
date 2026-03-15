@@ -22,7 +22,7 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
   import { t } from "$lib/i18n/index.svelte";
-  import { getDpr } from "$lib/format";
+  import { animatedCanvas } from "$lib/use-canvas";
 
   /** Channel labels, colors matching optical wavelengths. */
   const CH = ["Ambient", "IR", "Red"] as const;
@@ -38,9 +38,6 @@ the Free Software Foundation, version 3 only. -->
   const heads = [0, 0, 0];
   const filled = [0, 0, 0];
 
-  let canvas: HTMLCanvasElement | undefined;
-  let ctx: CanvasRenderingContext2D | null = null;
-  let raf = 0;
   let needsRedraw = false;
   let latestValues = $state<number[]>([0, 0, 0]);
 
@@ -80,16 +77,14 @@ the Free Software Foundation, version 3 only. -->
     needsRedraw = true;
   }
 
-  function draw() {
-    raf = requestAnimationFrame(draw);
-    if (!needsRedraw || !ctx) return;
+  function draw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    if (!needsRedraw) return;
     needsRedraw = false;
 
-    const dpr = getDpr();
-    const w = CANVAS_W * dpr;
-    const h = CANVAS_H * dpr;
-
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.save();
+    const dpr = ctx.canvas.width / w;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // Draw each channel as a separate line, sharing the vertical space.
     const chH = h / CH_COUNT;
@@ -114,7 +109,7 @@ the Free Software Foundation, version 3 only. -->
 
       ctx.beginPath();
       ctx.strokeStyle = COLORS[ch];
-      ctx.lineWidth = 1.2 * dpr;
+      ctx.lineWidth = 1.2;
       for (let i = 0; i < n; i++) {
         const idx = (head - n + i + VISIBLE_SAMPLES * 2) % VISIBLE_SAMPLES;
         const x = (i / (VISIBLE_SAMPLES - 1)) * w;
@@ -126,8 +121,8 @@ the Free Software Foundation, version 3 only. -->
 
       // Channel label (left).
       ctx.fillStyle = COLORS[ch];
-      ctx.font = `${10 * dpr}px system-ui, sans-serif`;
-      ctx.fillText(CH[ch], 4 * dpr, yOff + 12 * dpr);
+      ctx.font = `${10}px system-ui, sans-serif`;
+      ctx.fillText(CH[ch], 4, yOff + 12);
     }
 
     // ── Event markers ──────────────────────────────────────────────────────
@@ -147,9 +142,9 @@ the Free Software Foundation, version 3 only. -->
 
       // Dashed vertical line
       ctx.save();
-      ctx.setLineDash([4 * dpr, 3 * dpr]);
+      ctx.setLineDash([4, 3]);
       ctx.strokeStyle = mk.color;
-      ctx.lineWidth   = 1.5 * dpr;
+      ctx.lineWidth   = 1.5;
       ctx.globalAlpha = 0.85;
       ctx.beginPath();
       ctx.moveTo(mx, 0);
@@ -160,7 +155,7 @@ the Free Software Foundation, version 3 only. -->
       // Top triangle
       ctx.fillStyle   = mk.color;
       ctx.globalAlpha = 0.9;
-      const ts = 4 * dpr;
+      const ts = 4;
       ctx.beginPath();
       ctx.moveTo(mx, 0);
       ctx.lineTo(mx - ts, ts * 1.75);
@@ -174,15 +169,15 @@ the Free Software Foundation, version 3 only. -->
           ? mk.label.slice(0, PPG_LABEL_MAX) + "…"
           : mk.label;
 
-        ctx.font         = `bold ${8 * dpr}px system-ui, sans-serif`;
+        ctx.font         = `bold ${8}px system-ui, sans-serif`;
         ctx.textBaseline = "top";
         const tw  = ctx.measureText(short).width;
-        const px  = 3 * dpr;
-        const pillH = 12 * dpr;
-        const pillY = 9 * dpr;
-        let lx  = mx + 5 * dpr;
+        const px  = 3;
+        const pillH = 12;
+        const pillY = 9;
+        let lx  = mx + 5;
         let align: CanvasTextAlign = "left";
-        if (lx + tw + px * 2 > w) { align = "right"; lx = mx - 5 * dpr; }
+        if (lx + tw + px * 2 > w) { align = "right"; lx = mx - 5; }
         ctx.textAlign = align;
 
         // Background pill
@@ -194,12 +189,12 @@ the Free Software Foundation, version 3 only. -->
         // Text
         ctx.globalAlpha = 1;
         ctx.fillStyle   = mk.color;
-        ctx.fillText(short, lx, pillY + 1 * dpr);
+        ctx.fillText(short, lx, pillY + 1);
 
         // Record hit-box in CSS px for click detection
         frameHits.push({
-          x: rx / dpr, y: pillY / dpr,
-          w: (tw + px * 2) / dpr, h: pillH / dpr,
+          x: rx, y: pillY,
+          w: tw + px * 2, h: pillH,
           marker: mk,
         });
       }
@@ -208,11 +203,12 @@ the Free Software Foundation, version 3 only. -->
     }
 
     ppgHitBoxes = frameHits;
+    ctx.restore();
   }
 
   // ── Marker click → tooltip ───────────────────────────────────────────────
   function onPpgClick(e: MouseEvent) {
-    if (!canvas) return;
+    const canvas = e.currentTarget as HTMLCanvasElement;
     const rect = canvas.getBoundingClientRect();
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
@@ -228,17 +224,6 @@ the Free Software Foundation, version 3 only. -->
     }
     ppgTooltip = null;
   }
-
-  $effect(() => {
-    if (canvas) {
-      const dpr = getDpr();
-      canvas.width  = CANVAS_W * dpr;
-      canvas.height = CANVAS_H * dpr;
-      ctx = canvas.getContext("2d");
-      raf = requestAnimationFrame(draw);
-    }
-    return () => { if (raf) cancelAnimationFrame(raf); clearTimeout(ppgTooltipTimer); };
-  });
 </script>
 
 <div class="flex flex-col gap-1.5">
@@ -255,12 +240,12 @@ the Free Software Foundation, version 3 only. -->
     {/each}
   </div>
 
-  <!-- Canvas + tooltip -->
+  <!-- Canvas + tooltip — lifecycle managed by animatedCanvas action -->
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="relative">
     <canvas
-      bind:this={canvas}
+      use:animatedCanvas={{ draw, heightPx: CANVAS_H, widthPx: CANVAS_W }}
       class="w-full rounded-lg bg-black/[0.03] dark:bg-white/[0.03]"
       style="height:{CANVAS_H}px; image-rendering:pixelated"
       onclick={onPpgClick}

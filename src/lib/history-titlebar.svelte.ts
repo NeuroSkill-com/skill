@@ -5,11 +5,13 @@
 // titlebar so that the history window's navigation controls live inside the
 // 30 px titlebar instead of a separate in-page header row.
 
+import { createTitlebarState, createTitlebarCallbacks } from "$lib/titlebar-state.svelte";
+
 /** Calendar heatmap view granularity. */
 export type HistoryViewMode = "year" | "month" | "week" | "day";
 
 /** Display data written by the history page, read by CustomTitleBar. */
-export const hBar = $state({
+export const hBar = createTitlebarState({
   /** True once the history page has mounted and set up callbacks. */
   active:          false,
   /** Mirrors history page `daysLoading`. */
@@ -33,7 +35,7 @@ export const hBar = $state({
 });
 
 /** Callbacks set by the history page on mount. */
-export const hCbs = {
+export const hCbs = createTitlebarCallbacks({
   prev:          () => {},
   next:          () => {},
   toggleCompare: () => {},
@@ -43,14 +45,4 @@ export const hCbs = {
   setViewMode:   (_m: HistoryViewMode) => {},
   calendarPrev:  () => {},
   calendarNext:  () => {},
-} as {
-  prev:          () => void;
-  next:          () => void;
-  toggleCompare: () => void;
-  openCompare:   () => void;
-  toggleLabels:  () => void;
-  reload:        () => void;
-  setViewMode:   (m: HistoryViewMode) => void;
-  calendarPrev:  () => void;
-  calendarNext:  () => void;
-};
+});

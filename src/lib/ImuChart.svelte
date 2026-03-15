@@ -15,7 +15,7 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
   import { t } from "$lib/i18n/index.svelte";
-  import { getDpr } from "$lib/format";
+  import { animatedCanvas } from "$lib/use-canvas";
 
   const CANVAS_W  = 400;
   const CANVAS_H  = 160;       // two stacked sub-charts (accel + gyro)
@@ -32,9 +32,6 @@ the Free Software Foundation, version 3 only. -->
   const heads  = [0, 0];
   const filled = [0, 0];
 
-  let canvas: HTMLCanvasElement | undefined;
-  let ctx: CanvasRenderingContext2D | null = null;
-  let raf = 0;
   let needsRedraw = false;
 
   // Latest values for the numeric readout
@@ -59,17 +56,18 @@ the Free Software Foundation, version 3 only. -->
     needsRedraw = true;
   }
 
-  function draw() {
-    raf = requestAnimationFrame(draw);
-    if (!needsRedraw || !ctx) return;
+  function draw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+    if (!needsRedraw) return;
     needsRedraw = false;
 
-    const dpr = getDpr();
-    const w = CANVAS_W * dpr;
-    const h = CANVAS_H * dpr;
+    const dpr = w / CANVAS_W; // effectively getDpr() since w = CANVAS_W * dpr / dpr
+    const pw = CANVAS_W * (w / CANVAS_W);  // just w
+    const ph = CANVAS_H * (h / CANVAS_H);  // just h
     const halfH = h / 2;
 
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.save();
+    ctx.setTransform(ctx.canvas.width / w, 0, 0, ctx.canvas.height / h, 0, 0);
 
     const sensorLabels = [t("dashboard.accel"), t("dashboard.gyro")];
     const sensorUnits  = ["g", "°/s"];
@@ -82,7 +80,7 @@ the Free Software Foundation, version 3 only. -->
       // Separator line between accel and gyro
       if (si === 1) {
         ctx.strokeStyle = "rgba(128,128,128,0.2)";
-        ctx.lineWidth   = 1 * dpr;
+        ctx.lineWidth   = 1;
         ctx.beginPath();
         ctx.moveTo(0, yOff);
         ctx.lineTo(w, yOff);
@@ -91,10 +89,10 @@ the Free Software Foundation, version 3 only. -->
 
       // Sensor label
       ctx.fillStyle    = "rgba(160,160,180,0.6)";
-      ctx.font         = `${9 * dpr}px system-ui, sans-serif`;
+      ctx.font         = `${9}px system-ui, sans-serif`;
       ctx.textAlign    = "left";
       ctx.textBaseline = "top";
-      ctx.fillText(`${sensorLabels[si]} (${sensorUnits[si]})`, 4 * dpr, yOff + 4 * dpr);
+      ctx.fillText(`${sensorLabels[si]} (${sensorUnits[si]})`, 4, yOff + 4);
 
       if (n < 2) continue;
 
@@ -120,8 +118,8 @@ the Free Software Foundation, version 3 only. -->
       const zeroY = yOff + (1 - (0 - mn) / finalRange) * halfH;
       if (zeroY > yOff && zeroY < yOff + halfH) {
         ctx.strokeStyle = "rgba(128,128,128,0.15)";
-        ctx.lineWidth   = 1 * dpr;
-        ctx.setLineDash([3 * dpr, 3 * dpr]);
+        ctx.lineWidth   = 1;
+        ctx.setLineDash([3, 3]);
         ctx.beginPath();
         ctx.moveTo(0, zeroY);
         ctx.lineTo(w, zeroY);
@@ -134,7 +132,7 @@ the Free Software Foundation, version 3 only. -->
         const buf = bufs[si][a];
         ctx.beginPath();
         ctx.strokeStyle = AXIS_COLORS[a];
-        ctx.lineWidth   = 1.3 * dpr;
+        ctx.lineWidth   = 1.3;
         ctx.globalAlpha = 0.85;
         for (let i = 0; i < n; i++) {
           const idx = (head - n + i + VISIBLE * 2) % VISIBLE;
@@ -147,18 +145,9 @@ the Free Software Foundation, version 3 only. -->
         ctx.globalAlpha = 1;
       }
     }
-  }
 
-  $effect(() => {
-    if (canvas) {
-      const dpr = getDpr();
-      canvas.width  = CANVAS_W * dpr;
-      canvas.height = CANVAS_H * dpr;
-      ctx = canvas.getContext("2d");
-      raf = requestAnimationFrame(draw);
-    }
-    return () => { if (raf) cancelAnimationFrame(raf); };
-  });
+    ctx.restore();
+  }
 </script>
 
 <div class="flex flex-col gap-1.5">
@@ -182,9 +171,9 @@ the Free Software Foundation, version 3 only. -->
     </div>
   </div>
 
-  <!-- Canvas -->
+  <!-- Canvas — lifecycle managed by animatedCanvas action -->
   <canvas
-    bind:this={canvas}
+    use:animatedCanvas={{ draw, heightPx: CANVAS_H, widthPx: CANVAS_W }}
     class="w-full rounded-lg bg-black/[0.03] dark:bg-white/[0.03]"
     style="height:{CANVAS_H}px; image-rendering:pixelated"
   ></canvas>

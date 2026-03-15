@@ -23,7 +23,7 @@ the Free Software Foundation, version 3 only. -->
   import { colorForLoad, C_NEUTRAL, rgba as toRgba } from "$lib/theme";
   import { t } from "$lib/i18n/index.svelte";
   import { getResolved } from "$lib/theme-store.svelte";
-  import { getDpr } from "$lib/format";
+  import { animatedCanvas } from "$lib/use-canvas";
 
   interface GpuStats    { render: number; tiler: number; overall: number; }
   interface ModelStatus { encoder_loaded: boolean; }
@@ -40,35 +40,23 @@ the Free Software Foundation, version 3 only. -->
   let gpuStats    = $state<GpuStats | null>(null);
   let modelActive = $state(false);
 
-  let container: HTMLDivElement    | undefined = $state();
-  let canvas:    HTMLCanvasElement | undefined = $state();
+  let container: HTMLDivElement | undefined = $state();
 
   const visible = $derived(gpuStats !== null);
   const col     = $derived(gpuStats ? colorForLoad(gpuStats.overall) : C_NEUTRAL);
 
   // ── Non-reactive (mutated inside rAF — no Svelte overhead) ────────────────
   let history:   Point[]           = [];
-  let ro:        ResizeObserver | undefined;
   let gpuTimer:  ReturnType<typeof setInterval> | undefined;
   let mdlTimer:  ReturnType<typeof setInterval> | undefined;
-  let animFrame: number | undefined;
 
-  // toRgba imported from $lib/theme (was duplicated here).
-
-  // ── Draw — called every rAF frame ──────────────────────────────────────────
-  function draw() {
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr  = getDpr();
-    const W    = canvas.width  / dpr;
-    const H    = canvas.height / dpr;
-    const now  = Date.now();
-    const wStart = now - WIN_MS;
-
+  // ── Draw — called every rAF frame by the animatedCanvas action ─────────────
+  function draw(ctx: CanvasRenderingContext2D, W: number, H: number) {
     ctx.save();
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(ctx.canvas.width / W, 0, 0, ctx.canvas.height / H, 0, 0);
+
+    const now    = Date.now();
+    const wStart = now - WIN_MS;
 
     // Background
     const dark = getResolved() === "dark";
@@ -171,38 +159,6 @@ the Free Software Foundation, version 3 only. -->
     ctx.restore();
   }
 
-  // ── rAF loop ───────────────────────────────────────────────────────────────
-  function tick() {
-    // Schedule next frame first so a draw exception can never kill the loop.
-    animFrame = requestAnimationFrame(tick);
-    try {
-      draw();
-    } catch (err) {
-      console.error("[GpuChart] render error (recovered):", err);
-    }
-  }
-
-  // ── Resize ─────────────────────────────────────────────────────────────────
-  function resize() {
-    if (!canvas || !container) return;
-    const dpr = getDpr();
-    const w   = container.clientWidth;
-    canvas.width        = w * dpr;
-    canvas.height       = CANVAS_H * dpr;
-    canvas.style.width  = `${w}px`;
-    canvas.style.height = `${CANVAS_H}px`;
-  }
-
-  // Re-attach ResizeObserver and defer resize until layout settles.
-  // (clientWidth is 0 during the synchronous $effect tick right after mount.)
-  $effect(() => {
-    if (!canvas || !container) return;
-    ro?.disconnect();
-    ro = new ResizeObserver(resize);
-    ro.observe(container);
-    requestAnimationFrame(resize);   // wait one frame for layout
-  });
-
   // ── Polling ─────────────────────────────────────────────────────────────────
   let gpuErrCount = 0;
   async function pollGpu() {
@@ -241,13 +197,10 @@ the Free Software Foundation, version 3 only. -->
     pollModel();
     gpuTimer  = setInterval(pollGpu,  GPU_POLL_MS);
     mdlTimer  = setInterval(pollModel, MDL_POLL_MS);
-    animFrame = requestAnimationFrame(tick);
   });
   onDestroy(() => {
     clearInterval(gpuTimer);
     clearInterval(mdlTimer);
-    if (animFrame !== undefined) cancelAnimationFrame(animFrame);
-    ro?.disconnect();
   });
 </script>
 
@@ -279,7 +232,11 @@ the Free Software Foundation, version 3 only. -->
 
     {#if !collapsed}
       <div bind:this={container} class="w-full">
-        <canvas bind:this={canvas} class="block w-full" style="height:{CANVAS_H}px"></canvas>
+        <canvas
+          use:animatedCanvas={{ draw, heightPx: CANVAS_H, container }}
+          class="block w-full"
+          style="height:{CANVAS_H}px"
+        ></canvas>
       </div>
     {/if}
 
