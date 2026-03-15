@@ -155,6 +155,10 @@ sha2 = { version = "0.10", optional = true }
 # WAV read-back for NeuTTS cache playback — already compiled transitively via neutts.
 hound = { version = "3", optional = true }
 
+# ONNX Runtime — same version as fastembed; provides ExecutionProvider
+# types (CoreML, CPU) for GPU/CPU selection in image + text embeddings.
+ort = { version = "=2.0.0-rc.11", default-features = false }
+
 # OCR engine — extract text from screenshots before downsizing.
 # Models (~10 MB each) are auto-downloaded from S3 on first use.
 ocrs = "0.12.1"
