@@ -57,12 +57,12 @@ import {
 // ── Hardware / signal ─────────────────────────────────────────────────────────
 
 describe("hardware constants", () => {
-  it("EEG_CHANNELS is 4 (mirrors Rust EEG_CHANNELS)", () => {
-    expect(EEG_CHANNELS).toBe(4);
+  it("EEG_CHANNELS is 12 (mirrors Rust EEG_CHANNELS)", () => {
+    expect(EEG_CHANNELS).toBe(12);
   });
 
-  it("EEG_CH has one label per channel", () => {
-    expect(EEG_CH).toHaveLength(EEG_CHANNELS);
+  it("EEG_CH has one label per Muse channel", () => {
+    expect(EEG_CH).toHaveLength(4);
   });
 
   it("EEG_CH labels match Rust CHANNEL_NAMES order", () => {
@@ -72,8 +72,8 @@ describe("hardware constants", () => {
     expect(EEG_CH[3]).toBe("TP10");
   });
 
-  it("EEG_COLOR has one colour per channel", () => {
-    expect(EEG_COLOR).toHaveLength(EEG_CHANNELS);
+  it("EEG_COLOR has one colour per Muse channel", () => {
+    expect(EEG_COLOR).toHaveLength(4);
   });
 
   it("EEG_COLOR entries are valid hex strings", () => {
@@ -258,8 +258,8 @@ describe("BandChart canvas layout", () => {
     );
   });
 
-  it("BAND_CANVAS_H is 290 px (4 × 68 + 3 × 6)", () => {
-    expect(BAND_CANVAS_H).toBe(290);
+  it("BAND_CANVAS_H is 642 px (12 × 48 + 11 × 6)", () => {
+    expect(BAND_CANVAS_H).toBe(642);
   });
 
   it("BAND_TILE_H is positive", () => {

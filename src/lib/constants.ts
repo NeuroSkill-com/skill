@@ -176,7 +176,7 @@ export const BAND_TILE_H = 48;
 export const BAND_TILE_GAP = 6;
 
 /** Total band chart canvas height (CSS px) = 4 × TILE_H + 3 × TILE_GAP. */
-export const BAND_CANVAS_H = EEG_CHANNELS * BAND_TILE_H + (EEG_CHANNELS - 1) * BAND_TILE_GAP; // 290
+export const BAND_CANVAS_H = EEG_CHANNELS * BAND_TILE_H + (EEG_CHANNELS - 1) * BAND_TILE_GAP; // 642
 
 /** Left inner margin inside each tile (CSS px). */
 export const BAND_TILE_ML = 12;
