@@ -9311,6 +9311,7 @@ dependencies = [
  "serde_json",
  "serialport",
  "sha2",
+ "skill-constants",
  "skill-data",
  "skill-eeg",
  "skill-llm",
@@ -9333,6 +9334,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "skill-constants"
+version = "0.0.1"
+
+[[package]]
 name = "skill-data"
 version = "0.0.1"
 dependencies = [
@@ -9340,6 +9345,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "skill-constants",
  "sysinfo 0.38.4",
 ]
 
@@ -9350,6 +9356,7 @@ dependencies = [
  "gpu-fft",
  "serde",
  "serde_json",
+ "skill-constants",
 ]
 
 [[package]]

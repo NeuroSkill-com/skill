@@ -67,7 +67,7 @@ impl HooksLog {
     ///
     /// Returns `None` on failure so callers can continue without logging.
     pub fn open(skill_dir: &Path) -> Option<Self> {
-        let path = skill_dir.join("hooks.sqlite");
+        let path = skill_dir.join(skill_constants::HOOKS_LOG_FILE);
         let conn = rusqlite::Connection::open(&path)
             .map_err(|e| eprintln!("[hooks_log] open {}: {e}", path.display()))
             .ok()?;
