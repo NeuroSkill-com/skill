@@ -8,22 +8,11 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use skill_constants::{ZUNA_CONFIG_FILE, ZUNA_WEIGHTS_FILE};
+use skill_data::util::MutexExt;
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_model_config::EegModelStatus;
-
-// ── MutexExt (local copy) ─────────────────────────────────────────────────────
-
-trait MutexExt<T> {
-    fn lock_or_recover(&self) -> std::sync::MutexGuard<'_, T>;
-}
-impl<T> MutexExt<T> for Mutex<T> {
-    fn lock_or_recover(&self) -> std::sync::MutexGuard<'_, T> {
-        self.lock().unwrap_or_else(|e| e.into_inner())
-    }
-}
 
 // ── Cosine distance ───────────────────────────────────────────────────────────
 
@@ -100,51 +89,8 @@ pub fn fuzzy_match(keyword: &str, candidate: &str) -> bool {
 
 // ── UTC timestamp helpers ─────────────────────────────────────────────────────
 
-/// Current UTC date as `"YYYYMMDD"`.
-pub fn yyyymmdd_utc() -> String {
-    let mut days = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        / 86_400;
-    let mut y = 1970u32;
-    loop {
-        let leap  = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-        let in_yr = if leap { 366u64 } else { 365 };
-        if days < in_yr { break; }
-        days -= in_yr; y += 1;
-    }
-    let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-    let ml: [u64; 12] = if leap { [31,29,31,30,31,30,31,31,30,31,30,31] }
-                        else    { [31,28,31,30,31,30,31,31,30,31,30,31] };
-    let mut m = 1u32;
-    for &l in &ml { if days < l { break; } days -= l; m += 1; }
-    format!("{y:04}{m:02}{d:02}", d = days + 1)
-}
-
-/// Current UTC time as the integer `YYYYMMDDHHmmss`.
-pub fn yyyymmddhhmmss_utc() -> i64 {
-    let s    = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
-    let sec  = (s % 60) as u32;
-    let min  = ((s / 60) % 60) as u32;
-    let hour = ((s / 3600) % 24) as u32;
-    let mut days = s / 86_400;
-    let mut y = 1970u32;
-    loop {
-        let leap  = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-        let in_yr = if leap { 366u64 } else { 365 };
-        if days < in_yr { break; }
-        days -= in_yr; y += 1;
-    }
-    let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-    let ml: [u64; 12] = if leap { [31,29,31,30,31,30,31,31,30,31,30,31] }
-                        else    { [31,28,31,30,31,30,31,31,30,31,30,31] };
-    let mut m = 1u32;
-    for &l in &ml { if days < l { break; } days -= l; m += 1; }
-    let d = days as u32 + 1;
-    (y as i64)*10_000_000_000 + (m as i64)*100_000_000 + (d as i64)*1_000_000
-        + (hour as i64)*10_000 + (min as i64)*100 + sec as i64
-}
+// Delegated to `skill_data::util`.  Re-exported here for backward compat.
+pub use skill_data::util::{yyyymmdd_utc, yyyymmddhhmmss_utc};
 
 // ── HuggingFace weight resolution ─────────────────────────────────────────────
 

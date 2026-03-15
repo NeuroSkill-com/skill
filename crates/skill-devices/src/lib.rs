@@ -4,10 +4,88 @@
 //!
 //! Everything here is **Tauri-free**: Do Not Disturb decision engine,
 //! composite EEG score computation (meditation, cognitive load, drowsiness),
-//! and battery EMA smoothing.
+//! battery EMA smoothing, and band-snapshot enrichment.
 
 use std::collections::VecDeque;
 use skill_eeg::eeg_bands::BandSnapshot;
+use skill_eeg::artifact_detection::ArtifactMetrics;
+use skill_eeg::head_pose::HeadPoseMetrics;
+use skill_data::ppg_analysis::PpgMetrics;
+use skill_data::gpu_stats::GpuStats;
+
+// ── Band-snapshot enrichment ──────────────────────────────────────────────────
+
+/// All the auxiliary signals that can enrich a [`BandSnapshot`].
+///
+/// Pass this to [`enrich_band_snapshot`] to populate PPG vitals, artifact
+/// counts, head-pose metrics, composite scores, and GPU stats on the snapshot.
+#[derive(Default)]
+pub struct SnapshotContext {
+    pub ppg:             Option<PpgMetrics>,
+    pub artifacts:       Option<ArtifactMetrics>,
+    pub head_pose:       Option<HeadPoseMetrics>,
+    pub temperature_raw: u16,
+    pub gpu:             Option<GpuStats>,
+}
+
+/// Enrich a [`BandSnapshot`] in-place with auxiliary signals and composite scores.
+///
+/// This is the single implementation of the enrichment logic formerly
+/// duplicated across `muse_session.rs` and `openbci_session.rs`.
+pub fn enrich_band_snapshot(snap: &mut BandSnapshot, ctx: &SnapshotContext) {
+    // PPG vitals
+    if let Some(ref ppg) = ctx.ppg {
+        snap.hr               = Some(ppg.hr);
+        snap.rmssd            = Some(ppg.rmssd);
+        snap.sdnn             = Some(ppg.sdnn);
+        snap.pnn50            = Some(ppg.pnn50);
+        snap.lf_hf_ratio      = Some(ppg.lf_hf_ratio);
+        snap.respiratory_rate = Some(ppg.respiratory_rate);
+        snap.spo2_estimate    = Some(ppg.spo2_estimate);
+        snap.perfusion_index  = Some(ppg.perfusion_index);
+        snap.stress_index     = Some(ppg.stress_index);
+    }
+
+    // Artifact detection
+    if let Some(ref art) = ctx.artifacts {
+        snap.blink_count = Some(art.blink_count);
+        snap.blink_rate  = Some(art.blink_rate);
+    }
+
+    // Head pose
+    let (stillness, rmssd_opt) = if let Some(ref hp) = ctx.head_pose {
+        snap.head_pitch  = Some(hp.pitch);
+        snap.head_roll   = Some(hp.roll);
+        snap.stillness   = Some(hp.stillness);
+        snap.nod_count   = Some(hp.nod_count);
+        snap.shake_count = Some(hp.shake_count);
+        (hp.stillness, ctx.ppg.as_ref().map(|p| p.rmssd))
+    } else {
+        (0.0, ctx.ppg.as_ref().map(|p| p.rmssd))
+    };
+
+    // Temperature
+    if ctx.temperature_raw > 0 {
+        snap.temperature_raw = Some(ctx.temperature_raw);
+    }
+
+    // Composite scores
+    let meditation = compute_meditation(snap, stillness, rmssd_opt);
+    snap.meditation = Some((meditation * 10.0).round() / 10.0);
+
+    let cognitive_load = compute_cognitive_load(snap);
+    snap.cognitive_load = Some((cognitive_load * 10.0).round() / 10.0);
+
+    let drowsiness = compute_drowsiness(snap);
+    snap.drowsiness = Some((drowsiness * 10.0).round() / 10.0);
+
+    // GPU stats
+    if let Some(ref gpu) = ctx.gpu {
+        snap.gpu_overall = Some(gpu.overall as f64);
+        snap.gpu_render  = Some(gpu.render  as f64);
+        snap.gpu_tiler   = Some(gpu.tiler   as f64);
+    }
+}
 
 // ── Composite EEG scores ──────────────────────────────────────────────────────
 

@@ -133,49 +133,67 @@ the Free Software Foundation, version 3 only. -->
     return (v as EpochRow[]).length > 2 ? (v as EpochRow[]) : null;
   }
 
-  // ── Throttled metrics loader (max 4 concurrent) ─────────────────────────
-  const METRICS_CONCURRENCY = 4;
-  let metricsInFlight = 0;
-  const metricsBacklog: string[] = [];
+  // ── Batch metrics loader ──────────────────────────────────────────────────
+  // Loads all sessions' metrics in a single IPC call.  The backend reads from
+  // a fast disk cache (`_metrics_cache.json`) when available and returns
+  // downsampled timeseries (≤360 points) to keep payloads small.
 
+  /** Load metrics for a list of csv paths in one batch call.
+   *  Paths already in the cache are skipped. */
+  async function loadMetricsBatch(csvPaths: string[]) {
+    // Filter out already-loaded paths.
+    const needed = csvPaths.filter(p => !(p in metricsCache));
+    if (needed.length === 0) return;
+
+    // Mark all as loading.
+    for (const p of needed) {
+      metricsCache[p] = "loading";
+      tsCache[p]      = "loading";
+    }
+
+    try {
+      const results = await invoke<Record<string, CsvMetricsResult>>(
+        "get_day_metrics_batch", { csvPaths: needed, maxTsPoints: 360 }
+      );
+      for (const p of needed) {
+        const result = results[p];
+        if (result && result.n_rows > 0) {
+          metricsCache[p] = result.summary;
+          tsCache[p]      = result.timeseries;
+          writeMetricsCache(p, result);
+        } else {
+          // Fallback: try SQLite-based loading for sessions without _metrics.csv
+          void loadMetricsFallback(p);
+        }
+      }
+    } catch (e) {
+      console.warn("[history] batch metrics failed, falling back:", e);
+      for (const p of needed) void loadMetricsFallback(p);
+    }
+  }
+
+  /** Fallback for a single session without _metrics.csv — queries SQLite. */
+  async function loadMetricsFallback(csvPath: string) {
+    const session = sessionRegistry.get(csvPath);
+    if (!session?.session_start_utc || !session?.session_end_utc) {
+      metricsCache[csvPath] = "none"; tsCache[csvPath] = []; return;
+    }
+    try {
+      metricsCache[csvPath] = await invoke<SessionMetrics>("get_session_metrics", {
+        startUtc: session.session_start_utc, endUtc: session.session_end_utc,
+      });
+    } catch { metricsCache[csvPath] = "none"; }
+    try {
+      tsCache[csvPath] = await invoke<EpochRow[]>("get_session_timeseries", {
+        startUtc: session.session_start_utc, endUtc: session.session_end_utc,
+      });
+    } catch { tsCache[csvPath] = []; }
+  }
+
+  /** Legacy single-session loader — still used by expand toggle and prefetch. */
   function loadMetrics(csvPath: string) {
     if (csvPath in metricsCache) return;
-    metricsCache[csvPath] = "loading";
-    tsCache[csvPath]      = "loading";
-    if (metricsInFlight < METRICS_CONCURRENCY) { void runMetrics(csvPath); }
-    else { metricsBacklog.push(csvPath); }
-  }
-  function drainMetrics() {
-    while (metricsInFlight < METRICS_CONCURRENCY && metricsBacklog.length > 0)
-      void runMetrics(metricsBacklog.shift()!);
-  }
-  async function runMetrics(csvPath: string) {
-    metricsInFlight++;
-    try {
-      try {
-        const result = await invoke<CsvMetricsResult | null>("get_csv_metrics", { csvPath });
-        if (result && result.n_rows > 0) {
-          metricsCache[csvPath] = result.summary;
-          tsCache[csvPath]      = result.timeseries;
-          writeMetricsCache(csvPath, result);
-          return;
-        }
-      } catch (e) { console.warn("[history] get_csv_metrics:", e); }
-      const session = sessionRegistry.get(csvPath);
-      if (!session?.session_start_utc || !session?.session_end_utc) {
-        metricsCache[csvPath] = "none"; tsCache[csvPath] = []; return;
-      }
-      try {
-        metricsCache[csvPath] = await invoke<SessionMetrics>("get_session_metrics", {
-          startUtc: session.session_start_utc, endUtc: session.session_end_utc,
-        });
-      } catch { metricsCache[csvPath] = "none"; }
-      try {
-        tsCache[csvPath] = await invoke<EpochRow[]>("get_session_timeseries", {
-          startUtc: session.session_start_utc, endUtc: session.session_end_utc,
-        });
-      } catch { tsCache[csvPath] = []; }
-    } finally { metricsInFlight--; drainMetrics(); }
+    void loadMetricsBatch([csvPath]);
   }
 
   async function loadSleep(csvPath: string) {
@@ -302,20 +320,19 @@ the Free Software Foundation, version 3 only. -->
     // Register sessions so runMetrics can resolve timestamps for them.
     registerSessions(list);
 
-    // Queue metrics for any session not already in the cache.
+    // Restore from sessionStorage first, then batch-load the rest.
+    const needsBatch: string[] = [];
     for (const s of list) {
-      if (!s.csv_path) continue;
+      if (!s.csv_path || s.csv_path in metricsCache) continue;
       const mc = readMetricsCache(s.csv_path);
       if (mc) {
-        // Restore from sessionStorage without triggering reactive updates.
-        if (!(s.csv_path in metricsCache)) {
-          metricsCache[s.csv_path] = mc.summary as SessionMetrics;
-          tsCache[s.csv_path]      = mc.timeseries ?? [];
-        }
-      } else if (!(s.csv_path in metricsCache)) {
-        loadMetrics(s.csv_path);
+        metricsCache[s.csv_path] = mc.summary as SessionMetrics;
+        tsCache[s.csv_path]      = mc.timeseries ?? [];
+      } else {
+        needsBatch.push(s.csv_path);
       }
     }
+    if (needsBatch.length > 0) void loadMetricsBatch(needsBatch);
   }
 
   async function loadDay(idx: number) {
@@ -335,6 +352,7 @@ the Free Software Foundation, version 3 only. -->
     if (cached && cached.length > 0) {
       sessions = cached;
       registerSessions(cached);
+      // Restore metrics from sessionStorage for instant chart render.
       for (const s of sessions) {
         if (s.csv_path && !(s.csv_path in tsCache)) {
           const mc = readMetricsCache(s.csv_path);
@@ -354,12 +372,18 @@ the Free Software Foundation, version 3 only. -->
       sessions = fresh;
       registerSessions(fresh);
       setTimeout(() => writeDayCache(localKey, fresh), 0); // defer serialisation
+
+      // Restore from sessionStorage, collect the rest for batch loading.
+      const needsBatch: string[] = [];
       for (const s of fresh) {
         if (!s.csv_path) continue;
+        if (s.csv_path in metricsCache) continue;
         const mc = readMetricsCache(s.csv_path);
         if (mc) { tsCache[s.csv_path] = mc.timeseries ?? []; metricsCache[s.csv_path] = mc.summary; }
-        else if (!(s.csv_path in metricsCache)) loadMetrics(s.csv_path);
+        else needsBatch.push(s.csv_path);
       }
+      // Single IPC call loads all remaining sessions' metrics at once.
+      if (needsBatch.length > 0) void loadMetricsBatch(needsBatch);
     } catch (e) {
       if (loadSeq === seq) console.error("[history] loadDay failed:", e);
     } finally {
@@ -517,6 +541,7 @@ the Free Software Foundation, version 3 only. -->
     weekLoading = true;
     const dayKeys = calendarCells.map(c => c.dayKey).filter(k => k);
     const map = new Map<string, SessionEntry[]>();
+    const allNeedsBatch: string[] = [];
     await Promise.all(dayKeys.map(async (dk) => {
       try {
         let list = readDayCache(dk);
@@ -526,12 +551,18 @@ the Free Software Foundation, version 3 only. -->
         }
         registerSessions(list);
         map.set(dk, list);
-        // Trigger timeseries loading for each session
+        // Collect all sessions needing metrics.
         for (const s of list) {
-          if (s.csv_path && !(s.csv_path in metricsCache)) loadMetrics(s.csv_path);
+          if (s.csv_path && !(s.csv_path in metricsCache)) {
+            const mc = readMetricsCache(s.csv_path);
+            if (mc) { metricsCache[s.csv_path] = mc.summary; tsCache[s.csv_path] = mc.timeseries ?? []; }
+            else allNeedsBatch.push(s.csv_path);
+          }
         }
       } catch { map.set(dk, []); }
     }));
+    // Single batch call for the entire week.
+    if (allNeedsBatch.length > 0) void loadMetricsBatch(allNeedsBatch);
     weekSessions = map;
     weekLoading = false;
   }

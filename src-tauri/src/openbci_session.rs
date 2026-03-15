@@ -228,7 +228,17 @@ pub(crate) async fn run_openbci_ganglion_session(
                     }
                 }
                 if let Some(col) = spec_col { let _ = app.emit("eeg-spectrogram", &col); }
-                if let Some(snap) = band_snap {
+                if let Some(mut snap) = band_snap {
+                    // ── Enrich snap via shared skill-devices logic ───────────
+                    let enrich_ctx = skill_devices::SnapshotContext {
+                        ppg:             dsp.accumulator.latest_ppg().cloned(),
+                        artifacts:       Some(dsp.artifact_detector.metrics()),
+                        head_pose:       Some(dsp.head_pose.metrics()),
+                        temperature_raw: 0,
+                        gpu:             crate::gpu_stats::read(),
+                    };
+                    skill_devices::enrich_band_snapshot(&mut snap, &enrich_ctx);
+
                     // Write back so get_latest_bands can read without DSP contention.
                     app.state::<Mutex<Box<AppState>>>().lock_or_recover().latest_bands = Some(snap.clone());
                     let _ = app.emit("eeg-bands", &snap);
@@ -470,7 +480,16 @@ async fn run_openbci_board_session(
                     }
                 }
                 if let Some(col) = spec_col { let _ = app.emit("eeg-spectrogram", &col); }
-                if let Some(snap) = band_snap {
+                if let Some(mut snap) = band_snap {
+                    let enrich_ctx = skill_devices::SnapshotContext {
+                        ppg:             dsp.accumulator.latest_ppg().cloned(),
+                        artifacts:       Some(dsp.artifact_detector.metrics()),
+                        head_pose:       Some(dsp.head_pose.metrics()),
+                        temperature_raw: 0,
+                        gpu:             crate::gpu_stats::read(),
+                    };
+                    skill_devices::enrich_band_snapshot(&mut snap, &enrich_ctx);
+
                     app.state::<Mutex<Box<AppState>>>().lock_or_recover().latest_bands = Some(snap.clone());
                     let _ = app.emit("eeg-bands", &snap);
                     app.state::<WsBroadcaster>().send("eeg-bands", &snap);

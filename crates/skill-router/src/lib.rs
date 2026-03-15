@@ -109,9 +109,8 @@ pub fn load_embeddings_range(
         if !path.is_dir() { continue; }
         let db_path = path.join(SQLITE_FILE);
         if !db_path.exists() { continue; }
-        let conn = match rusqlite::Connection::open_with_flags(
-            &db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) { Ok(c) => c, Err(_) => continue };
+        let conn = match skill_data::util::open_readonly(&db_path)
+        { Ok(c) => c, Err(_) => continue };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
         let mut stmt = match conn.prepare(
             "SELECT timestamp, eeg_embedding FROM embeddings
@@ -143,9 +142,8 @@ pub fn load_labels_range(
 ) -> Vec<(u64, u64, String)> {
     let labels_db = skill_dir.join(LABELS_FILE);
     if !labels_db.exists() { return vec![]; }
-    let conn = match rusqlite::Connection::open_with_flags(
-        &labels_db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ) { Ok(c) => c, Err(_) => return vec![] };
+    let conn = match skill_data::util::open_readonly(&labels_db)
+    { Ok(c) => c, Err(_) => return vec![] };
     let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
     let mut stmt = match conn.prepare(
         "SELECT eeg_start, eeg_end, text FROM labels

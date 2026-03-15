@@ -83,22 +83,6 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│                   SvelteKit Frontend                │
-│  Svelte 5 · Tailwind · Three.js · shadcn-svelte     │
-├─────────────────────────────────────────────────────┤
-│                  Tauri v2 Bridge                    │
-│         IPC commands · Event emitters               │
-├─────────────────────────────────────────────────────┤
-│                   Rust Backend                      │
-│  CoreBluetooth/BlueZ · gpu_fft · ZUNA (wgpu)        │
-│  rusqlite · fast_hnsw · umap_rs · job_queue         │
-└─────────────────────────────────────────────────────┘
-```
-
-### Crate dependency graph
-
 ```mermaid
 graph TD
     subgraph Vendored

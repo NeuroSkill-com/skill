@@ -317,214 +317,61 @@ pub(crate) async fn handle_event(
             }
 
             if let Some(mut snap) = band_snap {
-                // ── Enrich snap from session-local DSP (all lock-free) ───────
-                if let Some(ppg) = dsp.accumulator.latest_ppg() {
-                    snap.hr               = Some(ppg.hr);
-                    snap.rmssd            = Some(ppg.rmssd);
-                    snap.sdnn             = Some(ppg.sdnn);
-                    snap.pnn50            = Some(ppg.pnn50);
-                    snap.lf_hf_ratio      = Some(ppg.lf_hf_ratio);
-                    snap.respiratory_rate = Some(ppg.respiratory_rate);
-                    snap.spo2_estimate    = Some(ppg.spo2_estimate);
-                    snap.perfusion_index  = Some(ppg.perfusion_index);
-                    snap.stress_index     = Some(ppg.stress_index);
-                }
-
-                let art = dsp.artifact_detector.metrics();
-                snap.blink_count = Some(art.blink_count);
-                snap.blink_rate  = Some(art.blink_rate);
-
-                let hp = dsp.head_pose.metrics();
-                snap.head_pitch  = Some(hp.pitch);
-                snap.head_roll   = Some(hp.roll);
-                snap.stillness   = Some(hp.stillness);
-                snap.nod_count   = Some(hp.nod_count);
-                snap.shake_count = Some(hp.shake_count);
-
-                // Brief read lock only for temperature (one scalar copy).
+                // ── Enrich snap via shared skill-devices logic ───────────────
                 let temperature_raw = {
                     let sr = app.state::<Mutex<Box<AppState>>>();
-                    let g = sr.lock_or_recover();
-                    g.status.temperature_raw
+                    sr.lock_or_recover().status.temperature_raw
                 };
-                if temperature_raw > 0 {
-                    snap.temperature_raw = Some(temperature_raw);
-                }
-
-                // ── Composite scores (pure computation, lock-free) ───────────
-                let rmssd_opt = dsp.accumulator.latest_ppg().map(|p| p.rmssd);
-                let meditation = skill_devices::compute_meditation(&snap, hp.stillness, rmssd_opt);
-                snap.meditation = Some((meditation * 10.0).round() / 10.0);
-
-                let cognitive_load = skill_devices::compute_cognitive_load(&snap);
-                snap.cognitive_load = Some((cognitive_load * 10.0).round() / 10.0);
-
-                let drowsiness = skill_devices::compute_drowsiness(&snap);
-                snap.drowsiness = Some((drowsiness * 10.0).round() / 10.0);
-
-                if let Some(gpu) = crate::gpu_stats::read() {
-                    snap.gpu_overall = Some(gpu.overall as f64);
-                    snap.gpu_render  = Some(gpu.render  as f64);
-                    snap.gpu_tiler   = Some(gpu.tiler   as f64);
-                }
+                let enrich_ctx = skill_devices::SnapshotContext {
+                    ppg:             dsp.accumulator.latest_ppg().cloned(),
+                    artifacts:       Some(dsp.artifact_detector.metrics()),
+                    head_pose:       Some(dsp.head_pose.metrics()),
+                    temperature_raw,
+                    gpu:             crate::gpu_stats::read(),
+                };
+                skill_devices::enrich_band_snapshot(&mut snap, &enrich_ctx);
 
                 csv.push_metrics(csv_path, &snap);
 
-                // ── Auto Do Not Disturb (lock-free scoring, brief locks for state) ──
-                let engage_raw: f32 = if snap.channels.is_empty() {
-                    0.5
-                } else {
-                    let n = snap.channels.len() as f32;
-                    snap.channels.iter().map(|ch| {
-                        let d = ch.rel_alpha + ch.rel_theta;
-                        if d > 1e-6 { ch.rel_beta / d } else { 0.5 }
-                    }).sum::<f32>() / n
-                };
-                let focus_score: f64 =
-                    (100.0_f32 / (1.0 + (-2.0 * (engage_raw - 0.8)).exp())) as f64;
-
-                // Current SNR (dB) from the band snapshot.
+                // ── Auto Do Not Disturb (using skill_devices::dnd_tick) ──────
+                let engage_raw = skill_devices::compute_engagement_raw(&snap);
+                let focus_score = skill_devices::focus_score(engage_raw);
                 let snr_db = snap.snr;
 
-                // SNR threshold below which signal quality is too poor to
-                // sustain focus mode.  After SNR_LOW_TICKS consecutive ticks
-                // (~1 minute at 4 Hz) below this level the focus mode exits.
-                const SNR_LOW_DB: f32 = crate::constants::SNR_LOW_DB;
-                const SNR_LOW_TICKS: u32 = crate::constants::SNR_LOW_TICKS;
-
-                // Read DND config + current state, update rolling windows,
-                // decide action — all in one brief lock.
-                struct DndDecision {
-                    dnd_enabled:           bool,
-                    threshold:             f64,
-                    exit_duration_secs:    u32,
-                    focus_lookback_secs:   u32,
-                    window:                usize,
-                    exit_window:           usize,
-                    sample_count:          usize,
-                    avg_score:             f64,
-                    emit_active:           bool,
-                    below_ticks:           u32,
-                    exit_held:             bool,
-                    os_active:             Option<bool>,
-                    /// `Some(true/false)` → call set_dnd(value) after lock release.
-                    set_dnd_to:            Option<(bool, String)>,
-                    /// Whether to send a native exit notification after the OS call.
-                    send_exit_notification: bool,
-                    /// Human-readable exit reason for the notification body.
-                    exit_body:             &'static str,
-                }
-
+                // Brief lock: read DND config + state, run pure dnd_tick, write state back.
                 let d = {
                     let sr = app.state::<Mutex<Box<AppState>>>();
                     let mut s = sr.lock_or_recover();
-
-                    let dnd_enabled   = s.dnd_config.enabled;
-                    let threshold     = s.dnd_config.focus_threshold as f64;
-                    let duration_secs = s.dnd_config.duration_secs;
-                    let window        = (duration_secs as usize * 4).max(8);
-                    let exit_notif_cfg = s.dnd_config.exit_notification;
-
-                    s.dnd_focus_samples.push_back(focus_score);
-                    while s.dnd_focus_samples.len() > window { s.dnd_focus_samples.pop_front(); }
-                    let sample_count = s.dnd_focus_samples.len();
-                    let avg_score = s.dnd_focus_samples.iter().sum::<f64>() / sample_count as f64;
-
-                    let exit_duration_secs  = s.dnd_config.exit_duration_secs;
-                    let focus_lookback_secs = s.dnd_config.focus_lookback_secs;
-                    let exit_window     = (exit_duration_secs  as usize * 4).max(4);
-                    let lookback_window = (focus_lookback_secs as usize * 4).max(4);
-
-                    s.dnd_score_history.push_back(focus_score);
-                    while s.dnd_score_history.len() > lookback_window { s.dnd_score_history.pop_front(); }
-
-                    // ── SNR low-signal tracking ───────────────────────────────
-                    if snr_db < SNR_LOW_DB {
-                        s.dnd_snr_low_ticks = s.dnd_snr_low_ticks.saturating_add(1);
-                    } else {
-                        s.dnd_snr_low_ticks = 0;
-                    }
-                    // Exit immediately if SNR has been below threshold for 1 min.
-                    let snr_forced_exit = dnd_enabled
-                        && s.dnd_active
-                        && s.dnd_snr_low_ticks >= SNR_LOW_TICKS;
-
-                    let mut emit_active = s.dnd_active;
-                    let mut below_ticks = s.dnd_below_ticks;
-                    let mut exit_held   = false;
-                    let mut set_dnd_to: Option<(bool, String)> = None;
-                    let mut send_exit_notification = false;
-                    let mut exit_body: &'static str = "";
-
-                    if snr_forced_exit {
-                        // Signal quality too low for 1 minute: drop focus mode
-                        // immediately, bypassing the normal exit-delay logic.
-                        // Cap below_ticks so we retry next tick if the OS call fails.
-                        s.dnd_below_ticks  = exit_window as u32;
-                        below_ticks        = exit_window as u32;
-                        // NOTE: s.dnd_active stays true until post-lock OS call succeeds.
-                        emit_active        = false;
-                        set_dnd_to         = Some((false, String::new()));
-                        send_exit_notification = exit_notif_cfg;
-                        exit_body          = "Signal quality (SNR) dropped below 5 dB for 1 minute. Focus mode deactivated.";
-                    } else if dnd_enabled {
-                        if avg_score >= threshold {
-                            s.dnd_below_ticks = 0;
-                            below_ticks       = 0;
-                            if !s.dnd_active && snr_db >= SNR_LOW_DB && sample_count >= window {
-                                let mode_id = s.dnd_config.focus_mode_identifier.clone();
-                                set_dnd_to = Some((true, mode_id));
-                            }
-                        } else if s.dnd_active {
-                            let recent_had_focus = s.dnd_score_history.iter().any(|&v| v >= threshold);
-                            if recent_had_focus {
-                                s.dnd_below_ticks = 0; below_ticks = 0; exit_held = true;
-                            } else {
-                                s.dnd_below_ticks += 1;
-                                below_ticks        = s.dnd_below_ticks;
-                                if s.dnd_below_ticks as usize >= exit_window {
-                                    // Cap at exit_window so next tick retries if OS call fails.
-                                    // NOTE: s.dnd_active stays true until post-lock OS call succeeds.
-                                    s.dnd_below_ticks      = exit_window as u32;
-                                    emit_active            = false;
-                                    set_dnd_to             = Some((false, String::new()));
-                                    send_exit_notification = exit_notif_cfg;
-                                    exit_body              = "Your focus score dropped. Focus mode has been deactivated.";
-                                }
-                            }
-                        } else {
-                            s.dnd_below_ticks = 0; below_ticks = 0;
-                        }
-                    } else if s.dnd_active {
-                        // Feature was disabled while focus mode was active — clear it.
-                        s.dnd_below_ticks  = 0;
-                        below_ticks        = 0;
-                        // NOTE: s.dnd_active stays true until post-lock OS call succeeds.
-                        emit_active        = false;
-                        set_dnd_to         = Some((false, String::new()));
-                        send_exit_notification = exit_notif_cfg;
-                        exit_body          = "Do Not Disturb automation was disabled. Focus mode deactivated.";
-                    }
-
-                    DndDecision {
-                        dnd_enabled, threshold, exit_duration_secs, focus_lookback_secs,
-                        window, exit_window, sample_count, avg_score,
-                        emit_active, below_ticks, exit_held,
-                        os_active: s.dnd_os_active,
-                        set_dnd_to,
-                        send_exit_notification,
-                        exit_body,
-                    }
-                }; // lock released — set_dnd (file I/O) runs below
+                    let cfg = skill_devices::DndConfig {
+                        enabled:               s.dnd_config.enabled,
+                        focus_threshold:        s.dnd_config.focus_threshold as f64,
+                        duration_secs:          s.dnd_config.duration_secs,
+                        exit_duration_secs:     s.dnd_config.exit_duration_secs,
+                        focus_lookback_secs:    s.dnd_config.focus_lookback_secs,
+                        exit_notification:      s.dnd_config.exit_notification,
+                        focus_mode_identifier:  s.dnd_config.focus_mode_identifier.clone(),
+                    };
+                    let mut dnd_state = skill_devices::DndState {
+                        active:        s.dnd_active,
+                        focus_samples: std::mem::take(&mut s.dnd_focus_samples),
+                        score_history: std::mem::take(&mut s.dnd_score_history),
+                        below_ticks:   s.dnd_below_ticks,
+                        snr_low_ticks: s.dnd_snr_low_ticks,
+                        os_active:     s.dnd_os_active,
+                    };
+                    let decision = skill_devices::dnd_tick(&cfg, &mut dnd_state, focus_score, snr_db);
+                    // Write mutated state back.
+                    s.dnd_focus_samples = dnd_state.focus_samples;
+                    s.dnd_score_history = dnd_state.score_history;
+                    s.dnd_below_ticks   = dnd_state.below_ticks;
+                    s.dnd_snr_low_ticks = dnd_state.snr_low_ticks;
+                    decision
+                }; // lock released — OS DND call runs below
 
                 // Perform OS DND change outside the lock.
-                // Order: (1) exit system Focus first, (2) then notify the user.
                 if let Some((enable, mode_id)) = d.set_dnd_to {
                     let ok = crate::dnd::set_dnd(enable, &mode_id);
                     if ok {
-                        // Update app state only after the OS call succeeds.
-                        // This prevents a state mismatch if the call fails and
-                        // ensures the exit is retried on the next tick.
                         {
                             let sr = app.state::<Mutex<Box<AppState>>>();
                             let mut s = sr.lock_or_recover();
@@ -534,18 +381,11 @@ pub(crate) async fn handle_event(
                         }
                         let _ = app.emit("dnd-state-changed", enable);
                         app.state::<WsBroadcaster>().send("dnd-state-changed", &enable);
-                        // (2) Notify the user AFTER system focus has been cleared.
                         if !enable && d.send_exit_notification {
-                            send_toast(
-                                app,
-                                ToastLevel::Info,
-                                "Focus mode exited",
-                                d.exit_body,
-                            );
+                            send_toast(app, ToastLevel::Info,
+                                "Focus mode exited", d.exit_body);
                         }
                     }
-                    // If !ok: s.dnd_active remains true, dnd_below_ticks is capped
-                    // at exit_window, so the next tick will retry immediately.
                 }
 
                 let emit_active = d.emit_active;
@@ -555,15 +395,14 @@ pub(crate) async fn handle_event(
                         remaining as f64 / 4.0
                     } else { 0.0 };
 
-                // Write the latest band snapshot back so get_latest_bands
-                // can read it without any lock contention from DSP.
+                // Write the latest band snapshot back.
                 {
                     let sr = app.state::<Mutex<Box<AppState>>>();
                     sr.lock_or_recover().latest_bands = Some(snap.clone());
                 }
 
                 let eligibility = serde_json::json!({
-                    "enabled":               d.dnd_enabled,
+                    "enabled":               d.enabled,
                     "focus_score":           focus_score,
                     "avg_score":             d.avg_score,
                     "sample_count":          d.sample_count,
@@ -580,7 +419,6 @@ pub(crate) async fn handle_event(
                 });
                 let _ = app.emit("dnd-eligibility", &eligibility);
                 app.state::<WsBroadcaster>().send("dnd-eligibility", &eligibility);
-                // ── End Auto DND ─────────────────────────────────────────────
 
                 let _ = app.emit("eeg-bands", &snap);
                 app.state::<WsBroadcaster>().send("eeg-bands", &snap);

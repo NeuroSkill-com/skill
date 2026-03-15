@@ -1376,7 +1376,89 @@ pub(crate) fn get_session_timeseries(
 /// This is the primary path for history view — works without SQLite epochs.
 #[tauri::command]
 pub(crate) fn get_csv_metrics(csv_path: String) -> Option<CsvMetricsResult> {
-    load_metrics_csv(std::path::Path::new(&csv_path))
+    load_csv_metrics_cached(std::path::Path::new(&csv_path))
+}
+
+/// Batch-load metrics for multiple sessions in a single IPC call.
+/// Returns a map of csv_path → CsvMetricsResult for all sessions that
+/// have data.  Timeseries are downsampled to at most `max_ts_points`
+/// (default 360) to keep the payload small for sparklines and heatmaps.
+#[tauri::command]
+pub(crate) fn get_day_metrics_batch(
+    csv_paths: Vec<String>,
+    max_ts_points: Option<usize>,
+) -> std::collections::HashMap<String, CsvMetricsResult> {
+    let cap = max_ts_points.unwrap_or(360);
+    let mut out = std::collections::HashMap::with_capacity(csv_paths.len());
+    for path in &csv_paths {
+        if let Some(mut result) = load_csv_metrics_cached(std::path::Path::new(path)) {
+            downsample_timeseries(&mut result.timeseries, cap);
+            out.insert(path.clone(), result);
+        }
+    }
+    out
+}
+
+/// Downsample a timeseries to at most `max` points using LTTB-like
+/// uniform stride selection (keeps first and last).
+fn downsample_timeseries(ts: &mut Vec<EpochRow>, max: usize) {
+    let n = ts.len();
+    if n <= max || max < 2 { return; }
+    let step = (n - 1) as f64 / (max - 1) as f64;
+    let mut sampled = Vec::with_capacity(max);
+    for i in 0..max {
+        let idx = (i as f64 * step).round() as usize;
+        sampled.push(ts[idx.min(n - 1)].clone());
+    }
+    *ts = sampled;
+}
+
+// ── Disk cache for pre-computed metrics ────────────────────────────────────────
+
+/// Cache file path: `muse_XXX.csv` → `muse_XXX_metrics_cache.json`
+fn metrics_cache_path(csv_path: &std::path::Path) -> std::path::PathBuf {
+    let stem = csv_path.file_stem().and_then(|s| s.to_str()).unwrap_or("muse");
+    csv_path.with_file_name(format!("{stem}_metrics_cache.json"))
+}
+
+/// Load metrics from disk cache if valid, otherwise compute from CSV and cache.
+fn load_csv_metrics_cached(csv_path: &std::path::Path) -> Option<CsvMetricsResult> {
+    let metrics_csv = metrics_csv_path(csv_path);
+    if !metrics_csv.exists() { return None; }
+
+    let cache_path = metrics_cache_path(csv_path);
+
+    // Check if cache exists and is newer than the metrics CSV.
+    if cache_path.exists() {
+        let csv_mtime = std::fs::metadata(&metrics_csv).ok()
+            .and_then(|m| m.modified().ok());
+        let cache_mtime = std::fs::metadata(&cache_path).ok()
+            .and_then(|m| m.modified().ok());
+        if let (Some(cm), Some(ca)) = (csv_mtime, cache_mtime) {
+            if ca >= cm {
+                // Cache is fresh — read it.
+                if let Ok(data) = std::fs::read(&cache_path) {
+                    if let Ok(result) = serde_json::from_slice::<CsvMetricsResult>(&data) {
+                        return Some(result);
+                    }
+                }
+            }
+        }
+    }
+
+    // Cache miss — compute from CSV.
+    let result = load_metrics_csv(csv_path)?;
+
+    // Write cache asynchronously (best-effort).
+    let cache_path_owned = cache_path.to_path_buf();
+    let result_clone = result.clone();
+    std::thread::spawn(move || {
+        if let Ok(json) = serde_json::to_vec(&result_clone) {
+            let _ = std::fs::write(&cache_path_owned, json);
+        }
+    });
+
+    Some(result)
 }
 
 /// Open the session comparison window (or focus it if already open).

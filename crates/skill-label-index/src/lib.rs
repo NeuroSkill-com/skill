@@ -136,17 +136,11 @@ fn blob_to_f32s(b: Vec<u8>) -> Vec<f32> {
 }
 
 /// List all valid `YYYYMMDD` sub-directories under `skill_dir`.
+///
+/// Delegates to [`skill_data::util::date_dirs`].
+#[inline]
 fn date_dirs(skill_dir: &Path) -> Vec<(String, PathBuf)> {
-    let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(skill_dir) else { return out };
-    for entry in rd.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.len() == 8 && name.chars().all(|c| c.is_ascii_digit()) {
-            out.push((name, entry.path()));
-        }
-    }
-    out.sort_by(|a, b| a.0.cmp(&b.0));
-    out
+    skill_data::util::date_dirs(skill_dir)
 }
 
 /// Fetch EEG embeddings from every `eeg.sqlite` whose date overlaps
@@ -164,9 +158,7 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64)
     for (_date, dir) in date_dirs(skill_dir) {
         let db_path = dir.join(SQLITE_FILE);
         if !db_path.exists() { continue; }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(
-            &db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) else { continue };
+        let Ok(conn) = skill_data::util::open_readonly(&db_path) else { continue };
 
         let mut stmt = match conn.prepare(
             "SELECT eeg_embedding FROM embeddings \
@@ -218,9 +210,7 @@ fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64)
     for (_date, dir) in date_dirs(skill_dir) {
         let db_path = dir.join(SQLITE_FILE);
         if !db_path.exists() { continue; }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(
-            &db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) else { continue };
+        let Ok(conn) = skill_data::util::open_readonly(&db_path) else { continue };
 
         let mut stmt = match conn.prepare(
             "SELECT json_extract(metrics_json, '$.relaxation_score'),
@@ -291,9 +281,7 @@ struct LabelRow {
 }
 
 fn read_label_rows(labels_db: &Path) -> Vec<LabelRow> {
-    let Ok(conn) = rusqlite::Connection::open_with_flags(
-        labels_db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ) else { return vec![] };
+    let Ok(conn) = skill_data::util::open_readonly(labels_db) else { return vec![] };
 
     let mut stmt = match conn.prepare(
         "SELECT id, text, context, eeg_start, eeg_end, created_at,
@@ -319,9 +307,7 @@ fn read_label_rows(labels_db: &Path) -> Vec<LabelRow> {
 }
 
 fn fetch_label_by_id(labels_db: &Path, label_id: i64) -> Option<LabelRow> {
-    let conn = rusqlite::Connection::open_with_flags(
-        labels_db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ).ok()?;
+    let conn = skill_data::util::open_readonly(labels_db).ok()?;
     conn.query_row(
         "SELECT id, text, context, eeg_start, eeg_end, created_at,
                 embedding_model, text_embedding, context_embedding

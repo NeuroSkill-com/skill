@@ -467,20 +467,12 @@ fn encode_webp(raw_bytes: &[u8], _quality: u8, out_path: &Path) -> Option<u64> {
 ///
 /// All timestamps in the screenshot system are **UTC** — matching the EEG
 /// embedding pipeline's `YYYYMMDDHHmmss` convention.  `chrono::DateTime::from_timestamp`
-/// returns `DateTime<Utc>`, so the formatted string is always in UTC regardless
-/// of the system's local timezone.
+/// Returns `("YYYYMMDDHHmmss", unix_secs)` — always UTC.
+///
+/// Delegates to [`skill_data::util::yyyymmddhhmmss_utc_str`].
+#[inline]
 fn yyyymmddhhmmss_utc() -> (String, u64) {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let unix_ts = now.as_secs();
-
-    // chrono::DateTime::from_timestamp returns DateTime<Utc> — always UTC.
-    let dt = chrono::DateTime::from_timestamp(unix_ts as i64, 0)
-        .unwrap_or_default();
-    let ts_str = dt.format("%Y%m%d%H%M%S").to_string();
-
-    (ts_str, unix_ts)
+    skill_data::util::yyyymmddhhmmss_utc_str()
 }
 
 // ── HNSW helpers ──────────────────────────────────────────────────────────────
@@ -492,48 +484,54 @@ fn fresh_hnsw() -> LabeledIndex<Cosine, i64> {
         .build_labeled(Cosine)
 }
 
-fn load_or_rebuild_hnsw(
-    skill_dir: &Path,
-    store: &ScreenshotStore,
+/// Generic load-or-rebuild for any HNSW index backed by an embedding-fetch closure.
+fn load_or_rebuild_hnsw_generic(
+    skill_dir:  &Path,
+    hnsw_file:  &str,
+    label:      &str,
+    fetch_rows: impl FnOnce() -> Vec<(i64, Vec<f32>)>,
 ) -> LabeledIndex<Cosine, i64> {
-    let hnsw_path = skill_dir.join(SCREENSHOTS_HNSW);
+    let hnsw_path = skill_dir.join(hnsw_file);
     if hnsw_path.exists() {
         match LabeledIndex::<Cosine, i64>::load(&hnsw_path, Cosine) {
             Ok(idx) => {
-                eprintln!("[screenshot] loaded HNSW from {}", hnsw_path.display());
+                eprintln!("[screenshot] loaded {label} HNSW from {}", hnsw_path.display());
                 return idx;
             }
             Err(e) => {
-                eprintln!("[screenshot] HNSW load error: {e} — rebuilding");
+                eprintln!("[screenshot] {label} HNSW load error: {e} — rebuilding");
             }
         }
     }
-
-    rebuild_hnsw_from_sqlite(store, skill_dir)
-}
-
-fn rebuild_hnsw_from_sqlite(
-    store: &ScreenshotStore,
-    skill_dir: &Path,
-) -> LabeledIndex<Cosine, i64> {
     let mut idx = fresh_hnsw();
-    let rows = store.all_embeddings();
-    eprintln!("[screenshot] rebuilding HNSW from {} embeddings", rows.len());
+    let rows = fetch_rows();
+    eprintln!("[screenshot] rebuilding {label} HNSW from {} embeddings", rows.len());
     for (ts, emb) in &rows {
         idx.insert(emb.clone(), *ts);
     }
-    let hnsw_path = skill_dir.join(SCREENSHOTS_HNSW);
     if let Err(e) = idx.save(&hnsw_path) {
-        eprintln!("[screenshot] HNSW save error: {e}");
+        eprintln!("[screenshot] {label} HNSW save error: {e}");
     }
     idx
 }
 
-fn save_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
-    let path = skill_dir.join(SCREENSHOTS_HNSW);
+/// Save an HNSW index to `skill_dir/hnsw_file`.
+fn save_hnsw_to(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path, hnsw_file: &str, label: &str) {
+    let path = skill_dir.join(hnsw_file);
     if let Err(e) = idx.save(&path) {
-        eprintln!("[screenshot] HNSW save error: {e}");
+        eprintln!("[screenshot] {label} HNSW save error: {e}");
     }
+}
+
+fn load_or_rebuild_hnsw(
+    skill_dir: &Path,
+    store: &ScreenshotStore,
+) -> LabeledIndex<Cosine, i64> {
+    load_or_rebuild_hnsw_generic(skill_dir, SCREENSHOTS_HNSW, "vision", || store.all_embeddings())
+}
+
+fn save_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
+    save_hnsw_to(idx, skill_dir, SCREENSHOTS_HNSW, "vision");
 }
 
 // ── fastembed image embedder ──────────────────────────────────────────────────
@@ -726,43 +724,11 @@ fn load_or_rebuild_ocr_hnsw(
     skill_dir: &Path,
     store: &ScreenshotStore,
 ) -> LabeledIndex<Cosine, i64> {
-    let hnsw_path = skill_dir.join(SCREENSHOTS_OCR_HNSW);
-    if hnsw_path.exists() {
-        match LabeledIndex::<Cosine, i64>::load(&hnsw_path, Cosine) {
-            Ok(idx) => {
-                eprintln!("[screenshot] loaded OCR HNSW from {}", hnsw_path.display());
-                return idx;
-            }
-            Err(e) => {
-                eprintln!("[screenshot] OCR HNSW load error: {e} — rebuilding");
-            }
-        }
-    }
-    rebuild_ocr_hnsw_from_sqlite(store, skill_dir)
-}
-
-fn rebuild_ocr_hnsw_from_sqlite(
-    store: &ScreenshotStore,
-    skill_dir: &Path,
-) -> LabeledIndex<Cosine, i64> {
-    let mut idx = fresh_hnsw();
-    let rows = store.all_ocr_embeddings();
-    eprintln!("[screenshot] rebuilding OCR HNSW from {} embeddings", rows.len());
-    for (ts, emb) in &rows {
-        idx.insert(emb.clone(), *ts);
-    }
-    let hnsw_path = skill_dir.join(SCREENSHOTS_OCR_HNSW);
-    if let Err(e) = idx.save(&hnsw_path) {
-        eprintln!("[screenshot] OCR HNSW save error: {e}");
-    }
-    idx
+    load_or_rebuild_hnsw_generic(skill_dir, SCREENSHOTS_OCR_HNSW, "OCR", || store.all_ocr_embeddings())
 }
 
 fn save_ocr_hnsw(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
-    let path = skill_dir.join(SCREENSHOTS_OCR_HNSW);
-    if let Err(e) = idx.save(&path) {
-        eprintln!("[screenshot] OCR HNSW save error: {e}");
-    }
+    save_hnsw_to(idx, skill_dir, SCREENSHOTS_OCR_HNSW, "OCR");
 }
 
 // ── Screenshot event payload ──────────────────────────────────────────────────

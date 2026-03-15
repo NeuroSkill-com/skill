@@ -684,10 +684,14 @@ pub(crate) fn delete_session(csv_path: String) -> Result<(), String> {
     let json = csv.with_extension("json");
     let ppg  = ppg_csv_path(&csv);
     let met  = metrics_csv_path(&csv);
-    if csv.exists()  { std::fs::remove_file(&csv).map_err(|e| e.to_string())?; }
-    if json.exists() { std::fs::remove_file(&json).map_err(|e| e.to_string())?; }
-    if ppg.exists()  { std::fs::remove_file(&ppg).map_err(|e| e.to_string())?; }
-    if met.exists()  { std::fs::remove_file(&met).map_err(|e| e.to_string())?; }
+    // Metrics cache: muse_XXX_metrics_cache.json
+    let stem = csv.file_stem().and_then(|s| s.to_str()).unwrap_or("muse");
+    let cache = csv.with_file_name(format!("{stem}_metrics_cache.json"));
+    if csv.exists()   { std::fs::remove_file(&csv).map_err(|e| e.to_string())?; }
+    if json.exists()  { std::fs::remove_file(&json).map_err(|e| e.to_string())?; }
+    if ppg.exists()   { std::fs::remove_file(&ppg).map_err(|e| e.to_string())?; }
+    if met.exists()   { std::fs::remove_file(&met).map_err(|e| e.to_string())?; }
+    if cache.exists() { let _ = std::fs::remove_file(&cache); }
     Ok(())
 }
 

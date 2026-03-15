@@ -117,7 +117,7 @@ pub(crate) use session_analysis::{
 };
 use session_analysis::{
     get_sleep_stages, compute_umap_compare, enqueue_umap_compare, poll_job,
-    get_session_metrics, get_session_timeseries, get_csv_metrics,
+    get_session_metrics, get_session_timeseries, get_csv_metrics, get_day_metrics_batch,
     open_compare_window, open_compare_window_with_sessions,
 };
 
@@ -1879,7 +1879,7 @@ pub fn run() {
             open_history_window, list_sessions, list_session_days, list_sessions_for_day,
             stream_sessions, get_history_stats, delete_session,
             open_compare_window, open_compare_window_with_sessions,
-            get_session_metrics, get_session_timeseries, get_csv_metrics,
+            get_session_metrics, get_session_timeseries, get_csv_metrics, get_day_metrics_batch,
             list_embedding_sessions, get_sleep_stages,
             compute_umap_compare, enqueue_umap_compare, poll_job,
             get_label_shortcut, set_label_shortcut,

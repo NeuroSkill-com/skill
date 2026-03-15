@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use fast_hnsw::{distance::Cosine, labeled::LabeledIndex};
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::params;
 use serde::Serialize;
 
 use skill_constants::{HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE};
@@ -1596,10 +1596,7 @@ pub fn get_labels_near(labels_db: &Path, ts_unix: u64, window_secs: u64) -> Vec<
 
 /// Fetch the `text_embedding` BLOB for one label (read-only, no metrics).
 pub fn get_found_label_embedding(labels_db: &Path, label_id: i64) -> Option<Vec<f32>> {
-    let conn = Connection::open_with_flags(
-        labels_db,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ).ok()?;
+    let conn = skill_data::util::open_readonly(labels_db).ok()?;
     let blob: Option<Vec<u8>> = conn.query_row(
         "SELECT text_embedding FROM labels WHERE id = ?1",
         params![label_id],

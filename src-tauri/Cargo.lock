@@ -9382,6 +9382,7 @@ dependencies = [
  "serde",
  "serde_json",
  "skill-constants",
+ "skill-data",
  "skill-eeg",
 ]
 
@@ -9462,6 +9463,7 @@ dependencies = [
  "serde_json",
  "skill-commands",
  "skill-constants",
+ "skill-data",
  "skill-settings",
 ]
 
