@@ -306,7 +306,26 @@ impl ScreenshotStore {
         }).unwrap().filter_map(|r| r.ok()).collect()
     }
 
-    /// Find screenshots by timestamp range.
+    /// Find a screenshot by its exact YYYYMMDDHHmmss timestamp (HNSW payload).
+    pub fn find_by_timestamp(&self, ts: i64) -> Option<ScreenshotResult> {
+        let conn = self.conn.lock_or_recover();
+        conn.query_row(
+            "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text
+             FROM screenshots WHERE timestamp = ?1",
+            params![ts],
+            |r| Ok(ScreenshotResult {
+                timestamp:    r.get(0)?,
+                unix_ts:      r.get::<_, i64>(1)? as u64,
+                filename:     r.get(2)?,
+                app_name:     r.get(3)?,
+                window_title: r.get(4)?,
+                ocr_text:     r.get::<_, String>(5).unwrap_or_default(),
+                similarity:   0.0,
+            }),
+        ).ok()
+    }
+
+    /// Find screenshots by unix timestamp range.
     pub fn around_timestamp(&self, ts: i64, window_secs: i32) -> Vec<ScreenshotResult> {
         let conn = self.conn.lock_or_recover();
         let lo = ts - window_secs as i64;

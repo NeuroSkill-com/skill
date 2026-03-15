@@ -1227,23 +1227,11 @@ pub fn search_by_vector(
 ) -> Vec<ScreenshotResult> {
     let ef = k.max(100); // ef >= k for good recall
     let results = hnsw.search(query, k, ef);
-    results.iter().map(|r| {
-        let ts = *r.payload;
-        let around = store.around_timestamp(ts, 1);
-        if let Some(mut sr) = around.into_iter().next() {
-            sr.similarity = 1.0 - r.distance; // cosine distance → similarity
-            sr
-        } else {
-            ScreenshotResult {
-                timestamp: ts,
-                unix_ts: 0,
-                filename: String::new(),
-                app_name: String::new(),
-                window_title: String::new(),
-                ocr_text: String::new(),
-                similarity: 1.0 - r.distance,
-            }
-        }
+    results.iter().filter_map(|r| {
+        let ts = *r.payload; // YYYYMMDDHHmmss
+        let mut sr = store.find_by_timestamp(ts)?;
+        sr.similarity = 1.0 - r.distance; // cosine distance → similarity
+        Some(sr)
     }).collect()
 }
 

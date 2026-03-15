@@ -2945,6 +2945,8 @@ const en: Record<string, string> = {
   "screenshots.ocrSearchTitle":                  "Search by Screen Text",
   "screenshots.ocrSearchPlaceholder":            "Search text visible in screenshots…",
   "screenshots.ocrSearchBtn":                    "Search",
+  "screenshots.ocrModeSubstring":                "Text Match",
+  "screenshots.ocrModeSemantic":                 "Semantic",
   "screenshots.ocrNoResults":                    "No matching screenshots found.",
 
   "screenshots.perfTitle":                        "Pipeline Performance",
