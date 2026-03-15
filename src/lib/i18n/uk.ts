@@ -2377,6 +2377,18 @@ const uk: Record<string, string> = {
   "chat.btn.params":                    "Параметри",
   "chat.btn.startServer":               "Запустити LLM-сервер",
   "chat.btn.send":                      "Надіслати повідомлення",
+
+  "chat.sidebar.chats":                 "Чати",
+  "chat.sidebar.newConvo":              "Нова розмова",
+  "chat.sidebar.empty":                 "Ще немає розмов.\nПочніть чат, щоб створити одну.",
+  "chat.sidebar.justNow":              "щойно",
+  "chat.sidebar.yesterday":            "вчора",
+  "chat.sidebar.archive":              "Архівувати",
+  "chat.sidebar.archiveSection":       "Архів",
+  "chat.sidebar.archiveEmpty":         "Немає архівованих розмов.",
+  "chat.sidebar.restore":             "Відновити",
+  "chat.sidebar.deletePermanent":     "Видалити назавжди",
+
   "chat.systemPrompt":                  "Системний промпт",
   "chat.systemPrompt.chars":            "{n} симв.",
   "chat.systemPrompt.reset":            "Скинути до стандарту",

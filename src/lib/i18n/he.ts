@@ -2211,6 +2211,18 @@ const he: Record<string, string> = {
   "chat.btn.params":                    "פרמטרים",
   "chat.btn.startServer":               "הפעל שרת LLM",
   "chat.btn.send":                      "שלח הודעה",
+
+  "chat.sidebar.chats":                 "שיחות",
+  "chat.sidebar.newConvo":              "שיחה חדשה",
+  "chat.sidebar.empty":                 "אין שיחות עדיין.\nהתחל לשוחח כדי ליצור אחת.",
+  "chat.sidebar.justNow":              "הרגע",
+  "chat.sidebar.yesterday":            "אתמול",
+  "chat.sidebar.archive":              "העבר לארכיון",
+  "chat.sidebar.archiveSection":       "ארכיון",
+  "chat.sidebar.archiveEmpty":         "אין שיחות בארכיון.",
+  "chat.sidebar.restore":             "שחזר",
+  "chat.sidebar.deletePermanent":     "מחק לצמיתות",
+
   "chat.systemPrompt":                  "הנחיית מערכת",
   "chat.systemPrompt.chars":            "{n} תווים",
   "chat.systemPrompt.reset":            "איפוס לברירת מחדל",

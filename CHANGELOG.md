@@ -28,6 +28,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Tools removed from parameters panel**: the tool allow-list and execution mode selector have been removed from the parameters/settings slide-in panel. Tools are now configured exclusively via the dedicated tools panel opened by the tools badge button in the header, eliminating duplicate UI.
 
+- **Chat session archive (soft-delete)**: the default action on chat sessions is now "archive" (box icon) instead of permanent delete. Archived sessions are hidden from the main conversation list and collected in a collapsible "Archive" section at the bottom of the sidebar. From the archive, users can restore a session back to the main list or permanently delete it. Backend adds an `archived` column to `chat_sessions` with seamless migration of existing databases.
+
 - **Model name moved to titlebar**: the active model name is now shown in the header drag region (acting as the window title), freeing horizontal space for badges and controls. The footer hint no longer repeats the model name.
 
 - **Deduplicated tools UI**: when the dedicated tools panel is open, the tools allow-list in the parameters/settings panel is automatically hidden to avoid showing the same controls in two places simultaneously.

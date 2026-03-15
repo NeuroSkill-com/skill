@@ -2378,6 +2378,18 @@ const de: Record<string, string> = {
   "chat.btn.params":                    "Parameter",
   "chat.btn.startServer":               "LLM-Server starten",
   "chat.btn.send":                      "Nachricht senden",
+
+  "chat.sidebar.chats":                 "Chats",
+  "chat.sidebar.newConvo":              "Neue Unterhaltung",
+  "chat.sidebar.empty":                 "Noch keine Unterhaltungen.\nStarte einen Chat, um eine zu erstellen.",
+  "chat.sidebar.justNow":              "gerade eben",
+  "chat.sidebar.yesterday":            "gestern",
+  "chat.sidebar.archive":              "Archivieren",
+  "chat.sidebar.archiveSection":       "Archiv",
+  "chat.sidebar.archiveEmpty":         "Keine archivierten Unterhaltungen.",
+  "chat.sidebar.restore":             "Wiederherstellen",
+  "chat.sidebar.deletePermanent":     "Endgültig löschen",
+
   "chat.systemPrompt":                  "Systemprompt",
   "chat.systemPrompt.chars":            "{n} Zeichen",
   "chat.systemPrompt.reset":            "Auf Standard zurücksetzen",

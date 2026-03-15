@@ -19,7 +19,8 @@
         "center": true,
         "visible": false,
         "skipTaskbar": true,
-        "decorations": false
+        "decorations": false,
+        "transparent": true
       }
     ],
     "security": {

@@ -2378,6 +2378,18 @@ const fr: Record<string, string> = {
   "chat.btn.params":                    "Paramètres",
   "chat.btn.startServer":               "Démarrer le serveur LLM",
   "chat.btn.send":                      "Envoyer le message",
+
+  "chat.sidebar.chats":                 "Discussions",
+  "chat.sidebar.newConvo":              "Nouvelle conversation",
+  "chat.sidebar.empty":                 "Aucune conversation.\nCommencez à discuter pour en créer une.",
+  "chat.sidebar.justNow":              "à l'instant",
+  "chat.sidebar.yesterday":            "hier",
+  "chat.sidebar.archive":              "Archiver",
+  "chat.sidebar.archiveSection":       "Archives",
+  "chat.sidebar.archiveEmpty":         "Aucune conversation archivée.",
+  "chat.sidebar.restore":             "Restaurer",
+  "chat.sidebar.deletePermanent":     "Supprimer définitivement",
+
   "chat.systemPrompt":                  "Système d'invitation",
   "chat.systemPrompt.chars":            "{n} voiture.",
   "chat.systemPrompt.reset":            "Réinitialiser",

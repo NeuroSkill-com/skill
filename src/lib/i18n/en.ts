@@ -2562,6 +2562,17 @@ const en: Record<string, string> = {
   "chat.btn.startServer":               "Start LLM server",
   "chat.btn.send":                      "Send message",
 
+  "chat.sidebar.chats":                 "Chats",
+  "chat.sidebar.newConvo":              "New conversation",
+  "chat.sidebar.empty":                 "No conversations yet.\nStart chatting to create one.",
+  "chat.sidebar.justNow":              "just now",
+  "chat.sidebar.yesterday":            "yesterday",
+  "chat.sidebar.archive":              "Archive",
+  "chat.sidebar.archiveSection":       "Archive",
+  "chat.sidebar.archiveEmpty":         "No archived conversations.",
+  "chat.sidebar.restore":             "Restore",
+  "chat.sidebar.deletePermanent":     "Delete permanently",
+
   "chat.systemPrompt":                  "System prompt",
   "chat.systemPrompt.chars":            "{n} chars",
   "chat.systemPrompt.reset":            "Reset to default",

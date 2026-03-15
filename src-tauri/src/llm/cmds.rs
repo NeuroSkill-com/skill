@@ -773,6 +773,38 @@ pub fn delete_chat_session(
     store.delete_session(id);
 }
 
+/// Archive a session (soft-delete — keeps data but hides from main list).
+#[tauri::command]
+pub fn archive_chat_session(
+    id:    i64,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    store.archive_session(id);
+}
+
+/// Restore an archived session back to the main list.
+#[tauri::command]
+pub fn unarchive_chat_session(
+    id:    i64,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    store.unarchive_session(id);
+}
+
+/// Return all archived sessions.
+#[tauri::command]
+pub fn list_archived_chat_sessions(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Vec<super::chat_store::SessionSummary> {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.llm.chat_store.as_mut() else { return vec![]; };
+    store.list_archived_sessions()
+}
+
 /// Append a single message to a chat session.
 /// Returns the new message row id, or 0 if the store is unavailable.
 #[tauri::command]

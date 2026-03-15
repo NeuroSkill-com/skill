@@ -173,12 +173,16 @@ impl ChatStore {
         let _ = conn.execute_batch(
             "ALTER TABLE chat_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '';",
         );
+        // Migration: add archived column (0 = active, 1 = archived).
+        let _ = conn.execute_batch(
+            "ALTER TABLE chat_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;",
+        );
         Some(ChatStore { conn })
     }
 
     // ── Session list / rename / delete ────────────────────────────────────────
 
-    /// Return all sessions newest-first, with preview text and message count.
+    /// Return all non-archived sessions newest-first, with preview text and message count.
     pub fn list_sessions(&mut self) -> Vec<SessionSummary> {
         let mut stmt = match self.conn.prepare(
             "SELECT
@@ -196,6 +200,7 @@ impl ChatStore {
                  (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id)
                      AS message_count
              FROM chat_sessions s
+             WHERE COALESCE(s.archived, 0) = 0
              ORDER BY s.id DESC
              LIMIT 300",
         ) {
@@ -231,6 +236,60 @@ impl ChatStore {
         let _ = self.conn.execute(
             "DELETE FROM chat_sessions WHERE id = ?1", params![id],
         );
+    }
+
+    /// Archive a session (soft-delete).
+    pub fn archive_session(&mut self, id: i64) {
+        let _ = self.conn.execute(
+            "UPDATE chat_sessions SET archived = 1 WHERE id = ?1",
+            params![id],
+        );
+    }
+
+    /// Unarchive (restore) a session.
+    pub fn unarchive_session(&mut self, id: i64) {
+        let _ = self.conn.execute(
+            "UPDATE chat_sessions SET archived = 0 WHERE id = ?1",
+            params![id],
+        );
+    }
+
+    /// Return all archived sessions newest-first.
+    pub fn list_archived_sessions(&mut self) -> Vec<SessionSummary> {
+        let mut stmt = match self.conn.prepare(
+            "SELECT
+                 s.id,
+                 COALESCE(s.title, '') AS title,
+                 COALESCE(
+                     SUBSTR(
+                         (SELECT content FROM chat_messages
+                          WHERE session_id = s.id AND role = 'user'
+                          ORDER BY id ASC LIMIT 1),
+                         1, 80
+                     ), ''
+                 ) AS preview,
+                 s.created_at,
+                 (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id)
+                     AS message_count
+             FROM chat_sessions s
+             WHERE s.archived = 1
+             ORDER BY s.id DESC
+             LIMIT 300",
+        ) {
+            Ok(s)  => s,
+            Err(_) => return Vec::new(),
+        };
+        stmt.query_map([], |row| {
+            Ok(SessionSummary {
+                id:            row.get(0)?,
+                title:         row.get(1)?,
+                preview:       row.get(2)?,
+                created_at:    row.get(3)?,
+                message_count: row.get(4)?,
+            })
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
     }
 
     /// Return the `id` of the most recent session, creating a fresh one if
