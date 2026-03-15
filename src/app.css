@@ -222,6 +222,7 @@
     height: 100vh;
     overflow: hidden;   /* the <main> scroll container handles scrolling */
     user-select: none;
+    border-radius: 10px;
   }
 
   input[type="checkbox"],
@@ -509,4 +510,6 @@
   padding-top: 30px;
   height: 100vh;
   box-sizing: border-box;
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
 }

@@ -1401,7 +1401,7 @@
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <!-- Root container (full window height, dark/light theme-aware)                -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
-<div class="flex h-full min-h-0 bg-background text-foreground overflow-hidden">
+<div class="flex h-full min-h-0 bg-background text-foreground overflow-hidden rounded-b-[10px]">
 
   <!-- ── Conversation sidebar ───────────────────────────────────────────── -->
   {#if sidebarOpen}
