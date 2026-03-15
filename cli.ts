@@ -1653,6 +1653,28 @@ async function cmdStatus(args: Args): Promise<void> {
       }
     }
 
+    // ── Hooks ─────────────────────────────────────────────────────────────
+    if (r.hooks && typeof r.hooks === "object") {
+      const h = r.hooks;
+      print("");
+      print(`  ${BOLD}Hooks${RESET}  ${DIM}(${h.total ?? 0} total, ${h.enabled ?? 0} enabled)${RESET}`);
+
+      const lt = h.latest_trigger;
+      if (lt && lt.triggered_at_utc) {
+        const when = fmtTs(lt.triggered_at_utc);
+        const ago  = Math.floor(Date.now() / 1000) - lt.triggered_at_utc;
+        const agoStr = fmtDur(ago);
+        const distStr = typeof lt.distance === "number" ? lt.distance.toFixed(4) : "?";
+        const distColor = typeof lt.distance === "number" && lt.distance < 0.1 ? GREEN : CYAN;
+        print(`  ${DIM}latest:${RESET} ${YELLOW}${lt.hook}${RESET}  ${DIM}${when}${RESET}  ${DIM}(${agoStr} ago)${RESET}`);
+        print(`  ${DIM}  dist:${RESET} ${distColor}${distStr}${RESET}`
+          + (lt.label_text ? `  ${DIM}label:${RESET} ${GREEN}"${lt.label_text}"${RESET}` : "")
+          + (lt.label_id   != null ? `  ${DIM}id:${RESET} ${CYAN}${lt.label_id}${RESET}` : ""));
+      } else {
+        print(`  ${DIM}latest: never triggered${RESET}`);
+      }
+    }
+
     // ── Sleep (48 h summary) ─────────────────────────────────────────────
     if (r.sleep) {
       const s = r.sleep;

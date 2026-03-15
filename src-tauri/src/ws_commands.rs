@@ -523,6 +523,31 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
     let gyro                   = status.gyro;
     let fuel_gauge_mv          = status.fuel_gauge_mv;
     let temperature_raw        = status.temperature_raw;
+
+    // ── Hooks — most recent trigger across all hooks ─────────────────────────
+    let hooks_summary = {
+        let runtime = guard.hook_runtime.lock_or_recover();
+        let total_hooks   = guard.hooks.len();
+        let enabled_hooks = guard.hooks.iter().filter(|h| h.enabled).count();
+
+        // Find the most recent trigger across all hooks.
+        let latest: Option<(&String, &crate::settings::HookLastTrigger)> = runtime.iter()
+            .filter(|(_, t)| t.triggered_at_utc > 0)
+            .max_by_key(|(_, t)| t.triggered_at_utc);
+
+        serde_json::json!({
+            "total":   total_hooks,
+            "enabled": enabled_hooks,
+            "latest_trigger": latest.map(|(name, t)| serde_json::json!({
+                "hook":             name,
+                "triggered_at_utc": t.triggered_at_utc,
+                "distance":         t.distance,
+                "label_id":         t.label_id,
+                "label_text":       t.label_text,
+            })),
+        })
+    };
+
     drop(guard);
 
     // ── Embedding totals (filesystem scan, outside lock) ─────────────────────
@@ -626,6 +651,7 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
                 .unwrap_or(Value::Null),
             None => Value::Null,
         },
+        "hooks": hooks_summary,
         "history": history_json,
     }))
 }

@@ -8,9 +8,13 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Server
 
+- **Hooks summary in `status` response**: the `status` WebSocket command now includes a `hooks` object with `total` (configured hooks), `enabled` (active hooks), and `latest_trigger` — the most recent hook trigger across all hooks, containing hook name, `triggered_at_utc`, cosine `distance`, `label_id`, and `label_text`. Returns `null` for `latest_trigger` if no hook has ever fired.
+
 - **Enriched hook trigger broadcast**: the `hook` WebSocket broadcast event now includes full trigger context — `scenario`, `distance` (cosine distance to matched reference), `label_id`, `label_text`, and `triggered_at_utc` — in addition to the existing `hook`, `command`, `text`, and `context` fields. Previously these details were only available in the audit log; now any WebSocket listener receives the complete trigger context in real time.
 
 ### CLI
+
+- **Latest hook trigger in `status`**: the `status` summary now includes a Hooks section showing total/enabled hook count, the name of the last-triggered hook, when it fired (with time-ago), cosine distance, and the matched label text/id. Available via `node cli.ts status --json | jq '.hooks.latest_trigger'`.
 
 - **Hook trigger display in `listen`**: the `listen` command now renders a dedicated 🪝 Hook Triggers section when hook events are received during the listen window. Shows hook name, scenario, cosine distance, matched label text/id, and configured command/text. Makes it easy to observe and debug Proactive Hook behavior from the terminal.
 

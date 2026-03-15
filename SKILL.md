@@ -220,12 +220,14 @@ summary**. It is only visible with `--full` (colorized) or `--json` (plain).
 | `scores.faa`, `scores.tar`, `scores.bar` … | numbers | EEG ratios and spectral indices not surfaced in the summary's Scores section |
 | `calibration.actions[]` | array | Full ordered list of calibration step objects (name, duration, …) |
 | `labels.recent[]` | array | Full label objects; summary only prints text + timestamp |
+| `hooks.latest_trigger` | object | Most recent hook trigger across all hooks: `{ hook, triggered_at_utc, distance, label_id, label_text }`. The summary shows hook name, timestamp, and distance; the JSON has the full object. |
 | `history.today_vs_avg` | object | Per-metric today-vs-7-day-avg comparison table (metric, today, avg_7d, delta_pct, direction) |
 
 ```bash
 node cli.ts status --json | jq '.history.today_vs_avg'
 node cli.ts status --json | jq '.calibration.actions'
 node cli.ts status --json | jq '.labels.recent'
+node cli.ts status --json | jq '.hooks.latest_trigger'
 ```
 
 #### `session`
@@ -695,6 +697,17 @@ done
     "rem_epochs": 112,
     "epoch_secs": 5
   },
+  "hooks": {
+    "total": 3,                    // total configured hooks
+    "enabled": 2,                  // how many are enabled
+    "latest_trigger": {            // most recent trigger across all hooks (null if never)
+      "hook": "Deep Work Guard",   // hook name that fired
+      "triggered_at_utc": 1740413100,
+      "distance": 0.0892,          // cosine distance to matched reference
+      "label_id": 7,
+      "label_text": "focused reading session"
+    }
+  },
   "history": {
     "total_sessions": 63,
     "recording_days": 31,
@@ -713,7 +726,7 @@ done
 ### `status`
 
 Full snapshot: device state, session, signal quality, scores, bands, embeddings, labels,
-sleep summary, and recording history.
+hooks (with latest trigger), sleep summary, and recording history.
 
 Use `--poll <n>` to re-poll every N seconds over the same open connection
 (keeps the socket open; press Ctrl+C to stop).
@@ -727,6 +740,9 @@ node cli.ts status --json | jq '.device.battery'
 node cli.ts status --json | jq '.signal_quality'
 node cli.ts status --json | jq '.sleep'
 node cli.ts status --json | jq '.history.current_streak_days'
+node cli.ts status --json | jq '.hooks'                      # hook summary + latest trigger
+node cli.ts status --json | jq '.hooks.latest_trigger'       # most recent hook trigger
+node cli.ts status --json | jq '.hooks.latest_trigger.hook'  # which hook fired last
 node cli.ts status --poll 5              # refresh every 5 seconds
 node cli.ts status --poll 10 --json      # JSON snapshot every 10 seconds
 ```
