@@ -2608,6 +2608,7 @@ const en: Record<string, string> = {
   "chat.inputPlaceholder":              "Message… (Enter to send, Shift+Enter for newline)",
   "chat.inputPlaceholderStopped":       "Start the server first",
 
+  "chat.hint.llmWarning":               "LLM output can be inaccurate — always verify tool results and generated content.",
   "chat.hint.running":                  "Enter to send · Shift+Enter for newline",
   "chat.hint.loading":                  "Loading — check Settings → LLM for progress",
   "chat.hint.stopped":                  "Start the server in the top bar or Settings → LLM",
@@ -2636,6 +2637,8 @@ const en: Record<string, string> = {
   "chat.tools.write_fileDesc":          "Create or overwrite files",
   "chat.tools.edit_file":               "Edit file",
   "chat.tools.edit_fileDesc":           "Find-and-replace edits",
+  "chat.tools.search_output":          "Search output",
+  "chat.tools.search_outputDesc":      "Regex/grep search on bash output files",
   "chat.tools.argsLabel":               "Arguments",
   "chat.tools.resultLabel":             "Result",
   "chat.tools.unsupported":             "Tools require the model to be running",

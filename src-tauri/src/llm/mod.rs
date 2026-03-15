@@ -687,20 +687,68 @@ fn builtin_llm_tools() -> Vec<tools::Tool> {
                 })),
             },
         },
+        tools::Tool {
+            tool_type: "function".into(),
+            function: tools::ToolFunction {
+                name: "search_output".into(),
+                description: Some("Search a bash output file using regex, or retrieve lines by range. Use this to explore large command outputs without loading them into context. The output_file path is returned by the bash tool.".into()),
+                parameters: Some(json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Path to the output file (from bash tool's output_file field)"
+                        },
+                        "pattern": {
+                            "type": "string",
+                            "description": "Regex pattern to search for (case-insensitive). Omit to use head/tail mode."
+                        },
+                        "context_lines": {
+                            "type": "number",
+                            "description": "Number of context lines before and after each match (default: 2)"
+                        },
+                        "head": {
+                            "type": "number",
+                            "description": "Return the first N lines of the file"
+                        },
+                        "tail": {
+                            "type": "number",
+                            "description": "Return the last N lines of the file"
+                        },
+                        "line_start": {
+                            "type": "number",
+                            "description": "Return lines starting from this line number (1-indexed)"
+                        },
+                        "line_end": {
+                            "type": "number",
+                            "description": "Return lines up to this line number (inclusive)"
+                        },
+                        "max_matches": {
+                            "type": "number",
+                            "description": "Maximum number of matches to return (default: 50)"
+                        }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                })),
+            },
+        },
     ]
 }
 
 fn is_builtin_tool_enabled(config: &LlmToolConfig, name: &str) -> bool {
     match name {
-        "date"       => config.date,
-        "location"   => config.location,
-        "web_search" => config.web_search,
-        "web_fetch"  => config.web_fetch,
-        "bash"       => config.bash,
-        "read_file"  => config.read_file,
-        "write_file" => config.write_file,
-        "edit_file"  => config.edit_file,
-        _            => false,
+        "date"          => config.date,
+        "location"      => config.location,
+        "web_search"    => config.web_search,
+        "web_fetch"     => config.web_fetch,
+        "bash"          => config.bash,
+        "read_file"     => config.read_file,
+        "write_file"    => config.write_file,
+        "edit_file"     => config.edit_file,
+        // search_output is automatically enabled when bash is enabled
+        "search_output" => config.bash,
+        _               => false,
     }
 }
 
@@ -1223,20 +1271,52 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
                                     combined.push_str(&stderr);
                                 }
 
-                                // Truncate: keep last 2000 lines / 50 KB
-                                let truncated = truncate_tool_output(&combined, 2000, 50 * 1024);
-
                                 let exit_code = out.status.code().unwrap_or(-1);
+                                let total_lines = combined.lines().count();
+                                let total_bytes = combined.len();
+
+                                // Always save full output to a file for later search_output queries.
+                                let output_file = {
+                                    let _ = std::fs::create_dir_all(&scripts_dir);
+                                    let ts = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default();
+                                    let fname = format!("output_{}_{}.txt", ts.as_secs(), ts.subsec_millis());
+                                    let p = scripts_dir.join(&fname);
+                                    let _ = std::fs::write(&p, &combined);
+                                    p
+                                };
+
+                                // Build a compact summary: first 20 + last 20 lines if output is large.
+                                const SUMMARY_HEAD: usize = 20;
+                                const SUMMARY_TAIL: usize = 20;
+                                const INLINE_THRESHOLD: usize = 200; // lines
+                                let lines: Vec<&str> = combined.lines().collect();
+                                let (summary, was_truncated) = if lines.len() <= INLINE_THRESHOLD {
+                                    (combined.clone(), false)
+                                } else {
+                                    let head: Vec<&str> = lines.iter().take(SUMMARY_HEAD).copied().collect();
+                                    let tail: Vec<&str> = lines.iter().rev().take(SUMMARY_TAIL).copied().rev().collect();
+                                    let s = format!(
+                                        "{}\n\n… [{} lines omitted — use search_output to explore] …\n\n{}",
+                                        head.join("\n"),
+                                        lines.len() - SUMMARY_HEAD - SUMMARY_TAIL,
+                                        tail.join("\n")
+                                    );
+                                    (s, true)
+                                };
+
                                 let mut result = json!({
                                     "ok": exit_code == 0 && !timed_out,
                                     "tool": "bash",
                                     "exit_code": exit_code,
-                                    "output": truncated.text,
+                                    "output": summary,
+                                    "output_file": output_file.to_string_lossy(),
+                                    "total_lines": total_lines,
+                                    "total_bytes": total_bytes,
                                 });
-                                if truncated.was_truncated {
+                                if was_truncated {
                                     result["truncated"] = json!(true);
-                                    result["total_lines"] = json!(truncated.total_lines);
-                                    result["total_bytes"] = json!(truncated.total_bytes);
                                 }
                                 if timed_out {
                                     result["error"] = json!(format!("command timed out after {} seconds", timeout_secs.unwrap_or(0)));
@@ -1435,6 +1515,134 @@ async fn execute_builtin_tool_call(call: &tools::ToolCall, allowed_tools: &LlmTo
                     Err(e) => json!({ "ok": false, "tool": "edit_file", "error": format!("cannot write {}: {}", resolved.display(), e) }),
                 }
             }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "edit_file", "error": e.to_string() }))
+        }
+
+        "search_output" => {
+            let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            if path.is_empty() {
+                return json!({ "ok": false, "tool": "search_output", "error": "missing path" });
+            }
+            let pattern = args.get("pattern").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let context_lines = args.get("context_lines").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
+            let head_n = args.get("head").and_then(|v| v.as_u64()).map(|v| v as usize);
+            let tail_n = args.get("tail").and_then(|v| v.as_u64()).map(|v| v as usize);
+            let line_start = args.get("line_start").and_then(|v| v.as_u64()).map(|v| v as usize);
+            let line_end = args.get("line_end").and_then(|v| v.as_u64()).map(|v| v as usize);
+            let max_matches = args.get("max_matches").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+
+            tokio::task::spawn_blocking(move || {
+                let resolved = resolve_tool_path(&path);
+                let content = match std::fs::read_to_string(&resolved) {
+                    Ok(c) => c,
+                    Err(e) => return json!({ "ok": false, "tool": "search_output", "error": format!("cannot read {}: {}", resolved.display(), e) }),
+                };
+                let all_lines: Vec<&str> = content.lines().collect();
+                let total_lines = all_lines.len();
+
+                // Mode 1: Head/tail — return first or last N lines
+                if let Some(n) = head_n {
+                    let n = n.min(total_lines);
+                    let result: Vec<String> = all_lines.iter().take(n)
+                        .enumerate()
+                        .map(|(i, l)| format!("{:>6}: {}", i + 1, l))
+                        .collect();
+                    return json!({
+                        "ok": true, "tool": "search_output",
+                        "mode": "head", "total_lines": total_lines,
+                        "lines_returned": result.len(),
+                        "output": result.join("\n"),
+                    });
+                }
+                if let Some(n) = tail_n {
+                    let n = n.min(total_lines);
+                    let start = total_lines.saturating_sub(n);
+                    let result: Vec<String> = all_lines.iter().skip(start)
+                        .enumerate()
+                        .map(|(i, l)| format!("{:>6}: {}", start + i + 1, l))
+                        .collect();
+                    return json!({
+                        "ok": true, "tool": "search_output",
+                        "mode": "tail", "total_lines": total_lines,
+                        "lines_returned": result.len(),
+                        "output": result.join("\n"),
+                    });
+                }
+
+                // Mode 2: Line range
+                if let Some(start) = line_start {
+                    let start_idx = start.saturating_sub(1).min(total_lines);
+                    let end_idx = line_end.unwrap_or(start_idx + 50).min(total_lines);
+                    let result: Vec<String> = all_lines[start_idx..end_idx]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, l)| format!("{:>6}: {}", start_idx + i + 1, l))
+                        .collect();
+                    return json!({
+                        "ok": true, "tool": "search_output",
+                        "mode": "range", "total_lines": total_lines,
+                        "line_start": start_idx + 1, "line_end": end_idx,
+                        "lines_returned": result.len(),
+                        "output": result.join("\n"),
+                    });
+                }
+
+                // Mode 3: Regex search
+                if let Some(ref pat) = pattern {
+                    let re = match regex::RegexBuilder::new(pat)
+                        .case_insensitive(true)
+                        .build()
+                    {
+                        Ok(r) => r,
+                        Err(e) => return json!({ "ok": false, "tool": "search_output", "error": format!("invalid regex: {}", e) }),
+                    };
+
+                    let mut matches: Vec<String> = Vec::new();
+                    let mut match_count = 0usize;
+                    let mut last_printed = 0usize; // track last line printed to avoid overlap
+
+                    for (i, line) in all_lines.iter().enumerate() {
+                        if re.is_match(line) {
+                            match_count += 1;
+                            if match_count > max_matches { break; }
+
+                            let ctx_start = i.saturating_sub(context_lines).max(last_printed);
+                            let ctx_end = (i + context_lines + 1).min(total_lines);
+
+                            if ctx_start > last_printed && last_printed > 0 {
+                                matches.push("   ---".to_string());
+                            }
+
+                            for j in ctx_start..ctx_end {
+                                let marker = if j == i { ">" } else { " " };
+                                matches.push(format!("{}{:>5}: {}", marker, j + 1, all_lines[j]));
+                            }
+                            last_printed = ctx_end;
+                        }
+                    }
+
+                    let total_matches = if match_count > max_matches {
+                        format!("{}+ (capped at {})", max_matches, max_matches)
+                    } else {
+                        match_count.to_string()
+                    };
+
+                    return json!({
+                        "ok": true, "tool": "search_output",
+                        "mode": "regex", "pattern": pat,
+                        "total_lines": total_lines,
+                        "matches": total_matches,
+                        "output": matches.join("\n"),
+                    });
+                }
+
+                // No mode specified — return file summary
+                json!({
+                    "ok": true, "tool": "search_output",
+                    "mode": "info", "total_lines": total_lines,
+                    "total_bytes": content.len(),
+                    "hint": "Use pattern, head, tail, or line_start/line_end to explore the file.",
+                })
+            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "search_output", "error": e.to_string() }))
         }
 
         other => json!({ "ok": false, "tool": other, "error": "unsupported tool" }),
