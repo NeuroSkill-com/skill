@@ -62,34 +62,15 @@ fn capture_macos() -> Option<CapturedImage> {
 
     let tmp = std::env::temp_dir().join("skill_screenshot.png");
 
-    // Try to get the frontmost window ID via CGWindowListCopyWindowInfo.
-    // We use a small osascript snippet to get the window ID, then pass
-    // it to screencapture -l <wid> to capture only that window.
-    let window_id = Command::new("osascript")
-        .args(["-e", r#"
-            use framework "AppKit"
-            set wlist to current application's NSWorkspace's sharedWorkspace()'s frontmostApplication()'s processIdentifier() as integer
-            -- Get all windows for the frontmost app's PID via CGWindowListCopyWindowInfo
-            set output to do shell script "python3 -c \"
-import Quartz, sys
-pid = " & wlist & "
-wl = Quartz.CGWindowListCopyWindowInfo(Quartz.kCGWindowListOptionOnScreenOnly | Quartz.kCGWindowListExcludeDesktopElements, Quartz.kCGNullWindowID)
-for w in wl:
-    if w.get('kCGWindowOwnerPID', 0) == pid and w.get('kCGWindowLayer', 0) == 0:
-        print(w['kCGWindowNumber'])
-        sys.exit(0)
-\""
-            return output
-        "#])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| {
-            String::from_utf8_lossy(&o.stdout).trim().parse::<u64>().ok()
-        });
+    // Get the frontmost window ID via CoreGraphics FFI — completely silent,
+    // no cursor change, no user interaction.  Falls back to full-screen
+    // capture (also silent via `screencapture -x`) if the window ID cannot
+    // be determined.
+    let window_id = macos_frontmost_window_id();
 
     let status = if let Some(wid) = window_id {
-        // Capture the specific window by ID
+        // Capture the specific window by ID — silent, non-interactive.
+        // -x = no sound, -l <wid> = capture window by CGWindowID
         Command::new("screencapture")
             .args(["-x", "-t", "png", "-l"])
             .arg(wid.to_string())
@@ -97,9 +78,10 @@ for w in wl:
             .status()
             .ok()?
     } else {
-        // Fallback: capture the interactive frontmost window
+        // Fallback: capture the full screen silently.
+        // -x = no sound, no user interaction.
         Command::new("screencapture")
-            .args(["-x", "-t", "png", "-w", "-o"])
+            .args(["-x", "-t", "png"])
             .arg(&tmp)
             .status()
             .ok()?
@@ -115,6 +97,150 @@ for w in wl:
     let (w, h) = img.dimensions();
 
     Some(CapturedImage { raw_bytes, width: w, height: h })
+}
+
+/// Get the CGWindowID of the frontmost application's main window via
+/// CoreGraphics FFI.  Completely silent — no cursor change, no user
+/// interaction, no subprocess, sub-millisecond.
+///
+/// Uses `CGWindowListCopyWindowInfo` (linked via CoreGraphics.framework,
+/// always available on macOS) and the frontmost PID from the
+/// `NSWorkspace` shared instance (linked via AppKit.framework).
+#[cfg(target_os = "macos")]
+fn macos_frontmost_window_id() -> Option<u64> {
+    use std::ffi::c_void;
+
+    // ── CoreFoundation / CoreGraphics C types ──
+    type CFTypeRef     = *const c_void;
+    type CFArrayRef    = *const c_void;
+    type CFDictionaryRef = *const c_void;
+    type CFStringRef   = *const c_void;
+    type CFNumberRef   = *const c_void;
+    type CFIndex       = isize;
+    type CGWindowID    = u32;
+
+    const K_CF_NUMBER_SINT32_TYPE: CFIndex = 3;
+    const K_CF_NUMBER_SINT64_TYPE: CFIndex = 4;
+
+    // CGWindowListOption flags
+    const ON_SCREEN_ONLY: u32 = 1 << 0;
+    const EXCLUDE_DESKTOP: u32 = 1 << 4;
+    const K_CG_NULL_WINDOW_ID: CGWindowID = 0;
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGWindowListCopyWindowInfo(option: u32, relativeToWindow: CGWindowID) -> CFArrayRef;
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFArrayGetCount(theArray: CFArrayRef) -> CFIndex;
+        fn CFArrayGetValueAtIndex(theArray: CFArrayRef, idx: CFIndex) -> CFTypeRef;
+        fn CFDictionaryGetValue(theDict: CFDictionaryRef, key: CFTypeRef) -> CFTypeRef;
+        fn CFNumberGetValue(number: CFNumberRef, theType: CFIndex, valuePtr: *mut c_void) -> bool;
+        fn CFRelease(cf: CFTypeRef);
+
+        // Create a CFString from a C string literal — used for dictionary keys.
+        fn CFStringCreateWithCString(
+            alloc: CFTypeRef, cStr: *const u8, encoding: u32,
+        ) -> CFStringRef;
+    }
+
+    const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
+
+    /// Helper: create a CFString from a `&[u8]` C-string literal.
+    unsafe fn cfstr(s: &[u8]) -> CFStringRef {
+        CFStringCreateWithCString(std::ptr::null(), s.as_ptr(), K_CF_STRING_ENCODING_UTF8)
+    }
+
+    /// Helper: get an i32 from a CFNumber.
+    unsafe fn cfnum_i32(n: CFTypeRef) -> Option<i32> {
+        if n.is_null() { return None; }
+        let mut v: i32 = 0;
+        if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v as *mut _ as *mut c_void) {
+            Some(v)
+        } else { None }
+    }
+
+    /// Helper: get an i64 from a CFNumber (some fields may be i64).
+    unsafe fn cfnum_i64(n: CFTypeRef) -> Option<i64> {
+        if n.is_null() { return None; }
+        let mut v: i64 = 0;
+        if CFNumberGetValue(n, K_CF_NUMBER_SINT64_TYPE, &mut v as *mut _ as *mut c_void) {
+            Some(v)
+        } else {
+            // Fall back to i32
+            let mut v32: i32 = 0;
+            if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v32 as *mut _ as *mut c_void) {
+                Some(v32 as i64)
+            } else { None }
+        }
+    }
+
+    // ── Get frontmost PID from NSWorkspace ──
+    // NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier
+    // All of these are already linked via objc2-app-kit.
+    let front_pid: i32 = {
+        use objc2::runtime::AnyObject;
+        use objc2::msg_send;
+        use objc2_app_kit::NSWorkspace;
+
+        let workspace = NSWorkspace::sharedWorkspace();
+        let front_app: Option<&AnyObject> = unsafe {
+            msg_send![&workspace, frontmostApplication]
+        };
+        let front_app = front_app?;
+        let pid: i32 = unsafe { msg_send![front_app, processIdentifier] };
+        if pid <= 0 { return None; }
+        pid
+    };
+
+    unsafe {
+        let key_pid    = cfstr(b"kCGWindowOwnerPID\0");
+        let key_layer  = cfstr(b"kCGWindowLayer\0");
+        let key_number = cfstr(b"kCGWindowNumber\0");
+
+        let list = CGWindowListCopyWindowInfo(
+            ON_SCREEN_ONLY | EXCLUDE_DESKTOP,
+            K_CG_NULL_WINDOW_ID,
+        );
+        if list.is_null() {
+            CFRelease(key_pid); CFRelease(key_layer); CFRelease(key_number);
+            return None;
+        }
+
+        let count = CFArrayGetCount(list);
+        let mut result: Option<u64> = None;
+
+        for i in 0..count {
+            let dict = CFArrayGetValueAtIndex(list, i);
+            if dict.is_null() { continue; }
+
+            // Match PID
+            let pid_ref = CFDictionaryGetValue(dict, key_pid);
+            let pid = cfnum_i32(pid_ref).unwrap_or(-1);
+            if pid != front_pid { continue; }
+
+            // Layer must be 0 (normal window)
+            let layer_ref = CFDictionaryGetValue(dict, key_layer);
+            let layer = cfnum_i32(layer_ref).unwrap_or(-1);
+            if layer != 0 { continue; }
+
+            // Get window number
+            let num_ref = CFDictionaryGetValue(dict, key_number);
+            if let Some(wid) = cfnum_i64(num_ref) {
+                result = Some(wid as u64);
+                break;
+            }
+        }
+
+        CFRelease(list);
+        CFRelease(key_pid);
+        CFRelease(key_layer);
+        CFRelease(key_number);
+
+        result
+    }
 }
 
 #[cfg(target_os = "linux")]
