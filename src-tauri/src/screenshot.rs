@@ -432,7 +432,9 @@ fn resize_fit_pad(raw_bytes: &[u8], target: u32) -> Option<(Vec<u8>, u32, u32)> 
     let nw = (w as f64 * scale).round() as u32;
     let nh = (h as f64 * scale).round() as u32;
 
-    let resized = img.resize_exact(nw, nh, image::imageops::FilterType::Lanczos3);
+    // Triangle (bilinear) is ~10× faster than Lanczos3 on large images
+    // and visually indistinguishable at the target sizes used here.
+    let resized = img.resize_exact(nw, nh, image::imageops::FilterType::Triangle);
 
     // Center-pad to target × target
     let mut canvas = DynamicImage::new_rgb8(target, target);
@@ -656,30 +658,16 @@ fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
     }).ok()
 }
 
-/// Run OCR on raw image bytes (PNG/JPEG/WebP).  Returns the extracted text.
+/// Run OCR on an already-resized PNG image.  Returns the extracted text.
 ///
-/// The image is first downsized to `OCR_MAX_DIMENSION` max dimension
-/// (1536px) if larger.  Full retina captures are far too large for the
-/// rten-based OCR engine and cause 20+ second inference times.  At 1536px
-/// all readable text is preserved and OCR completes in <1 second.
-fn run_ocr(engine: &ocrs::OcrEngine, raw_bytes: &[u8]) -> Option<String> {
-    let img = image::load_from_memory(raw_bytes).ok()?;
+/// The image is expected to already be at the configured `image_size`
+/// (typically 768px).  This is the same image saved to disk as WebP —
+/// no redundant decode or resize needed.  At 768px, all readable text
+/// (≥8px font) is preserved and OCR completes in ~200–500 ms.
+fn run_ocr(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
+    let img = image::load_from_memory(png_bytes).ok()?.into_rgb8();
     let (w, h) = img.dimensions();
-
-    // Downsize if larger than OCR_MAX_DIMENSION
-    let img = if w > OCR_MAX_DIMENSION || h > OCR_MAX_DIMENSION {
-        let scale = (OCR_MAX_DIMENSION as f64 / w as f64)
-            .min(OCR_MAX_DIMENSION as f64 / h as f64);
-        let nw = (w as f64 * scale).round() as u32;
-        let nh = (h as f64 * scale).round() as u32;
-        img.resize(nw, nh, image::imageops::FilterType::Triangle)
-    } else {
-        img
-    };
-
-    let rgb = img.into_rgb8();
-    let (w, h) = rgb.dimensions();
-    let source = ocrs::ImageSource::from_bytes(rgb.as_raw(), (w, h)).ok()?;
+    let source = ocrs::ImageSource::from_bytes(img.as_raw(), (w, h)).ok()?;
     let input = engine.prepare_input(source).ok()?;
     let text = engine.get_text(&input).ok()?;
     let text = text.trim().to_string();
@@ -859,17 +847,10 @@ struct EmbedJob {
     row_id:      i64,
     ts_i64:      i64,
     resized_png: Vec<u8>,
-    /// Raw capture bytes at full resolution — used for OCR in the embed
-    /// thread.  `None` when OCR is disabled to avoid copying large buffers.
-    raw_for_ocr: Option<Vec<u8>>,
+    /// Whether OCR should run on `resized_png` in the embed thread.
+    run_ocr:     bool,
     config:      ScreenshotConfig,
 }
-
-/// Maximum dimension (width or height) for the image passed to the OCR
-/// engine.  Full retina captures (5120×2880+) are far too large for text
-/// detection and make OCR take 20+ seconds.  Downsizing to 1536px max
-/// preserves all readable text while reducing OCR time to <1 second.
-const OCR_MAX_DIMENSION: u32 = 1536;
 
 // ── Background worker ─────────────────────────────────────────────────────────
 
@@ -967,13 +948,7 @@ pub fn run_screenshot_worker(
         };
         metrics.resize_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
-        // Keep raw bytes for OCR in embed thread (only if OCR enabled)
-        let raw_for_ocr = if config.ocr_enabled {
-            Some(captured.raw_bytes.clone())
-        } else {
-            None
-        };
-        drop(captured);
+        drop(captured); // free full-res capture immediately
 
         // ── Save to disk as WebP + SQLite + context ──
         let t0 = Instant::now();
@@ -1034,7 +1009,7 @@ pub fn run_screenshot_worker(
                 row_id,
                 ts_i64,
                 resized_png,
-                raw_for_ocr,
+                run_ocr: config.ocr_enabled,
                 config: config.clone(),
             }) {
                 Ok(()) => {
@@ -1179,10 +1154,14 @@ fn run_embed_thread(
             );
         }
 
-        // ── OCR extraction (on raw full-res image, downsized to OCR_MAX_DIMENSION) ──
+        // ── OCR extraction (on the already-resized PNG — typically 768px) ──
         let t_ocr = Instant::now();
-        let ocr_text = if let (Some(ref engine), Some(ref raw)) = (&ocr_engine, &job.raw_for_ocr) {
-            run_ocr(engine, raw).unwrap_or_default()
+        let ocr_text = if job.run_ocr {
+            if let Some(ref engine) = ocr_engine {
+                run_ocr(engine, &job.resized_png).unwrap_or_default()
+            } else {
+                String::new()
+            }
         } else {
             String::new()
         };
