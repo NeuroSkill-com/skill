@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### All Windows
+
+- **Cmd/Ctrl+W now closes windows**: added a global keydown handler in the root layout that calls `getCurrentWindow().close()` on ⌘W (macOS) or Ctrl+W (Linux/Windows). The main window is hidden (existing behavior), while secondary windows (chat, settings, help, about, etc.) are closed.
+
 ### Chat UI
 
 - **Context usage always visible**: the context-window usage bar (tokens used / n_ctx) is now permanently displayed below the chat header instead of being hidden inside the tools panel. Shows a colour-coded progress bar (green → amber → red) with token counts.

@@ -14,6 +14,7 @@
   import { onMount, onDestroy, tick } from "svelte";
   import { invoke, Channel }          from "@tauri-apps/api/core";
   import { listen }                   from "@tauri-apps/api/event";
+
   import MarkdownRenderer             from "$lib/MarkdownRenderer.svelte";
   import ChatSidebar                  from "$lib/ChatSidebar.svelte";
   import PromptLibrary                from "$lib/PromptLibrary.svelte";

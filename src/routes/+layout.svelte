@@ -10,6 +10,7 @@ the Free Software Foundation, version 3 only. -->
   import type { Snippet } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { invoke } from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   // Side-effect: initialises locale from localStorage / navigator.language
   import "$lib/i18n/index.svelte";
   import { initLocaleFromSettings } from "$lib/i18n/index.svelte";
@@ -61,6 +62,16 @@ the Free Software Foundation, version 3 only. -->
     unlisteners.push(
       await listen("toggle-theme", () => toggleTheme()),
     );
+
+    // ── Cmd/Ctrl+W to close (or hide) the current window ─────────────────
+    function handleCloseShortcut(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "w") {
+        e.preventDefault();
+        getCurrentWindow().close();
+      }
+    }
+    window.addEventListener("keydown", handleCloseShortcut);
+    unlisteners.push(() => window.removeEventListener("keydown", handleCloseShortcut));
   });
   onDestroy(() => unlisteners.forEach((u) => u()));
 </script>
