@@ -776,7 +776,7 @@ pub struct EegAccumulator {
     /// `None` inside the Option while the startup build is still running.
     global_index: Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
     hooks: Vec<HookRule>,
-    text_embedding_model: String,
+    shared_embedder: Arc<crate::label_cmds::EmbedderState>,
     label_idx: Arc<crate::label_index::LabelIndexState>,
     ws_broadcaster: crate::ws_server::WsBroadcaster,
     hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
@@ -794,7 +794,7 @@ impl EegAccumulator {
         logger:           Arc<SkillLogger>,
         global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
         hooks:            Vec<HookRule>,
-        text_embedding_model: String,
+        shared_embedder:  Arc<crate::label_cmds::EmbedderState>,
         label_idx:        Arc<crate::label_index::LabelIndexState>,
         ws_broadcaster:   crate::ws_server::WsBroadcaster,
         hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
@@ -804,7 +804,7 @@ impl EegAccumulator {
             skill_dir.clone(), config.clone(),
             status.clone(), cancel.clone(), reload_requested.clone(),
             logger.clone(), global_index.clone(),
-            hooks.clone(), text_embedding_model.clone(), label_idx.clone(), ws_broadcaster.clone(),
+            hooks.clone(), shared_embedder.clone(), label_idx.clone(), ws_broadcaster.clone(),
             hook_runtime.clone(), app.clone(),
         );
         Self {
@@ -827,7 +827,7 @@ impl EegAccumulator {
             reload_requested,
             global_index,
             hooks,
-            text_embedding_model,
+            shared_embedder,
             label_idx,
             ws_broadcaster,
             hook_runtime,
@@ -848,7 +848,7 @@ impl EegAccumulator {
         logger:           Arc<SkillLogger>,
         global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
         hooks:            Vec<HookRule>,
-        text_embedding_model: String,
+        shared_embedder:  Arc<crate::label_cmds::EmbedderState>,
         label_idx:        Arc<crate::label_index::LabelIndexState>,
         ws_broadcaster:   crate::ws_server::WsBroadcaster,
         hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
@@ -859,7 +859,7 @@ impl EegAccumulator {
             .name("eeg-embed".into())
             .spawn(move || embed_worker(
                 rx, skill_dir, config, status, cancel, reload_requested, logger, global_index,
-                hooks, text_embedding_model, label_idx, ws_broadcaster,
+                hooks, shared_embedder, label_idx, ws_broadcaster,
                 hook_runtime, app,
             ))
             .expect("[embed] failed to spawn background thread");
@@ -879,7 +879,7 @@ impl EegAccumulator {
             self.logger.clone(),
             self.global_index.clone(),
             self.hooks.clone(),
-            self.text_embedding_model.clone(),
+            self.shared_embedder.clone(),
             self.label_idx.clone(),
             self.ws_broadcaster.clone(),
             self.hook_runtime.clone(),
@@ -1043,7 +1043,9 @@ struct HookMatcher {
     hooks: Vec<HookRule>,
     label_idx: Arc<crate::label_index::LabelIndexState>,
     ws_broadcaster: crate::ws_server::WsBroadcaster,
-    text_embedder: Option<fastembed::TextEmbedding>,
+    /// Shared app-wide text embedder — same instance used by labels and
+    /// screenshot OCR.  Avoids loading a separate ~130 MB ONNX model copy.
+    shared_embedder: Arc<crate::label_cmds::EmbedderState>,
     cache: Vec<HookReferenceSet>,
     last_refresh_unix: u64,
     last_fired_unix: HashMap<String, u64>,
@@ -1058,25 +1060,13 @@ impl HookMatcher {
     fn new(
         skill_dir: PathBuf,
         hooks: Vec<HookRule>,
-        text_embedding_model: String,
+        shared_embedder: Arc<crate::label_cmds::EmbedderState>,
         label_idx: Arc<crate::label_index::LabelIndexState>,
         ws_broadcaster: crate::ws_server::WsBroadcaster,
         logger: Arc<SkillLogger>,
         hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
         app: tauri::AppHandle,
     ) -> Self {
-        use std::str::FromStr;
-        let text_embedder = fastembed::EmbeddingModel::from_str(&text_embedding_model)
-            .ok()
-            .and_then(|model| {
-                fastembed::TextEmbedding::try_new(
-                    fastembed::InitOptions::new(model)
-                        .with_cache_dir(skill_dir.join("fastembed_cache"))
-                        .with_show_download_progress(false),
-                )
-                .ok()
-            });
-
         let hooks_log = crate::hooks_log::HooksLog::open(&skill_dir);
 
         Self {
@@ -1084,7 +1074,7 @@ impl HookMatcher {
             hooks,
             label_idx,
             ws_broadcaster,
-            text_embedder,
+            shared_embedder,
             cache: Vec::new(),
             last_refresh_unix: 0,
             last_fired_unix: HashMap::new(),
@@ -1102,41 +1092,60 @@ impl HookMatcher {
         }
         self.last_refresh_unix = now;
 
-        let Some(te) = self.text_embedder.as_mut() else {
-            self.cache.clear();
-            return;
-        };
-
         let recent_labels = load_recent_label_texts(&self.skill_dir, 180);
-        let mut next_cache: Vec<HookReferenceSet> = Vec::new();
 
-        for hook in self.hooks.iter().filter(|h| h.enabled) {
-            let mut queries: Vec<String> = hook.keywords
-                .iter()
-                .map(|k| k.trim().to_owned())
-                .filter(|k| !k.is_empty())
-                .collect();
+        // ── Phase 1: batch-embed all hook keywords while holding the lock ─────
+        // Collect (hook_index, queries, embeddings) tuples.
+        struct HookQueries {
+            hook_idx:   usize,
+            embeddings: Vec<Vec<f32>>,
+        }
+        let mut hook_queries: Vec<HookQueries> = Vec::new();
 
-            if queries.is_empty() {
-                continue;
-            }
-
-            for label in &recent_labels {
-                if queries.iter().any(|k| fuzzy_match(k, label)) && !queries.iter().any(|q| q == label) {
-                    queries.push(label.clone());
-                }
-            }
-
-            let query_refs: Vec<&str> = queries.iter().map(String::as_str).collect();
-            let embeddings = match te.embed(query_refs, None) {
-                Ok(v) => v,
-                Err(_) => continue,
+        {
+            let mut guard = match self.shared_embedder.0.lock() {
+                Ok(g) => g,
+                Err(p) => p.into_inner(),
+            };
+            let Some(te) = guard.as_mut() else {
+                self.cache.clear();
+                return;
             };
 
+            for (idx, hook) in self.hooks.iter().enumerate().filter(|(_, h)| h.enabled) {
+                let mut queries: Vec<String> = hook.keywords
+                    .iter()
+                    .map(|k| k.trim().to_owned())
+                    .filter(|k| !k.is_empty())
+                    .collect();
+
+                if queries.is_empty() { continue; }
+
+                for label in &recent_labels {
+                    if queries.iter().any(|k| fuzzy_match(k, label)) && !queries.iter().any(|q| q == label) {
+                        queries.push(label.clone());
+                    }
+                }
+
+                let query_refs: Vec<&str> = queries.iter().map(String::as_str).collect();
+                let embeddings = match te.embed(query_refs, None) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+                hook_queries.push(HookQueries { hook_idx: idx, embeddings });
+            }
+        } // ── lock released here ──────────────────────────────────────────────
+
+        // ── Phase 2: HNSW search (no lock needed) ─────────────────────────────
+        let mut next_cache: Vec<HookReferenceSet> = Vec::new();
+
+        for hq in &hook_queries {
+            let hook = &self.hooks[hq.hook_idx];
+
             let mut neighbors: Vec<crate::label_index::LabelNeighbor> = Vec::new();
-            for qvec in embeddings {
+            for qvec in &hq.embeddings {
                 neighbors.extend(crate::label_index::search_by_text_vec(
-                    &qvec,
+                    qvec,
                     6,
                     64,
                     &self.skill_dir,
@@ -1427,7 +1436,7 @@ fn embed_worker(
     logger:           Arc<SkillLogger>,
     global_index:     Arc<Mutex<Option<fast_hnsw::labeled::LabeledIndex<fast_hnsw::distance::Cosine, i64>>>>,
     hooks:            Vec<HookRule>,
-    text_embedding_model: String,
+    shared_embedder:  Arc<crate::label_cmds::EmbedderState>,
     label_idx:        Arc<crate::label_index::LabelIndexState>,
     ws_broadcaster:   crate::ws_server::WsBroadcaster,
     hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
@@ -1610,7 +1619,7 @@ fn embed_worker(
     // Counter for periodic global index saves.
     let mut global_save_counter: usize = 0;
     let mut hook_matcher = HookMatcher::new(
-        skill_dir.clone(), hooks, text_embedding_model, label_idx, ws_broadcaster, logger.clone(),
+        skill_dir.clone(), hooks, shared_embedder, label_idx, ws_broadcaster, logger.clone(),
         hook_runtime, app,
     );
 

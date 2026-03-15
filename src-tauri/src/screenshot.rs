@@ -14,10 +14,10 @@ pub use skill_screenshots::context::*;
 #[allow(unused_imports)]
 pub use skill_screenshots::ScreenshotConfig;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
-use crate::{AppState, MutexExt};
+use crate::{AppState, MutexExt, EmbedderState};
 
 /// Bridges `tauri::AppHandle` + `AppState` to the `ScreenshotContext` trait.
 pub struct TauriScreenshotContext {
@@ -51,6 +51,14 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
 
     fn emit_event(&self, event: &str, payload: Value) {
         let _ = self.app.emit(event, payload);
+    }
+
+    fn embed_text(&self, text: &str) -> Option<Vec<f32>> {
+        let embedder = Arc::clone(&*self.app.state::<Arc<EmbedderState>>());
+        let mut guard = embedder.0.lock().ok()?;
+        let te = guard.as_mut()?;
+        let mut vecs = te.embed(vec![text], None).ok()?;
+        if vecs.is_empty() { None } else { Some(vecs.remove(0)) }
     }
 
     fn embed_image_via_llm(&self, png_bytes: &[u8]) -> Option<Vec<f32>> {

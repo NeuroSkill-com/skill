@@ -13,7 +13,7 @@
 
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
@@ -711,37 +711,13 @@ fn run_ocr_rten(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
     if text.is_empty() { None } else { Some(text) }
 }
 
-/// Cached text embedder for OCR search queries.
+/// Embed OCR text using an externally-provided embed function.
 ///
-/// Re-creating a `TextEmbedding` instance loads the ONNX model from disk and
-/// re-initialises the execution provider on every call — expensive when the
-/// user performs multiple searches in succession.  A process-wide `Mutex`
-/// amortises the cost to a single load.
-static OCR_TEXT_EMBEDDER: OnceLock<Mutex<Option<fastembed::TextEmbedding>>> = OnceLock::new();
-
-/// Embed OCR text using a **cached** fastembed text embedder.
-///
-/// The model is loaded lazily on the first call and reused for subsequent
-/// queries, avoiding the ~200 ms per-call overhead of model re-creation.
-fn embed_ocr_text(text: &str, skill_dir: &Path, config: &ScreenshotConfig) -> Option<Vec<f32>> {
-    let cell = OCR_TEXT_EMBEDDER.get_or_init(|| Mutex::new(None));
-    let mut guard = cell.lock().ok()?;
-
-    // Lazy init — first use or if a previous init attempt failed.
-    if guard.is_none() {
-        let cache = skill_dir.join("fastembed_cache");
-        let model = config.ocr_text_model_enum();
-        let eps = build_execution_providers(config.use_gpu);
-        *guard = fastembed::TextEmbedding::try_new(
-            fastembed::InitOptions::new(model)
-                .with_cache_dir(cache)
-                .with_execution_providers(eps)
-        ).ok();
-    }
-
-    let embedder = guard.as_mut()?;
-    let mut results = embedder.embed(vec![text], None).ok()?;
-    if results.is_empty() { None } else { Some(results.remove(0)) }
+/// The caller passes `embed_fn` — typically bound to the shared app-wide
+/// text embedder (`EmbedderState`).  This avoids loading a second copy of
+/// the ONNX model (~130 MB) inside the screenshots crate.
+fn embed_ocr_text(text: &str, embed_fn: &dyn Fn(&str) -> Option<Vec<f32>>) -> Option<Vec<f32>> {
+    embed_fn(text)
 }
 
 // ── OCR HNSW helpers ──────────────────────────────────────────────────────────
@@ -1143,20 +1119,9 @@ fn run_embed_thread(
         None
     };
 
-    // Load text embedder for OCR
-    let mut text_embedder: Option<fastembed::TextEmbedding> = if initial_config.ocr_enabled {
-        let cache = skill_dir.join("fastembed_cache");
-        let model = initial_config.ocr_text_model_enum();
-        let eps = build_execution_providers(initial_config.use_gpu);
-        eprintln!("[screenshot-embed] OCR text model: {} (gpu={})", initial_config.ocr_text_model, initial_config.use_gpu);
-        fastembed::TextEmbedding::try_new(
-            fastembed::InitOptions::new(model)
-                .with_cache_dir(cache)
-                .with_execution_providers(eps)
-        ).ok()
-    } else {
-        None
-    };
+    // OCR text embedding: reuse the app-wide shared text embedder via ctx.embed_text().
+    // No local TextEmbedding instance needed — saves ~130 MB of RAM.
+    eprintln!("[screenshot-embed] OCR text embedding: using shared app-wide embedder via ctx.embed_text()");
 
     let mut inserts_since_save: usize = 0;
     let mut ocr_inserts_since_save: usize = 0;
@@ -1222,17 +1187,13 @@ fn run_embed_thread(
                     String::new()
                 };
                 if ocr_text.is_empty() { continue; }
-                // Embed the OCR text
-                if let Some(ref mut te) = text_embedder {
-                    if let Ok(mut vecs) = te.embed(vec![ocr_text.as_str()], None) {
-                        if let Some(emb) = vecs.pop() {
-                            let ts = store.get_timestamp(row.id).unwrap_or(0);
-                            let id = ocr_hnsw.len() as u64;
-                            ocr_hnsw.insert(emb.clone(), ts);
-                            ocr_inserts_since_save += 1;
-                            store.update_ocr(row.id, &ocr_text, Some(&emb), Some(id));
-                        }
-                    }
+                // Embed the OCR text via the shared app-wide embedder
+                if let Some(emb) = ctx.embed_text(&ocr_text) {
+                    let ts = store.get_timestamp(row.id).unwrap_or(0);
+                    let id = ocr_hnsw.len() as u64;
+                    ocr_hnsw.insert(emb.clone(), ts);
+                    ocr_inserts_since_save += 1;
+                    store.update_ocr(row.id, &ocr_text, Some(&emb), Some(id));
                 } else {
                     store.update_ocr(row.id, &ocr_text, None, None);
                 }
@@ -1329,21 +1290,17 @@ fn run_embed_thread(
         // ── OCR text embedding + backfill ──
         let t0 = Instant::now();
         if !ocr_text.is_empty() {
-            if let Some(ref mut te) = text_embedder {
-                if let Ok(mut vecs) = te.embed(vec![ocr_text.as_str()], None) {
-                    if let Some(emb) = vecs.pop() {
-                        let id = ocr_hnsw.len() as u64;
-                        ocr_hnsw.insert(emb.clone(), job.ts_i64);
-                        ocr_inserts_since_save += 1;
-                        if ocr_inserts_since_save >= SCREENSHOT_HNSW_SAVE_EVERY {
-                            save_ocr_hnsw(&ocr_hnsw, &skill_dir);
-                            ocr_inserts_since_save = 0;
-                        }
-                        store.update_ocr(job.row_id, &ocr_text, Some(&emb), Some(id));
-                    }
+            if let Some(emb) = ctx.embed_text(&ocr_text) {
+                let id = ocr_hnsw.len() as u64;
+                ocr_hnsw.insert(emb.clone(), job.ts_i64);
+                ocr_inserts_since_save += 1;
+                if ocr_inserts_since_save >= SCREENSHOT_HNSW_SAVE_EVERY {
+                    save_ocr_hnsw(&ocr_hnsw, &skill_dir);
+                    ocr_inserts_since_save = 0;
                 }
+                store.update_ocr(job.row_id, &ocr_text, Some(&emb), Some(id));
             } else {
-                // No text embedder — still save the OCR text without embedding
+                // Shared embedder not available — still save the OCR text
                 store.update_ocr(job.row_id, &ocr_text, None, None);
             }
         }
@@ -1380,16 +1337,19 @@ pub fn search_by_vector(
 }
 
 /// Search screenshots by OCR text similarity using the OCR HNSW index.
-/// Embeds the query text with fastembed, then searches the OCR HNSW.
+///
+/// `embed_fn` embeds the query text into a vector using the app-wide shared
+/// text embedder.  Pass a closure that delegates to `EmbedderState` (or
+/// `ScreenshotContext::embed_text`) so we don't need a local ONNX model.
 pub fn search_by_ocr_text_embedding(
     skill_dir: &Path,
     store: &ScreenshotStore,
     query: &str,
     k: usize,
-    config: &ScreenshotConfig,
+    embed_fn: &dyn Fn(&str) -> Option<Vec<f32>>,
 ) -> Vec<ScreenshotResult> {
-    // Embed the query text
-    let query_emb = embed_ocr_text(query, skill_dir, config);
+    // Embed the query text via the shared embedder
+    let query_emb = embed_ocr_text(query, embed_fn);
     let query_emb = match query_emb {
         Some(v) => v,
         None => return vec![],

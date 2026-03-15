@@ -17,6 +17,16 @@
 
 use serde::{Deserialize, Serialize};
 
+// ── Paired (persisted) device ─────────────────────────────────────────────────
+
+/// A BLE device that has been paired and persisted to `settings.json`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PairedDevice {
+    pub id:        String,
+    pub name:      String,
+    pub last_seen: u64,
+}
+
 // ── Device family ─────────────────────────────────────────────────────────────
 
 /// Known EEG device families.

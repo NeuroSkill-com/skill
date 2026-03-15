@@ -1646,11 +1646,13 @@ pub async fn search_screenshots_by_text(
     k: Option<usize>,
     mode: Option<String>,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
+    embedder: tauri::State<'_, std::sync::Arc<crate::EmbedderState>>,
 ) -> Result<Vec<crate::screenshot_store::ScreenshotResult>, String> {
-    let (skill_dir, store, config) = {
+    let (skill_dir, store) = {
         let g = state.lock_or_recover();
-        (g.skill_dir.clone(), g.screenshot_store.clone(), g.screenshot_config.clone())
+        (g.skill_dir.clone(), g.screenshot_store.clone())
     };
+    let embedder = std::sync::Arc::clone(&embedder);
     Ok(tokio::task::spawn_blocking(move || {
         let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
             Some(s) => s,
@@ -1660,7 +1662,15 @@ pub async fn search_screenshots_by_text(
         let mode = mode.unwrap_or_else(|| "semantic".into());
         match mode.as_str() {
             "substring" => crate::screenshot::search_by_ocr_text_like(&store, &query, k),
-            _ => crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k, &config),
+            _ => {
+                let embed_fn = |text: &str| -> Option<Vec<f32>> {
+                    let mut guard = embedder.0.lock().ok()?;
+                    let te = guard.as_mut()?;
+                    let mut vecs = te.embed(vec![text], None).ok()?;
+                    if vecs.is_empty() { None } else { Some(vecs.remove(0)) }
+                };
+                crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k, &embed_fn)
+            }
         }
     }).await.unwrap_or_default())
 }
