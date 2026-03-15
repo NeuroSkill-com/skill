@@ -177,11 +177,59 @@ fn infer_family_id(repo: &str) -> String {
 /// will be discovered during download from the HF API.
 ///
 /// Returns the created (or existing) entry's filename.
+/// Helper: ensure a single file is in the catalog, creating the entry if needed.
+/// Returns `true` if the entry was newly created.
+fn ensure_catalog_entry(
+    s:        &mut AppState,
+    repo:     &str,
+    filename: &str,
+    size_gb:  Option<f32>,
+    is_mmproj_override: Option<bool>,
+) -> bool {
+    if s.llm.catalog.entries.iter().any(|e| e.filename == filename) {
+        return false;
+    }
+
+    let is_mmproj = is_mmproj_override.unwrap_or_else(|| infer_is_mmproj(filename));
+    let quant     = infer_quant(filename);
+    let family_id   = infer_family_id(repo);
+    let family_name = infer_family_name(repo);
+
+    let entry = super::catalog::LlmModelEntry {
+        repo:        repo.to_string(),
+        filename:    filename.to_string(),
+        quant,
+        size_gb:     size_gb.unwrap_or(0.0),
+        description: if is_mmproj {
+            format!("Vision projector from {repo}")
+        } else {
+            format!("Custom model from {repo}")
+        },
+        family_id,
+        family_name,
+        family_desc: String::new(),
+        tags:        if is_mmproj { vec!["vision".into(), "multimodal".into()] }
+                     else { vec!["chat".into()] },
+        is_mmproj,
+        recommended: false,
+        advanced:    false,
+        local_path:  None,
+        state:       super::catalog::DownloadState::NotDownloaded,
+        status_msg:  None,
+        progress:    0.0,
+        initiated_at_unix: None,
+    };
+
+    s.llm.catalog.entries.push(entry);
+    true
+}
+
 #[tauri::command]
 pub fn add_llm_model(
     repo:       String,
     filename:   String,
     size_gb:    Option<f32>,
+    mmproj:     Option<String>,
     download:   Option<bool>,
     app:        AppHandle,
     state:      tauri::State<'_, Mutex<Box<AppState>>>,
@@ -190,49 +238,18 @@ pub fn add_llm_model(
 
     {
         let mut s = state.lock_or_recover();
-
-        // If already in catalog, skip creation.
-        if s.llm.catalog.entries.iter().any(|e| e.filename == filename) {
-            save_catalog(&app, &s);
-            drop(s);
-            if should_download {
-                download_llm_model(filename.clone(), app, state);
-            }
-            return Ok(filename);
+        ensure_catalog_entry(&mut s, &repo, &filename, size_gb, Some(false));
+        if let Some(ref mm) = mmproj {
+            ensure_catalog_entry(&mut s, &repo, mm, None, Some(true));
         }
-
-        let is_mmproj = infer_is_mmproj(&filename);
-        let quant     = infer_quant(&filename);
-        let family_id   = infer_family_id(&repo);
-        let family_name = infer_family_name(&repo);
-
-        let entry = super::catalog::LlmModelEntry {
-            repo:        repo.clone(),
-            filename:    filename.clone(),
-            quant,
-            size_gb:     size_gb.unwrap_or(0.0),
-            description: format!("Custom model from {repo}"),
-            family_id,
-            family_name,
-            family_desc: String::new(),
-            tags:        if is_mmproj { vec!["vision".into(), "multimodal".into()] }
-                         else { vec!["chat".into()] },
-            is_mmproj,
-            recommended: false,
-            advanced:    false,
-            local_path:  None,
-            state:       super::catalog::DownloadState::NotDownloaded,
-            status_msg:  None,
-            progress:    0.0,
-            initiated_at_unix: None,
-        };
-
-        s.llm.catalog.entries.push(entry);
         save_catalog(&app, &s);
     }
 
     if should_download {
-        download_llm_model(filename.clone(), app, state);
+        download_llm_model(filename.clone(), app.clone(), state.clone());
+        if let Some(ref mm) = mmproj {
+            download_llm_model(mm.clone(), app, state);
+        }
     }
 
     Ok(filename)

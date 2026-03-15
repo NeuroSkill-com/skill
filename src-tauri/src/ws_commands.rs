@@ -2269,17 +2269,19 @@ fn llm_add_model(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .ok_or_else(|| "llm_add_model: 'filename' field required (string, e.g. \"Phi-4-Q4_K_M.gguf\")".to_string())?
         .to_string();
     let size_gb = msg["size_gb"].as_f64().map(|v| v as f32);
+    let mmproj = msg["mmproj"].as_str().map(|s| s.to_string());
     let download = msg.get("download").and_then(|v| v.as_bool());
 
     let result = crate::llm::cmds::add_llm_model(
         repo.clone(),
         filename.clone(),
         size_gb,
+        mmproj.clone(),
         download,
         app.clone(),
         app.state::<Mutex<Box<AppState>>>(),
     )?;
-    Ok(serde_json::json!({ "filename": result, "repo": repo }))
+    Ok(serde_json::json!({ "filename": result, "repo": repo, "mmproj": mmproj }))
 }
 
 /// `llm_hardware_fit` — check which models fit in available memory.
