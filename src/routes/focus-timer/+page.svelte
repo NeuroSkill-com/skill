@@ -15,6 +15,7 @@ the Free Software Foundation, version 3 only. -->
   import { useWindowTitle } from "$lib/window-title.svelte";
   import { Button }             from "$lib/components/ui/button";
   import { fmtDuration, fmtTimeShort as fmtTime, dateToCompactKey, fmtCountdown } from "$lib/format";
+  import { openLabel } from "$lib/navigation";
 
   // ── Presets ────────────────────────────────────────────────────────────────
   type Preset = "pomodoro" | "deepWork" | "shortFocus" | "custom";
@@ -304,9 +305,7 @@ the Free Software Foundation, version 3 only. -->
     sessionsDone = 0;
   }
 
-  async function openLabel() {
-    await invoke("open_label_window");
-  }
+
 
   function skipPhase() {
     clearInterval(intervalId!);

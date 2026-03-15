@@ -1,0 +1,3 @@
+### Refactor
+
+- **Deduplicate frontend formatting, canvas setup, navigation, and UI patterns**: replaced ~15 inline date formatting calls with shared `format.ts` helpers; added `dateToLocalKey()`, `dateToCompactKey()`, `fromUnix()`, `toUnix()`, `setupHiDpiCanvas()`, `getDpr()`, `fmtCountdown()`, `fmtDateTimeLocalInput()`, `parseDateTimeLocalInput()`, `localKeyToUnix()` to `format.ts`; replaced 23 DPR canvas setup blocks across 8 chart files; migrated `EegIndices`, `FaaGauge`, `HeadPoseCard` to `CollapsibleSection`; created `$lib/navigation.ts` with shared window-open helpers used by 8 files; created `ConfirmAction` UI component replacing inline confirm-delete in history and labels; cleaned up compare page internal duplication (5 DPR blocks, inline date helpers).

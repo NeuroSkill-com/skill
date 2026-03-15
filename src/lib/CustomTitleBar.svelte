@@ -15,6 +15,7 @@ the Free Software Foundation, version 3 only. -->
   import { helpTitlebarState } from "$lib/help-search-state.svelte";
   import { labelTitlebarState } from "$lib/label-titlebar.svelte";
   import { chatTitlebarState } from "$lib/chat-titlebar.svelte";
+  import { openLabel, openHistory, openHelp } from "$lib/navigation";
   import { isBtOff } from "$lib/bt-status-store.svelte";
 
   // ── State ───────────────────────────────────────────────────────────────
@@ -53,9 +54,7 @@ the Free Software Foundation, version 3 only. -->
   async function minimizeWindow()       { await getCurrentWindow().minimize(); }
   async function toggleMaximizeWindow() { await getCurrentWindow().toggleMaximize(); }
   async function closeWindow()          { await getCurrentWindow().close(); }
-  async function openLabel()   { await invoke("open_label_window"); }
-  async function openHistory() { await invoke("open_history_window"); }
-  async function openHelp()    { await invoke("open_help_window"); }
+
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
   $effect(() => {

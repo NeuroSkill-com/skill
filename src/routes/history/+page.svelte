@@ -24,6 +24,7 @@ the Free Software Foundation, version 3 only. -->
   import { Spinner }       from "$lib/components/ui/spinner";
   import { hBar, hCbs, type HistoryViewMode } from "$lib/history-titlebar.svelte";
   import type { LabelRow, SleepStages } from "$lib/types";
+  import { ConfirmAction } from "$lib/components/ui/confirm-action";
   import {
     fmtDayKey, fmtDurationRange, fmtDateTimeLocale, fmtTimeShort,
     dateToLocalKey, fromUnix, pad, setupHiDpiCanvas, getDpr,
@@ -1926,17 +1927,13 @@ the Free Software Foundation, version 3 only. -->
                     <!-- Actions -->
                     <div class="flex items-center gap-2">
                       {#if confirmDelete === session.csv_path}
-                        <span class="text-[0.62rem] text-red-600 dark:text-red-400 font-medium">
-                          {t("history.confirmDelete")}
-                        </span>
-                        <Button size="sm" variant="destructive" class="text-[0.62rem] h-6 px-2"
-                                onclick={(e: MouseEvent) => { e.stopPropagation(); deleteSession(session.csv_path); }}>
-                          {t("history.yesDelete")}
-                        </Button>
-                        <Button size="sm" variant="ghost" class="text-[0.62rem] h-6 px-2 text-muted-foreground"
-                                onclick={(e: MouseEvent) => { e.stopPropagation(); confirmDelete = null; }}>
-                          {t("common.cancel")}
-                        </Button>
+                        <ConfirmAction
+                          message={t("history.confirmDelete")}
+                          confirmLabel={t("history.yesDelete")}
+                          cancelLabel={t("common.cancel")}
+                          onconfirm={() => deleteSession(session.csv_path)}
+                          oncancel={() => { confirmDelete = null; }}
+                        />
                       {:else}
                         <Button size="sm" variant="ghost" class="text-[0.62rem] h-6 px-2"
                                 onclick={(e: MouseEvent) => { e.stopPropagation(); invoke("open_session_window", { csvPath: session.csv_path }); }}>

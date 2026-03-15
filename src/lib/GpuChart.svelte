@@ -20,7 +20,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { invoke }             from "@tauri-apps/api/core";
-  import { colorForLoad, C_NEUTRAL } from "$lib/theme";
+  import { colorForLoad, C_NEUTRAL, rgba as toRgba } from "$lib/theme";
   import { t } from "$lib/i18n/index.svelte";
   import { getResolved } from "$lib/theme-store.svelte";
   import { getDpr } from "$lib/format";
@@ -53,13 +53,7 @@ the Free Software Foundation, version 3 only. -->
   let mdlTimer:  ReturnType<typeof setInterval> | undefined;
   let animFrame: number | undefined;
 
-  // ── hex → rgba ─────────────────────────────────────────────────────────────
-  function toRgba(hex: string, a: number) {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r},${g},${b},${a})`;
-  }
+  // toRgba imported from $lib/theme (was duplicated here).
 
   // ── Draw — called every rAF frame ──────────────────────────────────────────
   function draw() {

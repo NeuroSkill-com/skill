@@ -17,6 +17,7 @@ the Free Software Foundation, version 3 only. -->
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
   import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
+  import { openSettings }       from "$lib/navigation";
   import type { MuseStatus }    from "$lib/types";
 
   // ── Types ──────────────────────────────────────────────────────────────────
@@ -539,7 +540,7 @@ the Free Software Foundation, version 3 only. -->
   function prev() { const i = stepIdx; if (i > 0) step = STEPS[i - 1]; }
   async function startScan() { await invoke("retry_connect"); }
   async function finish()    { await invoke("complete_onboarding"); }
-  async function openSettings() { await invoke("open_settings_window"); }
+
 
   useWindowTitle("window.title.onboarding");
 </script>

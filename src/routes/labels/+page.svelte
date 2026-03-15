@@ -15,6 +15,8 @@ the Free Software Foundation, version 3 only. -->
   import { t }          from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+  import { openHistory } from "$lib/navigation";
+  import { ConfirmAction } from "$lib/components/ui/confirm-action";
   import type { LabelRow } from "$lib/types";
   import { fmtDateTimeLocale as formatDate, fmtElapsed } from "$lib/format";
 
@@ -228,7 +230,7 @@ the Free Software Foundation, version 3 only. -->
   // Open history window (labels don't carry the CSV path, so navigate to history).
   async function viewSession(_label: LabelRow) {
     try {
-      await invoke("open_history_window");
+      await openHistory();
     } catch (_) {}
   }
 
@@ -429,18 +431,14 @@ the Free Software Foundation, version 3 only. -->
 
             {:else if confirmDel === label.id}
               <!-- ── Delete confirmation ──────────────────────────────── -->
-              <div class="flex items-center gap-3 py-0.5">
-                <span class="text-[0.75rem] text-foreground/80 flex-1">
-                  {t("labels.confirmDelete")}
-                </span>
-                <Button variant="ghost" size="sm" class="h-6 text-[0.68rem]"
-                        onclick={cancelDelete}>{t("common.cancel")}</Button>
-                <Button variant="destructive" size="sm" class="h-6 text-[0.68rem]"
-                        disabled={deletingId === label.id}
-                        onclick={() => doDelete(label.id)}>
-                  {deletingId === label.id ? "…" : t("labels.yesDelete")}
-                </Button>
-              </div>
+              <ConfirmAction
+                message={t("labels.confirmDelete")}
+                confirmLabel={t("labels.yesDelete")}
+                cancelLabel={t("common.cancel")}
+                disabled={deletingId === label.id}
+                onconfirm={() => doDelete(label.id)}
+                oncancel={cancelDelete}
+              />
 
             {:else}
               <!-- ── Normal view ──────────────────────────────────────── -->

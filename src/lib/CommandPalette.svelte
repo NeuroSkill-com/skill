@@ -16,6 +16,7 @@ the Free Software Foundation, version 3 only. -->
   import { t }                  from "$lib/i18n/index.svelte";
   import { getHighContrast, toggleHighContrast } from "$lib/theme-store.svelte";
   import { addToast }           from "$lib/toast-store.svelte";
+  import * as nav               from "$lib/navigation";
 
   let open   = $state(false);
   let query  = $state("");
@@ -44,37 +45,37 @@ the Free Software Foundation, version 3 only. -->
         id: "open-settings", icon: "⚙", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openSettings"), shortcut: `${mod},`,
         keywords: t("cmdK.kw.settings"),
-        action: () => invoke("open_settings_window"),
+        action: nav.openSettings,
       },
       {
         id: "open-help", icon: "?", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openHelp"),
         keywords: t("cmdK.kw.help"),
-        action: () => invoke("open_help_window"),
+        action: nav.openHelp,
       },
       {
         id: "open-history", icon: "🕐", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openHistory"),
         keywords: t("cmdK.kw.history"),
-        action: () => invoke("open_history_window"),
+        action: nav.openHistory,
       },
       {
         id: "open-compare", icon: "⚖", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openCompare"),
         keywords: t("cmdK.kw.compare"),
-        action: () => invoke("open_compare_window"),
+        action: nav.openCompare,
       },
       {
         id: "open-search", icon: "🔍", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openSearch"), shortcut: `${mod}⇧S`,
         keywords: t("cmdK.kw.search"),
-        action: () => invoke("open_search_window"),
+        action: nav.openSearch,
       },
       {
         id: "open-label", icon: "🏷", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openLabel"), shortcut: `${mod}⇧L`,
         keywords: t("cmdK.kw.label"),
-        action: () => invoke("open_label_window"),
+        action: nav.openLabel,
       },
 
       // ── Device ─────────────────────────────────────────────────────────
@@ -88,7 +89,7 @@ the Free Software Foundation, version 3 only. -->
         id: "open-bt-settings", icon: "📶", section: t("cmdK.sectionDevice"),
         label: t("cmdK.openBtSettings"),
         keywords: t("cmdK.kw.btSettings"),
-        action: () => invoke("open_bt_settings"),
+        action: nav.openBtSettings,
       },
 
       // ── Calibration ────────────────────────────────────────────────────
@@ -97,7 +98,7 @@ the Free Software Foundation, version 3 only. -->
         label: t("cmdK.openCalibration"), shortcut: `${mod}⇧C`,
         keywords: t("cmdK.kw.calibration"),
         action: async () => {
-          try { await invoke("open_calibration_window"); }
+          try { await nav.openCalibration(); }
           catch (e) { addToast("warning", t("cmdK.calibrationError"), String(e)); }
         },
       },
@@ -106,37 +107,37 @@ the Free Software Foundation, version 3 only. -->
         id: "open-api", icon: "🌐", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openApi"),
         keywords: t("cmdK.kw.api"),
-        action: () => invoke("open_api_window"),
+        action: nav.openApi,
       },
       {
         id: "open-labels", icon: "🏷", section: t("cmdK.sectionNavigation"),
         label: t("labels.openLabels"),
         keywords: "labels annotations notes tags all browse edit delete manage",
-        action: () => invoke("open_labels_window"),
+        action: nav.openLabels,
       },
       {
         id: "open-focus-timer", icon: "⏱", section: t("cmdK.sectionNavigation"),
         label: t("focusTimer.openTimer"),
         keywords: "pomodoro focus timer work break productivity neurofeedback session",
-        action: () => invoke("open_focus_timer_window"),
+        action: nav.openFocusTimer,
       },
       {
         id: "open-downloads", icon: "⬇", section: t("cmdK.sectionNavigation"),
         label: t("downloads.windowTitle"),
         keywords: "downloads download manager llm models pause resume cancel delete progress",
-        action: () => invoke("open_downloads_window"),
+        action: nav.openDownloads,
       },
       {
         id: "open-onboarding", icon: "🧭", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openOnboarding"),
         keywords: t("cmdK.kw.onboarding"),
-        action: () => invoke("open_onboarding_window"),
+        action: nav.openOnboarding,
       },
       {
         id: "open-electrodes", icon: "🧠", section: t("cmdK.sectionNavigation"),
         label: t("cmdK.openElectrodes"),
         keywords: t("cmdK.kw.electrodes"),
-        action: () => invoke("open_help_window"),
+        action: nav.openHelp,
       },
 
       // ── Utilities ──────────────────────────────────────────────────────
@@ -160,7 +161,7 @@ the Free Software Foundation, version 3 only. -->
         id: "check-updates", icon: "⬆", section: t("cmdK.sectionUtilities"),
         label: t("cmdK.checkUpdates"),
         keywords: t("cmdK.kw.updates"),
-        action: () => invoke("open_updates_window"),
+        action: nav.openUpdates,
       },
     ];
   }
