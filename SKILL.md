@@ -581,6 +581,11 @@ node cli.ts listen --seconds 60 --json | jq '[.[] | select(.event == "hook") | .
 | `--recent <n>` | (`hooks add`/`update`) Recent-refs limit (10–20) |
 | `--limit <n>` | (`hooks log`) Page size (default: 20) |
 | `--offset <n>` | (`hooks log`) Row offset (default: 0) |
+| `--actions "L1:20,L2:20"` | (`calibrations create`/`update`) Actions as `label:secs` pairs |
+| `--loops <n>` | (`calibrations create`/`update`) Loop count (default: 3) |
+| `--break <n>` | (`calibrations create`/`update`) Break duration in seconds (default: 5) |
+| `--auto-start` | (`calibrations create`/`update`) Auto-start when opened |
+| `--name "…"` | (`calibrations update`) Rename the profile |
 | `--system "..."` | (`llm chat`) Prepend a system prompt |
 | `--temperature <f>` | (`llm chat`) Sampling temperature 0–2 (default 0.8) |
 | `--max-tokens <n>` | (`llm chat`) Maximum tokens to generate per turn (default 2048) |
@@ -1956,14 +1961,51 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 ### `calibrations`
 
-List or inspect calibration profiles stored on the server.
+Full CRUD for calibration profiles stored on the server.
+
+| Subcommand | Description |
+|---|---|
+| `calibrations` / `calibrations list` | List all profiles |
+| `calibrations get <id>` | Inspect a single profile by numeric ID |
+| `calibrations create "name" --actions "L:s,…"` | Create a new profile |
+| `calibrations update <id-or-name> [opts]` | Update an existing profile |
+| `calibrations delete <id-or-name>` | Delete a profile |
+
+**Calibration profile flags** (for `create` and `update`):
+
+| Flag | Description |
+|---|---|
+| `--actions "L1:20,L2:20"` | Actions as `label:duration_secs` pairs (comma-separated) |
+| `--loops <n>` | Loop count — how many times to repeat the action sequence (default: 3) |
+| `--break <n>` | Break duration in seconds between loops (default: 5) |
+| `--auto-start` | Auto-start when the calibration window opens |
+| `--name "…"` | (`update` only) Rename the profile |
+
+The `--actions` format is `"Label1:seconds,Label2:seconds"`.  If no colon is present,
+defaults to 20 seconds per action.
 
 ```bash
+# List / inspect
 node cli.ts calibrations                         # list all profiles
 node cli.ts calibrations list                    # same as above
 node cli.ts calibrations get 3                   # full detail for profile id=3
 node cli.ts calibrations --json | jq '.profiles[].name'
 node cli.ts calibrations get 3 --json | jq '.profile.actions'
+
+# Create a new profile
+node cli.ts calibrations create "My Protocol" --actions "Eyes Open:20,Eyes Closed:20" --loops 3 --break 5
+node cli.ts calibrations create "Quick Baseline" --actions "Relax:30,Focus:30" --auto-start
+node cli.ts calibrations create "Three Phase" --actions "Rest:15,Concentrate:30,Breathe:10" --loops 2
+
+# Update an existing profile (by name or UUID)
+node cli.ts calibrations update "My Protocol" --loops 5 --break 10
+node cli.ts calibrations update "My Protocol" --name "Renamed Protocol"
+node cli.ts calibrations update "My Protocol" --actions "Eyes Open:30,Eyes Closed:30,Breathe:15"
+node cli.ts calibrations update "a1b2c3d4" --loops 4
+
+# Delete a profile (by name or UUID)
+node cli.ts calibrations delete "My Protocol"
+node cli.ts calibrations delete "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 ```
 
 **HTTP:**
@@ -1977,6 +2019,40 @@ curl -s -X POST http://127.0.0.1:8375/ \
 curl -s -X POST http://127.0.0.1:8375/ \
   -H "Content-Type: application/json" \
   -d '{"command":"get_calibration","id":3}'
+
+# Create a new profile:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "command": "create_calibration",
+    "name": "My Protocol",
+    "actions": [
+      { "label": "Eyes Open", "duration_secs": 20 },
+      { "label": "Eyes Closed", "duration_secs": 20 }
+    ],
+    "loop_count": 3,
+    "break_duration_secs": 5,
+    "auto_start": false
+  }'
+
+# Update a profile:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"update_calibration","id":"a1b2c3d4-...","loop_count":5}'
+
+# Delete a profile:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"delete_calibration","id":"a1b2c3d4-..."}'
+
+# REST equivalents:
+curl -s -X POST http://127.0.0.1:8375/calibrations \
+  -H "Content-Type: application/json" \
+  -d '{"name":"My Protocol","actions":[{"label":"Eyes Open","duration_secs":20}]}'
+curl -s -X PATCH http://127.0.0.1:8375/calibrations/a1b2c3d4-... \
+  -H "Content-Type: application/json" \
+  -d '{"loop_count":5}'
+curl -s -X DELETE http://127.0.0.1:8375/calibrations/a1b2c3d4-...
 ```
 
 **Example output (list):**
@@ -1990,24 +2066,30 @@ curl -s -X POST http://127.0.0.1:8375/ \
   3      Focus Baseline                 5        1
 ```
 
-**JSON response (list):**
+**Example output (create):**
+```
+⚡ calibrations create "My Protocol"
+  ✓ created My Protocol  id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+  actions: Eyes Open (20s) → Eyes Closed (20s)
+  loops: 3  break: 5s  auto-start: false
+```
+
+**JSON response (create):**
 ```jsonc
 {
-  "command": "list_calibrations",
+  "command": "create_calibration",
   "ok": true,
-  "profiles": [
-    {
-      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-      "name": "Eyes Open/Closed",
-      "loop_count": 3,
-      "break_duration_secs": 5,
-      "auto_start": true,
-      "actions": [
-        { "name": "Eyes Open",  "duration_secs": 20 },
-        { "name": "Eyes Closed", "duration_secs": 20 }
-      ]
-    }
-  ]
+  "profile": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "My Protocol",
+    "loop_count": 3,
+    "break_duration_secs": 5,
+    "auto_start": false,
+    "actions": [
+      { "label": "Eyes Open",  "duration_secs": 20 },
+      { "label": "Eyes Closed", "duration_secs": 20 }
+    ]
+  }
 }
 ```
 
@@ -3114,56 +3196,4 @@ for s in sessions["sessions"][:3]:
 
 sleep = skill("sleep", start_utc=sessions["sessions"][0]["start_utc"],
                        end_utc=sessions["sessions"][0]["end_utc"])
-print("N3 sleep:", sleep["summary"]["n3_epochs"], "epochs")
-EOF
-
-# ── WebSocket from Python ─────────────────────────────────────────────────
-
-python3 - <<'EOF'
-import asyncio, json
-import websockets
-
-async def main():
-    async with websockets.connect("ws://127.0.0.1:8375") as ws:
-        await ws.send(json.dumps({"command": "status"}))
-        msg = await ws.recv()
-        data = json.loads(msg)
-        print("Focus:", data["scores"]["focus"])
-
-        # Listen for 10 seconds of broadcast events
-        import time
-        end = time.time() + 10
-        while time.time() < end:
-            try:
-                evt = json.loads(await asyncio.wait_for(ws.recv(), timeout=1))
-                if evt.get("event") == "scores":
-                    print("Live scores:", evt.get("focus"), evt.get("relaxation"))
-            except asyncio.TimeoutError:
-                pass
-
-asyncio.run(main())
-EOF
-
-# ── Node.js HTTP polling ──────────────────────────────────────────────────
-
-node - <<'EOF'
-const PORT = 8375;
-const skill = (cmd) =>
-  fetch(`http://127.0.0.1:${PORT}/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(cmd),
-  }).then(r => r.json());
-
-setInterval(async () => {
-  const { scores } = await skill({ command: "status" });
-  console.log(`relax=${scores.relaxation.toFixed(2)} engage=${scores.engagement.toFixed(2)} hr=${scores.hr.toFixed(1)}`);
-}, 5000);
-EOF
-```
-
----
-
-> **⚠ Research use only.** Sleep staging, consciousness metrics, and all
-> derived scores are research biomarkers and experimental indicators. They are **not** validated
-> medical devices and must **not** be used for diagnosis or clinical decision-making.
+print

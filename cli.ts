@@ -106,6 +106,9 @@ const CLI_VERSION = "1.1.0";
  *   npx tsx cli.ts label "eyes closed" --context "4-7-8 breathing" --at 1740412800
  *   npx tsx cli.ts calibrations                     # → list all profiles
  *   npx tsx cli.ts calibrations get <id>            # → full profile JSON
+ *   npx tsx cli.ts calibrations create "name" --actions "L1:20,L2:20" [--loops 3] [--break 5] [--auto-start]
+ *   npx tsx cli.ts calibrations update <id-or-name> [--name ...] [--actions ...] [--loops N] [--break N] [--auto-start]
+ *   npx tsx cli.ts calibrations delete <id-or-name>
  *   npx tsx cli.ts search-labels "focused reading"  # → semantic label search
  *   npx tsx cli.ts search-labels "deep work" --mode context --k 5
  *   npx tsx cli.ts interactive "deep focus"         # → cross-modal graph (summary)
@@ -631,10 +634,32 @@ interface Args {
   at?: number;
   /** Voice name for the `say` command (e.g. "Jasper"). Uses server default when omitted. */
   voice?: string;
-  /** Subaction for the `calibrations` command: "list" | "get". */
+  /** Subaction for the `calibrations` command: "list" | "get" | "create" | "update" | "delete". */
   subAction?: string;
   /** Numeric ID for `calibrations get <id>`. */
   id?: number;
+  /**
+   * Calibration profile UUID for `calibrations update/delete`.
+   * Populated from the first positional arg after the subcommand.
+   */
+  profileId?: string;
+  /**
+   * Calibration profile name for `calibrations create` / `calibrations update --name`.
+   * For `create`: first positional arg after subcommand.
+   * For `update`: via `--name` flag.
+   */
+  calName?: string;
+  /**
+   * Calibration actions string for `calibrations create` / `update --actions`.
+   * Compact format: `"Eyes Open:20,Eyes Closed:20"` (label:duration_secs pairs).
+   */
+  calActions?: string;
+  /** Loop count for `calibrations create` / `update --loops`. */
+  calLoops?: number;
+  /** Break duration (seconds) for `calibrations create` / `update --break`. */
+  calBreak?: number;
+  /** Auto-start flag for `calibrations create` / `update --auto-start`. */
+  calAutoStart?: boolean;
   /** Generic pagination limit for subcommands that support it (e.g. hooks log). */
   limit?: number;
   /** Generic pagination offset for subcommands that support it (e.g. hooks log). */
@@ -729,6 +754,7 @@ function parseArgs(): Args {
     "--context", "--at", "--voice",
     "--system", "--max-tokens", "--temperature", "--image", "--mmproj",
     "--keywords", "--scenario", "--command", "--threshold", "--recent", "--hook-text",
+    "--actions", "--loops", "--break", "--auto-start", "--name",
   ]);
 
   let i = 0;
@@ -793,6 +819,11 @@ function parseArgs(): Args {
       }
       args.temperature = n;
     }
+    else if (a === "--actions")     { args.calActions   = argv[++i]; }
+    else if (a === "--loops")       { args.calLoops     = nextInt("--loops"); }
+    else if (a === "--break")       { args.calBreak     = nextInt("--break"); }
+    else if (a === "--auto-start")  { args.calAutoStart = true; }
+    else if (a === "--name")        { args.calName      = argv[++i]; }
     // ── Positional arguments ─────────────────────────────────────────────
     else if (!args.command)      { args.command = a.toLowerCase(); }
     else if (args.command === "label"         && !args.text)    { args.text    = a; }
@@ -846,13 +877,22 @@ function parseArgs(): Args {
       args.subAction = a; // "on" or "off" → maps to dnd_set { enabled: true/false }
     }
     else if (args.command === "calibrations"  && !args.subAction) {
-      // calibrations [list|get] [<id>]
+      // calibrations [list|get|create|update|delete] [<id-or-name>]
       args.subAction = a.toLowerCase();
     }
     else if (args.command === "calibrations"  && args.subAction === "get" && args.id == null) {
       const n = Number(a);
       if (isNaN(n)) { console.error(`error: calibrations get requires a numeric id (got: ${JSON.stringify(a)})`); process.exit(1); }
       args.id = n;
+    }
+    else if (args.command === "calibrations" && args.subAction === "create" && !args.calName) {
+      args.calName = a; // profile name
+    }
+    else if (args.command === "calibrations" && args.subAction === "update" && !args.profileId) {
+      args.profileId = a; // profile UUID or name
+    }
+    else if (args.command === "calibrations" && args.subAction === "delete" && !args.profileId) {
+      args.profileId = a; // profile UUID or name
     }
     else if (args.command === "hooks" && !args.subAction) {
       args.subAction = a.toLowerCase();
@@ -904,6 +944,9 @@ ${m("search [--start <utc>] [--end <utc>] [--k <n>]", "ANN EEG-similarity search
 ${m("compare --a-start .. --a-end .. --b-start .. --b-end ..", "side-by-side metrics + UMAP")}
 ${m("sleep [index] [--start <utc>] [--end <utc>]",   "sleep staging — index selects session (0=latest, 1=prev)")}
 ${m("calibrations [list|get <id>]",                  "list calibration profiles or inspect one by ID")}
+${m('calibrations create "name" --actions "L1:20,L2:20"', "create a new calibration profile")}
+${m("calibrations update <id-or-name> [opts]",       "update an existing calibration profile")}
+${m("calibrations delete <id-or-name>",              "delete a calibration profile")}
 ${m("calibrate [--profile <name-or-id>]",            "open calibration window and start profile immediately")}
 ${m("timer",                                         "open focus-timer window and start work phase immediately")}
 ${m("umap [--a-start .. --a-end .. --b-start .. --b-end ..]", "3D UMAP projection (waits for result)")}
@@ -970,6 +1013,11 @@ ${BOLD}OPTIONS${RESET}
   ${YELLOW}--reach <n>${RESET}       (interactive) temporal window in minutes around each EEG point (default: 10)
   ${YELLOW}--voice <name>${RESET}    say: voice name to use (e.g. ${GREEN}Jasper${RESET}); omit to use the server default
   ${YELLOW}--profile <p>${RESET}     calibrate: profile name or UUID to run (default: active profile)
+  ${YELLOW}--actions "L:s,…"${RESET} (calibrations create/update) actions as "Label:secs" pairs (e.g. ${GREEN}"Eyes Open:20,Eyes Closed:20"${RESET})
+  ${YELLOW}--loops <n>${RESET}       (calibrations create/update) loop count (default: 3)
+  ${YELLOW}--break <n>${RESET}       (calibrations create/update) break duration in seconds (default: 5)
+  ${YELLOW}--auto-start${RESET}     (calibrations create/update) auto-start when opened
+  ${YELLOW}--name "…"${RESET}       (calibrations update) rename the profile
   ${YELLOW}--mmproj <file>${RESET}    llm add: also download a vision projector from the same repo
   ${YELLOW}--image <path>${RESET}     llm chat: attach an image (can be repeated: --image a.jpg --image b.png)
   ${YELLOW}--system "..."${RESET}    llm chat: prepend a system prompt (e.g. ${GREEN}"You are a concise EEG assistant."${RESET})
@@ -1047,6 +1095,14 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}#   1      Eyes Open/Closed               4        2${RESET}
   ${DIM}#   2      Relaxation                     3        1${RESET}
   ${DIM}#   3      Focus Baseline                 5        1${RESET}
+
+  ${BOLD}calibrations create/update/delete${RESET} — full calibration profile CRUD
+  ${DIM}$${RESET} npx tsx cli.ts calibrations create "My Protocol" --actions "Eyes Open:20,Eyes Closed:20" --loops 3 --break 5
+  ${DIM}$${RESET} npx tsx cli.ts calibrations create "Quick Baseline" --actions "Relax:30,Focus:30" --auto-start
+  ${DIM}$${RESET} npx tsx cli.ts calibrations update "My Protocol" --loops 5 --break 10
+  ${DIM}$${RESET} npx tsx cli.ts calibrations update "My Protocol" --name "Renamed Protocol"
+  ${DIM}$${RESET} npx tsx cli.ts calibrations update "My Protocol" --actions "Eyes Open:30,Eyes Closed:30,Breathe:15"
+  ${DIM}$${RESET} npx tsx cli.ts calibrations delete "My Protocol"
 
   ${BOLD}calibrate${RESET} — open calibration window and start immediately
   ${DIM}$${RESET} npx tsx cli.ts calibrate                              ${DIM}# uses active profile${RESET}
@@ -2090,25 +2146,65 @@ async function cmdNotify(title: string, body?: string): Promise<void> {
 }
 
 /**
- * `calibrations` — List or inspect calibration profiles stored on the server.
+ * `calibrations` — Full CRUD for calibration profiles.
  *
  * Subcommands:
- * - `calibrations` / `calibrations list` — fetch all profiles via
- *   `{ command: "list_calibrations" }` and display them as a formatted table.
- * - `calibrations get <id>` — fetch a single profile by numeric ID via
- *   `{ command: "get_calibration", id }` and print the full detail.
+ * - `calibrations` / `calibrations list` — list all profiles.
+ * - `calibrations get <id>` — inspect a single profile.
+ * - `calibrations create "name" --actions "L1:20,L2:20"` — create a new profile.
+ * - `calibrations update <id-or-name> [--name/--actions/--loops/--break/--auto-start]` — update.
+ * - `calibrations delete <id-or-name>` — remove a profile.
  *
- * **HTTP equivalent:**
- * ```sh
- * # List all profiles:
- * curl -s http://127.0.0.1:8375/calibrations
- *
- * # Get a specific profile by ID:
- * curl -s http://127.0.0.1:8375/calibrations/3
- * ```
- *
- * @param args - Parsed CLI arguments (`subAction`, `id`).
+ * @param args - Parsed CLI arguments.
  */
+/**
+ * Parse a compact actions string into an array of `{ label, duration_secs }`.
+ *
+ * Format: `"Eyes Open:20,Eyes Closed:20"` → `[{ label: "Eyes Open", duration_secs: 20 }, ...]`
+ *
+ * If no colon is present in an entry, defaults to 20 seconds.
+ */
+function parseCalActions(raw: string): Array<{ label: string; duration_secs: number }> {
+  return raw.split(",")
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(s => {
+      const colonIdx = s.lastIndexOf(":");
+      if (colonIdx > 0) {
+        const label = s.slice(0, colonIdx).trim();
+        const dur   = Number(s.slice(colonIdx + 1).trim());
+        return { label, duration_secs: isNaN(dur) || dur <= 0 ? 20 : dur };
+      }
+      return { label: s, duration_secs: 20 };
+    });
+}
+
+/**
+ * Resolve a profile identifier (UUID or name substring) to a UUID.
+ *
+ * Fetches the profile list from the server and matches:
+ * 1. Exact UUID match.
+ * 2. Case-insensitive name substring match.
+ *
+ * Exits with an error if no match is found.
+ */
+async function resolveProfileId(idOrName: string): Promise<string> {
+  const lr = await send({ command: "list_calibrations" });
+  if (!lr.ok) printError(`could not list profiles: ${lr.error}`);
+  const profiles = (lr.profiles ?? []) as Array<{ id: string; name: string }>;
+  if (profiles.length === 0) printError("no calibration profiles found");
+
+  const exact  = profiles.find(p => p.id === idOrName);
+  const byName = profiles.find(p => p.name.toLowerCase().includes(idOrName.toLowerCase()));
+  const match  = exact ?? byName;
+
+  if (!match) {
+    const names = profiles.map(p => `"${p.name}" (${p.id})`).join("\n    ");
+    printError(`profile "${idOrName}" not found.\n  Available profiles:\n    ${names}`);
+  }
+  return match!.id;
+}
+
 async function cmdCalibrations(args: Args): Promise<void> {
   const sub = args.subAction ?? "list";
 
@@ -2133,6 +2229,83 @@ async function cmdCalibrations(args: Args): Promise<void> {
       }
       print("");
     }
+    printResult(r);
+    return;
+  }
+
+  // ── create ─────────────────────────────────────────────────────────────
+  if (sub === "create") {
+    if (!args.calName) printError('usage: calibrations create "Profile Name" --actions "Eyes Open:20,Eyes Closed:20" [--loops 3] [--break 5] [--auto-start]');
+    if (!args.calActions) printError("--actions is required for create. Format: \"Label1:secs,Label2:secs\" (e.g. \"Eyes Open:20,Eyes Closed:20\")");
+
+    const actions = parseCalActions(args.calActions!);
+    if (actions.length === 0) printError("--actions must contain at least one label:duration pair");
+
+    print(`${BOLD}⚡ calibrations create${RESET} ${GREEN}"${args.calName}"${RESET}`);
+
+    const cmd: Record<string, unknown> = {
+      command: "create_calibration",
+      name:    args.calName,
+      actions,
+    };
+    if (args.calLoops != null)     cmd.loop_count          = args.calLoops;
+    if (args.calBreak != null)     cmd.break_duration_secs = args.calBreak;
+    if (args.calAutoStart != null) cmd.auto_start          = args.calAutoStart;
+
+    const r = await send(cmd);
+    if (!r.ok) printError(`create failed: ${r.error}`);
+
+    if (!jsonMode && r.profile) {
+      const p = r.profile;
+      print(`  ${GREEN}✓${RESET} created ${CYAN}${p.name}${RESET}  ${DIM}id: ${p.id}${RESET}`);
+      print(`  ${DIM}actions:${RESET} ${actions.map((a: any) => `${CYAN}${a.label}${RESET} ${DIM}(${a.duration_secs}s)${RESET}`).join(`${DIM} → ${RESET}`)}`);
+      print(`  ${DIM}loops:${RESET} ${CYAN}${p.loop_count}${RESET}  ${DIM}break:${RESET} ${CYAN}${p.break_duration_secs}s${RESET}  ${DIM}auto-start:${RESET} ${CYAN}${p.auto_start}${RESET}`);
+    }
+    printResult(r);
+    return;
+  }
+
+  // ── update ─────────────────────────────────────────────────────────────
+  if (sub === "update") {
+    if (!args.profileId) printError("usage: calibrations update <id-or-name> [--name ...] [--actions ...] [--loops N] [--break N] [--auto-start]");
+
+    const profileUuid = await resolveProfileId(args.profileId);
+
+    print(`${BOLD}⚡ calibrations update${RESET} ${CYAN}${args.profileId}${RESET}`);
+
+    const cmd: Record<string, unknown> = {
+      command: "update_calibration",
+      id:      profileUuid,
+    };
+    if (args.calName    != null) cmd.name                = args.calName;
+    if (args.calActions != null) cmd.actions             = parseCalActions(args.calActions);
+    if (args.calLoops   != null) cmd.loop_count          = args.calLoops;
+    if (args.calBreak   != null) cmd.break_duration_secs = args.calBreak;
+    if (args.calAutoStart != null) cmd.auto_start        = args.calAutoStart;
+
+    const r = await send(cmd);
+    if (!r.ok) printError(`update failed: ${r.error}`);
+
+    if (!jsonMode && r.profile) {
+      const p = r.profile;
+      print(`  ${GREEN}✓${RESET} updated ${CYAN}${p.name}${RESET}  ${DIM}id: ${p.id}${RESET}`);
+    }
+    printResult(r);
+    return;
+  }
+
+  // ── delete ─────────────────────────────────────────────────────────────
+  if (sub === "delete") {
+    if (!args.profileId) printError("usage: calibrations delete <id-or-name>");
+
+    const profileUuid = await resolveProfileId(args.profileId);
+
+    print(`${BOLD}⚡ calibrations delete${RESET} ${CYAN}${args.profileId}${RESET}`);
+
+    const r = await send({ command: "delete_calibration", id: profileUuid });
+    if (!r.ok) printError(`delete failed: ${r.error}`);
+
+    print(`  ${GREEN}✓${RESET} deleted`);
     printResult(r);
     return;
   }
