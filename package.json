@@ -36,6 +36,8 @@
     "sync:i18n": "npx tsx scripts/sync-i18n.ts",
     "sync:i18n:fix": "npx tsx scripts/sync-i18n.ts --fix",
     "sync:i18n:check": "npx tsx scripts/sync-i18n.ts --check",
+    "audit:i18n": "npx tsx scripts/audit-i18n.ts",
+    "audit:i18n:check": "npx tsx scripts/audit-i18n.ts --check",
     "sync:llm:catalog": "node scripts/sync-llm-catalog.js --write",
     "sync:llm:catalog:check": "node scripts/sync-llm-catalog.js --check",
     "bump": "node scripts/bump.js",

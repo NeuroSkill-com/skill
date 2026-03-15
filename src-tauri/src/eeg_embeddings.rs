@@ -1019,6 +1019,11 @@ struct HookBroadcastPayload {
     context: String,
     command: String,
     text: String,
+    scenario: String,
+    distance: f32,
+    label_id: i64,
+    label_text: String,
+    triggered_at_utc: f64,
 }
 
 struct HookReferenceSet {
