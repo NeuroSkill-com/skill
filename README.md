@@ -33,6 +33,8 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 
 - [Features](#features)
 - [Architecture](#architecture)
+  - [Crate dependency graph](#crate-dependency-graph)
+  - [Data flow](#data-flow)
 - [Project layout](#project-layout)
   - [Workspace crates](#workspace-crates)
   - [Vendored crates](#vendored-crates)
@@ -93,6 +95,102 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 │  CoreBluetooth/BlueZ · gpu_fft · ZUNA (wgpu)        │
 │  rusqlite · fast_hnsw · umap_rs · job_queue         │
 └─────────────────────────────────────────────────────┘
+```
+
+### Crate dependency graph
+
+```mermaid
+graph TD
+    subgraph Vendored
+        fast-hnsw
+        rdev
+    end
+
+    subgraph Foundation
+        skill-constants
+        skill-jobs
+        skill-vision
+        apple-ocr
+    end
+
+    subgraph Signal Processing
+        skill-eeg --> skill-constants
+    end
+
+    subgraph Core Data
+        skill-data --> skill-constants
+        skill-data --> skill-eeg
+    end
+
+    subgraph Devices & Embeddings
+        skill-devices --> skill-constants
+        skill-devices --> skill-eeg
+        skill-exg --> skill-constants
+        skill-exg --> skill-eeg
+        skill-exg --> skill-data
+    end
+
+    subgraph Search & Indexing
+        skill-commands --> skill-constants
+        skill-commands --> skill-data
+        skill-label-index --> skill-constants
+        skill-label-index --> skill-commands
+        skill-label-index --> skill-data
+    end
+
+    subgraph AI & Media
+        skill-tools --> skill-constants
+        skill-llm --> skill-constants
+        skill-llm --> skill-tools
+        skill-tts --> skill-constants
+        skill-screenshots --> skill-constants
+        skill-screenshots --> skill-data
+        skill-screenshots --> skill-vision
+    end
+
+    subgraph Orchestration
+        skill-router --> skill-constants
+        skill-router --> skill-commands
+        skill-router --> skill-data
+        skill-router --> skill-settings
+        skill-settings --> skill-constants
+        skill-settings --> skill-eeg
+        skill-settings --> skill-tts
+        skill-settings --> skill-llm
+        skill-settings --> skill-screenshots
+        skill-settings --> skill-data
+    end
+
+    subgraph Platform
+        skill-autostart --> skill-constants
+        skill-tray --> skill-constants
+    end
+
+    subgraph Application
+        src-tauri["src-tauri (Tauri App)"]
+        src-tauri --> skill-router
+        src-tauri --> skill-settings
+        src-tauri --> skill-devices
+        src-tauri --> skill-exg
+        src-tauri --> skill-eeg
+        src-tauri --> skill-label-index
+        src-tauri --> skill-llm
+        src-tauri --> skill-tools
+        src-tauri --> skill-tts
+        src-tauri --> skill-screenshots
+        src-tauri --> skill-vision
+        src-tauri --> skill-jobs
+        src-tauri --> skill-data
+        src-tauri --> skill-commands
+        src-tauri --> skill-constants
+        src-tauri --> skill-autostart
+        src-tauri --> skill-tray
+        src-tauri --> fast-hnsw
+    end
+
+    subgraph Frontend
+        sveltekit["SvelteKit UI"] -.->|IPC / Events| src-tauri
+    end
 ```
 
 ### Data flow
