@@ -160,7 +160,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
 
                 // If the command is long (>8 KB), write it to a script file
                 // to avoid ARG_MAX / "prompt too long" errors.
-                const SCRIPT_THRESHOLD: usize = 8 * 1024;
+                const SCRIPT_THRESHOLD: usize = skill_constants::TOOL_BASH_SCRIPT_THRESHOLD;
                 let (actual_arg, script_path) = if command.len() > SCRIPT_THRESHOLD {
                     let ts = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
@@ -245,9 +245,9 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                                 };
 
                                 // Build a compact summary: first 20 + last 20 lines if output is large.
-                                const SUMMARY_HEAD: usize = 20;
-                                const SUMMARY_TAIL: usize = 20;
-                                const INLINE_THRESHOLD: usize = 200; // lines
+                                const SUMMARY_HEAD: usize = skill_constants::TOOL_BASH_SUMMARY_HEAD;
+                                const SUMMARY_TAIL: usize = skill_constants::TOOL_BASH_SUMMARY_TAIL;
+                                const INLINE_THRESHOLD: usize = skill_constants::TOOL_BASH_INLINE_THRESHOLD;
                                 let lines: Vec<&str> = combined.lines().collect();
                                 let (summary, was_truncated) = if lines.len() <= INLINE_THRESHOLD {
                                     (combined.clone(), false)

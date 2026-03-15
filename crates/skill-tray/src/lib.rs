@@ -203,7 +203,7 @@ pub fn overlay_progress_bar(
 
 /// Minimum interval between full native menu rebuilds (ms).
 /// Prevents multiple rapid state changes from blocking the main thread.
-pub const MENU_REBUILD_MIN_MS: u64 = 300;
+pub use skill_constants::MENU_REBUILD_MIN_MS;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 

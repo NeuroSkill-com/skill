@@ -13,6 +13,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
+use skill_constants::{TOOL_CALL_START, TOOL_CALL_END};
 
 // ── Argument validation ───────────────────────────────────────────────────────
 
@@ -336,8 +337,8 @@ pub fn inject_tools_into_system_prompt(
 /// llama-server returns tool calls in `[TOOL_CALL]…[/TOOL_CALL]` blocks
 /// or (in newer builds) as structured JSON under `tool_calls`.
 pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
-    const START: &str = "[TOOL_CALL]";
-    const END:   &str = "[/TOOL_CALL]";
+    const START: &str = TOOL_CALL_START;
+    const END:   &str = TOOL_CALL_END;
 
     let mut calls = Vec::new();
     let mut dedup = HashSet::<(String, String)>::new();
@@ -679,8 +680,8 @@ fn find_balanced_json_arrays(content: &str) -> Vec<(usize, usize)> {
 
 /// Remove `[TOOL_CALL]…[/TOOL_CALL]` markers from assistant message content.
 pub fn strip_tool_call_blocks_preserve(content: &str) -> String {
-    const START: &str = "[TOOL_CALL]";
-    const END:   &str = "[/TOOL_CALL]";
+    const START: &str = TOOL_CALL_START;
+    const END:   &str = TOOL_CALL_END;
 
     let mut out    = String::new();
     let mut cursor = 0;

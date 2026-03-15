@@ -4,3 +4,6 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "System tray icon helpers — progress-ring overlay, shortcut formatting, dedup fingerprints — extracted workspace crate"
+
+[dependencies]
+skill-constants = { path = "../skill-constants" }

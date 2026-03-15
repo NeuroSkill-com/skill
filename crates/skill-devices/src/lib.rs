@@ -132,12 +132,9 @@ impl BatteryEma {
 
 // ── DND Focus-Mode Decision Engine ────────────────────────────────────────────
 
-/// SNR threshold (dB) below which signal quality is too poor for focus mode.
-pub const SNR_LOW_DB: f32 = 5.0;
-
-/// Number of consecutive ticks below [`SNR_LOW_DB`] before focus mode exits
-/// (~1 minute at 4 Hz tick rate).
-pub const SNR_LOW_TICKS: u32 = 240;
+// Re-export SNR thresholds from the canonical constants crate.
+pub use skill_constants::SNR_LOW_DB;
+pub use skill_constants::SNR_LOW_TICKS;
 
 /// Configuration for the DND decision engine (read from app settings).
 #[derive(Debug, Clone)]

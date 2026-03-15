@@ -992,7 +992,7 @@ pub fn sessions(app: &AppHandle) -> Result<Value, String> {
     // the same logic.  Use the state's skill_dir.
     let skill_dir = st.lock_or_recover().skill_dir.clone();
 
-    const GAP_SECS: u64 = 120;
+    const GAP_SECS: u64 = skill_constants::SESSION_GAP_SECS;
 
     let mut all_ts: Vec<(u64, String)> = Vec::new();
 

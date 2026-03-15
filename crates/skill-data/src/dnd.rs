@@ -21,13 +21,13 @@
 //! - `HKCU\Software\Microsoft\Windows\CurrentVersion\PushNotifications\ToastEnabled`
 
 #[cfg(target_os = "macos")]
-const CLIENT_ID: &str = "com.neuroskill.app.dnd";
+use skill_constants::DND_CLIENT_ID as CLIENT_ID;
 
 #[cfg(target_os = "linux")]
-const LINUX_MODE_ID: &str = "linux.dnd.default";
+use skill_constants::DND_LINUX_MODE_ID as LINUX_MODE_ID;
 
 #[cfg(target_os = "windows")]
-const WINDOWS_MODE_ID: &str = "windows.dnd.default";
+use skill_constants::DND_WINDOWS_MODE_ID as WINDOWS_MODE_ID;
 
 #[cfg(target_os = "linux")]
 static PORTAL_INHIBIT_HANDLE: std::sync::OnceLock<std::sync::Mutex<Option<String>>> =

@@ -5,6 +5,58 @@
 //!
 //! All signal-processing constants here must stay in sync with their
 //! TypeScript mirrors in `src/lib/constants.ts`.
+//!
+//! # Prelude
+//!
+//! For convenience, `skill_constants::prelude` re-exports the most frequently
+//! used items so crates can write:
+//!
+//! ```rust,ignore
+//! use skill_constants::prelude::*;
+//! ```
+
+/// Convenience re-exports of the most frequently used constants.
+///
+/// ```rust,ignore
+/// use skill_constants::prelude::*;
+/// ```
+pub mod prelude {
+    pub use crate::{
+        // Hardware
+        EEG_CHANNELS, CHANNEL_NAMES, MUSE_SAMPLE_RATE, PPG_SAMPLE_RATE, PPG_CHANNELS,
+        // Filter
+        FILTER_WINDOW, FILTER_HOP, FILTER_OVERLAP,
+        DEFAULT_LP_HZ, DEFAULT_HP_HZ, DEFAULT_NOTCH_BW_HZ,
+        // Bands
+        NUM_BANDS, BANDS, BAND_COLORS, BAND_SYMBOLS, BAND_WINDOW, BAND_HOP,
+        // Embedding / ZUNA
+        EMBEDDING_EPOCH_SECS, EMBEDDING_EPOCH_SAMPLES,
+        EMBEDDING_OVERLAP_SECS, EMBEDDING_OVERLAP_SAMPLES, EMBEDDING_HOP_SAMPLES,
+        EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS,
+        ZUNA_DATA_NORM, ZUNA_HF_REPO, ZUNA_WEIGHTS_FILE, ZUNA_CONFIG_FILE,
+        // HNSW
+        HNSW_M, HNSW_EF_CONSTRUCTION,
+        HNSW_INDEX_FILE, GLOBAL_HNSW_FILE, GLOBAL_HNSW_SAVE_EVERY,
+        // Data files
+        SQLITE_FILE, LABELS_FILE, ACTIVITY_FILE, HOOKS_LOG_FILE,
+        SETTINGS_FILE, MODEL_CONFIG_FILE, UMAP_CONFIG_FILE, LOG_CONFIG_FILE,
+        // Screenshots
+        SCREENSHOTS_SQLITE, SCREENSHOTS_DIR, SCREENSHOTS_HNSW,
+        SCREENSHOT_HNSW_SAVE_EVERY, SCREENSHOTS_OCR_HNSW,
+        // Label index
+        LABEL_TEXT_INDEX_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_EEG_INDEX_FILE,
+        // LLM
+        LLM_CATALOG_FILE, LLM_LOG_DIR, LLM_LOG_CAP,
+        // Session
+        SESSION_GAP_SECS,
+        // WebSocket
+        WS_HOST, WS_DEFAULT_PORT, WS_BROADCAST_CAPACITY,
+    };
+
+    // Platform-specific re-exports.
+    #[cfg(not(target_os = "windows"))]
+    pub use crate::SKILL_DIR;
+}
 
 // ── Onboarding ───────────────────────────────────────────────────────────────
 
@@ -26,6 +78,12 @@ pub const MUSE_SAMPLE_RATE: f32 = 256.0;
 
 /// PPG hardware sample rate (Hz) — Muse PPG stream runs at 64 Hz.
 pub const PPG_SAMPLE_RATE: f32 = 64.0;
+
+/// Number of PPG optical channels (ambient, infrared, red).
+pub const PPG_CHANNELS: usize = 3;
+
+/// IMU sample rate (Hz) — Muse fires at ~52 Hz, 3 samples per notification.
+pub const IMU_SAMPLE_RATE: f64 = 52.0;
 
 /// OpenBCI Ganglion channel labels (default 10-20 sites when unset).
 pub const GANGLION_CHANNEL_NAMES: [&str; 4] = ["Ch1", "Ch2", "Ch3", "Ch4"];
@@ -90,6 +148,85 @@ pub const BAND_COLORS: [&str; NUM_BANDS] = [
 
 /// Greek-letter shorthand for each band (same order as [`BANDS`]).
 pub const BAND_SYMBOLS: [&str; NUM_BANDS] = ["δ", "θ", "α", "β", "γ", "γ+"];
+
+// ── EEG signal quality thresholds ─────────────────────────────────────────────
+
+/// Rolling window length for quality assessment (samples, 1 s at 256 Hz).
+pub const QUALITY_WINDOW: usize = 256;
+
+/// RMS below this → electrode not in contact (µV).
+pub const QUALITY_NO_SIGNAL_RMS: f64 = 5.0;
+
+/// RMS above this → gross movement or sustained saturation (µV).
+pub const QUALITY_POOR_RMS: f64 = 400.0;
+
+/// Samples whose absolute value exceeds this are counted as clips (µV).
+pub const QUALITY_CLIP_UV: f64 = 1200.0;
+
+/// Eight or more clips per window → Poor quality.
+pub const QUALITY_POOR_CLIPS: usize = 8;
+
+/// RMS above this → noticeable artifact or poor contact / Fair (µV).
+pub const QUALITY_FAIR_RMS: f64 = 100.0;
+
+// ── Artifact detection (blinks) ───────────────────────────────────────────────
+
+/// Blink detection: minimum µV spike amplitude on frontal channels (AF7/AF8).
+pub const BLINK_THRESHOLD_UV: f64 = 80.0;
+
+/// Minimum gap between consecutive blinks (seconds).
+pub const BLINK_REFRACTORY_S: f64 = 0.3;
+
+/// Sliding window for blinks-per-minute calculation (seconds).
+pub const BLINK_RATE_WINDOW_S: f64 = 60.0;
+
+// ── Head pose (IMU complementary filter) ──────────────────────────────────────
+
+/// Complementary filter coefficient (0–1).  Higher = more trust in gyro.
+pub const HEAD_POSE_ALPHA: f64 = 0.96;
+
+/// Stillness EMA smoothing time constant (seconds).
+pub const HEAD_POSE_STILL_TAU_S: f64 = 1.0;
+
+/// Angular velocity (°/s) below which stillness score is ~100.
+pub const HEAD_POSE_STILL_QUIET_DPS: f64 = 3.0;
+
+/// Angular velocity (°/s) above which stillness score is ~0.
+pub const HEAD_POSE_STILL_ACTIVE_DPS: f64 = 50.0;
+
+/// Minimum pitch delta (degrees) within the nod window.
+pub const HEAD_POSE_NOD_THRESHOLD_DEG: f64 = 12.0;
+
+/// Minimum yaw delta (degrees) within the shake window.
+pub const HEAD_POSE_SHAKE_THRESHOLD_DEG: f64 = 15.0;
+
+/// Gesture detection window (seconds).
+pub const HEAD_POSE_GESTURE_WINDOW_S: f64 = 0.6;
+
+/// Gesture refractory period (seconds).
+pub const HEAD_POSE_GESTURE_REFRACTORY_S: f64 = 1.0;
+
+// ── PPG analysis ──────────────────────────────────────────────────────────────
+
+/// Minimum inter-beat interval (seconds) — corresponds to ~200 BPM.
+pub const PPG_IBI_MIN_S: f64 = 0.3;
+
+/// Maximum inter-beat interval (seconds) — corresponds to ~30 BPM.
+pub const PPG_IBI_MAX_S: f64 = 2.0;
+
+// ── SNR / focus-mode thresholds ───────────────────────────────────────────────
+
+/// SNR threshold (dB) below which the signal is considered low quality.
+pub const SNR_LOW_DB: f32 = 5.0;
+
+/// Consecutive ticks below [`SNR_LOW_DB`] before focus mode exits (60 s × 4 Hz).
+pub const SNR_LOW_TICKS: u32 = 240;
+
+// ── Session segmentation ──────────────────────────────────────────────────────
+
+/// Maximum gap (seconds) between consecutive EEG epochs before a new session
+/// boundary is created.  Two minutes without data starts a new session.
+pub const SESSION_GAP_SECS: u64 = 120;
 
 // ── EEG Embedding (ZUNA model + HNSW index) ──────────────────────────────────
 
@@ -175,6 +312,101 @@ pub const OCR_DETECTION_MODEL_FILE: &str = "text-detection.rten";
 /// Filename for the cached OCR recognition model.
 pub const OCR_RECOGNITION_MODEL_FILE: &str = "text-recognition.rten";
 
+// ── Label index files ─────────────────────────────────────────────────────────
+
+/// HNSW index for text embeddings of label text.
+pub const LABEL_TEXT_INDEX_FILE: &str = "label_text_index.hnsw";
+
+/// HNSW index for text embeddings of label context.
+pub const LABEL_CONTEXT_INDEX_FILE: &str = "label_context_index.hnsw";
+
+/// HNSW index for EEG embeddings of label epochs.
+pub const LABEL_EEG_INDEX_FILE: &str = "label_eeg_index.hnsw";
+
+// ── LLM ───────────────────────────────────────────────────────────────────────
+
+/// Filename of the persisted LLM model catalog.
+pub const LLM_CATALOG_FILE: &str = "llm_catalog.json";
+
+/// Directory name under `skill_dir` for LLM session log files.
+pub const LLM_LOG_DIR: &str = "llm_logs";
+
+/// Maximum entries in the shared LLM log ring-buffer.
+pub const LLM_LOG_CAP: usize = 500;
+
+// ── TTS ───────────────────────────────────────────────────────────────────────
+
+/// Tauri event name for TTS progress notifications.
+pub const TTS_PROGRESS_EVENT: &str = "tts-progress";
+
+/// Seconds of silence appended after synthesised speech.
+pub const TTS_TAIL_SILENCE_SECS: f32 = 0.25;
+
+/// HuggingFace repository for the KittenTTS model.
+pub const KITTEN_TTS_HF_REPO: &str = "KittenML/kitten-tts-mini-0.8";
+
+/// Default KittenTTS voice name.
+pub const KITTEN_TTS_VOICE_DEFAULT: &str = "Jasper";
+
+/// Default KittenTTS speech speed multiplier.
+pub const KITTEN_TTS_SPEED: f32 = 1.0;
+
+// ── Tray ──────────────────────────────────────────────────────────────────────
+
+/// Minimum milliseconds between tray menu rebuilds (debounce).
+pub const MENU_REBUILD_MIN_MS: u64 = 300;
+
+// ── Tool calling ──────────────────────────────────────────────────────────────
+
+/// Opening delimiter for tool-call blocks in model output.
+pub const TOOL_CALL_START: &str = "[TOOL_CALL]";
+
+/// Closing delimiter for tool-call blocks in model output.
+pub const TOOL_CALL_END: &str = "[/TOOL_CALL]";
+
+/// Maximum characters retained from tool results in chat context.
+pub const TOOL_MAX_RESULT_CHARS: usize = 2000;
+
+/// Bash command size threshold (bytes) above which the command is written to a
+/// script file instead of passed via `bash -c`.
+pub const TOOL_BASH_SCRIPT_THRESHOLD: usize = 8 * 1024;
+
+/// Lines of bash output shown in the head portion of a summarised result.
+pub const TOOL_BASH_SUMMARY_HEAD: usize = 20;
+
+/// Lines of bash output shown in the tail portion of a summarised result.
+pub const TOOL_BASH_SUMMARY_TAIL: usize = 20;
+
+/// Below this many lines, bash output is returned inline without summarisation.
+pub const TOOL_BASH_INLINE_THRESHOLD: usize = 200;
+
+// ── Active window tracking ────────────────────────────────────────────────────
+
+/// Seconds of inactivity before a user is considered idle.
+pub const ACTIVE_WINDOW_IDLE_THRESHOLD_SECS: f64 = 2.0;
+
+// ── WebSocket server ──────────────────────────────────────────────────────────
+
+/// Broadcast channel capacity for WebSocket clients.
+pub const WS_BROADCAST_CAPACITY: usize = 512;
+
+/// Maximum entries in the per-client request audit log.
+pub const WS_MAX_REQUEST_LOG: usize = 200;
+
+pub const WS_HOST: &str = "127.0.0.1";
+pub const WS_DEFAULT_PORT: u16 = 8375;
+
+// ── DND (Do Not Disturb) ─────────────────────────────────────────────────────
+
+/// Reverse-DNS client identifier for DND platform APIs.
+pub const DND_CLIENT_ID: &str = "com.neuroskill.app.dnd";
+
+/// Default focus-mode identifier on Linux.
+pub const DND_LINUX_MODE_ID: &str = "linux.dnd.default";
+
+/// Default focus-mode identifier on Windows.
+pub const DND_WINDOWS_MODE_ID: &str = "windows.dnd.default";
+
 // ── Calibration ───────────────────────────────────────────────────────────────
 
 pub const CALIBRATION_ACTION1_LABEL: &str = "Eyes Open";
@@ -211,14 +443,6 @@ pub const ACTIVITY_FILE: &str = "activity.sqlite";
 
 /// Hooks audit-log database filename.
 pub const HOOKS_LOG_FILE: &str = "hooks.sqlite";
-
-// ── WebSocket server ──────────────────────────────────────────────────────────
-
-/// Broadcast channel capacity for WebSocket clients.
-pub const WS_BROADCAST_CAPACITY: usize = 512;
-
-pub const WS_HOST: &str = "127.0.0.1";
-pub const WS_DEFAULT_PORT: u16 = 8375;
 
 // ── mDNS / Bonjour ────────────────────────────────────────────────────────────
 

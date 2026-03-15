@@ -1445,6 +1445,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
 
 [[package]]
+name = "skill-constants"
+version = "0.0.1"
+
+[[package]]
 name = "skill-tools"
 version = "0.0.1"
 dependencies = [
@@ -1455,6 +1459,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "skill-constants",
  "tokio",
  "ureq",
  "urlencoding",

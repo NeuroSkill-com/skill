@@ -9380,6 +9380,7 @@ version = "0.0.1"
 dependencies = [
  "serde",
  "serde_json",
+ "skill-constants",
  "skill-eeg",
 ]
 
@@ -9440,6 +9441,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "skill-constants",
  "skill-tools",
  "tokio",
  "ureq 2.12.1",
@@ -9508,6 +9510,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "skill-constants",
  "tokio",
  "ureq 2.12.1",
  "urlencoding",
@@ -9516,6 +9519,9 @@ dependencies = [
 [[package]]
 name = "skill-tray"
 version = "0.0.1"
+dependencies = [
+ "skill-constants",
+]
 
 [[package]]
 name = "skill-tts"
@@ -9530,6 +9536,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "skill-constants",
  "tokio",
 ]
 

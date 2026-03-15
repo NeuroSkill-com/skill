@@ -18,24 +18,24 @@
 //! - Mahony, R. et al. (2008). Nonlinear complementary filters on SO(3).
 //!   IEEE Trans. Automatic Control, 53(5), 1203–1218.
 
-/// IMU sample rate (Hz) — Muse fires at ~52 Hz, 3 samples per notification.
-const IMU_SR: f64 = 52.0;
-/// Complementary filter coefficient (0–1).  Higher = more trust in gyro.
-const ALPHA: f64 = 0.96;
-/// Stillness: EMA smoothing time constant (seconds).
-const STILL_TAU_S: f64 = 1.0;
-/// Stillness: angular velocity threshold (°/s) below which score is ~100.
-const STILL_QUIET_DPS: f64 = 3.0;
-/// Stillness: angular velocity above which score is ~0.
-const STILL_ACTIVE_DPS: f64 = 50.0;
-/// Nod detection: minimum pitch delta (degrees) within the nod window.
-const NOD_THRESHOLD_DEG: f64 = 12.0;
-/// Shake detection: minimum yaw delta (degrees) within the shake window.
-const SHAKE_THRESHOLD_DEG: f64 = 15.0;
-/// Gesture detection window (seconds).
-const GESTURE_WINDOW_S: f64 = 0.6;
-/// Gesture refractory period (seconds).
-const GESTURE_REFRACTORY_S: f64 = 1.0;
+use skill_constants::{
+    IMU_SAMPLE_RATE,
+    HEAD_POSE_ALPHA, HEAD_POSE_STILL_TAU_S,
+    HEAD_POSE_STILL_QUIET_DPS, HEAD_POSE_STILL_ACTIVE_DPS,
+    HEAD_POSE_NOD_THRESHOLD_DEG, HEAD_POSE_SHAKE_THRESHOLD_DEG,
+    HEAD_POSE_GESTURE_WINDOW_S, HEAD_POSE_GESTURE_REFRACTORY_S,
+};
+
+// Local aliases for readability.
+const IMU_SR: f64            = IMU_SAMPLE_RATE;
+const ALPHA: f64             = HEAD_POSE_ALPHA;
+const STILL_TAU_S: f64       = HEAD_POSE_STILL_TAU_S;
+const STILL_QUIET_DPS: f64   = HEAD_POSE_STILL_QUIET_DPS;
+const STILL_ACTIVE_DPS: f64  = HEAD_POSE_STILL_ACTIVE_DPS;
+const NOD_THRESHOLD_DEG: f64 = HEAD_POSE_NOD_THRESHOLD_DEG;
+const SHAKE_THRESHOLD_DEG: f64 = HEAD_POSE_SHAKE_THRESHOLD_DEG;
+const GESTURE_WINDOW_S: f64  = HEAD_POSE_GESTURE_WINDOW_S;
+const GESTURE_REFRACTORY_S: f64 = HEAD_POSE_GESTURE_REFRACTORY_S;
 
 /// Head orientation and movement metrics.
 #[derive(Clone, Debug, Default)]
