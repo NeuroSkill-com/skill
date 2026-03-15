@@ -104,7 +104,7 @@ fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
     let skill_dir = {
         let st = app.state::<Mutex<Box<AppState>>>();
-        let dir = st.lock_or_recover().skill_dir.clone();
+        let dir = skill_dir(&st);
         dir
     };
 
@@ -318,7 +318,7 @@ fn hooks_log(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
     let skill_dir = {
         let st = app.state::<Mutex<Box<AppState>>>();
-        let dir = st.lock_or_recover().skill_dir.clone();
+        let dir = skill_dir(&st);
         dir
     };
     let Some(log) = crate::hooks_log::HooksLog::open(&skill_dir) else {
@@ -731,11 +731,10 @@ pub fn search_labels(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         other => return Err(format!("invalid mode \"{other}\": must be \"text\", \"context\", or \"both\"")),
     }
 
-    let (skill_dir, model_code) = {
-        let state = app.state::<Mutex<Box<AppState>>>();
-        let g = state.lock_or_recover();
-        (g.skill_dir.clone(), g.text_embedding_model.clone())
-    };
+    let (skill_dir, model_code) = crate::read_state(
+        &app.state::<Mutex<Box<AppState>>>(),
+        |s| (s.skill_dir.clone(), s.text_embedding_model.clone()),
+    );
 
     // Embed the query synchronously — ws_commands are called from a blocking
     // context (tokio spawn_blocking) so this is safe.
@@ -811,11 +810,7 @@ pub fn search(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let k  = msg.get("k").and_then(|v| v.as_u64()).map(|v| v as usize);
     let ef = msg.get("ef").and_then(|v| v.as_u64()).map(|v| v as usize);
 
-    let skill_dir = {
-        let s = app.state::<Mutex<Box<AppState>>>();
-        let dir = s.lock_or_recover().skill_dir.clone();
-        dir
-    };
+    let skill_dir = skill_dir(&app.state::<Mutex<Box<AppState>>>());
 
     let k  = k.unwrap_or(10).clamp(1, 100);
     let ef = ef.unwrap_or(k.max(50));
@@ -859,7 +854,7 @@ pub fn session_metrics(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .ok_or("missing required field: \"end_utc\" (u64)")?;
     if end < start { return Err("\"end_utc\" must be >= \"start_utc\"".into()); }
 
-    let skill_dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&app.state::<Mutex<Box<crate::AppState>>>());
     let mid = (start + end) / 2;
 
     let full   = crate::get_session_metrics_impl(&skill_dir, start, end);
@@ -917,7 +912,7 @@ pub fn compare(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     if b_end < b_start { return Err("\"b_end_utc\" must be >= \"b_start_utc\"".into()); }
 
     let st = app.state::<Mutex<Box<AppState>>>();
-    let skill_dir = st.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&st);
 
     // ── Session metrics (all bands + derived scores + ratios + PPG) ──────────
     let metrics_a = crate::get_session_metrics_impl(&skill_dir, a_start, a_end);
@@ -991,7 +986,7 @@ pub fn sessions(app: &AppHandle) -> Result<Value, String> {
     let st = app.state::<Mutex<Box<AppState>>>();
     // We can't call the #[tauri::command] directly, but we can replicate
     // the same logic.  Use the state's skill_dir.
-    let skill_dir = st.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&st);
 
     const GAP_SECS: u64 = skill_constants::SESSION_GAP_SECS;
 
@@ -1073,7 +1068,7 @@ pub fn sleep(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     if end < start { return Err("\"end_utc\" must be >= \"start_utc\"".into()); }
 
     let st = app.state::<Mutex<Box<AppState>>>();
-    let skill_dir = st.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&st);
 
     let result = crate::get_sleep_stages_impl(&skill_dir, start, end);
     let analysis = crate::analyze_sleep_stages(&result);
@@ -1107,7 +1102,7 @@ pub fn umap(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     if b_end < b_start { return Err("\"b_end_utc\" must be >= \"b_start_utc\"".into()); }
 
     let st = app.state::<Mutex<Box<AppState>>>();
-    let skill_dir = st.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&st);
 
     let queue = app.state::<std::sync::Arc<crate::job_queue::JobQueue>>();
 
@@ -1310,11 +1305,10 @@ pub fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, String>
     let reach_minutes = msg.get("reach_minutes").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 60);
     let reach_seconds = reach_minutes * 60;
 
-    let (skill_dir, _model_code) = {
-        let state = app.state::<Mutex<Box<AppState>>>();
-        let g = state.lock_or_recover();
-        (g.skill_dir.clone(), g.text_embedding_model.clone())
-    };
+    let (skill_dir, _model_code) = crate::read_state(
+        &app.state::<Mutex<Box<AppState>>>(),
+        |s| (s.skill_dir.clone(), s.text_embedding_model.clone()),
+    );
 
     let embedder_arc = std::sync::Arc::clone(
         &*app.state::<std::sync::Arc<crate::label_cmds::EmbedderState>>()

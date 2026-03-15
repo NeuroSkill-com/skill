@@ -101,7 +101,7 @@ pub fn get_recent_labels(
 
 #[tauri::command]
 pub fn delete_label(label_id: i64, state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<(), String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
     if !labels_db.exists() { return Err("labels db not found".into()); }
     let conn = rusqlite::Connection::open(&labels_db).map_err(|e| e.to_string())?;
@@ -118,7 +118,7 @@ pub fn update_label(
     let text    = text.trim().to_owned();
     let context = context.unwrap_or_default().trim().to_owned();
     if text.is_empty() { return Err("label text is empty".into()); }
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
     if !labels_db.exists() { return Err("labels db not found".into()); }
     let conn = rusqlite::Connection::open(&labels_db).map_err(|e| e.to_string())?;
@@ -291,7 +291,7 @@ pub async fn set_embedding_model(
     }
     save_settings_handle(&app);
 
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     let embedder  = std::sync::Arc::clone(&embedder);
     let mc2 = model_code.clone();
     let sd2 = skill_dir.clone();
@@ -344,7 +344,7 @@ pub async fn rebuild_label_index(
     state:     tauri::State<'_, Mutex<Box<AppState>>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<crate::label_index::RebuildStats, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     let label_idx = std::sync::Arc::clone(&label_idx);
     tokio::task::spawn_blocking(move || Ok(crate::label_index::rebuild(&skill_dir, &label_idx)))
         .await.map_err(|e| e.to_string())?
@@ -358,7 +358,7 @@ pub async fn search_labels_by_text(
     embedder:  tauri::State<'_, std::sync::Arc<EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<Vec<crate::label_index::LabelNeighbor>, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     let embedder  = std::sync::Arc::clone(&embedder);
     let label_idx = std::sync::Arc::clone(&label_idx);
     let ef = (k * 4).max(64);
@@ -379,7 +379,7 @@ pub async fn search_labels_by_eeg(
     state:         tauri::State<'_, Mutex<Box<AppState>>>,
     label_idx:     tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<Vec<crate::label_index::LabelNeighbor>, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     let label_idx = std::sync::Arc::clone(&label_idx);
     let ef = (k * 4).max(64);
     tokio::task::spawn_blocking(move || {
@@ -395,8 +395,8 @@ pub async fn reembed_all_labels(
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
     app:       AppHandle,
 ) -> Result<(), String> {
-    let skill_dir  = state.lock_or_recover().skill_dir.clone();
-    let model_code = state.lock_or_recover().text_embedding_model.clone();
+    let (skill_dir, model_code) = crate::read_state(&state,
+        |s| (s.skill_dir.clone(), s.text_embedding_model.clone()));
     let embedder   = std::sync::Arc::clone(&embedder);
     let label_idx  = std::sync::Arc::clone(&label_idx);
 

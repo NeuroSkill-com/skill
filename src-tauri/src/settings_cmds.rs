@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
     AppState, MuseStatus, DiscoveredDevice, EegPacket, PpgPacket, ImuPacket,
-    emit_status, emit_devices, save_settings,
+    emit_status, emit_devices, save_settings, skill_dir, mutate_and_save,
     start_session, cancel_session,
     constants::{EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS, LOG_CONFIG_FILE},
 };
@@ -108,7 +108,7 @@ pub async fn suggest_hook_keywords(
     }
 
     let max_n = limit.unwrap_or(8).clamp(1, 20);
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&state);
     let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
     let embedder = std::sync::Arc::clone(&embedder);
     let label_idx = std::sync::Arc::clone(&label_idx);
@@ -489,15 +489,13 @@ pub fn get_theme_and_language(state: tauri::State<'_, Mutex<Box<AppState>>>) -> 
 }
 
 #[tauri::command]
-pub fn set_theme(theme: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    state.lock_or_recover().theme = theme;
-    save_settings(&app);
+pub fn set_theme(theme: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
+    mutate_and_save(&app, |s| s.theme = theme);
 }
 
 #[tauri::command]
-pub fn set_language(language: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    state.lock_or_recover().language = language;
-    save_settings(&app);
+pub fn set_language(language: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
+    mutate_and_save(&app, |s| s.language = language);
 }
 
 #[tauri::command]
@@ -509,10 +507,9 @@ pub fn get_accent_color(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String
 pub fn set_accent_color(
     accent: String,
     app:    AppHandle,
-    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    state.lock_or_recover().accent_color = accent;
-    save_settings(&app);
+    mutate_and_save(&app, |s| s.accent_color = accent);
 }
 
 // ── Daily goal ────────────────────────────────────────────────────────────────
@@ -536,9 +533,8 @@ pub fn get_goal_notified_date(state: tauri::State<'_, Mutex<Box<AppState>>>) -> 
 }
 
 #[tauri::command]
-pub fn set_goal_notified_date(date: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    state.lock_or_recover().goal_notified_date = date;
-    save_settings(&app);
+pub fn set_goal_notified_date(date: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
+    mutate_and_save(&app, |s| s.goal_notified_date = date);
 }
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
@@ -611,7 +607,7 @@ pub async fn open_session_for_timestamp(
     app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&state);
     let Some(csv_path) = crate::history_cmds::find_session_csv_for_timestamp(&skill_dir, timestamp_utc) else {
         return Err("no session found for timestamp".to_owned());
     };
@@ -623,7 +619,7 @@ pub fn get_daily_recording_mins(
     days:  Option<u32>,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<(String, u32)> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&state);
     let n = days.unwrap_or(30).min(365) as i64;
     let now_secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1248,7 +1244,7 @@ pub fn suggest_hook_distances(
     keywords: Vec<String>,
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> HookDistanceSuggestion {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&state);
 
     let empty = HookDistanceSuggestion {
         label_n: 0, ref_n: 0, sample_n: 0,
@@ -1437,7 +1433,7 @@ pub fn get_hook_log(
     offset: Option<i64>,
     state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<crate::hooks_log::HookLogRow> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&state);
     let Some(log) = crate::hooks_log::HooksLog::open(&skill_dir) else {
         return vec![];
     };
@@ -1447,7 +1443,7 @@ pub fn get_hook_log(
 /// Return the total number of hook-fire events in the audit log.
 #[tauri::command]
 pub fn get_hook_log_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> i64 {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&state);
     crate::hooks_log::HooksLog::open(&skill_dir)
         .map(|l| l.count())
         .unwrap_or(0)
@@ -1606,7 +1602,7 @@ pub fn get_screenshot_metrics(
 pub fn check_ocr_models_ready(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> bool {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&state);
     let ocr_dir = skill_dir.join("ocr_models");
     ocr_dir.join(crate::constants::OCR_DETECTION_MODEL_FILE).exists()
         && ocr_dir.join(crate::constants::OCR_RECOGNITION_MODEL_FILE).exists()
@@ -1619,7 +1615,7 @@ pub fn check_ocr_models_ready(
 pub async fn download_ocr_models(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<bool, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&state);
     Ok(tokio::task::spawn_blocking(move || {
         let ocr_dir = skill_dir.join("ocr_models");
         let _ = std::fs::create_dir_all(&ocr_dir);

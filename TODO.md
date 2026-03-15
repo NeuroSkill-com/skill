@@ -2,6 +2,8 @@
 
 - [ ] when you download first model, it does not get activated by default. Fix the `use` button. And streamline first onboarding with the first model. If user click start the LLM engine, if the model is not used, ask user to go and click `use` which one they want to run.
 
+- [x] deduplicate Tauri backend boilerplate — added `skill_dir()`, `read_state()`, `mutate_state()`, `mutate_and_save()` helpers to `lib.rs` replacing ~30 `state.lock_or_recover().skill_dir.clone()` call sites across `commands.rs`, `ws_commands.rs`, `settings_cmds.rs`, `label_cmds.rs`, `history_cmds.rs`, `session_analysis.rs`, `global_eeg_index.rs`; added `search_params()` helper in `commands.rs` deduplicating k/ef clamping; added `load_json_or_default()` / `save_json()` generic helpers and `init_wal_pragmas()` to `skill-data::util` replacing duplicate patterns across `skill-settings`, `skill_log`, `activity_store`, `screenshot_store`, `hooks_log`, `eeg_embeddings`; applied `mutate_and_save()` to ~12 simple set-and-persist patterns in `window_cmds.rs` and `settings_cmds.rs`
+
 - [x] adopt `use-canvas.ts` action in chart components — migrated ImuChart, PpgChart, GpuChart, BandChart; EegChart left as-is (too complex — spectrogram tapes, MutationObserver, frame-skip logic)
 
 - [x] consolidate HuggingFace cache path resolution — added `hf_cache_root()`, `hf_model_dir()`, `hf_ensure_dirs()` to `skill-data::util`; replaced manual env-var resolution in `skill-exg`, duplicated `Cache::from_env().path()` + folder construction in `skill-exg` and `skill-llm`; removed `dirs` crate dependency from `skill-exg`

@@ -449,7 +449,7 @@ pub async fn open_onboarding_window(app: AppHandle) -> Result<(), String> {
     }
 
 #[tauri::command]
-pub fn complete_onboarding(app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn complete_onboarding(app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
     mutate_and_save(&app, |s| s.onboarding_complete = true);
     if let Some(win) = app.get_webview_window("onboarding") { let _ = win.close(); }
     if let Some(win) = app.get_webview_window("main") {
@@ -541,7 +541,7 @@ pub fn get_active_calibration(state: tauri::State<'_, Mutex<Box<AppState>>>) -> 
 }
 
 #[tauri::command]
-pub fn set_active_calibration(id: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn set_active_calibration(id: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
     mutate_and_save(&app, |s| s.active_calibration_id = id);
 }
 
@@ -549,7 +549,7 @@ pub fn set_active_calibration(id: String, app: AppHandle, state: tauri::State<'_
 pub fn create_calibration_profile(
     mut profile: CalibrationProfile,
     app:         AppHandle,
-    state:       tauri::State<'_, Mutex<Box<AppState>>>,
+    _state:      tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> CalibrationProfile {
     profile.id = new_profile_id();
     profile.last_calibration_utc = None;
@@ -560,7 +560,7 @@ pub fn create_calibration_profile(
 
 #[tauri::command]
 pub fn update_calibration_profile(
-    profile: CalibrationProfile, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>,
+    profile: CalibrationProfile, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let r = app.state::<Mutex<Box<AppState>>>();
     let mut s = r.lock_or_recover();
@@ -575,7 +575,7 @@ pub fn update_calibration_profile(
 
 #[tauri::command]
 pub fn delete_calibration_profile(
-    id: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>,
+    id: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let r = app.state::<Mutex<Box<AppState>>>();
     let mut s = r.lock_or_recover();
@@ -596,7 +596,7 @@ pub fn delete_calibration_profile(
 pub fn record_calibration_completed(
     profile_id: Option<String>,
     app:        AppHandle,
-    state:      tauri::State<'_, Mutex<Box<AppState>>>,
+    _state:     tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     mutate_and_save(&app, |s| {
         let target_id = profile_id.unwrap_or_else(|| s.active_calibration_id.clone());

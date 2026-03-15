@@ -63,7 +63,7 @@ pub(crate) async fn get_sleep_stages(
     start_utc: u64, end_utc: u64,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<skill_history::SleepStages, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     tokio::task::spawn_blocking(move || {
         skill_history::get_sleep_stages(&skill_dir, start_utc, end_utc)
     }).await.map_err(|e| e.to_string())
@@ -74,7 +74,7 @@ pub(crate) async fn get_session_metrics(
     start_utc: u64, end_utc: u64,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<SessionMetrics, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     tokio::task::spawn_blocking(move || {
         skill_history::get_session_metrics(&skill_dir, start_utc, end_utc)
     }).await.map_err(|e| e.to_string())
@@ -85,7 +85,7 @@ pub(crate) async fn get_session_timeseries(
     start_utc: u64, end_utc: u64,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<Vec<EpochRow>, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     tokio::task::spawn_blocking(move || {
         skill_history::get_session_timeseries(&skill_dir, start_utc, end_utc)
     }).await.map_err(|e| e.to_string())
@@ -114,7 +114,7 @@ pub(crate) fn compute_umap_compare(
     b_start_utc: u64, b_end_utc: u64,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> UmapResult {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     match ws_commands::umap_compute_inner(&skill_dir, a_start_utc, a_end_utc, b_start_utc, b_end_utc, None) {
         Ok(val) => serde_json::from_value(val).unwrap_or_default(),
         Err(e) => { eprintln!("[umap] compute error: {e}"); UmapResult::default() }
@@ -128,7 +128,7 @@ pub(crate) fn enqueue_umap_compare(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
     queue: tauri::State<'_, std::sync::Arc<job_queue::JobQueue>>,
 ) -> job_queue::JobTicket {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     let n_a = load_embeddings_range(&skill_dir, a_start_utc, a_end_utc).len();
     let n_b = load_embeddings_range(&skill_dir, b_start_utc, b_end_utc).len();
     let n = n_a + n_b;

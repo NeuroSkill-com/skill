@@ -232,7 +232,7 @@ pub fn get_global_index_stats(
     state:  tauri::State<'_, std::sync::Mutex<Box<crate::AppState>>>,
     global: tauri::State<'_, std::sync::Arc<GlobalEegIndex>>,
 ) -> GlobalIndexStats {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     let path      = index_path(&skill_dir);
     let file_size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
     let guard     = global.0.lock_or_recover();
@@ -252,7 +252,7 @@ pub async fn rebuild_global_eeg_index(
     state:  tauri::State<'_, std::sync::Mutex<Box<crate::AppState>>>,
     global: tauri::State<'_, std::sync::Arc<GlobalEegIndex>>,
 ) -> Result<GlobalIndexStats, String> {
-    let skill_dir  = state.lock_or_recover().skill_dir.clone();
+    let skill_dir  = crate::skill_dir(&state);
     let global_arc = global.arc();
 
     tokio::task::spawn_blocking(move || {

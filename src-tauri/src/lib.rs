@@ -793,6 +793,7 @@ pub(crate) fn read_state<T>(
 /// ```ignore
 /// mutate_state(&state, |s| s.theme = "dark".into());
 /// ```
+#[allow(dead_code)]
 pub(crate) fn mutate_state(
     state: &Mutex<Box<AppState>>,
     f: impl FnOnce(&mut AppState),

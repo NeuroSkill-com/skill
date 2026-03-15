@@ -52,7 +52,7 @@ pub(crate) fn list_sessions(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Ve
 
 #[tauri::command]
 pub(crate) async fn list_session_days(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<Vec<String>, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     tokio::task::spawn_blocking(move || {
         skill_history::list_session_days(&skill_dir)
     }).await.map_err(|e| e.to_string())
@@ -63,7 +63,7 @@ pub(crate) async fn list_sessions_for_day(
     day: String,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<Vec<SessionEntry>, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     tokio::task::spawn_blocking(move || {
         let label_store = skill_history::label_store::LabelStore::open(&skill_dir);
         skill_history::list_sessions_for_day(&day, &skill_dir, label_store.as_ref())
@@ -95,7 +95,7 @@ pub(crate) async fn stream_sessions(
     on_event: tauri::ipc::Channel<SessionStreamEvent>,
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
 
     tokio::task::spawn_blocking(move || {
         let days = skill_history::list_session_days(&skill_dir);
@@ -133,7 +133,7 @@ pub(crate) async fn stream_sessions(
 pub(crate) async fn get_history_stats(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<skill_history::HistoryStats, ()> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     Ok(tokio::task::spawn_blocking(move || {
         skill_history::get_history_stats(&skill_dir)
     }).await.unwrap_or(skill_history::HistoryStats {
@@ -144,7 +144,7 @@ pub(crate) async fn get_history_stats(
 /// List embedding sessions for the compare picker.
 #[tauri::command]
 pub(crate) fn list_embedding_sessions(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<skill_history::EmbeddingSession> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = crate::skill_dir(&state);
     skill_history::list_embedding_sessions(&skill_dir)
 }
 
