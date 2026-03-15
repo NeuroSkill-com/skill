@@ -346,7 +346,11 @@ async fn handle_mw75_event(
             let ipc_ch = {
                 let sr = app.state::<Mutex<Box<AppState>>>();
                 let mut s = sr.lock_or_recover();
-                for (ch, &uv) in pkt.channels.iter().enumerate().take(pipeline_ch) {
+                // Ensure status.eeg can hold all MW75 channels.
+                if s.status.eeg.len() < pkt.channels.len() {
+                    s.status.eeg.resize(pkt.channels.len(), f64::NAN);
+                }
+                for (ch, &uv) in pkt.channels.iter().enumerate() {
                     s.status.eeg[ch] = uv as f64;
                 }
                 s.status.sample_count += 1;
