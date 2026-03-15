@@ -1979,7 +1979,7 @@
                   {#each msg.toolUses as tu, tuIdx}
                     {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐", bash: "💻", read_file: "📄", write_file: "✏️", edit_file: "🔧", search_output: "🔎" }}
                     {@const icon = icons[tu.tool] ?? "🔧"}
-                    {@const hasDetails = !!(tu.args || tu.result)}
+                    {@const hasDetails = !!(tu.args || tu.result || tu.detail)}
                     {@const dangerKey = detectToolDanger(tu)}
                     {@const isDangerous = !!dangerKey}
                     {@const borderColor =
@@ -2127,14 +2127,79 @@
                       {#if tu.expanded && hasDetails}
                         <div class="border-t border-current/10 px-3 py-2 flex flex-col gap-2
                                     text-[0.63rem] text-muted-foreground">
-                          <!-- Arguments -->
-                          {#if tu.args}
+                          <!-- Bash: show command prominently -->
+                          {#if tu.tool === "bash" && tu.args?.command}
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                                {t("chat.tools.commandLabel")}
+                              </span>
+                              <pre class="font-mono text-[0.65rem] leading-relaxed whitespace-pre-wrap break-all
+                                          bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2 max-h-48 overflow-y-auto
+                                          text-foreground select-text">{tu.args.command}</pre>
+                            </div>
+                          <!-- File tools: show path prominently -->
+                          {:else if (tu.tool === "read_file" || tu.tool === "write_file" || tu.tool === "edit_file") && tu.args?.path}
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                                {tu.tool === "read_file" ? t("chat.tools.fileLabel") : t("chat.tools.fileLabel")}
+                              </span>
+                              <pre class="font-mono text-[0.65rem] leading-relaxed whitespace-pre-wrap break-all
+                                          bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2
+                                          text-foreground select-text">{tu.args.path}</pre>
+                              {#if tu.tool === "edit_file" && tu.args.old_text}
+                                <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50 mt-1">
+                                  {t("chat.tools.editOldLabel")}
+                                </span>
+                                <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
+                                            bg-red-500/5 border border-red-500/10 rounded-lg px-2 py-1.5 max-h-32 overflow-y-auto
+                                            text-foreground select-text">{tu.args.old_text}</pre>
+                              {/if}
+                              {#if tu.tool === "edit_file" && tu.args.new_text}
+                                <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50 mt-1">
+                                  {t("chat.tools.editNewLabel")}
+                                </span>
+                                <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
+                                            bg-emerald-500/5 border border-emerald-500/10 rounded-lg px-2 py-1.5 max-h-32 overflow-y-auto
+                                            text-foreground select-text">{tu.args.new_text}</pre>
+                              {/if}
+                              {#if tu.tool === "write_file" && tu.args.content}
+                                <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50 mt-1">
+                                  {t("chat.tools.contentLabel")}
+                                </span>
+                                <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
+                                            bg-black/5 dark:bg-white/5 rounded-lg px-2 py-1.5 max-h-48 overflow-y-auto
+                                            text-foreground select-text">{tu.args.content}</pre>
+                              {/if}
+                            </div>
+                          <!-- Web search: show query -->
+                          {:else if tu.tool === "web_search" && tu.args?.query}
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                                {t("chat.tools.queryLabel")}
+                              </span>
+                              <pre class="font-mono text-[0.65rem] leading-relaxed whitespace-pre-wrap break-all
+                                          bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2
+                                          text-foreground select-text">{tu.args.query}</pre>
+                            </div>
+                          <!-- Web fetch: show URL -->
+                          {:else if tu.tool === "web_fetch" && tu.args?.url}
+                            <div class="flex flex-col gap-0.5">
+                              <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                                URL
+                              </span>
+                              <pre class="font-mono text-[0.65rem] leading-relaxed whitespace-pre-wrap break-all
+                                          bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2
+                                          text-foreground select-text">{tu.args.url}</pre>
+                            </div>
+                          <!-- Generic: show raw JSON args -->
+                          {:else if tu.args}
                             <div class="flex flex-col gap-0.5">
                               <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
                                 {t("chat.tools.argsLabel")}
                               </span>
                               <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
-                                          bg-black/5 dark:bg-white/5 rounded-lg px-2 py-1.5 max-h-48 overflow-y-auto">{JSON.stringify(tu.args, null, 2)}</pre>
+                                          bg-black/5 dark:bg-white/5 rounded-lg px-2 py-1.5 max-h-48 overflow-y-auto
+                                          select-text">{JSON.stringify(tu.args, null, 2)}</pre>
                             </div>
                           {/if}
                           <!-- Result -->
@@ -2145,7 +2210,7 @@
                               </span>
                               <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
                                           bg-black/5 dark:bg-white/5 rounded-lg px-2 py-1.5 max-h-64 overflow-y-auto
-                                          {tu.status === 'error' ? 'text-red-500' : ''}">{#if typeof tu.result === "string"}{tu.result}{:else}{JSON.stringify(tu.result, null, 2)}{/if}</pre>
+                                          select-text {tu.status === 'error' ? 'text-red-500' : ''}">{#if typeof tu.result === "string"}{tu.result}{:else}{JSON.stringify(tu.result, null, 2)}{/if}</pre>
                             </div>
                           {/if}
 
