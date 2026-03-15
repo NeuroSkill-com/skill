@@ -14,6 +14,7 @@ the Free Software Foundation, version 3 only. -->
   import { hBar, hCbs } from "$lib/history-titlebar.svelte";
   import { helpTitlebarState } from "$lib/help-search-state.svelte";
   import { labelTitlebarState } from "$lib/label-titlebar.svelte";
+  import { chatTitlebarState } from "$lib/chat-titlebar.svelte";
   import { isBtOff } from "$lib/bt-status-store.svelte";
 
   // ── State ───────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ the Free Software Foundation, version 3 only. -->
   const isDownloadsWindow = $derived(windowLabel === "downloads");
   const isHistoryWindow   = $derived(windowLabel === "history");
   const isLabelWindow     = $derived(windowLabel === "label");
+  const isChatWindow      = $derived(windowLabel === "chat");
   const btUnavailable     = $derived(isMainWindow && isBtOff());
 
   const SEARCH_MODE_EVENT     = "skill:search-mode";
@@ -187,6 +189,24 @@ the Free Software Foundation, version 3 only. -->
       </div>
       <span class="help-version-badge">v{helpTitlebarState.version}</span>
       <span class="help-license-badge" title="GNU General Public License v3.0">{t("settings.license")}</span>
+    </div>
+  {:else if isChatWindow}
+    <div class="chat-window-head" data-tauri-drag-region>
+      <span class="chat-status-dot
+        {chatTitlebarState.status === 'running'  ? 'chat-status-running'
+        : chatTitlebarState.status === 'loading' ? 'chat-status-loading'
+        :                                          'chat-status-stopped'}"></span>
+      <span class="chat-model-label" data-tauri-drag-region>
+        {#if chatTitlebarState.status === 'running' && chatTitlebarState.modelName}
+          {chatTitlebarState.modelName}
+        {:else if chatTitlebarState.status === 'loading'}
+          {t("chat.status.loading")}
+        {:else if chatTitlebarState.status === 'running'}
+          {t("chat.status.running")}
+        {:else}
+          {t("chat.status.stopped")}
+        {/if}
+      </span>
     </div>
   {:else}
     <div class="titlebar-title" data-tauri-drag-region>
@@ -372,6 +392,28 @@ the Free Software Foundation, version 3 only. -->
   .titlebar button:hover { background-color: var(--color-hover); }
   .titlebar button:active { background-color: var(--color-active); }
   .titlebar button svg { width: 18px; height: 18px; }
+
+  /* ── Chat window ─────────────────────────────────────────────────────── */
+  .chat-window-head {
+    position: absolute;
+    left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    max-width: min(400px, calc(100vw - 200px));
+    min-width: 0; padding: 0 10px; height: 100%;
+    overflow: hidden; pointer-events: none; z-index: 1;
+  }
+  .chat-status-dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+  .chat-status-running  { background: #22c55e; }
+  .chat-status-loading  { background: #f59e0b; animation: pulse 1.5s ease-in-out infinite; }
+  .chat-status-stopped  { background: color-mix(in oklab, var(--color-text) 25%, transparent); }
+  .chat-model-label {
+    font-size: 0.66rem; font-weight: 600; letter-spacing: 0.01em;
+    color: var(--color-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    user-select: none;
+  }
 
   /* ── Search window ───────────────────────────────────────────────────── */
   .search-window-head {
