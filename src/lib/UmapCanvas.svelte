@@ -11,14 +11,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
   import { Canvas } from "@threlte/core";
   import UmapScene from "./UmapScene.svelte";
-
-  interface UmapPoint {
-    x: number; y: number; z: number;
-    session: number; utc: number; label?: string;
-  }
-  interface UmapResult {
-    points: UmapPoint[]; n_a: number; n_b: number; dim: number;
-  }
+  import type { UmapPoint, UmapResult } from "$lib/types";
 
   let {
     data,

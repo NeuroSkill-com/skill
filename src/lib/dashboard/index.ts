@@ -15,3 +15,5 @@ export { default as PpgMetrics }           from "./PpgMetrics.svelte";
 export { default as MetricTooltip }        from "./MetricTooltip.svelte";
 export { default as TimeSeriesChart }      from "./TimeSeriesChart.svelte";
 export { default as SessionDetail }        from "./SessionDetail.svelte";
+export { default as CollapsibleSection }   from "./CollapsibleSection.svelte";
+export { default as MetricBar }            from "./MetricBar.svelte";

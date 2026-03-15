@@ -682,7 +682,7 @@ fn load_ocr_engine(skill_dir: &Path) -> Option<ocrs::OcrEngine> {
 
 /// Run OCR on an already-resized PNG image.  Returns the extracted text.
 ///
-/// On macOS: uses `apple-ocr` crate (compiled ObjC, Vision framework,
+/// On macOS: uses `skill-vision` crate (compiled ObjC, Vision framework,
 /// GPU / Neural Engine) — typically <50 ms.
 ///
 /// On other platforms (or if Apple Vision fails): uses `ocrs` (rten, CPU).
@@ -690,7 +690,7 @@ fn run_ocr(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
     // Try Apple Vision first on macOS (GPU/ANE, <50ms)
     #[cfg(target_os = "macos")]
     {
-        if let Some(text) = apple_ocr::recognize_text_from_png(png_bytes) {
+        if let Some(text) = skill_vision::recognize_text_from_png(png_bytes) {
             return Some(text);
         }
         // Fall through to ocrs if Vision framework fails

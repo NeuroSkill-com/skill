@@ -26,6 +26,7 @@ the Free Software Foundation, version 3 only. -->
   import type { SleepEpoch, SleepSummary, SleepStages } from "$lib/types";
   import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
   import { fmtSecs, fmtTime, fmtDateTime, fmtDuration, pad } from "$lib/format";
+  import type { UmapPoint, UmapResult, UmapProgress } from "$lib/types";
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -65,8 +66,6 @@ the Free Software Foundation, version 3 only. -->
   let sleepExpanded   = $state(false);
 
   // UMAP state
-  interface UmapPoint { x: number; y: number; z: number; session: number; utc: number; label?: string; }
-  interface UmapResult { points: UmapPoint[]; n_a: number; n_b: number; dim: number; elapsed_ms?: number; }
   let umapResult    = $state<UmapResult | null>(null);
   let umapLoading   = $state(false);
   let umapRequested = $state(false);               // true once the user clicks "Calculate UMAP"
@@ -107,7 +106,6 @@ the Free Software Foundation, version 3 only. -->
 
   // Job queue types
   interface JobTicket { job_id: number; estimated_ready_utc: number; queue_position: number; estimated_secs: number; }
-  interface UmapProgress { epoch: number; total_epochs: number; loss: number; best_loss: number; elapsed_secs: number; epoch_ms: number; }
   interface JobPollResult { status: string; job_id: number; result?: any; elapsed_ms?: number; error?: string; queue_position?: number; estimated_secs?: number; progress?: UmapProgress; }
 
   /** Start the wall-clock timer that drives elapsed / countdown display. */

@@ -25,13 +25,7 @@ the Free Software Foundation, version 3 only. -->
   } from "three";
 
   // ── Types ────────────────────────────────────────────────────────────────
-  interface UmapPoint {
-    x: number; y: number; z: number;
-    session: number; utc: number; label?: string;
-  }
-  interface UmapResult {
-    points: UmapPoint[]; n_a: number; n_b: number; dim: number;
-  }
+  import type { UmapPoint, UmapResult } from "$lib/types";
 
   // ── Props ────────────────────────────────────────────────────────────────
   let {

@@ -166,8 +166,8 @@ ocrs = "0.12.1"
 rten = "0.24.0"
 
 # Apple Vision framework OCR — compiled ObjC FFI, runs on GPU/ANE.
-# No-op on non-macOS platforms.
-apple-ocr = { path = "../crates/apple-ocr" }
+# No-op on non-macOS platforms.  (Renamed from apple-ocr → skill-vision.)
+skill-vision = { path = "../crates/skill-vision" }
 
 # Image processing — resize/pad screenshots before saving and embedding.
 # Already compiled transitively via fastembed; listing it here gives

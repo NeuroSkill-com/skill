@@ -30,18 +30,7 @@ the Free Software Foundation, version 3 only. -->
   } from "$lib/constants";
   import { getResolved } from "$lib/theme-store.svelte";
   import { fmtTimeShort } from "$lib/format";
-
-  interface UmapPoint {
-    x: number; y: number; z: number;
-    session: number; utc: number; label?: string;
-    /** Semantic distance from the query anchor (used in kNN graph tooltips). */
-    dist?: number;
-  }
-  interface UmapResult {
-    points: UmapPoint[]; n_a: number; n_b: number; dim: number;
-  }
-
-  interface UmapProgress { epoch: number; total_epochs: number; loss: number; best_loss: number; elapsed_secs: number; epoch_ms: number; }
+  import type { UmapPoint, UmapResult, UmapProgress } from "$lib/types";
 
   type ThreeModule = typeof import("three");
   type LabelCloudGroup = THREE_NS.Group & { __updatePositions?: (pos: Float32Array) => void };

@@ -28,6 +28,7 @@ version = "=2.0.0-rc.11"
 default-features = false
 
 [target.'cfg(target_os = "macos")'.dependencies]
+skill-vision = { path = "../skill-vision" }
 fastembed = { version = "5.11.0", features = ["metal"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]

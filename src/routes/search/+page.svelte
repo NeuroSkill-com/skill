@@ -24,6 +24,7 @@ the Free Software Foundation, version 3 only. -->
     pad, fmtTime, fmtDate, fmtDateTimeSecs as fmtDateTime,
     fmtDuration as fmtDurationSecs, fmtUtcDay, fmtSecs,
   } from "$lib/format";
+  import type { UmapPoint, UmapResult } from "$lib/types";
 
   // ── Types ────────────────────────────────────────────────────────────────
   interface NeighborMetrics {
@@ -61,7 +62,6 @@ the Free Software Foundation, version 3 only. -->
     distMin: number; distMax: number; distMean: number; distStddev: number;
     hourHist: number[]; topDays: { day: string; count: number }[]; peakHour: number;
   }
-  interface UmapPoint  { x: number; y: number; z: number; session: number; utc: number; label?: string; dist?: number; }
   // Interactive search graph types (mirrored from InteractiveGraph3D)
   interface GraphNode {
     id: string; kind: "query" | "text_label" | "eeg_point" | "found_label";
@@ -72,7 +72,6 @@ the Free Software Foundation, version 3 only. -->
     from_id: string; to_id: string; distance: number;
     kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox";
   }
-  interface UmapResult { points: UmapPoint[]; n_a: number; n_b: number; dim: number; }
   interface JobTicket  { job_id: number; estimated_ready_utc: number; queue_position: number; estimated_secs: number; }
   interface JobPollResult { status: string; job_id: number; result?: any; error?: string; queue_position?: number; }
 

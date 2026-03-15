@@ -1,5 +1,5 @@
 [package]
-name = "apple-ocr"
+name = "skill-vision"
 version = "0.1.0"
 edition = "2021"
 description = "Apple Vision framework OCR via compiled ObjC FFI"

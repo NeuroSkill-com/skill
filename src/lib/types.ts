@@ -101,6 +101,32 @@ export interface SleepStages {
   summary: SleepSummary;
 }
 
+// ── UMAP types ───────────────────────────────────────────────────────────────
+
+export interface UmapPoint {
+  x: number; y: number; z: number;
+  session: number; utc: number; label?: string;
+  /** Semantic distance from the query anchor (used in kNN graph tooltips). */
+  dist?: number;
+}
+
+export interface UmapResult {
+  points: UmapPoint[];
+  n_a: number;
+  n_b: number;
+  dim: number;
+  elapsed_ms?: number;
+}
+
+export interface UmapProgress {
+  epoch: number;
+  total_epochs: number;
+  loss: number;
+  best_loss: number;
+  elapsed_secs: number;
+  epoch_ms: number;
+}
+
 // ── Label types ──────────────────────────────────────────────────────────────
 
 export interface LabelRow {
