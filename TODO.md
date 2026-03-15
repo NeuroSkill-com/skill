@@ -28,6 +28,8 @@
 
 - [x] add LLM accuracy warning banner in chat window — persistent amber warning above the footer hint reminding users that LLM output can be inaccurate and to always verify tool results and generated content; full i18n across all 5 locales (en/de/fr/uk/he)
 
+- [x] README badges — added Discord community link badge, Homebrew cask install badge, and platform download buttons (macOS, Windows, Linux) at the top of README.md pointing to the latest GitHub release assets
+
 - [x] real-time context usage prediction — context bar now updates live as messages accumulate, as the user types, and as tokens stream in; uses ~4 chars/token heuristic with tool prompt overhead estimation; shows `~` prefix when displaying estimates; snaps to real values from llama.cpp when the `done` chunk arrives; completion tokens tracked during streaming
 
 - [x] add Cmd/Ctrl+W to close (or hide) windows — keydown handler in root layout calls `getCurrentWindow().close()` on all windows; main window is hidden (existing CloseRequested intercept), all other windows (chat, settings, help, etc.) are closed
