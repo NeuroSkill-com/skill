@@ -9315,6 +9315,7 @@ dependencies = [
  "skill-data",
  "skill-eeg",
  "skill-llm",
+ "skill-screenshots",
  "skill-tts",
  "stacker",
  "sysinfo 0.38.4",
@@ -9382,6 +9383,25 @@ dependencies = [
  "tokio",
  "ureq 2.12.1",
  "urlencoding",
+]
+
+[[package]]
+name = "skill-screenshots"
+version = "0.0.1"
+dependencies = [
+ "chrono",
+ "crossbeam-channel",
+ "fast-hnsw",
+ "fastembed",
+ "image",
+ "ocrs",
+ "ort",
+ "rten",
+ "serde",
+ "serde_json",
+ "skill-constants",
+ "skill-data",
+ "ureq 2.12.1",
 ]
 
 [[package]]

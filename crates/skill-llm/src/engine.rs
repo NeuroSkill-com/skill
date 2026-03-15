@@ -2689,12 +2689,16 @@ fn run_actor(
 
     // ── create generation context ──
     let ctx_size = NonZeroU32::new(config.ctx_size.unwrap_or(4096));
-    llm_info!(&app, &log_buf, log_file, "creating context (n_ctx={}, n_gpu_layers={})",
-              ctx_size.map_or(0, |n| n.get()), config.n_gpu_layers);
+    llm_info!(&app, &log_buf, log_file,
+        "creating context (n_ctx={}, n_gpu_layers={}, flash_attn={}, offload_kqv={})",
+        ctx_size.map_or(0, |n| n.get()), config.n_gpu_layers,
+        config.flash_attention, config.offload_kqv);
     let ctx_params = LlamaContextParams::default()
         .with_n_ctx(ctx_size)
         .with_n_threads(-1)
-        .with_n_threads_batch(-1);
+        .with_n_threads_batch(-1)
+        .with_flash_attention(config.flash_attention)
+        .with_offload_kqv(config.offload_kqv);
 
     let mut ctx = match model.new_context(backend, ctx_params) {
         Ok(c)  => c,
@@ -2782,68 +2786,70 @@ fn run_actor(
                 return None;
             }
 
-            // Linux Vulkan + mtmd init can still hard-abort for some projector
-            // / driver combinations before returning an error. Prefer the CPU
-            // projector path by default on Linux to keep startup stable.
+            // Linux Vulkan + mtmd init can hard-abort for some projector
+            // / driver combinations.  We attempt GPU first (for speed) and
+            // silently retry on CPU if the GPU path panics or errors.
             //
-            // Advanced users can force mmproj GPU offload with:
-            //   SKILL_FORCE_MMPROJ_GPU=1
+            // Users can force CPU-only with `no_mmproj_gpu: true` in settings,
+            // or force GPU-only with `SKILL_FORCE_MMPROJ_GPU=1`.
             let force_mmproj_gpu = std::env::var("SKILL_FORCE_MMPROJ_GPU")
                 .ok()
                 .as_deref()
                 .map(|v| matches!(v, "1" | "true" | "TRUE" | "yes" | "YES"))
                 .unwrap_or(false);
 
-            let mut mmproj_use_gpu = !config.no_mmproj_gpu;
-            if cfg!(target_os = "linux") && mmproj_use_gpu && !force_mmproj_gpu {
-                mmproj_use_gpu = false;
-                llm_warn!(&app, &log_buf, log_file,
-                    "linux mmproj GPU offload disabled by default for stability; \
-                     using CPU projector path (set SKILL_FORCE_MMPROJ_GPU=1 to override)");
-            }
-
-            let mtmd_params = MtmdContextParams::default()
-                .use_gpu(mmproj_use_gpu)
-                .n_threads(config.mmproj_n_threads)
-                .print_timings(config.verbose)
-                .warmup(false);  // defer warmup — avoids Vulkan/GPU crashes
-                                 // when the mmproj is incompatible; the first
-                                 // real multimodal request will compile kernels
+            let mmproj_use_gpu = !config.no_mmproj_gpu || force_mmproj_gpu;
 
             llm_info!(&app, &log_buf, log_file,
                 "loading mmproj: {} ({:.1} MB, gpu={}, threads={})",
                 p.display(), file_size as f64 / 1_048_576.0,
                 mmproj_use_gpu, config.mmproj_n_threads);
 
-            // Run init in a catch_unwind so a native abort / Rust panic in the
-            // C library doesn't take down the whole application.
-            let mmproj_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                MtmdContext::init_from_file(p, &model, mtmd_params)
-            }));
+            // Helper: attempt to load mmproj with a given GPU flag.
+            let try_load_mmproj = |use_gpu: bool| -> Result<MtmdContext, String> {
+                let params = MtmdContextParams::default()
+                    .use_gpu(use_gpu)
+                    .n_threads(config.mmproj_n_threads)
+                    .print_timings(config.verbose)
+                    .warmup(false);
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    MtmdContext::init_from_file(p, &model, params)
+                })) {
+                    Ok(Ok(mc))     => Ok(mc),
+                    Ok(Err(e))     => Err(format!("{e}")),
+                    Err(_panic)    => Err("panic in native code".into()),
+                }
+            };
 
-            match mmproj_result {
-                Ok(Ok(mc)) => {
+            // First attempt with the requested GPU mode.
+            let result = try_load_mmproj(mmproj_use_gpu);
+
+            // On Linux: if GPU failed, automatically retry on CPU (unless
+            // the user explicitly forced GPU-only).
+            let result = match result {
+                Ok(mc) => Ok(mc),
+                Err(ref gpu_err) if mmproj_use_gpu && cfg!(target_os = "linux") && !force_mmproj_gpu => {
+                    llm_warn!(&app, &log_buf, log_file,
+                        "mmproj GPU load failed ({gpu_err}); retrying on CPU…");
+                    try_load_mmproj(false)
+                }
+                Err(e) => Err(e),
+            };
+
+            match result {
+                Ok(mc) => {
                     llm_info!(&app, &log_buf, log_file,
                         "mmproj loaded ✓ — vision={} audio={}",
                         mc.supports_vision(), mc.supports_audio());
                     vision_flag.store(true, Ordering::Relaxed);
                     Some(mc)
                 }
-                Ok(Err(e)) => {
+                Err(e) => {
                     llm_error!(&app, &log_buf, log_file,
                         "failed to load mmproj: {e} — file: {}", p.display());
                     llm_info!(&app, &log_buf, log_file,
                         "vision disabled — to enable image input, \
                          ensure the mmproj file matches your model or re-download it in Settings → LLM");
-                    None
-                }
-                Err(_panic) => {
-                    llm_error!(&app, &log_buf, log_file,
-                        "mmproj loading crashed (panic in native code) — \
-                         file: {} — vision disabled", p.display());
-                    llm_info!(&app, &log_buf, log_file,
-                        "try re-downloading the mmproj in Settings → LLM, \
-                         or disable autoload_mmproj");
                     None
                 }
             }

@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### Performance
+
+- **GPU optimization across all model systems**: enabled flash attention (`with_flash_attention(true)`) and KQV offloading (`with_offload_kqv(true)`) in the LLM context parameters — reduces KV cache memory by 50% (f16 instead of f32) and accelerates attention on Metal, CUDA, and Vulkan backends. Added `flash_attention` and `offload_kqv` configuration options to `LlmConfig` (both default to `true`). Multimodal projector (mmproj) on Linux now attempts GPU loading first and automatically retries on CPU if the GPU path fails, instead of the previous blanket CPU-only default — this gives Linux users with working Vulkan drivers the same speed as macOS Metal users. Screenshot/OCR embeddings on Windows now register the DirectML execution provider (GPU acceleration via DirectX 12 covering NVIDIA, AMD, and Intel GPUs) and on Linux register the CUDA execution provider, both with CPU fallback — previously non-macOS platforms always ran on CPU. Cached the OCR text embedder in a process-wide `OnceLock<Mutex<TextEmbedding>>` so repeated search queries reuse the loaded ONNX model instead of re-creating it from disk on every call (~200 ms saved per query).
+
 ### Build
 
 - **Create `skill-constants` crate as single source of truth**: all constants (EEG hardware/filter/band, data-file paths, calibration defaults, WebSocket, mDNS, app identity, screenshot/OCR, HNSW settings) are now canonically defined once in `crates/skill-constants/`. The `skill-eeg`, `skill-data`, and main `skill` crates all depend on and re-export from it, eliminating duplicate definitions. Zero dependencies — pure `const` values only.
