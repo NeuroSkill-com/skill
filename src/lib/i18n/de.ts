@@ -361,6 +361,7 @@ const de: Record<string, string> = {
   "settings.calibration":          "Kalibrierung",
   "embeddings.model":       "Einbettungsmodell",
   "embeddings.info":       "Einbettungen werden für den Text und Kontext jedes Labels generiert. Beim ersten Start werden die Modellgewichte einmalig heruntergeladen und lokal gespeichert. Kleinere Modelle (≤384d) sind schnell; größere erzeugen reichhaltigere Repräsentationen.",
+  "embeddings.sharedNote": "Dieses Modell wird in der gesamten App geteilt — es wird auch für EEG-Hook-Abgleich und Screenshot-OCR-Textsuche verwendet.",
   "embeddings.stale":       "veraltet",
   "embeddings.reembed":       "Alle Labels neu einbetten",
   "embeddings.reembedDesc":       "Einbettungen für alle vorhandenen Labels mit dem aktuellen Modell neu berechnen. Nach einem Modellwechsel ausführen.",
@@ -2691,11 +2692,7 @@ const de: Record<string, string> = {
   "screenshots.ocrEngineAppleVision": "Apple Vision — GPU / Neural Engine (empfohlen auf macOS)",
   "screenshots.ocrEngineOcrs": "ocrs — lokale rten-basierte CPU (plattformübergreifend)",
   "screenshots.ocrAppleVisionHint": "⚡ Apple Vision läuft auf GPU/ANE und ist ~10× schneller als ocrs auf macOS",
-  "screenshots.ocrTextModelSelect": "OCR-Text-Einbettungsmodell",
-  "screenshots.ocrTextModelDesc": "Modell für die Einbettung des extrahierten Textes für semantische Suche.",
-  "screenshots.ocrModelBgeSmall": "BGE-Small-EN-v1.5 — 384d (schnell, Standard)",
-  "screenshots.ocrModelMiniLM": "all-MiniLM-L6-v2 — 384d (ausgewogen)",
-  "screenshots.ocrModelBgeBase": "BGE-Base-EN-v1.5 — 768d (reichhaltiger, langsamer)",
+
   "screenshots.ocrActiveModels": "Aktive Modelle",
   "screenshots.ocrInference": "Inferenz",
 

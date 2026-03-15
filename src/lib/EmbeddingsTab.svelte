@@ -149,9 +149,14 @@ the Free Software Foundation, version 3 only. -->
       <line x1="12" y1="8" x2="12" y2="12"/>
       <line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
-    <p class="text-[0.65rem] text-primary leading-relaxed">
-      {t("embeddings.info")}
-    </p>
+    <div class="flex flex-col gap-1">
+      <p class="text-[0.65rem] text-primary leading-relaxed">
+        {t("embeddings.info")}
+      </p>
+      <p class="text-[0.6rem] text-primary/70 leading-relaxed">
+        {t("embeddings.sharedNote")}
+      </p>
+    </div>
   </div>
 
   <!-- ── Re-embed all ────────────────────────────────────────────────────── -->

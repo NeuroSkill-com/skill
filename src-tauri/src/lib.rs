@@ -307,7 +307,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{
     ipc::Channel,
     tray::TrayIconBuilder,
@@ -361,12 +361,8 @@ impl<T> MutexExt<T> for std::sync::Mutex<T> {
 
 // ── Persistent data structure (written to disk) ───────────────────────────────
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PairedDevice {
-    pub id:        String,
-    pub name:      String,
-    pub last_seen: u64,
-}
+// Re-export from skill-data (canonical definition).
+pub use skill_data::device::PairedDevice;
 
 // ── Runtime-only discovered device (merged from scan + paired list) ───────────
 

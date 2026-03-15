@@ -25,7 +25,6 @@ the Free Software Foundation, version 3 only. -->
     fastembed_model: string;
     ocr_enabled:     boolean;
     ocr_engine:      string;
-    ocr_text_model:  string;
     use_gpu:         boolean;
   }
   interface ConfigChangeResult {
@@ -51,13 +50,15 @@ the Free Software Foundation, version 3 only. -->
     fastembed_model: "clip-vit-b-32",
     ocr_enabled: true,
     ocr_engine: "ocrs",
-    ocr_text_model: "bge-small-en-v1.5",
     use_gpu: true,
   });
 
   let saving      = $state(false);
   let reembedding = $state(false);
   let screenPermission = $state<boolean | null>(null);
+  /** The app-wide text embedding model (from Settings → Embeddings).
+   *  OCR text embeddings use this shared model now. */
+  let sharedTextModel = $state("");
   const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
   let estimate    = $state<ReembedEstimate | null>(null);
   let progress    = $state<{ done: number; total: number; elapsed_secs: number; eta_secs: number } | null>(null);
@@ -140,6 +141,9 @@ the Free Software Foundation, version 3 only. -->
     try {
       estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
     } catch { estimate = null; }
+    try {
+      sharedTextModel = await invoke<string>("get_embedding_model");
+    } catch { sharedTextModel = ""; }
 
     if (isMac) {
       try { screenPermission = await invoke<boolean>("check_screen_recording_permission"); }
@@ -668,21 +672,6 @@ the Free Software Foundation, version 3 only. -->
 
       <Separator class="bg-border dark:bg-white/[0.05]" />
 
-      <!-- OCR text embedding model select -->
-      <div class="flex flex-col gap-1.5">
-        <span class="text-[0.72rem] font-semibold text-foreground">{t("screenshots.ocrTextModelSelect")}</span>
-        <span class="text-[0.54rem] text-muted-foreground/60">{t("screenshots.ocrTextModelDesc")}</span>
-        <select bind:value={config.ocr_text_model}
-                class="w-full rounded-lg border border-border dark:border-white/[0.08]
-                       bg-white dark:bg-[#14141e] px-3 py-2
-                       text-[0.72rem] text-foreground
-                       focus:outline-none focus:ring-1 focus:ring-ring/50">
-          <option value="bge-small-en-v1.5">{t("screenshots.ocrModelBgeSmall")}</option>
-          <option value="all-minilm-l6-v2">{t("screenshots.ocrModelMiniLM")}</option>
-          <option value="bge-base-en-v1.5">{t("screenshots.ocrModelBgeBase")}</option>
-        </select>
-      </div>
-
       <!-- Apply button for OCR config changes -->
       <div class="flex justify-end">
         <Button size="sm" onclick={save} disabled={saving}
@@ -704,7 +693,10 @@ the Free Software Foundation, version 3 only. -->
           <span class="text-muted-foreground">{t("screenshots.ocrRecModel")}</span>
           <span class="text-foreground font-mono text-[0.58rem]">text-recognition.rten</span>
           <span class="text-muted-foreground">{t("screenshots.ocrTextEmbed")}</span>
-          <span class="text-foreground font-mono text-[0.58rem]">{config.ocr_text_model}</span>
+          <span class="text-foreground font-mono text-[0.58rem]">
+            {sharedTextModel || "—"}
+            <span class="text-muted-foreground/50 font-sans ml-1">(Embeddings)</span>
+          </span>
           <span class="text-muted-foreground">{t("screenshots.ocrIndex")}</span>
           <span class="text-foreground font-mono text-[0.58rem]">screenshots_ocr.hnsw</span>
           <span class="text-muted-foreground">{t("screenshots.ocrInference")}</span>

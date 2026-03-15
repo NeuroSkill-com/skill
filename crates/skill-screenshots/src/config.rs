@@ -17,7 +17,6 @@ pub fn default_screenshot_ocr_engine()      -> String {
     #[cfg(not(target_os = "macos"))]
     { "ocrs".into() }
 }
-pub fn default_screenshot_ocr_text_model()  -> String { "bge-small-en-v1.5".into() }
 pub fn default_screenshot_use_gpu()         -> bool   { true }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -49,9 +48,6 @@ pub struct ScreenshotConfig {
     #[serde(default = "default_screenshot_ocr_engine")]
     pub ocr_engine: String,
 
-    #[serde(default = "default_screenshot_ocr_text_model")]
-    pub ocr_text_model: String,
-
     #[serde(default = "default_screenshot_use_gpu")]
     pub use_gpu: bool,
 }
@@ -68,7 +64,6 @@ impl Default for ScreenshotConfig {
             fastembed_model: default_screenshot_fastembed_model(),
             ocr_enabled:     default_screenshot_ocr_enabled(),
             ocr_engine:      default_screenshot_ocr_engine(),
-            ocr_text_model:  default_screenshot_ocr_text_model(),
             use_gpu:         default_screenshot_use_gpu(),
         }
     }
@@ -92,14 +87,6 @@ impl ScreenshotConfig {
             },
             "mmproj" => "mmproj".into(),
             other    => other.into(),
-        }
-    }
-
-    pub fn ocr_text_model_enum(&self) -> fastembed::EmbeddingModel {
-        match self.ocr_text_model.as_str() {
-            "all-minilm-l6-v2"  => fastembed::EmbeddingModel::AllMiniLML6V2,
-            "bge-base-en-v1.5"  => fastembed::EmbeddingModel::BGEBaseENV15,
-            _                   => fastembed::EmbeddingModel::BGESmallENV15,
         }
     }
 

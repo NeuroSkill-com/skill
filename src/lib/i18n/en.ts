@@ -451,6 +451,7 @@ const en: Record<string, string> = {
 
   "embeddings.model":          "Embedding Model",
   "embeddings.info":           "Embeddings are generated for each label's text and context. On first use the model weights are downloaded once and cached locally. Smaller models (≤384d) are fast; larger models produce richer representations.",
+  "embeddings.sharedNote":     "This model is shared across the app — it is also used for EEG hook matching and screenshot OCR text search.",
   "embeddings.stale":       "stale",
   "embeddings.reembed":        "Re-embed All Labels",
   "embeddings.reembedDesc":    "Recompute embeddings for all existing labels using the current model. Run this after switching models.",
@@ -2927,11 +2928,7 @@ const en: Record<string, string> = {
   "screenshots.ocrEngineAppleVision":             "Apple Vision — GPU / Neural Engine (recommended on macOS)",
   "screenshots.ocrEngineOcrs":                   "ocrs — local rten-based CPU (cross-platform)",
   "screenshots.ocrAppleVisionHint":              "⚡ Apple Vision runs on GPU/ANE and is ~10× faster than ocrs on macOS",
-  "screenshots.ocrTextModelSelect":              "OCR Text Embedding Model",
-  "screenshots.ocrTextModelDesc":                "Model used to embed extracted text for semantic search.",
-  "screenshots.ocrModelBgeSmall":                "BGE-Small-EN-v1.5 — 384d (fast, default)",
-  "screenshots.ocrModelMiniLM":                  "all-MiniLM-L6-v2 — 384d (balanced)",
-  "screenshots.ocrModelBgeBase":                 "BGE-Base-EN-v1.5 — 768d (richer, slower)",
+
   "screenshots.ocrActiveModels":                 "Active Models",
   "screenshots.ocrInference":                    "Inference",
 

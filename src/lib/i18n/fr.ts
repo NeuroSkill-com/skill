@@ -356,6 +356,7 @@ const fr: Record<string, string> = {
   "settings.calibration":          "Calibration",
   "embeddings.model":       "Modèle d'embedding",
   "embeddings.info":       "Les embeddings sont générés pour le texte et le contexte de chaque étiquette. Lors de la première utilisation, les poids du modèle sont téléchargés une fois et mis en cache localement. Les modèles plus petits (≤384d) sont rapides ; les plus grands produisent des représentations plus riches.",
+  "embeddings.sharedNote": "Ce modèle est partagé dans toute l'application — il est aussi utilisé pour la correspondance des hooks EEG et la recherche OCR des captures d'écran.",
   "embeddings.stale":       "obsolètes",
   "embeddings.reembed":       "Ré-intégrer toutes les étiquettes",
   "embeddings.reembedDesc":       "Recalculer les embeddings pour toutes les étiquettes existantes avec le modèle actuel. À effectuer après un changement de modèle.",
