@@ -19,6 +19,7 @@
   import ChatSidebar                  from "$lib/ChatSidebar.svelte";
   import PromptLibrary                from "$lib/PromptLibrary.svelte";
   import { t }                        from "$lib/i18n/index.svelte";
+  import { chatTitlebarState }        from "$lib/chat-titlebar.svelte";
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -559,6 +560,12 @@
   /** Persist on every change via a reactive effect. */
   $effect(() => {
     try { localStorage.setItem(SYSTEM_PROMPT_KEY, systemPrompt); } catch { /* storage full */ }
+  });
+
+  /** Keep the titlebar model name + status in sync. */
+  $effect(() => {
+    chatTitlebarState.modelName = modelName;
+    chatTitlebarState.status = status;
   });
 
   /** Apply a preset and focus the textarea so the user can refine it. */
@@ -1422,24 +1429,6 @@
 
     <!-- Spacer to push right-side controls to the end -->
     <div class="flex-1 min-w-0" data-tauri-drag-region></div>
-
-    <!-- Status indicator + model name (centered in titlebar via absolute positioning) -->
-    <div class="absolute inset-x-0 flex items-center justify-center pointer-events-none" data-tauri-drag-region>
-      <div class="flex items-center gap-1.5 max-w-[50%]" data-tauri-drag-region>
-        <!-- Live indicator -->
-        <span class="w-2 h-2 rounded-full shrink-0
-                      {status === 'running'  ? 'bg-emerald-500'
-                      : status === 'loading' ? 'bg-amber-500 animate-pulse'
-                      :                       'bg-slate-400/50'}"></span>
-        <span class="text-[0.72rem] font-semibold truncate {statusColor}" data-tauri-drag-region>
-          {#if status === 'running' && modelName}
-            {modelName}
-          {:else}
-            {statusLabel}
-          {/if}
-        </span>
-      </div>
-    </div>
 
     <!-- Tools badge -->
     {#if supportsTools}
