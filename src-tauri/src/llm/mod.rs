@@ -800,6 +800,7 @@ struct TruncatedOutput {
 
 /// Truncate from the tail (keep last N lines / max bytes).
 /// Suitable for bash output where the end (errors/results) matters most.
+#[allow(dead_code)]
 fn truncate_tool_output(content: &str, max_lines: usize, max_bytes: usize) -> TruncatedOutput {
     let total_bytes = content.len();
     let lines: Vec<&str> = content.split('\n').collect();

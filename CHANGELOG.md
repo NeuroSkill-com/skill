@@ -23,6 +23,13 @@ All notable changes to NeuroSkill™ are documented here.
 ### LLM — Coding-Agent Tools
 
 - **Bash tool** (`bash`): execute shell commands from the LLM chat with configurable timeout. Output is tail-truncated to 2 000 lines / 50 KB (keeps the end where errors appear). Commands run in the user's home directory.
+- **Bash output saved to file**: the `bash` tool now always saves full command output to a timestamped text file (`output_<ts>.txt`) in the session scripts directory. Instead of returning the full output inline (which consumed context), it returns a compact summary — first 20 + last 20 lines for outputs over 200 lines, with the full `output_file` path for follow-up queries.
+- **New `search_output` tool** 🔎: lets the LLM search and navigate large bash outputs without loading them into context. Supports:
+  - **Regex search** (`pattern`): case-insensitive regex with configurable context lines around matches
+  - **Head/tail** (`head`, `tail`): retrieve the first or last N lines
+  - **Line range** (`line_start`, `line_end`): retrieve a specific range of lines
+  - **Max matches** (`max_matches`): cap the number of regex results (default: 50)
+  - All output includes line numbers for easy reference. Auto-enabled when bash is enabled — no separate toggle needed.
 - **Context-aware tool calling**: tool-calling now adapts to the available context window to prevent "prompt too long" errors.
   - **Compact tool prompt** (≤ 4096 tokens): the verbose tool system prompt (descriptions, parameter docs, examples) is replaced with a minimal 3-line version listing tool names and the call format, saving ~500 tokens.
   - **Automatic history trimming**: before each inference round, the message history is checked against 75% of `n_ctx`. Long tool results in history are truncated to 2 KB, then oldest non-system messages are dropped until the conversation fits within budget.
