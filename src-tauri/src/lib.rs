@@ -1133,6 +1133,8 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     let csv  = new_csv_path(app);
     let app2 = app.clone();
 
+    app_log!(app, "bluetooth", "[session] routing: target={target:?} name={target_name:?} ganglion={is_ganglion} mw75={is_mw75}");
+
     if is_ganglion {
         tauri::async_runtime::spawn(async move {
             run_openbci_ganglion_session(app2, rx, csv, target).await;

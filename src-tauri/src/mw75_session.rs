@@ -78,11 +78,13 @@ pub(crate) async fn run_mw75_session(
         ..Default::default()
     };
     let client = Mw75Client::new(config);
+    app_log!(app, "bluetooth", "[mw75] scanning for MW75 devices (10s timeout)…");
     let all_devices = tokio::select! {
         biased;
         _ = &mut cancel_rx => { crate::go_disconnected(&app, None, false); return; }
         r = client.scan_all() => match r {
             Err(e) => {
+                app_log!(app, "bluetooth", "[mw75] scan error: {e}");
                 let (m, b) = classify_bt_error(&e.to_string());
                 crate::go_disconnected(&app, Some(m), b);
                 return;
@@ -90,6 +92,10 @@ pub(crate) async fn run_mw75_session(
             Ok(d) => d,
         }
     };
+    app_log!(app, "bluetooth", "[mw75] scan found {} device(s)", all_devices.len());
+    for d in &all_devices {
+        app_log!(app, "bluetooth", "[mw75]   device: name={:?} id={}", d.name, d.id);
+    }
 
     // 3. Pick device
     let paired_ids: Vec<String> = {
@@ -107,9 +113,11 @@ pub(crate) async fn run_mw75_session(
             None     => all_devices.into_iter().find(|d| paired_ids.contains(&d.id)),
         }
     };
+    app_log!(app, "bluetooth", "[mw75] preferred_id={preferred_id:?} paired_ids={paired_ids:?} first_time={first_time}");
     let device = match device {
         Some(d) => d,
         None => {
+            app_log!(app, "bluetooth", "[mw75] no matching MW75 device found in scan results");
             crate::go_disconnected(
                 &app,
                 Some("NO_MW75_NEARBY\n\n\
