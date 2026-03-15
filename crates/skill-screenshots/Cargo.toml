@@ -30,6 +30,8 @@ default-features = false
 [target.'cfg(target_os = "macos")'.dependencies]
 skill-vision = { path = "../skill-vision" }
 fastembed = { version = "5.11.0", features = ["metal"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 fastembed = { version = "5.11.0" }
