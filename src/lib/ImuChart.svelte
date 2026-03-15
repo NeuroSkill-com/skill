@@ -15,6 +15,7 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
   import { t } from "$lib/i18n/index.svelte";
+  import { getDpr } from "$lib/format";
 
   const CANVAS_W  = 400;
   const CANVAS_H  = 160;       // two stacked sub-charts (accel + gyro)
@@ -63,7 +64,7 @@ the Free Software Foundation, version 3 only. -->
     if (!needsRedraw || !ctx) return;
     needsRedraw = false;
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getDpr();
     const w = CANVAS_W * dpr;
     const h = CANVAS_H * dpr;
     const halfH = h / 2;
@@ -150,7 +151,7 @@ the Free Software Foundation, version 3 only. -->
 
   $effect(() => {
     if (canvas) {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = getDpr();
       canvas.width  = CANVAS_W * dpr;
       canvas.height = CANVAS_H * dpr;
       ctx = canvas.getContext("2d");

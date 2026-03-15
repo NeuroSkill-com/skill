@@ -14,7 +14,7 @@ the Free Software Foundation, version 3 only. -->
   import { t }           from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import { Button }             from "$lib/components/ui/button";
-  import { fmtDuration, fmtTimeShort as fmtTime } from "$lib/format";
+  import { fmtDuration, fmtTimeShort as fmtTime, dateToCompactKey, fmtCountdown } from "$lib/format";
 
   // ── Presets ────────────────────────────────────────────────────────────────
   type Preset = "pomodoro" | "deepWork" | "shortFocus" | "custom";
@@ -112,8 +112,7 @@ the Free Software Foundation, version 3 only. -->
 
   /** YYYYMMDD string for today (local time). */
   function todayKey(): string {
-    const d = new Date();
-    return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+    return dateToCompactKey(new Date());
   }
 
   function loadLog(): LogEntry[] {
@@ -179,11 +178,7 @@ the Free Software Foundation, version 3 only. -->
   );
 
   // Formatted time MM:SS
-  let timeDisplay = $derived(() => {
-    const m = Math.floor(secondsLeft / 60);
-    const s = secondsLeft % 60;
-    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-  });
+  let timeDisplay = $derived(() => fmtCountdown(secondsLeft));
 
   // Phase label
   let phaseLabel = $derived(

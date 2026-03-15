@@ -40,7 +40,6 @@ use std::{
     collections::{HashMap, VecDeque},
     path::{Path, PathBuf},
     sync::{mpsc, Arc, Mutex},
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use crate::skill_log::SkillLogger;
@@ -1061,7 +1060,7 @@ impl HookMatcher {
     }
 
     fn maybe_refresh(&mut self) {
-        let now = unix_secs_now();
+        let now = crate::unix_secs();
         if now.saturating_sub(self.last_refresh_unix) < 20 {
             return;
         }
@@ -1193,7 +1192,7 @@ impl HookMatcher {
         if self.cache.is_empty() {
             return;
         }
-        let now = unix_secs_now();
+        let now = crate::unix_secs();
 
         for entry in &self.cache {
             if !Self::scenario_allows_fire(&entry.hook.scenario, metrics) {
@@ -1292,12 +1291,7 @@ fn msg_ts_utc_now() -> u64 {
     yyyymmddhhmmss_utc().max(0) as u64
 }
 
-fn unix_secs_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
+// Removed: use crate::unix_secs instead (was duplicated as unix_secs_now).
 
 pub(crate) use skill_exg::cosine_distance;
 

@@ -32,7 +32,7 @@ export const C_BORDER  = "#cbd5e1";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Expand a 6-digit hex to `rgba(r,g,b,alpha)`. */
-function rgba(hex: string, alpha: number): string {
+export function rgba(hex: string, alpha: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);

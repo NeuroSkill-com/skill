@@ -23,6 +23,7 @@ the Free Software Foundation, version 3 only. -->
   import { colorForLoad, C_NEUTRAL } from "$lib/theme";
   import { t } from "$lib/i18n/index.svelte";
   import { getResolved } from "$lib/theme-store.svelte";
+  import { getDpr } from "$lib/format";
 
   interface GpuStats    { render: number; tiler: number; overall: number; }
   interface ModelStatus { encoder_loaded: boolean; }
@@ -66,7 +67,7 @@ the Free Software Foundation, version 3 only. -->
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dpr  = window.devicePixelRatio || 1;
+    const dpr  = getDpr();
     const W    = canvas.width  / dpr;
     const H    = canvas.height / dpr;
     const now  = Date.now();
@@ -190,7 +191,7 @@ the Free Software Foundation, version 3 only. -->
   // ── Resize ─────────────────────────────────────────────────────────────────
   function resize() {
     if (!canvas || !container) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getDpr();
     const w   = container.clientWidth;
     canvas.width        = w * dpr;
     canvas.height       = CANVAS_H * dpr;

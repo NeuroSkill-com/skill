@@ -22,6 +22,7 @@ the Free Software Foundation, version 3 only. -->
 
 <script lang="ts">
   import { t } from "$lib/i18n/index.svelte";
+  import { getDpr } from "$lib/format";
 
   /** Channel labels, colors matching optical wavelengths. */
   const CH = ["Ambient", "IR", "Red"] as const;
@@ -84,7 +85,7 @@ the Free Software Foundation, version 3 only. -->
     if (!needsRedraw || !ctx) return;
     needsRedraw = false;
 
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getDpr();
     const w = CANVAS_W * dpr;
     const h = CANVAS_H * dpr;
 
@@ -230,7 +231,7 @@ the Free Software Foundation, version 3 only. -->
 
   $effect(() => {
     if (canvas) {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = getDpr();
       canvas.width  = CANVAS_W * dpr;
       canvas.height = CANVAS_H * dpr;
       ctx = canvas.getContext("2d");

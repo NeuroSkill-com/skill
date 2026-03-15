@@ -19,6 +19,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { getResolved } from "$lib/theme-store.svelte";
+  import { getDpr, setupHiDpiCanvas } from "$lib/format";
 
   export interface Series {
     key:   string;
@@ -218,13 +219,9 @@ the Free Software Foundation, version 3 only. -->
   /** Draw the rubber-band selection rectangle on the overlay canvas. */
   function drawSelectionOverlay() {
     if (!overlayCanvas) return;
-    const dpr = devicePixelRatio || 1;
     const W = overlayCanvas.clientWidth;
     const H = overlayCanvas.clientHeight;
-    overlayCanvas.width = Math.round(W * dpr);
-    overlayCanvas.height = Math.round(H * dpr);
-    const ctx = overlayCanvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(overlayCanvas, W, H);
     ctx.clearRect(0, 0, W, H);
 
     // Re-draw labels (WebGL path uses overlay for labels)
@@ -304,7 +301,7 @@ the Free Software Foundation, version 3 only. -->
   function drawWebGL() {
     if (!gl || !glProgram || !canvas || series.length === 0 || timestamps.length < 2) return;
 
-    const dpr = devicePixelRatio || 1;
+    const dpr = getDpr();
     const W = canvas.clientWidth;
     const H = canvas.clientHeight;
     if (W < 2 || H < 2) return; // not laid out yet
@@ -437,11 +434,7 @@ the Free Software Foundation, version 3 only. -->
   /** Draw time-axis and Y-axis labels on the overlay canvas (shared by WebGL + Canvas2D). */
   function drawLabelsOverlay(tMin: number, tMax: number, tRange: number, yLo: number, yRange: number, W: number, H: number) {
     if (!overlayCanvas) return;
-    const dpr = devicePixelRatio || 1;
-    overlayCanvas.width = Math.round(W * dpr);
-    overlayCanvas.height = Math.round(H * dpr);
-    const ctx = overlayCanvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(overlayCanvas, W, H);
     ctx.clearRect(0, 0, W, H);
 
     const dark = getResolved() === "dark";
@@ -502,14 +495,10 @@ the Free Software Foundation, version 3 only. -->
 
   function drawCanvas2D() {
     if (!canvas || series.length === 0 || timestamps.length < 2) return;
-    const dpr = devicePixelRatio || 1;
     const W = canvas.clientWidth;
     const H = canvas.clientHeight;
     if (W < 2 || H < 2) return; // not laid out yet
-    canvas.width = Math.round(W * dpr);
-    canvas.height = Math.round(H * dpr);
-    const ctx = canvas.getContext("2d")!;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ctx = setupHiDpiCanvas(canvas, W, H);
 
     const dark = getResolved() === "dark";
     ctx.fillStyle = dark ? "#0f0f18" : "#f8f9fb";

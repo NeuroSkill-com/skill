@@ -37,6 +37,7 @@ the Free Software Foundation, version 3 only. -->
     DC_BETA, WP_TAU_MS as WP_TAU,
   } from "$lib/constants";
   import { getResolved } from "$lib/theme-store.svelte";
+  import { getDpr } from "$lib/format";
 
   // ── Spectrogram colormap LUT ─────────────────────────────────────────────────
   // 256-entry RGBA lookup table; index = Math.round(normalised_power × 255).
@@ -324,8 +325,7 @@ the Free Software Foundation, version 3 only. -->
       if (!ctx) return;
 
       // Scale context so all coordinates are in CSS pixels (DPR-transparent).
-      const dpr = devicePixelRatio || 1;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(getDpr(), 0, 0, getDpr(), 0, 0);
 
       const W = cssW;
       const H = CHART_H;
@@ -710,7 +710,7 @@ the Free Software Foundation, version 3 only. -->
     initSpecTapes();
 
     const resize = () => {
-      const dpr = devicePixelRatio || 1;
+      const dpr = getDpr();
       cssW = canvasEl.clientWidth;
       canvasEl.width  = Math.round(cssW    * dpr);
       canvasEl.height = Math.round(CHART_H * dpr);

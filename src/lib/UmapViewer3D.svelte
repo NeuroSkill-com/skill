@@ -29,7 +29,7 @@ the Free Software Foundation, version 3 only. -->
     UMAP_TRACE_COLOR, UMAP_TRACE_NODE_COLOR,
   } from "$lib/constants";
   import { getResolved } from "$lib/theme-store.svelte";
-  import { fmtTimeShort } from "$lib/format";
+  import { fmtTimeShort, dateToLocalKey, fromUnix } from "$lib/format";
   import type { UmapPoint, UmapResult, UmapProgress } from "$lib/types";
 
   type ThreeModule = typeof import("three");
@@ -718,8 +718,7 @@ the Free Software Foundation, version 3 only. -->
   // ── Build point clouds ───────────────────────────────────────────────────
   /** Convert UTC seconds → local "YYYY-MM-DD" string. */
   function utcToLocalDate(utc: number): string {
-    const d = new Date(utc * 1000);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    return dateToLocalKey(fromUnix(utc));
   }
 
   /** Build a date→color map using evenly spaced hues. */

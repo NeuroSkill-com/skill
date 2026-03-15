@@ -327,37 +327,10 @@ use openbci_session::run_openbci_ganglion_session;
 /// # Why not plain `.unwrap()`?
 ///
 /// Rust poisons a `Mutex` whenever a thread panics while holding it.  A bare
-/// `.lock().unwrap()` then re-panics on *every* subsequent acquisition —
-/// turning one background-thread crash into a total process freeze.
-///
-/// # Recovery strategy
-///
-/// `.lock_or_recover()` extracts the inner guard from the [`PoisonError`] via
-/// `.into_inner()`, giving callers access to whatever state was present at
-/// crash time.
-///
-/// This trade-off is appropriate here because all durable data is persisted to
-/// disk, so a brief window of slightly-stale in-memory state is acceptable,
-/// and the UI must stay responsive even if a background thread crashes.
-pub(crate) trait MutexExt<T> {
-    /// Acquire the lock, recovering the guard even if the mutex is poisoned.
-    fn lock_or_recover(&self) -> std::sync::MutexGuard<'_, T>;
-}
-
-impl<T> MutexExt<T> for std::sync::Mutex<T> {
-    #[inline]
-    fn lock_or_recover(&self) -> std::sync::MutexGuard<'_, T> {
-        self.lock().unwrap_or_else(|poison| {
-            eprintln!(
-                "[mutex] WARNING: recovered from poisoned lock at {}:{}; \
-                 a previous thread panicked while holding this lock. \
-                 State may be inconsistent — check the log file.",
-                file!(), line!()
-            );
-            poison.into_inner()
-        })
-    }
-}
+// Re-export MutexExt from skill-data so `crate::MutexExt` keeps working
+// everywhere in src-tauri. The canonical implementation lives in
+// crates/skill-data/src/util.rs.
+pub(crate) use skill_data::util::MutexExt;
 
 // ── Persistent data structure (written to disk) ───────────────────────────────
 

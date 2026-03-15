@@ -496,10 +496,10 @@ the Free Software Foundation, version 3 only. -->
   function heatColor(count: number, maxC: number): string {
     if (count === 0) return "";
     const intensity = Math.min(1, count / Math.max(1, maxC));
-    if (intensity < 0.25) return "bg-emerald-200/60 dark:bg-emerald-900/40";
-    if (intensity < 0.5)  return "bg-emerald-300/70 dark:bg-emerald-800/50";
-    if (intensity < 0.75) return "bg-emerald-400/80 dark:bg-emerald-700/60";
-    return "bg-emerald-500 dark:bg-emerald-600/80";
+    if (intensity < 0.25) return "bg-violet-200/60 dark:bg-violet-900/40";
+    if (intensity < 0.5)  return "bg-violet-300/70 dark:bg-violet-800/50";
+    if (intensity < 0.75) return "bg-violet-400/80 dark:bg-violet-700/60";
+    return "bg-violet-500 dark:bg-violet-600/80";
   }
 
   // ── Week/day epoch dot timeline ─────────────────────────────────────────
@@ -720,7 +720,8 @@ the Free Software Foundation, version 3 only. -->
     for (let t = cellT; t < cellEnd; t++) {
       const info = screenshotByTs.get(t);
       if (info) {
-        values.push({ label: "📷", val: info.window_title || info.app_name || "screenshot", color: "#60a5fa" });
+        const accentHex = getComputedStyle(document.documentElement).getPropertyValue("--color-violet-400").trim() || "#60a5fa";
+        values.push({ label: "📷", val: info.window_title || info.app_name || "screenshot", color: accentHex });
         // Show image preview only when hovering the cell with a screenshot
         screenshotPreview = {
           x: e.clientX, y: e.clientY,
@@ -831,6 +832,8 @@ the Free Software Foundation, version 3 only. -->
 
     // ⑦ Draw screenshot indicators — small camera-icon diamonds at grid cells
     if (data.screenshotTs.size > 0) {
+      // Read the accent color from CSS custom properties (violet-500 is remapped by the accent system)
+      const accentColor = getComputedStyle(document.documentElement).getPropertyValue("--color-violet-500").trim();
       const iconR = Math.max(2, Math.min(4, colW * 0.12));
       ctx.globalAlpha = 0.85;
       for (const ts of data.screenshotTs) {
@@ -840,8 +843,8 @@ the Free Software Foundation, version 3 only. -->
         const row = Math.floor((secOff % 3600) / GRID_BIN);
         const cx = col * colW + colW - iconR - 1;
         const cy = row * rowH + rowH / 2;
-        // Diamond shape
-        ctx.fillStyle = isDark ? "rgba(96,165,250,0.9)" : "rgba(59,130,246,0.85)";
+        // Diamond shape — uses the accent color
+        ctx.fillStyle = accentColor || (isDark ? "rgba(96,165,250,0.9)" : "rgba(59,130,246,0.85)");
         ctx.beginPath();
         ctx.moveTo(cx, cy - iconR);
         ctx.lineTo(cx + iconR, cy);
@@ -1349,10 +1352,10 @@ the Free Software Foundation, version 3 only. -->
               <div class="flex items-center gap-1.5 mt-2 justify-end text-[0.45rem] text-muted-foreground/40">
                 <span>{t("history.heatmap.less")}</span>
                 <div class="w-[11px] h-[11px] rounded-[2px] bg-muted/40 dark:bg-white/[0.04]"></div>
-                <div class="w-[11px] h-[11px] rounded-[2px] bg-emerald-200/60 dark:bg-emerald-900/40"></div>
-                <div class="w-[11px] h-[11px] rounded-[2px] bg-emerald-300/70 dark:bg-emerald-800/50"></div>
-                <div class="w-[11px] h-[11px] rounded-[2px] bg-emerald-400/80 dark:bg-emerald-700/60"></div>
-                <div class="w-[11px] h-[11px] rounded-[2px] bg-emerald-500 dark:bg-emerald-600/80"></div>
+                <div class="w-[11px] h-[11px] rounded-[2px] bg-violet-200/60 dark:bg-violet-900/40"></div>
+                <div class="w-[11px] h-[11px] rounded-[2px] bg-violet-300/70 dark:bg-violet-800/50"></div>
+                <div class="w-[11px] h-[11px] rounded-[2px] bg-violet-400/80 dark:bg-violet-700/60"></div>
+                <div class="w-[11px] h-[11px] rounded-[2px] bg-violet-500 dark:bg-violet-600/80"></div>
                 <span>{t("history.heatmap.more")}</span>
               </div>
             </div>
@@ -1380,11 +1383,11 @@ the Free Software Foundation, version 3 only. -->
                     title="{cell.dayKey}: {cell.count} {cell.count === 1 ? 'session' : 'sessions'}"
                     onclick={() => cell.count > 0 && navigateToDay(cell.dayKey)}>
                     <span class="font-semibold {cell.inRange ? 'text-foreground' : 'text-muted-foreground/50'}
-                                 {cell.count > 0 ? 'text-emerald-900 dark:text-emerald-100' : ''}">
+                                 {cell.count > 0 ? 'text-violet-900 dark:text-violet-100' : ''}">
                       {cell.date.getDate()}
                     </span>
                     {#if cell.count > 0}
-                      <span class="text-[0.4rem] font-bold text-emerald-700 dark:text-emerald-300">
+                      <span class="text-[0.4rem] font-bold text-violet-700 dark:text-violet-300">
                         {cell.count}
                       </span>
                     {/if}

@@ -32,6 +32,9 @@ the Free Software Foundation, version 3 only. -->
   import { t } from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import { addToast } from "$lib/toast-store.svelte";
+  import {
+    openSettings, openLabel, openHistory, openBtSettings, openUpdates,
+  } from "$lib/navigation";
   import { setBtOff } from "$lib/bt-status-store.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
   import type { MuseStatus, DiscoveredDevice } from "$lib/types";
@@ -507,15 +510,11 @@ the Free Software Foundation, version 3 only. -->
 
   async function retryConnect()   { await invoke("retry_connect"); }
   async function cancelRetry()    { await invoke("cancel_retry"); }
-  async function openBtSettings() { await invoke("open_bt_settings"); }
   async function forgetDevice(id: string) { status = await invoke<MuseStatus>("forget_device", { id }); }
   async function connectDevice(id: string) {
     await invoke("set_preferred_device", { id });
     await invoke("retry_connect");
   }
-  async function openSettings()   { await invoke("open_settings_window"); }
-  async function openLabel()      { await invoke("open_label_window"); }
-  async function openHistory()    { await invoke("open_history_window"); }
 
   // ── Event markers (labels, calibration, search) ────────────────────────────
   /** Push a vertical marker to both EEG and PPG charts simultaneously. */
@@ -557,7 +556,7 @@ the Free Software Foundation, version 3 only. -->
         localStorage.setItem("lastUpdateCheckUtc", String(nowSecs));
         if (update) {
           // Update available — open the updates tab so user sees it
-          await invoke("open_updates_window");
+          await openUpdates();
         }
       }
     } catch { /* updater not available in dev / offline */ }

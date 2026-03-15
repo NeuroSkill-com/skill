@@ -524,16 +524,16 @@ the Free Software Foundation, version 3 only. -->
     // Unique calendar days, sorted
     const daySet = new Set<string>();
     for (const n of eeg) {
-      const d = new Date(n.timestamp_unix! * 1000);
-      daySet.add(`${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`);
+      const d = fromUnix(n.timestamp_unix!);
+      daySet.add(dateToCompactKey(d));
     }
     const days = [...daySet].sort();
 
     // grid[dayIndex][hour] = count
     const grid: number[][] = days.map(() => new Array(24).fill(0));
     for (const n of eeg) {
-      const d   = new Date(n.timestamp_unix! * 1000);
-      const key = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+      const d   = fromUnix(n.timestamp_unix!);
+      const key = dateToCompactKey(d);
       const di  = days.indexOf(key);
       if (di >= 0) grid[di][d.getHours()]++;
     }
@@ -681,8 +681,7 @@ the Free Software Foundation, version 3 only. -->
 
   async function openSessionForLabel(nb: LabelNeighbor) {
     try {
-      const d = new Date(nb.eeg_start * 1000);
-      const dateStr = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}`;
+      const dateStr = dateToCompactKey(fromUnix(nb.eeg_start));
       const ref = await invoke<{ csv_path: string } | null>("find_session_for_timestamp", { timestampUnix: nb.eeg_start, date: dateStr });
       await invoke(ref ? "open_session_window" : "open_history_window", ref ? { csvPath: ref.csv_path } : {});
     } catch { /* swallow */ }
@@ -2162,7 +2161,7 @@ the Free Software Foundation, version 3 only. -->
                     </span>
                   {/if}
                   <span class="ml-auto text-[0.5rem] text-muted-foreground/40 tabular-nums shrink-0">
-                    {new Date(r.unix_ts * 1000).toLocaleString()}
+                    {fmtDateTimeLocale(r.unix_ts)}
                   </span>
                 </div>
                 {#if r.window_title}

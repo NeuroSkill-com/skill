@@ -100,6 +100,7 @@ the Free Software Foundation, version 3 only. -->
     BAND_TILE_MR  as MR,
     BAND_TAU_MS   as TAU_MS,
   } from "$lib/constants";
+  import { getDpr } from "$lib/format";
 
   // ── Band metadata + canvas layout ─────────────────────────────────────────
   // BANDS, CH_NAMES, CH_COLORS, NBAND, TILE_H, TILE_GAP, CANVAS_H, ML, MR
@@ -160,8 +161,7 @@ the Free Software Foundation, version 3 only. -->
       const ctx = canvasEl.getContext("2d");
       if (!ctx) return;
 
-      const dpr = devicePixelRatio || 1;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.setTransform(getDpr(), 0, 0, getDpr(), 0, 0);
 
       const dt    = lastNow < 0 ? 0 : now - lastNow;
       lastNow     = now;
@@ -314,7 +314,7 @@ the Free Software Foundation, version 3 only. -->
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   onMount(() => {
     const resize = () => {
-      const dpr = devicePixelRatio || 1;
+      const dpr = getDpr();
       cssW = canvasEl.clientWidth;
       canvasEl.width  = Math.round(cssW     * dpr);
       canvasEl.height = Math.round(CANVAS_H * dpr);
