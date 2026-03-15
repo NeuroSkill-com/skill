@@ -48,6 +48,7 @@ const CLI_VERSION = "1.1.0";
  *   llm catalog                    Show model catalog with download states
  *   llm add <repo> <filename>      Add an external HF model to the catalog and download it
  *   llm add <hf-url>               Add from a full HuggingFace URL
+ *   llm add ... --mmproj <file>    Also add and download a vision projector from the same repo
  *   llm select <filename>          Set the active text model
  *   llm mmproj <filename|none>     Set the active vision projector (or "none" to disable)
  *   llm autoload-mmproj <on|off>   Toggle auto-loading of vision projector on start
@@ -653,6 +654,12 @@ interface Args {
   /** Hook name captured as second positional arg for hooks add/remove/enable/disable/update. */
   hookName?: string;
   /**
+   * Vision projector filename for `llm add --mmproj <filename>`.
+   * When specified alongside `llm add`, both the model and the mmproj are
+   * added to the catalog and downloaded from the same repo.
+   */
+  mmproj?: string;
+  /**
    * One or more image file paths for `llm chat`.
    * Each file is base64-encoded and embedded as an `image_url` content part.
    * Can be specified multiple times: `--image a.jpg --image b.png`.
@@ -720,7 +727,7 @@ function parseArgs(): Args {
     "--mode", "--profile", "--seconds", "--poll",
     "--limit", "--offset",
     "--context", "--at", "--voice",
-    "--system", "--max-tokens", "--temperature", "--image",
+    "--system", "--max-tokens", "--temperature", "--image", "--mmproj",
     "--keywords", "--scenario", "--command", "--threshold", "--recent", "--hook-text",
   ]);
 
@@ -762,6 +769,7 @@ function parseArgs(): Args {
     else if (a === "--voice")       { args.voice       = argv[++i]; }
     else if (a === "--system")      { args.system      = argv[++i]; }
     else if (a === "--image")       { (args.images ??= []).push(argv[++i]); }
+    else if (a === "--mmproj")      { args.mmproj   = argv[++i]; }
     else if (a === "--keywords")    { args.hookKeywords  = argv[++i]; }
     else if (a === "--scenario")    { args.hookScenario  = argv[++i]; }
     else if (a === "--command")     { args.hookCommand   = argv[++i]; }
@@ -906,6 +914,7 @@ ${m("llm stop",                                      "stop LLM inference server 
 ${m("llm catalog",                                   "show model catalog with download states")}
 ${m("llm add <repo> <filename>",                      "add an external HF model to the catalog and download it")}
 ${m("llm add <hf-url>",                               "add from a full HuggingFace URL")}
+${m("llm add ... --mmproj <file>",                    "also add and download a vision projector from the same repo")}
 ${m("llm select <filename>",                         "set the active text model")}
 ${m("llm mmproj <filename|none>",                    "set the active vision projector (or 'none' to disable)")}
 ${m("llm autoload-mmproj <on|off>",                  "toggle auto-loading of vision projector on start")}
@@ -961,6 +970,7 @@ ${BOLD}OPTIONS${RESET}
   ${YELLOW}--reach <n>${RESET}       (interactive) temporal window in minutes around each EEG point (default: 10)
   ${YELLOW}--voice <name>${RESET}    say: voice name to use (e.g. ${GREEN}Jasper${RESET}); omit to use the server default
   ${YELLOW}--profile <p>${RESET}     calibrate: profile name or UUID to run (default: active profile)
+  ${YELLOW}--mmproj <file>${RESET}    llm add: also download a vision projector from the same repo
   ${YELLOW}--image <path>${RESET}     llm chat: attach an image (can be repeated: --image a.jpg --image b.png)
   ${YELLOW}--system "..."${RESET}    llm chat: prepend a system prompt (e.g. ${GREEN}"You are a concise EEG assistant."${RESET})
   ${YELLOW}--temperature <f>${RESET} llm chat: sampling temperature 0–2 (default 0.8; 0 = deterministic)
@@ -1194,6 +1204,7 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}$${RESET} npx tsx cli.ts llm stop
   ${DIM}$${RESET} npx tsx cli.ts llm catalog
   ${DIM}$${RESET} npx tsx cli.ts llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf
+  ${DIM}$${RESET} npx tsx cli.ts llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf --mmproj mmproj-Phi-4-mini-reasoning-BF16.gguf
   ${DIM}$${RESET} npx tsx cli.ts llm add https://huggingface.co/bartowski/Phi-4-mini-reasoning-GGUF/blob/main/Phi-4-mini-reasoning-Q4_K_M.gguf
   ${DIM}$${RESET} npx tsx cli.ts llm select "Qwen_Qwen3.5-4B-Q4_K_M.gguf"
   ${DIM}$${RESET} npx tsx cli.ts llm mmproj "mmproj-Qwen_Qwen3.5-4B-BF16.gguf"
@@ -4003,13 +4014,14 @@ async function cmdLlm(args: Args): Promise<void> {
       let repo: string;
       let filename: string;
       const raw = args.text;
-      if (!raw) printError(
-        "usage: cli.ts llm add <repo> <filename>\n" +
-        "       cli.ts llm add <hf-url>\n\n" +
+      const addUsage =
+        "usage: cli.ts llm add <repo> <filename> [--mmproj <file>]\n" +
+        "       cli.ts llm add <hf-url> [--mmproj <file>]\n\n" +
         "  Examples:\n" +
         "    llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf\n" +
-        "    llm add https://huggingface.co/bartowski/Phi-4-mini-reasoning-GGUF/blob/main/Phi-4-mini-reasoning-Q4_K_M.gguf"
-      );
+        "    llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf --mmproj mmproj-Phi-4-mini-reasoning-BF16.gguf\n" +
+        "    llm add https://huggingface.co/bartowski/Phi-4-mini-reasoning-GGUF/blob/main/Phi-4-mini-reasoning-Q4_K_M.gguf";
+      if (!raw) printError(addUsage);
 
       if (args.body) {
         // Two positional args: repo + filename
@@ -4026,19 +4038,18 @@ async function cmdLlm(args: Args): Promise<void> {
         repo = urlMatch![1];
         filename = decodeURIComponent(urlMatch![2]);
       } else {
-        printError(
-          "usage: cli.ts llm add <repo> <filename>\n" +
-          "       cli.ts llm add <hf-url>\n\n" +
-          "  Examples:\n" +
-          "    llm add bartowski/Phi-4-mini-reasoning-GGUF Phi-4-mini-reasoning-Q4_K_M.gguf\n" +
-          "    llm add https://huggingface.co/bartowski/Phi-4-mini-reasoning-GGUF/blob/main/Phi-4-mini-reasoning-Q4_K_M.gguf"
-        );
+        printError(addUsage);
       }
 
-      print(`${BOLD}🤖 llm add${RESET} ${CYAN}${repo!}${RESET} / ${CYAN}${filename!}${RESET}`);
-      const r = await send({ command: "llm_add_model", repo: repo!, filename: filename!, download: true });
+      const mmproj = args.mmproj || undefined;
+      const mmNote = mmproj ? ` + mmproj ${CYAN}${mmproj}${RESET}` : "";
+      print(`${BOLD}🤖 llm add${RESET} ${CYAN}${repo!}${RESET} / ${CYAN}${filename!}${RESET}${mmNote}`);
+      const payload: Record<string, unknown> = { command: "llm_add_model", repo: repo!, filename: filename!, download: true };
+      if (mmproj) payload.mmproj = mmproj;
+      const r = await send(payload);
       if (!r.ok) { printResult(r); printError(r.error ?? "llm_add_model failed"); }
       print(`  ${GREEN}✓${RESET} added ${CYAN}${r.filename}${RESET} from ${DIM}${r.repo}${RESET}`);
+      if (r.mmproj) print(`  ${GREEN}✓${RESET} mmproj ${CYAN}${r.mmproj}${RESET}`);
       print(`  ${DIM}download started — poll with: llm downloads${RESET}`);
       printResult(r);
       break;
