@@ -15,7 +15,7 @@ the Free Software Foundation, version 3 only. -->
   import PpgChart,  { type PpgPacket }         from "$lib/PpgChart.svelte";
   import ImuChart,  { type ImuPacket }         from "$lib/ImuChart.svelte";
   import GpuChart                              from "$lib/GpuChart.svelte";
-  import { EEG_CH, EEG_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
+  import { EEG_CH, EEG_COLOR, MW75_CH, MW75_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
   import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
   import {
     BrainStateScores, FaaGauge, EegIndices, CompositeScores,
@@ -350,8 +350,13 @@ the Free Software Foundation, version 3 only. -->
   // Capability flags derived from device_kind — hide irrelevant UI for non-Muse devices
   const isMuse      = $derived(status.device_kind === "muse" || status.device_kind === "unknown");
   const isGanglion  = $derived(status.device_kind === "ganglion");
+  const isMw75      = $derived(status.device_kind === "mw75");
   const hasPpg      = $derived(isMuse);
-  const hasBattery  = $derived(isMuse);
+  const hasBattery  = $derived(isMuse || isMw75);
+
+  // Channel labels and colours — dynamic based on connected device.
+  const chLabels = $derived(isMw75 ? MW75_CH : EEG_CH);
+  const chColors = $derived(isMw75 ? MW75_COLOR : EEG_COLOR);
   /**
    * Athena = Muse S gen 2.
    * Detected by hardware_version "p50" (arrives a few seconds after connect)
@@ -1081,7 +1086,8 @@ the Free Software Foundation, version 3 only. -->
           <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground shrink-0">
             {t("dashboard.signal")}
           </span>
-          {#each EEG_CH as ch, i}
+          {#each chLabels as ch, i}
+            {#if i < (status.channel_quality?.length ?? 4)}
             {@const q = status.channel_quality[i] ?? 'no_signal'}
             <div class="flex items-center gap-1.5 flex-1 min-w-[60px]">
               <svg width="8" height="8" viewBox="0 0 8 8">
@@ -1095,6 +1101,7 @@ the Free Software Foundation, version 3 only. -->
               <span class="text-[0.58rem] text-muted-foreground/60 leading-none"
                     style="color:{qualityColor(q)}">{qualityLabel(q)}</span>
             </div>
+            {/if}
           {/each}
         </div>
 
@@ -1240,13 +1247,13 @@ the Free Software Foundation, version 3 only. -->
             <span class="text-[0.45rem] text-emerald-500 live-blink shrink-0" aria-hidden="true">●</span>
           </button>
           {#if eegChExpanded}
-            <div class="grid grid-cols-2 gap-1.5">
-              {#each EEG_CH as ch, i}
+            <div class="grid gap-1.5" class:grid-cols-2={!isMw75} class:grid-cols-3={isMw75}>
+              {#each chLabels as ch, i}
                 <div class="min-w-0 rounded-lg border border-border dark:border-white/[0.04]
                             bg-muted dark:bg-[#1a1a28] px-2 py-1.5 flex flex-col gap-0.5"
-                  style="border-left-color:{EEG_COLOR[i]}; border-left-width:2px">
+                  style="border-left-color:{chColors[i]}; border-left-width:2px">
                   <span class="text-[0.55rem] font-semibold tracking-widest uppercase text-muted-foreground truncate">{ch}</span>
-                  <span class="font-mono text-[0.72rem] font-semibold truncate" style="color:{EEG_COLOR[i]}">{fmtEeg(status.eeg[i])}</span>
+                  <span class="font-mono text-[0.72rem] font-semibold truncate" style="color:{chColors[i]}">{fmtEeg(status.eeg[i])}</span>
                 </div>
               {/each}
             </div>

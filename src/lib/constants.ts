@@ -14,14 +14,33 @@
 
 // ── Hardware / signal ─────────────────────────────────────────────────────────
 
-/** Number of EEG channels.  Mirrors `EEG_CHANNELS` in constants.rs. */
+/** Number of EEG channels in the DSP pipeline.  Mirrors `EEG_CHANNELS` in constants.rs. */
 export const EEG_CHANNELS = 4;
 
-/** Channel labels, index-matched to all per-channel arrays. */
+/** Muse channel labels (default), index-matched to all per-channel arrays. */
 export const EEG_CH = ["TP9", "AF7", "AF8", "TP10"] as const;
 
-/** Per-channel accent colours (TP9, AF7, AF8, TP10). */
+/** Per-channel accent colours for the default 4-channel view. */
 export const EEG_COLOR = ["#22c55e", "#60a5fa", "#c084fc", "#fb923c"] as const;
+
+// ── MW75 Neuro (12-channel) ──────────────────────────────────────────────────
+
+/** MW75 total EEG channel count (6 per ear cup). */
+export const MW75_EEG_CHANNELS = 12;
+
+/** MW75 channel labels — approximate 10-20 extended positions.
+ *  Left ear (Ch1-6): FT7, T7, TP7, CP5, P7, C5
+ *  Right ear (Ch7-12): FT8, T8, TP8, CP6, P8, C6 */
+export const MW75_CH = [
+  "FT7", "T7", "TP7", "CP5", "P7", "C5",
+  "FT8", "T8", "TP8", "CP6", "P8", "C6",
+] as const;
+
+/** MW75 per-channel colours — 6 greens (left) + 6 blues (right). */
+export const MW75_COLOR = [
+  "#22c55e", "#16a34a", "#15803d", "#a3e635", "#84cc16", "#65a30d",
+  "#60a5fa", "#3b82f6", "#2563eb", "#c084fc", "#a855f7", "#7c3aed",
+] as const;
 
 /** Muse EEG hardware sample rate (Hz).  Mirrors `MUSE_SAMPLE_RATE`. */
 export const SAMPLE_RATE = 256;
