@@ -1430,54 +1430,57 @@
     <!-- Spacer to push right-side controls to the end -->
     <div class="flex-1 min-w-0" data-tauri-drag-region></div>
 
-    <!-- Tools badge with context usage ring -->
+    <!-- Tools badge -->
     {#if supportsTools}
-      {@const ctxPct = nCtx > 0 && liveUsedTokens > 0 ? Math.min(Math.round((liveUsedTokens / nCtx) * 100), 100) : 0}
-      {@const ctxIsEstimate = realPromptTokens === null && liveUsedTokens > 0}
-      {@const ringStroke = ctxPct >= 90 ? 'stroke-red-500' : ctxPct >= 70 ? 'stroke-amber-500' : 'stroke-primary'}
-      {@const circumference = 2 * Math.PI * 7}
-      {@const dashOffset = circumference - (circumference * ctxPct / 100)}
       <button
         onclick={() => { showTools = !showTools; if (showTools) showSettings = false; }}
-        title="{enabledToolCount} tool{enabledToolCount !== 1 ? 's' : ''} enabled{nCtx > 0 ? ` · ${t('chat.ctxUsage')}: ${ctxIsEstimate ? '~' : ''}${liveUsedTokens.toLocaleString()}/${nCtx.toLocaleString()} (${ctxPct}%)` : ''}"
-        class="flex items-center gap-1.5 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer
+        title="{enabledToolCount} tool{enabledToolCount !== 1 ? 's' : ''} enabled"
+        class="flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer
                shrink-0 text-[0.6rem] font-semibold
                {showTools
                  ? 'bg-primary/20 text-primary ring-1 ring-primary/30'
                  : enabledToolCount > 0
                    ? 'bg-primary/10 text-primary hover:bg-primary/20'
                    : 'bg-muted text-muted-foreground/50 hover:bg-muted/80'}">
-        <!-- Context usage circular progress -->
-        {#if nCtx > 0}
-          <svg viewBox="0 0 18 18" class="w-3.5 h-3.5 shrink-0 -rotate-90">
-            <!-- Track -->
-            <circle cx="9" cy="9" r="7" fill="none" stroke-width="2"
-                    class="stroke-muted-foreground/15" />
-            <!-- Progress arc -->
-            <circle cx="9" cy="9" r="7" fill="none" stroke-width="2"
-                    class="{ringStroke} transition-all duration-150"
-                    stroke-linecap="round"
-                    stroke-dasharray="{circumference}"
-                    stroke-dashoffset="{dashOffset}" />
-          </svg>
-        {:else}
-          <!-- Wrench icon when no context info -->
-          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
-               stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 shrink-0">
-            <path d="M14.7 6.3a1 1 0 0 0 0-1.4l-.6-.6a1 1 0 0 0-1.4 0L6.3 10.7a1 1 0 0 0 0 1.4l.6.6a1 1 0 0 0 1.4 0z"/>
-            <path d="M16 2l2 2-1.5 1.5L14.5 3.5z"/>
-            <path d="M2 18l4-1 9.3-9.3-3-3L3 14z"/>
-          </svg>
-        {/if}
-        {#if nCtx > 0}
-          <span class="tabular-nums opacity-80">{ctxPct}%</span>
-        {:else}
-          <span>{t("chat.tools.badge")}</span>
-          {#if enabledToolCount > 0}
-            <span class="tabular-nums opacity-70">{enabledToolCount}</span>
-          {/if}
+        <!-- Wrench icon -->
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+             stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3 shrink-0">
+          <path d="M14.7 6.3a1 1 0 0 0 0-1.4l-.6-.6a1 1 0 0 0-1.4 0L6.3 10.7a1 1 0 0 0 0 1.4l.6.6a1 1 0 0 0 1.4 0z"/>
+          <path d="M16 2l2 2-1.5 1.5L14.5 3.5z"/>
+          <path d="M2 18l4-1 9.3-9.3-3-3L3 14z"/>
+        </svg>
+        <span>{t("chat.tools.badge")}</span>
+        {#if enabledToolCount > 0}
+          <span class="tabular-nums opacity-70">{enabledToolCount}</span>
         {/if}
       </button>
+    {/if}
+
+    <!-- Context usage circular indicator (next to tools) -->
+    {#if nCtx > 0}
+      {@const ctxPct = liveUsedTokens > 0 ? Math.min(Math.round((liveUsedTokens / nCtx) * 100), 100) : 0}
+      {@const ctxIsEstimate = realPromptTokens === null && liveUsedTokens > 0}
+      {@const ringStroke = ctxPct >= 90 ? 'stroke-red-500' : ctxPct >= 70 ? 'stroke-amber-500' : 'stroke-primary'}
+      {@const circumference = 2 * Math.PI * 7}
+      {@const dashOffset = circumference - (circumference * ctxPct / 100)}
+      <div class="flex items-center gap-1 shrink-0 select-none"
+           title="{t('chat.ctxUsage')}: {ctxIsEstimate ? '~' : ''}{liveUsedTokens.toLocaleString()}/{nCtx.toLocaleString()} ({ctxPct}%)">
+        <svg viewBox="0 0 18 18" class="w-4 h-4 -rotate-90">
+          <!-- Track -->
+          <circle cx="9" cy="9" r="7" fill="none" stroke-width="2.2"
+                  class="stroke-muted-foreground/15" />
+          <!-- Progress arc -->
+          <circle cx="9" cy="9" r="7" fill="none" stroke-width="2.2"
+                  class="{ringStroke} transition-all duration-150"
+                  stroke-linecap="round"
+                  stroke-dasharray="{circumference}"
+                  stroke-dashoffset="{dashOffset}" />
+        </svg>
+        <span class="text-[0.5rem] tabular-nums font-semibold
+                      {ctxPct >= 90 ? 'text-red-500' : ctxPct >= 70 ? 'text-amber-500' : 'text-muted-foreground/60'}">
+          {ctxPct}%
+        </span>
+      </div>
     {/if}
 
     <!-- EEG context badge -->
