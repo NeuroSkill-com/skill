@@ -6,6 +6,16 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### CLI — Proactive Hooks CRUD
+
+- **Full hook management from the CLI**: hooks can now be fully created, listed, updated, enabled/disabled, and deleted from the command line, matching the UI's capabilities. New subcommands:
+  - `hooks list` — list raw hook rules (name, keywords, threshold, scenario, command, text)
+  - `hooks add <name> [--keywords "k1,k2"] [--scenario cognitive] [--command cmd] [--hook-text txt] [--threshold 0.14] [--recent 12]` — create a new hook
+  - `hooks remove <name>` — delete a hook by name
+  - `hooks enable <name>` / `hooks disable <name>` — toggle a hook on or off
+  - `hooks update <name> [--keywords …] [--scenario …] [--threshold …] …` — modify fields on an existing hook
+- **New WS commands**: `hooks_get` (return raw hook rules) and `hooks_set` (replace all hooks with sanitised input) added to the WebSocket API, reusing the same `sanitize_hook` validation as the Tauri IPC path.
+
 ### Chat
 
 - **Auto-label typed text every 5 seconds**: when the user types (not pastes) in the chat input, a 5-second interval — matching the EXG model's epoch window size (`EPOCH_S`) — accumulates only keyboard-originated characters using the `beforeinput` event's `inputType`. At the end of each 5-second window, if any recognisable words were typed, a label is automatically submitted via `submit_label` with the typed words as label text and the current chat session summary (session ID, model name, last 6 messages) as context. Paste, drop, and autocomplete inputs are excluded so only genuine typing is captured. The timer starts on component mount and flushes any remaining typed text on destroy. **Word-boundary aware**: if the 5-second window ends mid-word, the flush is deferred until the user types the next word-boundary character (space, punctuation, Enter), so labels always contain complete words; a 1.5-second safety timeout forces the flush if the user stops typing mid-word. **Deletion tracking**: deletions within the same 5-second window are captured via `beforeinput` delete events (`deleteContentBackward`, `deleteContentForward`, `deleteWordBackward`, `deleteWordForward`, `deleteByCut`); the deleted text is extracted from the textarea value before the event mutates it; at flush time, typed words that were also deleted are wrapped in `<del>…</del>` tags (e.g. `the <del>blue</del> sky`) using case-insensitive multiset matching so duplicate occurrences are correctly handled one-for-one.

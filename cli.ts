@@ -31,6 +31,12 @@ const CLI_VERSION = "1.1.0";
  *   umap                           3D UMAP projection with live progress bar
  *   listen                         Stream broadcast events for N seconds
  *   hooks                          List Proactive Hook rules, scenarios, and last-trigger metadata
+ *   hooks list                     List raw hook rules (name, keywords, threshold, …)
+ *   hooks add <name> [opts]        Add a new hook rule
+ *   hooks remove <name>            Delete a hook by name
+ *   hooks enable <name>            Enable a hook
+ *   hooks disable <name>           Disable a hook
+ *   hooks update <name> [opts]     Update fields on an existing hook
  *   hooks suggest "kw1,kw2"        Suggest threshold from real EEG/label data
  *   hooks log [--limit N --offset M]  View paginated hook trigger audit log rows
  *   dnd                            Show DND automation status (config + live eligibility + OS state)
@@ -108,6 +114,12 @@ const CLI_VERSION = "1.1.0";
  *   npx tsx cli.ts umap --json | jq '.points | length'
  *   npx tsx cli.ts listen --seconds 30              # 30s event stream
  *   npx tsx cli.ts hooks --json | jq '.hooks[] | {name: .hook.name, scenario: .hook.scenario, last: .last_trigger.triggered_at_utc}'
+ *   npx tsx cli.ts hooks list --json
+ *   npx tsx cli.ts hooks add "Deep Work Guard" --keywords "focus,deep work,flow" --scenario cognitive --threshold 0.14
+ *   npx tsx cli.ts hooks update "Deep Work Guard" --keywords "focus,flow" --threshold 0.12
+ *   npx tsx cli.ts hooks enable "Deep Work Guard"
+ *   npx tsx cli.ts hooks disable "Deep Work Guard"
+ *   npx tsx cli.ts hooks remove "Deep Work Guard"
  *   npx tsx cli.ts hooks suggest "focus,deep work"
  *   npx tsx cli.ts hooks log --limit 10 --offset 0
  *   npx tsx cli.ts raw '{"command":"search","start_utc":1740412800,"end_utc":1740415500,"k":3}'
@@ -616,6 +628,20 @@ interface Args {
   limit?: number;
   /** Generic pagination offset for subcommands that support it (e.g. hooks log). */
   offset?: number;
+  /** Hook keywords (comma-separated) for `hooks add` / `hooks update --keywords`. */
+  hookKeywords?: string;
+  /** Hook scenario for `hooks add` / `hooks update --scenario`. */
+  hookScenario?: string;
+  /** Hook command for `hooks add` / `hooks update --command`. */
+  hookCommand?: string;
+  /** Hook text payload for `hooks add` / `hooks update --text`. */
+  hookText?: string;
+  /** Hook distance threshold for `hooks add` / `hooks update --threshold`. */
+  hookThreshold?: number;
+  /** Hook recent-refs limit for `hooks add` / `hooks update --recent`. */
+  hookRecent?: number;
+  /** Hook name captured as second positional arg for hooks add/remove/enable/disable/update. */
+  hookName?: string;
   /**
    * One or more image file paths for `llm chat`.
    * Each file is base64-encoded and embedded as an `image_url` content part.
@@ -685,6 +711,7 @@ function parseArgs(): Args {
     "--limit", "--offset",
     "--context", "--at", "--voice",
     "--system", "--max-tokens", "--temperature", "--image",
+    "--keywords", "--scenario", "--command", "--threshold", "--recent", "--hook-text",
   ]);
 
   let i = 0;
@@ -725,6 +752,20 @@ function parseArgs(): Args {
     else if (a === "--voice")       { args.voice       = argv[++i]; }
     else if (a === "--system")      { args.system      = argv[++i]; }
     else if (a === "--image")       { (args.images ??= []).push(argv[++i]); }
+    else if (a === "--keywords")    { args.hookKeywords  = argv[++i]; }
+    else if (a === "--scenario")    { args.hookScenario  = argv[++i]; }
+    else if (a === "--command")     { args.hookCommand   = argv[++i]; }
+    else if (a === "--hook-text")   { args.hookText      = argv[++i]; }
+    else if (a === "--threshold")   {
+      const raw = argv[++i];
+      const n   = Number(raw);
+      if (raw == null || raw.trim() === "" || isNaN(n)) {
+        console.error(`error: --threshold requires a numeric value (got: ${JSON.stringify(raw)})`);
+        process.exit(1);
+      }
+      args.hookThreshold = n;
+    }
+    else if (a === "--recent")      { args.hookRecent    = nextInt("--recent"); }
     else if (a === "--temperature") {
       const raw = argv[++i];
       const n   = Number(raw);
@@ -776,6 +817,9 @@ function parseArgs(): Args {
     }
     else if (args.command === "hooks" && args.subAction === "suggest" && !args.text) {
       args.text = a;
+    }
+    else if (args.command === "hooks" && ["add", "remove", "enable", "disable", "update"].includes(args.subAction ?? "") && !args.hookName) {
+      args.hookName = a;
     }
     else if (args.command === "session" || args.command === "sleep") {
       const n = Number(a);
@@ -834,6 +878,12 @@ ${m("llm chat",                                       "interactive multi-turn ch
 ${m('llm chat "message"',                            "single-shot: send one message, stream the reply, and exit")}
 ${m("listen [--seconds <n>]",                        "listen for broadcast events (default: 5s)")}
 ${m("hooks",                                         "list Proactive Hooks (scenario + last trigger metadata)")}
+${m("hooks list",                                    "list raw hook rules (name, keywords, threshold, …)")}
+${m("hooks add <name> [--keywords …] [opts]",       "add a new hook rule")}
+${m("hooks remove <name>",                           "delete a hook by name")}
+${m("hooks enable <name>",                           "enable a hook")}
+${m("hooks disable <name>",                          "disable a hook")}
+${m("hooks update <name> [--keywords …] [opts]",    "update fields on an existing hook")}
 ${m('hooks suggest "kw1,kw2"',                       "suggest threshold from matching labels + recent EEG embeddings")}
 ${m("hooks log [--limit <n>] [--offset <n>]",       "show hook trigger audit history from hooks.sqlite")}
 ${m("raw '{\"command\":\"status\"}'",                "send raw JSON, print full response")}
@@ -849,6 +899,12 @@ ${BOLD}OPTIONS${RESET}
   ${YELLOW}--poll <n>${RESET}        (status) re-poll every N seconds; keeps the socket open
   ${YELLOW}--limit <n>${RESET}       (hooks log) page size (default: 20)
   ${YELLOW}--offset <n>${RESET}      (hooks log) row offset (default: 0)
+  ${YELLOW}--keywords <csv>${RESET}  (hooks add/update) comma-separated keywords
+  ${YELLOW}--scenario <s>${RESET}    (hooks add/update) any | cognitive | emotional | physical
+  ${YELLOW}--command <cmd>${RESET}   (hooks add/update) command to run on trigger
+  ${YELLOW}--hook-text <txt>${RESET} (hooks add/update) payload text
+  ${YELLOW}--threshold <f>${RESET}   (hooks add/update) distance threshold (0.01–1.0)
+  ${YELLOW}--recent <n>${RESET}      (hooks add/update) recent-refs limit (10–20)
   ${YELLOW}--trends${RESET}          (sessions) show per-session metric trends and first/second-half deltas
   ${YELLOW}--context "..."${RESET}   (label) long-form annotation body; used by search-labels --mode context
   ${YELLOW}--at <utc>${RESET}        (label) backdate to a specific unix second (default: now)
@@ -3196,7 +3252,122 @@ async function cmdHooks(args: Args): Promise<void> {
     return;
   }
 
-  printError(`unknown hooks subcommand: "${sub}". Valid: status suggest log`);
+  if (sub === "list") {
+    print(`${BOLD}🪝 hooks list${RESET}`);
+    const r = await send({ command: "hooks_get" });
+    if (!r.ok) { printResult(r); printError(r.error ?? "hooks_get failed"); }
+
+    const hooks = Array.isArray(r.hooks) ? r.hooks : [];
+    if (hooks.length === 0) {
+      print(`  ${DIM}(no hooks configured)${RESET}`);
+      printResult(r);
+      return;
+    }
+
+    for (const h of hooks) {
+      const enabled = h.enabled ? `${GREEN}on${RESET}` : `${GRAY}off${RESET}`;
+      const kws = Array.isArray(h.keywords) ? h.keywords.join(", ") : "";
+      print(`  ${CYAN}${h.name ?? "(unnamed)"}${RESET}  [${enabled}]  scenario=${h.scenario ?? "any"}  threshold=${Number(h.distance_threshold ?? 0.1).toFixed(2)}  recent=${h.recent_limit ?? 12}`);
+      if (kws) print(`    keywords: ${kws}`);
+      if (h.command) print(`    command: ${h.command}`);
+      if (h.text)    print(`    text: ${h.text}`);
+    }
+    printResult(r);
+    return;
+  }
+
+  if (sub === "add") {
+    if (!args.hookName) printError('usage: hooks add <name> [--keywords "k1,k2"] [--scenario any] [--command cmd] [--hook-text txt] [--threshold 0.14] [--recent 12]');
+
+    // Fetch current hooks
+    const r0 = await send({ command: "hooks_get" });
+    if (!r0.ok) { printResult(r0); printError(r0.error ?? "hooks_get failed"); }
+    const current: any[] = Array.isArray(r0.hooks) ? r0.hooks : [];
+
+    if (current.some((h: any) => h.name === args.hookName)) {
+      printError(`hook "${args.hookName}" already exists — use 'hooks update' to modify it`);
+    }
+
+    const newHook: any = {
+      name: args.hookName!,
+      enabled: true,
+      keywords: args.hookKeywords ? args.hookKeywords.split(",").map((s: string) => s.trim()).filter(Boolean) : [],
+      scenario: args.hookScenario ?? "any",
+      command: args.hookCommand ?? "",
+      text: args.hookText ?? "",
+      distance_threshold: args.hookThreshold ?? 0.1,
+      recent_limit: args.hookRecent ?? 12,
+    };
+
+    current.push(newHook);
+    const r = await send({ command: "hooks_set", hooks: current });
+    if (!r.ok) { printResult(r); printError(r.error ?? "hooks_set failed"); }
+    print(`${GREEN}✓${RESET} hook ${CYAN}${args.hookName}${RESET} added`);
+    printResult(r);
+    return;
+  }
+
+  if (sub === "remove") {
+    if (!args.hookName) printError("usage: hooks remove <name>");
+
+    const r0 = await send({ command: "hooks_get" });
+    if (!r0.ok) { printResult(r0); printError(r0.error ?? "hooks_get failed"); }
+    const current: any[] = Array.isArray(r0.hooks) ? r0.hooks : [];
+    const before = current.length;
+    const filtered = current.filter((h: any) => h.name !== args.hookName);
+
+    if (filtered.length === before) {
+      printError(`hook "${args.hookName}" not found`);
+    }
+
+    const r = await send({ command: "hooks_set", hooks: filtered });
+    if (!r.ok) { printResult(r); printError(r.error ?? "hooks_set failed"); }
+    print(`${GREEN}✓${RESET} hook ${CYAN}${args.hookName}${RESET} removed`);
+    printResult(r);
+    return;
+  }
+
+  if (sub === "enable" || sub === "disable") {
+    if (!args.hookName) printError(`usage: hooks ${sub} <name>`);
+
+    const r0 = await send({ command: "hooks_get" });
+    if (!r0.ok) { printResult(r0); printError(r0.error ?? "hooks_get failed"); }
+    const current: any[] = Array.isArray(r0.hooks) ? r0.hooks : [];
+    const hook = current.find((h: any) => h.name === args.hookName);
+    if (!hook) printError(`hook "${args.hookName}" not found`);
+
+    hook.enabled = sub === "enable";
+    const r = await send({ command: "hooks_set", hooks: current });
+    if (!r.ok) { printResult(r); printError(r.error ?? "hooks_set failed"); }
+    print(`${GREEN}✓${RESET} hook ${CYAN}${args.hookName}${RESET} ${sub === "enable" ? "enabled" : "disabled"}`);
+    printResult(r);
+    return;
+  }
+
+  if (sub === "update") {
+    if (!args.hookName) printError('usage: hooks update <name> [--keywords "k1,k2"] [--scenario any] [--command cmd] [--hook-text txt] [--threshold 0.14] [--recent 12]');
+
+    const r0 = await send({ command: "hooks_get" });
+    if (!r0.ok) { printResult(r0); printError(r0.error ?? "hooks_get failed"); }
+    const current: any[] = Array.isArray(r0.hooks) ? r0.hooks : [];
+    const hook = current.find((h: any) => h.name === args.hookName);
+    if (!hook) printError(`hook "${args.hookName}" not found`);
+
+    if (args.hookKeywords !== undefined) hook.keywords = args.hookKeywords.split(",").map((s: string) => s.trim()).filter(Boolean);
+    if (args.hookScenario !== undefined) hook.scenario = args.hookScenario;
+    if (args.hookCommand  !== undefined) hook.command  = args.hookCommand;
+    if (args.hookText     !== undefined) hook.text     = args.hookText;
+    if (args.hookThreshold !== undefined) hook.distance_threshold = args.hookThreshold;
+    if (args.hookRecent    !== undefined) hook.recent_limit = args.hookRecent;
+
+    const r = await send({ command: "hooks_set", hooks: current });
+    if (!r.ok) { printResult(r); printError(r.error ?? "hooks_set failed"); }
+    print(`${GREEN}✓${RESET} hook ${CYAN}${args.hookName}${RESET} updated`);
+    printResult(r);
+    return;
+  }
+
+  printError(`unknown hooks subcommand: "${sub}". Valid: status list add remove enable disable update suggest log`);
 }
 
 /**

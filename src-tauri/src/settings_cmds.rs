@@ -543,7 +543,7 @@ pub fn set_goal_notified_date(date: String, app: AppHandle, state: tauri::State<
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────
 
-fn sanitize_hook(mut h: HookRule) -> Option<HookRule> {
+pub fn sanitize_hook(mut h: HookRule) -> Option<HookRule> {
     h.name = h.name.trim().to_owned();
     if h.name.is_empty() { return None; }
 

@@ -39,6 +39,46 @@ struct RoundedBands {
     rel_gamma: f32,
 }
 
+/// `hooks_get` — return raw hook rules (no runtime trigger state).
+fn hooks_get(app: &AppHandle) -> Result<Value, String> {
+    let st = app.state::<Mutex<Box<AppState>>>();
+    let s = st.lock_or_recover();
+    Ok(serde_json::json!({ "hooks": s.hooks }))
+}
+
+/// `hooks_set` — replace all hooks with the provided list.
+///
+/// Accepts `{ "hooks": [ { name, enabled, keywords, scenario, command, text,
+///   distance_threshold, recent_limit }, … ] }`.
+/// Each rule is sanitised identically to the Tauri `set_hooks` command.
+fn hooks_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let raw: Vec<crate::settings::HookRule> = msg
+        .get("hooks")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+
+    let clean: Vec<crate::settings::HookRule> = raw
+        .into_iter()
+        .filter_map(crate::settings_cmds::sanitize_hook)
+        .take(100)
+        .collect();
+
+    {
+        let st = app.state::<Mutex<Box<AppState>>>();
+        let mut s = st.lock_or_recover();
+        s.hooks = clean;
+        let keep: std::collections::HashSet<String> =
+            s.hooks.iter().map(|h| h.name.clone()).collect();
+        s.hook_runtime.lock_or_recover().retain(|name, _| keep.contains(name));
+    }
+    crate::save_settings_handle(app);
+
+    // Return the saved hooks so callers can verify sanitisation.
+    let st = app.state::<Mutex<Box<AppState>>>();
+    let s = st.lock_or_recover();
+    Ok(serde_json::json!({ "hooks": s.hooks }))
+}
+
 /// `hooks_status` — return all hooks with last-trigger metadata.
 fn hooks_status(app: &AppHandle) -> Result<Value, String> {
     let st = app.state::<Mutex<Box<AppState>>>();
@@ -2095,6 +2135,8 @@ pub async fn dispatch(
         "sessions"            => sessions(app),
         "sleep"               => sleep(app, msg),
         "umap"                => umap(app, msg),
+        "hooks_get"           => hooks_get(app),
+        "hooks_set"           => hooks_set(app, msg),
         "hooks_status"        => hooks_status(app),
         "hooks_suggest"       => hooks_suggest(app, msg),
         "hooks_log"           => hooks_log(app, msg),

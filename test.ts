@@ -87,6 +87,7 @@
  * 5.  LABEL              — Create a timestamped text annotation
  * 6.  SEARCH_LABELS      — Search labels by free-text query (text / context / both modes)
  * 7.  HOOKS_STATUS       — Proactive Hook rules + scenario + last-trigger metadata
+ * 7b. HOOKS_GET/SET      — Full CRUD for hook rules via hooks_get / hooks_set
  * 8.  HOOKS_SUGGEST      — Suggest threshold from labels + EEG embedding distances
  * 9.  HOOKS_LOG          — Paginated hook trigger audit log from hooks.sqlite (includes scenario in hook_json)
  * 10. INTERACTIVE_SEARCH — Cross-modal 4-layer graph search (query → labels → EEG → found labels)
@@ -860,6 +861,55 @@ async function testHooksSuggest(): Promise<void> {
     else fail("missing suggestion object");
   } catch (e: any) {
     fail(`hooks_suggest request failed: ${e.message}`);
+  }
+}
+
+async function testHooksGetSet(): Promise<void> {
+  heading("hooks_get / hooks_set");
+  try {
+    // Get current hooks
+    const r0 = await send({ command: "hooks_get" });
+    if (r0.ok === true) ok("hooks_get returns ok=true");
+    else fail(`hooks_get failed: ${r0.error ?? "unknown"}`);
+    if (Array.isArray(r0.hooks)) ok(`hooks array present (${r0.hooks.length})`);
+    else fail("hooks field is not an array");
+
+    const original = Array.isArray(r0.hooks) ? r0.hooks : [];
+
+    // Add a test hook
+    const testHook = {
+      name: "__cli_test_hook__",
+      enabled: true,
+      keywords: ["test", "cli"],
+      scenario: "cognitive",
+      command: "test_cmd",
+      text: "test text",
+      distance_threshold: 0.15,
+      recent_limit: 12,
+    };
+    const withTest = [...original, testHook];
+    const r1 = await send({ command: "hooks_set", hooks: withTest });
+    if (r1.ok === true) ok("hooks_set (add) returns ok=true");
+    else fail(`hooks_set (add) failed: ${r1.error ?? "unknown"}`);
+
+    // Verify the hook was added
+    const r2 = await send({ command: "hooks_get" });
+    const found = Array.isArray(r2.hooks) && r2.hooks.some((h: any) => h.name === "__cli_test_hook__");
+    if (found) ok("test hook found after set");
+    else fail("test hook not found after set");
+
+    // Clean up — restore original hooks
+    const r3 = await send({ command: "hooks_set", hooks: original });
+    if (r3.ok === true) ok("hooks_set (restore) returns ok=true");
+    else fail(`hooks_set (restore) failed: ${r3.error ?? "unknown"}`);
+
+    // Verify cleanup
+    const r4 = await send({ command: "hooks_get" });
+    const still = Array.isArray(r4.hooks) && r4.hooks.some((h: any) => h.name === "__cli_test_hook__");
+    if (!still) ok("test hook removed after restore");
+    else fail("test hook still present after restore");
+  } catch (e: any) {
+    fail(`hooks_get/set request failed: ${e.message}`);
   }
 }
 
@@ -3003,6 +3053,7 @@ async function main(): Promise<void> {
   await testLabel();
   await testHooksStatus();
   await testHooksSuggest();
+  await testHooksGetSet();
   await testHooksLog();
   await testSearchLabels();
   await testInteractiveSearch();
