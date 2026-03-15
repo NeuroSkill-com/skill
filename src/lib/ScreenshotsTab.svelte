@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Screenshots tab — capture, embedding model, re-embed -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { Button }    from "$lib/components/ui/button";
   import { Card, CardContent } from "$lib/components/ui/card";
@@ -66,7 +66,7 @@ the Free Software Foundation, version 3 only. -->
   let unlisten: UnlistenFn | null = null;
 
   // ── OCR search state ──────────────────────────────────────────────────────
-  let screenshotsDir = $state("");
+  let screenshotsPort = $state(8375);
   let ocrQuery     = $state("");
   let ocrResults   = $state<Array<{timestamp: number; unix_ts: number; filename: string; app_name: string; window_title: string; ocr_text: string; similarity: number}>>([]);
   let ocrSearching = $state(false);
@@ -106,8 +106,8 @@ the Free Software Foundation, version 3 only. -->
   }
 
   function screenshotSrc(filename: string): string {
-    if (!screenshotsDir || !filename) return "";
-    return convertFileSrc(`${screenshotsDir}/${filename}`);
+    if (!filename) return "";
+    return `http://127.0.0.1:${screenshotsPort}/screenshots/${filename}`;
   }
 
   function fmtMs(ms: number): string {
@@ -150,8 +150,9 @@ the Free Software Foundation, version 3 only. -->
       estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
     } catch { estimate = null; }
     try {
-      screenshotsDir = await invoke<string>("get_screenshots_dir");
-    } catch { screenshotsDir = ""; }
+      const [, port] = await invoke<[string, number]>("get_screenshots_dir");
+      screenshotsPort = port;
+    } catch {}
     if (isMac) {
       try { screenPermission = await invoke<boolean>("check_screen_recording_permission"); }
       catch { screenPermission = null; }
@@ -790,7 +791,7 @@ the Free Software Foundation, version 3 only. -->
               <div class="rounded-xl border border-border dark:border-white/[0.06]
                           bg-muted/20 dark:bg-white/[0.015] overflow-hidden">
                 <!-- Thumbnail -->
-                {#if r.filename && screenshotsDir}
+                {#if r.filename}
                   <img src={screenshotSrc(r.filename)}
                        alt="Screenshot"
                        class="w-full h-auto max-h-40 object-cover bg-black/5 dark:bg-white/[0.02]"
