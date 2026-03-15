@@ -152,7 +152,7 @@ the Free Software Foundation, version 3 only. -->
   {#if isSearchWindow}
     <div class="search-window-head">
       <div class="search-mode-switch" role="tablist" aria-label={t("search.title")}>
-        {#each (["eeg","text","interactive","images"] as const) as mode}
+        {#each (["eeg","text","images","interactive"] as const) as mode}
           <button type="button" role="tab" aria-selected={searchMode === mode}
                   class="search-mode-button {searchMode === mode ? 'active' : ''}"
                   onclick={() => emitSearchModeSwitch(mode)}>
