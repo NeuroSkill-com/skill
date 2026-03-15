@@ -6,7 +6,7 @@
 [![Homebrew](https://img.shields.io/badge/Homebrew-Install%20via%20Cask-FBB040?style=for-the-badge&logo=homebrew&logoColor=white)](https://github.com/NeuroSkill-com/skill#install-homebrew-macos-apple-silicon)
 
 [![macOS](https://img.shields.io/badge/Download-macOS%20(Apple%20Silicon)-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.dmg)
-[![Windows](https://img.shields.io/badge/Download-Windows%20(x86__64)-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.exe)
+[![Windows](https://img.shields.io/badge/Download-Windows%20(x86__64)-0078D4?style=for-the-badge&logo=windows11&logoColor=white)](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.exe)
 [![Linux](https://img.shields.io/badge/Download-Linux%20(x86__64)-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/NeuroSkill-com/skill/releases/latest/download/NeuroSkill.AppImage)
 
 > **⚠️ Research Use Only — Not a Medical Device**
