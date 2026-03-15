@@ -8,6 +8,12 @@ All notable changes to NeuroSkill™ are documented here.
 
 ### Chat UI
 
+- **Context usage always visible**: the context-window usage bar (tokens used / n_ctx) is now permanently displayed below the chat header instead of being hidden inside the tools panel. Shows a colour-coded progress bar (green → amber → red) with token counts.
+
+- **Model name moved to titlebar**: the active model name is now shown in the header drag region (acting as the window title), freeing horizontal space for badges and controls. The footer hint no longer repeats the model name.
+
+- **Deduplicated tools UI**: when the dedicated tools panel is open, the tools allow-list in the parameters/settings panel is automatically hidden to avoid showing the same controls in two places simultaneously.
+
 - **Tools badge now toggles a dedicated tools panel**: clicking the wrench/tools badge in the chat header now opens and closes a dedicated tools-only panel instead of opening the full settings drawer. The panel displays the tool allow-list grid, execution mode toggle, and a context-length progress bar showing the model's `n_ctx` window size with token usage from the most recent assistant message. The badge is always visible when the model supports tools (even with 0 tools enabled) and highlights when the panel is open. The tools panel and settings panel are mutually exclusive — opening one closes the other.
 
 - **Added LLM accuracy warning banner**: a persistent amber-tinted warning is now displayed above the footer hint in the chat window, reminding users that LLM output can be inaccurate and to always verify tool results and generated content. Fully localised across all 5 supported languages (en/de/fr/uk/he).

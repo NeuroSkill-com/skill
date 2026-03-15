@@ -783,8 +783,12 @@ pub fn save_chat_message(
     thinking:   Option<String>,
     state:      tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> i64 {
+    eprintln!("[save_chat_message] called: session_id={session_id} role={role} content_len={}", content.len());
     let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return 0; };
+    let Some(store) = s.llm.chat_store.as_mut() else {
+        eprintln!("[save_chat_message] chat_store is None!");
+        return 0;
+    };
     store.save_message(session_id, &role, &content, thinking.as_deref())
 }
 

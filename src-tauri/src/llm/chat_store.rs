@@ -219,15 +219,22 @@ impl ChatStore {
         thinking:   Option<&str>,
     ) -> i64 {
         let now = unix_ms();
-        self.conn
-            .execute(
-                "INSERT INTO chat_messages \
-                 (session_id, role, content, thinking, created_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![session_id, role, content, thinking, now],
-            )
-            .ok();
-        self.conn.last_insert_rowid()
+        match self.conn.execute(
+            "INSERT INTO chat_messages \
+             (session_id, role, content, thinking, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![session_id, role, content, thinking, now],
+        ) {
+            Ok(rows) => {
+                let id = self.conn.last_insert_rowid();
+                eprintln!("[chat_store] save_message OK: session={session_id} role={role} rows={rows} id={id} content_len={}", content.len());
+                id
+            }
+            Err(e) => {
+                eprintln!("[chat_store] save_message FAILED: session={session_id} role={role} error={e}");
+                0
+            }
+        }
     }
 
     /// Load all messages for a session in insertion order.

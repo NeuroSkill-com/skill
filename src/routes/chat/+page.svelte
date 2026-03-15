@@ -1329,14 +1329,20 @@
       </svg>
     </button>
 
-    <!-- Model / status -->
-    <div class="flex items-center gap-1.5 flex-1 min-w-0">
+    <!-- Status indicator + model name (acts as titlebar text) -->
+    <div class="flex items-center gap-1.5 flex-1 min-w-0" data-tauri-drag-region>
       <!-- Live indicator -->
       <span class="w-2 h-2 rounded-full shrink-0
                     {status === 'running'  ? 'bg-emerald-500'
                     : status === 'loading' ? 'bg-amber-500 animate-pulse'
                     :                       'bg-slate-400/50'}"></span>
-      <span class="text-[0.72rem] font-semibold truncate {statusColor}">{statusLabel}</span>
+      <span class="text-[0.72rem] font-semibold truncate {statusColor}" data-tauri-drag-region>
+        {#if status === 'running' && modelName}
+          {modelName}
+        {:else}
+          {statusLabel}
+        {/if}
+      </span>
     </div>
 
     <!-- Tools badge -->
@@ -1439,6 +1445,33 @@
       </svg>
     </button>
   </header>
+
+  <!-- ── Always-visible context usage bar ─────────────────────────────────── -->
+  {#if nCtx > 0}
+    {@const lastUsage = [...messages].reverse().find(m => m.role === "assistant" && m.usage)?.usage}
+    {@const usedTokens = lastUsage?.total_tokens ?? 0}
+    {@const usedPct = usedTokens > 0 ? Math.round((usedTokens / nCtx) * 100) : 0}
+    {@const barColor = usedPct >= 90 ? "bg-red-500"
+                     : usedPct >= 70 ? "bg-amber-500"
+                     :                 "bg-primary"}
+    <div class="flex items-center gap-2 px-3 py-1 border-b border-border dark:border-white/[0.06]
+                bg-slate-50/40 dark:bg-[#111118]/60 shrink-0">
+      <span class="text-[0.5rem] font-semibold uppercase tracking-widest text-muted-foreground/50 shrink-0">
+        {t("chat.ctxUsage")}
+      </span>
+      <div class="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+        <div class="h-full rounded-full {barColor} transition-all duration-300"
+             style="width: {Math.min(usedPct, 100)}%"></div>
+      </div>
+      <span class="text-[0.5rem] tabular-nums text-muted-foreground/50 shrink-0 font-medium">
+        {#if usedTokens > 0}
+          {usedTokens.toLocaleString()}/{nCtx.toLocaleString()} ({usedPct}%)
+        {:else}
+          0/{nCtx.toLocaleString()}
+        {/if}
+      </span>
+    </div>
+  {/if}
 
   <!-- ── Parameters sidebar (slide-in) ────────────────────────────────────── -->
   {#if showSettings}
@@ -1577,7 +1610,8 @@
         </div>
       {/if}
 
-      <!-- Tools allow-list -->
+      <!-- Tools allow-list (hidden when dedicated tools panel is open) -->
+      {#if !showTools}
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center justify-between gap-2">
           <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -1660,6 +1694,7 @@
           </div>
         {/if}
       </div>
+      {/if}
 
       <!-- Thinking level -->
       <div class="flex flex-col gap-1">
@@ -1710,34 +1745,6 @@
     <div class="min-h-0 max-h-[50vh] overflow-y-auto border-b border-border dark:border-white/[0.06]
                 bg-slate-50/60 dark:bg-[#111118] px-4 py-3 flex flex-col gap-3
                 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border">
-
-      <!-- Context length -->
-      {#if nCtx > 0}
-        {@const lastUsage = [...messages].reverse().find(m => m.role === "assistant" && m.usage)?.usage}
-        {@const usedTokens = lastUsage?.total_tokens ?? 0}
-        {@const usedPct = usedTokens > 0 ? Math.round((usedTokens / nCtx) * 100) : 0}
-        {@const barColor = usedPct >= 90 ? "bg-red-500"
-                         : usedPct >= 70 ? "bg-amber-500"
-                         :                 "bg-primary"}
-        <div class="flex flex-col gap-1.5">
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-[0.58rem] font-semibold uppercase tracking-widest text-muted-foreground">
-              {t("chat.ctxUsage")}
-            </span>
-            <span class="text-[0.58rem] tabular-nums text-muted-foreground/60 font-medium">
-              {#if usedTokens > 0}
-                {usedTokens.toLocaleString()} / {nCtx.toLocaleString()} {t("chat.tok")} ({usedPct}%)
-              {:else}
-                {nCtx.toLocaleString()} {t("chat.tok")}
-              {/if}
-            </span>
-          </div>
-          <div class="h-1.5 rounded-full bg-muted overflow-hidden">
-            <div class="h-full rounded-full {barColor} transition-all duration-300"
-                 style="width: {Math.min(usedPct, 100)}%"></div>
-          </div>
-        </div>
-      {/if}
 
       <!-- Tools allow-list -->
       <div class="flex flex-col gap-1.5">
@@ -2432,7 +2439,7 @@
     <!-- Footer hint -->
     <p class="text-[0.55rem] text-muted-foreground/30 text-center mt-1.5">
       {#if status === "running"}
-        {modelName} · {t("chat.hint.running")}
+        {t("chat.hint.running")}
       {:else if status === "loading"}
         {t("chat.hint.loading")}
       {:else}
