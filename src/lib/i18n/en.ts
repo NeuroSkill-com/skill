@@ -1896,6 +1896,11 @@ const en: Record<string, string> = {
   "onboarding.models.neuttsDesc": "Recommended multilingual voice engine with better quality and cloning support.",
   "onboarding.models.kittenTitle": "Kitten TTS",
   "onboarding.models.kittenDesc": "Lightweight fast voice backend, useful as a quick fallback and for low-resource systems.",
+  "onboarding.models.ocrTitle": "OCR Models",
+  "onboarding.models.ocrDesc": "Text detection + recognition models for extracting text from screenshots. Enables text search across captured screens (~10 MB each).",
+  "onboarding.screenRecTitle": "Screen Recording Permission",
+  "onboarding.screenRecDesc": "Required on macOS to capture other application windows for the screenshot system. Without it, screenshots may be blank.",
+  "onboarding.screenRecOpen": "Open Settings",
 
   "onboarding.trayTitle":         "Find the App in Your Tray",
   "onboarding.trayBody":          "{app} runs quietly in the background. After setup, the icon in your menu bar (macOS) or system tray (Windows/Linux) is your entry point back into the app.",

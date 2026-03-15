@@ -64,7 +64,7 @@ the Free Software Foundation, version 3 only. -->
     ref_wav_path: string;
     ref_text: string;
   }
-  type OnboardingModelKey = "zuna" | "kitten" | "neutts" | "llm";
+  type OnboardingModelKey = "zuna" | "kitten" | "neutts" | "llm" | "ocr";
   type CalPhase = "idle" | "action" | "break" | "done";
   interface Phase { kind: CalPhase; actionIndex: number; loop: number; }
 
@@ -113,7 +113,11 @@ the Free Software Foundation, version 3 only. -->
   let neuttsDlError   = $state("");
   let kittenDlError   = $state("");
   let bundleBusy      = $state(false);
-  let onboardingDownloadOrder = $state<OnboardingModelKey[]>(["zuna", "kitten", "neutts", "llm"]);
+  let ocrDlState      = $state<"idle"|"downloading"|"ready"|"error">("idle");
+  let ocrDlError      = $state("");
+  let screenRecPerm   = $state<boolean | null>(null);
+  const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+  let onboardingDownloadOrder = $state<OnboardingModelKey[]>(["zuna", "kitten", "neutts", "llm", "ocr"]);
   type AutoModelStage = OnboardingModelKey | "done";
   let autoModelStage      = $state<AutoModelStage>("zuna");
   let autoModelInFlight   = $state(false);
@@ -127,7 +131,8 @@ the Free Software Foundation, version 3 only. -->
   const zunaProgressPct   = $derived(((zunaStatus?.download_progress ?? 0) * 100));
   const allRecommendedReady = $derived(
     qwenIsDownloaded && zunaIsDownloaded &&
-    neuttsDlState === "ready" && kittenDlState === "ready"
+    neuttsDlState === "ready" && kittenDlState === "ready" &&
+    ocrDlState === "ready"
   );
 
   const footerModelStatus = $derived.by(() => {
@@ -142,6 +147,7 @@ the Free Software Foundation, version 3 only. -->
       if (stage === "zuna") return fmt("ZUNA", zunaIsDownloaded, zunaIsDownloading, zunaProgressPct, false);
       if (stage === "kitten") return fmt("Kitten", kittenDlState === "ready", kittenDlState === "downloading", 0, kittenDlState === "error");
       if (stage === "neutts") return fmt("NeuTTS", neuttsDlState === "ready", neuttsDlState === "downloading", 0, neuttsDlState === "error");
+      if (stage === "ocr") return fmt("OCR", ocrDlState === "ready", ocrDlState === "downloading", 0, ocrDlState === "error");
       return fmt("LLM", qwenIsDownloaded, qwenIsDownloading, qwenProgressPct, false);
     };
     const parts = onboardingDownloadOrder.map(stagePart);
@@ -219,12 +225,14 @@ the Free Software Foundation, version 3 only. -->
 
   async function refreshModelDownloads() {
     try {
-      const [catalog, eeg] = await Promise.all([
+      const [catalog, eeg, ocrReady] = await Promise.all([
         invoke<LlmCatalogLite>("get_llm_catalog"),
         invoke<EegModelStatusLite>("get_eeg_model_status"),
+        invoke<boolean>("check_ocr_models_ready"),
       ]);
       qwenTarget = pickQwenTarget(catalog.entries);
       zunaStatus = eeg;
+      if (ocrReady && ocrDlState !== "ready") ocrDlState = "ready";
       modelLoadError = "";
     } catch (e) {
       modelLoadError = String(e);
@@ -288,6 +296,20 @@ the Free Software Foundation, version 3 only. -->
     }
   }
 
+  async function downloadOcrModels() {
+    if (ocrDlState === "ready" || ocrDlState === "downloading") return;
+    ocrDlState = "downloading";
+    ocrDlError = "";
+    try {
+      const ok = await invoke<boolean>("download_ocr_models");
+      ocrDlState = ok ? "ready" : "error";
+      if (!ok) ocrDlError = "OCR model download failed";
+    } catch (e) {
+      ocrDlState = "error";
+      ocrDlError = String(e);
+    }
+  }
+
   async function downloadRecommendedBundle() {
     if (bundleBusy) return;
     bundleBusy = true;
@@ -301,6 +323,8 @@ the Free Software Foundation, version 3 only. -->
           if (kittenDlState !== "ready") await downloadTtsBackend("kitten");
         } else if (stage === "neutts") {
           if (neuttsDlState !== "ready") await downloadTtsBackend("neutts");
+        } else if (stage === "ocr") {
+          if (ocrDlState !== "ready") await downloadOcrModels();
         } else if (!qwenIsDownloaded && !qwenIsDownloading) {
           await downloadQwen();
         }
@@ -317,6 +341,7 @@ the Free Software Foundation, version 3 only. -->
     if (stage === "zuna") return zunaIsDownloaded;
     if (stage === "kitten") return kittenDlState === "ready";
     if (stage === "neutts") return neuttsDlState === "ready";
+    if (stage === "ocr") return ocrDlState === "ready";
     return qwenIsDownloaded;
   }
 
@@ -324,6 +349,7 @@ the Free Software Foundation, version 3 only. -->
     if (stage === "zuna") return zunaIsDownloading;
     if (stage === "kitten") return kittenDlState === "downloading" || (ttsActionBusy && autoModelStage === "kitten");
     if (stage === "neutts") return neuttsDlState === "downloading" || (ttsActionBusy && autoModelStage === "neutts");
+    if (stage === "ocr") return ocrDlState === "downloading";
     return qwenIsDownloading;
   }
 
@@ -352,6 +378,8 @@ the Free Software Foundation, version 3 only. -->
         await downloadTtsBackend("kitten");
       } else if (autoModelStage === "neutts" && neuttsDlState !== "ready") {
         await downloadTtsBackend("neutts");
+      } else if (autoModelStage === "ocr" && ocrDlState !== "ready") {
+        await downloadOcrModels();
       } else if (autoModelStage === "llm" && !qwenIsDownloaded && !qwenIsDownloading) {
         await downloadQwen();
       }
@@ -455,7 +483,7 @@ the Free Software Foundation, version 3 only. -->
     try {
       const order = await invoke<string[]>("get_onboarding_model_download_order");
       const valid = order.filter((stage): stage is OnboardingModelKey =>
-        stage === "zuna" || stage === "kitten" || stage === "neutts" || stage === "llm"
+        stage === "zuna" || stage === "kitten" || stage === "neutts" || stage === "llm" || stage === "ocr"
       );
       if (valid.length) onboardingDownloadOrder = valid;
     } catch {}
@@ -478,9 +506,15 @@ the Free Software Foundation, version 3 only. -->
     invoke("tts_init").catch(() => {});
 
     await refreshModelDownloads();
+    if (isMac) {
+      try { screenRecPerm = await invoke<boolean>("check_screen_recording_permission"); } catch {}
+    }
     autoModelsStarted = true;
     void driveAutoModelQueue();
-    modelsTimer = setInterval(() => { refreshModelDownloads(); }, 2000);
+    modelsTimer = setInterval(() => {
+      refreshModelDownloads();
+      if (isMac) invoke<boolean>("check_screen_recording_permission").then(v => { screenRecPerm = v; }).catch(() => {});
+    }, 2000);
   });
   onDestroy(async () => {
     unsubs.forEach((u) => u());
@@ -497,6 +531,7 @@ the Free Software Foundation, version 3 only. -->
     qwenTarget;
     kittenDlState;
     neuttsDlState;
+    ocrDlState;
     ttsActionBusy;
     autoModelsStarted;
     autoModelStage;
@@ -891,8 +926,51 @@ the Free Software Foundation, version 3 only. -->
                 </Button>
               </div>
             </div>
+            <div class="flex flex-col gap-1.5 rounded-lg border border-border/70 dark:border-white/[0.08] bg-muted/40 dark:bg-[#1a1a28] px-3 py-2.5 text-left">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">📝</span>
+                <span class="text-[0.66rem] font-semibold">{t("onboarding.models.ocrTitle")}</span>
+              </div>
+              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.ocrDesc")}</p>
+              {#if ocrDlState === "error" && ocrDlError}
+                <p class="text-[0.55rem] text-destructive leading-relaxed">{ocrDlError}</p>
+              {/if}
+              <div class="flex justify-end">
+                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={downloadOcrModels}
+                        disabled={ocrDlState === "ready" || ocrDlState === "downloading"}>
+                  {ocrDlState === "ready" ? t("onboarding.models.downloaded") : ocrDlState === "downloading" ? t("onboarding.models.downloading") : t("onboarding.models.download")}
+                </Button>
+              </div>
+            </div>
+
           </CardContent>
         </Card>
+
+        <!-- ── Screen Recording permission (macOS) ──────────────────── -->
+        {#if isMac}
+          <Card class="w-full max-w-[360px] border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+            <CardContent class="px-3 py-3 flex flex-col gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-sm">🖥️</span>
+                <span class="text-[0.66rem] font-semibold">{t("onboarding.screenRecTitle")}</span>
+                <span class="ml-auto inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.55rem] font-semibold
+                             {screenRecPerm ? 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30' : 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'}">
+                  <span class="w-1.5 h-1.5 rounded-full {screenRecPerm ? 'bg-green-500' : 'bg-amber-400'}"></span>
+                  {screenRecPerm ? t("perm.granted") : t("perm.denied")}
+                </span>
+              </div>
+              <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.screenRecDesc")}</p>
+              {#if !screenRecPerm}
+                <div class="flex justify-end">
+                  <Button size="sm" variant="outline" class="h-7 text-[0.62rem] px-3"
+                          onclick={() => invoke("open_screen_recording_settings")}>
+                    {t("onboarding.screenRecOpen")}
+                  </Button>
+                </div>
+              {/if}
+            </CardContent>
+          </Card>
+        {/if}
 
         {#if modelLoadError}
           <p class="text-[0.56rem] text-destructive/90 max-w-[340px] leading-relaxed">{modelLoadError}</p>

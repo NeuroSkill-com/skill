@@ -1583,6 +1583,39 @@ pub fn search_screenshots_by_image(
     crate::screenshot::search_by_vector(&hnsw, &store, &query, k)
 }
 
+/// Check whether OCR models are downloaded and ready.
+#[tauri::command]
+pub fn check_ocr_models_ready(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> bool {
+    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let ocr_dir = skill_dir.join("ocr_models");
+    ocr_dir.join(crate::constants::OCR_DETECTION_MODEL_FILE).exists()
+        && ocr_dir.join(crate::constants::OCR_RECOGNITION_MODEL_FILE).exists()
+}
+
+/// Download OCR models (text-detection.rten + text-recognition.rten).
+/// Returns true if both models are now available.
+#[tauri::command]
+pub fn download_ocr_models(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> bool {
+    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let ocr_dir = skill_dir.join("ocr_models");
+    let _ = std::fs::create_dir_all(&ocr_dir);
+
+    let det_path = ocr_dir.join(crate::constants::OCR_DETECTION_MODEL_FILE);
+    let rec_path = ocr_dir.join(crate::constants::OCR_RECOGNITION_MODEL_FILE);
+
+    let det_ok = crate::screenshot::download_ocr_model_pub(
+        crate::constants::OCR_DETECTION_MODEL_URL, &det_path,
+    );
+    let rec_ok = crate::screenshot::download_ocr_model_pub(
+        crate::constants::OCR_RECOGNITION_MODEL_URL, &rec_path,
+    );
+    det_ok && rec_ok
+}
+
 /// Search screenshots by OCR text — both semantic (embedding similarity)
 /// and substring (SQL LIKE) modes.
 /// `mode`: "semantic" (default) uses text embedding HNSW search,

@@ -1394,6 +1394,11 @@ const de: Record<string, string> = {
   "onboarding.models.neuttsDesc": "Empfohlene mehrsprachige Sprachengine mit besserer Qualität und Klon-Unterstützung.",
   "onboarding.models.kittenTitle": "Kitten TTS",
   "onboarding.models.kittenDesc": "Leichtgewichtiges schnelles Sprach-Backend, nützlich als schneller Fallback und für ressourcenarme Systeme.",
+  "onboarding.models.ocrTitle": "OCR-Modelle",
+  "onboarding.models.ocrDesc": "Texterkennungsmodelle für die Extraktion von Text aus Screenshots. Ermöglicht Textsuche über erfasste Bildschirme (~10 MB pro Modell).",
+  "onboarding.screenRecTitle": "Bildschirmaufnahme-Berechtigung",
+  "onboarding.screenRecDesc": "Auf macOS erforderlich, um Fenster anderer Anwendungen für das Screenshot-System zu erfassen.",
+  "onboarding.screenRecOpen": "Einstellungen öffnen",
 
   "onboarding.trayTitle":         "Die App im Tray finden",
   "onboarding.trayBody":          "{app} läuft im Hintergrund. Nach dem Setup ist das Symbol in deiner Menüleiste (macOS) bzw. im Infobereich (Windows/Linux) dein Einstiegspunkt.",

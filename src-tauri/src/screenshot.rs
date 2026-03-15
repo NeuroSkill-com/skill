@@ -579,6 +579,11 @@ fn fastembed_embed(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) ->
 
 // ── OCR engine ────────────────────────────────────────────────────────────────
 
+/// Download an OCR model file if it doesn't exist yet. Public alias for Tauri commands.
+pub fn download_ocr_model_pub(url: &str, dest: &Path) -> bool {
+    download_ocr_model(url, dest)
+}
+
 /// Download an OCR model file if it doesn't exist yet.
 fn download_ocr_model(url: &str, dest: &Path) -> bool {
     if dest.exists() { return true; }

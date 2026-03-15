@@ -16,11 +16,12 @@
 ///
 /// The frontend queries this at runtime so the sequence is configured from one
 /// backend source of truth.
-pub const ONBOARDING_MODEL_DOWNLOAD_ORDER: [&str; 4] = [
+pub const ONBOARDING_MODEL_DOWNLOAD_ORDER: [&str; 5] = [
     "zuna",
     "kitten",
     "neutts",
     "llm",
+    "ocr",
 ];
 
 // ── Hardware ──────────────────────────────────────────────────────────────────
