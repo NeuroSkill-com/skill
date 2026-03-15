@@ -6,6 +6,10 @@ All notable changes to NeuroSkill™ are documented here.
 
 ## [Unreleased]
 
+### macOS
+
+- **Fixed copy/paste in chat window**: added the standard Edit menu (Undo, Redo, Cut, Copy, Paste, Select All) to the macOS app menu bar. Without this menu, macOS Tauri webviews do not route ⌘C / ⌘V / ⌘X / ⌘A to the web content, making text selection and clipboard operations non-functional.
+
 ### LLM — Coding-Agent Tools
 
 - **Bash tool** (`bash`): execute shell commands from the LLM chat with configurable timeout. Output is tail-truncated to 2 000 lines / 50 KB (keeps the end where errors appear). Commands run in the user's home directory.

@@ -1391,6 +1391,15 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 true, Some("Cmd+Q"),
             )?)
             .build()?;
+        let edit_submenu = SubmenuBuilder::new(app, "Edit")
+            .item(&PredefinedMenuItem::undo(app, None)?)
+            .item(&PredefinedMenuItem::redo(app, None)?)
+            .separator()
+            .item(&PredefinedMenuItem::cut(app, None)?)
+            .item(&PredefinedMenuItem::copy(app, None)?)
+            .item(&PredefinedMenuItem::paste(app, None)?)
+            .item(&PredefinedMenuItem::select_all(app, None)?)
+            .build()?;
         let window_submenu = SubmenuBuilder::new(app, "Window")
             .item(&PredefinedMenuItem::minimize(app, None)?)
             .item(&PredefinedMenuItem::maximize(app, None)?)
@@ -1399,6 +1408,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             .build()?;
         let app_menu = MenuBuilder::new(app)
             .item(&app_submenu)
+            .item(&edit_submenu)
             .item(&window_submenu)
             .build()?;
         app.set_menu(app_menu).ok();
