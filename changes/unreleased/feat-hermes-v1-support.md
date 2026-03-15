@@ -1,0 +1,3 @@
+### Features
+
+- **Hermes V1 EEG headset support**: Added full session support for the Hermes V1 headset (8-channel ADS1299 at 250 Hz, 9-DOF IMU). The `hermes-ble` crate is added to `skill-devices` and re-exported. All data streams over BLE GATT — no RFCOMM needed. BLE scanner recognises devices whose name starts with "Hermes". Session handles EEG (8 channels through DSP pipeline), IMU (accel + gyro → head pose), and packet-drop detection. Dashboard renders 8 channels dynamically with device-specific labels and colours. Electrode placement guide and 3D electrode guide include Hermes V1 tab. Constants added to `skill-constants` (`HERMES_EEG_CHANNELS`, `HERMES_SAMPLE_RATE`, `HERMES_CHANNEL_NAMES`).
