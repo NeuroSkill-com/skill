@@ -63,6 +63,8 @@ the Free Software Foundation, version 3 only. -->
   let hoveredSession = $state<string | null>(null);
   /** Currently hovered label id — drives exact-match and proximity highlighting. */
   let hoveredLabelId = $state<number | null>(null);
+  /** Fixed-position tooltip for hovered label dots (avoids overflow clipping). */
+  let labelTooltip = $state<{ x: number; y: number; text: string; time: string; timeEnd?: string } | null>(null);
 
   // ── Chart visibility (IntersectionObserver per row) ─────────────────────
   /** csv_paths whose row has entered the viewport — chart is only mounted then. */
@@ -1122,6 +1124,22 @@ the Free Software Foundation, version 3 only. -->
     return labelRelations(lbl, allDayLabels);
   });
 
+  /** Show the fixed label tooltip near the cursor for a given label dot. */
+  function showLabelTooltip(e: MouseEvent, label: LabelRow, showEnd = false) {
+    hoveredLabelId = label.id;
+    labelTooltip = {
+      x: e.clientX,
+      y: e.clientY,
+      text: label.text,
+      time: fmtTimeShort(label.eeg_start),
+      timeEnd: showEnd ? fmtTime(label.eeg_end) : undefined,
+    };
+  }
+  function hideLabelTooltip() {
+    hoveredLabelId = null;
+    labelTooltip = null;
+  }
+
   /** Svelte action: draw a mini sparkline on a canvas element. */
   function drawSparkline(canvas: HTMLCanvasElement, ts: EpochRow[]) {
     renderSparkline(canvas, ts);
@@ -1588,30 +1606,16 @@ the Free Software Foundation, version 3 only. -->
                       {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
                       {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
                       {@const isHoveredSelf = hoveredLabelId === label.id}
-                      <div class="group/lbl relative">
-                        <span
-                          class="block w-1.5 h-1.5 rounded-full cursor-default transition-all duration-150
-                                 {isHoveredSelf ? 'scale-[2] ring-1 ring-white/50 shadow-md' :
-                                  isExact ? 'scale-[1.6] ring-[0.5px] ring-white/40' :
-                                  isClose ? 'scale-[1.3] brightness-125' : ''}"
-                          style="background:{lColor};
-                                 {isExact && !isHoveredSelf ? `box-shadow: 0 0 4px 1px ${lColor}` : ''}"
-                          onmouseenter={() => hoveredLabelId = label.id}
-                          onmouseleave={() => hoveredLabelId = null}>
-                        </span>
-                        <!-- Hover tooltip -->
-                        <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5
-                                    opacity-0 group-hover/lbl:opacity-100 transition-opacity duration-150 z-50
-                                    whitespace-nowrap max-w-[180px]">
-                          <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
-                                      shadow-lg px-1.5 py-1 text-popover-foreground">
-                            <span class="block text-[0.55rem] font-medium leading-tight truncate">{label.text}</span>
-                            <span class="block text-[0.42rem] text-muted-foreground/60 tabular-nums mt-0.5">
-                              {fmtTimeShort(label.eeg_start)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                      <span
+                        class="block w-1.5 h-1.5 rounded-full cursor-default transition-all duration-150
+                               {isHoveredSelf ? 'scale-[2] ring-1 ring-white/50 shadow-md' :
+                                isExact ? 'scale-[1.6] ring-[0.5px] ring-white/40' :
+                                isClose ? 'scale-[1.3] brightness-125' : ''}"
+                        style="background:{lColor};
+                               {isExact && !isHoveredSelf ? `box-shadow: 0 0 4px 1px ${lColor}` : ''}"
+                        onmouseenter={(e) => showLabelTooltip(e, label)}
+                        onmouseleave={hideLabelTooltip}>
+                      </span>
                     {/each}
                   </div>
                 {/if}
@@ -1663,6 +1667,23 @@ the Free Software Foundation, version 3 only. -->
                   </div>
                 {/if}
               </div>
+            </div>
+          {/if}
+
+          <!-- Label dot tooltip (fixed position — avoids overflow clipping) -->
+          {#if labelTooltip}
+            <div class="fixed pointer-events-none z-[120]"
+                 style="left:{labelTooltip.x}px; top:{labelTooltip.y - 10}px; transform: translate(-50%, -100%);">
+              <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
+                          shadow-xl px-2.5 py-1.5 text-popover-foreground whitespace-nowrap max-w-[220px]">
+                <span class="block text-[0.6rem] font-medium leading-tight truncate">{labelTooltip.text}</span>
+                <span class="block text-[0.46rem] text-muted-foreground/60 tabular-nums mt-0.5">
+                  {labelTooltip.time}{#if labelTooltip.timeEnd} – {labelTooltip.timeEnd}{/if}
+                </span>
+              </div>
+              <!-- Arrow -->
+              <div class="mx-auto w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px]
+                          border-l-transparent border-r-transparent border-t-popover"></div>
             </div>
           {/if}
 
@@ -1751,31 +1772,17 @@ the Free Software Foundation, version 3 only. -->
                         {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
                         {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
                         {@const isHoveredSelf = hoveredLabelId === label.id}
-                        <div class="group/lbl relative">
-                          <span
-                            class="block w-2 h-2 rounded-full cursor-default transition-all duration-150
-                                   {isHoveredSelf ? 'scale-[1.8] ring-2 ring-white/50 shadow-lg' :
-                                    isExact ? 'scale-150 ring-[1.5px] ring-white/40 shadow-md' :
-                                    isClose ? 'scale-125 brightness-125' : ''}"
-                            style="background:{lColor};
-                                   {isExact && !isHoveredSelf ? `box-shadow: 0 0 6px 1px ${lColor}` : ''}
-                                   {isClose && !isExact ? `box-shadow: 0 0 4px 0px ${lColor}` : ''}"
-                            onmouseenter={() => hoveredLabelId = label.id}
-                            onmouseleave={() => hoveredLabelId = null}>
-                          </span>
-                          <!-- Hover tooltip -->
-                          <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2
-                                      opacity-0 group-hover/lbl:opacity-100 transition-opacity duration-150 z-50
-                                      whitespace-nowrap max-w-[200px]">
-                            <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
-                                        shadow-lg px-2 py-1.5 text-popover-foreground">
-                              <span class="block text-[0.6rem] font-medium leading-tight truncate">{label.text}</span>
-                              <span class="block text-[0.46rem] text-muted-foreground/60 tabular-nums mt-0.5">
-                                {fmtTimeShort(label.eeg_start)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
+                        <span
+                          class="block w-2 h-2 rounded-full cursor-default transition-all duration-150
+                                 {isHoveredSelf ? 'scale-[1.8] ring-2 ring-white/50 shadow-lg' :
+                                  isExact ? 'scale-150 ring-[1.5px] ring-white/40 shadow-md' :
+                                  isClose ? 'scale-125 brightness-125' : ''}"
+                          style="background:{lColor};
+                                 {isExact && !isHoveredSelf ? `box-shadow: 0 0 6px 1px ${lColor}` : ''}
+                                 {isClose && !isExact ? `box-shadow: 0 0 4px 0px ${lColor}` : ''}"
+                          onmouseenter={(e) => showLabelTooltip(e, label)}
+                          onmouseleave={hideLabelTooltip}>
+                        </span>
                       {/each}
                     </div>
                   {/if}
@@ -1849,36 +1856,18 @@ the Free Software Foundation, version 3 only. -->
                             {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
                             {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
                             {@const isHoveredSelf = hoveredLabelId === label.id}
-                            <div class="group/lbl relative">
-                              <span
-                                class="block w-3 h-3 rounded-full cursor-default ring-1 ring-white/20 shadow-sm
-                                       transition-all duration-150
-                                       {isHoveredSelf ? 'scale-[2] ring-2 ring-white/60 shadow-lg z-10' :
-                                        isExact ? 'scale-[1.7] ring-[1.5px] ring-white/50 shadow-md z-10' :
-                                        isClose ? 'scale-[1.4] brightness-130' : 'hover:scale-150'}"
-                                style="background:{lColor};
-                                       {isExact && !isHoveredSelf ? `box-shadow: 0 0 8px 2px ${lColor}` : ''}
-                                       {isClose && !isExact ? `box-shadow: 0 0 5px 1px ${lColor}` : ''}"
-                                onmouseenter={() => hoveredLabelId = label.id}
-                                onmouseleave={() => hoveredLabelId = null}>
-                              </span>
-                              <!-- Hover tooltip -->
-                              <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2
-                                          opacity-0 group-hover/lbl:opacity-100 transition-opacity duration-150 z-50
-                                          whitespace-nowrap max-w-[220px]">
-                                <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
-                                            shadow-lg px-2.5 py-1.5 text-popover-foreground">
-                                  <span class="block text-[0.62rem] font-medium leading-tight truncate">{label.text}</span>
-                                  <span class="block text-[0.48rem] text-muted-foreground/60 tabular-nums mt-0.5">
-                                    {fmtTime(label.eeg_start)} – {fmtTime(label.eeg_end)}
-                                  </span>
-                                </div>
-                                <!-- Arrow -->
-                                <div class="absolute top-full left-1/2 -translate-x-1/2 -mt-px
-                                            w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px]
-                                            border-l-transparent border-r-transparent border-t-popover"></div>
-                              </div>
-                            </div>
+                            <span
+                              class="block w-3 h-3 rounded-full cursor-default ring-1 ring-white/20 shadow-sm
+                                     transition-all duration-150
+                                     {isHoveredSelf ? 'scale-[2] ring-2 ring-white/60 shadow-lg z-10' :
+                                      isExact ? 'scale-[1.7] ring-[1.5px] ring-white/50 shadow-md z-10' :
+                                      isClose ? 'scale-[1.4] brightness-130' : 'hover:scale-150'}"
+                              style="background:{lColor};
+                                     {isExact && !isHoveredSelf ? `box-shadow: 0 0 8px 2px ${lColor}` : ''}
+                                     {isClose && !isExact ? `box-shadow: 0 0 5px 1px ${lColor}` : ''}"
+                              onmouseenter={(e) => showLabelTooltip(e, label, true)}
+                              onmouseleave={hideLabelTooltip}>
+                            </span>
                           {/each}
                         </div>
                       </div>

@@ -14,7 +14,7 @@
 //! - **ppg_analysis** — PPG/heart-rate signal analysis
 //! - **dnd** — Do Not Disturb platform automation
 //! - **device** — BLE device types
-//! - **util** — shared utilities (MutexExt)
+//! - **util** — shared utilities (MutexExt, date_dirs, UTC formatters, open_readonly)
 
 pub mod util;
 pub mod active_window;

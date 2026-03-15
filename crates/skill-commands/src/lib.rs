@@ -26,7 +26,7 @@
 //! with the embed-worker's write transactions.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 use fast_hnsw::{distance::Cosine, labeled::LabeledIndex};
 use rusqlite::{Connection, OpenFlags, params};
@@ -34,21 +34,8 @@ use serde::Serialize;
 
 use skill_constants::{HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE};
 
-// ── MutexExt (local copy — avoids coupling to the Tauri crate) ───────────────
-
-/// Extension trait for `std::sync::Mutex` that recovers from a poisoned lock.
-pub trait MutexExt<T> {
-    fn lock_or_recover(&self) -> MutexGuard<'_, T>;
-}
-
-impl<T> MutexExt<T> for Mutex<T> {
-    fn lock_or_recover(&self) -> MutexGuard<'_, T> {
-        self.lock().unwrap_or_else(|e| {
-            eprintln!("[skill-commands] recovering poisoned mutex");
-            e.into_inner()
-        })
-    }
-}
+// Re-export shared utilities so downstream crates keep compiling.
+pub use skill_data::util::{MutexExt, unix_to_ts, ts_to_unix, fmt_unix_utc};
 
 /// Shared, optionally-ready global HNSW index.
 ///
@@ -58,77 +45,7 @@ impl<T> MutexExt<T> for Mutex<T> {
 /// running and `Some` once the index is ready.
 pub type GlobalIndexHandle = Option<Arc<Mutex<Option<LabeledIndex<Cosine, i64>>>>>;
 
-// ── Timestamp helpers ─────────────────────────────────────────────────────────
-
-fn is_leap(y: u32) -> bool {
-    (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
-}
-
-/// Unix seconds (UTC) → `YYYYMMDDHHmmss` integer.
-pub fn unix_to_ts(secs: u64) -> i64 {
-    let days = (secs / 86400) as u32;
-    let rem  = secs % 86400;
-    let h = rem / 3600;
-    let m = (rem % 3600) / 60;
-    let s = rem % 60;
-
-    // Walk years from 1970
-    let mut y = 1970u32;
-    let mut d = days;
-    loop {
-        let dy = if is_leap(y) { 366 } else { 365 };
-        if d < dy { break; }
-        d -= dy;
-        y += 1;
-    }
-
-    // Walk months
-    let month_days = [
-        31u32, if is_leap(y) { 29 } else { 28 }, 31, 30, 31, 30,
-        31, 31, 30, 31, 30, 31,
-    ];
-    let mut mo = 1u32;
-    for &md in &month_days {
-        if d < md { break; }
-        d -= md;
-        mo += 1;
-    }
-
-    y  as i64 * 10_000_000_000
-    + mo as i64 * 100_000_000
-    + (d + 1) as i64 * 1_000_000
-    + h as i64 * 10_000
-    + m as i64 * 100
-    + s as i64
-}
-
-/// `YYYYMMDDHHmmss` integer → Unix seconds (UTC).
-pub fn ts_to_unix(ts: i64) -> u64 {
-    let s  = (ts                   % 100) as u64;
-    let m  = (ts /         100     % 100) as u64;
-    let h  = (ts /      10_000     % 100) as u64;
-    let d  = (ts /   1_000_000     % 100) as u64;
-    let mo = (ts / 100_000_000     % 100) as u64;
-    let y  = (ts / 10_000_000_000)        as u32;
-
-    // Days from epoch to start of year y
-    let mut days = 0u64;
-    for yr in 1970..y {
-        days += if is_leap(yr) { 366 } else { 365 };
-    }
-
-    // Days in months before mo
-    let month_days: [u64; 12] = [
-        31, if is_leap(y) { 29 } else { 28 }, 31, 30, 31, 30,
-        31, 31, 30, 31, 30, 31,
-    ];
-    for &md in month_days.iter().take(mo as usize - 1) {
-        days += md;
-    }
-
-    days += d - 1;
-    days * 86400 + h * 3600 + m * 60 + s
-}
+// Timestamp helpers are re-exported from skill_data::util above.
 
 // ── Result types (all Serialize so Tauri returns them as JSON) ────────────────
 
@@ -248,18 +165,11 @@ pub struct DayIndex {
 }
 
 /// List all valid `YYYYMMDD` sub-directories under `skill_dir`.
+///
+/// Delegates to [`skill_data::util::date_dirs`].
+#[inline]
 pub fn list_date_dirs(skill_dir: &Path) -> Vec<(String, PathBuf)> {
-    let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(skill_dir) else { return out };
-    for entry in rd.flatten() {
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.len() == 8 && name.bytes().all(|b| b.is_ascii_digit()) && entry.path().is_dir() {
-            out.push((name.to_string(), entry.path()));
-        }
-    }
-    out.sort_by(|a, b| a.0.cmp(&b.0));
-    out
+    skill_data::util::date_dirs(skill_dir)
 }
 
 /// Load a `LabeledIndex<Cosine, i64>` from a date directory (read-only mmap).
@@ -287,10 +197,7 @@ struct RawEmb {
 
 /// Read every embedding in [start_ts, end_ts] from a single day's SQLite.
 fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<RawEmb> {
-    let conn = match Connection::open_with_flags(
-        db_path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ) {
+    let conn = match skill_data::util::open_readonly(db_path) {
         Ok(c)  => c,
         Err(e) => { eprintln!("[search] open {}: {e}", db_path.display()); return vec![]; }
     };
@@ -321,10 +228,7 @@ fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<R
 
 /// Look up `device_id` and `device_name` for a specific `hnsw_id` in a day's SQLite.
 fn get_embedding_meta(db_path: &Path, hnsw_id: i64) -> (Option<String>, Option<String>) {
-    let Ok(conn) = Connection::open_with_flags(
-        db_path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ) else { return (None, None) };
+    let Ok(conn) = skill_data::util::open_readonly(db_path) else { return (None, None) };
 
     conn.query_row(
         "SELECT device_id, device_name FROM embeddings WHERE hnsw_id = ?1 LIMIT 1",
@@ -336,10 +240,7 @@ fn get_embedding_meta(db_path: &Path, hnsw_id: i64) -> (Option<String>, Option<S
 
 /// Fetch key EEG metrics for a single embedding by hnsw_id.
 fn get_embedding_metrics(db_path: &Path, hnsw_id: i64) -> Option<NeighborMetrics> {
-    let conn = Connection::open_with_flags(
-        db_path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ).ok()?;
+    let conn = skill_data::util::open_readonly(db_path).ok()?;
 
     conn.query_row(
         "SELECT json_extract(metrics_json, '$.relaxation_score'),
@@ -389,10 +290,7 @@ fn get_embedding_by_ts(
     db_path:   &Path,
     timestamp: i64,
 ) -> (i64, Option<String>, Option<String>) {
-    let Ok(conn) = Connection::open_with_flags(
-        db_path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ) else { return (0, None, None) };
+    let Ok(conn) = skill_data::util::open_readonly(db_path) else { return (0, None, None) };
 
     conn.query_row(
         "SELECT hnsw_id, device_id, device_name \
@@ -409,10 +307,7 @@ fn get_embedding_by_ts(
 
 /// Fetch key EEG metrics for a row identified by its `YYYYMMDDHHmmss` timestamp.
 fn get_embedding_metrics_by_ts(db_path: &Path, timestamp: i64) -> Option<NeighborMetrics> {
-    let conn = Connection::open_with_flags(
-        db_path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ).ok()?;
+    let conn = skill_data::util::open_readonly(db_path).ok()?;
 
     conn.query_row(
         "SELECT json_extract(metrics_json, '$.relaxation_score'),
@@ -453,10 +348,7 @@ fn get_embedding_metrics_by_ts(db_path: &Path, timestamp: i64) -> Option<Neighbo
 
 /// Fetch all labels from `labels.sqlite` whose EEG window contains `ts_unix`.
 pub fn get_labels_for(labels_db: &Path, ts_unix: u64) -> Vec<LabelEntry> {
-    let Ok(conn) = Connection::open_with_flags(
-        labels_db,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ) else { return vec![] };
+    let Ok(conn) = skill_data::util::open_readonly(labels_db) else { return vec![] };
 
     let Ok(mut stmt) = conn.prepare(
         "SELECT id, eeg_start, eeg_end, label_start, label_end, text
@@ -873,24 +765,7 @@ pub struct InteractiveSearchResult {
 
 // ── DOT generation helpers ─────────────────────────────────────────────────
 
-/// Format a Unix-second timestamp as `YYYY-MM-DD HH:MM` (UTC, no external crate).
-pub fn fmt_unix_utc(ts: u64) -> String {
-    let tod = ts % 86400;
-    let h   = tod / 3600;
-    let m   = (tod % 3600) / 60;
-    // Howard Hinnant civil_from_days (proleptic Gregorian)
-    let z   = (ts / 86400) as i64 + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y   = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp  = (5 * doy + 2) / 153;
-    let d   = doy - (153 * mp + 2) / 5 + 1;
-    let mo  = if mp < 10 { mp + 3 } else { mp - 9 };
-    let yr  = if mo <= 2 { y + 1 } else { y };
-    format!("{yr:04}-{mo:02}-{d:02} {h:02}:{m:02}")
-}
+// `fmt_unix_utc` is re-exported from `skill_data::util` at the top of this file.
 
 /// Escape a string for use inside a DOT double-quoted label.
 pub fn dot_esc(s: &str) -> String {
@@ -1688,10 +1563,7 @@ pub fn generate_svg(
 /// Fetch labels from `labels.sqlite` whose EEG window contains `ts_unix`,
 /// or — if none — labels whose window starts within `window_secs` of it.
 pub fn get_labels_near(labels_db: &Path, ts_unix: u64, window_secs: u64) -> Vec<LabelEntry> {
-    let Ok(conn) = Connection::open_with_flags(
-        labels_db,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    ) else { return vec![] };
+    let Ok(conn) = skill_data::util::open_readonly(labels_db) else { return vec![] };
 
     let ts  = ts_unix as i64;
     let lo  = ts_unix.saturating_sub(window_secs) as i64;

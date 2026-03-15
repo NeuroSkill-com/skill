@@ -22,6 +22,8 @@
 use rusqlite::{Connection, params};
 use std::path::Path;
 
+use skill_constants::LABELS_FILE;
+
 const DDL: &str = "
     CREATE TABLE IF NOT EXISTS labels (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,7 +57,7 @@ pub struct LabelStore {
 impl LabelStore {
     /// Open (or create) the label database inside `skill_dir`.
     pub fn open(skill_dir: &Path) -> Option<Self> {
-        let db_path = skill_dir.join("labels.sqlite");
+        let db_path = skill_dir.join(LABELS_FILE);
         let conn = match Connection::open(&db_path) {
             Ok(c)  => c,
             Err(e) => { eprintln!("[labels] open {}: {e}", db_path.display()); return None; }
