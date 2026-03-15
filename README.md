@@ -94,7 +94,6 @@ graph TD
         skill-constants
         skill-jobs
         skill-vision
-        apple-ocr
     end
 
     subgraph Signal Processing

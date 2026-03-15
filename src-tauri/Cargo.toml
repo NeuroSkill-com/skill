@@ -314,6 +314,7 @@ tempfile = "3"
 [patch.crates-io]
 cubek-matmul    = { git = "https://github.com/eugenehp/cubek.git", branch = "cubek-matmul", package = "cubek-matmul" }
 btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "imrpoved_mac_version" }
+mw75            = { path = "vendor/mw75" }
 
 # ── kittentts / neutts pre-release patches ───────────────────────────────────
 # Uncomment to test local changes before publishing kittentts 0.2.8 / neutts 0.0.8.
