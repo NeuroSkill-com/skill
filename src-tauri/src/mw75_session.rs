@@ -45,7 +45,7 @@ use crate::{
     AppState, EegPacket, MutexExt, SessionDsp, ToastLevel,
     emit_status, refresh_tray, send_toast, upsert_paired, unix_secs,
 };
-use crate::ble_scanner::{bluetooth_ok, classify_bt_error, stop_background_scanner, start_background_scanner};
+use crate::ble_scanner::{bluetooth_ok, classify_bt_error};
 use crate::eeg_bands::BandSnapshot;
 use crate::session_csv::{CsvState, write_session_meta};
 use crate::ws_server::WsBroadcaster;
@@ -80,79 +80,42 @@ pub(crate) async fn run_mw75_session(
     refresh_tray(&app);
     emit_status(&app);
 
-    // 2. Stop the background BLE scanner — on macOS, two CoreBluetooth
-    //    central managers competing for main-queue delegate callbacks blocks
-    //    the UI thread (preventing windows from loading).
-    stop_background_scanner(&app);
-
-    // 3. BLE discover + connect.
+    // 2. BLE discover + connect (single step, like the mw75 CLI binary).
+    //
+    //    Uses client.connect() which creates its own btleplug Manager,
+    //    scans with the MW75 service UUID filter, and connects to the first
+    //    device found.  We do NOT stop the background scanner — two
+    //    CBCentralManagers coexist fine on macOS, and stopping the old one
+    //    would destroy its peripheral cache, causing the new one's scan to
+    //    find 0 devices.
     let config = Mw75ClientConfig {
         scan_timeout_secs: 10,
         ..Default::default()
     };
     let client = Mw75Client::new(config);
 
-    app_log!(app, "bluetooth", "[mw75] scanning (preferred_id={preferred_id:?})…");
+    app_log!(app, "bluetooth", "[mw75] connecting (preferred_id={preferred_id:?})…");
 
-    // Helper closure: handle connect failure — also restarts the scanner.
-    let fail_connect = |app: &AppHandle, msg: String| {
-        app_log!(app, "bluetooth", "[mw75] connect failed: {msg}");
-        start_background_scanner(app);
-        let (m, b) = classify_bt_error(&msg);
-        crate::go_disconnected(
-            app,
-            Some(format!(
-                "{m}\n\n\
-                 To pair MW75: hold the power button for 4+ seconds,\n\
-                 then pair in System Bluetooth Settings."
-            )),
-            b,
-        );
-    };
-
-    let connect_result = if let Some(ref pref_id) = preferred_id {
-        let scan_res = tokio::select! {
-            biased;
-            _ = &mut cancel_rx => { start_background_scanner(&app); crate::go_disconnected(&app, None, false); return; }
-            r = client.scan_all() => r,
-        };
-        match scan_res {
-            Err(e) => { fail_connect(&app, format!("{e}")); return; }
-            Ok(devs) => {
-                app_log!(app, "bluetooth", "[mw75] scan found {} device(s)", devs.len());
-                for d in &devs {
-                    app_log!(app, "bluetooth", "[mw75]   → name={:?} id={}", d.name, d.id);
-                }
-                let device = devs.iter().find(|d| &d.id == pref_id).cloned()
-                    .or_else(|| devs.into_iter().next());
-                match device {
-                    Some(dev) => {
-                        app_log!(app, "bluetooth", "[mw75] connecting to {:?} ({})", dev.name, dev.id);
-                        tokio::select! {
-                            biased;
-                            _ = &mut cancel_rx => { start_background_scanner(&app); crate::go_disconnected(&app, None, false); return; }
-                            r = client.connect_to(dev) => r.map_err(|e| format!("{e}")),
-                        }
-                    }
-                    None => {
-                        fail_connect(&app, "No MW75 device found in BLE scan".into());
-                        return;
-                    }
-                }
-            }
-        }
-    } else {
-        tokio::select! {
-            biased;
-            _ = &mut cancel_rx => { start_background_scanner(&app); crate::go_disconnected(&app, None, false); return; }
-            r = client.connect() => r.map_err(|e| format!("{e}")),
-        }
+    let connect_result = tokio::select! {
+        biased;
+        _ = &mut cancel_rx => { crate::go_disconnected(&app, None, false); return; }
+        r = client.connect() => r.map_err(|e| format!("{e}")),
     };
 
     let (mut rx, handle) = match connect_result {
         Ok(v) => v,
         Err(msg) => {
-            fail_connect(&app, msg);
+            app_log!(app, "bluetooth", "[mw75] connect failed: {msg}");
+            let (m, b) = classify_bt_error(&msg);
+            crate::go_disconnected(
+                &app,
+                Some(format!(
+                    "{m}\n\n\
+                     To pair MW75: hold the power button for 4+ seconds,\n\
+                     then pair in System Bluetooth Settings."
+                )),
+                b,
+            );
             return;
         }
     };
@@ -164,7 +127,6 @@ pub(crate) async fn run_mw75_session(
         biased;
         _ = &mut cancel_rx => {
             let _ = handle.disconnect().await;
-            start_background_scanner(&app);
             crate::go_disconnected(&app, None, false);
             return;
         }
@@ -172,7 +134,6 @@ pub(crate) async fn run_mw75_session(
             if let Err(e) = r {
                 app_log!(app, "bluetooth", "[mw75] BLE activation failed: {e}");
                 let _ = handle.disconnect().await;
-                start_background_scanner(&app);
                 crate::go_disconnected(&app, Some(format!("MW75 activation failed: {e}")), false);
                 return;
             }
@@ -198,14 +159,12 @@ pub(crate) async fn run_mw75_session(
         let rfcomm = tokio::select! {
             biased;
             _ = &mut cancel_rx => {
-                start_background_scanner(&app);
                 crate::go_disconnected(&app, None, false);
                 return;
             }
             r = skill_devices::mw75::rfcomm::start_rfcomm_stream(handle.clone(), &bt_address) => match r {
                 Err(e) => {
                     app_log!(app, "bluetooth", "[mw75] RFCOMM failed: {e}");
-                    start_background_scanner(&app);
                     crate::go_disconnected(
                         &app,
                         Some(format!(
@@ -232,7 +191,6 @@ pub(crate) async fn run_mw75_session(
     };
 
     // BLE is now disconnected — safe to restart the background scanner.
-    start_background_scanner(&app);
 
     // 7. Open CSV with MW75 channel labels.
     let ch_labels = skill_constants::MW75_CHANNEL_NAMES;
