@@ -41,6 +41,7 @@
     "sync:llm:catalog": "node scripts/sync-llm-catalog.js --write",
     "sync:llm:catalog:check": "node scripts/sync-llm-catalog.js --check",
     "setup:build-cache": "bash scripts/setup-build-cache.sh",
+    "compile:changelog": "node scripts/compile-changelog.js",
     "bump": "node scripts/bump.js",
     "tag": "node scripts/tag.js"
   },

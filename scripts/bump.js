@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
+import { compileChangelog } from "./compile-changelog.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -132,10 +133,22 @@ cargo = cargo.replace(versionLine, `version = "${newVersion}"`);
 writeText(cargoPath, cargo);
 console.log("  ✓  src-tauri/Cargo.toml");
 
-// ── CHANGELOG.md ─────────────────────────────────────────────────────────────
+// ── CHANGELOG.md — compile fragments ─────────────────────────────────────────
 
-const changelogPath = "CHANGELOG.md";
-bumpChangelogUnreleased(changelogPath, newVersion, todayIsoDate());
-console.log("  ✓  CHANGELOG.md (Unreleased → versioned section)");
+const date = todayIsoDate();
+const result = compileChangelog(newVersion, date);
+
+if (result.entryCount > 0) {
+  console.log(
+    `  ✓  CHANGELOG.md — compiled ${result.entryCount} entries (${result.categories.join(", ")})`
+  );
+  console.log(
+    `  ✓  changes/releases/${newVersion}/ — archived ${result.categories.length} fragments`
+  );
+} else {
+  // No fragments — fall back to rotating the [Unreleased] header only
+  bumpChangelogUnreleased("CHANGELOG.md", newVersion, date);
+  console.log("  ✓  CHANGELOG.md (Unreleased → versioned section, no fragments)");
+}
 
 console.log(`\nDone! Version is now ${newVersion}`);

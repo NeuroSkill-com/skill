@@ -162,7 +162,7 @@ In-depth guides live in [`docs/`](docs/):
 
 | Document | Description |
 |---|---|
-| [`CHANGELOG.md`](CHANGELOG.md) | All notable changes — features, fixes, refactors |
+| [`CHANGELOG.md`](CHANGELOG.md) | All notable changes — compiled from [`changes/`](changes/) fragments at release time |
 | [`METRICS.md`](docs/METRICS.md) | Full metrics & indices reference — band powers, derived scores, PPG, composites, with formulas and citations |
 | [`HOOKS.md`](docs/HOOKS.md) | Proactive Hooks architecture — background brain-state monitoring and automated actions |
 | [`LLM.md`](docs/LLM.md) | LLM engine architecture — actor pattern, model lifecycle, chat, function calling |
@@ -372,12 +372,18 @@ Both must pass. Bypass in an emergency with `git commit --no-verify`.
 
 ## Versioning
 
-The `bump` script keeps `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` in sync:
+The `bump` script keeps `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` in sync, and compiles changelog fragments:
 
 ```bash
 npm run bump          # auto-increment patch (0.0.3 → 0.0.4)
 npm run bump 1.2.0    # set exact version
 ```
+
+Bump automatically:
+1. Runs preflight checks (clippy, svelte-check, i18n sync)
+2. Updates version in all three files
+3. Compiles `changes/unreleased/*.md` fragments into `CHANGELOG.md`
+4. Archives fragments to `changes/releases/<version>/`
 
 ---
 
