@@ -24,179 +24,37 @@ pub const ONBOARDING_MODEL_DOWNLOAD_ORDER: [&str; 5] = [
     "ocr",
 ];
 
-// ── Hardware ──────────────────────────────────────────────────────────────────
-
-/// Number of EEG channels in the primary pipeline (matches Muse and Ganglion).
-pub const EEG_CHANNELS: usize = 4;
-
-/// Human-readable label for each channel index (TP9=0, AF7=1, AF8=2, TP10=3).
-pub const CHANNEL_NAMES: [&str; EEG_CHANNELS] = ["TP9", "AF7", "AF8", "TP10"];
-
-/// EEG hardware sample rate (Hz) — Muse and Ganglion both run at 256 Hz.
-pub const MUSE_SAMPLE_RATE: f32 = 256.0;
+// ── EEG constants (canonical definitions in skill-eeg crate) ──────────────────
+//
+// Re-exported here so the rest of the main crate can keep using
+// `crate::constants::EEG_CHANNELS` etc. unchanged.
+#[allow(unused_imports)]
+pub use skill_eeg::constants::{
+    // Hardware
+    EEG_CHANNELS, CHANNEL_NAMES, MUSE_SAMPLE_RATE,
+    // Signal filter
+    FILTER_WINDOW, FILTER_HOP, FILTER_OVERLAP,
+    // Filter defaults
+    DEFAULT_LP_HZ, DEFAULT_HP_HZ, DEFAULT_NOTCH_BW_HZ,
+    // Spectrogram
+    SPEC_N_FREQ,
+    // Band analysis
+    BAND_WINDOW, BAND_HOP, NUM_BANDS, BANDS, BAND_COLORS, BAND_SYMBOLS,
+    // EEG embedding / ZUNA model
+    EMBEDDING_EPOCH_SECS, EMBEDDING_EPOCH_SAMPLES,
+    EMBEDDING_OVERLAP_SECS, EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS,
+    EMBEDDING_OVERLAP_SAMPLES, EMBEDDING_HOP_SAMPLES,
+    ZUNA_DATA_NORM, ZUNA_HF_REPO, ZUNA_WEIGHTS_FILE, ZUNA_CONFIG_FILE,
+    // HNSW
+    HNSW_M, HNSW_EF_CONSTRUCTION,
+    // Model config
+    MODEL_CONFIG_FILE,
+};
 
 /// OpenBCI Ganglion channel labels (default 10-20 sites when unset).
 pub const GANGLION_CHANNEL_NAMES: [&str; 4] = ["Ch1", "Ch2", "Ch3", "Ch4"];
 
-// ── Signal filter (overlap-save, GPU fft_batch) ───────────────────────────────
-
-/// FFT analysis window length (samples).  Must be a power of two.
-///
-/// At 256 Hz → 256 bins → 1 Hz / bin frequency resolution.
-pub const FILTER_WINDOW: usize = 256;
-
-/// New samples required per channel before a GPU batch is triggered.
-///
-/// `32 samples / 256 Hz = 125 ms` processing latency per hop.
-pub const FILTER_HOP: usize = 32;
-
-/// Samples carried over from the previous hop as leading context.
-///
-/// Only the trailing `FILTER_HOP` samples of the IFFT are artefact-free;
-/// the first `FILTER_OVERLAP` samples are discarded (overlap-save rule).
-pub const FILTER_OVERLAP: usize = FILTER_WINDOW - FILTER_HOP; // 224
-
-// ── Filter defaults ───────────────────────────────────────────────────────────
-
-/// Default low-pass cut-off (Hz).  Removes EMG and alias noise above 50 Hz.
-pub const DEFAULT_LP_HZ: f32 = 50.0;
-
-/// Default high-pass cut-off (Hz).  Removes DC drift and slow baseline wander.
-pub const DEFAULT_HP_HZ: f32 = 0.5;
-
-/// Default notch half-bandwidth (Hz).
-///
-/// The zeroed band around each harmonic `h` is `[h − BW, h + BW]`.
-/// At 1 Hz / bin, a bandwidth of 1.0 removes 3 bins per harmonic.
-pub const DEFAULT_NOTCH_BW_HZ: f32 = 1.0;
-
-// ── Spectrogram ───────────────────────────────────────────────────────────────
-
-/// Number of frequency bins in each spectrogram column.
-///
-/// With `FILTER_WINDOW = 256` and `MUSE_SAMPLE_RATE = 256 Hz` → 1 Hz / bin.
-/// Bins 0–50 cover the full clinical EEG range (0–50 Hz), giving 51 bins.
-///
-/// Extracted from the filter's `fft_batch` output *before* the mask is applied,
-/// so the spectrogram reflects the raw unfiltered spectrum.
-///
-/// **Must stay in sync with `SPEC_N_FREQ` in `src/lib/constants.ts`.**
-pub const SPEC_N_FREQ: usize = 51; // inclusive: 0 Hz (DC) … 50 Hz
-
-// ── Band analysis (Hann-windowed GPU fft_batch) ───────────────────────────────
-
-/// Analysis window length for band power estimation (samples, power of two).
-///
-/// 512 samples @ 256 Hz = 2 s → **0.5 Hz / bin** — sufficient to resolve the
-/// 0.5 Hz lower bound of the delta band.
-pub const BAND_WINDOW: usize = 512;
-
-/// New samples required per channel before a band snapshot is triggered.
-///
-/// `64 samples / 256 Hz = 250 ms` → 4 snapshots per second.
-pub const BAND_HOP: usize = 64;
-
-/// Number of clinical EEG frequency bands.
-pub const NUM_BANDS: usize = 6;
-
-/// Band table: `(name, lo_hz inclusive, hi_hz exclusive)`.
-///
-/// **Must stay in sync with the `BANDS` array in `src/lib/constants.ts`.**
-pub const BANDS: [(&str, f32, f32); NUM_BANDS] = [
-    ("delta",       0.5,   4.0),
-    ("theta",       4.0,   8.0),
-    ("alpha",       8.0,  13.0),
-    ("beta",       13.0,  30.0),
-    ("gamma",      30.0,  50.0),
-    ("high_gamma", 50.0, 100.0),
-];
-
-/// Hex colour for each band (same order as [`BANDS`]).
-///
-/// **Must stay in sync with `color` fields in `src/lib/constants.ts` `BANDS`.**
-pub const BAND_COLORS: [&str; NUM_BANDS] = [
-    "#6366f1", // delta      — indigo
-    "#8b5cf6", // theta      — violet
-    "#22c55e", // alpha      — green
-    "#3b82f6", // beta       — blue
-    "#f59e0b", // gamma      — amber
-    "#ef4444", // high_gamma — red
-];
-
-/// Greek-letter shorthand for each band (same order as [`BANDS`]).
-///
-/// **Must stay in sync with `sym` fields in `src/lib/constants.ts` `BANDS`.**
-pub const BAND_SYMBOLS: [&str; NUM_BANDS] = ["δ", "θ", "α", "β", "γ", "γ+"];
-
-// ── EEG Embedding (ZUNA model + HNSW index) ──────────────────────────────────
-
-/// Duration of each EEG epoch fed to the ZUNA embedding model (seconds).
-pub const EMBEDDING_EPOCH_SECS: f32 = 5.0;
-
-/// Raw samples per embedding epoch per channel.
-///
-/// `MUSE_SAMPLE_RATE × EMBEDDING_EPOCH_SECS` = 256 × 5 = 1 280.
-pub const EMBEDDING_EPOCH_SAMPLES: usize =
-    (MUSE_SAMPLE_RATE as usize) * (EMBEDDING_EPOCH_SECS as usize);
-
-/// Default overlap between consecutive embedding epochs (seconds).
-///
-/// A new epoch is emitted every `EMBEDDING_EPOCH_SECS − EMBEDDING_OVERLAP_SECS`
-/// seconds.  With the default 2.5 s overlap the hop is also 2.5 s, giving a
-/// 50 % overlap between adjacent windows.
-pub const EMBEDDING_OVERLAP_SECS: f32 = 2.5;
-
-/// Minimum configurable overlap (seconds).  0 = non-overlapping windows.
-pub const EMBEDDING_OVERLAP_MIN_SECS: f32 = 0.0;
-
-/// Maximum configurable overlap (seconds).
-///
-/// Must be strictly less than `EMBEDDING_EPOCH_SECS` so that at least one new
-/// sample arrives per epoch (0.5 s margin → 127-sample minimum hop).
-pub const EMBEDDING_OVERLAP_MAX_SECS: f32 = EMBEDDING_EPOCH_SECS - 0.5; // 4.5 s
-
-/// Default overlap expressed in samples.
-///
-/// `EMBEDDING_OVERLAP_SECS × MUSE_SAMPLE_RATE` = 2.5 × 256 = 640.
-pub const EMBEDDING_OVERLAP_SAMPLES: usize =
-    (EMBEDDING_OVERLAP_SECS * MUSE_SAMPLE_RATE) as usize;
-
-/// Default hop size (samples between epoch emissions).
-///
-/// `EMBEDDING_EPOCH_SAMPLES − EMBEDDING_OVERLAP_SAMPLES` = 1 280 − 640 = 640.
-pub const EMBEDDING_HOP_SAMPLES: usize =
-    EMBEDDING_EPOCH_SAMPLES - EMBEDDING_OVERLAP_SAMPLES;
-
-/// Divisor applied to z-scored EEG before entering the ZUNA model.
-///
-/// Must match the training-time normalisation — **do not change**.
-pub const ZUNA_DATA_NORM: f32 = 10.0;
-
-/// HuggingFace repository identifier for the ZUNA EEG foundation model.
-pub const ZUNA_HF_REPO: &str = "Zyphra/ZUNA";
-
-/// Safetensors weights filename within the ZUNA HF repo snapshot.
-pub const ZUNA_WEIGHTS_FILE: &str = "model-00001-of-00001.safetensors";
-
-/// Config filename within the ZUNA HF repo snapshot.
-pub const ZUNA_CONFIG_FILE: &str = "config.json";
-
-/// HNSW graph connectivity parameter `M` (candidate neighbours per layer).
-///
-/// Larger values increase recall at the cost of memory and build time.
-pub const HNSW_M: usize = 16;
-
-/// HNSW build-time `ef_construction` — beam width during graph construction.
-///
-/// Larger values produce a higher-quality graph at the cost of insert speed.
-pub const HNSW_EF_CONSTRUCTION: usize = 200;
-
-/// Filename of the EEG model configuration persisted inside the skill data dir
-/// (`~/.skill/model_config.json`).
-pub const MODEL_CONFIG_FILE: &str = "model_config.json";
-
-/// Filename of the UMAP projection configuration persisted inside the skill
-/// data dir (`~/.skill/umap_config.json`).
+/// Filename of the UMAP projection configuration.
 pub const UMAP_CONFIG_FILE: &str = "umap_config.json";
 
 /// SQLite database that stores user-authored labels (`~/.skill/labels.sqlite`).

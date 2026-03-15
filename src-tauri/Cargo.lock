@@ -9317,6 +9317,7 @@ dependencies = [
  "serde_json",
  "serialport",
  "sha2",
+ "skill-eeg",
  "skill-llm",
  "stacker",
  "sysinfo 0.38.4",
@@ -9333,6 +9334,15 @@ dependencies = [
  "tower-http",
  "ureq 2.12.1",
  "zuna-rs",
+]
+
+[[package]]
+name = "skill-eeg"
+version = "0.0.1"
+dependencies = [
+ "gpu-fft",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

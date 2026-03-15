@@ -1,0 +1,11 @@
+[package]
+name = "skill-eeg"
+version = "0.0.1"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "EEG signal processing for NeuroSkill — extracted workspace crate"
+
+[dependencies]
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+gpu-fft    = { version = "1.1.1", features = ["wgpu"] }
