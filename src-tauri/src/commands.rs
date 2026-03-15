@@ -11,11 +11,22 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager as _;
 
 use crate::MutexExt;
+use crate::skill_dir;
 use crate::global_eeg_index::GlobalEegIndex;
 
 // ── Re-exports ────────────────────────────────────────────────────────────────
 
 pub use skill_commands::*;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/// Normalise the optional `k` and `ef` search parameters used by every
+/// embedding-search command.
+fn search_params(k: Option<usize>, ef: Option<usize>) -> (usize, usize) {
+    let k  = k.unwrap_or(10).clamp(1, 100);
+    let ef = ef.unwrap_or(k.max(50));
+    (k, ef)
+}
 
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
@@ -37,10 +48,9 @@ pub fn search_embeddings(
     state:     tauri::State<'_, Mutex<Box<crate::AppState>>>,
     global:    tauri::State<'_, Arc<GlobalEegIndex>>,
 ) -> SearchResult {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
-    let k  = k.unwrap_or(10).clamp(1, 100);
-    let ef = ef.unwrap_or(k.max(50));
-    search_embeddings_in_range(&skill_dir, start_utc, end_utc, k, ef, Some(global.arc()))
+    let dir = skill_dir(&state);
+    let (k, ef) = search_params(k, ef);
+    search_embeddings_in_range(&dir, start_utc, end_utc, k, ef, Some(global.arc()))
 }
 
 /// Enqueue search_embeddings as a background job.  Returns a JobTicket.
@@ -54,10 +64,9 @@ pub fn enqueue_search_embeddings(
     queue:     tauri::State<'_, std::sync::Arc<crate::job_queue::JobQueue>>,
     global:    tauri::State<'_, Arc<GlobalEegIndex>>,
 ) -> crate::job_queue::JobTicket {
-    let skill_dir   = state.lock_or_recover().skill_dir.clone();
+    let skill_dir   = skill_dir(&state);
     let global_arc  = global.arc();
-    let k  = k.unwrap_or(10).clamp(1, 100);
-    let ef = ef.unwrap_or(k.max(50));
+    let (k, ef) = search_params(k, ef);
 
     // Estimate: range in seconds × ~0.5ms per second searched
     let range_s = end_utc.saturating_sub(start_utc);
@@ -84,10 +93,9 @@ pub async fn stream_search_embeddings(
     state:       tauri::State<'_, Mutex<Box<crate::AppState>>>,
     global:      tauri::State<'_, Arc<GlobalEegIndex>>,
 ) -> Result<(), String> {
-    let skill_dir  = state.lock_or_recover().skill_dir.clone();
+    let skill_dir  = skill_dir(&state);
     let global_arc = global.arc();
-    let k  = k.unwrap_or(10).clamp(1, 100);
-    let ef = ef.unwrap_or(k.max(50));
+    let (k, ef) = search_params(k, ef);
 
     tokio::task::spawn_blocking(move || {
         stream_search_inner(
@@ -109,8 +117,7 @@ pub fn find_session_for_timestamp(
     date: String,  // YYYYMMDD
     state: tauri::State<'_, Mutex<Box<crate::AppState>>>,
 ) -> Option<SessionRef> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
-    find_session_for_timestamp_in(&skill_dir, timestamp_unix, &date)
+    find_session_for_timestamp_in(&skill_dir(&state), timestamp_unix, &date)
 }
 
 /// Interactive cross-modal search.
@@ -136,7 +143,7 @@ pub async fn interactive_search(
     embedder:  tauri::State<'_, std::sync::Arc<crate::label_cmds::EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<InteractiveSearchResult, String> {
-    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let skill_dir = skill_dir(&state);
     let embedder  = std::sync::Arc::clone(&embedder);
     let label_idx = std::sync::Arc::clone(&label_idx);
 

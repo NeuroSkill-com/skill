@@ -215,19 +215,13 @@ pub fn tee_stderr_to_file(_log_path: &Path) {
 // ── Config file helpers ───────────────────────────────────────────────────────
 
 pub fn load_log_config(skill_dir: &Path) -> LogConfig {
-    let path = skill_dir.join(crate::constants::LOG_CONFIG_FILE);
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    skill_data::util::load_json_or_default(&skill_dir.join(crate::constants::LOG_CONFIG_FILE))
 }
 
 /// Write default `LogConfig` to disk if the file does not exist yet.
 pub fn ensure_log_config(skill_dir: &Path) {
     let path = skill_dir.join(crate::constants::LOG_CONFIG_FILE);
     if !path.exists() {
-        if let Ok(json) = serde_json::to_string_pretty(&LogConfig::default()) {
-            let _ = std::fs::write(path, json);
-        }
+        skill_data::util::save_json(&path, &LogConfig::default());
     }
 }

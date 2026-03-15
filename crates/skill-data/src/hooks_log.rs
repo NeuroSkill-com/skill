@@ -72,9 +72,7 @@ impl HooksLog {
             .map_err(|e| eprintln!("[hooks_log] open {}: {e}", path.display()))
             .ok()?;
 
-        let _ = conn.execute_batch(
-            "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
-        );
+        crate::util::init_wal_pragmas(&conn);
 
         let ddl = "
             CREATE TABLE IF NOT EXISTS hook_events (

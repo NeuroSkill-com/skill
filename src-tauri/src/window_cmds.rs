@@ -12,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
     AppState, CalibrationProfile, CalibrationConfig, new_profile_id,
-    save_settings, unix_secs, send_toast, ToastLevel,
+    save_settings, mutate_and_save, unix_secs, send_toast, ToastLevel,
     default_skill_dir,
 };
 use crate::settings::tilde_path;
@@ -411,11 +411,7 @@ pub fn get_whats_new_seen_version(state: tauri::State<'_, Mutex<Box<AppState>>>)
 /// API (which can silently fail in secondary webview windows).
 #[tauri::command]
 pub fn dismiss_whats_new(version: String, app: AppHandle) {
-    {
-        let r = app.state::<Mutex<Box<AppState>>>();
-        r.lock_or_recover().last_seen_whats_new_version = version;
-    }
-    save_settings(&app);
+    mutate_and_save(&app, |s| s.last_seen_whats_new_version = version);
     if let Some(win) = app.get_webview_window("whats-new") {
         let _ = win.close();
     }
@@ -454,8 +450,7 @@ pub async fn open_onboarding_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn complete_onboarding(app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    state.lock_or_recover().onboarding_complete = true;
-    save_settings(&app);
+    mutate_and_save(&app, |s| s.onboarding_complete = true);
     if let Some(win) = app.get_webview_window("onboarding") { let _ = win.close(); }
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show(); let _ = win.set_focus();
@@ -547,8 +542,7 @@ pub fn get_active_calibration(state: tauri::State<'_, Mutex<Box<AppState>>>) -> 
 
 #[tauri::command]
 pub fn set_active_calibration(id: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    state.lock_or_recover().active_calibration_id = id;
-    save_settings(&app);
+    mutate_and_save(&app, |s| s.active_calibration_id = id);
 }
 
 #[tauri::command]
@@ -560,8 +554,7 @@ pub fn create_calibration_profile(
     profile.id = new_profile_id();
     profile.last_calibration_utc = None;
     let ret = profile.clone();
-    state.lock_or_recover().calibration_profiles.push(profile);
-    save_settings(&app);
+    mutate_and_save(&app, |s| s.calibration_profiles.push(profile));
     ret
 }
 
@@ -569,7 +562,8 @@ pub fn create_calibration_profile(
 pub fn update_calibration_profile(
     profile: CalibrationProfile, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let mut s = state.lock_or_recover();
+    let r = app.state::<Mutex<Box<AppState>>>();
+    let mut s = r.lock_or_recover();
     let entry = s.calibration_profiles.iter_mut()
         .find(|p| p.id == profile.id)
         .ok_or_else(|| format!("profile not found: {}", profile.id))?;
@@ -583,7 +577,8 @@ pub fn update_calibration_profile(
 pub fn delete_calibration_profile(
     id: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let mut s = state.lock_or_recover();
+    let r = app.state::<Mutex<Box<AppState>>>();
+    let mut s = r.lock_or_recover();
     if s.calibration_profiles.len() <= 1 {
         return Err("Cannot delete the last calibration profile".into());
     }
@@ -603,14 +598,12 @@ pub fn record_calibration_completed(
     app:        AppHandle,
     state:      tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    {
-        let mut s = state.lock_or_recover();
+    mutate_and_save(&app, |s| {
         let target_id = profile_id.unwrap_or_else(|| s.active_calibration_id.clone());
         if let Some(p) = s.calibration_profiles.iter_mut().find(|p| p.id == target_id) {
             p.last_calibration_utc = Some(unix_secs());
         }
-    }
-    save_settings(&app);
+    });
     send_toast(&app, ToastLevel::Success, "Calibration Complete",
         "All calibration iterations finished successfully.");
 }

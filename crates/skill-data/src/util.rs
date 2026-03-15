@@ -39,6 +39,43 @@ pub fn open_readonly(path: &Path) -> Result<rusqlite::Connection, rusqlite::Erro
     )
 }
 
+// ── JSON config load / save ────────────────────────────────────────────────────
+
+/// Load a JSON config file, returning `T::default()` if the file is missing or
+/// malformed.
+///
+/// This replaces the repeated `read_to_string(&path).ok().and_then(|s|
+/// serde_json::from_str(&s).ok()).unwrap_or_default()` three-liner used by
+/// `load_model_config`, `load_umap_config`, `load_log_config`, etc.
+pub fn load_json_or_default<T: serde::de::DeserializeOwned + Default>(path: &Path) -> T {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+/// Pretty-print `val` as JSON and write it to `path`.
+///
+/// Parent directories are **not** created — call `fs::create_dir_all` first if
+/// needed.  Errors are silently ignored (matches existing behaviour across the
+/// codebase).
+pub fn save_json<T: serde::Serialize>(path: &Path, val: &T) {
+    if let Ok(json) = serde_json::to_string_pretty(val) {
+        let _ = std::fs::write(path, json);
+    }
+}
+
+// ── SQLite WAL pragmas ────────────────────────────────────────────────────────
+
+/// Apply the standard WAL + NORMAL-sync pragmas to a SQLite connection.
+///
+/// This consolidates the `PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;`
+/// one-liner duplicated in `activity_store`, `screenshot_store`, `hooks_log`,
+/// and `eeg_embeddings`.
+pub fn init_wal_pragmas(conn: &rusqlite::Connection) {
+    let _ = conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;");
+}
+
 // ── Blob ↔ f32 conversion ─────────────────────────────────────────────────────
 
 /// Deserialise a SQLite `BLOB` (little-endian packed `f32` values) into a `Vec<f32>`.

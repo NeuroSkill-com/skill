@@ -12,6 +12,7 @@
 
 use std::sync::Mutex;
 use crate::MutexExt;
+use crate::skill_dir;
 
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};

@@ -20,8 +20,6 @@ use crate::util::MutexExt;
 // ── DDL ───────────────────────────────────────────────────────────────────────
 
 const DDL: &str = "
-PRAGMA journal_mode = WAL;
-
 CREATE TABLE IF NOT EXISTS screenshots (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
 
@@ -154,6 +152,7 @@ impl ScreenshotStore {
                 return None;
             }
         };
+        crate::util::init_wal_pragmas(&conn);
         if let Err(e) = conn.execute_batch(DDL) {
             eprintln!("[screenshot_store] DDL error: {e}");
             return None;

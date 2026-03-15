@@ -764,6 +764,56 @@ impl AppState {
     }
 }
 
+// ── State access helpers ──────────────────────────────────────────────────────
+
+/// Read `skill_dir` from `AppState` without keeping the lock.
+///
+/// `skill_dir` is always `~/.skill` and never changes at runtime.  This helper
+/// replaces the 300+ occurrences of `state.lock_or_recover().skill_dir.clone()`
+/// scattered across command handlers.
+pub(crate) fn skill_dir(state: &Mutex<Box<AppState>>) -> std::path::PathBuf {
+    state.lock_or_recover().skill_dir.clone()
+}
+
+/// Read a value from `AppState` via a short-lived lock.
+///
+/// ```ignore
+/// let (dir, model) = read_state(&state, |s| (s.skill_dir.clone(), s.text_embedding_model.clone()));
+/// ```
+pub(crate) fn read_state<T>(
+    state: &Mutex<Box<AppState>>,
+    f: impl FnOnce(&AppState) -> T,
+) -> T {
+    let g = state.lock_or_recover();
+    f(&g)
+}
+
+/// Mutate `AppState` via a short-lived lock.
+///
+/// ```ignore
+/// mutate_state(&state, |s| s.theme = "dark".into());
+/// ```
+pub(crate) fn mutate_state(
+    state: &Mutex<Box<AppState>>,
+    f: impl FnOnce(&mut AppState),
+) {
+    let mut g = state.lock_or_recover();
+    f(&mut g);
+}
+
+/// Mutate `AppState` and auto-persist settings afterwards.
+pub(crate) fn mutate_and_save(
+    app: &AppHandle,
+    f: impl FnOnce(&mut AppState),
+) {
+    {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let mut g = r.lock_or_recover();
+        f(&mut g);
+    }
+    save_settings(app);
+}
+
 // ── Settings persistence ──────────────────────────────────────────────────────
 
 /// Thin alias usable from async contexts where `&AppHandle` is not clonable.

@@ -582,11 +582,118 @@ the Free Software Foundation, version 3 only. -->
     data: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }
   ) {
     renderDayDots(canvas, data);
+    let currentOnMove = (e: MouseEvent) => handleDayDotsHover(canvas, e, data);
+    let currentOnLeave = () => { hoveredLabelId = null; labelTooltip = null; gridTooltip = null; };
+    canvas.addEventListener("mousemove", currentOnMove);
+    canvas.addEventListener("mouseleave", currentOnLeave);
     return {
       update(d: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }) {
         renderDayDots(canvas, d);
+        canvas.removeEventListener("mousemove", currentOnMove);
+        canvas.removeEventListener("mouseleave", currentOnLeave);
+        currentOnMove = (e: MouseEvent) => handleDayDotsHover(canvas, e, d);
+        currentOnLeave = () => { hoveredLabelId = null; labelTooltip = null; gridTooltip = null; };
+        canvas.addEventListener("mousemove", currentOnMove);
+        canvas.addEventListener("mouseleave", currentOnLeave);
+      },
+      destroy() {
+        canvas.removeEventListener("mousemove", currentOnMove);
+        canvas.removeEventListener("mouseleave", currentOnLeave);
       }
     };
+  }
+
+  /** Resolve hover target in a day-dots canvas (week view) for both labels and epoch dots. */
+  function handleDayDotsHover(
+    canvas: HTMLCanvasElement,
+    e: MouseEvent,
+    data: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }
+  ) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w === 0 || h === 0) return;
+
+    const { sessions, dayStart, labels } = data;
+    const dayEnd = dayStart + 86400;
+
+    // ① Check label circles first (drawn at bottom of canvas)
+    const dotR = Math.max(3, Math.min(5, h * 0.06));
+    const hitR = dotR + 4; // slightly larger hit area
+    let foundLabel = false;
+    for (const label of labels) {
+      const t = label.eeg_start;
+      if (t < dayStart || t >= dayEnd) continue;
+      const lx = ((t - dayStart) / 86400) * w;
+      const ly = h - dotR - 1;
+      const dist = Math.sqrt((mx - lx) ** 2 + (my - ly) ** 2);
+      if (dist <= hitR) {
+        hoveredLabelId = label.id;
+        labelTooltip = {
+          x: e.clientX, y: e.clientY,
+          text: label.text,
+          time: fmtTimeShort(label.eeg_start),
+        };
+        foundLabel = true;
+        break;
+      }
+    }
+
+    // ② Check epoch dots if no label was hit
+    if (!foundLabel) {
+      if (hoveredLabelId != null) { hoveredLabelId = null; labelTooltip = null; }
+
+      // Compute layout parameters matching renderDayDots
+      const dotAreaTop = Math.max(10, h * 0.22);
+      const dotAreaH   = h - dotAreaTop - 2;
+      const nSessions  = sessions.length;
+      const bandH      = nSessions > 0 ? dotAreaH / nSessions : dotAreaH;
+
+      let bestDist = Infinity;
+      let bestEpoch: EpochRow | null = null;
+      let bestSIdx = 0;
+
+      for (let sIdx = 0; sIdx < sessions.length; sIdx++) {
+        const ts = getTs(sessions[sIdx].csv_path);
+        if (!ts || ts.length === 0) continue;
+        const eDotR = Math.min(2.5, Math.max(1, bandH * 0.3));
+        const bandY = dotAreaTop + sIdx * bandH;
+
+        for (const row of ts) {
+          if (row.t < dayStart || row.t >= dayEnd) continue;
+          const ex = ((row.t - dayStart) / 86400) * w;
+          const valNorm = Math.max(0, Math.min(1, row.relaxation));
+          const ey = bandY + (1 - valNorm) * (bandH - eDotR * 2) + eDotR;
+          const dist = Math.sqrt((mx - ex) ** 2 + (my - ey) ** 2);
+          if (dist < bestDist && dist <= eDotR + 6) {
+            bestDist = dist;
+            bestEpoch = row;
+            bestSIdx = sIdx;
+          }
+        }
+      }
+
+      if (bestEpoch) {
+        const timeD = new Date(bestEpoch.t * 1000);
+        const hh = String(timeD.getHours()).padStart(2, "0");
+        const mm = String(timeD.getMinutes()).padStart(2, "0");
+        const ss = String(timeD.getSeconds()).padStart(2, "0");
+        gridTooltip = {
+          x: e.clientX, y: e.clientY,
+          hour: timeD.getHours(), row: 0,
+          time: `${hh}:${mm}:${ss}`,
+          values: [
+            { label: "relax", val: bestEpoch.relaxation.toFixed(2), color: sessionColor(bestSIdx) },
+            { label: "engage", val: bestEpoch.engagement.toFixed(2), color: sessionColor(bestSIdx) },
+          ],
+        };
+      } else {
+        gridTooltip = null;
+      }
+    } else {
+      gridTooltip = null;
+    }
   }
 
   function renderDayDots(
@@ -686,7 +793,7 @@ the Free Software Foundation, version 3 only. -->
   function drawDayGrid(canvas: HTMLCanvasElement, data: GridData) {
     renderDayGrid(canvas, data);
     let currentOnMove = (e: MouseEvent) => handleGridHover(canvas, e, data);
-    let currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; };
+    let currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; hoveredLabelId = null; labelTooltip = null; };
     canvas.addEventListener("mousemove", currentOnMove);
     canvas.addEventListener("mouseleave", currentOnLeave);
     return {
@@ -695,7 +802,7 @@ the Free Software Foundation, version 3 only. -->
         canvas.removeEventListener("mousemove", currentOnMove);
         canvas.removeEventListener("mouseleave", currentOnLeave);
         currentOnMove = (e: MouseEvent) => handleGridHover(canvas, e, d);
-        currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; };
+        currentOnLeave = () => { gridTooltip = null; screenshotPreview = null; hoveredLabelId = null; labelTooltip = null; };
         canvas.addEventListener("mousemove", currentOnMove);
         canvas.addEventListener("mouseleave", currentOnLeave);
       },
@@ -742,11 +849,25 @@ the Free Software Foundation, version 3 only. -->
       }
     }
     // Check for labels in this cell
+    let foundLabelInCell = false;
     for (const lbl of data.labels) {
       if (lbl.eeg_start >= cellT && lbl.eeg_start < cellEnd) {
         const lColor = dayLabelColors.get(lbl.id) ?? "#f59e0b";
         values.push({ label: "label", val: lbl.text, color: lColor });
+        if (!foundLabelInCell) {
+          hoveredLabelId = lbl.id;
+          labelTooltip = {
+            x: e.clientX, y: e.clientY,
+            text: lbl.text,
+            time: fmtTimeShort(lbl.eeg_start),
+          };
+          foundLabelInCell = true;
+        }
       }
+    }
+    if (!foundLabelInCell && hoveredLabelId != null) {
+      hoveredLabelId = null;
+      labelTooltip = null;
     }
 
     // Check for screenshot in this cell — show preview if hovering directly on the indicator
@@ -1659,65 +1780,6 @@ the Free Software Foundation, version 3 only. -->
             </div>
           {/if}
 
-          <!-- Grid tooltip (follows cursor, portal-style) -->
-          {#if gridTooltip}
-            <div class="fixed pointer-events-none z-[100]"
-                 style="left:{gridTooltip.x + 12}px; top:{gridTooltip.y - 8}px;">
-              <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
-                          shadow-xl px-2.5 py-1.5 text-popover-foreground min-w-[80px]">
-                <span class="block text-[0.62rem] font-bold tabular-nums">{gridTooltip.time}</span>
-                {#if gridTooltip.values.length > 0}
-                  {#each gridTooltip.values as v}
-                    <div class="flex items-center gap-1.5 mt-0.5">
-                      <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{v.color}"></span>
-                      <span class="text-[0.5rem] text-muted-foreground/70">{v.label}:</span>
-                      <span class="text-[0.5rem] font-medium truncate max-w-[120px]">{v.val}</span>
-                    </div>
-                  {/each}
-                {:else}
-                  <span class="text-[0.48rem] text-muted-foreground/40 italic">no data</span>
-                {/if}
-              </div>
-            </div>
-          {/if}
-
-          <!-- Screenshot preview (shown when hovering a cell with a screenshot) -->
-          {#if screenshotPreview}
-            <div class="fixed pointer-events-none z-[110]"
-                 style="left:{screenshotPreview.x + 16}px; top:{screenshotPreview.y + 16}px;">
-              <div class="rounded-lg overflow-hidden border border-border dark:border-white/[0.12]
-                          shadow-2xl bg-popover">
-                <img src={screenshotPreview.src}
-                     alt="screenshot preview"
-                     class="block max-w-[220px] max-h-[160px] object-contain bg-black/5 dark:bg-white/5" />
-                {#if screenshotPreview.title}
-                  <div class="px-2 py-1 border-t border-border/30 dark:border-white/[0.06]">
-                    <span class="text-[0.48rem] text-muted-foreground/70 truncate block max-w-[210px]">
-                      {screenshotPreview.title}
-                    </span>
-                  </div>
-                {/if}
-              </div>
-            </div>
-          {/if}
-
-          <!-- Label dot tooltip (fixed position — avoids overflow clipping) -->
-          {#if labelTooltip}
-            <div class="fixed pointer-events-none z-[120]"
-                 style="left:{labelTooltip.x}px; top:{labelTooltip.y - 10}px; transform: translate(-50%, -100%);">
-              <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
-                          shadow-xl px-2.5 py-1.5 text-popover-foreground whitespace-nowrap max-w-[220px]">
-                <span class="block text-[0.6rem] font-medium leading-tight truncate">{labelTooltip.text}</span>
-                <span class="block text-[0.46rem] text-muted-foreground/60 tabular-nums mt-0.5">
-                  {labelTooltip.time}{#if labelTooltip.timeEnd} – {labelTooltip.timeEnd}{/if}
-                </span>
-              </div>
-              <!-- Arrow -->
-              <div class="mx-auto w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px]
-                          border-l-transparent border-r-transparent border-t-popover"></div>
-            </div>
-          {/if}
-
           <!-- Session list (lazy chart rendering via IntersectionObserver) -->
           {#if dayLoading && sessions.length === 0}
             <div class="flex items-center gap-2 py-4 text-muted-foreground/50">
@@ -1988,6 +2050,65 @@ the Free Software Foundation, version 3 only. -->
 
         </div><!-- end current-day -->
       {/if}
+    <!-- Grid tooltip (follows cursor, portal-style — shared by day grid & week dots) -->
+    {#if gridTooltip}
+      <div class="fixed pointer-events-none z-[100]"
+           style="left:{gridTooltip.x + 12}px; top:{gridTooltip.y - 8}px;">
+        <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
+                    shadow-xl px-2.5 py-1.5 text-popover-foreground min-w-[80px]">
+          <span class="block text-[0.62rem] font-bold tabular-nums">{gridTooltip.time}</span>
+          {#if gridTooltip.values.length > 0}
+            {#each gridTooltip.values as v}
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{v.color}"></span>
+                <span class="text-[0.5rem] text-muted-foreground/70">{v.label}:</span>
+                <span class="text-[0.5rem] font-medium truncate max-w-[120px]">{v.val}</span>
+              </div>
+            {/each}
+          {:else}
+            <span class="text-[0.48rem] text-muted-foreground/40 italic">no data</span>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Screenshot preview (shown when hovering a cell with a screenshot) -->
+    {#if screenshotPreview}
+      <div class="fixed pointer-events-none z-[110]"
+           style="left:{screenshotPreview.x + 16}px; top:{screenshotPreview.y + 16}px;">
+        <div class="rounded-lg overflow-hidden border border-border dark:border-white/[0.12]
+                    shadow-2xl bg-popover">
+          <img src={screenshotPreview.src}
+               alt="screenshot preview"
+               class="block max-w-[220px] max-h-[160px] object-contain bg-black/5 dark:bg-white/5" />
+          {#if screenshotPreview.title}
+            <div class="px-2 py-1 border-t border-border/30 dark:border-white/[0.06]">
+              <span class="text-[0.48rem] text-muted-foreground/70 truncate block max-w-[210px]">
+                {screenshotPreview.title}
+              </span>
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
+
+    <!-- Label dot tooltip (fixed position — avoids overflow clipping) -->
+    {#if labelTooltip}
+      <div class="fixed pointer-events-none z-[120]"
+           style="left:{labelTooltip.x}px; top:{labelTooltip.y - 10}px; transform: translate(-50%, -100%);">
+        <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
+                    shadow-xl px-2.5 py-1.5 text-popover-foreground whitespace-nowrap max-w-[220px]">
+          <span class="block text-[0.6rem] font-medium leading-tight truncate">{labelTooltip.text}</span>
+          <span class="block text-[0.46rem] text-muted-foreground/60 tabular-nums mt-0.5">
+            {labelTooltip.time}{#if labelTooltip.timeEnd} – {labelTooltip.timeEnd}{/if}
+          </span>
+        </div>
+        <!-- Arrow -->
+        <div class="mx-auto w-0 h-0 border-l-[4px] border-r-[4px] border-t-[4px]
+                    border-l-transparent border-r-transparent border-t-popover"></div>
+      </div>
+    {/if}
+
   </div><!-- end scroll area -->
 
   <!-- ── Footer ───────────────────────────────────────────────────────────── -->

@@ -395,10 +395,7 @@ impl DayStore {
 
         // Enable WAL so concurrent readers (compare window, history) never
         // block the writer and the writer never blocks them.
-        // synchronous=NORMAL is safe with WAL and much faster than FULL.
-        let _ = conn.execute_batch(
-            "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;"
-        );
+        skill_data::util::init_wal_pragmas(&conn);
 
         let ddl = "
             CREATE TABLE IF NOT EXISTS embeddings (
@@ -1293,6 +1290,8 @@ fn msg_ts_utc_now() -> u64 {
 
 // Removed: use crate::unix_secs instead (was duplicated as unix_secs_now).
 
+// Re-exported so callers can use `crate::eeg_embeddings::cosine_distance`.
+// Prefer importing `skill_exg::cosine_distance` directly in new code.
 pub(crate) use skill_exg::cosine_distance;
 
 fn load_recent_label_texts(skill_dir: &Path, limit: usize) -> Vec<String> {

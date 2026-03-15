@@ -35,8 +35,6 @@ use crate::util::MutexExt;
 // ── DDL ───────────────────────────────────────────────────────────────────────
 
 const DDL: &str = "
-PRAGMA journal_mode = WAL;
-
 CREATE TABLE IF NOT EXISTS active_windows (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     app_name     TEXT    NOT NULL,
@@ -81,6 +79,7 @@ impl ActivityStore {
             Ok(c)  => c,
             Err(e) => { eprintln!("[activity] open {}: {e}", path.display()); return None; }
         };
+        crate::util::init_wal_pragmas(&conn);
         if let Err(e) = conn.execute_batch(DDL) {
             eprintln!("[activity] DDL: {e}");
             return None;

@@ -170,19 +170,12 @@ impl Default for UmapUserConfig {
 }
 
 pub fn load_umap_config(skill_dir: &Path) -> UmapUserConfig {
-    let path = skill_dir.join(UMAP_CONFIG_FILE);
-    std::fs::read_to_string(&path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+    skill_data::util::load_json_or_default(&skill_dir.join(UMAP_CONFIG_FILE))
 }
 
 pub fn save_umap_config(skill_dir: &Path, cfg: &UmapUserConfig) {
     let _ = std::fs::create_dir_all(skill_dir);
-    let path = skill_dir.join(UMAP_CONFIG_FILE);
-    if let Ok(json) = serde_json::to_string_pretty(cfg) {
-        let _ = std::fs::write(path, json);
-    }
+    skill_data::util::save_json(&skill_dir.join(UMAP_CONFIG_FILE), cfg);
 }
 
 // ── Calibration types ─────────────────────────────────────────────────────────
@@ -613,10 +606,7 @@ impl Default for UserSettings {
 }
 
 pub fn load_settings(skill_dir: &Path) -> UserSettings {
-    let mut s: UserSettings = std::fs::read_to_string(settings_path(skill_dir))
-        .ok()
-        .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default();
+    let mut s: UserSettings = skill_data::util::load_json_or_default(&settings_path(skill_dir));
 
     // ── Shortcut migrations ──────────────────────────────────────────────
     if s.search_shortcut   == "CmdOrCtrl+Shift+F" { s.search_shortcut   = default_search_shortcut(); }
