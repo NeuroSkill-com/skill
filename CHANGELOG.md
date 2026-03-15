@@ -38,6 +38,12 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Fix scripts storage**: tool script and output files were stored in per-server-start timestamp directories under `chats/scripts/<ts>/`, creating empty directories on every LLM server start even when no tools were used. Now `scripts_dir` is the base `chats/scripts/` path and `run_<ts>/` subdirectories are created lazily only when a tool actually writes a file.
 
+- **Fix tool cards showing empty arguments**: tool-call cards no longer display "ARGUMENTS: {}" when a tool was called with an empty parameter object. Empty `{}` args are now excluded from the "has details" check, so cards with no meaningful args, result, or detail text collapse cleanly without an expand chevron. The header summary also skips showing empty args inline.
+
+- **Filter out empty bash tool calls**: when the model emits a bash `[TOOL_CALL]` with empty `{}` arguments and no code fence to fill from, the call is now silently dropped instead of executing and producing a "missing command" error card. This eliminates the common pattern of empty-args bash error cards that clutter the conversation.
+
+- **Cross-round tool call dedup**: the model can no longer re-execute the exact same tool call (same name + same arguments) across multiple inference rounds. A `(name, args)` set tracks all executed calls; duplicate re-invocations are filtered out. If all calls in a round are filtered, the model's text is returned directly without entering an empty tool-execution phase.
+
 - **Expandable tool-call cards with rich detail views**: tool-call bubbles are now always expandable (like thinking bubbles) whenever any details are available. Each tool type has a purpose-built expanded view:
   - **Bash**: shows the full command under a "Command" header in a prominent monospace block
   - **File tools** (`read_file`/`write_file`/`edit_file`): shows the file path; `edit_file` shows find/replace diffs in red/green blocks; `write_file` shows file content

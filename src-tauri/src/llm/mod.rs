@@ -1751,6 +1751,10 @@ where
         .map(|t| (t.function.name.clone(), t.clone()))
         .collect();
 
+    // Cross-round dedup: track (tool_name, arguments) pairs already executed
+    // so the model can't re-call the exact same tool with the same args.
+    let mut executed_calls = std::collections::HashSet::<(String, String)>::new();
+
     for _ in 0..=max_rounds {
         // ── Context-aware history trimming ──────────────────────────────
         // Estimate token count (~4 chars/token) and drop the oldest
@@ -1779,6 +1783,36 @@ where
         }
 
         let cleaned = tools::strip_tool_call_blocks(&assistant_text);
+
+        // Filter out:
+        // 1. Bash calls with no command (will just error with "missing command")
+        // 2. Calls already executed in a prior round with identical args (cross-round dedup)
+        let selected_calls: Vec<tools::ToolCall> = tool_calls
+            .into_iter()
+            .filter(|tc| {
+                // Skip bash calls with empty/missing command
+                if tc.function.name == "bash" {
+                    let args: Value = serde_json::from_str(&tc.function.arguments)
+                        .unwrap_or(Value::Object(Default::default()));
+                    if args.get("command").and_then(|c| c.as_str()).unwrap_or("").is_empty() {
+                        return false;
+                    }
+                }
+                // Skip exact duplicates from prior rounds
+                let key = (tc.function.name.clone(), tc.function.arguments.clone());
+                if executed_calls.contains(&key) {
+                    return false;
+                }
+                true
+            })
+            .take(max_calls_per_round)
+            .collect();
+
+        // If all calls were filtered out, treat as no tool calls — return the text.
+        if selected_calls.is_empty() {
+            return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+        }
+
         // Always push an assistant message to maintain user/assistant alternation.
         // If the model only emitted tool calls (no prose), use a short placeholder.
         // This prevents consecutive user messages (original query + tool result)
@@ -1793,7 +1827,10 @@ where
             "content": assistant_content,
         }));
 
-        let selected_calls: Vec<tools::ToolCall> = tool_calls.into_iter().take(max_calls_per_round).collect();
+        // Record these calls for cross-round dedup
+        for tc in &selected_calls {
+            executed_calls.insert((tc.function.name.clone(), tc.function.arguments.clone()));
+        }
 
         match execution_mode {
             crate::settings::ToolExecutionMode::Sequential => {

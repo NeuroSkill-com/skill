@@ -1995,7 +1995,8 @@
                     {@const icons: Record<string, string> = { date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐", bash: "💻", read_file: "📄", write_file: "✏️", edit_file: "🔧", search_output: "🔎" }}
                     {@const icon = icons[tu.tool] ?? "🔧"}
                     {@const bashCmd = tu.tool === "bash" ? (tu.args?.command || tu.result?.command || "") : ""}
-                    {@const hasDetails = !!(tu.args || tu.result || tu.detail || bashCmd)}
+                    {@const hasNonEmptyArgs = tu.args && Object.keys(tu.args).length > 0}
+                    {@const hasDetails = !!(hasNonEmptyArgs || tu.result || tu.detail || bashCmd)}
                     {@const dangerKey = detectToolDanger(tu)}
                     {@const isDangerous = !!dangerKey}
                     {@const borderColor =
@@ -2057,7 +2058,7 @@
                           {/if}
 
                           <!-- Brief summary of args in header -->
-                          {#if tu.args || bashCmd}
+                          {#if hasNonEmptyArgs || bashCmd}
                             <span class="text-[0.6rem] text-muted-foreground/60 truncate ml-1 flex-1 min-w-0 font-mono">
                               {#if tu.tool === "bash" && bashCmd}
                                 {bashCmd.length > 60 ? bashCmd.slice(0, 60) + "…" : bashCmd}
@@ -2207,8 +2208,8 @@
                                           bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2
                                           text-foreground select-text">{tu.args.url}</pre>
                             </div>
-                          <!-- Generic: show raw JSON args -->
-                          {:else if tu.args}
+                          <!-- Generic: show raw JSON args (skip empty objects) -->
+                          {:else if hasNonEmptyArgs}
                             <div class="flex flex-col gap-0.5">
                               <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
                                 {t("chat.tools.argsLabel")}
