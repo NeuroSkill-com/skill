@@ -2,6 +2,9 @@
 
 [www.neuroskill.com](https://neuroskill.com)
 
+[![Release](https://img.shields.io/github/v/release/NeuroSkill-com/skill?style=for-the-badge&logo=github&logoColor=white&label=Latest)](https://github.com/NeuroSkill-com/skill/releases/latest)
+[![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)](https://github.com/NeuroSkill-com/skill/blob/main/LICENSE)
+[![Stars](https://img.shields.io/github/stars/NeuroSkill-com/skill?style=for-the-badge&logo=github&logoColor=white)](https://github.com/NeuroSkill-com/skill/stargazers)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/nA6Xk5MV)
 [![Homebrew](https://img.shields.io/badge/Homebrew-Install%20via%20Cask-FBB040?style=for-the-badge&logo=homebrew&logoColor=white)](https://github.com/NeuroSkill-com/skill#install-homebrew-macos-apple-silicon)
 
