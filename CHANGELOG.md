@@ -26,6 +26,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Context usage as circular progress next to tools button**: the separate full-width context-usage bar below the chat header has been replaced by a compact circular SVG progress ring that sits next to the tools badge. The ring fills proportionally (green → amber at 70% → red at 90%) with a colour-matched percentage label; full token counts (`~used/total`) shown in the tooltip on hover. The tools button retains its original wrench icon, label, and enabled count.
 
+- **Tools removed from parameters panel**: the tool allow-list and execution mode selector have been removed from the parameters/settings slide-in panel. Tools are now configured exclusively via the dedicated tools panel opened by the tools badge button in the header, eliminating duplicate UI.
+
 - **Model name moved to titlebar**: the active model name is now shown in the header drag region (acting as the window title), freeing horizontal space for badges and controls. The footer hint no longer repeats the model name.
 
 - **Deduplicated tools UI**: when the dedicated tools panel is open, the tools allow-list in the parameters/settings panel is automatically hidden to avoid showing the same controls in two places simultaneously.
