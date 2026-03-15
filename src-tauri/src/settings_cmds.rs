@@ -1664,6 +1664,20 @@ pub async fn search_screenshots_by_text(
     }).await.unwrap_or_default())
 }
 
+/// Return the absolute filesystem path to the screenshots directory.
+/// The frontend uses `convertFileSrc()` to turn this into an asset URL
+/// that WebView can load directly — no base64, no IPC for image bytes.
+#[tauri::command]
+pub fn get_screenshots_dir(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> String {
+    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    skill_dir
+        .join(crate::constants::SCREENSHOTS_DIR)
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// Find screenshots visually similar to a query embedding vector.
 /// Runs on a background thread (HNSW load + search).
 #[tauri::command]

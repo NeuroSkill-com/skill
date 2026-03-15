@@ -7,7 +7,7 @@ the Free Software Foundation, version 3 only. -->
 <!-- Screenshots tab — capture, embedding model, re-embed -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
+  import { invoke, convertFileSrc } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { Button }    from "$lib/components/ui/button";
   import { Card, CardContent } from "$lib/components/ui/card";
@@ -66,8 +66,9 @@ the Free Software Foundation, version 3 only. -->
   let unlisten: UnlistenFn | null = null;
 
   // ── OCR search state ──────────────────────────────────────────────────────
+  let screenshotsDir = $state("");
   let ocrQuery     = $state("");
-  let ocrResults   = $state<Array<{timestamp: number; unix_ts: number; filename: string; app_name: string; window_title: string; similarity: number}>>([]);
+  let ocrResults   = $state<Array<{timestamp: number; unix_ts: number; filename: string; app_name: string; window_title: string; ocr_text: string; similarity: number}>>([]);
   let ocrSearching = $state(false);
   let ocrSearched  = $state(false);
 
@@ -101,6 +102,11 @@ the Free Software Foundation, version 3 only. -->
     if (us < 1000) return `${us}µs`;
     if (us < 1_000_000) return `${(us / 1000).toFixed(1)}ms`;
     return `${(us / 1_000_000).toFixed(2)}s`;
+  }
+
+  function screenshotSrc(filename: string): string {
+    if (!screenshotsDir || !filename) return "";
+    return convertFileSrc(`${screenshotsDir}/${filename}`);
   }
 
   function fmtMs(ms: number): string {
@@ -142,6 +148,9 @@ the Free Software Foundation, version 3 only. -->
     try {
       estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed");
     } catch { estimate = null; }
+    try {
+      screenshotsDir = await invoke<string>("get_screenshots_dir");
+    } catch { screenshotsDir = ""; }
     if (isMac) {
       try { screenPermission = await invoke<boolean>("check_screen_recording_permission"); }
       catch { screenPermission = null; }
@@ -755,19 +764,45 @@ the Free Software Foundation, version 3 only. -->
           </Button>
         </div>
         {#if ocrResults.length > 0}
-          <div class="flex flex-col gap-1 mt-1 max-h-40 overflow-y-auto">
+          <div class="flex flex-col gap-2 mt-1 max-h-[28rem] overflow-y-auto">
             {#each ocrResults as r}
-              <div class="rounded-lg border border-border dark:border-white/[0.06]
-                          bg-muted/20 dark:bg-white/[0.015] px-3 py-2 flex flex-col gap-0.5">
-                <div class="flex items-center gap-2">
-                  <span class="text-[0.6rem] font-semibold text-foreground truncate">{r.app_name || '—'}</span>
-                  {#if r.similarity > 0}
-                    <span class="text-[0.5rem] text-muted-foreground/50 tabular-nums shrink-0">
-                      {(r.similarity * 100).toFixed(0)}%
+              <div class="rounded-xl border border-border dark:border-white/[0.06]
+                          bg-muted/20 dark:bg-white/[0.015] overflow-hidden">
+                <!-- Thumbnail -->
+                {#if r.filename && screenshotsDir}
+                  <img src={screenshotSrc(r.filename)}
+                       alt="Screenshot"
+                       class="w-full h-auto max-h-40 object-cover bg-black/5 dark:bg-white/[0.02]"
+                       loading="lazy" />
+                {/if}
+                <!-- Metadata + OCR text -->
+                <div class="px-3 py-2 flex flex-col gap-1">
+                  <div class="flex items-center gap-2">
+                    <span class="text-[0.62rem] font-semibold text-foreground truncate">
+                      {r.app_name || '—'}
                     </span>
+                    {#if r.similarity > 0}
+                      <span class="rounded-full px-1.5 py-0 text-[0.48rem] font-semibold
+                                   bg-primary/15 text-primary border border-primary/25 shrink-0">
+                        {(r.similarity * 100).toFixed(0)}%
+                      </span>
+                    {/if}
+                    <span class="ml-auto text-[0.48rem] text-muted-foreground/40 tabular-nums shrink-0">
+                      {new Date(r.unix_ts * 1000).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  {#if r.window_title}
+                    <span class="text-[0.56rem] text-muted-foreground truncate">{r.window_title}</span>
+                  {/if}
+                  {#if r.ocr_text}
+                    <p class="text-[0.54rem] text-foreground/70 leading-relaxed
+                              whitespace-pre-wrap break-words max-h-20 overflow-y-auto
+                              rounded bg-muted/40 dark:bg-white/[0.03] px-2 py-1.5 mt-0.5
+                              font-mono">
+                      {r.ocr_text.length > 500 ? r.ocr_text.slice(0, 500) + '…' : r.ocr_text}
+                    </p>
                   {/if}
                 </div>
-                <span class="text-[0.56rem] text-muted-foreground truncate">{r.window_title || r.filename}</span>
               </div>
             {/each}
           </div>

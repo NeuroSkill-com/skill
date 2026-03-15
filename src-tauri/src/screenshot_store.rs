@@ -102,6 +102,7 @@ pub struct ScreenshotResult {
     pub filename:     String,
     pub app_name:     String,
     pub window_title: String,
+    pub ocr_text:     String,
     pub similarity:   f32,
 }
 
@@ -311,7 +312,7 @@ impl ScreenshotStore {
         let lo = ts - window_secs as i64;
         let hi = ts + window_secs as i64;
         let mut stmt = conn.prepare(
-            "SELECT timestamp, unix_ts, filename, app_name, window_title
+            "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text
              FROM screenshots
              WHERE unix_ts BETWEEN ?1 AND ?2
              ORDER BY unix_ts"
@@ -323,6 +324,7 @@ impl ScreenshotStore {
                 filename:     r.get(2)?,
                 app_name:     r.get(3)?,
                 window_title: r.get(4)?,
+                ocr_text:     r.get::<_, String>(5).unwrap_or_default(),
                 similarity:   0.0,
             })
         }).unwrap().filter_map(|r| r.ok()).collect()
@@ -380,7 +382,7 @@ impl ScreenshotStore {
         let conn = self.conn.lock_or_recover();
         let pattern = format!("%{query}%");
         let mut stmt = conn.prepare(
-            "SELECT timestamp, unix_ts, filename, app_name, window_title
+            "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text
              FROM screenshots
              WHERE ocr_text LIKE ?1
              ORDER BY unix_ts DESC
@@ -393,6 +395,7 @@ impl ScreenshotStore {
                 filename:     r.get(2)?,
                 app_name:     r.get(3)?,
                 window_title: r.get(4)?,
+                ocr_text:     r.get::<_, String>(5).unwrap_or_default(),
                 similarity:   0.0,
             })
         }).unwrap().filter_map(|r| r.ok()).collect()

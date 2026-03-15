@@ -281,7 +281,7 @@ use settings_cmds::{
     get_screenshots_around, search_screenshots_by_vector, search_screenshots_by_image,
     search_screenshots_by_text,
     check_ocr_models_ready, download_ocr_models,
-    get_screenshot_metrics,
+    get_screenshot_metrics, get_screenshots_dir,
 };
 
 // LLM catalog commands (feature-gated)
@@ -1980,7 +1980,7 @@ pub fn run() {
             search_screenshots_by_image,
             search_screenshots_by_text,
             check_ocr_models_ready, download_ocr_models,
-            get_screenshot_metrics,
+            get_screenshot_metrics, get_screenshots_dir,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
             connect_openbci,
             open_api_window,

@@ -1240,6 +1240,7 @@ pub fn search_by_vector(
                 filename: String::new(),
                 app_name: String::new(),
                 window_title: String::new(),
+                ocr_text: String::new(),
                 similarity: 1.0 - r.distance,
             }
         }
