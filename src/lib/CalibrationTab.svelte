@@ -12,6 +12,7 @@ the Free Software Foundation, version 3 only. -->
   import { Button }             from "$lib/components/ui/button";
   import { Card, CardContent }  from "$lib/components/ui/card";
   import { t }                  from "$lib/i18n/index.svelte";
+  import { fmtDateTimeLocale }  from "$lib/format";
   import {
     CALIBRATION_ACTION1_LABEL,
     CALIBRATION_ACTION2_LABEL,
@@ -69,10 +70,7 @@ the Free Software Foundation, version 3 only. -->
   }
 
   function fmtDate(utc: number) {
-    return new Date(utc * 1000).toLocaleDateString(undefined, {
-      year: "numeric", month: "short", day: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
+    return fmtDateTimeLocale(utc);
   }
 
   async function load() {

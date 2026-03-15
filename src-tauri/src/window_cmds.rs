@@ -18,6 +18,70 @@ use crate::{
 use crate::settings::tilde_path;
 use crate::ws_server::WsBroadcaster;
 
+// ── Window helper ─────────────────────────────────────────────────────────────
+
+/// Configuration for creating a secondary window.
+pub(crate) struct WindowSpec<'a> {
+    pub label:          &'a str,
+    pub route:          &'a str,
+    pub title:          &'a str,
+    pub inner_size:     (f64, f64),
+    pub min_inner_size: Option<(f64, f64)>,
+    pub resizable:      bool,
+    pub always_on_top:  bool,
+    pub maximized:      bool,
+}
+
+impl<'a> Default for WindowSpec<'a> {
+    fn default() -> Self {
+        Self {
+            label: "", route: "", title: "",
+            inner_size: (680.0, 720.0),
+            min_inner_size: None,
+            resizable: true,
+            always_on_top: false,
+            maximized: false,
+        }
+    }
+}
+
+/// Focus an existing window or create a new one from `spec`.
+///
+/// Deduplicates the repeated "check-existing → unminimize/show/focus → or build new"
+/// pattern used by all `open_*_window` commands.
+pub(crate) fn focus_or_create(app: &AppHandle, spec: WindowSpec) -> Result<(), String> {
+    if let Some(win) = app.get_webview_window(spec.label) {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+        return Ok(());
+    }
+    let mut builder = tauri::WebviewWindowBuilder::new(
+        app, spec.label,
+        tauri::WebviewUrl::App(spec.route.into()),
+    )
+    .title(spec.title)
+    .inner_size(spec.inner_size.0, spec.inner_size.1)
+    .resizable(spec.resizable)
+    .center()
+    .decorations(false)
+    .transparent(true);
+
+    if let Some((w, h)) = spec.min_inner_size {
+        builder = builder.min_inner_size(w, h);
+    }
+    if spec.always_on_top {
+        builder = builder.always_on_top(true);
+    }
+    if spec.maximized {
+        builder = builder.maximized(true);
+    }
+
+    builder.build()
+        .map(|w| { let _ = w.set_focus(); })
+        .map_err(|e| e.to_string())
+}
+
 // ── Permissions ───────────────────────────────────────────────────────────────
 
 /// Return whether the app currently holds macOS Accessibility (AX) permission.
@@ -173,13 +237,11 @@ pub fn open_bt_settings() {
 
 #[tauri::command]
 pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("settings") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App("settings".into()))
-        .title("NeuroSkill™ – Settings")
-        .inner_size(760.0, 720.0).min_inner_size(580.0, 560.0)
-        .center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    focus_or_create(&app, WindowSpec {
+        label: "settings", route: "settings", title: "NeuroSkill™ – Settings",
+        inner_size: (760.0, 720.0), min_inner_size: Some((580.0, 560.0)),
+        ..Default::default()
+    })
 }
 
 #[tauri::command]
@@ -212,13 +274,11 @@ pub async fn open_updates_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn open_help_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("help") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "help", tauri::WebviewUrl::App("help".into()))
-        .title("NeuroSkill™ – Help")
-        .inner_size(680.0, 720.0).min_inner_size(600.0, 520.0)
-        .center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    focus_or_create(&app, WindowSpec {
+        label: "help", route: "help", title: "NeuroSkill™ – Help",
+        inner_size: (680.0, 720.0), min_inner_size: Some((600.0, 520.0)),
+        ..Default::default()
+    })
 }
 
 // NOTE: open_history_window, open_compare_window, open_compare_window_with_sessions
@@ -248,13 +308,11 @@ pub async fn open_session_window(app: AppHandle, csv_path: String) -> Result<(),
 
 #[tauri::command]
 pub async fn open_search_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("search") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "search", tauri::WebviewUrl::App("search".into()))
-        .title("EEG Search")
-        .inner_size(1100.0, 820.0).min_inner_size(700.0, 560.0)
-        .resizable(true).maximized(true).center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    focus_or_create(&app, WindowSpec {
+        label: "search", route: "search", title: "EEG Search",
+        inner_size: (1100.0, 820.0), min_inner_size: Some((700.0, 560.0)),
+        maximized: true, ..Default::default()
+    })
 }
 
 #[tauri::command]
@@ -286,25 +344,20 @@ pub async fn open_focus_timer_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn open_labels_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("labels") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "labels", tauri::WebviewUrl::App("labels".into()))
-        .title("All Labels")
-        .inner_size(680.0, 600.0).min_inner_size(480.0, 400.0)
-        .resizable(true).center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    focus_or_create(&app, WindowSpec {
+        label: "labels", route: "labels", title: "All Labels",
+        inner_size: (680.0, 600.0), min_inner_size: Some((480.0, 400.0)),
+        ..Default::default()
+    })
 }
 
 #[tauri::command]
 pub async fn open_label_window(app: AppHandle) -> Result<(), String> {
-    if let Some(win) = app.get_webview_window("label") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, "label", tauri::WebviewUrl::App("label".into()))
-        .title("Add Label")
-        .inner_size(520.0, 560.0).min_inner_size(420.0, 380.0)
-        .resizable(true).always_on_top(true)
-        .center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    focus_or_create(&app, WindowSpec {
+        label: "label", route: "label", title: "Add Label",
+        inner_size: (520.0, 560.0), min_inner_size: Some((420.0, 380.0)),
+        always_on_top: true, ..Default::default()
+    })
 }
 
 #[tauri::command]
