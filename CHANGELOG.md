@@ -12,6 +12,8 @@ All notable changes to NeuroSkill™ are documented here.
 
 - **Extract `skill-settings` workspace crate**: moved persistent configuration types and disk I/O (`settings.rs`, 924 lines) into `crates/skill-settings/`. Zero Tauri dependencies; depends on `skill-constants`, `skill-eeg`, `skill-tts`, `skill-llm`, `skill-screenshots`, and `skill-data`. Moved `PairedDevice` struct to `skill-data::device` and re-exported from both `skill-settings` and `lib.rs`. The `llm` feature flag is forwarded from the root crate for the `chat_shortcut` field. `src-tauri/src/settings.rs` replaced with a 4-line re-export shim. All 27 unit tests pass in the new crate.
 
+- **Flatten `llm/` and `tts/` module directories into single files**: converted `src-tauri/src/llm/` (mod.rs + cmds.rs) into a single `llm.rs` with an inline `pub mod cmds` block; converted `src-tauri/src/tts/` (mod.rs) into a single `tts.rs`. Eliminates two unnecessary directory levels with no API or import path changes.
+
 - **Remove dead `llm/` duplicates**: deleted `src-tauri/src/llm/catalog.rs` (748 lines) and `src-tauri/src/llm/chat_store.rs` (529 lines) which were byte-identical copies of their `crates/skill-llm/src/` counterparts (only `include_str!` path differed). `llm/mod.rs` already re-exports from `skill_llm` — the local files were never compiled (no `mod` declaration). Removes 1,277 lines of dead code.
 
 ### Performance
