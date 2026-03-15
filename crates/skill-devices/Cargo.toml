@@ -19,4 +19,11 @@ muse-rs = { version = "0.1.0", default-features = false }
 openbci = { version = "0.0.1", features = ["ble"] }
 
 # Neurable MW75 Neuro EEG headphones (BLE activation + RFCOMM data streaming)
-mw75 = { version = "0.0.2", default-features = false, features = ["rfcomm"] }
+mw75 = { version = "0.0.2", default-features = false }
+
+[features]
+default = []
+# Enable RFCOMM transport for MW75 (links IOBluetooth.framework on macOS,
+# bluer on Linux).  Enabling this adds ~2 s to app startup on macOS because
+# dyld loads IOBluetooth.framework at process launch.
+mw75-rfcomm = ["mw75/rfcomm"]
