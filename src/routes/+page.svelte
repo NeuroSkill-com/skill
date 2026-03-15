@@ -34,6 +34,7 @@ the Free Software Foundation, version 3 only. -->
   import { addToast } from "$lib/toast-store.svelte";
   import { setBtOff } from "$lib/bt-status-store.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+  import type { MuseStatus } from "$lib/types";
 
   // ── Model download status (shown as a banner when downloading/retrying) ────
   interface ModelDownloadStatus {
@@ -66,56 +67,6 @@ the Free Software Foundation, version 3 only. -->
   );
 
   // ── Types ──────────────────────────────────────────────────────────────────
-  interface PairedDevice { id: string; name: string; last_seen: number; }
-  interface DiscoveredDevice { id: string; name: string; last_rssi: number; is_paired: boolean; is_preferred: boolean; }
-  type PowerlineFreq = "Hz60" | "Hz50";
-  interface FilterConfig {
-    sample_rate:        number;
-    low_pass_hz:        number | null;
-    high_pass_hz:       number | null;
-    notch:              PowerlineFreq | null;
-    notch_bandwidth_hz: number;
-  }
-  interface MuseStatus {
-    state:          "disconnected" | "scanning" | "connected" | "bt_off";
-    device_name:    string | null;
-    device_id:      string | null;
-    /** Factory serial number from the headset ("sn" field), e.g. "AAAA-BBBB-CCCC". Arrives a few seconds after connect. */
-    serial_number:  string | null;
-    /** Hardware MAC address from the headset ("ma" field), e.g. "AA-BB-CC-DD-EE-FF". */
-    mac_address:    string | null;
-    csv_path:       string | null;
-    sample_count:   number;
-    battery:        number;
-    eeg:            number[];
-    paired_devices: PairedDevice[];
-    bt_error:       string | null;
-    target_name:    string | null;
-    filter_config:   FilterConfig;
-    /** Per-channel quality in electrode order [TP9, AF7, AF8, TP10].
-     *  Values: "good" | "fair" | "poor" | "no_signal" */
-    channel_quality: string[];
-    /** Current auto-retry attempt (0 = not retrying). */
-    retry_attempt: number;
-    /** Seconds remaining until next auto-retry (0 = not counting down). */
-    retry_countdown_secs: number;
-    /** Latest raw PPG values [ambient, infrared, red]. */
-    ppg: number[];
-    /** Total PPG samples received this session. */
-    ppg_sample_count: number;
-    /** Latest accelerometer reading [x, y, z] in g. */
-    accel: [number, number, number];
-    /** Latest gyroscope reading [x, y, z] in °/s. */
-    gyro: [number, number, number];
-    /** Battery fuel-gauge voltage in mV (Classic only, 0 on Athena). */
-    fuel_gauge_mv: number;
-    /** Raw temperature ADC value (Classic only, 0 on Athena). */
-    temperature_raw: number;
-    /** Which device family is connected: "muse" | "ganglion" | "unknown". */
-    device_kind: string;
-    /** Hardware model code, e.g. "p50" = Muse S (Athena), "p21" = Muse 2. */
-    hardware_version: string | null;
-  }
   interface EegPacket { electrode: number; samples: number[]; timestamp: number; }
 
   // EEG_CH and EEG_COLOR imported from constants.ts.

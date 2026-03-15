@@ -17,15 +17,9 @@ the Free Software Foundation, version 3 only. -->
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
   import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
+  import type { MuseStatus }    from "$lib/types";
 
   // ── Types ──────────────────────────────────────────────────────────────────
-  interface MuseStatus {
-    state:            string;
-    device_name:      string | null;
-    battery:          number;
-    channel_quality:  string[];
-    [k: string]:      unknown;
-  }
   interface CalibrationAction { label: string; duration_secs: number; }
   interface CalibrationProfile {
     id: string; name: string;

@@ -20,6 +20,10 @@ the Free Software Foundation, version 3 only. -->
     SEARCH_PAGE_SIZE, JOB_POLL_INTERVAL_MS, UMAP_POLL_INTERVAL_MS,
     UMAP_COLOR_A, UMAP_COLOR_B,
   } from "$lib/constants";
+  import {
+    pad, fmtTime, fmtDate, fmtDateTimeSecs as fmtDateTime,
+    fmtDuration as fmtDurationSecs, fmtUtcDay, fmtSecs,
+  } from "$lib/format";
 
   // ── Types ────────────────────────────────────────────────────────────────
   interface NeighborMetrics {
@@ -73,34 +77,11 @@ the Free Software Foundation, version 3 only. -->
   interface JobPollResult { status: string; job_id: number; result?: any; error?: string; queue_position?: number; }
 
   // ── Formatting helpers ───────────────────────────────────────────────────
-  function pad(n: number) { return String(n).padStart(2, "0"); }
   function toInputValue(d: Date) {
     return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   }
   function fromInputValue(s: string) { return Math.floor(new Date(s).getTime() / 1000); }
-  function fmtTime(unix: number) {
-    return new Date(unix * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
-  }
-  function fmtDate(unix: number) {
-    return new Date(unix * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-  }
-  function fmtDateTime(unix: number) {
-    const d = new Date(unix * 1000);
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  }
-  function fmtDuration(s: number, e: number) {
-    const d = e - s;
-    if (d < 60) return `${d}s`;
-    if (d < 3600) return `${Math.floor(d/60)}m ${d%60}s`;
-    return `${Math.floor(d/3600)}h ${Math.floor((d%3600)/60)}m`;
-  }
-  function fmtUtcDay(day: string) {
-    if (day.length === 8)
-      return new Date(Date.UTC(+day.slice(0,4), +day.slice(4,6)-1, +day.slice(6,8), 12))
-        .toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-    return day;
-  }
-  function fmtSecs(s: number) { return s >= 60 ? `${Math.floor(s/60)}m ${s%60}s` : `${s}s`; }
+  function fmtDuration(s: number, e: number) { return fmtDurationSecs(e - s); }
 
   // Distance → colour/width
   function distColor(d: number) {

@@ -23,12 +23,10 @@ the Free Software Foundation, version 3 only. -->
   import type { SessionMetrics, EpochRow, CsvMetricsResult } from "$lib/dashboard/SessionDetail.svelte";
   import { Spinner }       from "$lib/components/ui/spinner";
   import { hBar, hCbs, type HistoryViewMode } from "$lib/history-titlebar.svelte";
+  import type { LabelRow, SleepStages } from "$lib/types";
+  import { fmtDayKey, fmtDurationRange } from "$lib/format";
 
   // ── Types ───────────────────────────────────────────────────────────────
-  interface LabelRow {
-    id: number; eeg_start: number; eeg_end: number;
-    text: string; created_at: number;
-  }
   interface SessionEntry {
     csv_file: string; csv_path: string;
     session_start_utc: number | null; session_end_utc: number | null;
@@ -37,15 +35,6 @@ the Free Software Foundation, version 3 only. -->
     sample_rate_hz: number | null; labels: LabelRow[];
     file_size_bytes: number;
   }
-  interface SleepEpoch {
-    utc: number; stage: number;
-    rel_delta: number; rel_theta: number; rel_alpha: number; rel_beta: number;
-  }
-  interface SleepSummary {
-    total_epochs: number; wake_epochs: number; n1_epochs: number;
-    n2_epochs: number; n3_epochs: number; rem_epochs: number; epoch_secs: number;
-  }
-  interface SleepStages { epochs: SleepEpoch[]; summary: SleepSummary; }
   interface HistoryStatsData {
     total_sessions: number; total_secs: number;
     this_week_secs: number; last_week_secs: number;
@@ -813,14 +802,6 @@ the Free Software Foundation, version 3 only. -->
       weekday: "long", year: "numeric", month: "long", day: "numeric",
     });
   }
-  /** Format a LOCAL YYYY-MM-DD key as a human-readable date string. */
-  function fmtDayKey(localKey: string): string {
-    if (!localKey) return localKey;
-    const [y, m, d] = localKey.split("-").map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-      year: "numeric", month: "short", day: "numeric",
-    });
-  }
   function fmtTime(utc: number | null): string {
     if (!utc) return "–";
     return new Date(utc * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
@@ -830,11 +811,7 @@ the Free Software Foundation, version 3 only. -->
     return new Date(utc * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   }
   function fmtDuration(start: number | null, end: number | null): string {
-    if (!start || !end) return "–";
-    const s = end - start;
-    if (s < 60) return `${s}s`;
-    if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
-    return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
+    return fmtDurationRange(start, end);
   }
   function fmtSize(bytes: number): string {
     if (!bytes) return "–";

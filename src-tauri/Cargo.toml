@@ -188,6 +188,7 @@ skill-commands  = { path = "../crates/skill-commands" }
 skill-router    = { path = "../crates/skill-router" }
 skill-tray      = { path = "../crates/skill-tray" }
 skill-exg       = { path = "../crates/skill-exg" }
+skill-devices   = { path = "../crates/skill-devices" }
 skill-constants    = { path = "../crates/skill-constants" }
 skill-screenshots  = { path = "../crates/skill-screenshots" }
 chrono     = { version = "0.4", default-features = false, features = ["clock", "std"] }

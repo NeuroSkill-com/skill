@@ -9314,6 +9314,7 @@ dependencies = [
  "skill-commands",
  "skill-constants",
  "skill-data",
+ "skill-devices",
  "skill-eeg",
  "skill-exg",
  "skill-jobs",
@@ -9368,6 +9369,15 @@ dependencies = [
  "serde_json",
  "skill-constants",
  "sysinfo 0.38.4",
+]
+
+[[package]]
+name = "skill-devices"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "skill-eeg",
 ]
 
 [[package]]

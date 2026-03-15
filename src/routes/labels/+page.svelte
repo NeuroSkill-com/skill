@@ -15,21 +15,13 @@ the Free Software Foundation, version 3 only. -->
   import { t }          from "$lib/i18n/index.svelte";
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+  import type { LabelRow } from "$lib/types";
+  import { fmtDateTimeLocale as formatDate, fmtElapsed } from "$lib/format";
 
   // ── Actions ───────────────────────────────────────────────────────────────
   function focusOnMount(node: HTMLElement) { node.focus(); }
 
   // ── Types ──────────────────────────────────────────────────────────────────
-  interface LabelRow {
-    id:          number;
-    eeg_start:   number;
-    eeg_end:     number;
-    label_start: number;
-    label_end:   number;
-    text:        string;
-    context:     string;
-    created_at:  number;
-  }
 
   /** Result shape returned by the `search_labels_by_text` Tauri command. */
   interface LabelNeighbor {
@@ -162,18 +154,8 @@ the Free Software Foundation, version 3 only. -->
   let paginatedLabels = $derived(activeLabels.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE));
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-  function formatDate(unix: number): string {
-    return new Date(unix * 1000).toLocaleString(undefined, {
-      month: "short", day: "numeric", year: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  }
-
   function formatDuration(start: number, end: number): string {
-    const s = Math.max(0, end - start);
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60), ss = s % 60;
-    return `${m}m ${String(ss).padStart(2,"0")}s`;
+    return fmtElapsed(Math.max(0, end - start));
   }
 
   // ── Data loading ────────────────────────────────────────────────────────────

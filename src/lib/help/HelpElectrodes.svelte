@@ -14,12 +14,7 @@ the Free Software Foundation, version 3 only. -->
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
   import { t }                  from "$lib/i18n/index.svelte";
-
-  interface MuseStatus {
-    state:           string;
-    channel_quality: string[];
-    [k: string]:     unknown;
-  }
+  import type { MuseStatus }    from "$lib/types";
 
   let quality = $state<string[]>(["no_signal","no_signal","no_signal","no_signal"]);
   let connected = $state(false);

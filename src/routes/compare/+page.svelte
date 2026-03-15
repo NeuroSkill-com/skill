@@ -22,79 +22,12 @@ the Free Software Foundation, version 3 only. -->
   import * as Card         from "$lib/components/ui/card";
   import { Spinner }       from "$lib/components/ui/spinner";
   import { getResolved }   from "$lib/theme-store.svelte";
+  import type { SessionMetrics, EpochRow } from "$lib/dashboard/SessionDetail.svelte";
+  import type { SleepEpoch, SleepSummary, SleepStages } from "$lib/types";
+  import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
+  import { fmtSecs, fmtTime, fmtDateTime, fmtDuration, pad } from "$lib/format";
 
   // ── Types ──────────────────────────────────────────────────────────────────
-  interface SessionMetrics {
-    n_epochs:    number;
-    rel_delta:   number;
-    rel_theta:   number;
-    rel_alpha:   number;
-    rel_beta:    number;
-    rel_gamma:   number;
-
-    relaxation:  number;
-    engagement:  number;
-    faa:         number;
-    tar:         number;
-    bar:         number;
-    dtr:         number;
-    pse:         number;
-    apf:         number;
-    bps:         number;
-    snr:         number;
-    coherence:   number;
-    mu_suppression: number;
-    mood:        number;
-    tbr:         number;
-    sef95:       number;
-    spectral_centroid: number;
-    hjorth_activity:   number;
-    hjorth_mobility:   number;
-    hjorth_complexity: number;
-    permutation_entropy: number;
-    higuchi_fd:  number;
-    dfa_exponent: number;
-    sample_entropy: number;
-    pac_theta_gamma: number;
-    laterality_index: number;
-    hr:               number;
-    rmssd:            number;
-    sdnn:             number;
-    pnn50:            number;
-    lf_hf_ratio:      number;
-    respiratory_rate: number;
-    spo2_estimate:    number;
-    perfusion_index:  number;
-    stress_index:     number;
-    blink_count:  number;
-    blink_rate:   number;
-    head_pitch:   number;
-    head_roll:        number;
-    stillness:        number;
-    nod_count:        number;
-    shake_count:      number;
-    meditation:       number;
-    cognitive_load:   number;
-    drowsiness:       number;
-  }
-
-  /** Per-epoch time-series row from the backend. */
-  interface EpochRow {
-    t: number;
-    rd: number; rt: number; ra: number; rb: number; rg: number;
-    relaxation: number; engagement: number; faa: number;
-    tar: number; bar: number; dtr: number; tbr: number;
-    pse: number; apf: number; sef95: number; sc: number; bps: number; snr: number;
-    coherence: number; mu: number;
-    ha: number; hm: number; hc: number;
-    pe: number; hfd: number; dfa: number; se: number; pac: number; lat: number;
-    mood: number;
-    hr: number; rmssd: number; sdnn: number; pnn50: number; lf_hf: number;
-    resp: number; spo2: number; perf: number; stress: number;
-    blinks: number; blink_r: number;
-    pitch: number; roll: number; still: number; nods: number; shakes: number;
-    med: number; cog: number; drow: number;
-  }
 
   /** A contiguous recording range discovered from embedding timestamps. */
   interface EmbeddingSession {
@@ -103,16 +36,6 @@ the Free Software Foundation, version 3 only. -->
     n_epochs:  number;
     day:       string;
   }
-
-  interface SleepEpoch {
-    utc: number; stage: number;
-    rel_delta: number; rel_theta: number; rel_alpha: number; rel_beta: number;
-  }
-  interface SleepSummary {
-    total_epochs: number; wake_epochs: number; n1_epochs: number;
-    n2_epochs: number; n3_epochs: number; rem_epochs: number; epoch_secs: number;
-  }
-  interface SleepStages { epochs: SleepEpoch[]; summary: SleepSummary; }
 
   // ── State ──────────────────────────────────────────────────────────────────
   let sessions    = $state<EmbeddingSession[]>([]);
@@ -210,17 +133,7 @@ the Free Software Foundation, version 3 only. -->
     umapCountdown = null;
   }
 
-  /** Format seconds as "Xm Ys" or "Ys". */
-  function fmtSecs(s: number): string {
-    if (s >= 60) return `${Math.floor(s / 60)}m ${s % 60}s`;
-    return `${s}s`;
-  }
 
-  /** Format a unix-second UTC timestamp as local "HH:MM:SS". */
-  function fmtTime(utc: number): string {
-    const d = new Date(utc * 1000);
-    return d.toLocaleTimeString();
-  }
 
   // Canvas refs for spectrum charts
   let specCanvasA = $state<HTMLCanvasElement | null>(null);
@@ -436,22 +349,6 @@ the Free Software Foundation, version 3 only. -->
   const bValid = $derived(bRangeStart !== null && bRangeEnd !== null && bDurSecs > 0 && bDurSecs <= 86400 && bSessions.length > 0);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-  function pad(n: number) { return String(n).padStart(2, "0"); }
-
-  function fmtDateTime(utc: number): string {
-    const d = new Date(utc * 1000);
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-
-  function fmtDuration(secs: number): string {
-    if (secs < 0) return "—";
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m ${s}s`;
-    return `${s}s`;
-  }
 
   function sessionLabel(s: EmbeddingSession): string {
     const dt  = fmtDateTime(s.start_utc);
@@ -923,41 +820,6 @@ the Free Software Foundation, version 3 only. -->
 
   const improved = $derived(insightDeltas.filter(d => d.direction === "improved"));
   const declined = $derived(insightDeltas.filter(d => d.direction === "declined"));
-
-  // ── Sleep analysis helpers ─────────────────────────────────────────────────
-  interface SleepAnalysis {
-    efficiency: number;      // % of non-wake time
-    onsetLatencyMin: number; // minutes to first non-wake
-    remLatencyMin: number;   // minutes to first REM
-    totalMin: number;        // total recording minutes
-    awakenings: number;      // transitions from sleep → wake
-  }
-
-  function analyzeSleep(sleep: SleepStages): SleepAnalysis {
-    const eps = sleep.epochs;
-    const epochSecs = sleep.summary.epoch_secs || 5;
-    const totalMin = (eps.length * epochSecs) / 60;
-    const wakeMin = (sleep.summary.wake_epochs * epochSecs) / 60;
-    const efficiency = totalMin > 0 ? ((totalMin - wakeMin) / totalMin) * 100 : 0;
-
-    // Onset latency: time until first non-wake epoch
-    let onsetIdx = eps.findIndex(e => e.stage !== 0);
-    const onsetLatencyMin = onsetIdx >= 0 ? (onsetIdx * epochSecs) / 60 : totalMin;
-
-    // REM latency: time from sleep onset to first REM
-    let remIdx = eps.findIndex(e => e.stage === 4);
-    const remLatencyMin = remIdx >= 0 && onsetIdx >= 0
-      ? ((remIdx - onsetIdx) * epochSecs) / 60
-      : -1;
-
-    // Awakenings: transitions from sleep (stage 1-4) to wake (stage 0)
-    let awakenings = 0;
-    for (let i = 1; i < eps.length; i++) {
-      if (eps[i].stage === 0 && eps[i-1].stage > 0) awakenings++;
-    }
-
-    return { efficiency, onsetLatencyMin, remLatencyMin, totalMin, awakenings };
-  }
 
   const sleepAnalysisA = $derived(sleepA ? analyzeSleep(sleepA) : null);
   const sleepAnalysisB = $derived(sleepB ? analyzeSleep(sleepB) : null);

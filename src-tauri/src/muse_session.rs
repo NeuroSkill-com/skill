@@ -371,35 +371,14 @@ pub(crate) async fn handle_event(
                 }
 
                 // ── Composite scores (pure computation, lock-free) ───────────
-                let alpha_dom = snap.channels.iter()
-                    .map(|ch| ch.rel_alpha as f64).sum::<f64>() / 4.0;
-                let beta_dom = snap.channels.iter()
-                    .map(|ch| ch.rel_beta as f64).sum::<f64>() / 4.0;
-                let alpha_component = (alpha_dom * 200.0).min(40.0);
-                let beta_penalty    = (beta_dom  * 100.0).min(20.0);
-                let still_component = hp.stillness * 0.2;
-                let hrv_component = if let Some(ppg) = dsp.accumulator.latest_ppg() {
-                    (ppg.rmssd / 100.0 * 20.0).min(20.0)
-                } else { 10.0 };
-                let meditation = (alpha_component - beta_penalty + still_component + hrv_component)
-                    .clamp(0.0, 100.0);
+                let rmssd_opt = dsp.accumulator.latest_ppg().map(|p| p.rmssd);
+                let meditation = skill_devices::compute_meditation(&snap, hp.stillness, rmssd_opt);
                 snap.meditation = Some((meditation * 10.0).round() / 10.0);
 
-                let frontal_theta  = (snap.channels[1].rel_theta as f64
-                                    + snap.channels[2].rel_theta as f64) / 2.0;
-                let parietal_alpha = (snap.channels[0].rel_alpha as f64
-                                    + snap.channels[3].rel_alpha as f64) / 2.0;
-                let cog_ratio = if parietal_alpha > 0.01 {
-                    frontal_theta / parietal_alpha
-                } else { 1.0 };
-                let cognitive_load = (100.0 / (1.0 + (-2.5 * (cog_ratio - 1.0)).exp()))
-                    .clamp(0.0, 100.0);
+                let cognitive_load = skill_devices::compute_cognitive_load(&snap);
                 snap.cognitive_load = Some((cognitive_load * 10.0).round() / 10.0);
 
-                let tar = snap.tar as f64;
-                let tar_component  = (tar / 3.0 * 80.0).min(80.0);
-                let alpha_spindle  = (alpha_dom * 100.0).min(20.0);
-                let drowsiness = (tar_component + alpha_spindle).clamp(0.0, 100.0);
+                let drowsiness = skill_devices::compute_drowsiness(&snap);
                 snap.drowsiness = Some((drowsiness * 10.0).round() / 10.0);
 
                 if let Some(gpu) = crate::gpu_stats::read() {

@@ -15,46 +15,9 @@ the Free Software Foundation, version 3 only. -->
   import { Spinner }       from "$lib/components/ui/spinner";
   import Hypnogram         from "$lib/Hypnogram.svelte";
   import type { SessionMetrics, EpochRow, CsvMetricsResult } from "$lib/dashboard/SessionDetail.svelte";
-
-  // ── Types ─────────────────────────────────────────────────────────────────
-  interface SleepEpoch {
-    utc: number; stage: number;
-    rel_delta: number; rel_theta: number; rel_alpha: number; rel_beta: number;
-  }
-  interface SleepSummary {
-    total_epochs: number; wake_epochs: number; n1_epochs: number;
-    n2_epochs: number; n3_epochs: number; rem_epochs: number; epoch_secs: number;
-  }
-  interface SleepStages { epochs: SleepEpoch[]; summary: SleepSummary; }
-
-  interface SleepAnalysis {
-    efficiency: number; onsetLatencyMin: number; remLatencyMin: number;
-    totalMin: number; awakenings: number;
-    stageMinutes: { wake: number; n1: number; n2: number; n3: number; rem: number };
-  }
-
-  function analyzeSleep(sleep: SleepStages): SleepAnalysis {
-    const eps = sleep.epochs;
-    const epochSecs = sleep.summary.epoch_secs || 5;
-    const totalMin = (eps.length * epochSecs) / 60;
-    const wakeMin = (sleep.summary.wake_epochs * epochSecs) / 60;
-    const efficiency = totalMin > 0 ? ((totalMin - wakeMin) / totalMin) * 100 : 0;
-    let onsetIdx = eps.findIndex(e => e.stage !== 0);
-    const onsetLatencyMin = onsetIdx >= 0 ? (onsetIdx * epochSecs) / 60 : totalMin;
-    let remIdx = eps.findIndex(e => e.stage === 4);
-    const remLatencyMin = remIdx >= 0 && onsetIdx >= 0 ? ((remIdx - onsetIdx) * epochSecs) / 60 : -1;
-    let awakenings = 0;
-    for (let i = 1; i < eps.length; i++) {
-      if (eps[i].stage === 0 && eps[i-1].stage > 0) awakenings++;
-    }
-    const m = (n: number) => (n * epochSecs) / 60;
-    const stageMinutes = {
-      wake: m(sleep.summary.wake_epochs), n1: m(sleep.summary.n1_epochs),
-      n2: m(sleep.summary.n2_epochs), n3: m(sleep.summary.n3_epochs),
-      rem: m(sleep.summary.rem_epochs),
-    };
-    return { efficiency, onsetLatencyMin, remLatencyMin, totalMin, awakenings, stageMinutes };
-  }
+  import type { SleepStages } from "$lib/types";
+  import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";
+  import { fmtTime, fmtDateIso as fmtDate, fmtDuration } from "$lib/format";
 
   // ── Parse query params ────────────────────────────────────────────────────
   let csvPath = $state("");
@@ -65,20 +28,6 @@ the Free Software Foundation, version 3 only. -->
   let sessionMeta = $state<Record<string, any> | null>(null);
   let sleepData = $state<SleepStages | null>(null);
   let sleepAnalysisResult = $state<SleepAnalysis | null>(null);
-
-  function fmtTime(unix: number) {
-    return new Date(unix * 1000).toLocaleTimeString([], { hour:"2-digit", minute:"2-digit", second:"2-digit", hour12: false });
-  }
-  function fmtDate(unix: number) {
-    const d = new Date(unix * 1000);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  }
-  function fmtDuration(s: number) {
-    if (s < 60)   return `${s}s`;
-    if (s < 3600) return `${Math.floor(s/60)}m ${s%60}s`;
-    return `${Math.floor(s/3600)}h ${Math.floor((s%3600)/60)}m`;
-  }
 
   onMount(async () => {
     const params = new URLSearchParams(window.location.search);

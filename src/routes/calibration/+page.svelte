@@ -15,15 +15,11 @@ the Free Software Foundation, version 3 only. -->
   import { t }                   from "$lib/i18n/index.svelte";
   import { useWindowTitle }      from "$lib/window-title.svelte";
   import DisclaimerFooter        from "$lib/DisclaimerFooter.svelte";
+  import type { MuseStatus }    from "$lib/types";
+  import { MUSE_CHANNELS, MUSE_POSITIONS } from "$lib/types";
+  import { fmtDateTimeLocale }  from "$lib/format";
 
   // ── Electrode quality ──────────────────────────────────────────────────────
-  interface MuseStatus {
-    state:           string;
-    channel_quality: string[];
-    [k: string]:     unknown;
-  }
-  const MUSE_CHANNELS       = ["TP9", "AF7", "AF8", "TP10"] as const;
-  const MUSE_POSITIONS      = ["Left ear", "Left forehead", "Right forehead", "Right ear"] as const;
   type ElecTab = "muse" | "10-20" | "10-10";
   const ELEC_TABS: { id: ElecTab; label: string; count: string }[] = [
     { id: "muse",  label: "Muse",  count: "4"  },
@@ -109,12 +105,7 @@ the Free Software Foundation, version 3 only. -->
 
   function sleep(ms: number) { return new Promise<void>(r => setTimeout(r, ms)); }
 
-  function fmtDate(utc: number) {
-    return new Date(utc * 1000).toLocaleDateString(undefined, {
-      year: "numeric", month: "short", day: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  }
+
 
   function timeAgo(utc: number): string {
     const diff = Math.floor(Date.now() / 1000) - utc;
@@ -575,7 +566,7 @@ the Free Software Foundation, version 3 only. -->
           <div class="flex items-center gap-2 rounded-lg border border-border dark:border-white/[0.06]
                       bg-muted dark:bg-[#1a1a28] px-3 py-2">
             <span class="text-[0.6rem] font-semibold text-muted-foreground/70">{t("calibration.lastCalibrated")}</span>
-            <span class="text-[0.65rem] font-medium text-foreground/80">{fmtDate(profile.last_calibration_utc)}</span>
+            <span class="text-[0.65rem] font-medium text-foreground/80">{fmtDateTimeLocale(profile.last_calibration_utc)}</span>
             <span class="text-[0.58rem] text-muted-foreground/50">({timeAgo(profile.last_calibration_utc)})</span>
           </div>
         {:else}
