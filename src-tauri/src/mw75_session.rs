@@ -3,23 +3,26 @@
 //
 // Neurable MW75 Neuro EEG headphone session.
 //
-// The MW75 has a two-phase connection model:
+// Connection lifecycle (mirrors the `mw75` CLI binary):
 //
 // 0. **Power on + pairing** — hold the power button for 4+ seconds until a
 //    sound is heard.  On first use, continue holding to enter pairing mode,
 //    then pair the headphones via the OS Bluetooth settings (required for
 //    audio playback and RFCOMM data transport).
 //
-// 1. **BLE activation** — a short BLE handshake enables EEG mode and queries
-//    the battery level.  After activation, BLE is disconnected.
+// 1. **BLE discover + connect** — scan for the MW75 by name / service UUID,
+//    connect BLE, and subscribe to GATT notifications.
 //
-// 2. **RFCOMM streaming** — EEG data (12 channels at 500 Hz) flows over
-//    Bluetooth Classic RFCOMM channel 25.  The `mw75` crate's `rfcomm`
-//    feature handles the platform-specific socket connection.
+// 2. **BLE activation** — enable EEG mode, optionally enable raw mode (500 Hz),
+//    and query the battery level.
 //
-// The first `min(12, EEG_CHANNELS)` channels are routed through the existing
-// filter / band / embedding pipeline; all 12 channels are written to the
-// session CSV.
+// 3. **Disconnect BLE** — required on macOS before RFCOMM can connect
+//    (CoreBluetooth and IOBluetooth share the radio).
+//
+// 4. **RFCOMM streaming** — EEG data (12 channels at 500 Hz) flows over
+//    Bluetooth Classic RFCOMM channel 25.
+//
+// The entire session runs on a spawned async task — it never blocks the UI.
 
 use std::{
     path::PathBuf,
@@ -70,93 +73,88 @@ pub(crate) async fn run_mw75_session(
     refresh_tray(&app);
     emit_status(&app);
 
-    // 2. Scan — the MW75 must already be paired via the OS Bluetooth settings
-    //    (for audio / RFCOMM).  The BLE scan here finds the device by its
-    //    MW75 GATT service UUID or advertised name.
+    // 2. BLE discover + connect.
+    //
+    //    If we have a preferred_id we scan_all + connect_to so we pair to
+    //    the exact peripheral.  Otherwise use the simpler connect() which
+    //    finds and connects the first MW75 in one step — just like the mw75
+    //    CLI binary does.
     let config = Mw75ClientConfig {
         scan_timeout_secs: 10,
         ..Default::default()
     };
     let client = Mw75Client::new(config);
-    app_log!(app, "bluetooth", "[mw75] scanning for MW75 devices (10s timeout)…");
-    let all_devices = tokio::select! {
-        biased;
-        _ = &mut cancel_rx => { crate::go_disconnected(&app, None, false); return; }
-        r = client.scan_all() => match r {
-            Err(e) => {
-                app_log!(app, "bluetooth", "[mw75] scan error: {e}");
-                let (m, b) = classify_bt_error(&e.to_string());
-                crate::go_disconnected(&app, Some(m), b);
-                return;
+
+    app_log!(app, "bluetooth", "[mw75] scanning (preferred_id={preferred_id:?})…");
+
+    // Helper closure: handle connect failure.
+    let fail_connect = |app: &AppHandle, msg: String| {
+        app_log!(app, "bluetooth", "[mw75] connect failed: {msg}");
+        let (m, b) = classify_bt_error(&msg);
+        crate::go_disconnected(
+            app,
+            Some(format!(
+                "{m}\n\n\
+                 To pair MW75: hold the power button for 4+ seconds,\n\
+                 then pair in System Bluetooth Settings."
+            )),
+            b,
+        );
+    };
+
+    let connect_result = if let Some(ref pref_id) = preferred_id {
+        // Targeted connect — scan_all then pick by ID.
+        let scan_res = tokio::select! {
+            biased;
+            _ = &mut cancel_rx => { crate::go_disconnected(&app, None, false); return; }
+            r = client.scan_all() => r,
+        };
+        match scan_res {
+            Err(e) => { fail_connect(&app, format!("{e}")); return; }
+            Ok(devs) => {
+                app_log!(app, "bluetooth", "[mw75] scan found {} device(s)", devs.len());
+                for d in &devs {
+                    app_log!(app, "bluetooth", "[mw75]   → name={:?} id={}", d.name, d.id);
+                }
+                // Try preferred ID first, then first available MW75.
+                let device = devs.iter().find(|d| &d.id == pref_id).cloned()
+                    .or_else(|| devs.into_iter().next());
+                match device {
+                    Some(dev) => {
+                        app_log!(app, "bluetooth", "[mw75] connecting to {:?} ({})", dev.name, dev.id);
+                        tokio::select! {
+                            biased;
+                            _ = &mut cancel_rx => { crate::go_disconnected(&app, None, false); return; }
+                            r = client.connect_to(dev) => r.map_err(|e| format!("{e}")),
+                        }
+                    }
+                    None => {
+                        fail_connect(&app, "No MW75 device found in BLE scan".into());
+                        return;
+                    }
+                }
             }
-            Ok(d) => d,
         }
-    };
-    app_log!(app, "bluetooth", "[mw75] scan found {} device(s)", all_devices.len());
-    for d in &all_devices {
-        app_log!(app, "bluetooth", "[mw75]   device: name={:?} id={}", d.name, d.id);
-    }
-
-    // 3. Pick device
-    let paired_ids: Vec<String> = {
-        let r = app.state::<Mutex<Box<AppState>>>();
-        let s = r.lock_or_recover();
-        s.status.paired_devices.iter().map(|d| d.id.clone()).collect()
-    };
-    let first_time = paired_ids.is_empty();
-
-    let device = if first_time {
-        all_devices.into_iter().next()
     } else {
-        match &preferred_id {
-            Some(id) => all_devices.iter().find(|d| &d.id == id).cloned(),
-            None     => all_devices.into_iter().find(|d| paired_ids.contains(&d.id)),
+        // No preferred ID — use connect() which scans + connects in one step.
+        tokio::select! {
+            biased;
+            _ = &mut cancel_rx => { crate::go_disconnected(&app, None, false); return; }
+            r = client.connect() => r.map_err(|e| format!("{e}")),
         }
     };
-    app_log!(app, "bluetooth", "[mw75] preferred_id={preferred_id:?} paired_ids={paired_ids:?} first_time={first_time}");
-    let device = match device {
-        Some(d) => d,
-        None => {
-            app_log!(app, "bluetooth", "[mw75] no matching MW75 device found in scan results");
-            crate::go_disconnected(
-                &app,
-                Some("NO_MW75_NEARBY\n\n\
-                      Make sure the MW75 headphones are:\n\
-                      • Powered on (hold power button 4+ seconds until you hear a sound)\n\
-                      • Paired via System Bluetooth Settings \
-                        (hold power button 4+ seconds to enter pairing mode)\n\
-                      • In range".into()),
-                false,
-            );
+
+    let (mut rx, handle) = match connect_result {
+        Ok(v) => v,
+        Err(msg) => {
+            fail_connect(&app, msg);
             return;
         }
     };
 
-    // 3b. Pin the real BLE ID into status before connect_to() takes ownership.
-    let ble_peripheral_id = device.id.clone();
-    let _device_name = device.name.clone();
-    {
-        let sr = app.state::<Mutex<Box<AppState>>>();
-        let mut g = sr.lock_or_recover();
-        g.status.device_id = Some(ble_peripheral_id.clone());
-        g.retry_attempt    = 0;
-    }
+    app_log!(app, "bluetooth", "[mw75] BLE connected, starting activation…");
 
-    // 4. BLE connect
-    let (mut rx, handle) = tokio::select! {
-        biased;
-        _ = &mut cancel_rx => { crate::go_disconnected(&app, None, false); return; }
-        r = client.connect_to(device) => match r {
-            Err(e) => {
-                let (m, b) = classify_bt_error(&e.to_string());
-                crate::go_disconnected(&app, Some(m), b);
-                return;
-            }
-            Ok(v) => v,
-        }
-    };
-
-    // 5. BLE activation — enables EEG + raw mode, queries battery
+    // 3. BLE activation — enables EEG + raw mode, queries battery.
     tokio::select! {
         biased;
         _ = &mut cancel_rx => {
@@ -173,25 +171,28 @@ pub(crate) async fn run_mw75_session(
             }
         }
     }
+    app_log!(app, "bluetooth", "[mw75] activation complete");
 
-    // 6. Disconnect BLE — required before RFCOMM on macOS, recommended on Linux
-    app_log!(app, "bluetooth", "[mw75] BLE activation complete, disconnecting BLE for RFCOMM…");
+    // 4. Disconnect BLE before RFCOMM — required on macOS (CoreBluetooth and
+    //    IOBluetooth share the radio), recommended on Linux.
+    let bt_address = handle.peripheral_id();
+    app_log!(app, "bluetooth", "[mw75] disconnecting BLE (addr={bt_address})…");
     if let Err(e) = handle.disconnect_ble().await {
         app_log!(app, "bluetooth", "[mw75] BLE disconnect warning: {e}");
-        // Non-fatal — continue to RFCOMM anyway
     }
 
-    // 7. Start RFCOMM data stream
+    // 5. Start RFCOMM data stream.
     let handle = Arc::new(handle);
+    app_log!(app, "bluetooth", "[mw75] starting RFCOMM stream…");
     let rfcomm = tokio::select! {
         biased;
         _ = &mut cancel_rx => {
             crate::go_disconnected(&app, None, false);
             return;
         }
-        r = start_rfcomm_stream(handle.clone(), &ble_peripheral_id) => match r {
+        r = start_rfcomm_stream(handle.clone(), &bt_address) => match r {
             Err(e) => {
-                app_log!(app, "bluetooth", "[mw75] RFCOMM connection failed: {e}");
+                app_log!(app, "bluetooth", "[mw75] RFCOMM failed: {e}");
                 crate::go_disconnected(
                     &app,
                     Some(format!(
@@ -207,9 +208,9 @@ pub(crate) async fn run_mw75_session(
         }
     };
 
-    app_log!(app, "bluetooth", "[mw75] RFCOMM connected — EEG data streaming at 500 Hz");
+    app_log!(app, "bluetooth", "[mw75] RFCOMM connected — streaming EEG at {MW75_SAMPLE_RATE} Hz");
 
-    // 8. Open CSV with MW75 channel labels
+    // 6. Open CSV with MW75 channel labels.
     let ch_labels = skill_constants::MW75_CHANNEL_NAMES;
     let label_refs: Vec<&str> = ch_labels.iter().copied().collect();
     let mut csv = match CsvState::open_with_labels(&csv_path, &label_refs) {
@@ -223,11 +224,11 @@ pub(crate) async fn run_mw75_session(
     };
     write_session_meta(&app, &csv_path);
 
-    // 9. Create session-local DSP (lock-free after this point for all DSP).
+    // 7. Session-local DSP (lock-free after this point).
     let mut dsp = SessionDsp::new(&app);
     let pipeline_ch = skill_constants::MW75_EEG_CHANNELS.min(EEG_CHANNELS);
 
-    // 10. Event loop — data arrives as Mw75Event::Eeg from the RFCOMM reader
+    // 8. Event loop — data arrives as Mw75Event::Eeg from RFCOMM.
     let mut user_cancelled = false;
     loop {
         tokio::select! {
@@ -261,7 +262,7 @@ pub(crate) async fn run_mw75_session(
     // Yield so platform-specific cleanup can complete.
     tokio::time::sleep(Duration::from_millis(250)).await;
 
-    // 11. Finalise
+    // 9. Finalise.
     csv.flush();
     write_session_meta(&app, &csv_path);
 
@@ -357,10 +358,8 @@ async fn handle_mw75_event(
                     .as_secs_f64()
             };
 
-            // ── Sync config changes from UI ──────────────────────────────────
             dsp.sync_config(app);
 
-            // ── Status write-back: raw electrode values + sample count ───────
             let ipc_ch = {
                 let sr = app.state::<Mutex<Box<AppState>>>();
                 let mut s = sr.lock_or_recover();
@@ -369,9 +368,8 @@ async fn handle_mw75_event(
                 }
                 s.status.sample_count += 1;
                 s.eeg_channel.clone()
-            }; // lock released — all DSP below is lock-free
+            };
 
-            // ── CSV write + DSP pipeline ─────────────────────────────────────
             let mut filter_fired = false;
             let mut band_fired   = false;
 
@@ -412,7 +410,6 @@ async fn handle_mw75_event(
                 None
             };
 
-            // ── Write quality back (brief lock, after DSP completes) ─────────
             if filter_fired {
                 let qualities = dsp.quality.all_qualities();
                 let sr = app.state::<Mutex<Box<AppState>>>();
@@ -433,9 +430,8 @@ async fn handle_mw75_event(
             }
 
             if let Some(mut snap) = band_snap {
-                // ── Enrich snap via shared skill-devices logic ───────────────
                 let enrich_ctx = skill_devices::SnapshotContext {
-                    ppg:             None, // MW75 has no PPG
+                    ppg:             None,
                     artifacts:       Some(dsp.artifact_detector.metrics()),
                     head_pose:       Some(dsp.head_pose.metrics()),
                     temperature_raw: 0,
@@ -506,7 +502,6 @@ async fn handle_mw75_event(
                         0.0
                     };
 
-                // Write the latest band snapshot back.
                 {
                     let sr = app.state::<Mutex<Box<AppState>>>();
                     sr.lock_or_recover().latest_bands = Some(snap.clone());
@@ -547,6 +542,7 @@ async fn handle_mw75_event(
 
         // ── Battery ──────────────────────────────────────────────────────────
         Mw75Event::Battery(bat) => {
+            app_log!(app, "bluetooth", "[mw75] battery: {}%", bat.level);
             let level = bat.level as f32;
             let r = app.state::<Mutex<Box<AppState>>>();
             let mut s = r.lock_or_recover();
