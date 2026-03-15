@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 // ── Embedded catalog ──────────────────────────────────────────────────────────
 
 /// The bundled default catalog, embedded at compile time.
-const BUNDLED_CATALOG_JSON: &str = include_str!("../llm_catalog.json");
+const BUNDLED_CATALOG_JSON: &str = include_str!("../../../src-tauri/llm_catalog.json");
 
 // Re-export from skill-constants.
 pub use skill_constants::LLM_CATALOG_FILE as CATALOG_FILE;
