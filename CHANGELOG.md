@@ -1239,6 +1239,20 @@ All notable changes to NeuroSkill™ are documented here.
 - Refactored 15 window-open functions to use the shared helpers: `open_settings_window`, `open_help_window`, `open_search_window`, `open_labels_window`, `open_label_window`, `open_api_window`, `open_whats_new_window`, `open_onboarding_window`, `open_model_tab`, `open_updates_window`, `open_history_window`, `open_downloads_window`, `open_chat_window`, `open_about_window`, `open_compare_window`
 - Removed unused `Manager` imports from `history_cmds.rs` and `about.rs`
 
+### UI: history day view — 24×720 heatmap grid
+
+- Replaced the linear 24-hour timeline bar and epoch dot canvas with a dense heatmap grid
+- Layout: 24 columns (one per hour) × 720 rows (one per 5-second bin within each hour)
+- Each filled cell uses the session's assigned color with opacity modulated by `(relaxation + engagement) / 2`
+- Hour header strip with all 24 labels; every-6th-hour labels bolded
+- Faint vertical hour separators and horizontal 15-minute grid lines for orientation
+- Minute labels (`:00`, `:15`, `:30`, `:45`) along the left edge
+- Canvas height fixed at 720px inside a scrollable container (max 420px visible)
+- Labels rendered as rainbow-colored circles with glow + white ring at their exact grid cell
+- Cursor-following tooltip shows `HH:MM:SS` timestamp and relaxation/engagement values + any labels in the hovered 5-second bin
+- Dark/light mode detection via `document.documentElement.classList.contains("dark")` for proper canvas theming
+- Session color legend with start→end times preserved in the footer strip
+
 ### Refactor: rename apple-ocr → skill-vision
 
 - Renamed `crates/apple-ocr/` to `crates/skill-vision/` for naming consistency with the rest of the workspace (`skill-*` convention)

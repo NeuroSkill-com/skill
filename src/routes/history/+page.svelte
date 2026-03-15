@@ -607,6 +607,191 @@ the Free Software Foundation, version 3 only. -->
     }
   }
 
+  // ── Day-grid heatmap (24 cols × 720 rows) ────────────────────────────────
+  const GRID_COLS = 24;          // one column per hour
+  const GRID_ROWS = 720;         // 3600s / 5s = 720 rows per hour
+  const GRID_BIN  = 5;           // seconds per row
+
+  /** Tooltip state for the day-grid canvas. */
+  let gridTooltip = $state<{ x: number; y: number; hour: number; row: number; time: string; values: { label: string; val: string; color: string }[] } | null>(null);
+
+  /** Svelte action: render the 24×720 heatmap grid on canvas. */
+  function drawDayGrid(
+    canvas: HTMLCanvasElement,
+    data: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }
+  ) {
+    renderDayGrid(canvas, data);
+    const onMove = (e: MouseEvent) => handleGridHover(canvas, e, data);
+    const onLeave = () => { gridTooltip = null; };
+    canvas.addEventListener("mousemove", onMove);
+    canvas.addEventListener("mouseleave", onLeave);
+    return {
+      update(d: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }) {
+        renderDayGrid(canvas, d);
+        canvas.removeEventListener("mousemove", onMove);
+        canvas.removeEventListener("mouseleave", onLeave);
+        const onMove2 = (e: MouseEvent) => handleGridHover(canvas, e, d);
+        const onLeave2 = () => { gridTooltip = null; };
+        canvas.addEventListener("mousemove", onMove2);
+        canvas.addEventListener("mouseleave", onLeave2);
+      },
+      destroy() {
+        canvas.removeEventListener("mousemove", onMove);
+        canvas.removeEventListener("mouseleave", onLeave);
+      }
+    };
+  }
+
+  /** Resolve grid cell under mouse and build tooltip data. */
+  function handleGridHover(
+    canvas: HTMLCanvasElement,
+    e: MouseEvent,
+    data: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }
+  ) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    const colW = w / GRID_COLS;
+    const rowH = h / GRID_ROWS;
+    const col = Math.floor(mx / colW);
+    const row = Math.floor(my / rowH);
+    if (col < 0 || col >= GRID_COLS || row < 0 || row >= GRID_ROWS) {
+      gridTooltip = null; return;
+    }
+    const secInDay = col * 3600 + row * GRID_BIN;
+    const cellT = data.dayStart + secInDay;
+    const cellEnd = cellT + GRID_BIN;
+    const hh = String(col).padStart(2, "0");
+    const mm = String(Math.floor((row * GRID_BIN) / 60)).padStart(2, "0");
+    const ss = String((row * GRID_BIN) % 60).padStart(2, "0");
+    const timeStr = `${hh}:${mm}:${ss}`;
+    const values: { label: string; val: string; color: string }[] = [];
+    for (let sIdx = 0; sIdx < data.sessions.length; sIdx++) {
+      const s = data.sessions[sIdx];
+      const ts = getTs(s.csv_path);
+      if (!ts) continue;
+      for (const ep of ts) {
+        if (ep.t >= cellT && ep.t < cellEnd) {
+          values.push(
+            { label: "relax", val: ep.relaxation.toFixed(2), color: sessionColor(sIdx) },
+            { label: "engage", val: ep.engagement.toFixed(2), color: sessionColor(sIdx) },
+          );
+          break;
+        }
+      }
+    }
+    // Check for labels in this cell
+    for (const lbl of data.labels) {
+      if (lbl.eeg_start >= cellT && lbl.eeg_start < cellEnd) {
+        const lColor = dayLabelColors.get(lbl.id) ?? "#f59e0b";
+        values.push({ label: "label", val: lbl.text, color: lColor });
+      }
+    }
+    gridTooltip = { x: e.clientX, y: e.clientY, hour: col, row, time: timeStr, values };
+  }
+
+  function renderDayGrid(
+    canvas: HTMLCanvasElement,
+    data: { sessions: SessionEntry[]; dayStart: number; labels: LabelRow[] }
+  ) {
+    const dpr = devicePixelRatio || 1;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (w === 0 || h === 0) return;
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const { sessions, dayStart, labels } = data;
+    const colW = w / GRID_COLS;
+    const rowH = h / GRID_ROWS;
+
+    // ① Background — detect dark mode via the document class or media query
+    const isDark = document.documentElement.classList.contains("dark") ||
+                   window.matchMedia("(prefers-color-scheme: dark)").matches;
+    ctx.fillStyle = isDark ? "#0a0a14" : "#f8f8fa";
+    ctx.fillRect(0, 0, w, h);
+
+    // ② Build a lookup: for each grid cell, store the best epoch data.
+    //    Key = col * GRID_ROWS + row → { relaxation, engagement, sessionIdx }
+    const cellData = new Map<number, { relaxation: number; engagement: number; sIdx: number }>();
+
+    for (let sIdx = 0; sIdx < sessions.length; sIdx++) {
+      const ts = getTs(sessions[sIdx].csv_path);
+      if (!ts) continue;
+      for (const ep of ts) {
+        const secOff = ep.t - dayStart;
+        if (secOff < 0 || secOff >= 86400) continue;
+        const col = Math.floor(secOff / 3600);
+        const row = Math.floor((secOff % 3600) / GRID_BIN);
+        const key = col * GRID_ROWS + row;
+        if (!cellData.has(key)) {
+          cellData.set(key, { relaxation: ep.relaxation, engagement: ep.engagement, sIdx });
+        }
+      }
+    }
+
+    // ③ Draw filled cells
+    for (const [key, d] of cellData) {
+      const col = Math.floor(key / GRID_ROWS);
+      const row = key % GRID_ROWS;
+      const x = col * colW;
+      const y = row * rowH;
+      // Use session color as base, modulate brightness by relaxation
+      const baseColor = SESSION_COLORS[d.sIdx % SESSION_COLORS.length];
+      const intensity = Math.max(0.15, Math.min(1, (d.relaxation + d.engagement) / 2));
+      ctx.globalAlpha = intensity;
+      ctx.fillStyle = baseColor;
+      ctx.fillRect(x, y, Math.ceil(colW), Math.ceil(rowH));
+    }
+    ctx.globalAlpha = 1.0;
+
+    // ④ Draw hour separator lines
+    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)";
+    ctx.lineWidth = 0.5;
+    for (let c = 1; c < GRID_COLS; c++) {
+      const x = c * colW;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+
+    // ⑤ Draw 15-minute horizontal grid lines (faint)
+    ctx.strokeStyle = isDark ? "rgba(255,255,255,0.025)" : "rgba(0,0,0,0.03)";
+    for (let min = 15; min < 60; min += 15) {
+      const y = (min * 60 / GRID_BIN) * rowH; // row index for this minute mark
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+
+    // ⑥ Draw labels as rainbow circles at their grid position
+    if (labels.length > 0) {
+      const labelColors = assignLabelRainbowColors(labels);
+      const dotR = Math.max(2.5, Math.min(5, colW * 0.15));
+      ctx.globalAlpha = 0.95;
+      for (const label of labels) {
+        const secOff = label.eeg_start - dayStart;
+        if (secOff < 0 || secOff >= 86400) continue;
+        const col = Math.floor(secOff / 3600);
+        const row = Math.floor((secOff % 3600) / GRID_BIN);
+        const cx = col * colW + colW / 2;
+        const cy = row * rowH + rowH / 2;
+        const color = labelColors.get(label.id) ?? "#f59e0b";
+        // Glow
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(cx, cy, dotR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        // White ring
+        ctx.strokeStyle = "rgba(255,255,255,0.7)";
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1.0;
+    }
+  }
+
   /** Collect all labels for a day from sessions. */
   function labelsForDay(dayKey: string, sessionsForDay: SessionEntry[]): LabelRow[] {
     const all: LabelRow[] = [];
@@ -1269,140 +1454,125 @@ the Free Software Foundation, version 3 only. -->
             <Separator class="flex-1 bg-border dark:bg-white/[0.06]" />
           </div>
 
-          <!-- 24-hour timeline bar -->
-          {#if sessions.length > 0 || dayLoading}
-            <div class="rounded-lg border border-border dark:border-white/[0.06]
-                        bg-white dark:bg-[#14141e] overflow-hidden">
-              <!-- Hour ticks -->
-              <div class="relative h-4 bg-muted/30 dark:bg-white/[0.02] select-none">
-                {#each [0,3,6,9,12,15,18,21] as h}
-                  <span class="absolute top-0 text-[7px] text-muted-foreground/40 tabular-nums"
-                        style="left:{(h/24)*100}%; transform:translateX({h === 0 ? '1px' : h >= 21 ? '-100%' : '-50%'})">
-                    {String(h).padStart(2,"0")}:00
-                  </span>
-                  <span class="absolute bottom-0 w-px h-1 bg-border dark:bg-white/[0.08]"
-                        style="left:{(h/24)*100}%"></span>
-                {/each}
-              </div>
-              <!-- Session segments -->
-              <div class="relative h-7 bg-muted/10 dark:bg-white/[0.01]">
-                {#each [6,12,18] as h}
-                  <span class="absolute top-0 bottom-0 w-px bg-border/50 dark:bg-white/[0.04]"
-                        style="left:{(h/24)*100}%"></span>
-                {/each}
-                {#each timelineSessions as { s: session, i: origIdx } (session.csv_path)}
-                  {#if session.session_start_utc && session.session_end_utc}
-                    {@const leftPct  = dayPct(session.session_start_utc, currentDayStart)}
-                    {@const widthPct = Math.max(0.4, dayPct(session.session_end_utc, currentDayStart) - leftPct)}
-                    {@const color    = sessionColor(origIdx)}
-                    {@const isExpanded = !!expanded[session.csv_path]}
-                    {@const dur      = fmtDuration(session.session_start_utc, session.session_end_utc)}
-                    <!-- svelte-ignore a11y_no_static_element_interactions -->
-                    <button
-                      class="absolute top-1 bottom-1 rounded-[3px] cursor-pointer transition-all duration-150
-                             overflow-hidden flex items-center justify-center
-                             {isExpanded ? 'ring-2 ring-offset-1 ring-offset-background' : ''}
-                             {hoveredSession === session.csv_path ? 'brightness-110 scale-y-110' : ''}"
-                      style="left:{leftPct}%; width:{widthPct}%; background:{color};
-                             opacity:{isExpanded ? 1 : 0.7};
-                             z-index:{hoveredSession === session.csv_path || isExpanded ? 20 : 1};
-                             {isExpanded ? `ring-color:${color}` : ''}"
-                      title="{fmtTimeShort(session.session_start_utc)} → {fmtTimeShort(session.session_end_utc)} · {dur}"
-                      onmouseenter={() => hoveredSession = session.csv_path}
-                      onmouseleave={() => hoveredSession = null}
-                      onclick={() => toggleExpand(session.csv_path)}>
-                      {#if widthPct > 4}
-                        <span class="text-[7px] font-semibold text-white truncate px-0.5 drop-shadow-sm">{dur}</span>
-                      {/if}
-                    </button>
-                  {:else if session.session_end_utc}
-                    <!-- orphaned CSV (no JSON sidecar): tiny dot pinned at end time only -->
-                    {@const leftPct  = dayPct(session.session_end_utc, currentDayStart)}
-                    {@const color    = sessionColor(origIdx)}
-                    {@const isExpanded = !!expanded[session.csv_path]}
-                    <!-- svelte-ignore a11y_no_static_element_interactions -->
-                    <button
-                      class="absolute top-1 bottom-1 rounded-[3px] cursor-pointer transition-all duration-150
-                             overflow-hidden flex items-center justify-center
-                             {isExpanded ? 'ring-2 ring-offset-1 ring-offset-background' : ''}
-                             {hoveredSession === session.csv_path ? 'brightness-110 scale-y-110' : ''}"
-                      style="left:{leftPct}%; width:0.4%; background:{color};
-                             opacity:{isExpanded ? 1 : 0.55};
-                             z-index:{hoveredSession === session.csv_path || isExpanded ? 20 : 1};"
-                      title="? → {fmtTimeShort(session.session_end_utc)} · ?"
-                      onmouseenter={() => hoveredSession = session.csv_path}
-                      onmouseleave={() => hoveredSession = null}
-                      onclick={() => toggleExpand(session.csv_path)}>
-                    </button>
-                  {/if}
-                {/each}
-              </div>
-            </div>
-          {/if}
-
-          <!-- Epoch dot timeline -->
+          <!-- Day grid heatmap (24 hour-columns × 720 five-second rows) -->
           {#if sessions.length > 0}
             {@const dayLbls = sessions.flatMap(s => s.labels)}
             {@const anyTs   = sessions.some(s => { const ts = tsCache[s.csv_path]; return ts && ts !== "loading" && (ts as EpochRow[]).length > 0; })}
-            {#if anyTs}
-              <div class="rounded-lg border border-border dark:border-white/[0.06]
-                          bg-white dark:bg-[#14141e] overflow-hidden"
-                   style="--dot-grid:{'rgba(128,128,128,0.06)'}; --dot-hour-text:{'rgba(128,128,128,0.3)'}; --dot-label-text:{'rgba(245,158,11,0.75)'};">
-                {#key sessions.map(s => tsCache[s.csv_path] === "loading" ? "l" : "r").join(",")}
-                  <canvas class="w-full h-20"
-                          use:drawDayDots={{ sessions, dayStart: currentDayStart, labels: dayLbls }}>
-                  </canvas>
-                {/key}
-                <!-- Session color legend -->
-                <div class="flex items-center gap-3 px-2.5 py-1 border-t border-border/20 dark:border-white/[0.03]
-                            bg-muted/10 dark:bg-white/[0.005]">
-                  {#each sessions as session, idx}
-                    {#if session.session_start_utc}
-                      <div class="flex items-center gap-1">
-                        <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{sessionColor(idx)}"></span>
-                        <span class="text-[0.46rem] text-muted-foreground/50 tabular-nums">
-                          {fmtTimeShort(session.session_start_utc)}
-                        </span>
-                      </div>
-                    {/if}
-                  {/each}
-                  {#if dayLbls.length > 0}
-                    <div class="flex items-center gap-1 ml-auto">
-                      {#each dayLbls as label (label.id)}
-                        {@const lColor = dayLabelColors.get(label.id) ?? "#f59e0b"}
-                        {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
-                        {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
-                        {@const isHoveredSelf = hoveredLabelId === label.id}
-                        <div class="group/lbl relative">
-                          <span
-                            class="block w-1.5 h-1.5 rounded-full cursor-default transition-all duration-150
-                                   {isHoveredSelf ? 'scale-[2] ring-1 ring-white/50 shadow-md' :
-                                    isExact ? 'scale-[1.6] ring-[0.5px] ring-white/40' :
-                                    isClose ? 'scale-[1.3] brightness-125' : ''}"
-                            style="background:{lColor};
-                                   {isExact && !isHoveredSelf ? `box-shadow: 0 0 4px 1px ${lColor}` : ''}"
-                            onmouseenter={() => hoveredLabelId = label.id}
-                            onmouseleave={() => hoveredLabelId = null}>
-                          </span>
-                          <!-- Hover tooltip -->
-                          <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5
-                                      opacity-0 group-hover/lbl:opacity-100 transition-opacity duration-150 z-50
-                                      whitespace-nowrap max-w-[180px]">
-                            <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
-                                        shadow-lg px-1.5 py-1 text-popover-foreground">
-                              <span class="block text-[0.55rem] font-medium leading-tight truncate">{label.text}</span>
-                              <span class="block text-[0.42rem] text-muted-foreground/60 tabular-nums mt-0.5">
-                                {fmtTimeShort(label.eeg_start)}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      {/each}
+
+            <div class="rounded-lg border border-border dark:border-white/[0.06]
+                        bg-white dark:bg-[#14141e] overflow-hidden relative">
+              <!-- Hour labels header -->
+              <div class="relative h-5 bg-muted/30 dark:bg-white/[0.02] select-none flex">
+                {#each Array(24) as _, hr}
+                  <span class="flex-1 text-center text-[6.5px] leading-[20px] tabular-nums
+                               text-muted-foreground/40 border-r border-border/10 dark:border-white/[0.03] last:border-r-0
+                               {hr % 6 === 0 ? 'font-semibold text-muted-foreground/60' : ''}">
+                    {String(hr).padStart(2,"0")}
+                  </span>
+                {/each}
+              </div>
+              <!-- Heatmap canvas (scrollable) -->
+              <div class="overflow-y-auto max-h-[420px] scrollbar-thin relative">
+                {#if anyTs}
+                  {#key sessions.map(s => tsCache[s.csv_path] === "loading" ? "l" : "r").join(",")}
+                    <canvas class="w-full" style="height:720px;"
+                            use:drawDayGrid={{ sessions, dayStart: currentDayStart, labels: dayLbls }}>
+                    </canvas>
+                  {/key}
+                {:else}
+                  <!-- Skeleton while timeseries loads -->
+                  <div class="w-full h-40 flex items-center justify-center">
+                    <Spinner size="w-4 h-4" class="text-muted-foreground/30" />
+                  </div>
+                {/if}
+                <!-- Minute labels on the left edge -->
+                {#if anyTs}
+                  <div class="absolute top-0 left-0 pointer-events-none" style="height:720px;">
+                    {#each [0,15,30,45] as min}
+                      <span class="absolute left-0.5 text-[5.5px] text-muted-foreground/25 tabular-nums"
+                            style="top:{(min / 60) * 100}%;">
+                        :{String(min).padStart(2,"0")}
+                      </span>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+              <!-- Session color legend -->
+              <div class="flex items-center gap-3 px-2.5 py-1 border-t border-border/20 dark:border-white/[0.03]
+                          bg-muted/10 dark:bg-white/[0.005]">
+                {#each sessions as session, idx}
+                  {#if session.session_start_utc}
+                    <div class="flex items-center gap-1">
+                      <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{sessionColor(idx)}"></span>
+                      <span class="text-[0.46rem] text-muted-foreground/50 tabular-nums">
+                        {fmtTimeShort(session.session_start_utc)} → {fmtTimeShort(session.session_end_utc)}
+                      </span>
                     </div>
                   {/if}
-                </div>
+                {/each}
+                {#if dayLbls.length > 0}
+                  <div class="flex items-center gap-1 ml-auto">
+                    {#each dayLbls as label (label.id)}
+                      {@const lColor = dayLabelColors.get(label.id) ?? "#f59e0b"}
+                      {@const isExact = hoveredLabelRelations?.exactIds.has(label.id) ?? false}
+                      {@const isClose = hoveredLabelRelations?.closeIds.has(label.id) ?? false}
+                      {@const isHoveredSelf = hoveredLabelId === label.id}
+                      <div class="group/lbl relative">
+                        <span
+                          class="block w-1.5 h-1.5 rounded-full cursor-default transition-all duration-150
+                                 {isHoveredSelf ? 'scale-[2] ring-1 ring-white/50 shadow-md' :
+                                  isExact ? 'scale-[1.6] ring-[0.5px] ring-white/40' :
+                                  isClose ? 'scale-[1.3] brightness-125' : ''}"
+                          style="background:{lColor};
+                                 {isExact && !isHoveredSelf ? `box-shadow: 0 0 4px 1px ${lColor}` : ''}"
+                          onmouseenter={() => hoveredLabelId = label.id}
+                          onmouseleave={() => hoveredLabelId = null}>
+                        </span>
+                        <!-- Hover tooltip -->
+                        <div class="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5
+                                    opacity-0 group-hover/lbl:opacity-100 transition-opacity duration-150 z-50
+                                    whitespace-nowrap max-w-[180px]">
+                          <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
+                                      shadow-lg px-1.5 py-1 text-popover-foreground">
+                            <span class="block text-[0.55rem] font-medium leading-tight truncate">{label.text}</span>
+                            <span class="block text-[0.42rem] text-muted-foreground/60 tabular-nums mt-0.5">
+                              {fmtTimeShort(label.eeg_start)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
               </div>
-            {/if}
+            </div>
+          {:else if dayLoading}
+            <div class="rounded-lg border border-border dark:border-white/[0.06]
+                        bg-white dark:bg-[#14141e] p-4 flex items-center justify-center">
+              <Spinner size="w-4 h-4" class="text-muted-foreground/30" />
+            </div>
+          {/if}
+
+          <!-- Grid tooltip (follows cursor, portal-style) -->
+          {#if gridTooltip}
+            <div class="fixed pointer-events-none z-[100]"
+                 style="left:{gridTooltip.x + 12}px; top:{gridTooltip.y - 8}px;">
+              <div class="rounded-md bg-popover border border-border dark:border-white/[0.1]
+                          shadow-xl px-2.5 py-1.5 text-popover-foreground min-w-[80px]">
+                <span class="block text-[0.62rem] font-bold tabular-nums">{gridTooltip.time}</span>
+                {#if gridTooltip.values.length > 0}
+                  {#each gridTooltip.values as v}
+                    <div class="flex items-center gap-1.5 mt-0.5">
+                      <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{v.color}"></span>
+                      <span class="text-[0.5rem] text-muted-foreground/70">{v.label}:</span>
+                      <span class="text-[0.5rem] font-medium truncate max-w-[120px]">{v.val}</span>
+                    </div>
+                  {/each}
+                {:else}
+                  <span class="text-[0.48rem] text-muted-foreground/40 italic">no data</span>
+                {/if}
+              </div>
+            </div>
           {/if}
 
           <!-- Session list (lazy chart rendering via IntersectionObserver) -->
