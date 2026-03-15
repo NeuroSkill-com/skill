@@ -23,9 +23,9 @@
 >
 > **This software is provided for non-commercial research and educational use only.**
 
-**NeuroSkill™** is a desktop neurofeedback and brain-computer interface application for the BCI devices. It streams, analyses, embeds, and visualises EXG data in real time — all processing runs locally on-device.
+**NeuroSkill™** is a desktop neurofeedback and brain-computer interface application for BCI devices. It streams, analyses, embeds, and visualises EXG data in real time — all processing runs locally on-device.
 
-Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 frontend). Runs on **macOS** (Apple Silicon) and **Windows** (x86-64 MSVC).
+Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 frontend). Runs on **macOS** (Apple Silicon), **Windows** (x86-64 MSVC), and **Linux** (x86-64, experimental).
 
 ---
 
@@ -33,38 +33,22 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 
 - [Features](#features)
 - [Architecture](#architecture)
-  - [Data Flow](#data-flow)
-- [Data Storage](#data-storage)
-  - [SQLite Schema](#sqlite-schema-embeddings-table)
-- [Computed Metrics Reference](#computed-metrics-reference)
-  - [Band Powers](#band-powers)
-  - [Derived Scores](#derived-scores)
-  - [Frontal Alpha Asymmetry (FAA)](#frontal-alpha-asymmetry-faa)
-  - [Cross-Band Ratios](#cross-band-ratios)
-  - [Spectral Shape Metrics](#spectral-shape-metrics)
-  - [Cross-Channel Metrics](#cross-channel-metrics)
-  - [Time-Domain Features (Hjorth Parameters)](#time-domain-features-hjorth-parameters)
-  - [Nonlinear Complexity Measures](#nonlinear-complexity-measures)
-  - [Cross-Frequency Coupling](#cross-frequency-coupling)
-  - [Spatial Asymmetry](#spatial-asymmetry)
-  - [PPG-Derived Metrics](#ppg-derived-metrics)
-  - [Composite Indices](#composite-indices)
-- [WebSocket API](#websocket-api)
-  - [Discovery](#discovery)
-  - [Broadcast Events](#broadcast-events-server--client)
-  - [Commands](#commands-client--server)
-  - [REST API Shortcuts](#rest-api-shortcuts)
-- [Keyboard Shortcuts](#keyboard-shortcuts)
-  - [Global](#global-system-wide-work-even-when-window-is-hidden)
-  - [In-app](#in-app)
+- [Project layout](#project-layout)
+  - [Workspace crates](#workspace-crates)
+  - [Vendored crates](#vendored-crates)
+  - [Frontend](#frontend)
+- [Documentation](#documentation)
+- [Data storage](#data-storage)
+- [WebSocket & REST API](#websocket--rest-api)
+- [Keyboard shortcuts](#keyboard-shortcuts)
 - [Development](#development)
   - [Prerequisites](#prerequisites)
   - [Setup](#setup)
   - [Install (Homebrew)](#install-homebrew-macos-apple-silicon)
   - [Build](#build)
-  - [Linux Packaging](#linux-packaging-quickstart)
-  - [Project Structure](#project-structure)
-  - [Pre-commit Checks](#pre-commit-checks)
+  - [Build cache](#build-cache-optional-recommended)
+  - [Linux packaging](#linux-packaging-quickstart)
+  - [Pre-commit checks](#pre-commit-checks)
 - [Versioning](#versioning)
 - [Release](#release)
 - [License](#license)
@@ -75,27 +59,23 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 
 | Feature | Description |
 |---------|-------------|
-| **Live EXG Waveforms** | multi-channel real-time scrolling waveform with glow effect, gradient fill, live-edge pulse dot, configurable bandpass filter, and signal-quality indicators |
+| **Live EXG Waveforms** | Multi-channel real-time scrolling waveform with glow effect, gradient fill, live-edge pulse dot, configurable bandpass filter, and signal-quality indicators |
 | **GPU Band-Power Analysis** | Hann-windowed 512-sample FFT via `gpu_fft` — all 4 channels in a single GPU dispatch at ~4 Hz. Six clinical EXG bands (0.5–100 Hz) |
 | **ZUNA Neural Embeddings** | GPU-accelerated transformer encoder (ZUNA) converts 5-second EXG epochs into 32-dimensional embedding vectors for similarity search |
-| **Session Compare** | Side-by-side comparison of any two recording sessions: band powers, derived scores, FAA, sleep staging, and 3D UMAP embedding projection. Launch directly from History via **Quick Compare** mode |
-| **Quick Compare** | Select any two sessions from the History list with checkboxes; opens compare window pre-loaded with both sessions |
-| **3D UMAP Viewer** | Interactive Three.js scatter plot of session embeddings projected to 3D. Auto-orbit, hover tooltips, click-to-connect labelled points with multi-label support |
+| **Session Compare** | Side-by-side comparison of any two recording sessions: band powers, derived scores, FAA, sleep staging, and 3D UMAP embedding projection |
+| **3D UMAP Viewer** | Interactive Three.js scatter plot of session embeddings projected to 3D. Auto-orbit, hover tooltips, click-to-connect labelled points |
 | **Sleep Staging** | Automatic Wake/N1/N2/N3/REM classification from band-power ratios with hypnogram visualisation |
-| **Label System** | Attach user-defined tags to moments during recording. Full CRUD management window (search, inline edit, delete). Labels stored alongside embeddings and visualised in UMAP |
-| **Focus Timer** | Pomodoro-style work/break timer (25/5, 50/10, 15/5, or custom). Optional auto-label EXG at each phase transition. Launched from tray, Command Palette, or global shortcut |
-| **Calibration Presets** | 9 one-click presets (Baseline, Focus/Relax, Meditation, TBR, Pre-sleep, Gaming, Children, Clinical, Stress) that fill all calibration fields automatically |
-| **Onboarding Checklist** | Dashboard card tracking first-time setup: pair device → calibrate → 5-min session → set goal. Progress persisted in localStorage |
-| **Similarity Search** | Approximate nearest-neighbour search across daily HNSW indices to find similar brain states. Streaming results via Tauri `Channel` — results appear as each query completes |
-| **WebSocket API** | JSON-based LAN API with mDNS discovery (`_skill._tcp`). Commands: `status`, `label`, `search`, `compare`, `sessions`, `sleep`, `umap`, `umap_poll`. Built-in CLI/Python/Node.js code examples in the API window |
-| **Job Queue** | Serial background queue for expensive compute (UMAP). Context menu shows live queue depth and ETA. Returns ETA immediately; frontend polls for results |
-| **PPG Sensor** | Records ambient, infrared, and red PPG channels alongside EXG |
-| **Calibration** | Guided eyes-open / eyes-closed protocol with labelled epoch recording. 9 use-case presets for common scenarios |
-| **Tray Menu** | System tray with connection status, Open NeuroSkill™ (⌘⇧O), Focus Timer (⌘⇧P), Session Compare (⌘⇧M), and quick actions |
-| **Keyboard Shortcuts** | Press `?` anywhere for a full shortcut cheat sheet. All global shortcuts configurable in Settings → Shortcuts |
-| **Quit Protection** | Modal confirmation when quitting during an active recording — prevents accidental data loss |
-| **History — Day Streaming** | Session history loads day-by-day with a live progress bar, so large archives appear incrementally rather than blocking |
-| **i18n** | English, German, French, Hebrew, Ukrainian. Automated sync script (`npm run sync:i18n:check`) verifies all 5 locales stay in sync |
+| **Label System** | Attach user-defined tags to moments during recording. Full CRUD, stored alongside embeddings and visualised in UMAP |
+| **Focus Timer** | Pomodoro-style work/break timer with optional auto-label EXG at each phase transition |
+| **Similarity Search** | Approximate nearest-neighbour search across daily HNSW indices with streaming results |
+| **Screenshot Capture** | Periodic screenshots with CLIP vision embedding, OCR, and HNSW-based visual search |
+| **Local LLM** | On-device chat with function calling via llama.cpp — Metal, CUDA, and Vulkan GPU backends |
+| **Text-to-Speech** | KittenTTS and NeuTTS backends for voice feedback during sessions |
+| **Proactive Hooks** | Background monitoring that triggers actions when brain-state matches configured labels |
+| **DND Focus Mode** | Automatic Do Not Disturb toggling driven by real-time focus scores |
+| **WebSocket API** | JSON-based LAN API with mDNS discovery (`_skill._tcp`) |
+| **Keyboard Shortcuts** | Fully configurable global and in-app shortcuts. Press `?` for cheat sheet |
+| **i18n** | English, German, French, Hebrew, Ukrainian |
 
 ---
 
@@ -115,7 +95,7 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 └─────────────────────────────────────────────────────┘
 ```
 
-### Data Flow
+### Data flow
 
 1. **BLE** → Raw EXG samples at 256 Hz (4 channels × 12 samples/packet)
 2. **Signal Filter** → Bandpass + notch filter for display
@@ -125,190 +105,94 @@ Built with **Tauri v2** (Rust backend) + **SvelteKit** (TypeScript/Svelte 5 fron
 
 ---
 
-## Data Storage
+## Project layout
+
+### Workspace crates
+
+The Rust backend is split into focused, zero-Tauri-dependency crates under [`crates/`](crates/). Each has its own README with full API documentation.
+
+| Crate | Description |
+|---|---|
+| [`skill-constants`](crates/skill-constants/) | Single source of truth for all constants (sample rates, bands, file names, HNSW params) |
+| [`skill-eeg`](crates/skill-eeg/) | Real-time EEG signal processing — filter pipeline, band powers, quality monitor, artifact detection, head pose |
+| [`skill-exg`](crates/skill-exg/) | EEG embedding helpers — cosine distance, fuzzy matching, HuggingFace weight management, GPU cache, epoch metrics |
+| [`skill-devices`](crates/skill-devices/) | Device-session logic — composite EEG scores, battery EMA, DND focus-mode decision engine |
+| [`skill-data`](crates/skill-data/) | Shared data layer — label store, activity store, hooks log, screenshot store, device types, DND, GPU stats |
+| [`skill-commands`](crates/skill-commands/) | Embedding search engine — HNSW K-NN search, streaming results, graph generation (DOT/SVG), PCA projection |
+| [`skill-label-index`](crates/skill-label-index/) | Cross-modal HNSW label indices (text, context, EEG) with rebuild/insert/search |
+| [`skill-router`](crates/skill-router/) | UMAP projection (GPU), embedding loaders, cluster analysis, metric rounding, WS command registry |
+| [`skill-jobs`](crates/skill-jobs/) | Sequential background job queue for expensive compute (UMAP, model downloads) |
+| [`skill-settings`](crates/skill-settings/) | Persistent configuration types and JSON I/O — all user settings, calibration, hooks |
+| [`skill-screenshots`](crates/skill-screenshots/) | Screenshot capture, CLIP vision embedding (ONNX), OCR (ocrs / Apple Vision), HNSW search |
+| [`skill-llm`](crates/skill-llm/) | Local LLM inference engine — model catalog, chat store, llama.cpp, streaming generation |
+| [`skill-tools`](crates/skill-tools/) | LLM function-calling — tool definitions, argument validation, execution, safety checks |
+| [`skill-tts`](crates/skill-tts/) | Text-to-speech — KittenTTS and NeuTTS backends, voice management, audio playback |
+| [`skill-tray`](crates/skill-tray/) | System tray helpers — progress-ring overlay, shortcut formatting, dedup (pure `std`) |
+| [`skill-autostart`](crates/skill-autostart/) | Platform-specific launch-at-login registration (macOS/Linux/Windows) |
+| [`skill-vision`](crates/skill-vision/) | Apple Vision framework OCR via compiled Objective-C FFI (macOS only) |
+
+### Vendored crates
+
+| Crate | Description |
+|---|---|
+| [`fast-hnsw`](src-tauri/vendor/fast-hnsw/) | Pure-Rust HNSW approximate nearest-neighbour search |
+| [`rdev`](src-tauri/vendor/rdev/) | Cross-platform keyboard and mouse event listener |
+
+### Tauri backend
+
+[`src-tauri/`](src-tauri/) — application entry point, BLE integration, Tauri command wrappers, WebSocket/HTTP server, and mDNS discovery. See its [README](src-tauri/README.md).
+
+### Frontend
+
+```
+src/
+├── routes/          # SvelteKit pages (dashboard, compare, settings, history, …)
+└── lib/             # Shared components, i18n, utilities
+    ├── i18n/        # en, de, fr, he, uk
+    ├── format.ts    # Shared formatting helpers
+    ├── types.ts     # Shared TypeScript interfaces
+    └── …            # UI components (EXGChart, UmapViewer3D, HelpFaq, …)
+```
+
+---
+
+## Documentation
+
+In-depth guides live in [`docs/`](docs/):
+
+| Document | Description |
+|---|---|
+| [`CHANGELOG.md`](docs/CHANGELOG.md) | All notable changes — features, fixes, refactors |
+| [`METRICS.md`](docs/METRICS.md) | Full metrics & indices reference — band powers, derived scores, PPG, composites, with formulas and citations |
+| [`HOOKS.md`](docs/HOOKS.md) | Proactive Hooks architecture — background brain-state monitoring and automated actions |
+| [`LLM.md`](docs/LLM.md) | LLM engine architecture — actor pattern, model lifecycle, chat, function calling |
+| [`LINUX.md`](docs/LINUX.md) | Linux (Ubuntu) build prerequisites and packaging |
+| [`WINDOWS.md`](docs/WINDOWS.md) | Windows build instructions (Visual Studio, LLVM, CMake) |
+
+---
+
+## Data storage
 
 All data is stored locally in `~/.skill/` organised by UTC date:
 
 ```
 ~/.skill/
+  settings.json
+  labels.sqlite
+  screenshots.sqlite
   20260224/
-    EXG.sqlite              ← embeddings, metrics, labels
+    EXG.sqlite              ← embeddings, metrics, per-epoch scores
     EXG_embeddings.hnsw     ← daily HNSW approximate-NN index
     session_*.csv           ← raw EXG samples
   20260225/
-    ...
+    …
 ```
 
-### SQLite Schema (`embeddings` table)
-
-Each row represents one 2.5-second epoch (5 s window, 50% overlap):
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `id` | INTEGER | Primary key (autoincrement) |
-| `timestamp` | INTEGER | `YYYYMMDDHHmmss` UTC |
-| `device_id` | TEXT | BLE peripheral identifier |
-| `device_name` | TEXT | Headset display name |
-| `hnsw_id` | INTEGER | Zero-based row in daily HNSW file |
-| `EXG_embedding` | BLOB | f32 LE × 32 (128 bytes) |
-| `label` | TEXT | User-defined tag (nullable) |
-| `rel_delta` … `rel_high_gamma` | REAL | Relative band powers (6 bands, averaged across channels) |
-| `focus_score` | REAL | Focus score (0–100) |
-| `relaxation_score` | REAL | Relaxation score (0–100) |
-| `engagement_score` | REAL | Engagement score (0–100) |
-| `faa` | REAL | Frontal Alpha Asymmetry |
-| `tar` | REAL | Theta / Alpha ratio |
-| `bar` | REAL | Beta / Alpha ratio |
-| `dtr` | REAL | Delta / Theta ratio |
-| `pse` | REAL | Power Spectral Entropy |
-| `apf` | REAL | Alpha Peak Frequency (Hz) |
-| `bps` | REAL | Band-Power Slope (1/f exponent) |
-| `snr` | REAL | Signal-to-Noise Ratio (dB) |
-| `coherence` | REAL | Inter-channel alpha coherence |
-| `mu_suppression` | REAL | Mu suppression index |
-| `mood` | REAL | Mood composite index (0–100) |
-| `tbr` | REAL | Theta/Beta ratio (absolute) |
-| `sef95` | REAL | Spectral Edge Frequency 95% (Hz) |
-| `spectral_centroid` | REAL | Spectral centre of mass (Hz) |
-| `hjorth_activity` | REAL | Hjorth Activity (signal variance) |
-| `hjorth_mobility` | REAL | Hjorth Mobility (mean frequency) |
-| `hjorth_complexity` | REAL | Hjorth Complexity (bandwidth) |
-| `permutation_entropy` | REAL | Permutation Entropy (0–1) |
-| `higuchi_fd` | REAL | Higuchi Fractal Dimension |
-| `dfa_exponent` | REAL | DFA scaling exponent |
-| `sample_entropy` | REAL | Sample Entropy |
-| `pac_theta_gamma` | REAL | Phase-Amplitude Coupling (θ–γ) |
-| `laterality_index` | REAL | Generalised L/R asymmetry |
-| `hr` | REAL | Heart rate (bpm) |
-| `rmssd` | REAL | RMSSD — HRV parasympathetic (ms) |
-| `sdnn` | REAL | SDNN — HRV total variability (ms) |
-| `pnn50` | REAL | pNN50 — % of successive IBIs >50 ms apart |
-| `lf_hf_ratio` | REAL | LF/HF ratio — sympathovagal balance |
-| `respiratory_rate` | REAL | Respiratory rate (breaths/min) |
-| `spo2_estimate` | REAL | SpO₂ estimate (%) — uncalibrated |
-| `perfusion_idx` | REAL | Perfusion Index — AC/DC ratio (%) |
-| `stress_index` | REAL | Baevsky Stress Index |
-| `ppg_ambient` | REAL | Mean PPG ambient ADC |
-| `ppg_infrared` | REAL | Mean PPG infrared ADC |
-| `ppg_red` | REAL | Mean PPG red ADC |
-| `band_channels_json` | TEXT | Full per-channel band powers (JSON array) |
+For the full SQLite schema and per-column documentation (60+ columns covering band powers, derived scores, cross-band ratios, spectral shape, Hjorth parameters, complexity measures, PPG, and composites), see [`docs/METRICS.md`](docs/METRICS.md).
 
 ---
 
-## Computed Metrics Reference
-
-All metrics are computed from a **512-sample Hann-windowed FFT** at 256 Hz (0.5 Hz/bin resolution) and stored in `EXG.sqlite` every epoch.
-
-### Band Powers
-
-| Band | Range (Hz) | Association |
-|------|-----------|-------------|
-| Delta (δ) | 0.5 – 4 | Deep sleep, slow-wave activity |
-| Theta (θ) | 4 – 8 | Drowsiness, meditation, memory encoding |
-| Alpha (α) | 8 – 13 | Relaxed wakefulness, eyes-closed rest |
-| Beta (β) | 13 – 30 | Active cognition, focus, anxiety |
-| Gamma (γ) | 30 – 50 | High-level processing, perceptual binding |
-| High-Gamma | 50 – 100 | Broadband activity, often EMG artefact |
-
-Absolute power (µV²) is computed from the Heinzel-normalised one-sided PSD. Relative power is each band divided by the broadband total.
-
-> Heinzel, G., Rüdiger, A., & Schilling, R. (2002). *Spectrum and spectral density estimation by the Discrete Fourier Transform (DFT), including a comprehensive list of window functions and some new flat-top windows.* Max Planck Institute for Gravitational Physics. [https://hdl.handle.net/11858/00-001M-0000-0013-557A-5](https://hdl.handle.net/11858/00-001M-0000-0013-557A-5)
-
-### Derived Scores
-
-| Metric | Formula | Range | Description | Reference |
-|--------|---------|-------|-------------|-----------|
-| **Focus** | σ(β / (α + θ)) | 0–100 | Sustained attention / concentration index | Lubar, J. F. (1991). *Discourse on the development of EXG diagnostics and biofeedback for attention-deficit/hyperactivity disorders.* Biofeedback and Self-regulation, 16(3), 201–225. |
-| **Relaxation** | σ(α / (β + θ)) | 0–100 | Calm wakefulness / alpha-dominance index | Aftanas, L. I., & Golocheikine, S. A. (2001). *Human anterior and frontal midline theta and lower alpha reflect emotionally positive state and internalized attention.* Neuroscience Letters, 310(1), 57–60. |
-| **Engagement** | σ(β / (α + θ), k=2) | 0–100 | Cognitive engagement with gentler sigmoid | Pope, A. T., Bogart, E. H., & Bartolome, D. S. (1995). *Biocybernetic system evaluates indices of operator engagement in automated task.* Biological Psychology, 40(1-2), 187–195. |
-
-### Frontal Alpha Asymmetry (FAA)
-
-| Metric | Formula | Unit | Description | Reference |
-|--------|---------|------|-------------|-----------|
-| **FAA** | ln(AF8 α) − ln(AF7 α) | ln(µV²) | Positive → approach motivation; negative → withdrawal/avoidance | Coan, J. A., & Allen, J. J. B. (2004). *Frontal EXG asymmetry as a moderator and mediator of emotion.* Biological Psychology, 67(1-2), 7–50. |
-
-### Cross-Band Ratios
-
-| Metric | Formula | Description | Reference |
-|--------|---------|-------------|-----------|
-| **TAR** | θ / α | Theta/Alpha ratio — drowsiness, meditative states, anxiety | Putman, P. (2011). *Resting state EXG delta–beta coherence in relation to anxiety, behavioral inhibition, and selective attentional processing of threatening stimuli.* International Journal of Psychophysiology, 80(1), 63–68. |
-| **BAR** | β / α | Beta/Alpha ratio — attention, stress, cortical arousal | Angelidis, A., Hagenaars, M., van Son, D., van der Does, W., & Putman, P. (2018). *Do not look away! Spontaneous frontal EXG theta/beta ratio as a marker for cognitive control over attention to mild and high threat.* Biological Psychology, 135, 8–17. |
-| **DTR** | δ / θ | Delta/Theta ratio — deep sleep, deep relaxation | Knyazev, G. G. (2012). *EXG delta oscillations as a correlate of basic homeostatic and motivational processes.* Neuroscience & Biobehavioral Reviews, 36(1), 677–695. |
-| **TBR** | θ_abs / β_abs | Theta/Beta ratio (absolute power) — FDA-cleared ADHD biomarker | Monastra, V. J., Lubar, J. F., & Linden, M. (2001). *The development of a quantitative electroencephalographic scanning process for attention deficit–hyperactivity disorder: Reliability and validity studies.* Neuropsychology, 15(1), 136–144. |
-
-### Spectral Shape Metrics
-
-| Metric | Formula | Range | Description | Reference |
-|--------|---------|-------|-------------|-----------|
-| **PSE** | −Σ pᵢ ln(pᵢ) / ln(5) | 0–1 | Power Spectral Entropy — spectral complexity. Higher = more uniform distribution | Inouye, T., Shinosaki, K., Sakamoto, H., Toi, S., Ukai, S., Iyama, A., Katsuda, Y., & Hirano, M. (1991). *Quantification of EXG irregularity by use of the entropy of the power spectrum.* Electroencephalography and Clinical Neurophysiology, 79(3), 204–210. |
-| **APF** | argmax PSD(8–13 Hz) | Hz | Alpha Peak Frequency — individual alpha frequency, cognitive speed marker | Klimesch, W. (1999). *EXG alpha and theta oscillations reflect cognitive and memory performance: a review and analysis.* Brain Research Reviews, 29(2-3), 169–195. |
-| **SEF95** | freq at 95th percentile of cumulative PSD | Hz | Spectral Edge Frequency — consciousness depth / anaesthesia monitoring. Drops during sleep | Rampil, I. J. (1998). *A primer for EXG signal processing in anesthesia.* Anesthesiology, 89(4), 980–1002. |
-| **Spectral Centroid** | Σ(f·P(f)) / Σ P(f) | Hz | Centre of mass of the power spectrum — global arousal indicator. Higher = more alert | Gudmundsson, S., Runarsson, T. P., Sigurdsson, S., Eiriksdottir, G., & Johnsen, K. (2007). *Reliability of quantitative EXG features.* Clinical Neurophysiology, 118(10), 2162–2171. |
-| **BPS** | slope of log₁₀(P) vs log₁₀(f), 1–50 Hz | — | Band-Power Slope (aperiodic 1/f exponent). More negative = steeper spectral fall-off | Donoghue, T., Haller, M., Peterson, E. J., Varma, P., Sebastian, P., Gao, R., Noto, T., Lara, A. H., Wallings, J. D., Knight, R. T., Shestyuk, A., & Voytek, B. (2020). *Parameterizing neural power spectra into periodic and aperiodic components.* Nature Neuroscience, 23(12), 1655–1665. |
-| **SNR** | 10 log₁₀(P₁₋₅₀ / P₅₀₋₆₀) | dB | Signal-to-Noise Ratio — broadband (1–50 Hz) power vs line-noise (50–60 Hz) | Cohen, M. X. (2014). *Analyzing Neural Time Series Data: Theory and Practice.* MIT Press. ISBN: 978-0262019873 |
-
-### Cross-Channel Metrics
-
-| Metric | Formula | Range | Description | Reference |
-|--------|---------|-------|-------------|-----------|
-| **Coherence** | Pearson r of α_rel across channel pairs | −1 to 1 | Inter-channel alpha synchrony (simplified coherence) | Lachaux, J.-P., Rodriguez, E., Martinerie, J., & Varela, F. J. (1999). *Measuring phase synchrony in brain signals.* Human Brain Mapping, 8(4), 194–208. |
-| **Mu Suppression** | α_current / α_baseline (EMA) | 0–5 | Mu rhythm suppression index. <1.0 = suppression (motor imagery, action observation) | Pfurtscheller, G., & Lopes da Silva, F. H. (1999). *Event-related EXG/MEG synchronization and desynchronization: basic principles.* Clinical Neurophysiology, 110(11), 1842–1857. |
-
-### Time-Domain Features (Hjorth Parameters)
-
-| Metric | Formula | Unit | Description | Reference |
-|--------|---------|------|-------------|-----------|
-| **Hjorth Activity** | var(x) | µV² | Total signal variance (power). Higher = more active signal | Hjorth, B. (1970). *EXG analysis based on time domain properties.* Electroencephalography and Clinical Neurophysiology, 29(3), 306–310. |
-| **Hjorth Mobility** | √(var(x') / var(x)) | — | Estimate of mean frequency (time-domain). Higher = faster oscillations | Hjorth (1970), same as above |
-| **Hjorth Complexity** | mobility(x') / mobility(x) | — | Spectral bandwidth / spectral spread. Deviation from a pure sine wave | Hjorth (1970), same as above |
-
-### Nonlinear Complexity Measures
-
-| Metric | Formula | Range | Description | Reference |
-|--------|---------|-------|-------------|-----------|
-| **Permutation Entropy** | H(ordinal patterns, m=3) / ln(3!) | 0–1 | Complexity of the signal's ordinal structure. Higher = more irregular/complex. Robust to noise | Bandt, C. & Pompe, B. (2002). *Permutation entropy: a natural complexity measure for time series.* Physical Review Letters, 88(17), 174102. |
-| **Higuchi Fractal Dimension** | slope of log(L(k)) vs log(1/k), k=1..8 | ~1–2 | Fractal complexity of the signal. Higher = more complex. Effective for seizure/consciousness discrimination | Higuchi, T. (1988). *Approach to an irregular time series on the basis of the fractal theory.* Physica D: Nonlinear Phenomena, 31(2), 277–283. |
-| **DFA Exponent** | slope of log(F(n)) vs log(n) | ~0.5–1.5 | Detrended Fluctuation Analysis scaling exponent. α≈0.5 = white noise, α≈1.0 = 1/f noise, α≈1.5 = Brownian motion. Healthy EXG ≈ 0.6–0.8 | Peng, C.-K., Buldyrev, S. V., Havlin, S., Simons, M., Stanley, H. E., & Goldberger, A. L. (1994). *Mosaic organization of DNA nucleotides.* Physical Review E, 49(2), 1685–1689. |
-| **Sample Entropy** | −ln(A/B), m=2, r=0.2·σ | ≥ 0 | Signal regularity. Lower = more regular/predictable. Robust improvement over Approximate Entropy | Richman, J. S. & Moorman, J. R. (2000). *Physiological time-series analysis using approximate entropy and sample entropy.* American Journal of Physiology – Heart and Circulatory Physiology, 278(6), H2039–H2049. |
-
-### Cross-Frequency Coupling
-
-| Metric | Formula | Range | Description | Reference |
-|--------|---------|-------|-------------|-----------|
-| **PAC (θ–γ)** | |corr(θ_power, γ_power)| across sub-windows | 0–1 | Phase-Amplitude Coupling proxy — theta-gamma cross-frequency interaction. Higher = stronger coupling, associated with memory encoding and cognitive binding | Canolty, R. T., Edwards, E., Dalal, S. S., Soltani, M., Nagarajan, S. S., Kirsch, H. E., Berger, M. S., Barbaro, N. M., & Knight, R. T. (2006). *High gamma power is phase-locked to theta oscillations in human neocortex.* Science, 313(5793), 1626–1628. |
-
-### Spatial Asymmetry
-
-| Metric | Formula | Range | Description | Reference |
-|--------|---------|-------|-------------|-----------|
-| **Laterality Index** | (right − left) / (right + left) | −1 to 1 | Generalised left/right asymmetry across all bands and all channel pairs. Positive = right-dominant | Homan, R. W., Herman, J., & Purdy, P. (1987). *Cerebral location of international 10–20 system electrode placement.* Electroencephalography and Clinical Neurophysiology, 66(4), 376–382. |
-
-### PPG-Derived Metrics 
-
-All PPG metrics require the infrared and red optical sensors available on device. Inter-beat intervals (IBIs) are extracted from the IR channel via adaptive peak detection at 64 Hz.
-
-| Metric | Formula | Unit | Description | Reference |
-|--------|---------|------|-------------|-----------|
-| **Heart Rate (HR)** | 60 / mean(IBI) | bpm | Beats per minute from PPG peak detection | Elgendi, M. (2012). *On the analysis of fingertip photoplethysmogram signals.* Current Cardiology Reviews, 8(1), 14–25. |
-| **RMSSD** | √(mean(ΔIBI²)) | ms | Root mean square of successive IBI differences — parasympathetic / vagal tone. Higher = more relaxed | Shaffer, F. & Ginsberg, J. P. (2017). *An overview of heart rate variability metrics and norms.* Frontiers in Public Health, 5, 258. |
-| **SDNN** | std(IBI) | ms | Standard deviation of IBIs — overall autonomic variability | Task Force of ESC/NASPE (1996). *Heart rate variability: standards of measurement, physiological interpretation, and clinical use.* Circulation, 93(5), 1043–1065. |
-| **pNN50** | % of successive IBIs differing >50 ms | % | Parasympathetic activity marker | Task Force of ESC/NASPE (1996), same as above |
-| **LF/HF Ratio** | power(0.04–0.15 Hz) / power(0.15–0.4 Hz) of IBI series | — | Sympathovagal balance. Higher = sympathetic dominance. Computed via Goertzel on resampled IBI series | Task Force of ESC/NASPE (1996), same as above |
-| **Respiratory Rate** | Peak frequency of PPG envelope modulation (0.15–0.5 Hz) | breaths/min | Breathing rate extracted from PPG amplitude modulation | Nilsson, L., Johansson, A., & Kalman, S. (2003). *Respiratory variations in the reflection mode photoplethysmographic signal.* Medical & Biological Engineering & Computing, 41(3), 249–254. |
-| **SpO₂ Estimate** | 110 − 25 × R, where R = (AC_red/DC_red)/(AC_ir/DC_ir) | % | Blood oxygen saturation estimate. **Uncalibrated** — relative trends only, not for clinical use | Mendelson, Y. & Ochs, B. D. (1988). *Noninvasive pulse oximetry utilizing skin reflectance photoplethysmography.* IEEE Transactions on Biomedical Engineering, 35(10), 798–805. |
-| **Perfusion Index (PI)** | (2 × std(IR) / mean(IR)) × 100 | % | Peripheral blood perfusion. Higher = better perfusion. Lower during vasoconstriction/stress | Lima, A. & Bakker, J. (2005). *Noninvasive monitoring of peripheral perfusion.* Intensive Care Medicine, 31(10), 1316–1326. |
-| **Stress Index (SI)** | AMo / (2 × Mo × MxDMn) from IBI histogram | — | Baevsky's Stress Index — autonomic stress level. Higher = greater sympathetic activation | Baevsky, R. M. & Chernikova, A. G. (2017). *Heart rate variability analysis: physiological foundations and main methods.* Cardiometry, 10, 66–76. |
-
-### Composite Indices
-
-| Metric | Formula | Range | Description |
-|--------|---------|-------|-------------|
-| **Mood** | 50 + 20·FAA_norm + 15·(TAR_norm − 0.5) + 15·(BAR_norm − 0.5) | 0–100 | Weighted composite of FAA (approach valence), inverse TAR (alertness), and BAR (focus). Higher = more positive/approach valence |
-
----
-
-## WebSocket API
+## WebSocket & REST API
 
 NeuroSkill™ broadcasts EXG data and accepts commands over a local WebSocket server, advertised via mDNS as `_skill._tcp`.
 
@@ -322,13 +206,7 @@ dns-sd -B _skill._tcp
 avahi-browse _skill._tcp
 ```
 
-### Broadcast Events (server → client)
-
-```json
-{ "event": "EXG-bands",     "payload": { "channels": [...], "faa": 0.12, ... } }
-{ "event": "muse-status",   "payload": { "state": "connected", ... } }
-{ "event": "label-created", "payload": { "id": 42, "text": "eyes closed" } }
-```
+### Broadcast events (server → client)
 
 | Event | Rate | Description |
 |-------|------|-------------|
@@ -336,69 +214,41 @@ avahi-browse _skill._tcp
 | `muse-status` | ~1 Hz | Device heartbeat: battery, sample counts, connection state |
 | `label-created` | on-demand | Fired when any client creates a label |
 
-> **Note:** Raw EXG samples (256 Hz), PPG (64 Hz), IMU (50 Hz), and spectrogram
-> slices are **not** broadcast over the WebSocket API — their high frequency
-> would overwhelm the connection. Use the `EXG-bands` event for real-time
-> derived metrics, or the `status` command for a one-shot snapshot.
-
 ### Commands (client → server)
 
-| Command | Parameters | Description |
-|---------|-----------|-------------|
-| `status` | — | Device state, scores, embeddings count, sleep summary |
-| `label` | `text` | Attach a label to the current moment |
-| `search` | `start_utc`, `end_utc`, `k` | Find k-nearest EXG embeddings |
-| `sessions` | — | List all recording sessions |
-| `compare` | `a_start_utc`, `a_end_utc`, `b_start_utc`, `b_end_utc` | Full comparison: metrics A/B, sleep A/B, UMAP ticket |
-| `sleep` | `start_utc`, `end_utc` | Sleep staging for a time range |
-| `umap` | `a_start_utc`, `a_end_utc`, `b_start_utc`, `b_end_utc` | Enqueue 3D UMAP projection (non-blocking) |
-| `umap_poll` | `job_id` | Poll for UMAP result |
-| `llm_status` | — | LLM server state, active model, context size, vision flag |
-| `llm_start` | — | Load the active model and start the inference server |
-| `llm_stop` | — | Stop the inference server and free GPU/CPU resources |
-| `llm_catalog` | — | Model catalog with per-entry download states |
-| `llm_download` | `filename` | Start a background model download |
-| `llm_cancel_download` | `filename` | Cancel an in-progress download |
-| `llm_delete` | `filename` | Delete a locally-cached model file |
-| `llm_logs` | — | Last 500 LLM server log lines |
-| `llm_chat` | `messages`, `images?`, `system?`, `temperature?`, `max_tokens?` | Streaming chat completion over WebSocket |
+| Command | Description |
+|---------|-------------|
+| `status` | Device state, scores, embeddings count, sleep summary |
+| `label` | Attach a label to the current moment |
+| `search` | K-nearest EXG embedding search over a date range |
+| `sessions` | List all recording sessions |
+| `compare` | Full A/B session comparison (metrics, sleep, UMAP ticket) |
+| `sleep` | Sleep staging for a time range |
+| `umap` / `umap_poll` | Enqueue and poll 3D UMAP projection |
+| `llm_status` | LLM server state |
+| `llm_start` / `llm_stop` | Load or unload the active model |
+| `llm_catalog` | Model catalog with download states |
+| `llm_download` / `llm_cancel_download` / `llm_delete` | Model lifecycle |
+| `llm_chat` | Streaming chat completion |
+| `llm_logs` | Last 500 LLM server log lines |
 
-### REST API shortcuts
+### REST shortcuts
 
-The same server also exposes HTTP endpoints for every command. The base URL is
-`http://localhost:<port>` where `<port>` matches the WebSocket port (visible in
-Settings → API).
+Every command is also available as an HTTP endpoint at `http://localhost:<port>`. Common routes:
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/status` | Status snapshot |
 | `GET` | `/sessions` | List sessions |
 | `POST` | `/label` | Create label |
-| `POST` | `/notify` | OS notification |
-| `POST` | `/say` | Speak text via TTS |
-| `POST` | `/calibrate` | Open calibration + auto-start |
-| `POST` | `/timer` | Open focus timer + auto-start |
 | `POST` | `/search` | EXG ANN search |
 | `POST` | `/compare` | A/B session comparison |
 | `POST` | `/sleep` | Sleep staging |
-| `POST` | `/umap` | Enqueue UMAP job |
-| `GET` | `/umap/{job_id}` | Poll UMAP result |
-| `GET` | `/calibrations` | List calibration profiles |
-| `POST` | `/calibrations` | Create profile |
-| `GET` | `/calibrations/{id}` | Get profile |
-| `PATCH` | `/calibrations/{id}` | Update profile |
-| `DELETE` | `/calibrations/{id}` | Delete profile |
-| `GET` | `/dnd` | DND automation config + live eligibility |
-| `POST` | `/dnd` | Force-enable/disable DND `{ "enabled": bool }` |
-| `GET` | `/llm/status` | LLM server status (stopped/loading/running) |
-| `POST` | `/llm/start` | Start LLM inference server (loads model) |
-| `POST` | `/llm/stop` | Stop LLM inference server (frees GPU memory) |
-| `GET` | `/llm/catalog` | Model catalog with download states |
-| `POST` | `/llm/download` | Start model download `{ "filename": "…" }` |
-| `POST` | `/llm/cancel_download` | Cancel download `{ "filename": "…" }` |
-| `POST` | `/llm/delete` | Delete cached model `{ "filename": "…" }` |
-| `GET` | `/llm/logs` | Last 500 LLM server log lines |
-| `POST` | `/llm/chat` | Non-streaming chat: `{ message, images?, system?, temperature?, max_tokens? }` → `{ text, finish_reason, tokens }` |
+| `POST` | `/say` | Speak text via TTS |
+| `POST` | `/llm/chat` | Non-streaming chat completion |
+| `GET` | `/llm/status` | LLM server status |
+| `POST` | `/llm/start` / `/llm/stop` | Start/stop inference server |
+| `GET` | `/dnd` | DND config + live eligibility |
 
 ### Testing
 
@@ -409,7 +259,7 @@ node test.js 62853     # explicit port
 
 ---
 
-## Keyboard Shortcuts
+## Keyboard shortcuts
 
 ### Global (system-wide, work even when window is hidden)
 
@@ -426,16 +276,16 @@ node test.js 62853     # explicit port
 | ⌘⇧A | Ctrl+Shift+A | Open API Status |
 | ⌘⇧T | Ctrl+Shift+T | Toggle Theme |
 
-All global shortcuts are fully **configurable** in **Settings → Shortcuts**.
+All global shortcuts are configurable in **Settings → Shortcuts**.
 
 ### In-app
 
 | Shortcut | Action |
 |----------|--------|
-| `?` | Open keyboard shortcut cheat sheet |
-| ⌘K / Ctrl+K | Open Command Palette |
+| `?` | Keyboard shortcut cheat sheet |
+| ⌘K / Ctrl+K | Command Palette |
 | `Esc` | Close overlay / dialog |
-| ⌘↵ / Ctrl+↵ | Submit label (in label window) |
+| ⌘↵ / Ctrl+↵ | Submit label |
 
 ---
 
@@ -448,19 +298,18 @@ All global shortcuts are fully **configurable** in **Settings → Shortcuts**.
 - [Tauri CLI v2](https://v2.tauri.app/start/prerequisites/)
 - ZUNA weights from Hugging Face (see below)
 - **macOS** — Xcode Command Line Tools (`xcode-select --install`)
-- **Windows** — Visual Studio Build Tools 2022 with **Desktop development with C++** workload, LLVM, CMake, Git (see [`WINDOWS.md`](WINDOWS.md))
-- **Linux** — follow [`LINUX.md`](LINUX.md), including the tray runtime dependency (`libayatana-appindicator3-1` or fallback `libappindicator3-1`) before running `npm run tauri dev` (see [Tray runtime dependency](LINUX.md#41-tray-runtime-dependency-required-for-tauri-dev))
+- **Windows** — see [`docs/WINDOWS.md`](docs/WINDOWS.md)
+- **Linux** — see [`docs/LINUX.md`](docs/LINUX.md)
 
 ### Setup
 
 ```bash
-# Install frontend dependencies
 npm install
 
 # Download ZUNA encoder weights
 python3 -c "from huggingface_hub import snapshot_download; snapshot_download('mariozechner/zuna-EXG-v1')"
 
-# Run in development mode (builds espeak-ng static lib automatically on first run)
+# Run in development mode
 npm run tauri dev
 ```
 
@@ -471,226 +320,95 @@ brew tap NeuroSkill-com/skill
 brew install --cask neuroskill
 ```
 
-Upgrade later:
+Upgrade:
 
 ```bash
 brew upgrade --cask neuroskill
 ```
 
-Maintainers: update `Casks/neuroskill.rb` for each release:
+### Build
 
 ```bash
-# Auto-detects version from src-tauri/tauri.conf.json and SHA-256 from GitHub release metadata
-npm run brew:cask:generate
+npm run tauri build
 ```
 
 ### Build cache (optional, recommended)
 
-Install **sccache** and **mold** to speed up Rust/C++ builds by ~50%. The build system auto-detects these tools at build time — no config changes needed.
+Install **sccache** and **mold** to speed up Rust/C++ builds by ~50 %. The build system auto-detects these tools — no config changes needed.
 
 ```bash
-# macOS / Linux — interactive setup, prompts before installing each tool
+# Interactive setup
 npm run setup:build-cache
-
-# Windows (PowerShell)
-.\scripts\setup-build-cache.ps1
 ```
-
-Or install manually:
-
-```bash
-# sccache — caches rustc + C/C++ compilation across clean builds
-brew install sccache          # macOS
-cargo install sccache         # any platform
-scoop install sccache         # Windows
-winget install Mozilla.sccache # Windows
-
-# mold — fast linker (Linux only, not needed on macOS/Windows)
-sudo apt install mold clang   # Debian/Ubuntu
-sudo dnf install mold clang   # Fedora
-sudo pacman -S mold clang     # Arch
-```
-
-Once installed, `npm run tauri dev` and `npm run tauri build` automatically use them. No env vars or config changes required.
 
 | Tool | Platform | What it does | Speedup |
 |---|---|---|---|
-| sccache | macOS, Linux, Windows | Caches rustc + cc/c++ outputs | ~50% faster clean rebuilds |
+| sccache | macOS, Linux, Windows | Caches rustc + cc/c++ outputs | ~50 % faster clean rebuilds |
 | mold | Linux only | Fast linker (replaces ld/lld) | Faster link step |
 
-To temporarily disable: `SKILL_NO_SCCACHE=1` or `SKILL_NO_MOLD=1`.
-
-### Build
-
-```bash
-# macOS / Linux
-npm run tauri build
-
-# Windows
-npm run tauri build
-
-# With extra Tauri flags (e.g. debug bundle)
-npm run tauri build -- --debug
-```
+To disable temporarily: `SKILL_NO_SCCACHE=1` or `SKILL_NO_MOLD=1`.
 
 ### Linux packaging quickstart
 
-Use this local flow on Linux when you want release-style artifacts:
-
 ```bash
-# 1) Build AppImage via Tauri
 npm run tauri:build:linux:x64:native
-
-# 2) Build .deb + .rpm via system tools (dpkg-deb + rpmbuild)
 npm run package:linux:system:x64:native -- --skip-build
 ```
 
-Cross-target x86_64 builds from non-x86_64 hosts (intentional only):
+For full details, see [`docs/LINUX.md`](docs/LINUX.md).
 
-```bash
-ALLOW_LINUX_CROSS=1 npm run tauri:build:linux:x64
-ALLOW_LINUX_CROSS=1 bash scripts/package-linux-system-bundles.sh --target x86_64-unknown-linux-gnu
-```
+### Pre-commit checks
 
-For full Linux prerequisites and troubleshooting, see [`LINUX.md`](LINUX.md).
-
-### Project Structure
-
-```
-skill/
-├── src/                        # SvelteKit frontend
-│   ├── routes/                 # Pages (dashboard, compare, settings, …)
-│   └── lib/                    # Components, i18n, utilities
-│       ├── UmapViewer3D.svelte # 3D UMAP scatter (raw Three.js)
-│       ├── HelpFaq.svelte      # Help & FAQ content
-│       ├── EXGChart.svelte     # Real-time waveform display
-│       └── i18n/               # en, de, fr, he, uk
-├── src-tauri/                  # Rust backend
-│   └── src/
-│       ├── lib.rs              # App state, Tauri commands, BLE
-│       ├── EXG_bands.rs        # GPU FFT band-power analysis
-│       ├── EXG_embeddings.rs   # ZUNA encoder + SQLite/HNSW storage
-│       ├── ws_commands.rs      # WebSocket command handlers
-│       ├── ws_server.rs        # WebSocket server + mDNS
-│       ├── job_queue.rs        # Serial background job queue
-│       └── constants.rs        # Sample rates, bands, channels
-├── test.js                     # WebSocket API smoke test
-└── README.md
-```
-
-### Pre-commit Checks
-
-A Git pre-commit hook runs two fast sanity checks before every commit:
+A Git pre-commit hook runs two fast sanity checks:
 
 | Check | Command |
 |---|---|
 | `cargo clippy` | `cd src-tauri && cargo clippy --all-targets --all-features -- -D warnings` |
 | `svelte-check` | `npm run check` |
 
-The hook is already installed at `.git/hooks/pre-commit` — no setup required. Both checks must pass; any warning from Clippy is treated as an error. To bypass in an emergency:
-
-```bash
-git commit --no-verify
-```
+Both must pass. Bypass in an emergency with `git commit --no-verify`.
 
 ---
 
 ## Versioning
 
-The `bump` script keeps `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` in sync in one step.
-
-| Command | Behaviour |
-|---|---|
-| `npm run bump` | Auto-increments the **patch** digit (`0.0.3 → 0.0.4`) |
-| `npm run bump 1.2.0` | Sets all three files to the exact version supplied |
+The `bump` script keeps `package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml` in sync:
 
 ```bash
-# patch bump (0.0.x)
-npm run bump
-
-# explicit version
-npm run bump 1.2.0
+npm run bump          # auto-increment patch (0.0.3 → 0.0.4)
+npm run bump 1.2.0    # set exact version
 ```
 
 ---
 
 ## Release
 
-Generate new keys and update `tauri.conf.json`:
+Generate signing keys:
 
 ```shell
 npm run tauri signer generate -- -w ~/.tauri/skill.key
 ```
 
-### Required GitHub secrets                                                                                       
-                                                                                                                   
-| Secret                             | What it is                                   |
-|------------------------------------|----------------------------------------------|
-| APPLE_CERTIFICATE                  | `base64 -i cert.p12 output`                  |
-| APPLE_CERTIFICATE_PASSWORD         | P12 export password                          |
-| APPLE_SIGNING_IDENTITY             | `"Developer ID Application: Name (TEAMID)"`  |
-| APPLE_ID                           | Apple ID email                               |
-| APPLE_PASSWORD                     | App-specific password from appleid.apple.com |
-| APPLE_TEAM_ID                      | 10-character Team ID                         |
-| TAURI_SIGNING_PRIVATE_KEY          | Output of generate-keys.py                   |
-| TAURI_SIGNING_PRIVATE_KEY_PASSWORD | Key password (empty string if none)          |
+### Required GitHub secrets
 
-### Testing the CI/CD pipeline locally
-
-**CI workflow** (lint, type-check, tests) — runs in Docker via [`act`](https://github.com/nektos/act):
-
-```shell
-brew install act
-
-act push                          # all three jobs in parallel
-act push --job rust-check
-act push --job frontend-check
-act push --job audit
-```
-
-Pick **Medium** image (`catthehacker/ubuntu:act-latest`) on first run.
-
-**Release workflow** — `macos-26` can't run in Docker, so test the pieces separately:
-
-```shell
-# Dry-run: prints every command without executing anything destructive
-bash release.sh --dry-run
-
-# Build only (no signing, no upload; compile-only local path)
-npm run tauri:build:mac
-
-# If you explicitly need bundle artifacts on macOS, request them directly:
-# npx tauri build --target aarch64-apple-darwin --no-sign --bundles app
-
-# Full local release with real Apple credentials (skips upload)
-SKIP_UPLOAD=1 bash release.sh        # reads credentials from env.txt
-```
-
-> **Note:** The DMG is built with `hdiutil` directly (no `create-dmg` dependency).
-> `brew install create-dmg` is no longer required.
-
-Check that the tag version matches `tauri.conf.json` before pushing a tag:
-
-```shell
-TAG=v0.0.1
-VERSION="${TAG#v}"
-CONF=$(grep '"version"' src-tauri/tauri.conf.json | head -1 \
-       | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
-[ "$VERSION" = "$CONF" ] && echo "✓ versions match" || echo "✗ mismatch: tag=$VERSION conf=$CONF"
-```
-
-| Goal | Command |
+| Secret | What it is |
 |---|---|
-| Run all CI checks | `act push` |
-| Single CI job | `act push --job frontend-check` |
-| Dry-run release | `bash release.sh --dry-run` |
-| Build without signing | `SKIP_NOTARIZE=1 SKIP_UPLOAD=1 bash release.sh` |
-| Full local release | `SKIP_UPLOAD=1 bash release.sh` |
+| APPLE_CERTIFICATE | `base64 -i cert.p12` output |
+| APPLE_CERTIFICATE_PASSWORD | P12 export password |
+| APPLE_SIGNING_IDENTITY | `"Developer ID Application: Name (TEAMID)"` |
+| APPLE_ID | Apple ID email |
+| APPLE_PASSWORD | App-specific password |
+| APPLE_TEAM_ID | 10-character Team ID |
+| TAURI_SIGNING_PRIVATE_KEY | Output of signer generate |
+| TAURI_SIGNING_PRIVATE_KEY_PASSWORD | Key password (empty if none) |
 
-> **CI note:** The Linux `rust-check` job runs `cargo fetch --target
-> x86_64-unknown-linux-gnu` before `cargo check --locked` to resolve any
-> platform-specific dependencies that differ from the macOS-generated
-> `Cargo.lock`, without requiring network access during the check itself.
+### Local testing
+
+```bash
+act push                         # all CI jobs via Docker
+bash release.sh --dry-run        # dry-run release
+SKIP_UPLOAD=1 bash release.sh    # full local release (no upload)
+```
 
 ---
 
