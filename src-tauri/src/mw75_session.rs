@@ -180,6 +180,19 @@ pub(crate) async fn run_mw75_session(
             }
         };
         app_log!(app, "bluetooth", "[mw75] RFCOMM connected — streaming EEG at {MW75_SAMPLE_RATE} Hz");
+
+        // Drain any garbled EEG events from BLE notifications that arrived
+        // during the BLE→RFCOMM transition.  BLE GATT notifications from
+        // non-EEG characteristics can be misinterpreted as EEG packets with
+        // wrong channel counts or extreme values.
+        let mut drained = 0u32;
+        while let Ok(ev) = rx.try_recv() {
+            if matches!(ev, Mw75Event::Eeg(_)) { drained += 1; }
+        }
+        if drained > 0 {
+            app_log!(app, "bluetooth", "[mw75] drained {drained} stale BLE EEG events");
+        }
+
         Some(rfcomm)
     };
 
@@ -189,8 +202,6 @@ pub(crate) async fn run_mw75_session(
             "[mw75] RFCOMM feature disabled — receiving EEG via BLE notifications");
         None
     };
-
-    // BLE is now disconnected — safe to restart the background scanner.
 
     // 7. Open CSV with MW75 channel labels.
     let ch_labels = skill_constants::MW75_CHANNEL_NAMES;
@@ -213,6 +224,7 @@ pub(crate) async fn run_mw75_session(
 
     // 9. Event loop — data arrives as Mw75Event::Eeg from RFCOMM or BLE.
     let mut user_cancelled = false;
+    let mut first_eeg_logged = false;
     loop {
         tokio::select! {
             biased;
@@ -225,6 +237,18 @@ pub(crate) async fn run_mw75_session(
             ev = rx.recv() => {
                 match ev {
                     Some(e) => {
+                        // Log first EEG packet for diagnostics.
+                        if !first_eeg_logged {
+                            if let Mw75Event::Eeg(ref pkt) = e {
+                                first_eeg_logged = true;
+                                app_log!(app, "bluetooth",
+                                    "[mw75] first EEG: {} ch, counter={}, valid={}",
+                                    pkt.channels.len(), pkt.counter, pkt.checksum_valid);
+                                let preview: Vec<String> = pkt.channels.iter().enumerate()
+                                    .take(6).map(|(i, v)| format!("ch{}={:.1}", i, v)).collect();
+                                app_log!(app, "bluetooth", "[mw75]   {}", preview.join(" "));
+                            }
+                        }
                         let is_disconnect = matches!(e, Mw75Event::Disconnected);
                         handle_mw75_event(e, &app, &mut csv, &csv_path, &mut dsp, pipeline_ch).await;
                         if is_disconnect {

@@ -343,7 +343,7 @@ the Free Software Foundation, version 3 only. -->
   }
 
   const fmtEeg = (v: number | null | undefined) =>
-    v != null && isFinite(v) && v !== 0 ? (v >= 0 ? "+" : "") + v.toFixed(1) + " µV" : "—";
+    v != null && isFinite(v) ? (v >= 0 ? "+" : "") + v.toFixed(1) + " µV" : "—";
 
   const battColor = (p: number) => colorForLevel(p);
 
