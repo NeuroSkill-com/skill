@@ -95,6 +95,27 @@ export function fmtDateTimeLocale(utc: number): string {
   });
 }
 
+// ── Metric color helpers ──────────────────────────────────────────────────────
+
+/**
+ * Pick a color based on a value crossing thresholds.
+ *
+ * `thresholds` is an array of `[cutoff, color]` pairs sorted **descending**.
+ * The first entry whose cutoff the value exceeds wins; the last color is the fallback.
+ *
+ * Example: `thresholdColor(score, [[60, "#22c55e"], [30, "#f59e0b"]], "#6b7280")`
+ */
+export function thresholdColor(
+  value: number,
+  thresholds: [number, string][],
+  fallback: string,
+): string {
+  for (const [cutoff, color] of thresholds) {
+    if (value > cutoff) return color;
+  }
+  return fallback;
+}
+
 /** Format milliseconds as "Xs" or "Xms". */
 export function fmtMs(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
