@@ -1079,30 +1079,29 @@ the Free Software Foundation, version 3 only. -->
         {/if}
 
         <!-- Signal quality row -->
-        <div class="flex items-center gap-x-3 gap-y-1 flex-wrap
-                    rounded-xl border border-border dark:border-white/[0.04]
+        <div class="rounded-xl border border-border dark:border-white/[0.04]
                     bg-muted dark:bg-[#1a1a28] px-3 py-2.5"
              role="group" aria-label={t("dashboard.signal")}>
-          <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground shrink-0">
+          <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground block mb-1.5">
             {t("dashboard.signal")}
           </span>
-          {#each chLabels as ch, i}
-            {#if i < (status.channel_quality?.length ?? 4)}
-            {@const q = status.channel_quality[i] ?? 'no_signal'}
-            <div class="flex items-center gap-1.5 flex-1 min-w-[60px]">
-              <svg width="8" height="8" viewBox="0 0 8 8">
-                <circle cx="4" cy="4" r="4" fill={qualityColor(q)}>
-                  {#if q === 'fair' || q === 'poor'}
-                    <animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite"/>
-                  {/if}
-                </circle>
-              </svg>
-              <span class="text-[0.62rem] font-semibold text-muted-foreground">{ch}</span>
-              <span class="text-[0.58rem] text-muted-foreground/60 leading-none"
-                    style="color:{qualityColor(q)}">{qualityLabel(q)}</span>
-            </div>
-            {/if}
-          {/each}
+          <div class="grid gap-1.5" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 6} class:grid-cols-4={chLabels.length > 6}>
+            {#each chLabels as ch, i}
+              {@const q = status.channel_quality[i] ?? 'no_signal'}
+              <div class="flex items-center gap-1.5">
+                <svg width="8" height="8" viewBox="0 0 8 8" class="shrink-0">
+                  <circle cx="4" cy="4" r="4" fill={qualityColor(q)}>
+                    {#if q === 'fair' || q === 'poor'}
+                      <animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite"/>
+                    {/if}
+                  </circle>
+                </svg>
+                <span class="text-[0.58rem] font-semibold text-muted-foreground">{ch}</span>
+                <span class="text-[0.52rem] text-muted-foreground/60 leading-none"
+                      style="color:{qualityColor(q)}">{qualityLabel(q)}</span>
+              </div>
+            {/each}
+          </div>
         </div>
 
         <!-- Electrode placement toggle -->

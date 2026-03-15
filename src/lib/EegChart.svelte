@@ -50,6 +50,13 @@ the Free Software Foundation, version 3 only. -->
   /** Visible channel count — clamped to [1, N_CH]. */
   const VIS_CH = $derived(Math.max(1, Math.min(numChannels, N_CH)));
 
+  /** Minimum waveform row height in CSS px. */
+  const MIN_ROW_H = 30;
+  /** Dynamic chart height — ensures every channel gets at least MIN_ROW_H. */
+  const DYN_CHART_H = $derived(Math.max(CHART_H, VIS_CH * MIN_ROW_H + TIME_H));
+  /** Dynamic wave area height. */
+  const DYN_WAVE_H = $derived(DYN_CHART_H - TIME_H);
+
   // ── Spectrogram colormap LUT ─────────────────────────────────────────────────
   // 256-entry RGBA lookup table; index = Math.round(normalised_power × 255).
   function buildLut(stops: readonly (readonly [number, number, number, number, number])[]) {
@@ -340,8 +347,8 @@ the Free Software Foundation, version 3 only. -->
       ctx.setTransform(getDpr(), 0, 0, getDpr(), 0, 0);
 
       const W = cssW;
-      const H = CHART_H;
-      const ROW_H = WAVE_H / VIS_CH;   // ≈ 38.5 px
+      const H = DYN_CHART_H;
+      const ROW_H = DYN_WAVE_H / VIS_CH;   // ≈ 38.5 px
 
       // ── EWMA write head ──────────────────────────────────────────────────
       const dt    = lastFrameNow < 0 ? 0 : now - lastFrameNow;
@@ -372,7 +379,7 @@ the Free Software Foundation, version 3 only. -->
       ctx.fillStyle = cBg;
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = cBgStrip;
-      ctx.fillRect(0, WAVE_H, W, TIME_H);
+      ctx.fillRect(0, DYN_WAVE_H, W, TIME_H);
 
       // ── Spectrogram background ────────────────────────────────────────────
       //
@@ -393,7 +400,7 @@ the Free Software Foundation, version 3 only. -->
         ctx.imageSmoothingQuality = "low";
         ctx.save();
 
-        const ROW_H_F = WAVE_H / VIS_CH;
+        const ROW_H_F = DYN_WAVE_H / VIS_CH;
         const filled  = Math.min(specWriteCol, SPEC_COLS);
         const tapeX   = specWriteCol % SPEC_COLS; // oldest column in the ring
 
@@ -441,7 +448,7 @@ the Free Software Foundation, version 3 only. -->
         const x = (e / N_EPOCHS) * W;
         ctx.beginPath();
         ctx.moveTo(x, 0);
-        ctx.lineTo(x, WAVE_H);
+        ctx.lineTo(x, DYN_WAVE_H);
         ctx.stroke();
       }
       ctx.setLineDash([]);
@@ -450,8 +457,8 @@ the Free Software Foundation, version 3 only. -->
       ctx.strokeStyle = cGrid;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, WAVE_H);
-      ctx.lineTo(W, WAVE_H);
+      ctx.moveTo(0, DYN_WAVE_H);
+      ctx.lineTo(W, DYN_WAVE_H);
       ctx.stroke();
 
       // ── Time labels ───────────────────────────────────────────────────────
@@ -618,7 +625,7 @@ the Free Software Foundation, version 3 only. -->
           ctx.globalAlpha = 0.85;
           ctx.beginPath();
           ctx.moveTo(mx, 0);
-          ctx.lineTo(mx, WAVE_H);
+          ctx.lineTo(mx, DYN_WAVE_H);
           ctx.stroke();
           ctx.setLineDash([]);
 
@@ -725,7 +732,7 @@ the Free Software Foundation, version 3 only. -->
       const dpr = getDpr();
       cssW = canvasEl.clientWidth;
       canvasEl.width  = Math.round(cssW    * dpr);
-      canvasEl.height = Math.round(CHART_H * dpr);
+      canvasEl.height = Math.round(DYN_CHART_H * dpr);
       // Force full redraw on next frame after resize.
       lastDisplayPos = -Infinity;
     };
@@ -768,7 +775,7 @@ the Free Software Foundation, version 3 only. -->
   <canvas
     bind:this={canvasEl}
     class="block w-full"
-    style="height:{CHART_H}px"
+    style="height:{DYN_CHART_H}px"
     onclick={onCanvasClick}
   ></canvas>
 
