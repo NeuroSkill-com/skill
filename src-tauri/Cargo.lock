@@ -9314,8 +9314,10 @@ dependencies = [
  "skill-constants",
  "skill-data",
  "skill-eeg",
+ "skill-jobs",
  "skill-llm",
  "skill-screenshots",
+ "skill-settings",
  "skill-tools",
  "skill-tts",
  "stacker",
@@ -9364,6 +9366,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "skill-jobs"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "skill-llm"
 version = "0.0.1"
 dependencies = [
@@ -9398,6 +9408,21 @@ dependencies = [
  "skill-constants",
  "skill-data",
  "ureq 2.12.1",
+]
+
+[[package]]
+name = "skill-settings"
+version = "0.0.1"
+dependencies = [
+ "dirs",
+ "serde",
+ "serde_json",
+ "skill-constants",
+ "skill-data",
+ "skill-eeg",
+ "skill-llm",
+ "skill-screenshots",
+ "skill-tts",
 ]
 
 [[package]]

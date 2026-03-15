@@ -69,7 +69,7 @@ impl SessionDsp {
     /// Acquires the `AppState` lock exactly once, clones the needed values,
     /// and releases it before building any DSP object.
     pub(crate) fn new(app: &AppHandle) -> Self {
-        let (filter_cfg, overlap_secs, hooks, text_embedding_model, skill_dir, model_config,
+        let (filter_cfg, overlap_secs, hooks, skill_dir, model_config,
              model_status, download_cancel, encoder_reload_requested, logger, hook_runtime) = {
             let r = app.state::<Mutex<Box<AppState>>>();
             let g = r.lock_or_recover();
@@ -77,7 +77,6 @@ impl SessionDsp {
                 g.status.filter_config,
                 g.status.embedding_overlap_secs,
                 g.hooks.clone(),
-                g.text_embedding_model.clone(),
                 g.skill_dir.clone(),
                 g.model_config.clone(),
                 g.model_status.clone(),
@@ -87,6 +86,12 @@ impl SessionDsp {
                 g.hook_runtime.clone(),
             )
         }; // lock released here
+
+        // Shared text embedder — reuse the app-wide instance instead of
+        // creating a separate ~130 MB copy per EEG session.
+        let shared_embedder = std::sync::Arc::clone(
+            &*app.state::<std::sync::Arc<crate::EmbedderState>>()
+        );
 
         // Obtain a cloned Arc to the global cross-day HNSW index so the embed
         // worker can insert into it without going through Tauri's state system.
@@ -106,7 +111,7 @@ impl SessionDsp {
         let mut accumulator = EegAccumulator::new(
             skill_dir, model_config, model_status, download_cancel,
             encoder_reload_requested, logger, global_index,
-            hooks.clone(), text_embedding_model, label_idx, ws_broadcaster,
+            hooks.clone(), shared_embedder, label_idx, ws_broadcaster,
             hook_runtime, app.clone(),
         );
         accumulator.set_overlap_secs(overlap_secs);

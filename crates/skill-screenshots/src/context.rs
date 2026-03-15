@@ -32,4 +32,14 @@ pub trait ScreenshotContext: Send + Sync + 'static {
     /// Try to embed an image via the LLM vision projector (mmproj).
     /// Returns `None` if no LLM/mmproj is loaded or vision is not ready.
     fn embed_image_via_llm(&self, png_bytes: &[u8]) -> Option<Vec<f32>>;
+
+    /// Embed a short text string using the app-wide shared text embedder
+    /// (typically `bge-small-en-v1.5`).  Used for OCR text embeddings so the
+    /// screenshot crate can reuse the same model instance as labels / hooks
+    /// instead of loading a separate ~130 MB copy.
+    ///
+    /// Returns `None` if the embedder is not yet initialised or embedding
+    /// fails.  The default implementation always returns `None` (standalone /
+    /// test contexts that don't have a text embedder).
+    fn embed_text(&self, _text: &str) -> Option<Vec<f32>> { None }
 }
