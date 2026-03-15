@@ -8,6 +8,198 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.38] — 2026-03-15
+
+### Features
+
+- **Hermes 10-20 electrode labels**: Replaced generic `Ch1`–`Ch8` channel names with standard 10-20 positions (`Fp1`, `Fp2`, `AF3`, `AF4`, `F3`, `F4`, `FC1`, `FC2`) in `skill-constants` and the electrode placement SVG guide.
+
+- **Hermes V1 EEG headset support**: Added full session support for the Hermes V1 headset (8-channel ADS1299 at 250 Hz, 9-DOF IMU). The `hermes-ble` crate is added to `skill-devices` and re-exported. All data streams over BLE GATT — no RFCOMM needed. BLE scanner recognises devices whose name starts with "Hermes". Session handles EEG (8 channels through DSP pipeline), IMU (accel + gyro → head pose), and packet-drop detection. Dashboard renders 8 channels dynamically with device-specific labels and colours. Electrode placement guide and 3D electrode guide include Hermes V1 tab. Constants added to `skill-constants` (`HERMES_EEG_CHANNELS`, `HERMES_SAMPLE_RATE`, `HERMES_CHANNEL_NAMES`).
+
+- **Proactive Hooks**: background EEG monitoring that triggers actions when brain-state matches configured labels. Per-hook scenarios (cognitive/emotional/physical), keyword suggestions, distance threshold, fire history, WebSocket events, and full CLI CRUD.
+
+- **Hook distance suggestion**: analyses HNSW data to recommend optimal thresholds with percentile visualization.
+
+- **LLM coding-agent tools**: bash execution, read/write/edit file, web search (DuckDuckGo JSON + HTML fallback), web fetch, search_output for navigating large outputs. Safety approval dialogs for dangerous operations. Context-aware tool calling with automatic history trimming.
+
+- **Tool-call cards with rich detail views**: expandable cards per tool type with cancel/stop, danger detection, and structured argument display.
+
+- **Chat session archive (soft-delete)**: archive instead of permanent delete, with restore and permanent-delete from archive section.
+
+- **Neurable MW75 Neuro headphone support**: Full 12-channel EEG session at 500 Hz. BLE activation + RFCOMM data streaming (behind `mw75-rfcomm` feature flag). Electrode placement guide shows MW75 ear-cup layout with 6 electrodes per ear (FT7/T7/TP7/CP5/P7/C5 left, FT8/T8/TP8/CP6/P8/C6 right). All 12 channels render in the dashboard: signal quality dots, EEG waveforms, spectrogram, and band powers. DSP pipeline processes all active channels. Device presets for Muse (4ch), Ganglion (4ch), and MW75 (12ch) in electrode guides.
+
+- **Screenshot capture + vision embedding system**: periodic active-window capture with CLIP vision embedding (ONNX) and HNSW index. macOS CoreGraphics FFI, Linux X11/Wayland, Windows GDI. Configurable interval, size, quality, and embedding backend.
+
+- **OCR text extraction + text embedding**: on-device OCR via `ocrs` crate. Dual HNSW architecture for visual and text similarity search.
+
+- **Screenshots Settings UI tab**: full configuration with live re-embed progress.
+
+- **Configurable OCR engine, GPU/CPU toggle**: `ScreenshotConfig` extended with OCR engine, model, and GPU settings.
+
+### Performance
+
+- **Unblock main & settings window startup by moving I/O-heavy Tauri commands to async threads**: Converted 12 synchronous `#[tauri::command]` handlers that performed directory scanning, JSON parsing, or SQLite queries on the Tauri IPC executor thread to `async` commands using `tokio::task::spawn_blocking`. This prevents those operations from stalling window rendering and other IPC calls during startup. Affected commands: `list_sessions`, `delete_session`, `list_embedding_sessions` (history_cmds); `get_daily_recording_mins`, `suggest_hook_distances`, `get_hook_log`, `get_hook_log_count`, `list_serial_ports` (settings_cmds); `query_annotations`, `get_recent_labels`, `delete_label`, `update_label`, `get_stale_label_count` (label_cmds).
+
+- **History view: batch metrics loading with disk cache**: Replaced per-session IPC waterfall (4 concurrent `get_csv_metrics` calls) with a single `get_day_metrics_batch` call that loads all sessions' metrics in one roundtrip. Added persistent `_metrics_cache.json` disk cache next to each session CSV — subsequent loads skip CSV re-parsing entirely. Timeseries payloads are downsampled to ≤360 points on the backend, reducing transfer size for sparklines and heatmaps. Week view also uses a single batch call for all 7 days. Adjacent-day prefetching now batch-loads as well.
+
+- **Shared text embedder — eliminate 3 redundant model copies (~390 MB RAM saved)**: consolidated four independent `fastembed::TextEmbedding` instances into a single app-wide `Arc<Mutex<TextEmbedding>>`.
+
+- **GPU optimization across all model systems**: enabled flash attention and KQV offloading in LLM; GPU-first mmproj loading on Linux; DirectML on Windows and CUDA on Linux for screenshot embeddings.
+
+- **Async history commands**: Converted `list_session_days`, `list_sessions_for_day`, `get_session_metrics`, `get_session_timeseries`, `get_csv_metrics`, `get_day_metrics_batch`, and `get_sleep_stages` from synchronous Tauri commands to async commands using `tokio::task::spawn_blocking`, preventing UI thread blocking during heavy file I/O and CSV/SQLite parsing.
+
+### Bugfixes
+
+- **Heatmap session counts**: `daySessionCounts` now reads from the localStorage day cache to return actual session counts instead of always 1, making month/year heatmap intensity meaningful.
+
+- **Fix clippy warnings and a11y lint in history page**: Resolved 9 clippy warnings — `let_and_return` in ws_commands.rs, `double_ended_iterator_last` and `collapsible_str_replace` in llm.rs, `iter_cloned_collect` in hermes/mw75 sessions, `needless_borrow` in settings_cmds.rs. Converted label dot `<span>` elements to `<button>` with `aria-label`, `onfocus`/`onblur` handlers for keyboard accessibility.
+
+- **History view hover fixes**: Fixed label hover not working on the day-grid heatmap canvas — hovering a cell containing a label now correctly highlights matching labels and shows the label tooltip. Fixed week view hover completely missing — added mouse event handlers to the day-dots canvas so both epoch dot and label circle hovers show tooltips. Moved tooltip rendering outside view-mode conditionals so tooltips are visible in all views.
+
+- **History label dot tooltips no longer clipped**: Replaced `absolute`-positioned tooltips on label dots with a `fixed`-position portal element, preventing overflow clipping from parent containers with `overflow-hidden`. Tooltips now always render above all content regardless of DOM nesting.
+
+- **Fix missing objc2 dependencies in skill-screenshots**: Added `objc2` and `objc2-app-kit` as macOS-only dependencies to resolve compilation errors when resolving the frontmost application PID via NSWorkspace.
+
+- **Fix all svelte-check warnings and i18n gaps**: Resolved 5 Svelte compiler warnings — fixed `propColors` initial-value capture in `EegChart.svelte` by using `EEG_COLOR` fallback, fixed `device` prop capture in `ElectrodeGuide.svelte` by deferring initial tab selection to `$effect`, and fixed non-interactive element warning in `history/+page.svelte` by using `role="toolbar"` with `tabindex`. Added 215 missing English-fallback i18n keys across de, fr, he, and uk locales.
+
+- **Fix `$state` invalid placement in titlebar-state**: Moved `$state(initial)` from a `return` statement to a variable declaration initializer, fixing the Svelte 5 `state_invalid_placement` error in `src/lib/titlebar-state.svelte.ts`.
+
+### Refactor
+
+- **Dynamic multi-channel DSP pipeline**: `EEG_CHANNELS` raised from 4 to 12 (max across all devices). `EegFilter` and `BandAnalyzer` track active channels and only wait for channels that have received data before firing GPU batches. Muse/Ganglion sessions use channels 0–3; MW75 uses all 12. Inactive channels have zero overhead.
+
+- **Dynamic channel rendering**: EegChart, BandChart, signal quality, and EEG channel values all accept dynamic channel count/labels/colors via props. MW75 renders 12 channels in a 3-column grid; Muse/Ganglion render 4 in 2 columns.
+
+- **Centralize hardcoded constants with prelude module**: added `skill_constants::prelude` re-exporting ~60 most-used constants; moved 50+ hardcoded values from `skill-eeg` (signal quality thresholds, artifact detection params, head pose params), `skill-data` (PPG IBI limits, DND identifiers), `skill-devices` (SNR thresholds), `skill-label-index` (index file names, HNSW params), `skill-llm` (catalog file, log dir/cap), `skill-tts` (event name, silence duration, KittenTTS config), `skill-tray` (menu rebuild debounce), `skill-tools` (tool-call delimiters, bash limits), and `src-tauri` (session gap, PPG channels, active window idle, WS request log cap) into `skill-constants` as the single source of truth; added `skill-constants` dependency to 5 crates that previously lacked it.
+
+- **Cross-crate deduplication**: consolidated shared utilities into `skill-data::util` — `date_dirs`, `MutexExt`, UTC timestamp formatters (`yyyymmdd_utc`, `yyyymmddhhmmss_utc`, `unix_to_ts`, `ts_to_unix`, `fmt_unix_utc`, `civil_from_unix`), and `open_readonly` SQLite helper. Removed duplicate implementations from `skill-commands`, `skill-label-index`, `skill-exg`, `skill-screenshots`, and `skill-router`.
+- **Screenshot HNSW dedup**: replaced near-identical vision/OCR HNSW load/save/rebuild function pairs in `skill-screenshots` with a generic `load_or_rebuild_hnsw_generic` + `save_hnsw_to` parametrized by path and fetch closure.
+- **Band-snapshot enrichment**: extracted `enrich_band_snapshot` + `SnapshotContext` into `skill-devices`, eliminating ~90 lines of duplicated PPG/artifact/head-pose/composite-score/GPU enrichment from `muse_session.rs` and `openbci_session.rs`.
+- **DND decision dedup**: replaced ~200-line inline DND decision block in `muse_session.rs` with the existing `skill_devices::dnd_tick()` pure function and proper state round-tripping.
+- **Constants consistency**: fixed hardcoded `"labels.sqlite"` in `skill-data::label_store` to use `LABELS_FILE` from `skill-constants`.
+
+- **Deduplicate frontend types and formatting helpers**: extracted shared TypeScript interfaces into `$lib/types.ts`; extracted 12 formatting functions into `$lib/format.ts`; extracted `SleepAnalysis` into `$lib/sleep-analysis.ts`; updated 15 consumer files; eliminates ~30 duplicate interface definitions and ~20 duplicate utility functions.
+
+- **Canvas chart dedup**: migrated ImuChart, PpgChart, GpuChart, and BandChart to use the shared `animatedCanvas` Svelte action from `use-canvas.ts`, eliminating duplicated ResizeObserver + requestAnimationFrame + DPR scaling boilerplate. EegChart is intentionally left as-is due to its spectrogram tape + MutationObserver + frame-skip complexity.
+
+- **HuggingFace cache path consolidation**: added `hf_cache_root()`, `hf_model_dir()`, and `hf_ensure_dirs()` helpers to `skill-data::util`. Replaced the manual env-var resolution in `skill-exg::resolve_hf_weights` and the duplicated `Cache::from_env().path()` + folder construction pattern in both `skill-exg` and `skill-llm::catalog`. Removed the now-unused `dirs` crate dependency from `skill-exg`.
+
+- **Titlebar store factory**: added `createTitlebarState()` and `createTitlebarCallbacks()` in `titlebar-state.svelte.ts`. Refactored `chat-titlebar`, `history-titlebar`, and `label-titlebar` stores to use the shared factory instead of raw `$state()` calls.
+
+- **Deduplicate Rust and frontend code**: replaced duplicated `MutexExt` trait in `src-tauri` with re-export from `skill-data::util`; removed duplicated `unix_secs_now()` in `eeg_embeddings.rs`; exported `rgba()` from `theme.ts` and removed duplicate in `GpuChart.svelte`; extracted `MuseStatus::reset_for_scanning()` to replace ~20-line identical status reset blocks in `muse_session.rs` and `openbci_session.rs`; converted 14 pure re-export shim files to inline module declarations in `lib.rs` and deleted the files; added `PPG_SAMPLE_RATE` to `skill-constants` and derived sample-rate constants in `session_csv` from the canonical source; eliminated `skill-eeg/src/constants.rs` shim file.
+
+- **Deduplicate Tauri backend boilerplate**: Added `skill_dir()`, `read_state()`, `mutate_state()`, and `mutate_and_save()` helpers to `lib.rs`, replacing ~30 repetitive `state.lock_or_recover().skill_dir.clone()` call sites across `commands.rs`, `ws_commands.rs`, `settings_cmds.rs`, `label_cmds.rs`, `history_cmds.rs`, `session_analysis.rs`, and `global_eeg_index.rs`. Added `search_params()` helper in `commands.rs` to deduplicate the k/ef clamping pattern. Added generic `load_json_or_default()`, `save_json()`, and `init_wal_pragmas()` to `skill-data::util`, replacing duplicated JSON config I/O and SQLite PRAGMA patterns across `skill-settings`, `skill_log`, `activity_store`, `screenshot_store`, `hooks_log`, and `eeg_embeddings`. Applied `mutate_and_save()` to ~12 simple set-then-persist patterns in `window_cmds.rs` and `settings_cmds.rs`.
+
+- **Extract `skill-commands` workspace crate**: moved EEG embedding search, timestamp helpers, SVG/DOT graph generation, PCA projection, and streaming search (2,321 lines) into `crates/skill-commands/`. Zero Tauri dependencies.
+
+- **Extract `skill-devices` workspace crate**: moved DND focus-mode engine, composite EEG scores, and battery EMA from `muse_session.rs` (774 lines) into `crates/skill-devices/`. Zero Tauri dependencies. Includes 9 unit tests.
+
+- **Extract `skill-exg` workspace crate**: moved cosine distance, fuzzy matching, HF weight management, GPU cache, and epoch metrics from `eeg_embeddings.rs` (2,613 lines) into `crates/skill-exg/`. Zero Tauri dependencies.
+
+- **Extract `skill-jobs` workspace crate**: moved sequential job queue (384 lines) into `crates/skill-jobs/`. Zero Tauri dependencies. All 3 unit tests pass.
+
+- **Extract `skill-router` workspace crate**: moved UMAP projection, embedding/label loaders, cluster analysis, and metric rounding from `ws_commands.rs` (2,408 lines) into `crates/skill-router/`. Zero Tauri dependencies.
+
+- **Extract `skill-settings` workspace crate**: moved persistent configuration types and disk I/O (924 lines) into `crates/skill-settings/`. All 27 unit tests pass.
+
+- **Extract `skill-tray` workspace crate**: moved progress-ring overlay, shortcut formatting, and dedup helpers from `tray.rs` (674 lines) into `crates/skill-tray/`. Pure `std`, zero dependencies. Includes 8 unit tests + 2 doc-tests.
+
+- **Flatten `llm/` and `tts/` module directories into single files**: converted multi-file modules into single files. No API or import path changes.
+
+- **Remove dead `llm/` duplicates**: deleted 1,277 lines of dead code (byte-identical copies of `catalog.rs` and `chat_store.rs`).
+
+- **Deduplicate frontend formatting, canvas setup, navigation, and UI patterns**: replaced ~15 inline date formatting calls with shared `format.ts` helpers; added `dateToLocalKey()`, `dateToCompactKey()`, `fromUnix()`, `toUnix()`, `setupHiDpiCanvas()`, `getDpr()`, `fmtCountdown()`, `fmtDateTimeLocalInput()`, `parseDateTimeLocalInput()`, `localKeyToUnix()` to `format.ts`; replaced 23 DPR canvas setup blocks across 8 chart files; migrated `EegIndices`, `FaaGauge`, `HeadPoseCard` to `CollapsibleSection`; created `$lib/navigation.ts` with shared window-open helpers used by 8 files; created `ConfirmAction` UI component replacing inline confirm-delete in history and labels; cleaned up compare page internal duplication (5 DPR blocks, inline date helpers).
+
+- **Move muse-rs and openbci dependencies to skill-devices crate**: Moved `muse-rs` and `openbci` dependency declarations from `src-tauri/Cargo.toml` to `crates/skill-devices/Cargo.toml` and re-exported them. Updated all imports in `muse_session.rs` and `openbci_session.rs` to use the re-exports via `skill_devices::`.
+
+- **Extract `skill-history` crate**: Moved all session history, metrics, time-series, sleep staging, and analysis logic from `src-tauri/src/{history_cmds,session_analysis}.rs` into a new `crates/skill-history` workspace crate with zero Tauri dependencies. The Tauri files now contain only thin async IPC wrappers that delegate to `skill_history::*` and run on `spawn_blocking` threads. Types (`SessionEntry`, `SessionMetrics`, `EpochRow`, `CsvMetricsResult`, `SleepStages`, `HistoryStats`, `EmbeddingSession`) and all pure functions (`list_sessions_for_day`, `load_metrics_csv`, `get_session_metrics`, `get_sleep_stages`, `compute_compare_insights`, `analyze_sleep_stages`, `analyze_search_results`, `compute_status_history`, etc.) are now public API in the crate.
+
+- **Shared canvas lifecycle action**: added `src/lib/use-canvas.ts` (`animatedCanvas` Svelte action) to DRY the ResizeObserver + requestAnimationFrame + DPR scaling boilerplate duplicated across EegChart, BandChart, PpgChart, GpuChart, and ImuChart. Existing charts are not yet migrated (tracked as a TODO).
+
+### Build
+
+- **Extract `skill-screenshots` workspace crate**: moved 1,533 lines of screenshot capture, vision embedding, HNSW search, and OCR into `crates/skill-screenshots/`.
+
+- **Extract `skill-tools` workspace crate**: moved all LLM tool logic (definitions, execution, parsing, validation, safety) into `crates/skill-tools/`.
+
+- **Create `skill-constants` crate**: single source of truth for all constants.
+
+- **Extract `skill-data` workspace crate**: moved 2,984 lines of pure data/utility logic into `crates/skill-data/`.
+
+- **Extract `skill-tts` workspace crate**: moved 1,307 lines of TTS logic into `crates/skill-tts/`.
+
+- **Extract `skill-eeg` workspace crate**: moved 3,459 lines of EEG DSP into `crates/skill-eeg/`.
+
+- **Extract `skill-llm` workspace crate**: moved 7,421 lines of LLM logic into `crates/skill-llm/`.
+
+- **sccache + mold for faster builds**: auto-detected build caching. ~54% faster clean rebuilds.
+
+- **Fragment-based changelog system**: replaced single-file `CHANGELOG.md` editing with `changes/unreleased/` fragments. Each change gets its own `.md` file; `npm run bump` compiles fragments into `changes/releases/<version>.md`, deletes consumed fragments, and rebuilds `CHANGELOG.md` from all release files. All 20 historical releases migrated. Supports `--rebuild` to regenerate from archives.
+
+### CLI
+
+- **Dynamic signal quality rendering**: `status` command now renders signal quality for any number of EEG channels (4/8/12) instead of hardcoding Muse's tp9/af7/af8/tp10 keys. Added device support note and tool-calling documentation to CLI header comment.
+
+- **Full LLM management via CLI**: `llm select`, `llm mmproj`, `llm autoload-mmproj`, `llm pause`, `llm resume`, `llm downloads`, `llm refresh`, `llm fit`, `llm add`.
+
+- **Calibration profile CRUD**: `calibrations create`, `calibrations update`, `calibrations delete`.
+
+- **Hooks CRUD**: `hooks list`, `hooks add`, `hooks remove`, `hooks enable/disable`, `hooks update`, `hooks suggest`, `hooks log`.
+
+### UI
+
+- **History day view — 24×720 heatmap grid**: replaced the linear 24-hour timeline bar and epoch dot canvas with a dense heatmap grid (24 hour-columns × 720 five-second rows); cells colored by session color with opacity modulated by relaxation+engagement; hour headers, 15-minute grid lines, minute labels; scrollable canvas (max 420px); cursor-following tooltip with HH:MM:SS and data values.
+
+- **History day view — rainbow label circles**: replaced text-based label display with tiny colored circles in session rows, expanded details, timeline legend, and canvas; rainbow hue distribution (0°–300° HSL) based on temporal order; hover highlights exact-match labels (glow ring + scale) and temporally close labels (within 5 min, brightness/glow); popover tooltips on hover; cross-session matching.
+
+- **History day view — screenshot indicators on heatmap**: cells that have a corresponding screenshot show a small blue diamond indicator on the canvas grid; hovering a screenshot cell displays a floating image preview (loaded from the local API server); preview disappears immediately when the mouse moves to a different cell; screenshot data loaded per-day via `get_screenshots_around`.
+
+- **History view UX improvements**: 14 enhancements to the history view:
+  1. Week view shows total recording duration per day in sidebar (e.g. "2s · 1h 30m").
+  2. Clicking on the day grid heatmap scrolls to and expands the corresponding session.
+  3. Week view entire row is clickable to navigate to day view (not just sidebar).
+  4. Month view calendar cells show mini duration bars proportional to recording hours.
+  5. Day grid draws a red "now" marker hairline when viewing today.
+  6. Keyboard shortcuts 1/2/3/4 switch between year/month/week/day views; arrow keys navigate in calendar views too.
+  7. Week view today row has a visible left-edge accent bar instead of nearly invisible tint.
+  8. Cross-highlighting between grid and session list — hovering a cell highlights the session row below; hovering grid sets a primary ring on the matching session card.
+  9. Week↔Day view transitions use a subtle fade animation.
+  10. Day view shows an aggregate daily summary card (total duration, avg relaxation/engagement, label count) above the session list when there are multiple sessions.
+  11. Fixed `daySessionCounts` always returning 1 — heatmap intensity now reflects actual session count per day from cache.
+  12. Month/year view tooltips show recording duration alongside session count.
+  13. Expanding a session row scrolls it into view smoothly.
+  14. Week view shows small session color legend dots in each day row.
+
+- **MW75 Neuro device photo**: Added product image for the MW75 Neuro headphones, displayed on the dashboard when connected and in the device list in Settings.
+
+- **History view accent consistency**: migrated all interactive/highlight colors in the history view from hardcoded `emerald-*` to accent-aware `violet-*` (remapped by the Appearance accent setting). Affected: year/month heatmap cells and legend swatches, month calendar day-count text, screenshot canvas diamond indicator (now reads `--color-violet-500` CSS property), and screenshot tooltip dot. Semantic status colors (`emerald-500` for positive trend, `red-*` for destructive actions) remain unchanged.
+
+### i18n
+
+- **Complete translation pass across de/fr/he/uk**: all untranslated keys now translated. `npm run audit:i18n` reports 0 untranslated keys.
+
+- **Translation audit script** (`scripts/audit-i18n.ts`): detects untranslated keys with exemption system for technical terms.
+
+### Docs
+
+- **AI models reference**: Added `docs/AI.md` documenting all AI/ML models used across the codebase — LLM catalog, ZUNA EEG foundation model, CLIP/Nomic vision embeddings, OCR engines, TTS backends, HNSW search, and UMAP projection.
+
+- **Add `README.md` to every workspace crate**: created README files for all 19 crates that were missing one; each contains heading and description from `Cargo.toml`.
+
+- **Expand `crates/*/README.md`**: rewrote all 17 crate READMEs with comprehensive documentation — overview, public API tables, feature flags, and dependency lists.
+
+- **Rewrite root `README.md`**: restructured to reference all workspace crate READMEs and `docs/` guides; added project layout section with crate table, vendored crates, and frontend structure.
+
+- **Add workspace crate outline to `AGENTS.md`**: brief table of all 17 workspace crates and 2 vendored crates with one-line purpose descriptions.
+
+- **Move `CHANGELOG.md` to project root**: merged the root-level entries into the comprehensive `docs/CHANGELOG.md` and moved to root.
+
+- **Update SKILL.md for new devices, tools, and screenshots**: Added "Supported Devices" section documenting Muse, OpenBCI Ganglion, MW75 Neuro (12ch), and Hermes V1 (8ch) with channel counts and sample rates. Updated `status` JSON example to show device-agnostic fields (`eeg_channels`, multi-device name examples, dynamic signal quality keys). Added "Built-in Tool Calling" section to the LLM docs covering bash, read/write/edit, web search/fetch tools with safety info. Added "Screenshots (UI-only Feature)" section documenting capture, CLIP vision embedding, OCR, and dual HNSW search. Updated table of contents numbering.
+
+- **Mermaid crate dependency graph**: Added an interactive Mermaid diagram to the README Architecture section showing how all workspace crates depend on each other and connect to the Tauri app and SvelteKit frontend.
+
+- **Constants sync guard**: improved doc comment in `src/tests/constants.test.ts` explaining how the test file guards Rust↔TypeScript constant drift.
+
 ## [0.0.37] — 2026-03-14
 
 ### History — Calendar Heatmap View
