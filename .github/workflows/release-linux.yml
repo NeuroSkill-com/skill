@@ -386,12 +386,12 @@ jobs:
 
           if dl.returncode == 0:
               with open("latest.json", encoding="utf-8-sig") as fh:
-                manifest = json.load(fh)
+                  manifest = json.load(fh)
           else:
               pub_date = datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
               manifest = {
                   "version":  version,
-                    "notes":    f"NeuroSkill™ v{version}",
+                  "notes":    f"NeuroSkill\u2122 v{version}",
                   "pub_date": pub_date,
                   "platforms": {},
               }
@@ -402,7 +402,7 @@ jobs:
           }
 
           with open("latest.json", "w", encoding="utf-8") as fh:
-              json.dump(manifest, fh, indent=2)
+              json.dump(manifest, fh, indent=2, ensure_ascii=False)
               fh.write("\n")
 
           print("Updated latest.json:")
