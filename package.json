@@ -43,7 +43,8 @@
     "setup:build-cache": "bash scripts/setup-build-cache.sh",
     "compile:changelog": "node scripts/compile-changelog.js",
     "bump": "node scripts/bump.js",
-    "tag": "node scripts/tag.js"
+    "tag": "node scripts/tag.js",
+    "clean:rust": "find . -name target -type d -path '*/crates/*/target' -o -path '*/src-tauri/target' | xargs rm -rf"
   },
   "license": "GPL-3.0-only",
   "dependencies": {
