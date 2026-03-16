@@ -123,7 +123,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     .build();
                 let resp = agent
                     .get(&url_for_fetch)
-                    .set("User-Agent", "NeuroSkill-LLM-Tool/1.0")
+                    .set("User-Agent", BROWSER_UA)
                     .call();
 
                 match resp {
@@ -848,11 +848,18 @@ fn strip_html_tags(s: &str) -> String {
        .replace("&nbsp;", " ")
 }
 
+/// Standard browser User-Agent used for web requests that need to avoid bot
+/// detection (DuckDuckGo HTML lite, web_fetch, etc.).
+const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 /// Fallback search: scrape DuckDuckGo HTML lite page.
 fn ddg_html_search(agent: &ureq::Agent, query: &str) -> Vec<Value> {
     let resp = agent
         .post("https://html.duckduckgo.com/html/")
-        .set("User-Agent", "Mozilla/5.0 (compatible; SkillBot/1.0)")
+        .set("User-Agent", BROWSER_UA)
+        .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .set("Accept-Language", "en-US,en;q=0.5")
+        .set("Referer", "https://html.duckduckgo.com/")
         .set("Content-Type", "application/x-www-form-urlencoded")
         .send_string(&format!("q={}", urlencoding::encode(query)));
 
