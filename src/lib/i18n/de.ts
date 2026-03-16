@@ -405,7 +405,7 @@ const de: Record<string, string> = {
   "settings.logLlm":            "LLM",
   "settings.logLlmDesc":        "Inferenz-Engine (Modell laden, Generierung, Tool-Aufrufe)",
   "settings.logChatStore":      "Chat-Speicher",
-  "settings.logChatStoreDesc":  "Chat-SQLite-Operationen (Speichern, Migrieren, \u00d6ffnen)",
+  "settings.logChatStoreDesc":  "Chat-SQLite-Operationen (Speichern, Migrieren, Öffnen)",
   "settings.logHistory":        "Verlauf",
   "settings.logHistoryDesc":    "Sitzungsliste & CSV-Scan",
   "settings.logHooks":          "Hooks",
@@ -2194,7 +2194,7 @@ const de: Record<string, string> = {
   "llm.tools.parallel":                 "Parallel",
   "llm.tools.sequential":              "Sequentiell",
   "llm.tools.maxRounds":               "Max. Runden",
-  "llm.tools.maxRoundsDesc":           "Wie viele Denken\u2192Tool\u2192Denken-Zyklen pro Nachricht erlaubt sind.",
+  "llm.tools.maxRoundsDesc":           "Wie viele Denken→Tool→Denken-Zyklen pro Nachricht erlaubt sind.",
   "llm.tools.maxCallsPerRound":        "Max. Aufrufe pro Runde",
   "llm.tools.maxCallsPerRoundDesc":    "Wie viele Tools das Modell in einer Runde aufrufen darf.",
 

@@ -10,6 +10,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct LlmToolConfig {
+    /// Master switch — when `false`, *all* tools are disabled regardless of
+    /// individual toggles.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
     pub date:       bool,
     pub location:   bool,
     pub web_search: bool,
@@ -56,6 +61,7 @@ pub enum ToolExecutionMode {
     Parallel,
 }
 
+fn default_true()                      -> bool { true }
 fn default_tool_execution_mode()       -> ToolExecutionMode { ToolExecutionMode::Parallel }
 fn default_max_tool_rounds()           -> usize { 3 }
 fn default_max_tool_calls_per_round()  -> usize { 4 }
@@ -63,6 +69,7 @@ fn default_max_tool_calls_per_round()  -> usize { 4 }
 impl Default for LlmToolConfig {
     fn default() -> Self {
         Self {
+            enabled:            true,
             date:               true,
             location:           true,
             web_search:         true,
