@@ -2131,6 +2131,7 @@ const de: Record<string, string> = {
   "settingsTabs.tts": "Stimme",
 
   "settingsTabs.llm": "LLM-Server",
+  "settingsTabs.tools": "Werkzeuge",
 
   "llm.section.server":              "Lokaler LLM-Server",
   "llm.section.models":              "Sprachmodelle",

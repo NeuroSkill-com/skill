@@ -2125,6 +2125,7 @@ const uk: Record<string, string> = {
   "settingsTabs.tts": "Голос",
 
   "settingsTabs.llm": "LLM сервер",
+  "settingsTabs.tools": "Інструменти",
 
   "llm.section.server":              "Локальний LLM сервер",
   "llm.section.models":              "Мовні моделі",

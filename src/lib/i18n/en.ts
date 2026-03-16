@@ -2494,6 +2494,7 @@ const en: Record<string, string> = {
 
   // ── LLM tab ───────────────────────────────────────────────────────────────
   "settingsTabs.llm":                   "LLM",
+  "settingsTabs.tools":                 "Tools",
 
   "llm.section.server":                 "Local LLM Server",
   "llm.section.models":                 "Language Models",

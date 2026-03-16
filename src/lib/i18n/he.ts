@@ -782,6 +782,7 @@ const he: Record<string, string> = {
   "settingsTabs.tts": "קול",
 
   "settingsTabs.llm": "שרת LLM",
+  "settingsTabs.tools": "כלים",
 
   "llm.section.server":              "שרת LLM מקומי",
   "llm.section.models":              "מודלי שפה",
