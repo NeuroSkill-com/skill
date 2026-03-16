@@ -679,6 +679,10 @@ fn find_balanced_json_arrays(content: &str) -> Vec<(usize, usize)> {
 }
 
 /// Remove `[TOOL_CALL]…[/TOOL_CALL]` markers from assistant message content.
+///
+/// Also strips trailing partial prefixes of `[TOOL_CALL]` (e.g. `[TOOL_CA`)
+/// so that the streaming sanitizer holds them back instead of emitting them
+/// as visible text to clients.
 pub fn strip_tool_call_blocks_preserve(content: &str) -> String {
     const START: &str = TOOL_CALL_START;
     const END:   &str = TOOL_CALL_END;
@@ -702,7 +706,26 @@ pub fn strip_tool_call_blocks_preserve(content: &str) -> String {
         }
     }
 
+    // Strip trailing partial prefix of [TOOL_CALL] (during streaming the tag
+    // arrives token-by-token, e.g. "[", "[T", "[TO", … "[TOOL_CA").
+    // We check if the output ends with any proper prefix of START (len ≥ 1).
+    strip_trailing_tag_prefix(&mut out, START);
+    // Also strip trailing partial prefix of [/TOOL_CALL]
+    strip_trailing_tag_prefix(&mut out, END);
+
     strip_json_tool_call_payloads_preserve(&out)
+}
+
+/// If `out` ends with a string that is a proper prefix of `tag`, remove it.
+fn strip_trailing_tag_prefix(out: &mut String, tag: &str) {
+    // Check longest possible prefix first (len = tag.len()-1 down to 1).
+    for prefix_len in (1..tag.len()).rev() {
+        let prefix = &tag[..prefix_len];
+        if out.ends_with(prefix) {
+            out.truncate(out.len() - prefix_len);
+            return;
+        }
+    }
 }
 
 fn strip_json_tool_call_payloads_preserve(content: &str) -> String {
@@ -1262,5 +1285,91 @@ df -h
         let calls = extract_tool_calls(msg);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].function.name, "date");
+    }
+
+    // ── Partial tag prefix stripping (streaming) ──────────────────────────
+
+    #[test]
+    fn strip_partial_tool_call_tag_prefix() {
+        // During streaming, partial [TOOL_CALL] arrives token by token.
+        // The sanitizer must hold back partial prefixes so they aren't
+        // emitted as visible text.
+        assert_eq!(strip_tool_call_blocks_preserve("["), "");
+        assert_eq!(strip_tool_call_blocks_preserve("[T"), "");
+        assert_eq!(strip_tool_call_blocks_preserve("[TO"), "");
+        assert_eq!(strip_tool_call_blocks_preserve("[TOOL_CA"), "");
+        assert_eq!(strip_tool_call_blocks_preserve("[TOOL_CALL"), "");
+        assert_eq!(strip_tool_call_blocks_preserve("[TOOL_CALL]"), "");
+        // Text before the partial tag should survive
+        assert_eq!(strip_tool_call_blocks_preserve("Hello [TOOL_CA"), "Hello ");
+        assert_eq!(strip_tool_call_blocks_preserve("Hello [TOOL_CALL"), "Hello ");
+        // Complete block is fully stripped
+        assert_eq!(
+            strip_tool_call_blocks_preserve(
+                r#"[TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_CALL]"#
+            ),
+            ""
+        );
+        // Text around complete block survives
+        assert_eq!(
+            strip_tool_call_blocks_preserve(
+                r#"Hi [TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_CALL] done"#
+            ),
+            "Hi  done"
+        );
+    }
+
+    #[test]
+    fn strip_partial_close_tag_prefix() {
+        // Partial [/TOOL_CALL] suffix after a complete open+body
+        assert_eq!(
+            strip_tool_call_blocks_preserve(
+                r#"[TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_"#
+            ),
+            ""
+        );
+    }
+
+    #[test]
+    fn legitimate_brackets_survive_streaming() {
+        // Simulate streaming "Here are [options] for you." token by token.
+        // The bracket should be held back momentarily but appear once the
+        // next char proves it's not a tag prefix.
+        let full = "Here are [options] for you.";
+        let mut raw = String::new();
+        let mut emitted_len = 0usize;
+        let mut all_visible = String::new();
+        for ch in full.chars() {
+            raw.push(ch);
+            let visible = strip_tool_call_blocks_preserve(&raw);
+            if visible.len() > emitted_len {
+                all_visible.push_str(&visible[emitted_len..]);
+                emitted_len = visible.len();
+            }
+        }
+        assert_eq!(all_visible, full);
+    }
+
+    #[test]
+    fn sanitizer_streaming_simulation() {
+        // Simulate the ToolCallStreamSanitizer behaviour: accumulate raw text,
+        // call strip_tool_call_blocks_preserve, emit only new visible chars.
+        let full = r#"[TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_CALL]"#;
+        let mut raw = String::new();
+        let mut emitted_len = 0usize;
+        let mut all_visible = String::new();
+        for ch in full.chars() {
+            raw.push(ch);
+            let visible = strip_tool_call_blocks_preserve(&raw);
+            if visible.len() > emitted_len {
+                all_visible.push_str(&visible[emitted_len..]);
+                emitted_len = visible.len();
+            }
+        }
+        assert!(
+            all_visible.trim().is_empty(),
+            "tool call should produce no visible output, got: {:?}",
+            all_visible,
+        );
     }
 }
