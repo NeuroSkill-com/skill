@@ -27,6 +27,9 @@ pub mod mw75;
 pub mod hermes;
 pub mod openbci;
 
+#[cfg(test)]
+mod tests;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use bitflags::bitflags;

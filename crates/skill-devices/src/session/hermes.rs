@@ -23,7 +23,8 @@ use super::{
 
 pub struct HermesAdapter {
     rx:      mpsc::Receiver<HermesEvent>,
-    handle:  HermesHandle,
+    /// `None` only in tests (no BLE hardware available).
+    handle:  Option<HermesHandle>,
     desc:    DeviceDescriptor,
     pending: VecDeque<DeviceEvent>,
 }
@@ -35,7 +36,7 @@ impl HermesAdapter {
 
         Self {
             rx,
-            handle,
+            handle: Some(handle),
             desc: DeviceDescriptor {
                 kind: "hermes",
                 caps: DeviceCaps::EEG | DeviceCaps::IMU,
@@ -45,6 +46,27 @@ impl HermesAdapter {
                 pipeline_channels: HERMES_EEG_CHANNELS.min(EEG_CHANNELS),
             },
             pending: VecDeque::new(),
+        }
+    }
+
+    /// Test-only constructor without a real BLE handle.
+    #[cfg(test)]
+    pub(crate) fn new_for_test(rx: mpsc::Receiver<HermesEvent>) -> Self {
+        let channel_names: Vec<String> =
+            HERMES_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+
+        Self {
+            rx,
+            handle: None,
+            desc: super::DeviceDescriptor {
+                kind: "hermes",
+                caps: super::DeviceCaps::EEG | super::DeviceCaps::IMU,
+                eeg_channels: HERMES_EEG_CHANNELS,
+                eeg_sample_rate: HERMES_SAMPLE_RATE,
+                channel_names,
+                pipeline_channels: HERMES_EEG_CHANNELS.min(skill_constants::EEG_CHANNELS),
+            },
+            pending: std::collections::VecDeque::new(),
         }
     }
 
@@ -102,6 +124,8 @@ impl DeviceAdapter for HermesAdapter {
     }
 
     async fn disconnect(&mut self) {
-        let _ = self.handle.disconnect().await;
+        if let Some(ref h) = self.handle {
+            let _ = h.disconnect().await;
+        }
     }
 }

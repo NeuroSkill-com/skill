@@ -61,6 +61,22 @@ impl OpenBciAdapter {
         }
     }
 
+    /// Test-only constructor from a pre-built async channel (no blocking bridge).
+    #[cfg(test)]
+    pub(crate) fn from_receiver(
+        rx: tokio::sync::mpsc::Receiver<Sample>,
+        desc: DeviceDescriptor,
+        info: DeviceInfo,
+    ) -> Self {
+        Self {
+            sample_rx: rx,
+            desc,
+            pending: VecDeque::new(),
+            connected_emitted: false,
+            device_info: Some(info),
+        }
+    }
+
     /// Build a [`DeviceDescriptor`] for any OpenBCI board variant.
     pub fn make_descriptor(
         kind: &'static str,

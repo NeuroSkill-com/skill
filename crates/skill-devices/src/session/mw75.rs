@@ -31,7 +31,8 @@ use super::{
 
 pub struct Mw75Adapter {
     rx:      mpsc::Receiver<Mw75Event>,
-    handle:  Arc<Mw75Handle>,
+    /// `None` only in tests (no BLE hardware available).
+    handle:  Option<Arc<Mw75Handle>>,
     desc:    DeviceDescriptor,
     pending: VecDeque<DeviceEvent>,
 
@@ -61,7 +62,7 @@ impl Mw75Adapter {
 
         Self {
             rx,
-            handle,
+            handle: Some(handle),
             desc: DeviceDescriptor {
                 kind: "mw75",
                 caps: DeviceCaps::EEG | DeviceCaps::BATTERY,
@@ -81,6 +82,37 @@ impl Mw75Adapter {
     #[cfg(feature = "mw75-rfcomm")]
     pub fn set_rfcomm(&mut self, rfcomm: mw75::rfcomm::RfcommHandle) {
         self._rfcomm = Some(rfcomm);
+    }
+
+    /// Test-only constructor that creates an adapter without a real BLE handle.
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        rx: mpsc::Receiver<Mw75Event>,
+        initial_info: Option<super::DeviceInfo>,
+    ) -> Self {
+        let channel_names: Vec<String> =
+            MW75_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+
+        let mut pending = VecDeque::new();
+        if let Some(info) = initial_info {
+            pending.push_back(super::DeviceEvent::Connected(info));
+        }
+
+        Self {
+            rx,
+            handle: None, // No BLE handle in tests.
+            desc: super::DeviceDescriptor {
+                kind: "mw75",
+                caps: super::DeviceCaps::EEG | super::DeviceCaps::BATTERY,
+                eeg_channels: MW75_EEG_CHANNELS,
+                eeg_sample_rate: MW75_SAMPLE_RATE,
+                channel_names,
+                pipeline_channels: MW75_EEG_CHANNELS.min(skill_constants::EEG_CHANNELS),
+            },
+            pending,
+            #[cfg(feature = "mw75-rfcomm")]
+            _rfcomm: None,
+        }
     }
 
     fn translate(&mut self, ev: Mw75Event) {
@@ -147,6 +179,8 @@ impl DeviceAdapter for Mw75Adapter {
         if let Some(ref r) = self._rfcomm {
             r.shutdown();
         }
-        let _ = self.handle.disconnect().await;
+        if let Some(ref h) = self.handle {
+            let _ = h.disconnect().await;
+        }
     }
 }
