@@ -65,7 +65,7 @@ the Free Software Foundation, version 3 only. -->
   <!-- Community ──────────────────────────────────────────────────────────── -->
   <HelpSection title={t("helpDash.community")}
     description={t("helpDash.communityDesc")}>
-    <a href="https://discord.gg/nA6Xk5MV"
+    <a href="https://discord.gg/Rcvb8Cx4cZ"
        target="_blank" rel="noreferrer"
        class="inline-flex items-center gap-2 rounded-xl border border-border
               dark:border-white/[0.06] bg-white dark:bg-[#14141e] px-4 py-3
