@@ -8,6 +8,20 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.40] — 2026-03-16
+
+### Bugfixes
+
+- **CI: fix latest.json encoding and Python indentation**: Fixed IndentationError in macOS workflow (`if not notes:` was mis-indented inside `except` block) and inconsistent indentation in Linux workflow. Replaced literal `™` with `\u2122` escape in Python scripts and added `ensure_ascii=False` to all `json.dump` calls so `latest.json` is always coherent UTF-8 across all three platform CIs.
+
+- **Fix LINUX.md path in packaging scripts**: Updated `package-linux-dist.sh` and `package-linux-system-bundles.sh` to reference `docs/LINUX.md` instead of the non-existent root-level `LINUX.md`, fixing a `cp: cannot stat` error on Linux CI.
+
+- **Windows CI: fix trademark character encoding**: Replace literal `™` (U+2122) with PowerShell escape `$([char]0x2122)` in the Windows release workflow to prevent `Unexpected token` parse errors.
+
+### Docs
+
+- **AGENTS.md: add CI shared-artifact encoding rule**: New section documenting that all CI workflows must produce and consume `latest.json` as UTF-8 without BOM, with no literal non-ASCII characters in CI scripts.
+
 ## [0.0.39] — 2026-03-15
 
 ### Bugfixes
