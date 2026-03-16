@@ -11,7 +11,7 @@ use kittentts::{KittenTTS, download::{self, LoadProgress}};
 use rodio::{DeviceSinkBuilder, MixerDeviceSink};
 use tokio::sync::oneshot;
 
-use crate::{play_f32_audio, tts_log, init_espeak_data_path};
+use crate::{play_f32_audio, init_espeak_data_path};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
     init_espeak_data_path();
 
     let mut stream: Option<MixerDeviceSink> = DeviceSinkBuilder::open_default_sink()
-        .map_err(|e| eprintln!("[tts] warning: could not open audio: {e}")).ok();
+        .map_err(|e| tts_log!("tts", "warning: could not open audio: {e}")).ok();
     let mut model: Option<KittenTTS> = None;
 
     for cmd in rx {
@@ -88,7 +88,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                     Ok(m) => {
                         let voices = m.available_voices.clone();
                         let _ = AVAILABLE_VOICES.set(voices.clone());
-                        eprintln!("[tts] KittenTTS ready (voices={voices:?})");
+                        tts_log!("tts", "KittenTTS ready (voices={voices:?})");
                         model = Some(m);
                         LOADED.store(true, Ordering::Relaxed);
                         done.send(Ok(())).ok();
@@ -108,7 +108,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                             model = Some(m);
                         }
                         Err(e) => {
-                            eprintln!("[tts] lazy init failed: {e}");
+                            tts_log!("tts", "lazy init failed: {e}");
                             done.send(()).ok();
                             continue;
                         }
@@ -116,14 +116,14 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 }
                 if stream.is_none() {
                     stream = DeviceSinkBuilder::open_default_sink()
-                        .map_err(|e| eprintln!("[tts] could not open audio: {e}")).ok();
+                        .map_err(|e| tts_log!("tts", "could not open audio: {e}")).ok();
                 }
                 if let (Some(m), Some(s)) = (&model, &stream) {
                     if let Err(e) = speak_inner(m, s, &text, &voice) {
-                        eprintln!("[tts] synthesis error: {e}");
+                        tts_log!("tts", "synthesis error: {e}");
                     }
                 } else {
-                    eprintln!("[tts] speak skipped: no audio device");
+                    tts_log!("tts", "speak skipped: no audio device");
                 }
                 done.send(()).ok();
             }
@@ -131,7 +131,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
             Cmd::Unload { done } => {
                 model = None;
                 LOADED.store(false, Ordering::Relaxed);
-                eprintln!("[tts] KittenTTS model unloaded");
+                tts_log!("tts", "KittenTTS model unloaded");
                 done.send(()).ok();
             }
 
@@ -140,7 +140,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 drop(stream.take());
                 drop(model.take());
                 LOADED.store(false, Ordering::Relaxed);
-                eprintln!("[tts] KittenTTS shutdown complete");
+                tts_log!("tts", "KittenTTS shutdown complete");
                 done.send(()).ok();
                 return;
             }
@@ -158,14 +158,14 @@ fn speak_inner(
         .generate(text, voice, SPEED, true)
         .map_err(|e| format!("synthesis failed for {text:?}: {e}"))?;
     if samples.is_empty() {
-        eprintln!("[tts] no samples for {text:?} voice={voice:?}");
+        tts_log!("tts", "no samples for {text:?} voice={voice:?}");
         return Ok(());
     }
-    tts_log(&format!(
+    tts_log!("tts",
         "synthesised {} samples ({:.2} s) in {} ms — text={text:?} voice={voice:?}",
         samples.len(), samples.len() as f32 / SAMPLE_RATE as f32,
         t0.elapsed().as_millis(),
-    ));
+    );
     play_f32_audio(stream, samples, SAMPLE_RATE);
     Ok(())
 }

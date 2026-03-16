@@ -13,7 +13,7 @@ use rodio::{DeviceSinkBuilder, MixerDeviceSink};
 use sha2::{Digest, Sha256};
 use tokio::sync::oneshot;
 
-use crate::{play_f32_audio, skill_dir, tts_log, init_espeak_data_path};
+use crate::{play_f32_audio, skill_dir, init_espeak_data_path};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -104,7 +104,7 @@ pub fn apply_config(cfg: &crate::config::NeuttsConfig) {
 
     if cfg.enabled && was_ready {
         READY.store(false, Ordering::Relaxed);
-        tts_log("NeuTTS config updated — will reinitialise on next tts_init");
+        tts_log!("neutts", "config updated \u{2014} will reinitialise on next tts_init");
     }
 }
 
@@ -180,7 +180,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                     READY.store(false, Ordering::Relaxed);
                     match load(&backbone_repo, gguf_file.as_deref(), cb) {
                         Ok(m) => {
-                            eprintln!("[neutts] backbone ready (repo={backbone_repo})");
+                            tts_log!("neutts", "backbone ready (repo={backbone_repo})");
                             loaded_backbone = backbone_repo;
                             model = Some(m);
                         }
@@ -220,7 +220,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                             READY.store(true, Ordering::Relaxed);
                         }
                         Err(e) => {
-                            eprintln!("[neutts] lazy init failed: {e}");
+                            tts_log!("neutts", "lazy init failed: {e}");
                             done.send(()).ok();
                             continue;
                         }
@@ -239,7 +239,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 // The old sink is dropped (which is fine — it is idle between utterances)
                 // and a fresh one pointing at the *current* default device is created.
                 stream = DeviceSinkBuilder::open_default_sink()
-                    .map_err(|e| eprintln!("[neutts] could not open audio device: {e}"))
+                    .map_err(|e| tts_log!("neutts", "could not open audio device: {e}"))
                     .ok();
 
                 // Per-utterance voice override (loads inline without touching stored state).
@@ -249,7 +249,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                     std::borrow::Cow<str>,
                 ) = match voice_override.as_deref().filter(|v| !v.is_empty()) {
                     Some(ovr) if is_preset(ovr) => {
-                        tts_log(&format!("per-utterance preset override: {ovr:?}"));
+                        tts_log!("neutts", "per-utterance preset override: {ovr:?}");
                         let (c, t, k) = load_ref_codes(model.as_ref().unwrap(), ovr, "", "");
                         (std::borrow::Cow::Owned(c),
                          std::borrow::Cow::Owned(t),
@@ -265,7 +265,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 if let (Some(m), Some(s)) = (&model, &stream) {
                     speak_cached(m, s, &text, &eff_codes, &eff_text, &loaded_backbone, &eff_vkey);
                 } else {
-                    eprintln!("[neutts] speak skipped: no audio device");
+                    tts_log!("neutts", "speak skipped: no audio device");
                 }
                 done.send(()).ok();
             }
@@ -279,7 +279,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 loaded_voice_key = "default".to_string();
                 READY.store(false, Ordering::Relaxed);
                 LOADING.store(false, Ordering::Relaxed);
-                eprintln!("[neutts] model unloaded");
+                tts_log!("neutts", "model unloaded");
                 done.send(()).ok();
             }
 
@@ -294,7 +294,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 loaded_backbone.clear();
                 READY.store(false, Ordering::Relaxed);
                 LOADING.store(false, Ordering::Relaxed);
-                eprintln!("[neutts] shutdown complete — Metal context released");
+                tts_log!("neutts", "shutdown complete \u{2014} Metal context released");
                 done.send(()).ok();
                 // Exit the worker loop so the thread ends cleanly.
                 return;
@@ -452,10 +452,10 @@ fn load_ref_codes(
             Ok(codes) => {
                 let text = std::fs::read_to_string(&txt)
                     .map(|s| s.trim().to_string()).unwrap_or_default();
-                eprintln!("[neutts] preset voice '{preset}' loaded ({} tokens)", codes.len());
+                tts_log!("neutts", "preset voice '{preset}' loaded ({} tokens)", codes.len());
                 return (codes, text, preset.to_string());
             }
-            Err(e) => eprintln!("[neutts] preset '{preset}' not found at {}: {e}", npy.display()),
+            Err(e) => tts_log!("neutts", "preset '{preset}' not found at {}: {e}", npy.display()),
         }
     }
 
@@ -467,12 +467,12 @@ fn load_ref_codes(
             .unwrap_or_else(|_| format!("custom-{wav_path}"));
 
         let cache = neutts::RefCodeCache::with_dir(ref_code_cache_dir())
-            .map_err(|e| eprintln!("[neutts] ref-code cache open failed: {e}")).ok();
+            .map_err(|e| tts_log!("neutts", "ref-code cache open failed: {e}")).ok();
 
         if let Some((codes, outcome)) = cache.as_ref()
             .and_then(|c| c.try_load(path).ok().flatten())
         {
-            tts_log(&format!("custom voice ref-code cache hit: {outcome}"));
+            tts_log!("neutts", "custom voice ref-code cache hit: {outcome}");
             return (codes, ref_text.to_string(), voice_key);
         }
 
@@ -481,19 +481,19 @@ fn load_ref_codes(
                 Ok(codes) => {
                     if let Some(c) = &cache {
                         if let Ok(outcome) = c.store(path, &codes) {
-                            tts_log(&format!("custom voice encoded+cached: {outcome}"));
+                            tts_log!("neutts", "custom voice encoded+cached: {outcome}");
                         }
                     }
                     return (codes, ref_text.to_string(), voice_key);
                 }
-                Err(e) => eprintln!("[neutts] WAV encoding failed: {e}"),
+                Err(e) => tts_log!("neutts", "WAV encoding failed: {e}"),
             },
-            Err(e) => eprintln!("[neutts] NeuCodecEncoder not available ({e})"),
+            Err(e) => tts_log!("neutts", "NeuCodecEncoder not available ({e})"),
         }
     }
 
     // ── Backbone built-in voice ───────────────────────────────────────────────
-    eprintln!("[neutts] no voice reference loaded — using backbone built-in voice");
+    tts_log!("neutts", "no voice reference loaded \u{2014} using backbone built-in voice");
     (Vec::new(), String::new(), "default".to_string())
 }
 
@@ -508,8 +508,8 @@ fn synthesize(
     if audio.is_empty() {
         return Err(format!("synthesis returned no samples for {text:?}"));
     }
-    eprintln!(
-        "[neutts] synthesised {} samples ({:.2} s) in {} ms — text={text:?}",
+    tts_log!("neutts",
+        "synthesised {} samples ({:.2} s) in {} ms \u{2014} text={text:?}",
         audio.len(), audio.len() as f32 / SAMPLE_RATE as f32,
         t0.elapsed().as_millis(),
     );
@@ -547,7 +547,7 @@ fn speak_cached(
     let cache_path = wav_cache_path(backbone, voice_key, text);
 
     if cache_path.exists() {
-        eprintln!("[neutts] WAV cache hit — playing {}", cache_path.display());
+        tts_log!("neutts", "WAV cache hit \u{2014} playing {}", cache_path.display());
         play_wav(stream, &cache_path);
         return;
     }
@@ -555,13 +555,13 @@ fn speak_cached(
     match synthesize(model, text, ref_codes, ref_text) {
         Ok(audio) => {
             if let Err(e) = model.write_wav(&audio, &cache_path) {
-                eprintln!("[neutts] WAV cache write failed: {e}");
+                tts_log!("neutts", "WAV cache write failed: {e}");
             } else {
-                eprintln!("[neutts] WAV cached: {}", cache_path.display());
+                tts_log!("neutts", "WAV cached: {}", cache_path.display());
             }
             play_f32_audio(stream, audio, SAMPLE_RATE);
         }
-        Err(e) => eprintln!("[neutts] synthesis error: {e}"),
+        Err(e) => tts_log!("neutts", "synthesis error: {e}"),
     }
 }
 
@@ -573,7 +573,7 @@ fn speak_cached(
 fn play_wav(stream: &MixerDeviceSink, path: &Path) {
     let reader = match hound::WavReader::open(path) {
         Ok(r)  => r,
-        Err(e) => { eprintln!("[neutts] WAV cache open failed ({}): {e}", path.display()); return; }
+        Err(e) => { tts_log!("neutts", "WAV cache open failed ({}): {e}", path.display()); return; }
     };
     let sample_rate = reader.spec().sample_rate;
     let samples: Vec<f32> = reader
@@ -583,11 +583,11 @@ fn play_wav(stream: &MixerDeviceSink, path: &Path) {
         .collect();
 
     if samples.is_empty() {
-        eprintln!("[neutts] WAV cache file is empty: {}", path.display());
+        tts_log!("neutts", "WAV cache file is empty: {}", path.display());
         return;
     }
-    eprintln!(
-        "[neutts] playing {} samples @ {} Hz from cache",
+    tts_log!("neutts",
+        "playing {} samples @ {} Hz from cache",
         samples.len(), sample_rate
     );
     play_f32_audio(stream, samples, sample_rate);

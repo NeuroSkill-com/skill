@@ -15,6 +15,19 @@ pub use skill_tts::{
     set_logging, tts_shutdown, neutts_apply_config, use_neutts,
 };
 
+/// Wire TTS log output through the app's [`SkillLogger`](crate::skill_log::SkillLogger).
+///
+/// Call once during setup, after the logger is registered as managed state.
+pub fn init_tts_logger(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let logger = app.state::<std::sync::Arc<crate::skill_log::SkillLogger>>().inner().clone();
+    skill_tts::log::set_log_callback(move |tag, msg| {
+        if logger.enabled(tag) {
+            logger.write(tag, msg);
+        }
+    });
+}
+
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
 use tauri::{AppHandle, Emitter};
