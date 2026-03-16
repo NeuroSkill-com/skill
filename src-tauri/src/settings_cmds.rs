@@ -379,9 +379,10 @@ pub fn get_log_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> crate::s
 pub fn set_log_config(config: crate::skill_log::LogConfig, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let s = state.lock_or_recover();
     let config_path = s.skill_dir.join(LOG_CONFIG_FILE);
-    // Propagate TTS and LLM logging flags to their crate-level runtime atomics.
+    // Propagate TTS, LLM, and tool logging flags to their crate-level runtime atomics.
     crate::tts::set_logging(config.tts);
     crate::llm::set_llm_logging(config.llm || config.chat_store);
+    crate::llm::set_tool_logging(config.tools);
     s.logger.set_config(config, &config_path);
 }
 

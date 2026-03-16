@@ -58,6 +58,7 @@ the Free Software Foundation, version 3 only. -->
     chat_store: boolean;
     history:    boolean;
     hooks:      boolean;
+    tools:      boolean;
   }
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -79,7 +80,7 @@ the Free Software Foundation, version 3 only. -->
   }
   let gpuStats = $state<GpuStats | null>(null);
 
-  let logConfig      = $state<LogConfig>({ embedder: true, bluetooth: true, websocket: false, csv: false, filter: false, bands: false, tts: false, llm: false, chat_store: false, history: false, hooks: true });
+  let logConfig      = $state<LogConfig>({ embedder: true, bluetooth: true, websocket: false, csv: false, filter: false, bands: false, tts: false, llm: false, chat_store: false, history: false, hooks: true, tools: false });
   let dataDirCurrent = $state("");
   let dataDirDefault = $state("");
   let dataDirInput   = $state("");
@@ -1261,6 +1262,7 @@ the Free Software Foundation, version 3 only. -->
           ["chat_store", t("settings.logChatStore"),     t("settings.logChatStoreDesc")],
           ["history",    t("settings.logHistory"),       t("settings.logHistoryDesc")],
           ["hooks",     t("settings.logHooks"),        t("settings.logHooksDesc")],
+          ["tools",     t("settings.logTools"),        t("settings.logToolsDesc")],
         ] as [keyof LogConfig, string, string][]) as [key, label, desc]}
           <button
             onclick={() => toggleLog(key)}

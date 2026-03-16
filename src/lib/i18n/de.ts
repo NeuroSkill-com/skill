@@ -410,6 +410,8 @@ const de: Record<string, string> = {
   "settings.logHistoryDesc":    "Sitzungsliste & CSV-Scan",
   "settings.logHooks":          "Hooks",
   "settings.logHooksDesc":      "Hook-Matcher, Trigger & Benachrichtigungen",
+  "settings.logTools":          "Tools",
+  "settings.logToolsDesc":      "Tool-Aufruf-Ausf\u00FChrung (Aufruf, Sicherheit, Timing)",
 
   "hooks.lastTrigger":          "Letzter Trigger",
   "hooks.openSession":          "Sitzung öffnen",

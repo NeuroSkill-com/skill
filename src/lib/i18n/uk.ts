@@ -404,9 +404,11 @@ const uk: Record<string, string> = {
   "settings.logHistory":        "Історія",
   "settings.logHistoryDesc":    "Завантаження сесій та сканування CSV",
   "settings.logHooks":          "Hooks",
-  "settings.logHooksDesc":      "Матчер hooks, тригери та сповіщення",
+  "settings.logHooksDesc":      "\u041C\u0430\u0442\u0447\u0435\u0440 hooks, \u0442\u0440\u0438\u0433\u0435\u0440\u0438 \u0442\u0430 \u0441\u043F\u043E\u0432\u0456\u0449\u0435\u043D\u043D\u044F",
+  "settings.logTools":          "Tools",
+  "settings.logToolsDesc":      "\u0412\u0438\u043A\u043E\u043D\u0430\u043D\u043D\u044F \u0432\u0438\u043A\u043B\u0438\u043A\u0456\u0432 \u0456\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u0456\u0432 (\u0432\u0438\u043A\u043B\u0438\u043A, \u0431\u0435\u0437\u043F\u0435\u043A\u0430, \u0447\u0430\u0441)",
 
-  "hooks.lastTrigger":          "Останній тригер",
+  "hooks.lastTrigger":          "\u041E\u0441\u0442\u0430\u043D\u043D\u0456\u0439 \u0442\u0440\u0438\u0433\u0435\u0440",
   "hooks.openSession":          "Відкрити сесію",
   "hooks.opening":              "Відкриття…",
 

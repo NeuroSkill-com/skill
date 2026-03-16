@@ -500,6 +500,8 @@ const en: Record<string, string> = {
   "settings.logHistoryDesc":          "Session list loading & CSV scan",
   "settings.logHooks":                "Hooks",
   "settings.logHooksDesc":            "Hook matcher, triggers & notifications",
+  "settings.logTools":                "Tools",
+  "settings.logToolsDesc":            "Tool-call execution (invocation, safety, timing)",
 
   "settings.wsConfig":                "WebSocket Server",
   "settings.wsHost":                  "Bind address",
