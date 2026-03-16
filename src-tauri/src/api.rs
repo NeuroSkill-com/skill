@@ -313,7 +313,7 @@ async fn root_get(
                 "dnd","dnd_set",
                 "llm_status","llm_start","llm_stop","llm_catalog",
                 "llm_download","llm_cancel_download","llm_delete","llm_logs",
-                "llm_chat (WebSocket streaming + POST /llm/chat non-streaming)"
+                "llm_chat (WebSocket streaming + POST /llm/chat non-streaming, persisted to chat history)"
             ],
             "v1": {
                 "GET  /v1/status":                  "full system status snapshot",
@@ -680,7 +680,8 @@ async fn llm_chat_post(
         .unwrap_or_default();
 
     // ── Get server ────────────────────────────────────────────────────────────
-    let cell = state.app.state::<Mutex<Box<crate::AppState>>>().lock_or_recover().llm.state_cell.clone();
+    let app_state = state.app.state::<Mutex<Box<crate::AppState>>>();
+    let cell = app_state.lock_or_recover().llm.state_cell.clone();
     let server = { cell.lock().unwrap().as_ref().cloned() };
 
     let Some(server) = server else {
@@ -689,6 +690,38 @@ async fn llm_chat_post(
         state.tracker.lock_or_recover().log_request(&peer, "llm_chat", false);
         return (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response();
     };
+
+    // ── Persist: resolve or create a chat session ─────────────────────────────
+    let req_sid = msg.get("session_id").and_then(|v| v.as_i64()).unwrap_or(0);
+    let is_new_session = req_sid <= 0;
+    let session_id: i64 = {
+        let mut s = app_state.lock_or_recover();
+        if let Some(store) = s.llm.chat_store.as_mut() {
+            if req_sid > 0 { req_sid } else { store.new_session() }
+        } else {
+            0
+        }
+    };
+
+    // ── Persist: save the last user message ───────────────────────────────────
+    if session_id > 0 {
+        let last_user = messages.iter().rev()
+            .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"));
+        if let Some(um) = last_user {
+            let content = um.get("content").and_then(|c| c.as_str()).unwrap_or("");
+            if !content.is_empty() {
+                let mut s = app_state.lock_or_recover();
+                if let Some(store) = s.llm.chat_store.as_mut() {
+                    store.save_message(session_id, "user", content, None);
+                    if is_new_session {
+                        let title: String = content.chars().take(60).collect::<String>()
+                            .replace('\n', " ");
+                        store.rename_session(session_id, title.trim());
+                    }
+                }
+            }
+        }
+    }
 
     // ── Collect response ──────────────────────────────────────────────────────
     let images = crate::llm::extract_images_from_messages(&messages);
@@ -723,6 +756,15 @@ async fn llm_chat_post(
         }
     }
 
+    // ── Persist the assistant response ────────────────────────────────────────
+    if session_id > 0 && !text.is_empty() {
+        let mut s = app_state.lock_or_recover();
+        if let Some(store) = s.llm.chat_store.as_mut() {
+            let msg_id = store.save_message(session_id, "assistant", &text, None);
+            eprintln!("[http] persisted assistant message id={msg_id} session={session_id} len={}", text.len());
+        }
+    }
+
     state.tracker.lock_or_recover().log_request(&peer, "llm_chat", true);
     let body = json!({
         "command":           "llm_chat",
@@ -732,6 +774,7 @@ async fn llm_chat_post(
         "prompt_tokens":     prompt_tokens,
         "completion_tokens": completion_tokens,
         "n_ctx":             n_ctx,
+        "session_id":        session_id,
     });
     (StatusCode::OK, Json(body)).into_response()
 }
@@ -758,7 +801,8 @@ async fn llm_chat_post(
 ///   "command": "llm_chat",
 ///   "messages": [{"role":"user","content":"Hello!"}],
 ///   "temperature": 0.8,
-///   "max_tokens": 2048
+///   "max_tokens": 2048,
+///   "session_id": 42
 /// }
 /// ```
 /// Short-hand (single user message):
@@ -766,12 +810,18 @@ async fn llm_chat_post(
 /// { "command": "llm_chat", "message": "What is EEG coherence?" }
 /// ```
 ///
+/// If `session_id` is provided, the conversation continues that session.
+/// Otherwise a new session is created automatically. Both user and assistant
+/// messages are persisted to the same SQLite chat store used by the Chat window.
+///
 /// # Wire protocol (server → client, multiple frames)
 /// ```json
+/// { "command": "llm_chat", "type": "session", "session_id": 42 }
 /// { "command": "llm_chat", "type": "delta", "text": "Hello" }
 /// { "command": "llm_chat", "type": "delta", "text": "!" }
 /// { "command": "llm_chat", "ok": true,  "type": "done",
-///   "finish_reason": "stop", "prompt_tokens": 12, "completion_tokens": 1, "n_ctx": 4096 }
+///   "finish_reason": "stop", "prompt_tokens": 12, "completion_tokens": 1,
+///   "n_ctx": 4096, "session_id": 42 }
 /// ```
 /// Or on error:
 /// ```json
@@ -829,6 +879,47 @@ async fn handle_llm_chat_ws(
     // ── Get the running server ────────────────────────────────────────────────
     use tauri::Manager as _;
     let app_state = state.app.state::<Mutex<Box<crate::AppState>>>();
+
+    // ── Persist: resolve or create a chat session ─────────────────────────────
+    // Callers may pass `"session_id": <i64>` to continue an existing session;
+    // otherwise a new session is created automatically.
+    let req_sid = msg.get("session_id").and_then(|v| v.as_i64()).unwrap_or(0);
+    let is_new_session = req_sid <= 0;
+    let session_id: i64 = {
+        let mut s = app_state.lock_or_recover();
+        if let Some(store) = s.llm.chat_store.as_mut() {
+            if req_sid > 0 { req_sid } else { store.new_session() }
+        } else {
+            0
+        }
+    };
+
+    // ── Persist: save the last user message (the new turn) ────────────────────
+    if session_id > 0 {
+        let last_user = messages.iter().rev()
+            .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"));
+        if let Some(um) = last_user {
+            let content = um.get("content").and_then(|c| c.as_str()).unwrap_or("");
+            if !content.is_empty() {
+                let mut s = app_state.lock_or_recover();
+                if let Some(store) = s.llm.chat_store.as_mut() {
+                    store.save_message(session_id, "user", content, None);
+                    // Auto-title new sessions with the first user message (up to 60 chars).
+                    if is_new_session {
+                        let title: String = content.chars().take(60).collect::<String>()
+                            .replace('\n', " ");
+                        store.rename_session(session_id, title.trim());
+                    }
+                }
+            }
+        }
+    }
+
+    // Send session_id to client so it can reference this session later.
+    ws_send!(sink, json!({
+        "command": "llm_chat", "type": "session", "session_id": session_id
+    }));
+
     let cell = app_state.lock_or_recover().llm.state_cell.clone();
     let server = { cell.lock().unwrap().as_ref().cloned() };
 
@@ -855,6 +946,12 @@ async fn handle_llm_chat_ws(
     let tool_tx  = frame_tx.clone();
     drop(frame_tx); // drop original so channel closes when both clones are done
 
+    // Collect tool events for persistence after generation completes.
+    let tool_calls_collected = std::sync::Arc::new(std::sync::Mutex::new(
+        Vec::<crate::llm::chat_store::NewToolCall>::new(),
+    ));
+    let tool_calls_for_cb = tool_calls_collected.clone();
+
     // Spawn the orchestration on a task so we can concurrently drain the frame channel.
     let server_clone = server.clone();
     let gen_handle = tokio::spawn(async move {
@@ -872,15 +969,38 @@ async fn handle_llm_chat_ws(
             // on_tool_event
             move |event: ToolEvent| {
                 let msg = match &event {
-                    ToolEvent::ExecutionStart { tool_call_id, tool_name, args } => json!({
-                        "command": "llm_chat", "type": "tool_start",
-                        "tool_call_id": tool_call_id, "tool_name": tool_name, "arguments": args,
-                    }),
-                    ToolEvent::ExecutionEnd { tool_call_id, tool_name, result, is_error } => json!({
-                        "command": "llm_chat", "type": "tool_end",
-                        "tool_call_id": tool_call_id, "tool_name": tool_name,
-                        "result": result, "is_error": is_error,
-                    }),
+                    ToolEvent::ExecutionStart { tool_call_id, tool_name, args } => {
+                        // Record tool call start (we'll update with result on End).
+                        tool_calls_for_cb.lock().unwrap().push(
+                            crate::llm::chat_store::NewToolCall {
+                                tool:         tool_name.clone(),
+                                status:       "running".to_string(),
+                                detail:       None,
+                                tool_call_id: Some(tool_call_id.clone()),
+                                args:         Some(args.clone()),
+                                result:       None,
+                            },
+                        );
+                        json!({
+                            "command": "llm_chat", "type": "tool_start",
+                            "tool_call_id": tool_call_id, "tool_name": tool_name, "arguments": args,
+                        })
+                    }
+                    ToolEvent::ExecutionEnd { tool_call_id, tool_name, result, is_error } => {
+                        // Update the matching tool call with the result.
+                        let mut tcs = tool_calls_for_cb.lock().unwrap();
+                        if let Some(tc) = tcs.iter_mut().rev().find(|tc|
+                            tc.tool_call_id.as_deref() == Some(tool_call_id)
+                        ) {
+                            tc.status = if *is_error { "error".to_string() } else { "done".to_string() };
+                            tc.result = Some(result.clone());
+                        }
+                        json!({
+                            "command": "llm_chat", "type": "tool_end",
+                            "tool_call_id": tool_call_id, "tool_name": tool_name,
+                            "result": result, "is_error": is_error,
+                        })
+                    }
                     ToolEvent::Status { tool_name, status, detail } => json!({
                         "command": "llm_chat", "type": "tool_status",
                         "tool_name": tool_name, "status": status, "detail": detail,
@@ -905,6 +1025,18 @@ async fn handle_llm_chat_ws(
     // Generation finished — collect the result.
     match gen_handle.await {
         Ok(Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx))) => {
+            // ── Persist the assistant response ────────────────────────────
+            if session_id > 0 && !text.is_empty() {
+                let tool_calls = tool_calls_collected.lock().unwrap().clone();
+                let mut s = app_state.lock_or_recover();
+                if let Some(store) = s.llm.chat_store.as_mut() {
+                    let msg_id = store.save_message_with_tools(
+                        session_id, "assistant", &text, None, &tool_calls,
+                    );
+                    eprintln!("[ws] persisted assistant message id={msg_id} session={session_id} len={}", text.len());
+                }
+            }
+
             ws_send!(sink, json!({
                 "command":           "llm_chat",
                 "ok":                true,
@@ -914,6 +1046,7 @@ async fn handle_llm_chat_ws(
                 "completion_tokens": completion_tokens,
                 "n_ctx":             n_ctx,
                 "text":              text,
+                "session_id":        session_id,
             }));
             state.tracker.lock_or_recover().log_request(peer, "llm_chat", true);
         }

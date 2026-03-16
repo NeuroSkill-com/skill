@@ -277,7 +277,7 @@ use llm::cmds::{
     pause_llm_download, resume_llm_download, get_llm_downloads,
     delete_llm_model, refresh_llm_catalog, set_llm_active_model, set_llm_active_mmproj,
     set_llm_autoload_mmproj, add_llm_model,
-    get_llm_logs, start_llm_server, stop_llm_server, get_llm_server_status, open_chat_window,
+    get_llm_logs, start_llm_server, stop_llm_server, switch_llm_model, get_llm_server_status, open_chat_window,
     open_downloads_window,
     chat_completions_ipc, abort_llm_stream, cancel_tool_call,
     get_last_chat_session, save_chat_message, save_chat_tool_calls, new_chat_session,
@@ -754,6 +754,32 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         tauri::async_runtime::spawn(async move {
             crate::tts::tts_init(app_handle).await.ok();
         });
+    }
+
+    // Auto-start the LLM server if configured and a model is available.
+    let llm_autostart = {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let s = r.lock_or_recover();
+        s.llm.config.enabled && s.llm.config.autostart
+    };
+    if llm_autostart {
+        #[cfg(feature = "llm")]
+        {
+            let has_model = {
+                let r = app.state::<Mutex<Box<AppState>>>();
+                let s = r.lock_or_recover();
+                s.llm.config.model_path.as_ref().map(|p| p.exists()).unwrap_or(false)
+            };
+            if has_model {
+                let app_handle = app.handle().clone();
+                // Small delay so the main window can render first.
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                    let state = app_handle.state::<Mutex<Box<AppState>>>();
+                    crate::llm::cmds::start_llm_server(app_handle.clone(), state).ok();
+                });
+            }
+        }
     }
 
     {
@@ -1371,6 +1397,8 @@ pub fn run() {
             start_llm_server,
             #[cfg(feature = "llm")]
             stop_llm_server,
+            #[cfg(feature = "llm")]
+            switch_llm_model,
             #[cfg(feature = "llm")]
             get_llm_server_status,
             #[cfg(feature = "llm")]

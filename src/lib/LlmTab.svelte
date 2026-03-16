@@ -120,6 +120,18 @@
   let logs          = $state<LlmLogEntry[]>([]);
   let logAutoScroll = $state(true);
   let logEl         = $state<HTMLElement | null>(null);
+  let logFilter     = $state<"all"|"info"|"warn"|"error">("all");
+  let logSearch     = $state("");
+
+  const filteredLogs = $derived.by(() => {
+    let filtered = logs;
+    if (logFilter !== "all") filtered = filtered.filter(e => e.level === logFilter);
+    if (logSearch.trim()) {
+      const q = logSearch.trim().toLowerCase();
+      filtered = filtered.filter(e => e.message.toLowerCase().includes(q));
+    }
+    return filtered;
+  });
 
   let pollTimer:      ReturnType<typeof setInterval> | undefined;
   let unlistenLog:    (() => void) | undefined;
@@ -449,16 +461,10 @@
   }
 
   async function selectModel(filename: string) {
-    await invoke("set_llm_active_model", { filename });
-    await loadCatalog();
-    // Stop is fire-and-forget — actor join runs in background.
-    invoke("stop_llm_server").catch(() => {});
-    // Give stop a moment to clear the cell before start checks it.
-    await new Promise(r => setTimeout(r, 150));
     startError = "";
-    // Start is also fire-and-forget — UI polls status every second.
-    invoke("start_llm_server").catch((e: any) => {
-      startError = typeof e === "string" ? e : (e?.message ?? "Failed to start LLM server");
+    // Atomic switch: stop → set model → start in one backend call.
+    invoke("switch_llm_model", { filename }).catch((e: any) => {
+      startError = typeof e === "string" ? e : (e?.message ?? "Failed to switch model");
     });
     await loadCatalog();
   }
@@ -588,6 +594,23 @@
           <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
                         transform transition-transform duration-200
                         {config.enabled ? 'translate-x-4' : 'translate-x-0'}"></span>
+        </button>
+      </div>
+
+      <!-- Auto-start toggle -->
+      <div class="flex items-center justify-between gap-4 px-4 py-3">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.autostart")}</span>
+          <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.autostartDesc")}</span>
+        </div>
+        <button role="switch" aria-checked={config.autostart} aria-label={t("llm.autostart")}
+          onclick={async () => { config = { ...config, autostart: !config.autostart }; await saveConfig(); }}
+          class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
+                 border-transparent transition-colors duration-200
+                 {config.autostart ? 'bg-emerald-500' : 'bg-muted dark:bg-white/10'}">
+          <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
+                        transform transition-transform duration-200
+                        {config.autostart ? 'translate-x-4' : 'translate-x-0'}"></span>
         </button>
       </div>
 
@@ -1282,17 +1305,46 @@
 <!-- Server log                                                                  -->
 <!-- ─────────────────────────────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
-  <div class="flex items-center gap-2 px-0.5">
+  <!-- Header: title + filter tabs + search + controls -->
+  <div class="flex items-center gap-2 px-0.5 flex-wrap">
     <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
       Server log
     </span>
     <span class="flex items-center gap-1 text-[0.52rem] text-muted-foreground/50">
       <span class="w-1 h-1 rounded-full {logs.length > 0 ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
-      {logs.length} line{logs.length !== 1 ? "s" : ""}
+      {filteredLogs.length}{filteredLogs.length !== logs.length ? `/${logs.length}` : ""}
     </span>
+
+    <!-- Level filter tabs -->
+    <div class="flex rounded-md overflow-hidden border border-border/50 text-[0.5rem] font-medium ml-1">
+      {#each [
+        { key: "all"   as const, label: t("chat.logFilter.all"),   color: "" },
+        { key: "info"  as const, label: t("chat.logFilter.info"),  color: "text-emerald-500" },
+        { key: "warn"  as const, label: t("chat.logFilter.warn"),  color: "text-amber-500" },
+        { key: "error" as const, label: t("chat.logFilter.error"), color: "text-red-500" },
+      ] as tab}
+        <button onclick={() => logFilter = tab.key}
+          class="px-2 py-0.5 transition-colors cursor-pointer
+                 {logFilter === tab.key
+                   ? `bg-foreground/10 ${tab.color || 'text-foreground'} font-bold`
+                   : 'bg-transparent text-muted-foreground/50 hover:text-muted-foreground'}">
+          {tab.label}
+        </button>
+      {/each}
+    </div>
+
+    <!-- Search -->
+    <input
+      type="text"
+      bind:value={logSearch}
+      placeholder={t("chat.logFilter.search")}
+      class="ml-auto h-5 w-28 text-[0.52rem] px-2 rounded-md border border-border/50
+             bg-transparent text-muted-foreground placeholder:text-muted-foreground/30
+             focus:outline-none focus:border-violet-500/50" />
+
     <button
       onclick={() => { logAutoScroll = !logAutoScroll; if (logAutoScroll) scrollToBottom(); }}
-      class="ml-auto text-[0.52rem] cursor-pointer select-none transition-colors
+      class="text-[0.52rem] cursor-pointer select-none transition-colors
              {logAutoScroll ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/50 hover:text-foreground'}">
       auto-scroll {logAutoScroll ? "on" : "off"}
     </button>
@@ -1306,13 +1358,13 @@
        class="h-64 overflow-y-auto rounded-xl border border-border dark:border-white/[0.06]
               bg-[#0d0d14] font-mono text-[0.62rem] leading-5
               scrollbar-thin scrollbar-track-transparent scrollbar-thumb-white/10">
-    {#if logs.length === 0}
+    {#if filteredLogs.length === 0}
       <div class="flex items-center justify-center h-full text-muted-foreground/30 text-[0.65rem]">
-        No log output yet.
+        {logs.length === 0 ? "No log output yet." : "No matching lines."}
       </div>
     {:else}
       <div class="px-3 py-2 flex flex-col gap-0">
-        {#each logs as entry (entry.ts + entry.message)}
+        {#each filteredLogs as entry (entry.ts + entry.message)}
           {@const ts  = new Date(entry.ts).toISOString().slice(11, 23)}
           {@const col = entry.level === "error" ? "text-red-400" : entry.level === "warn" ? "text-amber-400" : "text-emerald-300/80"}
           <div class="flex items-start gap-2 min-w-0">

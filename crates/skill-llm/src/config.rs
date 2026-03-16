@@ -69,6 +69,11 @@ pub struct LlmConfig {
     #[serde(default)]
     pub verbose: bool,
 
+    /// Auto-start the LLM server when the app launches (if a model is
+    /// downloaded and selected).  Default: `false`.
+    #[serde(default)]
+    pub autostart: bool,
+
     /// Enable flash attention (KV cache in f16 instead of f32, faster on
     /// GPU backends that support it — Metal, CUDA, Vulkan).  Default: `true`.
     #[serde(default = "default_flash_attention")]
@@ -101,6 +106,7 @@ impl Default for LlmConfig {
             no_mmproj_gpu:    false,
             autoload_mmproj:  default_autoload_mmproj(),
             verbose:          false,
+            autostart:        false,
             flash_attention:  default_flash_attention(),
             offload_kqv:      default_offload_kqv(),
         }

@@ -1,0 +1,3 @@
+### Features
+
+- **WebSocket & HTTP chat persistence**: Chats initiated via the WebSocket `llm_chat` command and `POST /llm/chat` endpoint are now persisted to the same SQLite chat store used by the Chat window. User and assistant messages (including tool calls) are saved to `chat_history.sqlite`, making them visible in the Chat window sidebar and recoverable across restarts. A `session_id` field is returned in both the WS `session` frame and the `done`/response payload, and callers can pass `session_id` in subsequent requests to continue an existing conversation. New sessions are auto-titled from the first user message.

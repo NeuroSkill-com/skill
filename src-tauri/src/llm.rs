@@ -862,6 +862,106 @@ pub fn stop_llm_server(
     }
 }
 
+/// Atomically switch to a different model: stop the running server (if any),
+/// wait for full shutdown, set the new active model, then start again.
+///
+/// Returns immediately — the frontend should poll `get_llm_server_status` to
+/// track the `Stopped → Loading → Running` transition.
+#[tauri::command]
+pub fn switch_llm_model(
+    filename: String,
+    app:   AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Result<String, String> {
+    use std::sync::atomic::Ordering;
+
+    let (cell, log_buf, loading, start_error) = {
+        let mut s = state.lock_or_recover();
+        // Update the active model in the catalog immediately.
+        s.llm.catalog.active_model = filename.clone();
+        if !s.llm.catalog.active_mmproj_matches_active_model() {
+            s.llm.catalog.active_mmproj.clear();
+        }
+        // Mirror into LlmConfig so the server picks the updated pair.
+        s.llm.config.model_path = s.llm.catalog.active_model_path();
+        s.llm.config.mmproj     = s.llm.catalog.active_mmproj_path();
+        s.llm.config.enabled    = true;
+        save_catalog(&app, &s);
+        (
+            s.llm.state_cell.clone(),
+            s.llm.logs.clone(),
+            s.llm.loading.clone(),
+            s.llm.start_error.clone(),
+        )
+    };
+
+    crate::save_settings(&app);
+
+    // Clear any previous error.
+    *start_error.lock().unwrap() = None;
+
+    // Take the running server out of the cell (if any).
+    let server_state = { cell.lock().unwrap().take() };
+
+    let app2  = app.clone();
+
+    // Mark loading right away so the UI sees the transition.
+    loading.store(true, Ordering::Relaxed);
+
+    let emitter = super::TauriEmitter(app.clone());
+    push_log(&emitter, &log_buf, "info",
+        &format!("switch_llm_model: switching to {filename}"));
+
+    tauri::async_runtime::spawn(async move {
+        // 1. Shut down the old server (if running).
+        if let Some(old) = server_state {
+            let log_buf2 = log_buf.clone();
+            let emitter2 = super::TauriEmitter(app2.clone());
+            tokio::task::spawn_blocking(move || {
+                match std::sync::Arc::try_unwrap(old) {
+                    Ok(owned) => owned.shutdown(),
+                    Err(arc)  => drop(arc),
+                }
+                push_log(&emitter2, &log_buf2, "info", "old model unloaded");
+            }).await.ok();
+        }
+
+        // 2. Start the new model.
+        let (mut config, catalog, skill_dir) = {
+            let r = app2.state::<Mutex<Box<AppState>>>();
+            let s = r.lock_or_recover();
+            (s.llm.config.clone(), s.llm.catalog.clone(), s.skill_dir.clone())
+        };
+
+        // Resolve mmproj if needed.
+        if config.mmproj.is_none() {
+            config.mmproj = catalog.resolve_mmproj_path(config.autoload_mmproj);
+        }
+
+        let emitter_arc: std::sync::Arc<dyn super::LlmEventEmitter> =
+            std::sync::Arc::new(super::TauriEmitter(app2));
+        let result = tokio::task::spawn_blocking(move || {
+            crate::llm::init(&config, &catalog, emitter_arc, log_buf, &skill_dir)
+        }).await;
+
+        loading.store(false, std::sync::atomic::Ordering::Relaxed);
+
+        match result {
+            Ok(Some(s)) => { *cell.lock().unwrap() = Some(s); }
+            Ok(None) => {
+                *start_error.lock().unwrap() = Some(
+                    "Failed to start LLM server after model switch.".to_string()
+                );
+            }
+            Err(e) => {
+                *start_error.lock().unwrap() = Some(format!("Load task panicked: {e}"));
+            }
+        }
+    });
+
+    Ok("switching".to_string())
+}
+
 /// Return the current server status: `Stopped | Loading | Running`.
 #[derive(serde::Serialize)]
 pub struct LlmServerStatusResponse {
