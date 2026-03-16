@@ -123,7 +123,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     .build();
                 let resp = agent
                     .get(&url_for_fetch)
-                    .set("User-Agent", BROWSER_UA)
+                    .set("User-Agent", random_ua())
                     .call();
 
                 match resp {
@@ -848,20 +848,51 @@ fn strip_html_tags(s: &str) -> String {
        .replace("&nbsp;", " ")
 }
 
-/// Standard browser User-Agent used for web requests that need to avoid bot
-/// detection (DuckDuckGo HTML lite, web_fetch, etc.).
-const BROWSER_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+/// Pool of realistic browser User-Agent strings, rotated randomly to reduce
+/// fingerprinting and bot-detection risk.
+const BROWSER_USER_AGENTS: &[&str] = &[
+    // Chrome on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    // Chrome on macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+    // Firefox on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0",
+    // Firefox on Linux
+    "Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0",
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
+    // Safari on macOS
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Safari/605.1.15",
+    // Edge on Windows
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
+];
+
+/// Pick a random browser User-Agent from the pool.
+fn random_ua() -> &'static str {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let idx = COUNTER.fetch_add(1, Ordering::Relaxed) % BROWSER_USER_AGENTS.len();
+    BROWSER_USER_AGENTS[idx]
+}
 
 /// Fallback search: scrape DuckDuckGo HTML lite page.
+///
+/// Mimics a real browser form submission: the lite page has a `<form>` that
+/// POSTs `q=<query>&b=` to `/html/`.  The `Origin` and `Referer` headers are
+/// required to pass bot detection.
 fn ddg_html_search(agent: &ureq::Agent, query: &str) -> Vec<Value> {
+    let ua = random_ua();
     let resp = agent
         .post("https://html.duckduckgo.com/html/")
-        .set("User-Agent", BROWSER_UA)
+        .set("User-Agent", ua)
         .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
         .set("Accept-Language", "en-US,en;q=0.5")
-        .set("Referer", "https://html.duckduckgo.com/")
+        .set("Origin", "https://html.duckduckgo.com")
+        .set("Referer", "https://html.duckduckgo.com/html/")
         .set("Content-Type", "application/x-www-form-urlencoded")
-        .send_string(&format!("q={}", urlencoding::encode(query)));
+        .send_string(&format!("q={}&b=", urlencoding::encode(query)));
 
     let Ok(r) = resp else { return Vec::new(); };
     let body = match r.into_string() {

@@ -1,3 +1,4 @@
 ### Bugfixes
 
-- **Use realistic browser User-Agent for DuckDuckGo and web_fetch**: replaced bot-like User-Agent strings (`SkillBot/1.0`, `NeuroSkill-LLM-Tool/1.0`) with a standard Chrome browser UA to avoid captcha and bot-detection blocks. Also added `Accept`, `Accept-Language`, and `Referer` headers to DuckDuckGo requests.
+- **Rotating browser User-Agents**: replaced bot-like User-Agent strings with a pool of 10 realistic browser UAs (Chrome, Firefox, Safari, Edge on Windows/macOS/Linux) rotated on each request to reduce fingerprinting.
+- **Fix DuckDuckGo HTML search**: mimic real form submission by adding `Origin` header, correct `Referer`, and the `b=` submit-button field. Without these, DDG returns a captcha page instead of results.
