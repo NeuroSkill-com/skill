@@ -841,53 +841,91 @@ async fn handle_llm_chat_ws(
         return Ok(());
     };
 
-    // ── Extract images embedded in messages (base64 data-URLs only) ──────────
-    let images = crate::llm::extract_images_from_messages(&messages);
+    // ── Run chat with built-in tool orchestration ──────────────────────────
+    // Uses the same multi-round tool loop as the Tauri Chat window:
+    // model generates → parse tool calls → execute → inject results → continue.
+    // Visible deltas (with tool-call blocks stripped) are streamed to the client.
+    // Tool execution events are sent as typed WS messages for client progress UI.
+    use crate::llm::{run_chat_with_builtin_tools, ToolEvent};
 
-    // ── Send to actor and stream tokens ───────────────────────────────────────
-    let mut tok_rx = match server.chat(messages, images, params) {
-        Ok(rx)   => rx,
-        Err(e)   => {
-            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":e}));
-            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
-            return Ok(());
-        }
-    };
+    // Channel to shuttle WS frames from sync callbacks to our async send loop.
+    let (frame_tx, mut frame_rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
 
-    while let Some(tok) = tok_rx.recv().await {
-        match tok {
-            crate::llm::InferToken::Delta(text) => {
-                ws_send!(sink, json!({"command":"llm_chat","type":"delta","text":text}));
-            }
-            crate::llm::InferToken::Done {
-                finish_reason, prompt_tokens, completion_tokens, n_ctx,
-            } => {
-                ws_send!(sink, json!({
-                    "command":          "llm_chat",
-                    "ok":               true,
-                    "type":             "done",
-                    "finish_reason":    finish_reason,
-                    "prompt_tokens":    prompt_tokens,
-                    "completion_tokens":completion_tokens,
-                    "n_ctx":            n_ctx,
+    let delta_tx = frame_tx.clone();
+    let tool_tx  = frame_tx.clone();
+    drop(frame_tx); // drop original so channel closes when both clones are done
+
+    // Spawn the orchestration on a task so we can concurrently drain the frame channel.
+    let server_clone = server.clone();
+    let gen_handle = tokio::spawn(async move {
+        run_chat_with_builtin_tools(
+            &server_clone,
+            messages,
+            params,
+            Vec::new(),
+            // on_visible_delta
+            move |delta: &str| {
+                let _ = delta_tx.send(json!({
+                    "command": "llm_chat", "type": "delta", "text": delta
                 }));
-                state.tracker.lock_or_recover().log_request(peer, "llm_chat", true);
-                return Ok(());
-            }
-            crate::llm::InferToken::Error(e) => {
-                ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":e}));
-                state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
-                return Ok(());
-            }
+            },
+            // on_tool_event
+            move |event: ToolEvent| {
+                let msg = match &event {
+                    ToolEvent::ExecutionStart { tool_call_id, tool_name, args } => json!({
+                        "command": "llm_chat", "type": "tool_start",
+                        "tool_call_id": tool_call_id, "tool_name": tool_name, "arguments": args,
+                    }),
+                    ToolEvent::ExecutionEnd { tool_call_id, tool_name, result, is_error } => json!({
+                        "command": "llm_chat", "type": "tool_end",
+                        "tool_call_id": tool_call_id, "tool_name": tool_name,
+                        "result": result, "is_error": is_error,
+                    }),
+                    ToolEvent::Status { tool_name, status, detail } => json!({
+                        "command": "llm_chat", "type": "tool_status",
+                        "tool_name": tool_name, "status": status, "detail": detail,
+                    }),
+                };
+                let _ = tool_tx.send(msg);
+            },
+        ).await
+    });
+
+    // Drain the frame channel, forwarding each JSON value as a WS text frame.
+    while let Some(val) = frame_rx.recv().await {
+        let s = serde_json::to_string(&val).unwrap_or_default();
+        if sink.send(Message::Text(s.into())).await.is_err() {
+            // Client disconnected — abort generation.
+            gen_handle.abort();
+            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+            return Err(());
         }
     }
 
-    // Channel closed without a Done/Error — actor exited mid-generation.
-    ws_send!(sink, json!({
-        "command":"llm_chat","ok":false,"type":"error",
-        "error":"LLM actor exited unexpectedly"
-    }));
-    state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+    // Generation finished — collect the result.
+    match gen_handle.await {
+        Ok(Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx))) => {
+            ws_send!(sink, json!({
+                "command":           "llm_chat",
+                "ok":                true,
+                "type":              "done",
+                "finish_reason":     finish_reason,
+                "prompt_tokens":     prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "n_ctx":             n_ctx,
+                "text":              text,
+            }));
+            state.tracker.lock_or_recover().log_request(peer, "llm_chat", true);
+        }
+        Ok(Err(e)) => {
+            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":e}));
+            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+        }
+        Err(e) => {
+            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":format!("generation task panicked: {e}")}));
+            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+        }
+    }
     Ok(())
 }
 

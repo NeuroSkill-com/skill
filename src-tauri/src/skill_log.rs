@@ -49,6 +49,10 @@ pub struct LogConfig {
     pub bands:     bool,
     /// TTS synthesis events (text, sample count, latency).
     pub tts:       bool,
+    /// LLM inference engine (model load, token generation, tool calls).
+    pub llm:       bool,
+    /// Chat store SQLite operations (save, migrate, open).
+    pub chat_store: bool,
     /// Session history loading (directory scan, sidecar parsing, orphan CSV
     /// detection).  Can be noisy when many sessions exist; off by default.
     pub history:   bool,
@@ -65,8 +69,10 @@ impl Default for LogConfig {
             csv:       false,
             filter:    false,
             bands:     false,
-            tts:       false,
-            history:   false,
+            tts:        false,
+            llm:        false,
+            chat_store: false,
+            history:    false,
             hooks:     true,
         }
     }
@@ -95,9 +101,11 @@ impl SkillLogger {
             "csv"       => cfg.csv,
             "filter"    => cfg.filter,
             "bands"     => cfg.bands,
-            "tts"       => cfg.tts,
-            "history"   => cfg.history,
-            "hooks"     => cfg.hooks,
+            "tts"        => cfg.tts,
+            "llm"        => cfg.llm,
+            "chat_store" => cfg.chat_store,
+            "history"    => cfg.history,
+            "hooks"      => cfg.hooks,
             _           => true,
         }
     }

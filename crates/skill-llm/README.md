@@ -15,6 +15,7 @@ Manages the full lifecycle of a local large language model: model catalog and do
 | `config` | `LlmConfig` — runtime configuration: model path, context size, GPU layers, temperature, top-p, etc. |
 | `engine` | Inference engine wrapping `llama-cpp-4`: model loading, prompt formatting, streaming token generation, and vision embedding |
 | `event` | Event types for streaming inference progress |
+| `log` | Standalone logger with pluggable callback sink and `llm_log!` macro |
 
 ## Feature flags
 

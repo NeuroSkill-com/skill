@@ -13,6 +13,25 @@
 
 pub mod config;
 pub mod event;
+pub mod log;
+
+/// Log a message from the LLM subsystem.
+///
+/// ```ignore
+/// llm_log!("llm", "[info] model loaded: {name}");
+/// llm_log!("chat_store", "save_message OK: session={id}");
+/// ```
+///
+/// Short-circuits (no `format!` allocation) when logging is disabled.
+#[allow(unused_macros)]
+macro_rules! llm_log {
+    ($tag:expr, $($arg:tt)*) => {
+        if $crate::log::log_enabled() {
+            $crate::log::write_log($tag, &format!($($arg)*));
+        }
+    };
+}
+
 pub mod catalog;
 pub mod chat_store;
 

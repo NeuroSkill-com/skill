@@ -117,7 +117,7 @@ fn push_log_inner(
     level:    &str,
     msg:      &str,
 ) {
-    eprintln!("[llm][{level}] {msg}");
+    llm_log!("llm", "[{level}] {msg}");
     let ts    = unix_ts_ms();
     let entry = LlmLogEntry { ts, level: level.to_string(), message: msg.to_string() };
 

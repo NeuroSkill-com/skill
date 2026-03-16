@@ -678,8 +678,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     };
     app.manage(logger_arc);
 
-    // Route TTS log output through the unified SkillLogger.
+    // Route TTS and LLM log output through the unified SkillLogger.
     crate::tts::init_tts_logger(app.handle());
+    crate::llm::init_llm_logger(app.handle());
 
     let skill_dir = {
         let r = app.state::<Mutex<Box<AppState>>>();

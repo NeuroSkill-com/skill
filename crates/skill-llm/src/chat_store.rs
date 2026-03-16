@@ -131,7 +131,7 @@ impl ChatStore {
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let chats_dir = skill_dir.join("chats");
         if let Err(e) = std::fs::create_dir_all(&chats_dir) {
-            eprintln!("[chat_store] failed to create {}: {e}", chats_dir.display());
+            llm_log!("chat_store", "failed to create {}: {e}", chats_dir.display());
             return None;
         }
 
@@ -140,8 +140,8 @@ impl ChatStore {
         let db_path     = chats_dir.join("chat_history.sqlite");
         if legacy_path.exists() && !db_path.exists() {
             if let Err(e) = std::fs::rename(&legacy_path, &db_path) {
-                eprintln!(
-                    "[chat_store] migration rename {} -> {} failed: {e}",
+                llm_log!("chat_store",
+                    "migration rename {} -> {} failed: {e}",
                     legacy_path.display(),
                     db_path.display()
                 );
@@ -153,19 +153,19 @@ impl ChatStore {
                     let dst = chats_dir.join(format!("chat_history.sqlite{suffix}"));
                     let _ = std::fs::rename(&src, &dst);
                 }
-                eprintln!("[chat_store] migrated legacy DB to {}", db_path.display());
+                llm_log!("chat_store", "migrated legacy DB to {}", db_path.display());
             }
         }
 
         let conn = match Connection::open(&db_path) {
             Ok(c)  => c,
             Err(e) => {
-                eprintln!("[chat_store] failed to open {}: {e}", db_path.display());
+                llm_log!("chat_store", "failed to open {}: {e}", db_path.display());
                 return None;
             }
         };
         if let Err(e) = conn.execute_batch(DDL) {
-            eprintln!("[chat_store] DDL error: {e}");
+            llm_log!("chat_store", "DDL error: {e}");
             return None;
         }
         // Migration: add title column if it doesn't exist yet (existing databases).
@@ -351,11 +351,11 @@ impl ChatStore {
         ) {
             Ok(rows) => {
                 let id = self.conn.last_insert_rowid();
-                eprintln!("[chat_store] save_message OK: session={session_id} role={role} rows={rows} id={id} content_len={}", content.len());
+                llm_log!("chat_store", "save_message OK: session={session_id} role={role} rows={rows} id={id} content_len={}", content.len());
                 id
             }
             Err(e) => {
-                eprintln!("[chat_store] save_message FAILED: session={session_id} role={role} error={e}");
+                llm_log!("chat_store", "save_message FAILED: session={session_id} role={role} error={e}");
                 return 0;
             }
         };
@@ -371,7 +371,7 @@ impl ChatStore {
                 params![msg_id, tc.tool, tc.status, tc.detail, tc.tool_call_id,
                         args_json, result_json, now],
             ) {
-                eprintln!("[chat_store] save_tool_call FAILED: msg={msg_id} tool={} error={e}", tc.tool);
+                llm_log!("chat_store", "save_tool_call FAILED: msg={msg_id} tool={} error={e}", tc.tool);
             }
         }
 
@@ -400,7 +400,7 @@ impl ChatStore {
                     now,
                 ],
             ) {
-                eprintln!("[chat_store] save_tool_call FAILED: message_id={message_id} tool={} error={e}", tc.tool);
+                llm_log!("chat_store", "save_tool_call FAILED: message_id={message_id} tool={} error={e}", tc.tool);
             }
         }
     }

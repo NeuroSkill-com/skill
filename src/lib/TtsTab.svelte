@@ -27,7 +27,8 @@ the Free Software Foundation, version 3 only. -->
 
   interface LogConfig {
     embedder: boolean; bluetooth: boolean; websocket: boolean;
-    csv: boolean; filter: boolean; bands: boolean; tts: boolean; history: boolean;
+    csv: boolean; filter: boolean; bands: boolean; tts: boolean;
+    llm: boolean; chat_store: boolean; history: boolean; hooks: boolean;
   }
 
   type TtsProgress = { phase: "step" | "ready" | "unloaded" | "error"; step: number; total: number; label: string };
@@ -105,7 +106,8 @@ the Free Software Foundation, version 3 only. -->
   let ttsPreload    = $state(true);
   let logConfig     = $state<LogConfig>({
     embedder: true, bluetooth: true, websocket: false,
-    csv: false, filter: false, bands: false, tts: false, history: false,
+    csv: false, filter: false, bands: false, tts: false,
+    llm: false, chat_store: false, history: false, hooks: true,
   });
 
   // NeuTTS config dirty / save state

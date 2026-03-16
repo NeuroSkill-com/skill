@@ -1,0 +1,3 @@
+### Features
+
+- **Standalone LLM logger**: Added `skill_llm::log` module with pluggable callback sink (`set_log_callback`) and `llm_log!` macro. All `eprintln!("[llm] ...")` / `eprintln!("[chat_store] ...")` calls in `engine.rs` and `chat_store.rs` now route through the unified logger. On the Tauri side, `llm::init_llm_logger()` wires LLM output through `SkillLogger` so the `llm` and `chat_store` subsystem toggles in log config control visibility. Added `llm` and `chat_store` fields to `LogConfig`, new rows in the Settings logging grid, and i18n keys for all five locales (en, de, fr, uk, he). Also fixed the TtsTab `LogConfig` interface to include the missing `hooks` field.
