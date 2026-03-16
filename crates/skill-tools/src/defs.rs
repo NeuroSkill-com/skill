@@ -209,7 +209,11 @@ pub fn builtin_llm_tools() -> Vec<Tool> {
 }
 
 /// Check whether a builtin tool is enabled in the current config.
+/// Returns `false` for every tool when the master `enabled` flag is off.
 pub fn is_builtin_tool_enabled(config: &LlmToolConfig, name: &str) -> bool {
+    if !config.enabled {
+        return false;
+    }
     match name {
         "date"          => config.date,
         "location"      => config.location,

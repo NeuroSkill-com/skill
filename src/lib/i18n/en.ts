@@ -2565,7 +2565,7 @@ const en: Record<string, string> = {
   "llm.tools.parallel":                 "Parallel",
   "llm.tools.sequential":              "Sequential",
   "llm.tools.maxRounds":                "Max rounds",
-  "llm.tools.maxRoundsDesc":            "How many think\u2192tool\u2192think hops the model may perform per message.",
+  "llm.tools.maxRoundsDesc":            "How many think→tool→think hops the model may perform per message.",
   "llm.tools.maxCallsPerRound":         "Max calls per round",
   "llm.tools.maxCallsPerRoundDesc":     "How many tools the model may invoke in a single round.",
 
@@ -2604,7 +2604,7 @@ const en: Record<string, string> = {
   "chat.ctxWarning":                    "Context is {pct}% full. Older messages may be truncated.",
   "chat.ctxCompact":                    "Compact history",
   "chat.noModel":                       "No model downloaded",
-  "chat.noModelHint":                   "Download a model from Settings \u2192 LLM to get started.",
+  "chat.noModelHint":                   "Download a model from Settings → LLM to get started.",
   "chat.noModelBtn":                    "Open LLM settings",
   "chat.logFilter.all":                 "All",
   "chat.logFilter.info":                "Info",
