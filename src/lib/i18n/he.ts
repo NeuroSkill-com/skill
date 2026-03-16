@@ -1975,6 +1975,8 @@ const he: Record<string, string> = {
   "dnd.forceOffBtn":            "כבה עכשיו",
   "dnd.exitNotification":       "התראת יציאה",
   "dnd.exitNotificationDesc":   "שלח התראה כאשר מצב הפוקוס מושבת אוטומטית (ציון ירד, איכות אות נמוכה, או הפיצ׳ר הושבת).",
+  "dnd.snrExitThreshold":       "סף SNR להשבתה",
+  "dnd.snrExitThresholdDesc":   "אם יחס האות/רעש נשאר מתחת לרמה זו במשך דקה אחת, מצב הפוקוס מושבת בכפייה. ערכים נמוכים יותר סובלים אותות רועשיות יותר.",
   "dnd.untilActivation":        "עד להפעלה",
   "dnd.activating":             "מפעיל מצב פוקוס…",
   "dnd.buildingScore":          "מעורבות {score} / {threshold}",

@@ -248,7 +248,7 @@ pub const PPG_IBI_MAX_S: f64 = 2.0;
 // ── SNR / focus-mode thresholds ───────────────────────────────────────────────
 
 /// SNR threshold (dB) below which the signal is considered low quality.
-pub const SNR_LOW_DB: f32 = 5.0;
+pub const SNR_LOW_DB: f32 = 0.0;
 
 /// Consecutive ticks below [`SNR_LOW_DB`] before focus mode exits (60 s × 4 Hz).
 pub const SNR_LOW_TICKS: u32 = 240;

@@ -486,6 +486,7 @@ async fn handle_mw75_event(
                         focus_lookback_secs:    s.dnd_config.focus_lookback_secs,
                         exit_notification:      s.dnd_config.exit_notification,
                         focus_mode_identifier:  s.dnd_config.focus_mode_identifier.clone(),
+                        snr_exit_db:            s.dnd_config.snr_exit_db,
                     };
                     let mut dnd_state = skill_devices::DndState {
                         active:        s.dnd_active,

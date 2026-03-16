@@ -229,6 +229,8 @@ pub struct DndConfig {
     pub focus_lookback_secs: u32,
     pub exit_notification:   bool,
     pub focus_mode_identifier: String,
+    /// SNR threshold (dB) below which focus mode is forcibly deactivated.
+    pub snr_exit_db:         f32,
 }
 
 /// Mutable state tracked across ticks by the DND engine.
@@ -308,7 +310,8 @@ pub fn dnd_tick(
     while state.score_history.len() > lookback_window { state.score_history.pop_front(); }
 
     // SNR low-signal tracking.
-    if snr_db < SNR_LOW_DB {
+    let snr_threshold = config.snr_exit_db;
+    if snr_db < snr_threshold {
         state.snr_low_ticks = state.snr_low_ticks.saturating_add(1);
     } else {
         state.snr_low_ticks = 0;
@@ -330,12 +333,12 @@ pub fn dnd_tick(
         emit_active       = false;
         set_dnd_to        = Some((false, String::new()));
         send_exit_notification = config.exit_notification;
-        exit_body = "Signal quality (SNR) dropped below 5 dB for 1 minute. Focus mode deactivated.";
+        exit_body = "Signal quality (SNR) dropped below threshold for 1 minute. Focus mode deactivated.";
     } else if config.enabled {
         if avg_score >= config.focus_threshold {
             state.below_ticks = 0;
             below_ticks       = 0;
-            if !state.active && snr_db >= SNR_LOW_DB && sample_count >= window {
+            if !state.active && snr_db >= snr_threshold && sample_count >= window {
                 set_dnd_to = Some((true, config.focus_mode_identifier.clone()));
             }
         } else if state.active {

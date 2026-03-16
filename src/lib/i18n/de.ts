@@ -1992,6 +1992,8 @@ const de: Record<string, string> = {
   "dnd.forceOffBtn":            "Jetzt beenden",
   "dnd.exitNotification":       "Austritts-Benachrichtigung",
   "dnd.exitNotificationDesc":   "Benachrichtigung senden, wenn der Fokusmodus automatisch deaktiviert wird (Score gesunken, schlechtes Signal oder Funktion deaktiviert).",
+  "dnd.snrExitThreshold":       "SNR-Abschaltschwelle",
+  "dnd.snrExitThresholdDesc":   "Wenn das Signal-Rausch-Verhältnis 1 Minute lang unter diesem Wert bleibt, wird der Fokusmodus zwangsweise deaktiviert. Niedrigere Werte tolerieren verrauschtere Signale.",
   "dnd.untilActivation":        "bis zur Aktivierung",
   "dnd.activating":             "Fokusmodus wird aktiviert…",
   "dnd.buildingScore":          "Aufmerksamkeit {score} / {threshold}",

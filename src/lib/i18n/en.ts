@@ -382,6 +382,8 @@ const en: Record<string, string> = {
   "dnd.forceOffBtn":            "Turn Off Now",
   "dnd.exitNotification":       "Exit notification",
   "dnd.exitNotificationDesc":   "Send a notification when focus mode is automatically deactivated (score dropped, low signal quality, or feature turned off).",
+  "dnd.snrExitThreshold":       "SNR exit threshold",
+  "dnd.snrExitThresholdDesc":   "If signal-to-noise ratio stays below this level for 1 minute, focus mode is forcibly deactivated. Lower values tolerate noisier signals.",
   "dnd.untilActivation":        "until activation",
   "dnd.activating":             "Activating focus mode…",
   "dnd.buildingScore":          "Engagement {score} / {threshold}",

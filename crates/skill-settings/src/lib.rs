@@ -517,6 +517,7 @@ pub fn default_dnd_mode_identifier() -> String {
     "com.apple.donotdisturb.mode.default".to_owned()
 }
 pub fn default_dnd_exit_notification() -> bool { true }
+pub fn default_dnd_snr_exit_db() -> f32 { 0.0 }
 
 /// Configuration for the "auto Do Not Disturb when focus is sustained" feature.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -543,6 +544,10 @@ pub struct DoNotDisturbConfig {
     /// Whether to send an OS notification when focus mode is deactivated.
     #[serde(default = "default_dnd_exit_notification")]
     pub exit_notification: bool,
+    /// SNR threshold (dB) below which focus mode is forcibly deactivated.
+    /// Default: 0.0 dB.
+    #[serde(default = "default_dnd_snr_exit_db")]
+    pub snr_exit_db: f32,
 }
 
 impl Default for DoNotDisturbConfig {
@@ -555,6 +560,7 @@ impl Default for DoNotDisturbConfig {
             focus_lookback_secs:   default_dnd_focus_lookback_secs(),
             focus_mode_identifier: default_dnd_mode_identifier(),
             exit_notification:     default_dnd_exit_notification(),
+            snr_exit_db:           default_dnd_snr_exit_db(),
         }
     }
 }

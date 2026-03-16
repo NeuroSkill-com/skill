@@ -25,6 +25,7 @@ the Free Software Foundation, version 3 only. -->
     focus_lookback_secs:   number;   // lookback window — recent focus delays exit (default 60)
     focus_mode_identifier: string;   // modeIdentifier string, e.g. "com.apple.donotdisturb.mode.default"
     exit_notification:     boolean;  // whether to send a notification when focus mode exits
+    snr_exit_db:           number;   // SNR threshold (dB) below which DND is forcibly deactivated (default 0)
   }
 
   interface FocusModeOption {
@@ -61,7 +62,7 @@ the Free Software Foundation, version 3 only. -->
 
   const DND_DEFAULT_MODE = "com.apple.donotdisturb.mode.default";
 
-  let dndConfig              = $state<DndConfig>({ enabled: false, focus_threshold: 60, duration_secs: 60, exit_duration_secs: 300, focus_lookback_secs: 60, focus_mode_identifier: DND_DEFAULT_MODE, exit_notification: true });
+  let dndConfig              = $state<DndConfig>({ enabled: false, focus_threshold: 60, duration_secs: 60, exit_duration_secs: 300, focus_lookback_secs: 60, focus_mode_identifier: DND_DEFAULT_MODE, exit_notification: true, snr_exit_db: 0 });
   let dndActive              = $state(false);
   let dndOsActive            = $state<boolean | null>(null); // real system-level state
   let dndExitSecsRemain      = $state(0);    // >0 while exit countdown is running
@@ -128,6 +129,19 @@ the Free Software Foundation, version 3 only. -->
 
   async function toggleExitNotification() {
     dndConfig = { ...dndConfig, exit_notification: !dndConfig.exit_notification };
+    await saveDnd();
+  }
+
+  const DND_SNR_EXIT_PRESETS: [string, number][] = [
+    ["0 dB",  0],
+    ["3 dB",  3],
+    ["5 dB",  5],
+    ["10 dB", 10],
+    ["15 dB", 15],
+  ];
+
+  async function setSnrExitDb(db: number) {
+    dndConfig = { ...dndConfig, snr_exit_db: db };
     await saveDnd();
   }
 
@@ -726,6 +740,34 @@ the Free Software Foundation, version 3 only. -->
               {dndConfig.exit_notification ? "ON" : "OFF"}
             </span>
           </button>
+
+          <!-- ── SNR exit threshold ──────────────────────────────────────── -->
+          <div class="px-4 py-3.5 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[0.72rem] font-semibold text-foreground">
+                {t("dnd.snrExitThreshold")}
+              </span>
+              <span class="text-[0.62rem] font-bold text-violet-500">
+                {dndConfig.snr_exit_db} dB
+              </span>
+            </div>
+            <p class="text-[0.62rem] text-muted-foreground leading-relaxed -mt-0.5">
+              {t("dnd.snrExitThresholdDesc")}
+            </p>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              {#each DND_SNR_EXIT_PRESETS as [label, db]}
+                <button
+                  onclick={() => setSnrExitDb(db)}
+                  class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
+                         transition-all cursor-pointer select-none
+                         {dndConfig.snr_exit_db === db
+                           ? 'border-violet-500/50 bg-violet-500/10 dark:bg-violet-500/15 text-violet-600 dark:text-violet-400'
+                           : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
+                  {label}
+                </button>
+              {/each}
+            </div>
+          </div>
 
           <!-- ── Active state indicator + exit countdown timer ───────────── -->
           <!--

@@ -1982,6 +1982,8 @@ const fr: Record<string, string> = {
   "dnd.forceOffBtn":            "Désactiver maintenant",
   "dnd.exitNotification":       "Notification de sortie",
   "dnd.exitNotificationDesc":   "Envoyer une notification quand le mode Focus est désactivé automatiquement (score insuffisant, signal faible ou fonctionnalité désactivée).",
+  "dnd.snrExitThreshold":       "Seuil SNR de désactivation",
+  "dnd.snrExitThresholdDesc":   "Si le rapport signal/bruit reste en dessous de ce seuil pendant 1 minute, le mode Focus est désactivé de force. Des valeurs plus basses tolèrent des signaux plus bruités.",
   "dnd.untilActivation":        "avant l'activation",
   "dnd.activating":             "Activation du mode Focus…",
   "dnd.buildingScore":          "Engagement {score} / {threshold}",
