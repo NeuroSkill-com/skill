@@ -27,7 +27,7 @@ export interface FilterConfig {
   notch_bandwidth_hz: number;
 }
 
-export interface MuseStatus {
+export interface DeviceStatus {
   state:          "disconnected" | "scanning" | "connected" | "bt_off";
   device_name:    string | null;
   device_id:      string | null;

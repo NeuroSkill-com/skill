@@ -11,7 +11,7 @@ use crate::MutexExt;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
-    AppState, MuseStatus, DiscoveredDevice, EegPacket, PpgPacket, ImuPacket,
+    AppState, DeviceStatus, DiscoveredDevice, EegPacket, PpgPacket, ImuPacket,
     emit_status, emit_devices, save_settings, skill_dir, mutate_and_save,
     start_session, cancel_session,
     constants::{EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS, LOG_CONFIG_FILE},
@@ -191,7 +191,7 @@ pub fn subscribe_imu(on_event: tauri::ipc::Channel<ImuPacket>, state: tauri::Sta
 // ── Device commands ────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> MuseStatus {
+pub fn get_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DeviceStatus {
     state.lock_or_recover().status.clone()
 }
 
@@ -253,7 +253,7 @@ pub fn pair_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
 }
 
 #[tauri::command]
-pub fn forget_device(id: String, app: AppHandle) -> MuseStatus {
+pub fn forget_device(id: String, app: AppHandle) -> DeviceStatus {
     {
         let r = app.state::<Mutex<Box<AppState>>>();
         let mut s = r.lock_or_recover();

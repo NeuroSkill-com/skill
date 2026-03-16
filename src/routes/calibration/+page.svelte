@@ -15,7 +15,7 @@ the Free Software Foundation, version 3 only. -->
   import { t }                   from "$lib/i18n/index.svelte";
   import { useWindowTitle }      from "$lib/window-title.svelte";
   import DisclaimerFooter        from "$lib/DisclaimerFooter.svelte";
-  import type { MuseStatus }    from "$lib/types";
+  import type { DeviceStatus }    from "$lib/types";
   import { MUSE_CHANNELS, MUSE_POSITIONS } from "$lib/types";
   import { fmtDateTimeLocale }  from "$lib/format";
 
@@ -332,11 +332,11 @@ the Free Software Foundation, version 3 only. -->
 
     // Electrode signal quality
     try {
-      const s = await invoke<MuseStatus>("get_status");
+      const s = await invoke<DeviceStatus>("get_status");
       elecQuality   = s.channel_quality;
       museConnected = s.state === "connected";
     } catch {}
-    unlistenQualityFn = await listen<MuseStatus>("muse-status", (ev) => {
+    unlistenQualityFn = await listen<DeviceStatus>("muse-status", (ev) => {
       elecQuality   = ev.payload.channel_quality;
       museConnected = ev.payload.state === "connected";
     });

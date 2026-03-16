@@ -18,7 +18,7 @@ the Free Software Foundation, version 3 only. -->
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
   import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
   import { openSettings }       from "$lib/navigation";
-  import type { MuseStatus }    from "$lib/types";
+  import type { DeviceStatus }    from "$lib/types";
 
   // ── Types ──────────────────────────────────────────────────────────────────
   interface CalibrationAction { label: string; duration_secs: number; }
@@ -71,10 +71,10 @@ the Free Software Foundation, version 3 only. -->
   let stepIdx = $derived(STEPS.indexOf(step));
 
   // ── Reactive status ────────────────────────────────────────────────────────
-  let status = $state<MuseStatus>({
+  let status = $state<DeviceStatus>({
     state: "disconnected", device_name: null, battery: 0,
     channel_quality: ["no_signal","no_signal","no_signal","no_signal"],
-  } as MuseStatus);
+  } as DeviceStatus);
 
   const EEG_CH = ["TP9", "AF7", "AF8", "TP10"];
   const QC: Record<string, string> = {
@@ -471,8 +471,8 @@ the Free Software Foundation, version 3 only. -->
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   const unsubs: UnlistenFn[] = [];
   onMount(async () => {
-    status = await invoke<MuseStatus>("get_status");
-    unsubs.push(await listen<MuseStatus>("muse-status", (ev) => { status = ev.payload; }));
+    status = await invoke<DeviceStatus>("get_status");
+    unsubs.push(await listen<DeviceStatus>("muse-status", (ev) => { status = ev.payload; }));
 
     // Load default calibration profile for inline calibration
     try {

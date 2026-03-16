@@ -17,7 +17,7 @@ use tauri::{
     AppHandle, Manager,
 };
 
-use crate::{AppState, MuseStatus};
+use crate::{AppState, DeviceStatus};
 
 // ── Re-exports from skill-tray ────────────────────────────────────────────────
 pub use skill_tray::{
@@ -134,7 +134,7 @@ fn tray_download_icon_progress(_app: &AppHandle) -> Option<(usize, f32)> {
 
 /// Structural key — things that change the number / identity of menu items.
 /// When this changes, the entire menu must be rebuilt via `set_menu()`.
-fn structure_key(st: &MuseStatus, app: &AppHandle) -> String {
+fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
     let r = app.state::<Mutex<Box<AppState>>>();
     let g = r.lock_or_recover();
     let ls   = g.label_shortcut.clone();
@@ -171,7 +171,7 @@ fn structure_key(st: &MuseStatus, app: &AppHandle) -> String {
 /// Status key — things that only change text/enabled state of existing items.
 /// When this changes (but structure_key doesn't), we update items in-place
 /// via `set_text()` / `set_enabled()` — no `set_menu()` call needed.
-fn status_key(st: &MuseStatus) -> String {
+fn status_key(st: &DeviceStatus) -> String {
     let batt_bucket = if st.battery <= 0.0 {
         0u32
     } else {
@@ -189,7 +189,7 @@ fn status_key(st: &MuseStatus) -> String {
 
 /// Combined key for full dedup (used by LAST_MENU_KEY to track whether
 /// *anything* changed at all).
-fn menu_key(st: &MuseStatus, app: &AppHandle) -> String {
+fn menu_key(st: &DeviceStatus, app: &AppHandle) -> String {
     format!("{}|{}", structure_key(st, app), status_key(st))
 }
 
@@ -230,7 +230,7 @@ fn icon_with_progress(icon_state: &str, progress: Option<f32>) -> Image<'static>
 
 // ── Menu builder ──────────────────────────────────────────────────────────────
 
-pub(crate) fn build_menu(app: &AppHandle, st: &MuseStatus) -> tauri::Result<Menu<tauri::Wry>> {
+pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Menu<tauri::Wry>> {
     let (label_shortcut, search_shortcut, settings_shortcut, calibration_shortcut,
          help_shortcut, history_shortcut, api_shortcut, focus_timer_shortcut) = {
         let r = app.state::<Mutex<Box<AppState>>>();
@@ -503,7 +503,7 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
 /// This avoids the expensive native menu teardown/rebuild cycle for
 /// state transitions like connected↔disconnected that don't change
 /// which items exist.
-fn update_status_items(menu: &Menu<tauri::Wry>, st: &MuseStatus) {
+fn update_status_items(menu: &Menu<tauri::Wry>, st: &DeviceStatus) {
     // Status info line
     if let Some(item) = menu.get("info").and_then(|k| k.as_menuitem().cloned()) {
         let text = match st.state.as_str() {

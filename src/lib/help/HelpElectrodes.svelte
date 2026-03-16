@@ -14,7 +14,7 @@ the Free Software Foundation, version 3 only. -->
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
   import { t }                  from "$lib/i18n/index.svelte";
-  import type { MuseStatus }    from "$lib/types";
+  import type { DeviceStatus }    from "$lib/types";
 
   let quality = $state<string[]>(["no_signal","no_signal","no_signal","no_signal"]);
   let connected = $state(false);
@@ -22,12 +22,12 @@ the Free Software Foundation, version 3 only. -->
   const unsubs: UnlistenFn[] = [];
   onMount(async () => {
     try {
-      const s = await invoke<MuseStatus>("get_status");
+      const s = await invoke<DeviceStatus>("get_status");
       quality   = s.channel_quality;
       connected = s.state === "connected";
     } catch {}
     unsubs.push(
-      await listen<MuseStatus>("muse-status", (ev) => {
+      await listen<DeviceStatus>("muse-status", (ev) => {
         quality   = ev.payload.channel_quality;
         connected = ev.payload.state === "connected";
       })

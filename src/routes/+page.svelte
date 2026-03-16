@@ -37,7 +37,7 @@ the Free Software Foundation, version 3 only. -->
   } from "$lib/navigation";
   import { setBtOff } from "$lib/bt-status-store.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import type { MuseStatus, DiscoveredDevice } from "$lib/types";
+  import type { DeviceStatus, DiscoveredDevice } from "$lib/types";
 
   // ── Model download status (shown as a banner when downloading/retrying) ────
   interface ModelDownloadStatus {
@@ -263,7 +263,7 @@ the Free Software Foundation, version 3 only. -->
   let revealMAC = $state(false);
   let showElectrodes = $state(false);
 
-  let status = $state<MuseStatus>({
+  let status = $state<DeviceStatus>({
     state: "disconnected", device_name: null, device_id: null,
     serial_number: null, mac_address: null,
     csv_path: null, sample_count: 0, battery: 0,
@@ -522,7 +522,7 @@ the Free Software Foundation, version 3 only. -->
 
   async function retryConnect()   { await invoke("retry_connect"); }
   async function cancelRetry()    { await invoke("cancel_retry"); }
-  async function forgetDevice(id: string) { status = await invoke<MuseStatus>("forget_device", { id }); }
+  async function forgetDevice(id: string) { status = await invoke<DeviceStatus>("forget_device", { id }); }
   async function connectDevice(id: string) {
     await invoke("set_preferred_device", { id });
     await invoke("retry_connect");
@@ -545,7 +545,7 @@ the Free Software Foundation, version 3 only. -->
   const unlisteners: UnlistenFn[] = [];
   async function refreshStatus() {
     const prev = status.state;
-    status = await invoke<MuseStatus>("get_status");
+    status = await invoke<DeviceStatus>("get_status");
     if (prev !== "connected" && status.state === "connected") startUptime();
     if (prev === "connected"  && status.state !== "connected") stopUptime();
   }
@@ -608,7 +608,7 @@ the Free Software Foundation, version 3 only. -->
       dailyGoalMin = ev.payload;
     }));
 
-    unlisteners.push(await listen<MuseStatus>("muse-status", ev => {
+    unlisteners.push(await listen<DeviceStatus>("muse-status", ev => {
       const prev = status.state;
       status = ev.payload;
       if (prev !== "connected" && status.state === "connected") startUptime();
