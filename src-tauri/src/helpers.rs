@@ -15,7 +15,7 @@ use crate::state::*;
 use crate::ws_server::WsBroadcaster;
 use crate::MutexExt;
 use crate::settings::{
-    CalibrationConfig, CalibrationProfile, UserSettings,
+    CalibrationConfig, UserSettings,
     settings_path,
 };
 

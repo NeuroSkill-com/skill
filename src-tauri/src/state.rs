@@ -3,6 +3,7 @@
 //
 //! Core shared types: `AppState`, `DeviceStatus`, IPC packet structs, handles.
 
+#[cfg(not(feature = "llm"))]
 use std::sync::Mutex;
 
 use serde::Serialize;

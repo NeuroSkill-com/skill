@@ -17,7 +17,7 @@
 // ── Existing modules ──────────────────────────────────────────────────────────
 
 mod constants;
-use constants::EMBEDDING_OVERLAP_SECS;
+
 
 #[macro_use]
 mod skill_log;
@@ -43,7 +43,6 @@ macro_rules! app_log {
 mod gpu_stats { #[allow(unused_imports)] pub use skill_data::gpu_stats::*; }
 
 mod eeg_model_config { #[allow(unused_imports)] pub use skill_eeg::eeg_model_config::*; }
-use eeg_model_config::{EegModelConfig, EegModelStatus, load_model_config};
 
 mod eeg_embeddings;
 mod global_eeg_index;
@@ -51,10 +50,8 @@ use global_eeg_index::GlobalEegIndex;
 
 
 mod eeg_filter { #[allow(unused_imports)] pub use skill_eeg::eeg_filter::*; }
-use eeg_filter::FilterConfig;
 
 mod eeg_bands { #[allow(unused_imports)] pub use skill_eeg::eeg_bands::*; }
-use eeg_bands::BandSnapshot;
 
 mod eeg_quality { #[allow(unused_imports)] pub use skill_eeg::eeg_quality::*; }
 use eeg_quality::SignalQuality;
@@ -127,27 +124,19 @@ mod autostart;
 mod tts;
 pub mod device { #[allow(unused_imports)] pub use skill_data::device::*; }
 use tts::{tts_init, tts_speak, tts_unload, tts_list_voices, tts_list_neutts_voices, tts_get_voice, tts_set_voice};
-pub(crate) use tts::{neutts_apply_config, init_tts_dirs, init_neutts_samples_dir,
+pub(crate) use tts::{neutts_apply_config, init_neutts_samples_dir,
                      init_espeak_bundled_data_path, tts_shutdown};
 
 mod settings;
 pub(crate) use settings::{
-    UmapUserConfig, CalibrationAction, CalibrationProfile, CalibrationConfig, new_profile_id,
-    load_umap_config, load_settings, settings_path,
+    CalibrationAction, CalibrationProfile, CalibrationConfig, new_profile_id,
+    load_umap_config, load_settings,
     default_skill_dir,
-    default_label_shortcut, default_search_shortcut, default_settings_shortcut,
-    default_calibration_shortcut, default_help_shortcut, default_history_shortcut,
-    default_api_shortcut, default_theme_shortcut, default_focus_timer_shortcut,
-    default_theme, default_accent_color, default_daily_goal_min, default_embedding_model,
-    default_ws_host, default_ws_port, default_update_check_interval, UserSettings,
-    NeuttsConfig, HookRule, HookLastTrigger, default_track_active_window, default_track_input_activity,
-    DoNotDisturbConfig, ScreenshotConfig,
 };
 
 mod dnd { #[allow(unused_imports)] pub use skill_data::dnd::*; }
 
-#[cfg(feature = "llm")]
-pub(crate) use settings::default_chat_shortcut;
+
 
 mod tray;
 pub(crate) use tray::{refresh_tray, build_menu, icon_disconnected};
@@ -209,10 +198,8 @@ use shortcut_cmds::{get_chat_shortcut, set_chat_shortcut};
 
 
 mod active_window;
-pub(crate) use active_window::ActiveWindowInfo;
 
 mod activity_store { #[allow(unused_imports)] pub use skill_data::activity_store::*; }
-pub(crate) use activity_store::ActivityStore;
 
 mod about;
 use about::{get_about_info, open_about_window};
@@ -303,16 +290,13 @@ use llm::cmds::{
 
 use std::{
     sync::Mutex,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
-use serde::Serialize;
 use tauri::{
-    ipc::Channel,
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager,
 };
-use tauri_plugin_notification::NotificationExt;
 
 use session_csv::new_csv_path;
 use session_runner::run_device_session;
@@ -330,7 +314,7 @@ pub(crate) use helpers::{
     unix_secs, yyyymmdd_utc,
     emit_status, emit_devices,
     send_toast, ToastLevel,
-    skill_dir, read_state, mutate_state, mutate_and_save,
+    skill_dir, read_state, mutate_and_save,
     save_settings, save_settings_handle,
     upsert_paired, upsert_discovered,
 };

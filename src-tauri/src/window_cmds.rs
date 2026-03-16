@@ -426,11 +426,11 @@ pub fn dismiss_whats_new(version: String, app: AppHandle) {
     }
 }
 
-/// Open (or focus) the What's New window.
-///
-/// The frontend calls `get_whats_new_seen_version` first and only invokes
-/// this command when the stored version differs from the running version.
-/// The window's own page calls `set_whats_new_seen_version` on dismiss.
+// Open (or focus) the What's New window.
+//
+// The frontend calls `get_whats_new_seen_version` first and only invokes
+// this command when the stored version differs from the running version.
+// The window's own page calls `set_whats_new_seen_version` on dismiss.
 window_cmd!(open_whats_new_window, "whats-new", "whats-new",
     "What's New in NeuroSkill™",
     size: (520.0, 620.0), resizable: false);
