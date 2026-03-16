@@ -939,18 +939,56 @@ fn extract_ddg_redirect_url(url: &str) -> Option<String> {
 
 // ── SearXNG search ────────────────────────────────────────────────────────────
 
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
 /// Cached list of public SearXNG instance URLs and the time they were fetched.
 static SEARXNG_INSTANCES: Mutex<Option<(Instant, Vec<String>)>> = Mutex::new(None);
 
-/// How long to cache the public instance list before re-fetching.
-const SEARXNG_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
+/// How often to refresh the public instance list (1 hour).
+const SEARXNG_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3600);
+
+/// Whether the background refresh loop has been spawned.
+static SEARXNG_BG_STARTED: AtomicBool = AtomicBool::new(false);
+static SEARXNG_BG_INIT: Once = Once::new();
+
+/// Start the background task that periodically refreshes the public SearXNG
+/// instance list.  Safe to call multiple times — only the first call spawns
+/// the loop.
+pub fn start_searxng_instance_refresh() {
+    if SEARXNG_BG_STARTED.load(Ordering::Relaxed) { return; }
+    SEARXNG_BG_INIT.call_once(|| {
+        SEARXNG_BG_STARTED.store(true, Ordering::Relaxed);
+        std::thread::Builder::new()
+            .name("searxng-refresh".into())
+            .spawn(|| searxng_refresh_loop())
+            .ok();
+    });
+}
+
+/// Long-running loop: fetch once immediately, then every `SEARXNG_REFRESH_INTERVAL`.
+fn searxng_refresh_loop() {
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(10))
+        .timeout_read(std::time::Duration::from_secs(30))
+        .build();
+
+    loop {
+        let instances = fetch_public_searxng_instances(&agent);
+        if !instances.is_empty() {
+            tool_log!("tool", "[searxng] refreshed instance list: {} instances", instances.len());
+            let mut guard = SEARXNG_INSTANCES.lock().unwrap_or_else(|e| e.into_inner());
+            *guard = Some((Instant::now(), instances));
+        }
+
+        std::thread::sleep(SEARXNG_REFRESH_INTERVAL);
+    }
+}
 
 /// Fetch the list of public SearXNG instances from searx.space.
-/// Filters for instances that have a JSON-capable search endpoint, are reachable
-/// over HTTPS, and have a response time under 1 second.
+/// Filters for HTTPS instances with normal network type, HTTP 200 status,
+/// and a median search response time under 1 second.
 fn fetch_public_searxng_instances(agent: &ureq::Agent) -> Vec<String> {
     let resp = agent
         .get("https://searx.space/data/instances.json")
@@ -976,7 +1014,7 @@ fn fetch_public_searxng_instances(agent: &ureq::Agent) -> Vec<String> {
             .unwrap_or("");
         if network_type != "normal" { continue; }
 
-        // Check HTTP status is OK (grade A/B or http.status_code == 200).
+        // Check HTTP status is OK.
         let http_ok = info.pointer("/http/status_code")
             .and_then(|v| v.as_u64())
             .map(|c| c == 200)
@@ -990,35 +1028,26 @@ fn fetch_public_searxng_instances(agent: &ureq::Agent) -> Vec<String> {
             .unwrap_or(f64::MAX);
         if response_time > 1.0 { continue; }
 
-        // Must support JSON format.
-        // The API reports enabled engines; we just check the instance is up and fast.
-
         urls.push(url.trim_end_matches('/').to_string());
     }
 
     urls
 }
 
-/// Get cached public SearXNG instances, refreshing if stale.
-fn get_public_instances(agent: &ureq::Agent) -> Vec<String> {
-    let mut guard = SEARXNG_INSTANCES.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((fetched_at, ref instances)) = *guard {
-        if fetched_at.elapsed() < SEARXNG_CACHE_TTL && !instances.is_empty() {
-            return instances.clone();
-        }
-    }
+/// Return the cached public instances (may be empty if the first fetch hasn't
+/// completed yet).
+fn get_public_instances() -> Vec<String> {
+    // Ensure the background loop is running.
+    start_searxng_instance_refresh();
 
-    let instances = fetch_public_searxng_instances(agent);
-    if !instances.is_empty() {
-        *guard = Some((Instant::now(), instances.clone()));
-    }
-    instances
+    let guard = SEARXNG_INSTANCES.lock().unwrap_or_else(|e| e.into_inner());
+    guard.as_ref().map(|(_, v)| v.clone()).unwrap_or_default()
 }
 
 /// Try up to `max_attempts` random public SearXNG instances.
 /// Uses tight 2s connect + 3s read timeouts (set on the agent by caller).
 fn searxng_public_search(agent: &ureq::Agent, query: &str, max_attempts: usize) -> Vec<Value> {
-    let instances = get_public_instances(agent);
+    let instances = get_public_instances();
     if instances.is_empty() { return Vec::new(); }
 
     // Shuffle indices.

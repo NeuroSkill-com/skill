@@ -657,6 +657,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Pre-fetch public SearXNG instances in the background so web_search
+    // doesn't block on the first call.
+    skill_tools::start_searxng_instance_refresh();
+
     #[allow(unused_mut)]
     let (broadcaster, mut serve_handle) = ws_server::bind_with(ws_cfg.0, ws_cfg.1);
     ws_server::register_mdns(&app_name, serve_handle.port);

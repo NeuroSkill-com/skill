@@ -50,5 +50,5 @@ pub use defs::{
     builtin_llm_tools, is_builtin_tool_enabled,
     enabled_builtin_llm_tools, filter_allowed_tool_defs,
 };
-pub use exec::execute_builtin_tool_call;
+pub use exec::{execute_builtin_tool_call, start_searxng_instance_refresh};
 pub use context::{estimate_tokens, estimate_messages_tokens, trim_messages_to_fit};

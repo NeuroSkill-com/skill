@@ -1,6 +1,6 @@
 ### Features
 
-- **SearXNG web search support**: the `web_search` tool now automatically fetches the list of public SearXNG instances from searx.space, filters for fast HTTPS instances (< 1s median response time), and queries up to 3 randomly-selected instances with a 2s connect / 3s read timeout. If a user-configured SearXNG URL is set, it is tried first. DuckDuckGo HTML scraping remains the final fallback. The public instance list is cached for 1 hour.
+- **SearXNG web search with background instance refresh**: the `web_search` tool now fetches the list of public SearXNG instances from `https://searx.space/data/instances.json` at app startup and refreshes it every hour in a background thread. Instances are filtered for HTTPS, normal network, HTTP 200 status, and < 1s median response time. On each search, up to 3 randomly-selected instances are tried with tight timeouts (2s connect / 3s read). If a user-configured SearXNG URL is set, it is tried first. DuckDuckGo HTML scraping remains the final fallback.
 
 ### i18n
 
