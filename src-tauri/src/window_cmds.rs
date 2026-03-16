@@ -253,6 +253,57 @@ pub fn show_main_window(
     crate::linux_fix_decorations(&win);
 }
 
+// ── Window command macro ──────────────────────────────────────────────────────
+
+/// Generate a `#[tauri::command] pub async fn $name(app) -> Result<(), String>`
+/// that calls `focus_or_create` with the given `WindowSpec`.
+macro_rules! window_cmd {
+    // With min_inner_size and extra fields.
+    ($name:ident, $label:expr, $route:expr, $title:expr,
+     size: ($w:expr, $h:expr), min: ($mw:expr, $mh:expr) $(, $field:ident: $val:expr)*) => {
+        #[tauri::command]
+        pub async fn $name(app: AppHandle) -> Result<(), String> {
+            focus_or_create(&app, WindowSpec {
+                label: $label, route: $route, title: $title,
+                inner_size: ($w, $h),
+                min_inner_size: Some(($mw, $mh)),
+                $($field: $val,)*
+                ..Default::default()
+            })
+        }
+    };
+    // Without min_inner_size.
+    ($name:ident, $label:expr, $route:expr, $title:expr,
+     size: ($w:expr, $h:expr) $(, $field:ident: $val:expr)*) => {
+        #[tauri::command]
+        pub async fn $name(app: AppHandle) -> Result<(), String> {
+            focus_or_create(&app, WindowSpec {
+                label: $label, route: $route, title: $title,
+                inner_size: ($w, $h),
+                $($field: $val,)*
+                ..Default::default()
+            })
+        }
+    };
+}
+
+/// Like `window_cmd!` but emits an event to the existing window.
+macro_rules! window_tab_cmd {
+    ($name:ident, $label:expr, $route:expr, $title:expr,
+     size: ($w:expr, $h:expr), min: ($mw:expr, $mh:expr),
+     event: $ev:expr, payload: $pl:expr) => {
+        #[tauri::command]
+        pub async fn $name(app: AppHandle) -> Result<(), String> {
+            focus_or_create_with_emit(&app, WindowSpec {
+                label: $label, route: $route, title: $title,
+                inner_size: ($w, $h),
+                min_inner_size: Some(($mw, $mh)),
+                ..Default::default()
+            }, $ev, $pl)
+        }
+    };
+}
+
 // ── Bluetooth & utility windows ───────────────────────────────────────────────
 
 #[tauri::command]
@@ -268,45 +319,23 @@ pub fn open_bt_settings() {
         .arg("gnome-control-center bluetooth 2>/dev/null || blueman-manager 2>/dev/null").spawn(); }
 }
 
-#[tauri::command]
-pub async fn open_settings_window(app: AppHandle) -> Result<(), String> {
-    focus_or_create(&app, WindowSpec {
-        label: "settings", route: "settings", title: "NeuroSkill™ – Settings",
-        inner_size: (760.0, 720.0), min_inner_size: Some((580.0, 560.0)),
-        ..Default::default()
-    })
-}
+window_cmd!(open_settings_window, "settings", "settings",
+    "NeuroSkill™ – Settings",
+    size: (760.0, 720.0), min: (580.0, 560.0));
 
-#[tauri::command]
-pub async fn open_model_tab(app: AppHandle) -> Result<(), String> {
-    focus_or_create_with_emit(&app, WindowSpec {
-        label: "settings", route: "settings?tab=model", title: "NeuroSkill™ – Model",
-        inner_size: (760.0, 720.0), min_inner_size: Some((580.0, 560.0)),
-        ..Default::default()
-    }, "switch-tab", "model")
-}
+window_tab_cmd!(open_model_tab, "settings", "settings?tab=model",
+    "NeuroSkill™ – Model",
+    size: (760.0, 720.0), min: (580.0, 560.0),
+    event: "switch-tab", payload: "model");
 
-#[tauri::command]
-pub async fn open_updates_window(app: AppHandle) -> Result<(), String> {
-    focus_or_create_with_emit(&app, WindowSpec {
-        label: "settings", route: "settings?tab=updates", title: "NeuroSkill™ – Updates",
-        inner_size: (760.0, 720.0), min_inner_size: Some((580.0, 560.0)),
-        ..Default::default()
-    }, "switch-tab", "updates")
-}
+window_tab_cmd!(open_updates_window, "settings", "settings?tab=updates",
+    "NeuroSkill™ – Updates",
+    size: (760.0, 720.0), min: (580.0, 560.0),
+    event: "switch-tab", payload: "updates");
 
-#[tauri::command]
-pub async fn open_help_window(app: AppHandle) -> Result<(), String> {
-    focus_or_create(&app, WindowSpec {
-        label: "help", route: "help", title: "NeuroSkill™ – Help",
-        inner_size: (680.0, 720.0), min_inner_size: Some((600.0, 520.0)),
-        ..Default::default()
-    })
-}
-
-// NOTE: open_history_window, open_compare_window, open_compare_window_with_sessions
-// remain in lib.rs because they live inside the history-data section alongside
-// SessionEntry, list_sessions, etc. which are not yet extracted.
+window_cmd!(open_help_window, "help", "help",
+    "NeuroSkill™ – Help",
+    size: (680.0, 720.0), min: (600.0, 520.0));
 
 #[tauri::command]
 pub async fn open_session_window(app: AppHandle, csv_path: String) -> Result<(), String> {
@@ -329,14 +358,9 @@ pub async fn open_session_window(app: AppHandle, csv_path: String) -> Result<(),
         .resizable(true).center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-pub async fn open_search_window(app: AppHandle) -> Result<(), String> {
-    focus_or_create(&app, WindowSpec {
-        label: "search", route: "search", title: "EEG Search",
-        inner_size: (1100.0, 820.0), min_inner_size: Some((700.0, 560.0)),
-        maximized: true, ..Default::default()
-    })
-}
+window_cmd!(open_search_window, "search", "search",
+    "EEG Search",
+    size: (1100.0, 820.0), min: (700.0, 560.0), maximized: true);
 
 #[tauri::command]
 pub(crate) async fn open_focus_timer_window_inner(
@@ -365,37 +389,22 @@ pub async fn open_focus_timer_window(app: AppHandle) -> Result<(), String> {
     open_focus_timer_window_inner(&app, false).await
 }
 
-#[tauri::command]
-pub async fn open_labels_window(app: AppHandle) -> Result<(), String> {
-    focus_or_create(&app, WindowSpec {
-        label: "labels", route: "labels", title: "All Labels",
-        inner_size: (680.0, 600.0), min_inner_size: Some((480.0, 400.0)),
-        ..Default::default()
-    })
-}
+window_cmd!(open_labels_window, "labels", "labels",
+    "All Labels",
+    size: (680.0, 600.0), min: (480.0, 400.0));
 
-#[tauri::command]
-pub async fn open_label_window(app: AppHandle) -> Result<(), String> {
-    focus_or_create(&app, WindowSpec {
-        label: "label", route: "label", title: "Add Label",
-        inner_size: (520.0, 560.0), min_inner_size: Some((420.0, 380.0)),
-        always_on_top: true, ..Default::default()
-    })
-}
+window_cmd!(open_label_window, "label", "label",
+    "Add Label",
+    size: (520.0, 560.0), min: (420.0, 380.0), always_on_top: true);
 
 #[tauri::command]
 pub fn close_label_window(app: AppHandle) {
     if let Some(win) = app.get_webview_window("label") { let _ = win.close(); }
 }
 
-#[tauri::command]
-pub async fn open_api_window(app: AppHandle) -> Result<(), String> {
-    focus_or_create(&app, WindowSpec {
-        label: "api", route: "api", title: "NeuroSkill™ – API Status",
-        inner_size: (620.0, 560.0), min_inner_size: Some((480.0, 400.0)),
-        ..Default::default()
-    })
-}
+window_cmd!(open_api_window, "api", "api",
+    "NeuroSkill™ – API Status",
+    size: (620.0, 560.0), min: (480.0, 400.0));
 
 /// Return the last app version for which the What's New window was dismissed.
 ///
@@ -422,23 +431,13 @@ pub fn dismiss_whats_new(version: String, app: AppHandle) {
 /// The frontend calls `get_whats_new_seen_version` first and only invokes
 /// this command when the stored version differs from the running version.
 /// The window's own page calls `set_whats_new_seen_version` on dismiss.
-#[tauri::command]
-pub async fn open_whats_new_window(app: AppHandle) -> Result<(), String> {
-    focus_or_create(&app, WindowSpec {
-        label: "whats-new", route: "whats-new", title: "What's New in NeuroSkill™",
-        inner_size: (520.0, 620.0), resizable: false,
-        ..Default::default()
-    })
-}
+window_cmd!(open_whats_new_window, "whats-new", "whats-new",
+    "What's New in NeuroSkill™",
+    size: (520.0, 620.0), resizable: false);
 
-#[tauri::command]
-pub async fn open_onboarding_window(app: AppHandle) -> Result<(), String> {
-    focus_or_create(&app, WindowSpec {
-        label: "onboarding", route: "onboarding", title: "NeuroSkill™ – Welcome",
-        inner_size: (680.0, 760.0), min_inner_size: Some((560.0, 620.0)),
-        ..Default::default()
-    })
-}
+window_cmd!(open_onboarding_window, "onboarding", "onboarding",
+    "NeuroSkill™ – Welcome",
+    size: (680.0, 760.0), min: (560.0, 620.0));
 
     #[tauri::command]
     pub fn get_onboarding_model_download_order() -> Vec<String> {
