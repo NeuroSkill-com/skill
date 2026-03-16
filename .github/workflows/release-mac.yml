@@ -585,6 +585,7 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           JOB_STATUS: ${{ job.status }}
         run: |
+          COMMIT_MSG=$(git log -1 --format='%s' | head -c 200)
           RELEASE_URL="${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
@@ -612,7 +613,8 @@ jobs:
                   {\"name\": \"Tag\",      \"value\": \"\`${{ steps.version_meta.outputs.tag }}\`\",     \"inline\": true},
                   {\"name\": \"Version\",  \"value\": \"\`${{ steps.version_meta.outputs.version }}\`\", \"inline\": true},
                   {\"name\": \"Platform\", \"value\": \"macOS aarch64\",           \"inline\": true},
-                  {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true}
+                  {\"name\": \"Actor\",    \"value\": \"${{ github.actor }}\",     \"inline\": true},
+                  {\"name\": \"Commit Message\", \"value\": $(echo "$COMMIT_MSG" | jq -Rs .), \"inline\": false}
                 ],
                 \"footer\": {\"text\": \"${{ github.repository }}\"}
               }]

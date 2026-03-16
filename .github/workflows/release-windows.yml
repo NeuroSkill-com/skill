@@ -706,6 +706,8 @@ jobs:
             exit 0
           }
 
+          $commitMsg = (git log -1 --format='%s') | Select-Object -First 1
+          if ($commitMsg.Length -gt 200) { $commitMsg = $commitMsg.Substring(0, 200) }
           $releaseUrl = "${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version_meta.outputs.tag }}"
           $runUrl = "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
@@ -732,7 +734,8 @@ jobs:
                   @{ name = "Tag";      value = "${{ steps.version_meta.outputs.tag }}";     inline = $true },
                   @{ name = "Version";  value = "${{ steps.version_meta.outputs.version }}"; inline = $true },
                   @{ name = "Platform"; value = "Windows x86_64";                              inline = $true },
-                  @{ name = "Actor";    value = "${{ github.actor }}";                         inline = $true }
+                  @{ name = "Actor";    value = "${{ github.actor }}";                         inline = $true },
+                  @{ name = "Commit Message"; value = $commitMsg;                              inline = $false }
                 )
                 footer = @{ text = "${{ github.repository }}" }
               }

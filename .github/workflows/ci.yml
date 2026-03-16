@@ -493,10 +493,14 @@ jobs:
     needs: [rust-check, linux-portable-package, windows-check, frontend-check, audit]
     if: always()
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - name: Send CI result to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          COMMIT_MSG=$(git log -1 --format='%s' | head -c 200)
           RUST="${{ needs.rust-check.result }}"
           LINUX_PORTABLE="${{ needs.linux-portable-package.result }}"
           WINDOWS="${{ needs.windows-check.result }}"
@@ -537,6 +541,7 @@ jobs:
                   {\"name\": \"Branch\",    \"value\": \"\`$REF\`\",          \"inline\": true},
                   {\"name\": \"Commit\",    \"value\": \"\`${SHA:0:8}\`\",    \"inline\": true},
                   {\"name\": \"Triggered\", \"value\": \"$EVENT by $ACTOR\", \"inline\": true},
+                  {\"name\": \"Commit Message\", \"value\": $(echo "$COMMIT_MSG" | jq -Rs .), \"inline\": false},
                   {\"name\": \"Rust (Linux+Vulkan)\", \"value\": \"$EMOJI_RUST $RUST\", \"inline\": true},
                   {\"name\": \"Linux Portable (tar.gz)\", \"value\": \"$EMOJI_LINUX_PORTABLE $LINUX_PORTABLE\", \"inline\": true},
                   {\"name\": \"Rust (Windows)\", \"value\": \"$EMOJI_WINDOWS $WINDOWS\", \"inline\": true},
