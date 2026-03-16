@@ -81,13 +81,20 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 return json!({ "ok": false, "tool": "web_search", "error": "missing query" });
             }
 
+            let searxng_url = allowed_tools.searxng_url.clone();
             tokio::task::spawn_blocking(move || {
                 let agent = ureq::AgentBuilder::new()
                     .timeout_connect(std::time::Duration::from_secs(5))
                     .timeout_read(std::time::Duration::from_secs(10))
                     .build();
 
-                let results = ddg_html_search(&agent, &query);
+                // Try SearXNG first if configured, fall back to DuckDuckGo HTML.
+                let results = if !searxng_url.is_empty() {
+                    let r = searxng_search(&agent, &searxng_url, &query);
+                    if r.is_empty() { ddg_html_search(&agent, &query) } else { r }
+                } else {
+                    ddg_html_search(&agent, &query)
+                };
 
                 if results.is_empty() {
                     json!({ "ok": true, "tool": "web_search", "query": query, "results": [], "note": "no results found" })
@@ -916,4 +923,41 @@ fn extract_ddg_redirect_url(url: &str) -> Option<String> {
     } else {
         None
     }
+}
+
+// ── SearXNG search ────────────────────────────────────────────────────────────
+
+/// Search using a SearXNG instance JSON API.
+fn searxng_search(agent: &ureq::Agent, base_url: &str, query: &str) -> Vec<Value> {
+    let url = format!("{}/search", base_url.trim_end_matches('/'));
+    let resp = agent
+        .get(&url)
+        .query("q", query)
+        .query("format", "json")
+        .query("categories", "general")
+        .set("Accept", "application/json")
+        .call();
+
+    let Ok(r) = resp else { return Vec::new() };
+    let body: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+
+    let Some(items) = body.get("results").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+
+    let mut results = Vec::new();
+    for item in items.iter().take(10) {
+        let title   = item.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let url     = item.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let snippet = item.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+
+        if url.is_empty() { continue; }
+
+        results.push(json!({
+            "title":   if title.is_empty() { url.clone() } else { title },
+            "url":     url,
+            "snippet": truncate_text(&snippet, 500),
+        }));
+    }
+    results
 }

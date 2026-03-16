@@ -20,6 +20,12 @@ pub struct LlmToolConfig {
     pub web_search: bool,
     pub web_fetch:  bool,
 
+    /// Optional SearXNG instance base URL (e.g. `"https://search.example.com"`).
+    /// When set, web_search uses this SearXNG instance first, falling back to
+    /// DuckDuckGo HTML scraping if it fails.
+    #[serde(default)]
+    pub searxng_url: String,
+
     /// Allow the LLM to execute bash/shell commands.
     #[serde(default)]
     pub bash: bool,
@@ -74,6 +80,7 @@ impl Default for LlmToolConfig {
             location:           true,
             web_search:         true,
             web_fetch:          true,
+            searxng_url:        String::new(),
             bash:               false,
             read_file:          false,
             write_file:         false,
