@@ -59,7 +59,7 @@
   }
 
   interface LlmConfig {
-    enabled: boolean; model_path: string | null; n_gpu_layers: number;
+    enabled: boolean; autostart: boolean; model_path: string | null; n_gpu_layers: number;
     ctx_size: number | null; parallel: number; api_key: string | null;
     tools: LlmToolsConfig;
     mmproj: string | null; mmproj_n_threads: number; no_mmproj_gpu: boolean;
@@ -97,7 +97,7 @@
 
   let catalog = $state<LlmCatalog>({ entries: [], active_model: "", active_mmproj: "" });
   let config  = $state<LlmConfig>({
-    enabled: false, model_path: null, n_gpu_layers: 4294967295,
+    enabled: false, autostart: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
     tools: { date: true, location: true, web_search: true, web_fetch: true, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 3, max_calls_per_round: 4 },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,

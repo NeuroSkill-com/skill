@@ -2361,6 +2361,21 @@ node cli.ts llm chat "Summarize my session" --json   # JSON output: {text, token
 | `exit` or `quit` | End the session |
 | `Ctrl+C` or `Ctrl+D` | End the session immediately |
 
+**Chat persistence:**
+
+All conversations initiated via WebSocket (`llm_chat`) and HTTP (`POST /llm/chat`)
+are **automatically persisted** to the same SQLite chat store used by the Chat window UI
+(`~/.skill/chats/chat_history.sqlite`).  This means:
+
+- WebSocket / HTTP chats appear in the Chat window sidebar and can be reviewed later.
+- The server returns a `session_id` that you can pass in subsequent requests to continue
+  the same conversation (multi-turn persistence across connections).
+- New sessions are auto-titled from the first user message (up to 60 characters).
+- Tool calls executed during the conversation are also persisted.
+
+To continue an existing conversation, include `"session_id": <id>` in your request.
+If omitted, a new session is created automatically.
+
 **WebSocket protocol — `llm_chat` (streaming):**
 
 `llm_chat` is the only WebSocket command that returns **multiple frames** per request.
@@ -2373,6 +2388,8 @@ ws.send(JSON.stringify({
     { role: "system", content: "You are a concise EEG assistant." },
     { role: "user",   content: "What does high theta power indicate?" },
   ],
+  // Optional — continue an existing session:
+  // session_id: 42,
   // Optional GenParams — all have sensible defaults:
   // temperature: 0.8, top_k: 40, top_p: 0.9, repeat_penalty: 1.1,
   // max_tokens: 2048, thinking_budget: 512  (set to 0 to skip <think> blocks)
@@ -2385,12 +2402,15 @@ ws.send(JSON.stringify({ command: "llm_chat", message: "Hello!" }));
 **Server sends multiple frames back:**
 
 ```jsonc
+// Session frame (sent first — contains the persistent session_id):
+{ "command": "llm_chat", "type": "session", "session_id": 42 }
+
 // Delta frames (one per token batch):
 { "command": "llm_chat", "type": "delta", "text": "High theta" }
 { "command": "llm_chat", "type": "delta", "text": " power (4–8 Hz)" }
 // ...
 
-// Final done frame:
+// Final done frame (also includes session_id):
 {
   "command":           "llm_chat",
   "ok":                true,
@@ -2398,7 +2418,8 @@ ws.send(JSON.stringify({ command: "llm_chat", message: "Hello!" }));
   "finish_reason":     "stop",     // "stop" | "length"
   "prompt_tokens":     42,
   "completion_tokens": 87,
-  "n_ctx":             4096
+  "n_ctx":             4096,
+  "session_id":        42
 }
 
 // Or on error:
@@ -2470,11 +2491,19 @@ curl -s -X POST http://127.0.0.1:8375/ \
 curl -s http://127.0.0.1:8375/llm/logs | jq '.logs[-10:]'
 
 # ── POST /llm/chat — non-streaming chat with optional image upload ────────────
+# All conversations are persisted to chat_history.sqlite (same store as the Chat window).
+# A session_id is returned in the response; pass it in subsequent requests to continue
+# the same conversation.
 
-# Plain text message
+# Plain text message (creates a new session automatically)
 curl -s -X POST http://127.0.0.1:8375/llm/chat \
   -H "Content-Type: application/json" \
-  -d '{"message":"What is EEG coherence?"}' | jq '{text, finish_reason, completion_tokens}'
+  -d '{"message":"What is EEG coherence?"}' | jq '{text, finish_reason, completion_tokens, session_id}'
+
+# Continue an existing session (multi-turn)
+curl -s -X POST http://127.0.0.1:8375/llm/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Can you elaborate on that?","session_id":42}'
 
 # With a system prompt and GenParams
 curl -s -X POST http://127.0.0.1:8375/llm/chat \

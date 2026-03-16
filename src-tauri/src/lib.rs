@@ -282,6 +282,7 @@ use llm::cmds::{
     chat_completions_ipc, abort_llm_stream, cancel_tool_call,
     get_last_chat_session, save_chat_message, save_chat_tool_calls, new_chat_session,
     load_chat_session, list_chat_sessions, rename_chat_session, delete_chat_session,
+    get_session_params, set_session_params,
     archive_chat_session, unarchive_chat_session, list_archived_chat_sessions,
     get_model_hardware_fit,
 };

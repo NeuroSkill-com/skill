@@ -177,6 +177,10 @@ impl ChatStore {
         let _ = conn.execute_batch(
             "ALTER TABLE chat_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;",
         );
+        // Migration: add params column (JSON blob for per-session generation params).
+        let _ = conn.execute_batch(
+            "ALTER TABLE chat_sessions ADD COLUMN params TEXT NOT NULL DEFAULT '';",
+        );
         Some(ChatStore { conn })
     }
 
@@ -218,6 +222,23 @@ impl ChatStore {
         })
         .map(|rows| rows.filter_map(|r| r.ok()).collect())
         .unwrap_or_default()
+    }
+
+    /// Get per-session generation params as a JSON string (empty = use defaults).
+    pub fn get_session_params(&self, id: i64) -> String {
+        self.conn.query_row(
+            "SELECT COALESCE(params, '') FROM chat_sessions WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        ).unwrap_or_default()
+    }
+
+    /// Save per-session generation params (JSON string).
+    pub fn set_session_params(&mut self, id: i64, params_json: &str) {
+        let _ = self.conn.execute(
+            "UPDATE chat_sessions SET params = ?1 WHERE id = ?2",
+            rusqlite::params![params_json, id],
+        );
     }
 
     /// Set a custom title for a session.

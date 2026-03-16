@@ -3969,9 +3969,11 @@ async function cmdLlm(args: Args): Promise<void> {
       function streamTurn(
         messages: Array<{ role: string; content: string }>,
         timeoutMs = 120_000,
-      ): Promise<{ text: string; promptTokens: number; completionTokens: number; nCtx: number }> {
+        sessionId?: number,
+      ): Promise<{ text: string; promptTokens: number; completionTokens: number; nCtx: number; sessionId: number }> {
         return new Promise((resolve, reject) => {
           let text = "";
+          let sid = sessionId ?? 0;
           const timer = setTimeout(() => {
             ws.off("message", handler);
             reject(new Error("llm_chat timeout"));
@@ -3983,6 +3985,10 @@ async function cmdLlm(args: Args): Promise<void> {
             if (data.command !== "llm_chat") return;
 
             switch (data.type) {
+              case "session":
+                // Server sends session_id for chat persistence
+                if (data.session_id) sid = data.session_id;
+                break;
               case "delta":
                 process.stdout.write(data.text ?? "");
                 text += data.text ?? "";
@@ -3991,11 +3997,13 @@ async function cmdLlm(args: Args): Promise<void> {
                 process.stdout.write("\n");
                 clearTimeout(timer);
                 ws.off("message", handler);
+                if (data.session_id) sid = data.session_id;
                 resolve({
                   text,
                   promptTokens:     data.prompt_tokens     ?? 0,
                   completionTokens: data.completion_tokens ?? 0,
                   nCtx:             data.n_ctx             ?? 0,
+                  sessionId:        sid,
                 });
                 break;
               case "error":
@@ -4013,7 +4021,9 @@ async function cmdLlm(args: Args): Promise<void> {
           };
 
           ws.on("message", handler);
-          ws.send(JSON.stringify({ command: "llm_chat", messages, ...genParams }));
+          const payload: Record<string, unknown> = { command: "llm_chat", messages, ...genParams };
+          if (sid > 0) payload.session_id = sid;
+          ws.send(JSON.stringify(payload));
         });
       }
 
@@ -4050,9 +4060,9 @@ async function cmdLlm(args: Args): Promise<void> {
           if (!r.ok) { printResult(r); printError(r.error ?? "llm chat failed"); }
           print(r.text);
           if (!jsonMode) {
-            print(`\n${DIM}  finish: ${r.prompt_tokens}+${r.completion_tokens} tokens, n_ctx=${r.n_ctx}${RESET}`);
+            print(`\n${DIM}  finish: ${r.prompt_tokens}+${r.completion_tokens} tokens, n_ctx=${r.n_ctx}, session=${r.session_id ?? 0}${RESET}`);
           } else {
-            console.log(JSON.stringify({ text: r.text, prompt_tokens: r.prompt_tokens, completion_tokens: r.completion_tokens }));
+            console.log(JSON.stringify({ text: r.text, prompt_tokens: r.prompt_tokens, completion_tokens: r.completion_tokens, session_id: r.session_id ?? 0 }));
           }
           break;
         }
@@ -4062,12 +4072,13 @@ async function cmdLlm(args: Args): Promise<void> {
         print(`${BOLD}🤖 llm chat${RESET} ${DIM}${args.text}${RESET}${imgNote}\n`);
         const result = await streamTurn(history as Array<{ role: string; content: string }>);
         if (!jsonMode) {
-          print(`\n${DIM}  finish: ${result.promptTokens}+${result.completionTokens} tokens, n_ctx=${result.nCtx}${RESET}`);
+          print(`\n${DIM}  finish: ${result.promptTokens}+${result.completionTokens} tokens, n_ctx=${result.nCtx}, session=${result.sessionId}${RESET}`);
         } else {
           console.log(JSON.stringify({
             text:               result.text,
             prompt_tokens:      result.promptTokens,
             completion_tokens:  result.completionTokens,
+            session_id:         result.sessionId,
           }));
         }
         break;
@@ -4085,6 +4096,9 @@ async function cmdLlm(args: Args): Promise<void> {
       let totalPrompt = 0;
       let totalCompletion = 0;
       let turnCount = 0;
+      // Persistent session_id — set on first turn, reused across the REPL
+      // so all messages in a multi-turn conversation belong to the same chat session.
+      let sessionId = 0;
       // Images staged for the next message (set via /image command)
       let pendingImages: Array<{ type: string; image_url: { url: string } }> =
         loadImageParts(args.images ?? []);
@@ -4134,7 +4148,8 @@ async function cmdLlm(args: Args): Promise<void> {
           if (args.system) history.push({ role: "system", content: args.system });
           pendingImages = [];
           turnCount = 0;
-          process.stdout.write(`${DIM}  conversation cleared${RESET}\n\n`);
+          sessionId = 0; // new session will be created on next turn
+          process.stdout.write(`${DIM}  conversation cleared (new session on next message)${RESET}\n\n`);
           continue;
         }
 
@@ -4197,14 +4212,21 @@ async function cmdLlm(args: Args): Promise<void> {
         history.push(userMsg);
         process.stdout.write(`\n${BOLD}${GREEN}Assistant:${RESET}${imgNote} `);
 
-        let result: { text: string; promptTokens: number; completionTokens: number; nCtx: number };
+        let result: { text: string; promptTokens: number; completionTokens: number; nCtx: number; sessionId: number };
         try {
-          result = await streamTurn(history as Array<{ role: string; content: string }>);
+          result = await streamTurn(
+            history as Array<{ role: string; content: string }>,
+            120_000,
+            sessionId || undefined,
+          );
         } catch (e: any) {
           process.stdout.write(`\n${RED}Error: ${e.message}${RESET}\n\n`);
           history.pop(); // remove the user message so history stays consistent
           continue;
         }
+
+        // Track the session_id so subsequent turns stay in the same chat session.
+        if (result.sessionId > 0) sessionId = result.sessionId;
 
         history.push({ role: "assistant", content: result.text });
         turnCount++;
@@ -4212,17 +4234,18 @@ async function cmdLlm(args: Args): Promise<void> {
         totalCompletion += result.completionTokens;
 
         process.stdout.write(
-          `${DIM}  [${result.promptTokens}+${result.completionTokens} tokens, n_ctx=${result.nCtx}]${RESET}\n\n`,
+          `${DIM}  [${result.promptTokens}+${result.completionTokens} tokens, n_ctx=${result.nCtx}, session=${sessionId}]${RESET}\n\n`,
         );
       }
 
       // Session summary
       rl.close();
       if (turnCount > 0) {
+        const sidNote = sessionId > 0 ? `, session #${sessionId} (persisted)` : "";
         process.stdout.write(
           `${DIM}─────────────────────────────────────────────────────────────\n` +
           `  session ended — ${turnCount} turn(s), ` +
-          `${totalPrompt} prompt + ${totalCompletion} completion tokens\n${RESET}\n`,
+          `${totalPrompt} prompt + ${totalCompletion} completion tokens${sidNote}\n${RESET}\n`,
         );
       } else {
         process.stdout.write(`${DIM}  (no messages sent)${RESET}\n`);

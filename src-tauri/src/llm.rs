@@ -1124,6 +1124,29 @@ pub fn save_chat_message(
     store.save_message(session_id, &role, &content, thinking.as_deref())
 }
 
+/// Get per-session generation params as a JSON string.
+#[tauri::command]
+pub fn get_session_params(
+    id:    i64,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> String {
+    let s = state.lock_or_recover();
+    let Some(store) = s.llm.chat_store.as_ref() else { return String::new(); };
+    store.get_session_params(id)
+}
+
+/// Save per-session generation params (JSON string).
+#[tauri::command]
+pub fn set_session_params(
+    id:          i64,
+    params_json: String,
+    state:       tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let mut s = state.lock_or_recover();
+    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    store.set_session_params(id, &params_json);
+}
+
 /// Create a fresh chat session and return its id.
 /// Called when the user clicks "New Chat".
 #[tauri::command]

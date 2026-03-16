@@ -2101,9 +2101,6 @@
           </svg>
         </div>
         {#if status === "stopped"}
-          {#await invoke("get_llm_catalog").then((c: any) => c.entries?.some((e: any) => !e.is_mmproj && e.state === "downloaded")) catch { false }}
-          {/await}
-          {@const hasDownloadedModel = true}
           <div class="flex flex-col items-center gap-2">
             <p class="text-[0.82rem] font-semibold text-foreground">{t("chat.empty.stopped")}</p>
             <p class="text-[0.7rem] text-muted-foreground max-w-xs leading-relaxed">
@@ -2117,7 +2114,7 @@
                 {t("chat.btn.startServer")}
               </button>
               <button
-                onclick={() => invoke("open_model_tab")}
+                onclick={() => invoke("open_settings_window").then(() => invoke("open_model_tab")).catch(() => {})}
                 class="px-4 py-2 rounded-xl border border-violet-500/40
                        text-violet-600 dark:text-violet-400 text-[0.72rem] font-semibold
                        hover:bg-violet-500/10 transition-colors cursor-pointer">
