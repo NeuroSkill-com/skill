@@ -378,9 +378,9 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
         s.battery_ema  = None;
         s.latest_bands = None;
         // Reset session timestamp so screenshot "sessions only" gate works.
-        if !retry {
-            s.session_start_utc = None;
-        }
+        // Even during auto-reconnect the device is not streaming data,
+        // so this is not an active session.
+        s.session_start_utc = None;
         // DSP objects live in SessionDsp (session-local, lock-free).
         // They are dropped when the session task exits; the next session
         // creates a fresh set.  No reset needed here.
