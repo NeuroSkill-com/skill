@@ -900,17 +900,26 @@ fn ddg_html_search(agent: &ureq::Agent, query: &str) -> Vec<Value> {
         Err(_) => return Vec::new(),
     };
 
+    parse_ddg_html(&body)
+}
+
+/// Parse DuckDuckGo HTML response body into search results.
+fn parse_ddg_html(body: &str) -> Vec<Value> {
     let mut results = Vec::new();
 
-    for chunk in body.split("class=\"result__body") {
+    // Each result is wrapped in: <div class="result results_links results_links_deep web-result ">
+    // Split on the outer result wrapper to get one chunk per result.
+    for chunk in body.split("class=\"result results_links") {
         if results.len() >= 10 {
             break;
         }
 
-        let url = extract_attr_value(chunk, "class=\"result__a\"", "href=\"")
-            .or_else(|| extract_attr_value(chunk, "class=\"result__url\"", "href=\""));
+        // Title + URL from <a class="result__a" href="...">Title</a>
+        let url = extract_attr_value(chunk, "class=\"result__a\"", "href=\"");
 
         let title = extract_tag_content(chunk, "class=\"result__a\"");
+
+        // Snippet from <a class="result__snippet" href="...">Snippet text</a>
         let snippet = extract_tag_content(chunk, "class=\"result__snippet\"");
 
         if let Some(url) = url {
@@ -1040,4 +1049,193 @@ fn searxng_search(agent: &ureq::Agent, base_url: &str, query: &str) -> Vec<Value
         }));
     }
     results
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod web_search_tests {
+    use super::*;
+
+    fn make_agent() -> ureq::Agent {
+        ureq::AgentBuilder::new()
+            .timeout_connect(std::time::Duration::from_secs(10))
+            .timeout_read(std::time::Duration::from_secs(15))
+            .build()
+    }
+
+    /// Dump raw DDG HTML response for debugging.
+    /// Run manually: `cargo test -p skill-tools debug_ddg_raw_response -- --nocapture --ignored`
+    #[test]
+    #[ignore]
+    fn debug_ddg_raw_response() {
+        let agent = make_agent();
+        let query = "rust programming language";
+        let ua = BROWSER_USER_AGENTS[0];
+
+        // Current approach: POST to /html/
+        let resp = agent
+            .post("https://html.duckduckgo.com/html/")
+            .set("User-Agent", ua)
+            .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .set("Accept-Language", "en-US,en;q=0.5")
+            .set("Origin", "https://html.duckduckgo.com")
+            .set("Referer", "https://html.duckduckgo.com/html/")
+            .set("Content-Type", "application/x-www-form-urlencoded")
+            .send_string(&format!("q={}&b=", urlencoding::encode(query)));
+
+        match resp {
+            Ok(r) => {
+                let status = r.status();
+                let body = r.into_string().unwrap_or_default();
+                let result_count = body.matches("result__body").count();
+                let has_captcha = body.contains("bot") || body.contains("anomaly");
+                println!("[POST /html/] status={status} len={} results={result_count} captcha={has_captcha}",
+                    body.len());
+
+                // Show result-related CSS classes
+                let mut classes: Vec<&str> = Vec::new();
+                for part in body.split("class=\"") {
+                    let cls = part.split('"').next().unwrap_or("");
+                    if cls.contains("result") && !classes.contains(&cls) {
+                        classes.push(cls);
+                    }
+                }
+                println!("[POST /html/] result classes: {classes:?}");
+
+                if has_captcha && result_count == 0 {
+                    for line in body.lines() {
+                        let l = line.trim();
+                        if l.contains("bot") || l.contains("anomaly") {
+                            println!("[CAPTCHA] {}", &l[..l.len().min(200)]);
+                        }
+                    }
+                }
+                // Save body for inspection
+                std::fs::write("/tmp/ddg_html_response.html", &body).ok();
+                println!("[POST /html/] saved to /tmp/ddg_html_response.html");
+            }
+            Err(e) => println!("[POST /html/] ERROR: {e}"),
+        }
+
+        // Also try lite endpoint
+        println!("\n--- lite endpoint ---");
+        let resp = agent
+            .post("https://lite.duckduckgo.com/lite/")
+            .set("User-Agent", ua)
+            .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .set("Accept-Language", "en-US,en;q=0.5")
+            .set("Origin", "https://lite.duckduckgo.com")
+            .set("Referer", "https://lite.duckduckgo.com/lite/")
+            .set("Content-Type", "application/x-www-form-urlencoded")
+            .send_string(&format!("q={}", urlencoding::encode(query)));
+
+        match resp {
+            Ok(r) => {
+                let status = r.status();
+                let body = r.into_string().unwrap_or_default();
+                let has_captcha = body.contains("bot") || body.contains("anomaly");
+
+                // Count lite-style results (table rows with result-link class)
+                let link_count = body.matches("result-link").count();
+                let snippet_count = body.matches("result-snippet").count();
+                println!("[POST /lite/] status={status} len={} links={link_count} snippets={snippet_count} captcha={has_captcha}",
+                    body.len());
+
+                let mut classes: Vec<&str> = Vec::new();
+                for part in body.split("class=\"") {
+                    let cls = part.split('"').next().unwrap_or("");
+                    if cls.contains("result") && !classes.contains(&cls) {
+                        classes.push(cls);
+                    }
+                }
+                println!("[POST /lite/] result classes: {classes:?}");
+
+                std::fs::write("/tmp/ddg_lite_response.html", &body).ok();
+                println!("[POST /lite/] saved to /tmp/ddg_lite_response.html");
+            }
+            Err(e) => println!("[POST /lite/] ERROR: {e}"),
+        }
+    }
+
+    /// Integration test: ddg_html_search should return results.
+    /// May fail in environments where DDG rate-limits (returns captcha).
+    /// Run manually: `cargo test -p skill-tools test_ddg_html_search_live -- --nocapture --ignored`
+    #[test]
+    #[ignore]
+    fn test_ddg_html_search_live() {
+        let agent = make_agent();
+        let results = ddg_html_search(&agent, "rust programming language");
+        println!("ddg_html_search returned {} results", results.len());
+        for (i, r) in results.iter().enumerate() {
+            println!("  [{i}] title={} url={}",
+                r.get("title").and_then(|v| v.as_str()).unwrap_or("?"),
+                r.get("url").and_then(|v| v.as_str()).unwrap_or("?"));
+        }
+        // Don't assert — DDG may captcha-block this environment.
+    }
+
+    /// Offline test: verify parsing of known DDG HTML structure.
+    #[test]
+    fn test_ddg_html_parsing() {
+        let html = r#"
+<div class="serp__results">
+  <div class="result results_links results_links_deep web-result ">
+    <div class="links_main links_deep result__body">
+      <h2 class="result__title">
+        <a rel="nofollow" class="result__a" href="https://rust-lang.org/">Rust Programming Language</a>
+      </h2>
+      <a class="result__snippet" href="https://rust-lang.org/">A fast, reliable <b>language</b>.</a>
+    </div>
+  </div>
+  <div class="result results_links results_links_deep web-result ">
+    <div class="links_main links_deep result__body">
+      <h2 class="result__title">
+        <a rel="nofollow" class="result__a" href="https://en.wikipedia.org/wiki/Rust_(programming_language)">Rust (programming language) - Wikipedia</a>
+      </h2>
+      <a class="result__snippet" href="https://en.wikipedia.org/wiki/Rust_(programming_language)">General-purpose language.</a>
+    </div>
+  </div>
+  <div class="result results_links results_links_deep web-result ">
+    <div class="links_main links_deep result__body">
+      <h2 class="result__title">
+        <a rel="nofollow" class="result__a" href="https://www.w3schools.com/rust/">Rust Tutorial</a>
+      </h2>
+      <a class="result__snippet" href="https://www.w3schools.com/rust/">Learn Rust with examples.</a>
+    </div>
+  </div>
+</div>
+"#;
+        let results = parse_ddg_html(html);
+        println!("Parsed {} results:", results.len());
+        for (i, r) in results.iter().enumerate() {
+            println!("  [{i}] title={:?} url={:?} snippet={:?}",
+                r.get("title").and_then(|v| v.as_str()),
+                r.get("url").and_then(|v| v.as_str()),
+                r.get("snippet").and_then(|v| v.as_str()));
+        }
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0]["url"], "https://rust-lang.org/");
+        assert_eq!(results[0]["title"], "Rust Programming Language");
+        assert_eq!(results[1]["url"], "https://en.wikipedia.org/wiki/Rust_(programming_language)");
+        assert_eq!(results[2]["url"], "https://www.w3schools.com/rust/");
+    }
+
+    /// Offline test: DDG redirect URLs are properly unwrapped.
+    #[test]
+    fn test_ddg_redirect_unwrap() {
+        let html = r#"
+<div class="result results_links results_links_deep web-result ">
+  <div class="links_main links_deep result__body">
+    <h2 class="result__title">
+      <a class="result__a" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fpage&rut=abc">Example</a>
+    </h2>
+    <a class="result__snippet" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fpage&rut=abc">A snippet.</a>
+  </div>
+</div>
+"#;
+        let results = parse_ddg_html(html);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0]["url"], "https://example.com/page");
+    }
 }
