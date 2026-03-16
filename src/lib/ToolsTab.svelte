@@ -16,13 +16,19 @@
   // ── Types ──────────────────────────────────────────────────────────────────
 
   type ToolExecutionMode = "sequential" | "parallel";
+  type SearchBackend = "duckduckgo" | "brave" | "searxng";
+  interface WebSearchProvider {
+    backend: SearchBackend;
+    brave_api_key: string;
+    searxng_url: string;
+  }
   interface LlmToolsConfig {
     enabled: boolean;
     date: boolean;
     location: boolean;
     web_search: boolean;
     web_fetch: boolean;
-    searxng_url: string;
+    web_search_provider: WebSearchProvider;
     bash: boolean;
     read_file: boolean;
     write_file: boolean;
@@ -47,7 +53,7 @@
   let config  = $state<LlmConfig>({
     enabled: false, autostart: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
-    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, searxng_url: "", bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4 },
+    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4 },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
   });
@@ -159,24 +165,75 @@
           </div>
         {/each}
 
-        <!-- SearXNG URL -->
+        <!-- Search provider -->
         {#if config.tools.web_search}
-          <div class="flex flex-col gap-1 rounded-xl border border-border/60 dark:border-white/[0.06]
+          <div class="flex flex-col gap-2.5 rounded-xl border border-border/60 dark:border-white/[0.06]
                       bg-slate-50/60 dark:bg-[#111118] px-3 py-2.5">
-            <label for="searxng-url" class="text-[0.68rem] font-semibold text-foreground">
-              {t("llm.tools.searxngUrl")}
-            </label>
-            <span class="text-[0.6rem] text-muted-foreground leading-relaxed">{t("llm.tools.searxngUrlDesc")}</span>
-            <input id="searxng-url" type="text" placeholder="https://search.example.com"
-              value={config.tools.searxng_url ?? ""}
-              oninput={async (e: Event) => {
-                const val = (e.target as HTMLInputElement).value;
-                config = { ...config, tools: { ...config.tools, searxng_url: val } };
-              }}
-              onchange={async () => { await saveConfig(); }}
-              class="mt-1 w-full rounded-lg border border-border/60 dark:border-white/[0.08]
-                     bg-white dark:bg-[#0c0c14] px-2.5 py-1.5 text-[0.7rem] text-foreground
-                     placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-blue-500/50" />
+            <div class="flex flex-col gap-1">
+              <span class="text-[0.68rem] font-semibold text-foreground">{t("llm.tools.searchProvider")}</span>
+              <span class="text-[0.6rem] text-muted-foreground leading-relaxed">{t("llm.tools.searchProviderDesc")}</span>
+            </div>
+
+            <!-- Backend selector -->
+            <div class="flex rounded-lg overflow-hidden border border-border text-[0.66rem] font-medium">
+              {#each [
+                { key: "duckduckgo" as SearchBackend, label: "DuckDuckGo" },
+                { key: "brave"     as SearchBackend, label: "Brave" },
+                { key: "searxng"   as SearchBackend, label: "SearXNG" },
+              ] as opt}
+                <button
+                  onclick={async () => {
+                    config = { ...config, tools: { ...config.tools, web_search_provider: { ...config.tools.web_search_provider, backend: opt.key } } };
+                    await saveConfig();
+                  }}
+                  class="flex-1 py-1.5 transition-colors cursor-pointer
+                         {config.tools.web_search_provider.backend === opt.key
+                           ? 'bg-primary text-primary-foreground'
+                           : 'bg-background text-muted-foreground hover:bg-muted'}">
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+
+            <!-- Brave API key -->
+            {#if config.tools.web_search_provider.backend === "brave"}
+              <div class="flex flex-col gap-1">
+                <label for="brave-api-key" class="text-[0.64rem] font-semibold text-foreground">
+                  {t("llm.tools.braveApiKey")}
+                </label>
+                <span class="text-[0.58rem] text-muted-foreground leading-relaxed">{t("llm.tools.braveApiKeyDesc")}</span>
+                <input id="brave-api-key" type="password" autocomplete="off" placeholder="BSA..."
+                  value={config.tools.web_search_provider.brave_api_key ?? ""}
+                  oninput={(e: Event) => {
+                    const val = (e.target as HTMLInputElement).value;
+                    config = { ...config, tools: { ...config.tools, web_search_provider: { ...config.tools.web_search_provider, brave_api_key: val } } };
+                  }}
+                  onchange={async () => { await saveConfig(); }}
+                  class="mt-0.5 w-full rounded-lg border border-border/60 dark:border-white/[0.08]
+                         bg-white dark:bg-[#0c0c14] px-2.5 py-1.5 text-[0.7rem] text-foreground
+                         placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-blue-500/50" />
+              </div>
+            {/if}
+
+            <!-- SearXNG URL -->
+            {#if config.tools.web_search_provider.backend === "searxng"}
+              <div class="flex flex-col gap-1">
+                <label for="searxng-url" class="text-[0.64rem] font-semibold text-foreground">
+                  {t("llm.tools.searxngUrl")}
+                </label>
+                <span class="text-[0.58rem] text-muted-foreground leading-relaxed">{t("llm.tools.searxngUrlDesc")}</span>
+                <input id="searxng-url" type="text" placeholder="https://search.example.com"
+                  value={config.tools.web_search_provider.searxng_url ?? ""}
+                  oninput={(e: Event) => {
+                    const val = (e.target as HTMLInputElement).value;
+                    config = { ...config, tools: { ...config.tools, web_search_provider: { ...config.tools.web_search_provider, searxng_url: val } } };
+                  }}
+                  onchange={async () => { await saveConfig(); }}
+                  class="mt-0.5 w-full rounded-lg border border-border/60 dark:border-white/[0.08]
+                         bg-white dark:bg-[#0c0c14] px-2.5 py-1.5 text-[0.7rem] text-foreground
+                         placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-blue-500/50" />
+              </div>
+            {/if}
           </div>
         {/if}
       </div>

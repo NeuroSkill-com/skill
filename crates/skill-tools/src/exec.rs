@@ -81,33 +81,25 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 return json!({ "ok": false, "tool": "web_search", "error": "missing query" });
             }
 
-            let searxng_url = allowed_tools.searxng_url.clone();
+            let provider = allowed_tools.web_search_provider.clone();
             tokio::task::spawn_blocking(move || {
                 let agent = ureq::AgentBuilder::new()
-                    .timeout_connect(std::time::Duration::from_secs(2))
-                    .timeout_read(std::time::Duration::from_secs(3))
-                    .build();
-
-                // 1. If user configured a specific SearXNG instance, try it first.
-                if !searxng_url.is_empty() {
-                    let r = searxng_search(&agent, &searxng_url, &query);
-                    if !r.is_empty() {
-                        return json!({ "ok": true, "tool": "web_search", "query": query, "results": r });
-                    }
-                }
-
-                // 2. Try random public SearXNG instances (up to 3 attempts).
-                let r = searxng_public_search(&agent, &query, 3);
-                if !r.is_empty() {
-                    return json!({ "ok": true, "tool": "web_search", "query": query, "results": r });
-                }
-
-                // 3. Final fallback: DuckDuckGo HTML scrape.
-                let ddg_agent = ureq::AgentBuilder::new()
                     .timeout_connect(std::time::Duration::from_secs(5))
                     .timeout_read(std::time::Duration::from_secs(10))
                     .build();
-                let results = ddg_html_search(&ddg_agent, &query);
+
+                // Try the configured backend first.
+                let results = match provider.backend.as_str() {
+                    "brave" if !provider.brave_api_key.is_empty() => {
+                        let r = brave_search(&agent, &provider.brave_api_key, &query);
+                        if r.is_empty() { ddg_html_search(&agent, &query) } else { r }
+                    }
+                    "searxng" if !provider.searxng_url.is_empty() => {
+                        let r = searxng_search(&agent, &provider.searxng_url, &query);
+                        if r.is_empty() { ddg_html_search(&agent, &query) } else { r }
+                    }
+                    _ => ddg_html_search(&agent, &query),
+                };
 
                 if results.is_empty() {
                     json!({ "ok": true, "tool": "web_search", "query": query, "results": [], "note": "no results found" })
@@ -937,136 +929,47 @@ fn extract_ddg_redirect_url(url: &str) -> Option<String> {
     }
 }
 
-// ── SearXNG search ────────────────────────────────────────────────────────────
+// ── Brave Search API ──────────────────────────────────────────────────────────
 
-use std::sync::{Mutex, Once};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
-
-/// Cached list of public SearXNG instance URLs and the time they were fetched.
-static SEARXNG_INSTANCES: Mutex<Option<(Instant, Vec<String>)>> = Mutex::new(None);
-
-/// How often to refresh the public instance list (1 hour).
-const SEARXNG_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3600);
-
-/// Whether the background refresh loop has been spawned.
-static SEARXNG_BG_STARTED: AtomicBool = AtomicBool::new(false);
-static SEARXNG_BG_INIT: Once = Once::new();
-
-/// Start the background task that periodically refreshes the public SearXNG
-/// instance list.  Safe to call multiple times — only the first call spawns
-/// the loop.
-pub fn start_searxng_instance_refresh() {
-    if SEARXNG_BG_STARTED.load(Ordering::Relaxed) { return; }
-    SEARXNG_BG_INIT.call_once(|| {
-        SEARXNG_BG_STARTED.store(true, Ordering::Relaxed);
-        std::thread::Builder::new()
-            .name("searxng-refresh".into())
-            .spawn(|| searxng_refresh_loop())
-            .ok();
-    });
-}
-
-/// Long-running loop: fetch once immediately, then every `SEARXNG_REFRESH_INTERVAL`.
-fn searxng_refresh_loop() {
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(std::time::Duration::from_secs(10))
-        .timeout_read(std::time::Duration::from_secs(30))
-        .build();
-
-    loop {
-        let instances = fetch_public_searxng_instances(&agent);
-        if !instances.is_empty() {
-            tool_log!("tool", "[searxng] refreshed instance list: {} instances", instances.len());
-            let mut guard = SEARXNG_INSTANCES.lock().unwrap_or_else(|e| e.into_inner());
-            *guard = Some((Instant::now(), instances));
-        }
-
-        std::thread::sleep(SEARXNG_REFRESH_INTERVAL);
-    }
-}
-
-/// Fetch the list of public SearXNG instances from searx.space.
-/// Filters for HTTPS instances with normal network type, HTTP 200 status,
-/// and a median search response time under 1 second.
-fn fetch_public_searxng_instances(agent: &ureq::Agent) -> Vec<String> {
+/// Search using the Brave Search API (free tier: 2 000 queries/month).
+/// See <https://brave.com/search/api/>.
+fn brave_search(agent: &ureq::Agent, api_key: &str, query: &str) -> Vec<Value> {
     let resp = agent
-        .get("https://searx.space/data/instances.json")
+        .get("https://api.search.brave.com/res/v1/web/search")
+        .query("q", query)
+        .query("count", "10")
         .set("Accept", "application/json")
+        .set("Accept-Encoding", "gzip")
+        .set("X-Subscription-Token", api_key)
         .call();
 
     let Ok(r) = resp else { return Vec::new() };
     let body: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
 
-    let Some(instances) = body.get("instances").and_then(|v| v.as_object()) else {
+    let Some(items) = body.pointer("/web/results").and_then(|v| v.as_array()) else {
         return Vec::new();
     };
 
-    let mut urls: Vec<String> = Vec::new();
+    let mut results = Vec::new();
+    for item in items.iter().take(10) {
+        let title   = item.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let url     = item.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let snippet = item.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
-    for (url, info) in instances {
-        // Only HTTPS instances.
-        if !url.starts_with("https://") { continue; }
+        if url.is_empty() { continue; }
 
-        // Must have network_type "normal" (not Tor/I2P).
-        let network_type = info.pointer("/network_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        if network_type != "normal" { continue; }
-
-        // Check HTTP status is OK.
-        let http_ok = info.pointer("/http/status_code")
-            .and_then(|v| v.as_u64())
-            .map(|c| c == 200)
-            .unwrap_or(false);
-        if !http_ok { continue; }
-
-        // Response time must be under 1 second.
-        let response_time = info.pointer("/timing/search/all/median")
-            .or_else(|| info.pointer("/timing/initial/all/median"))
-            .and_then(|v| v.as_f64())
-            .unwrap_or(f64::MAX);
-        if response_time > 1.0 { continue; }
-
-        urls.push(url.trim_end_matches('/').to_string());
+        results.push(json!({
+            "title":   if title.is_empty() { url.clone() } else { strip_html_tags(&title) },
+            "url":     url,
+            "snippet": truncate_text(&strip_html_tags(&snippet), 500),
+        }));
     }
-
-    urls
+    results
 }
 
-/// Return the cached public instances (may be empty if the first fetch hasn't
-/// completed yet).
-fn get_public_instances() -> Vec<String> {
-    // Ensure the background loop is running.
-    start_searxng_instance_refresh();
+// ── SearXNG search ────────────────────────────────────────────────────────────
 
-    let guard = SEARXNG_INSTANCES.lock().unwrap_or_else(|e| e.into_inner());
-    guard.as_ref().map(|(_, v)| v.clone()).unwrap_or_default()
-}
-
-/// Try up to `max_attempts` random public SearXNG instances.
-/// Uses tight 2s connect + 3s read timeouts (set on the agent by caller).
-fn searxng_public_search(agent: &ureq::Agent, query: &str, max_attempts: usize) -> Vec<Value> {
-    let instances = get_public_instances();
-    if instances.is_empty() { return Vec::new(); }
-
-    // Shuffle indices.
-    let mut indices: Vec<usize> = (0..instances.len()).collect();
-    let mut rng = fastrand::Rng::new();
-    for i in (1..indices.len()).rev() {
-        let j = rng.usize(..=i);
-        indices.swap(i, j);
-    }
-
-    for &idx in indices.iter().take(max_attempts) {
-        let r = searxng_search(agent, &instances[idx], query);
-        if !r.is_empty() { return r; }
-    }
-
-    Vec::new()
-}
-
-/// Search using a single SearXNG instance JSON API.
+/// Search using a self-hosted SearXNG instance JSON API.
 fn searxng_search(agent: &ureq::Agent, base_url: &str, query: &str) -> Vec<Value> {
     let url = format!("{}/search", base_url.trim_end_matches('/'));
     let resp = agent

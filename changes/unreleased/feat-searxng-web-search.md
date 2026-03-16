@@ -1,11 +1,12 @@
 ### Features
 
-- **SearXNG web search with background instance refresh**: the `web_search` tool now fetches the list of public SearXNG instances from `https://searx.space/data/instances.json` at app startup and refreshes it every hour in a background thread. Instances are filtered for HTTPS, normal network, HTTP 200 status, and < 1s median response time. On each search, up to 3 randomly-selected instances are tried with tight timeouts (2s connect / 3s read). If a user-configured SearXNG URL is set, it is tried first. DuckDuckGo HTML scraping remains the final fallback.
+- **Configurable web search provider**: the `web_search` tool now supports three backends — **DuckDuckGo** (default, no API key), **Brave Search** (free tier: 2,000 queries/month with API key), and **SearXNG** (self-hosted instance URL). A new `WebSearchProvider` config struct holds the backend choice, Brave API key, and SearXNG URL. Each backend falls back to DuckDuckGo HTML scraping if it fails.
+- **Search provider UI**: added a backend selector (DuckDuckGo / Brave / SearXNG) to the Tools settings tab, with conditional API key and URL inputs.
+
+### Bugfixes
+
+- **Remove broken public SearXNG instance scraping**: public SearXNG instances universally block automated API access with 429 rate limits or anti-bot captchas. Removed the background instance list fetcher and random instance selection. SearXNG now requires a user-provided self-hosted instance URL.
 
 ### i18n
 
-- **SearXNG settings strings**: added SearXNG URL field label and description translations in en, de, fr, uk, and he.
-
-### Dependencies
-
-- **fastrand**: added `fastrand` dependency to `skill-tools` for random instance selection.
+- **Search provider strings**: added search provider selector, Brave API key, and SearXNG URL translations in en, de, fr, uk, and he.

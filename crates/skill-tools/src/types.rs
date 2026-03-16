@@ -20,11 +20,9 @@ pub struct LlmToolConfig {
     pub web_search: bool,
     pub web_fetch:  bool,
 
-    /// Optional SearXNG instance base URL (e.g. `"https://search.example.com"`).
-    /// When set, web_search uses this SearXNG instance first, falling back to
-    /// DuckDuckGo HTML scraping if it fails.
+    /// Web search provider configuration.
     #[serde(default)]
-    pub searxng_url: String,
+    pub web_search_provider: WebSearchProvider,
 
     /// Allow the LLM to execute bash/shell commands.
     #[serde(default)]
@@ -57,6 +55,39 @@ pub struct LlmToolConfig {
     pub max_calls_per_round: usize,
 }
 
+/// Web search provider configuration.
+///
+/// Search order: the configured provider is tried first, with DuckDuckGo HTML
+/// scraping as a final fallback.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebSearchProvider {
+    /// Which search backend to use: `"duckduckgo"`, `"brave"`, or `"searxng"`.
+    #[serde(default = "default_search_backend")]
+    pub backend: String,
+
+    /// Brave Search API key (free tier: 2 000 queries/month).
+    /// Get one at <https://brave.com/search/api/>.
+    #[serde(default)]
+    pub brave_api_key: String,
+
+    /// Self-hosted SearXNG instance base URL (e.g. `"https://search.example.com"`).
+    #[serde(default)]
+    pub searxng_url: String,
+}
+
+fn default_search_backend() -> String { "duckduckgo".into() }
+
+impl Default for WebSearchProvider {
+    fn default() -> Self {
+        Self {
+            backend:       default_search_backend(),
+            brave_api_key: String::new(),
+            searxng_url:   String::new(),
+        }
+    }
+}
+
 /// How tool calls from a single assistant message are executed.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -80,7 +111,7 @@ impl Default for LlmToolConfig {
             location:           true,
             web_search:         true,
             web_fetch:          true,
-            searxng_url:        String::new(),
+            web_search_provider: WebSearchProvider::default(),
             bash:               false,
             read_file:          false,
             write_file:         false,
