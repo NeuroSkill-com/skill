@@ -728,6 +728,38 @@
   let topP           = $state(0.9);
   let thinkingLevel  = $state<ThinkingLevel>("minimal");
 
+  /** Auto-save generation params when they change (debounced). */
+  let paramsSaveTimer: ReturnType<typeof setTimeout> | undefined;
+  // Derived string that changes whenever any param changes — triggers the save effect.
+  const paramsSig = $derived(`${temperature}|${maxTokens}|${topK}|${topP}|${thinkingLevel}`);
+  $effect(() => {
+    void paramsSig; // register dependency
+    clearTimeout(paramsSaveTimer);
+    paramsSaveTimer = setTimeout(() => saveSessionParams(), 500);
+  });
+
+  /** Save current generation params to the active session. */
+  async function saveSessionParams() {
+    if (sessionId <= 0) return;
+    const p = { temperature, maxTokens, topK, topP, thinkingLevel };
+    try { await invoke("set_session_params", { id: sessionId, paramsJson: JSON.stringify(p) }); } catch {}
+  }
+
+  /** Load generation params from a session (returns true if params were loaded). */
+  async function loadSessionParams(id: number): Promise<boolean> {
+    try {
+      const json = await invoke<string>("get_session_params", { id });
+      if (!json) return false;
+      const p = JSON.parse(json);
+      if (p.temperature !== undefined) temperature = p.temperature;
+      if (p.maxTokens   !== undefined) maxTokens   = p.maxTokens;
+      if (p.topK        !== undefined) topK        = p.topK;
+      if (p.topP        !== undefined) topP        = p.topP;
+      if (p.thinkingLevel !== undefined) thinkingLevel = p.thinkingLevel;
+      return true;
+    } catch { return false; }
+  }
+
   // Derived: budget value for current level
   const thinkingBudget = $derived(
     THINKING_LEVELS.find(l => l.key === thinkingLevel)?.budget ?? null
@@ -1278,6 +1310,8 @@
   async function loadSession(id: number) {
     if (id === sessionId) return;
     if (generating) abort();
+    // Save current session params before switching.
+    saveSessionParams();
     messages  = [];
     histIdx   = -1;
     histDraft = "";
@@ -1286,6 +1320,7 @@
       const resp = await invoke<ChatSessionResponse>("load_chat_session", { id });
       sessionId  = resp.session_id;
       messages   = resp.messages.map(storedToMessage);
+      await loadSessionParams(id);
       await scrollBottom(true);
     } catch {}
     await tick();
@@ -1620,6 +1655,7 @@
         messages = resp.messages.map(storedToMessage);
         await scrollBottom(true);
       }
+      if (sessionId > 0) await loadSessionParams(sessionId);
     } catch { /* store unavailable — start fresh */ }
 
     // Sidebar loads its own session list via onMount; no extra call needed.

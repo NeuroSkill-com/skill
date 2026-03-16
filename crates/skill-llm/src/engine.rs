@@ -766,7 +766,7 @@ where
         }
     }
 
-    Err("tool-calling round limit reached".to_string())
+    Err(format!("tool-calling round limit reached ({max_rounds} rounds). You can increase this in Settings → LLM → Tools → Max rounds."))
 }
 
 /// Validate arguments for a tool call.  Returns the parsed args `Value` or an

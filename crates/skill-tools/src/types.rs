@@ -72,7 +72,7 @@ impl Default for LlmToolConfig {
             write_file:         false,
             edit_file:          false,
             execution_mode:     default_tool_execution_mode(),
-            max_rounds:         default_max_tool_rounds(),
+            max_rounds:         10,
             max_calls_per_round: default_max_tool_calls_per_round(),
         }
     }
