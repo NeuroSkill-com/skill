@@ -2131,6 +2131,8 @@ const fr: Record<string, string> = {
   "llm.section.inference":           "Paramètres d'inférence",
   "llm.enabled":                     "Activer le serveur LLM",
   "llm.enabledDesc":                 "Exécutez un serveur d'inférence compatible OpenAI sur le même port que l'API WebSocket. Nécessite la fonctionnalité llm Cargo et un modèle téléchargé.",
+  "llm.autostart":                   "D\u00e9marrage automatique",
+  "llm.autostartDesc":               "Charger automatiquement le mod\u00e8le actif au lancement de l\u2019application.",
   "llm.status.running":              "En cours d'exécution",
   "llm.status.disabled":             "Désactivé",
   "llm.status.noModel":              "Aucun modèle sélectionné",

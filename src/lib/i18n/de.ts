@@ -2136,6 +2136,8 @@ const de: Record<string, string> = {
   "llm.section.inference":           "Inferenzeinstellungen",
   "llm.enabled":                     "LLM-Server aktivieren",
   "llm.enabledDesc":                 "Führen Sie einen OpenAI-kompatiblen Inferenzserver auf demselben Port aus wie die WebSocket-API. Erfordert die llm Cargo-Funktion und ein heruntergeladenes Modell.",
+  "llm.autostart":                   "Automatisch beim Start laden",
+  "llm.autostartDesc":               "Das aktive Modell automatisch beim App-Start laden.",
   "llm.status.running":              "Läuft",
   "llm.status.disabled":             "Deaktiviert",
   "llm.status.noModel":              "Kein Modell ausgewählt",

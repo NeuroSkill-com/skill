@@ -1417,6 +1417,10 @@ pub fn run() {
             #[cfg(feature = "llm")]
             delete_chat_session,
             #[cfg(feature = "llm")]
+            get_session_params,
+            #[cfg(feature = "llm")]
+            set_session_params,
+            #[cfg(feature = "llm")]
             archive_chat_session,
             #[cfg(feature = "llm")]
             unarchive_chat_session,
