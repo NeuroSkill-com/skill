@@ -2482,6 +2482,7 @@ const he: Record<string, string> = {
   "helpSettings.eegModelTab": "לשונית מודל EEG",
   "llm.tools.section": "כלים מובנים",
   "llm.tools.sectionDesc": "בחרו אילו כלים מקומיים צ׳אט ה-LLM רשאי להפעיל.",
+  "llm.tools.enableAll": "הפעלת כל הכלים",
   "llm.tools.date": "תאריך",
   "llm.tools.dateDesc": "הרשה למודל לקרוא את מטא-נתוני התאריך/שעה המקומיים הנוכחיים.",
   "llm.tools.location": "מיקום",

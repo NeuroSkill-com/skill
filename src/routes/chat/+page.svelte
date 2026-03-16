@@ -465,6 +465,7 @@
 
   type ToolExecutionMode = "sequential" | "parallel";
   interface ToolConfig {
+    enabled: boolean;
     date: boolean; location: boolean; web_search: boolean; web_fetch: boolean;
     bash: boolean; read_file: boolean; write_file: boolean; edit_file: boolean;
     execution_mode: ToolExecutionMode;
@@ -478,6 +479,7 @@
   let supportsVision = $state(false);
   let supportsTools  = $state(false);
   let toolConfig     = $state<ToolConfig>({
+    enabled: true,
     date: true, location: true, web_search: true, web_fetch: true,
     bash: false, read_file: false, write_file: false, edit_file: false,
     execution_mode: "parallel", max_rounds: 3, max_calls_per_round: 4,
@@ -579,11 +581,13 @@
   /** Whether the prompt has been edited away from the default. */
   const isDefaultPrompt = $derived(systemPrompt.trim() === SYSTEM_PROMPT_DEFAULT.trim());
 
-  /** Number of enabled tools. */
+  /** Number of enabled tools (0 when master toggle is off). */
   const enabledToolCount = $derived(
-    [toolConfig.date, toolConfig.location, toolConfig.web_search, toolConfig.web_fetch,
-     toolConfig.bash, toolConfig.read_file, toolConfig.write_file, toolConfig.edit_file]
-      .filter(Boolean).length
+    toolConfig.enabled
+      ? [toolConfig.date, toolConfig.location, toolConfig.web_search, toolConfig.web_fetch,
+         toolConfig.bash, toolConfig.read_file, toolConfig.write_file, toolConfig.edit_file]
+          .filter(Boolean).length
+      : 0
   );
 
   /** Persist tool config changes to the Rust backend. */
@@ -794,7 +798,7 @@
   const estimatedPromptTokens = $derived.by(() => {
     let total = estimateTokens(systemPrompt) + 10; // system message
     // Tool prompt overhead (compact ~30 tok, full ~500 tok)
-    if (supportsTools) {
+    if (supportsTools && toolConfig.enabled) {
       const enabledCount = [toolConfig.date, toolConfig.location, toolConfig.web_search,
         toolConfig.web_fetch, toolConfig.bash, toolConfig.read_file,
         toolConfig.write_file, toolConfig.edit_file].filter(Boolean).length;
@@ -1576,6 +1580,7 @@
       const cfg = await invoke<any>("get_llm_config");
       if (cfg?.tools) {
         toolConfig = {
+          enabled:             cfg.tools.enabled             ?? true,
           date:                cfg.tools.date                ?? true,
           location:            cfg.tools.location            ?? true,
           web_search:          cfg.tools.web_search          ?? true,

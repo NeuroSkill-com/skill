@@ -58,6 +58,8 @@ pub struct LogConfig {
     pub history:   bool,
     /// Hook runtime in the embedding worker (matching, trigger, notifications).
     pub hooks:     bool,
+    /// Tool-call execution (invocation, safety approval, results, timing).
+    pub tools:     bool,
 }
 
 impl Default for LogConfig {
@@ -74,6 +76,7 @@ impl Default for LogConfig {
             chat_store: false,
             history:    false,
             hooks:     true,
+            tools:     false,
         }
     }
 }
@@ -106,6 +109,7 @@ impl SkillLogger {
             "chat_store" => cfg.chat_store,
             "history"    => cfg.history,
             "hooks"      => cfg.hooks,
+            t if t == "tool" || t.starts_with("tool:") => cfg.tools,
             _           => true,
         }
     }

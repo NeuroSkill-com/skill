@@ -1266,7 +1266,7 @@
       </div>
 
       <!-- Tool toggles -->
-      <div class="flex flex-col gap-2 px-4 pb-3 {config.tools.enabled ? '' : 'opacity-40 pointer-events-none'}"
+      <div class="flex flex-col gap-2 px-4 pb-3 {config.tools.enabled ? '' : 'opacity-40 pointer-events-none'}">
         {#each TOOL_ROWS as tool}
           <div class="flex items-center justify-between gap-4 rounded-xl border
                       {tool.warn && config.tools[tool.key]
@@ -1305,7 +1305,7 @@
 
       <!-- Execution mode + limits -->
       <div class="flex flex-col gap-3 px-4 py-3 border-t border-border/40 dark:border-white/[0.04]
-                  bg-slate-50 dark:bg-[#111118] {config.tools.enabled ? '' : 'opacity-40 pointer-events-none'}"
+                  bg-slate-50 dark:bg-[#111118] {config.tools.enabled ? '' : 'opacity-40 pointer-events-none'}">
         <!-- Execution mode -->
         <div class="flex flex-col gap-1.5">
           <span class="text-[0.65rem] text-muted-foreground">{t("llm.tools.executionMode")}</span>

@@ -2173,6 +2173,7 @@ const de: Record<string, string> = {
 
   "llm.tools.section":     "Integrierte Tools",
   "llm.tools.sectionDesc": "Wählen Sie, welche lokalen Tools der LLM-Chat aufrufen darf.",
+  "llm.tools.enableAll":   "Alle Tools aktivieren",
   "llm.tools.date":        "Datum",
   "llm.tools.dateDesc":    "Ermöglicht das Modell, das aktuelle lokale Datum und die Uhrzeit abzurufen.",
   "llm.tools.location":    "Standort",

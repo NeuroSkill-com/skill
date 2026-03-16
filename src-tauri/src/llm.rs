@@ -54,6 +54,24 @@ pub fn set_llm_logging(enabled: bool) {
     skill_llm::log::set_log_enabled(enabled);
 }
 
+/// Wire `skill_tools::log` into the central [`SkillLogger`].
+///
+/// Call once during setup, after the logger is registered as managed state.
+pub fn init_tool_logger(app: &tauri::AppHandle) {
+    use tauri::Manager;
+    let logger = app.state::<std::sync::Arc<crate::skill_log::SkillLogger>>().inner().clone();
+    skill_tools::log::set_log_callback(move |tag, msg| {
+        if logger.enabled(tag) {
+            logger.write(tag, msg);
+        }
+    });
+}
+
+/// Enable or disable tool-call log output.
+pub fn set_tool_logging(enabled: bool) {
+    skill_tools::log::set_log_enabled(enabled);
+}
+
 // ── Tauri AppHandle adapter ───────────────────────────────────────────────────
 //
 // Implements `LlmEventEmitter` for `tauri::AppHandle` so the skill-llm crate

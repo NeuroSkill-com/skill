@@ -2544,6 +2544,7 @@ const en: Record<string, string> = {
 
   "llm.tools.section":                  "Built-in tools",
   "llm.tools.sectionDesc":              "Choose which local tools the LLM chat is allowed to call.",
+  "llm.tools.enableAll":                "Enable all tools",
   "llm.tools.date":                     "Date",
   "llm.tools.dateDesc":                 "Allow the chat model to read the current local date/time metadata.",
   "llm.tools.location":                 "Location",

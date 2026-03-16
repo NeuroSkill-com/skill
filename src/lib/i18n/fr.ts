@@ -2168,6 +2168,7 @@ const fr: Record<string, string> = {
 
   "llm.tools.section":     "Outils intégrés",
   "llm.tools.sectionDesc": "Choisissez quels outils locaux le chat LLM est autorisé à appeler.",
+  "llm.tools.enableAll":   "Activer tous les outils",
   "llm.tools.date":        "Date",
   "llm.tools.dateDesc":    "Permet au modèle de lire la date et l'heure locales actuelles.",
   "llm.tools.location":    "Localisation",

@@ -2167,6 +2167,7 @@ const uk: Record<string, string> = {
 
   "llm.tools.section":     "Вбудовані інструменти",
   "llm.tools.sectionDesc": "Оберіть, які локальні інструменти чат LLM може використовувати.",
+  "llm.tools.enableAll":   "Увімкнути всі інструменти",
   "llm.tools.date":        "Дата",
   "llm.tools.dateDesc":    "Дозволяє моделі читати поточну місцеву дату та час.",
   "llm.tools.location":    "Місцезнаходження",
