@@ -1290,27 +1290,70 @@
         {/each}
       </div>
 
-      <!-- Execution mode -->
-      <div class="flex flex-col gap-1.5 px-4 py-3 border-t border-border/40 dark:border-white/[0.04]
+      <!-- Execution mode + limits -->
+      <div class="flex flex-col gap-3 px-4 py-3 border-t border-border/40 dark:border-white/[0.04]
                   bg-slate-50 dark:bg-[#111118]">
-        <span class="text-[0.65rem] text-muted-foreground">{t("llm.tools.executionMode")}</span>
-        <div class="flex rounded-lg overflow-hidden border border-border text-[0.68rem] font-medium">
-          {#each [
-            { key: "parallel"   as ToolExecutionMode, label: t("llm.tools.parallel") },
-            { key: "sequential" as ToolExecutionMode, label: t("llm.tools.sequential") },
-          ] as mode}
-            <button
-              onclick={async () => {
-                config = { ...config, tools: { ...config.tools, execution_mode: mode.key } };
-                await saveConfig();
-              }}
-              class="flex-1 py-1.5 transition-colors cursor-pointer
-                     {config.tools.execution_mode === mode.key
-                       ? 'bg-primary text-primary-foreground'
-                       : 'bg-background text-muted-foreground hover:bg-muted'}">
-              {mode.label}
-            </button>
-          {/each}
+        <!-- Execution mode -->
+        <div class="flex flex-col gap-1.5">
+          <span class="text-[0.65rem] text-muted-foreground">{t("llm.tools.executionMode")}</span>
+          <div class="flex rounded-lg overflow-hidden border border-border text-[0.68rem] font-medium">
+            {#each [
+              { key: "parallel"   as ToolExecutionMode, label: t("llm.tools.parallel") },
+              { key: "sequential" as ToolExecutionMode, label: t("llm.tools.sequential") },
+            ] as mode}
+              <button
+                onclick={async () => {
+                  config = { ...config, tools: { ...config.tools, execution_mode: mode.key } };
+                  await saveConfig();
+                }}
+                class="flex-1 py-1.5 transition-colors cursor-pointer
+                       {config.tools.execution_mode === mode.key
+                         ? 'bg-primary text-primary-foreground'
+                         : 'bg-background text-muted-foreground hover:bg-muted'}">
+                {mode.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Max rounds (tool hops) -->
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.72rem] font-semibold text-foreground">{t("llm.tools.maxRounds")}</span>
+            <span class="text-[0.6rem] text-muted-foreground leading-relaxed">{t("llm.tools.maxRoundsDesc")}</span>
+          </div>
+          <div class="flex items-center gap-1">
+            {#each [1, 3, 5, 10] as val}
+              <button
+                onclick={async () => { config = { ...config, tools: { ...config.tools, max_rounds: val } }; await saveConfig(); }}
+                class="rounded-lg border px-2 py-1 text-[0.64rem] font-semibold transition-all cursor-pointer
+                       {config.tools.max_rounds === val
+                         ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                         : 'border-border bg-background text-muted-foreground hover:text-foreground'}">
+                {val}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Max calls per round -->
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.72rem] font-semibold text-foreground">{t("llm.tools.maxCallsPerRound")}</span>
+            <span class="text-[0.6rem] text-muted-foreground leading-relaxed">{t("llm.tools.maxCallsPerRoundDesc")}</span>
+          </div>
+          <div class="flex items-center gap-1">
+            {#each [1, 2, 4, 8] as val}
+              <button
+                onclick={async () => { config = { ...config, tools: { ...config.tools, max_calls_per_round: val } }; await saveConfig(); }}
+                class="rounded-lg border px-2 py-1 text-[0.64rem] font-semibold transition-all cursor-pointer
+                       {config.tools.max_calls_per_round === val
+                         ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                         : 'border-border bg-background text-muted-foreground hover:text-foreground'}">
+                {val}
+              </button>
+            {/each}
+          </div>
         </div>
       </div>
 

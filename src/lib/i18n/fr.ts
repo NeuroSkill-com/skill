@@ -2187,7 +2187,11 @@ const fr: Record<string, string> = {
   "llm.tools.advanced":                 "Avancé",
   "llm.tools.executionMode":            "Mode d'exécution des outils",
   "llm.tools.parallel":                 "Parallèle",
-  "llm.tools.sequential":              "Séquentiel",
+  "llm.tools.sequential":              "S\u00e9quentiel",
+  "llm.tools.maxRounds":               "Rounds max",
+  "llm.tools.maxRoundsDesc":           "Nombre de cycles penser\u2192outil\u2192penser autoris\u00e9s par message.",
+  "llm.tools.maxCallsPerRound":        "Appels max par round",
+  "llm.tools.maxCallsPerRoundDesc":    "Nombre d\u2019outils que le mod\u00e8le peut invoquer en un seul round.",
 
   "llm.mmproj.nThreads":             "Fils d'encodeur",
   "llm.mmproj.nThreadsDesc":         "Threads CPU pour l’encodeur vision/audio.",

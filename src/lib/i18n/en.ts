@@ -2564,6 +2564,10 @@ const en: Record<string, string> = {
   "llm.tools.executionMode":            "Tool execution mode",
   "llm.tools.parallel":                 "Parallel",
   "llm.tools.sequential":              "Sequential",
+  "llm.tools.maxRounds":                "Max rounds",
+  "llm.tools.maxRoundsDesc":            "How many think\u2192tool\u2192think hops the model may perform per message.",
+  "llm.tools.maxCallsPerRound":         "Max calls per round",
+  "llm.tools.maxCallsPerRoundDesc":     "How many tools the model may invoke in a single round.",
 
   "llm.mmproj.nThreads":                "Encoder threads",
   "llm.mmproj.nThreadsDesc":            "CPU threads for the vision/audio encoder.",

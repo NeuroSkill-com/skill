@@ -2193,6 +2193,10 @@ const de: Record<string, string> = {
   "llm.tools.executionMode":            "Werkzeug-Ausführungsmodus",
   "llm.tools.parallel":                 "Parallel",
   "llm.tools.sequential":              "Sequentiell",
+  "llm.tools.maxRounds":               "Max. Runden",
+  "llm.tools.maxRoundsDesc":           "Wie viele Denken\u2192Tool\u2192Denken-Zyklen pro Nachricht erlaubt sind.",
+  "llm.tools.maxCallsPerRound":        "Max. Aufrufe pro Runde",
+  "llm.tools.maxCallsPerRoundDesc":    "Wie viele Tools das Modell in einer Runde aufrufen darf.",
 
   "llm.mmproj.nThreads":             "Encoder-Threads",
   "llm.mmproj.nThreadsDesc":         "CPU-Threads für den Bild-/Audio-Encoder.",

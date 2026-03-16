@@ -2501,7 +2501,11 @@ const he: Record<string, string> = {
   "llm.tools.advanced":                 "מתקדם",
   "llm.tools.executionMode":            "מצב ביצוע כלים",
   "llm.tools.parallel":                 "מקבילי",
-  "llm.tools.sequential":              "סדרתי",
+  "llm.tools.sequential":              "\u05e1\u05d3\u05e8\u05ea\u05d9",
+  "llm.tools.maxRounds":               "\u05de\u05e7\u05e1\u05d9\u05de\u05d5\u05dd \u05e1\u05d9\u05d1\u05d5\u05d1\u05d9\u05dd",
+  "llm.tools.maxRoundsDesc":           "\u05db\u05de\u05d4 \u05de\u05d7\u05d6\u05d5\u05e8\u05d9 \u05d7\u05e9\u05d9\u05d1\u05d4\u2192\u05db\u05dc\u05d9\u2192\u05d7\u05e9\u05d9\u05d1\u05d4 \u05de\u05d5\u05ea\u05e8\u05d9\u05dd \u05dc\u05db\u05dc \u05d4\u05d5\u05d3\u05e2\u05d4.",
+  "llm.tools.maxCallsPerRound":        "\u05de\u05e7\u05e1\u05d9\u05de\u05d5\u05dd \u05e7\u05e8\u05d9\u05d0\u05d5\u05ea \u05dc\u05e1\u05d9\u05d1\u05d5\u05d1",
+  "llm.tools.maxCallsPerRoundDesc":    "\u05db\u05de\u05d4 \u05db\u05dc\u05d9\u05dd \u05d4\u05de\u05d5\u05d3\u05dc \u05d9\u05db\u05d5\u05dc \u05dc\u05d4\u05e4\u05e2\u05d9\u05dc \u05d1\u05e1\u05d9\u05d1\u05d5\u05d1 \u05d0\u05d7\u05d3.",
 
   "settingsTabs.hooks": "הוקים יזומים",
   "hooks.title": "הוקים יזומים",
