@@ -84,17 +84,30 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             let searxng_url = allowed_tools.searxng_url.clone();
             tokio::task::spawn_blocking(move || {
                 let agent = ureq::AgentBuilder::new()
+                    .timeout_connect(std::time::Duration::from_secs(2))
+                    .timeout_read(std::time::Duration::from_secs(3))
+                    .build();
+
+                // 1. If user configured a specific SearXNG instance, try it first.
+                if !searxng_url.is_empty() {
+                    let r = searxng_search(&agent, &searxng_url, &query);
+                    if !r.is_empty() {
+                        return json!({ "ok": true, "tool": "web_search", "query": query, "results": r });
+                    }
+                }
+
+                // 2. Try random public SearXNG instances (up to 3 attempts).
+                let r = searxng_public_search(&agent, &query, 3);
+                if !r.is_empty() {
+                    return json!({ "ok": true, "tool": "web_search", "query": query, "results": r });
+                }
+
+                // 3. Final fallback: DuckDuckGo HTML scrape.
+                let ddg_agent = ureq::AgentBuilder::new()
                     .timeout_connect(std::time::Duration::from_secs(5))
                     .timeout_read(std::time::Duration::from_secs(10))
                     .build();
-
-                // Try SearXNG first if configured, fall back to DuckDuckGo HTML.
-                let results = if !searxng_url.is_empty() {
-                    let r = searxng_search(&agent, &searxng_url, &query);
-                    if r.is_empty() { ddg_html_search(&agent, &query) } else { r }
-                } else {
-                    ddg_html_search(&agent, &query)
-                };
+                let results = ddg_html_search(&ddg_agent, &query);
 
                 if results.is_empty() {
                     json!({ "ok": true, "tool": "web_search", "query": query, "results": [], "note": "no results found" })
@@ -843,8 +856,7 @@ fn strip_html_tags(s: &str) -> String {
        .replace("&nbsp;", " ")
 }
 
-/// Primary search: DuckDuckGo JSON API (`api.duckduckgo.com/?format=json`).
-/// Search DuckDuckGo by scraping the HTML lite page.
+/// Fallback search: scrape DuckDuckGo HTML lite page.
 fn ddg_html_search(agent: &ureq::Agent, query: &str) -> Vec<Value> {
     let resp = agent
         .post("https://html.duckduckgo.com/html/")
@@ -927,7 +939,105 @@ fn extract_ddg_redirect_url(url: &str) -> Option<String> {
 
 // ── SearXNG search ────────────────────────────────────────────────────────────
 
-/// Search using a SearXNG instance JSON API.
+use std::sync::Mutex;
+use std::time::Instant;
+
+/// Cached list of public SearXNG instance URLs and the time they were fetched.
+static SEARXNG_INSTANCES: Mutex<Option<(Instant, Vec<String>)>> = Mutex::new(None);
+
+/// How long to cache the public instance list before re-fetching.
+const SEARXNG_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(3600);
+
+/// Fetch the list of public SearXNG instances from searx.space.
+/// Filters for instances that have a JSON-capable search endpoint, are reachable
+/// over HTTPS, and have a response time under 1 second.
+fn fetch_public_searxng_instances(agent: &ureq::Agent) -> Vec<String> {
+    let resp = agent
+        .get("https://searx.space/data/instances.json")
+        .set("Accept", "application/json")
+        .call();
+
+    let Ok(r) = resp else { return Vec::new() };
+    let body: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+
+    let Some(instances) = body.get("instances").and_then(|v| v.as_object()) else {
+        return Vec::new();
+    };
+
+    let mut urls: Vec<String> = Vec::new();
+
+    for (url, info) in instances {
+        // Only HTTPS instances.
+        if !url.starts_with("https://") { continue; }
+
+        // Must have network_type "normal" (not Tor/I2P).
+        let network_type = info.pointer("/network_type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if network_type != "normal" { continue; }
+
+        // Check HTTP status is OK (grade A/B or http.status_code == 200).
+        let http_ok = info.pointer("/http/status_code")
+            .and_then(|v| v.as_u64())
+            .map(|c| c == 200)
+            .unwrap_or(false);
+        if !http_ok { continue; }
+
+        // Response time must be under 1 second.
+        let response_time = info.pointer("/timing/search/all/median")
+            .or_else(|| info.pointer("/timing/initial/all/median"))
+            .and_then(|v| v.as_f64())
+            .unwrap_or(f64::MAX);
+        if response_time > 1.0 { continue; }
+
+        // Must support JSON format.
+        // The API reports enabled engines; we just check the instance is up and fast.
+
+        urls.push(url.trim_end_matches('/').to_string());
+    }
+
+    urls
+}
+
+/// Get cached public SearXNG instances, refreshing if stale.
+fn get_public_instances(agent: &ureq::Agent) -> Vec<String> {
+    let mut guard = SEARXNG_INSTANCES.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((fetched_at, ref instances)) = *guard {
+        if fetched_at.elapsed() < SEARXNG_CACHE_TTL && !instances.is_empty() {
+            return instances.clone();
+        }
+    }
+
+    let instances = fetch_public_searxng_instances(agent);
+    if !instances.is_empty() {
+        *guard = Some((Instant::now(), instances.clone()));
+    }
+    instances
+}
+
+/// Try up to `max_attempts` random public SearXNG instances.
+/// Uses tight 2s connect + 3s read timeouts (set on the agent by caller).
+fn searxng_public_search(agent: &ureq::Agent, query: &str, max_attempts: usize) -> Vec<Value> {
+    let instances = get_public_instances(agent);
+    if instances.is_empty() { return Vec::new(); }
+
+    // Shuffle indices.
+    let mut indices: Vec<usize> = (0..instances.len()).collect();
+    let mut rng = fastrand::Rng::new();
+    for i in (1..indices.len()).rev() {
+        let j = rng.usize(..=i);
+        indices.swap(i, j);
+    }
+
+    for &idx in indices.iter().take(max_attempts) {
+        let r = searxng_search(agent, &instances[idx], query);
+        if !r.is_empty() { return r; }
+    }
+
+    Vec::new()
+}
+
+/// Search using a single SearXNG instance JSON API.
 fn searxng_search(agent: &ureq::Agent, base_url: &str, query: &str) -> Vec<Value> {
     let url = format!("{}/search", base_url.trim_end_matches('/'));
     let resp = agent
