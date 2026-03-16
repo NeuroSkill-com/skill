@@ -15,12 +15,17 @@ use crate::defs::is_builtin_tool_enabled;
 /// Execute a single built-in tool call and return the JSON result.
 pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolConfig, scripts_dir: &std::path::Path) -> Value {
     let args: Value = serde_json::from_str(&call.function.arguments).unwrap_or_else(|_| json!({}));
+    let tool_name = &call.function.name;
 
-    if !is_builtin_tool_enabled(allowed_tools, &call.function.name) {
+    if !is_builtin_tool_enabled(allowed_tools, tool_name) {
+        tool_log!("tool", "[blocked] tool={} reason=disabled in settings", tool_name);
         return json!({ "ok": false, "tool": call.function.name, "error": "tool disabled in settings" });
     }
 
-    match call.function.name.as_str() {
+    tool_log!("tool", "[invoke] tool={} args={}", tool_name, args);
+    let start = std::time::Instant::now();
+
+    let result = match call.function.name.as_str() {
         "date" => {
             let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
             let now_utc = Utc::now();
@@ -146,10 +151,13 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
 
             // Safety check: require user approval for dangerous commands
             if let Some(reason) = check_bash_safety(&command) {
+                tool_log!("tool:bash", "[safety] approval required: {}", reason);
                 let approved = request_tool_approval("bash", &reason, &command).await;
                 if !approved {
+                    tool_log!("tool:bash", "[safety] user denied bash command");
                     return json!({ "ok": false, "tool": "bash", "error": "operation denied by user" });
                 }
+                tool_log!("tool:bash", "[safety] user approved bash command");
             }
 
             let scripts_dir = scripts_dir.to_path_buf();
@@ -367,11 +375,14 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             // Safety check: require approval for sensitive paths
             let resolved_check = resolve_tool_path(&path);
             if let Some(reason) = check_path_safety(&resolved_check) {
+                tool_log!("tool:write_file", "[safety] approval required: {}", reason);
                 let detail = format!("Write to: {}", resolved_check.display());
                 let approved = request_tool_approval("write_file", &reason, &detail).await;
                 if !approved {
+                    tool_log!("tool:write_file", "[safety] user denied write");
                     return json!({ "ok": false, "tool": "write_file", "error": "operation denied by user" });
                 }
+                tool_log!("tool:write_file", "[safety] user approved write");
             }
 
             tokio::task::spawn_blocking(move || {
@@ -410,11 +421,14 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             // Safety check: require approval for sensitive paths
             let resolved_check = resolve_tool_path(&path);
             if let Some(reason) = check_path_safety(&resolved_check) {
+                tool_log!("tool:edit_file", "[safety] approval required: {}", reason);
                 let detail = format!("Edit: {}", resolved_check.display());
                 let approved = request_tool_approval("edit_file", &reason, &detail).await;
                 if !approved {
+                    tool_log!("tool:edit_file", "[safety] user denied edit");
                     return json!({ "ok": false, "tool": "edit_file", "error": "operation denied by user" });
                 }
+                tool_log!("tool:edit_file", "[safety] user approved edit");
             }
 
             tokio::task::spawn_blocking(move || {
@@ -603,8 +617,21 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "search_output", "error": e.to_string() }))
         }
 
-        other => json!({ "ok": false, "tool": other, "error": "unsupported tool" }),
+        other => {
+            tool_log!("tool", "[error] tool={} unsupported", other);
+            json!({ "ok": false, "tool": other, "error": "unsupported tool" })
+        }
+    };
+
+    let elapsed = start.elapsed();
+    let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+    if ok {
+        tool_log!("tool", "[done] tool={} elapsed={:.1?}", tool_name, elapsed);
+    } else {
+        let err = result.get("error").and_then(|v| v.as_str()).unwrap_or("unknown");
+        tool_log!("tool", "[fail] tool={} elapsed={:.1?} error={}", tool_name, elapsed, err);
     }
+    result
 }
 
 // ── Text truncation helpers ───────────────────────────────────────────────────
