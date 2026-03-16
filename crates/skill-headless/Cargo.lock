@@ -1782,6 +1782,7 @@ version = "0.0.1"
 dependencies = [
  "base64",
  "crossbeam-channel",
+ "gtk",
  "serde",
  "serde_json",
  "tao",

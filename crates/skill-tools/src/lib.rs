@@ -47,7 +47,7 @@ pub use parse::{
     strip_tool_call_blocks, strip_tool_call_blocks_preserve,
 };
 pub use defs::{
-    builtin_llm_tools, is_builtin_tool_enabled,
+    builtin_llm_tools, skill_api_tool, is_builtin_tool_enabled,
     enabled_builtin_llm_tools, filter_allowed_tool_defs,
 };
 pub use exec::execute_builtin_tool_call;

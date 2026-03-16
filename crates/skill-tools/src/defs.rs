@@ -208,6 +208,72 @@ pub fn builtin_llm_tools() -> Vec<Tool> {
     ]
 }
 
+/// Return the Skill API tool definition.
+///
+/// This is a single tool that gives the LLM access to the full Skill
+/// WebSocket API — device status, EEG sessions, labels, search, hooks,
+/// DND, calibrations, TTS, and more.
+pub fn skill_api_tool() -> Tool {
+    Tool {
+        tool_type: "function".into(),
+        function: ToolFunction {
+            name: "skill".into(),
+            description: Some(
+                "Query the NeuroSkill EEG/BCI application via its API. \
+                 Send a JSON command and receive the full response.\n\n\
+                 Available commands:\n\
+                 - status: Full device/session/embeddings/scores snapshot. No args.\n\
+                 - sessions: List all recording sessions. No args.\n\
+                 - session_metrics: Metrics for a session. Args: start_utc (number), end_utc (number).\n\
+                 - say: Speak text via TTS. Args: text (string, required), voice (string, optional).\n\
+                 - notify: Show OS notification. Args: title (string, required), body (string, optional).\n\
+                 - label: Create timestamped annotation. Args: text (string, required), context (string, optional), label_start_utc (number, optional).\n\
+                 - search_labels: Semantic label search. Args: query (string, required), k (number, default 10), mode (\"text\"|\"context\"|\"both\", default \"text\"), ef (number, optional).\n\
+                 - interactive_search: Cross-modal graph search. Args: query (string, required), k_text (number, default 5), k_eeg (number, default 5), k_labels (number, default 3), reach_minutes (number, default 10).\n\
+                 - search: ANN EEG-similarity search. Args: start_utc (number), end_utc (number), k (number, default 5).\n\
+                 - compare: A/B session comparison. Args: a_start_utc, a_end_utc, b_start_utc, b_end_utc (numbers).\n\
+                 - sleep: Sleep staging. Args: start_utc (number), end_utc (number).\n\
+                 - calibrate: Open calibration window. No args (or id for specific profile).\n\
+                 - timer: Open focus-timer. No args.\n\
+                 - run_calibration: Start calibration. Args: id (string, optional profile UUID).\n\
+                 - list_calibrations: List calibration profiles. No args.\n\
+                 - get_calibration: Get one profile. Args: id (number).\n\
+                 - create_calibration: Create profile. Args: name (string), actions (array of {label, duration_secs}), loop_count (number), break_duration_secs (number), auto_start (bool).\n\
+                 - update_calibration: Update profile. Args: id (string), plus optional name/actions/loop_count/break_duration_secs/auto_start.\n\
+                 - delete_calibration: Delete profile. Args: id (string).\n\
+                 - dnd: DND automation status. No args.\n\
+                 - dnd_set: Force DND on/off. Args: enabled (bool).\n\
+                 - hooks_status: List hooks with last-trigger metadata. No args.\n\
+                 - hooks_get: List raw hook rules. No args.\n\
+                 - hooks_set: Replace all hooks. Args: hooks (array of hook rule objects).\n\
+                 - hooks_suggest: Suggest threshold. Args: keywords (array of strings).\n\
+                 - hooks_log: Hook trigger history. Args: limit (number, default 20), offset (number, default 0).\n\
+                 - umap: Enqueue 3D UMAP projection. Args: a_start_utc, a_end_utc, b_start_utc, b_end_utc (numbers).\n\
+                 - umap_poll: Poll UMAP job. Args: job_id (number).\n\
+                 - llm_status: LLM server status. No args.\n\
+                 - llm_catalog: Model catalog. No args.\n\
+                 - llm_downloads: List downloads. No args.\n\
+                 - llm_hardware_fit: Check model fit. No args.".into()
+            ),
+            parameters: Some(json!({
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The API command name (e.g. \"status\", \"sessions\", \"label\", \"search\", etc.)"
+                    },
+                    "args": {
+                        "type": "object",
+                        "description": "Command-specific arguments as key-value pairs (omit or {} for commands with no args)"
+                    }
+                },
+                "required": ["command"],
+                "additionalProperties": false
+            })),
+        },
+    }
+}
+
 /// Check whether a builtin tool is enabled in the current config.
 /// Returns `false` for every tool when the master `enabled` flag is off.
 pub fn is_builtin_tool_enabled(config: &LlmToolConfig, name: &str) -> bool {
@@ -225,16 +291,23 @@ pub fn is_builtin_tool_enabled(config: &LlmToolConfig, name: &str) -> bool {
         "edit_file"     => config.edit_file,
         // search_output is automatically enabled when bash is enabled
         "search_output" => config.bash,
+        // skill API tool — enabled when toggle is on AND port is known
+        "skill"         => config.skill_api && config.skill_api_port > 0,
         _               => false,
     }
 }
 
 /// Return only the enabled tool definitions.
 pub fn enabled_builtin_llm_tools(config: &LlmToolConfig) -> Vec<Tool> {
-    builtin_llm_tools()
+    let mut tools: Vec<Tool> = builtin_llm_tools()
         .into_iter()
         .filter(|tool| is_builtin_tool_enabled(config, &tool.function.name))
-        .collect()
+        .collect();
+    // Append the Skill API tool if enabled and port is known.
+    if is_builtin_tool_enabled(config, "skill") {
+        tools.push(skill_api_tool());
+    }
+    tools
 }
 
 /// Filter a provided set of tool definitions to only those enabled.

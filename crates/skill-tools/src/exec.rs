@@ -621,6 +621,85 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "search_output", "error": e.to_string() }))
         }
 
+        "skill" => {
+            let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if command.is_empty() {
+                return json!({ "ok": false, "tool": "skill", "error": "missing command" });
+            }
+            let port = allowed_tools.skill_api_port;
+            if port == 0 {
+                return json!({ "ok": false, "tool": "skill", "error": "Skill API port not configured" });
+            }
+
+            // Dangerous commands that should not be callable from the LLM
+            // (LLM management would be recursive / nonsensical).
+            const BLOCKED: &[&str] = &[
+                "llm_start", "llm_stop", "llm_chat",
+                "llm_delete", "llm_select_model", "llm_select_mmproj",
+                "llm_set_autoload_mmproj", "llm_add_model",
+            ];
+            if BLOCKED.contains(&command.as_str()) {
+                return json!({ "ok": false, "tool": "skill", "error": format!("command \"{}\" is blocked from LLM tool use", command) });
+            }
+
+            // Build the JSON payload: { "command": "<cmd>", ...args }
+            let extra_args = args.get("args").cloned().unwrap_or(json!({}));
+            let payload = if let Some(obj) = extra_args.as_object() {
+                let mut m = obj.clone();
+                m.insert("command".to_string(), json!(command));
+                Value::Object(m)
+            } else {
+                json!({ "command": command })
+            };
+
+            let url = format!("http://127.0.0.1:{}/", port);
+            let payload_str = payload.to_string();
+
+            tokio::task::spawn_blocking(move || {
+                let agent = ureq::AgentBuilder::new()
+                    .timeout_connect(std::time::Duration::from_secs(3))
+                    .timeout_read(std::time::Duration::from_secs(30))
+                    .build();
+
+                match agent
+                    .post(&url)
+                    .set("Content-Type", "application/json")
+                    .send_string(&payload_str)
+                {
+                    Ok(resp) => {
+                        match resp.into_json::<Value>() {
+                            Ok(mut v) => {
+                                // Ensure the response always has "tool" so the
+                                // model can identify where the data came from.
+                                if let Some(obj) = v.as_object_mut() {
+                                    obj.entry("tool".to_string())
+                                        .or_insert(json!("skill"));
+                                }
+                                // Truncate very large responses to avoid
+                                // blowing up the context window.
+                                let s = v.to_string();
+                                if s.len() > 24_000 {
+                                    json!({
+                                        "ok": v.get("ok").cloned().unwrap_or(json!(true)),
+                                        "tool": "skill",
+                                        "command": v.get("command").cloned().unwrap_or(json!(null)),
+                                        "truncated": true,
+                                        "response_preview": truncate_text(&s, 12_000),
+                                        "total_bytes": s.len(),
+                                        "hint": "Response was truncated. Use more specific queries or narrow the time range."
+                                    })
+                                } else {
+                                    v
+                                }
+                            }
+                            Err(e) => json!({ "ok": false, "tool": "skill", "error": format!("invalid JSON from server: {}", e) }),
+                        }
+                    }
+                    Err(e) => json!({ "ok": false, "tool": "skill", "error": format!("HTTP request failed: {}", e) }),
+                }
+            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "skill", "error": e.to_string() }))
+        }
+
         other => {
             tool_log!("tool", "[error] tool={} unsupported", other);
             json!({ "ok": false, "tool": other, "error": "unsupported tool" })

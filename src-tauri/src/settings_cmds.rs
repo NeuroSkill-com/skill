@@ -1211,7 +1211,11 @@ pub fn set_llm_config(
 
     #[cfg(feature = "llm")]
     if let Some(server) = cell.lock().unwrap().clone() {
-        *server.allowed_tools.lock().unwrap() = config.tools.clone();
+        // Preserve the runtime-only skill_api_port when updating tools config.
+        let prev_port = server.allowed_tools.lock().unwrap().skill_api_port;
+        let mut new_tools = config.tools.clone();
+        new_tools.skill_api_port = prev_port;
+        *server.allowed_tools.lock().unwrap() = new_tools;
     }
 
     save_settings(&app);

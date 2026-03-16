@@ -40,6 +40,16 @@ pub struct LlmToolConfig {
     #[serde(default)]
     pub edit_file: bool,
 
+    /// Allow the LLM to query the Skill API (device status, sessions, labels,
+    /// search, hooks, DND, calibrations, etc.) via the local WebSocket server.
+    #[serde(default = "default_true")]
+    pub skill_api: bool,
+
+    /// The local WebSocket/HTTP port the Skill server is listening on.
+    /// Set at runtime; not persisted.  Defaults to 0 (disabled).
+    #[serde(skip)]
+    pub skill_api_port: u16,
+
     /// Tool execution mode: "parallel" or "sequential".
     /// Parallel: prepare sequentially, execute concurrently.
     /// Sequential: prepare and execute one at a time.
@@ -116,6 +126,8 @@ impl Default for LlmToolConfig {
             read_file:          false,
             write_file:         false,
             edit_file:          false,
+            skill_api:          true,
+            skill_api_port:     0,
             execution_mode:     default_tool_execution_mode(),
             max_rounds:         10,
             max_calls_per_round: default_max_tool_calls_per_round(),

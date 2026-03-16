@@ -61,7 +61,7 @@ pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> Result<Value, Strin
 /// Built-in tool names used for dict-style multi-tool recognition:
 ///   { "date": {}, "location": {} }
 /// These must stay in sync with `enabled_builtin_llm_tools` in mod.rs.
-const KNOWN_TOOL_NAMES: &[&str] = &["date", "location", "web_search", "web_fetch", "bash", "read_file", "write_file", "edit_file", "search_output"];
+const KNOWN_TOOL_NAMES: &[&str] = &["date", "location", "web_search", "web_fetch", "bash", "read_file", "write_file", "edit_file", "search_output", "skill"];
 
 /// Returns true if `v` is a dict-style multi-tool object whose keys are
 /// (at least partially) known tool names and whose values are parameter objects.

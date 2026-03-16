@@ -670,7 +670,22 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     {
         let cell = app.state::<Mutex<Box<AppState>>>()
             .lock().unwrap().llm.state_cell.clone();
-        serve_handle.set_llm(cell);
+        serve_handle.set_llm(cell.clone());
+
+        // Propagate the actual WS port to the Skill API tool so the LLM
+        // can call back into the server via HTTP.
+        let ws_port = serve_handle.port;
+        std::thread::spawn(move || {
+            // Wait briefly for the LLM server to initialise, then set the port.
+            for _ in 0..60 {
+                if let Some(ref server) = *cell.lock().unwrap() {
+                    let mut tools = server.allowed_tools.lock().unwrap();
+                    tools.skill_api_port = ws_port;
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
+        });
     }
 
     tauri::async_runtime::spawn(async move { serve_handle.serve(ws_app).await; });

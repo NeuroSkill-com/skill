@@ -16,6 +16,19 @@ use tao::{
 };
 use wry::{WebContext, WebView, WebViewBuilder};
 
+// Platform-specific: allow event loop creation on non-main threads.
+#[cfg(target_os = "linux")]
+use tao::platform::unix::EventLoopBuilderExtUnix;
+#[cfg(target_os = "windows")]
+use tao::platform::windows::EventLoopBuilderExtWindows;
+#[cfg(target_os = "macos")]
+use tao::platform::macos::EventLoopBuilderExtMacOS;
+
+#[cfg(target_os = "linux")]
+use tao::platform::unix::WindowExtUnix;
+#[cfg(target_os = "linux")]
+use wry::WebViewBuilderExtUnix;
+
 use crate::command::Command;
 use crate::error::HeadlessError;
 use crate::response::Response;
@@ -182,7 +195,17 @@ fn run_event_loop(
     proxy_tx: Sender<Result<EventLoopProxy<UserEvent>, String>>,
     closed: Arc<AtomicBool>,
 ) -> Result<(), HeadlessError> {
-    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
+    let mut builder = EventLoopBuilder::<UserEvent>::with_user_event();
+
+    // Allow creating the event loop on a non-main thread.
+    #[cfg(target_os = "linux")]
+    builder.with_any_thread(true);
+    #[cfg(target_os = "windows")]
+    builder.with_any_thread(true);
+    #[cfg(target_os = "macos")]
+    builder.with_any_thread(true);
+
+    let event_loop = builder.build();
     let proxy = event_loop.create_proxy();
 
     // Send the proxy handle back to the launching thread.
@@ -195,42 +218,46 @@ fn run_event_loop(
         .build(&event_loop)
         .map_err(|e| HeadlessError::InitFailed(e.to_string()))?;
 
-    // IPC callback state: we use this to receive JS evaluation results.
-    let ipc_response: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
-    let ipc_notify: Arc<(Mutex<bool>, std::sync::Condvar)> =
-        Arc::new((Mutex::new(false), std::sync::Condvar::new()));
-
-    let ipc_resp_clone = ipc_response.clone();
-    let ipc_notify_clone = ipc_notify.clone();
-
     // Optional persistent web context for data directory / cache.
     let mut web_context = config
         .data_dir
         .as_ref()
         .map(|dir| WebContext::new(Some(dir.clone())));
 
-    let mut builder = if let Some(ref mut ctx) = web_context {
+    let mut wv_builder = if let Some(ref mut ctx) = web_context {
         WebViewBuilder::with_web_context(ctx)
     } else {
         WebViewBuilder::new()
     };
 
-    builder = builder
+    wv_builder = wv_builder
         .with_url(&config.initial_url)
-        .with_ipc_handler(move |msg| {
-            let body = msg.body().to_string();
-            *ipc_resp_clone.lock().unwrap() = Some(body);
-            let (lock, cvar) = &*ipc_notify_clone;
-            *lock.lock().unwrap() = true;
-            cvar.notify_all();
-        })
         .with_devtools(config.devtools);
 
     if let Some(ref ua) = config.user_agent {
-        builder = builder.with_user_agent(ua);
+        wv_builder = wv_builder.with_user_agent(ua);
     }
 
-    let webview = builder
+    // On Linux, use build_gtk with the inner vbox for Wayland + X11 support.
+    // GtkApplicationWindow is a GtkBin that already contains a GtkBox,
+    // so we must add the webview to that inner box, not the window itself.
+    #[cfg(target_os = "linux")]
+    let webview = {
+        use gtk::prelude::*;
+        let vbox = window
+            .gtk_window()
+            .children()
+            .into_iter()
+            .next()
+            .and_then(|w| w.downcast::<gtk::Box>().ok())
+            .expect("tao window should contain a GtkBox");
+        wv_builder
+            .build_gtk(&vbox)
+            .map_err(|e| HeadlessError::InitFailed(e.to_string()))?
+    };
+
+    #[cfg(not(target_os = "linux"))]
+    let webview = wv_builder
         .build(&window)
         .map_err(|e| HeadlessError::InitFailed(e.to_string()))?;
 
@@ -247,14 +274,14 @@ fn run_event_loop(
         match event {
             Event::UserEvent(UserEvent::Command(envelope)) => {
                 let Envelope { command, reply } = envelope;
-                let resp = {
-                    let wv_guard = webview.lock().unwrap();
-                    if let Some(ref wv) = *wv_guard {
-                        execute_command(wv, &window, &command, &ipc_response, &ipc_notify)
-                    } else {
-                        Response::Error("webview destroyed".into())
-                    }
-                };
+
+                let wv_guard = webview.lock().unwrap();
+                if let Some(ref wv) = *wv_guard {
+                    execute_command(wv, &window, &command, reply.clone());
+                } else {
+                    let _ = reply.send(Response::Error("webview destroyed".into()));
+                }
+                drop(wv_guard);
 
                 // Handle Close — destroy the webview and exit.
                 if matches!(command, Command::Close) {
@@ -262,8 +289,6 @@ fn run_event_loop(
                     *control_flow = ControlFlow::Exit;
                     closed.store(true, Ordering::Relaxed);
                 }
-
-                let _ = reply.send(resp);
             }
 
             Event::WindowEvent {
@@ -281,19 +306,22 @@ fn run_event_loop(
 
 // ── Command dispatch ─────────────────────────────────────────────────────────
 
-fn execute_command(
-    wv: &WebView,
-    window: &Window,
-    command: &Command,
-    ipc_response: &Arc<Mutex<Option<String>>>,
-    ipc_notify: &Arc<(Mutex<bool>, std::sync::Condvar)>,
-) -> Response {
+/// Execute a command on the event-loop thread.
+///
+/// For commands that need a JS return value, we use
+/// `evaluate_script_with_callback` which calls back on the webview thread
+/// without blocking the event loop.  The callback sends the response
+/// through the `reply` channel.
+fn execute_command(wv: &WebView, window: &Window, command: &Command, reply: Sender<Response>) {
     match command {
         // ── Page ─────────────────────────────────────────────────────────
-        Command::Navigate { url } => match wv.load_url(url) {
-            Ok(_) => Response::Ok,
-            Err(e) => Response::Error(format!("navigate: {e}")),
-        },
+        Command::Navigate { url } => {
+            let resp = match wv.load_url(url) {
+                Ok(_) => Response::Ok,
+                Err(e) => Response::Error(format!("navigate: {e}")),
+            };
+            let _ = reply.send(resp);
+        }
 
         Command::Reload { ignore_cache } => {
             let script = if *ignore_cache {
@@ -301,87 +329,84 @@ fn execute_command(
             } else {
                 "location.reload()"
             };
-            eval_js_fire(wv, script)
+            eval_fire(wv, script, reply);
         }
 
-        Command::GoBack => eval_js_fire(wv, "history.back()"),
-        Command::GoForward => eval_js_fire(wv, "history.forward()"),
-        Command::StopLoading => eval_js_fire(wv, "window.stop()"),
+        Command::GoBack => eval_fire(wv, "history.back()", reply),
+        Command::GoForward => eval_fire(wv, "history.forward()", reply),
+        Command::StopLoading => eval_fire(wv, "window.stop()", reply),
 
-        Command::GetUrl => eval_js_sync(wv, "return location.href;", ipc_response, ipc_notify),
-        Command::GetTitle => {
-            eval_js_sync(wv, "return document.title;", ipc_response, ipc_notify)
+        Command::GetUrl => eval_with_cb(wv, "location.href", reply),
+        Command::GetTitle => eval_with_cb(wv, "document.title", reply),
+
+        Command::GetContent => {
+            eval_with_cb(wv, "document.documentElement.outerHTML", reply)
         }
-
-        Command::GetContent => eval_js_sync(
-            wv,
-            "return document.documentElement.outerHTML;",
-            ipc_response,
-            ipc_notify,
-        ),
 
         Command::Screenshot => {
-            Response::Error(
+            let _ = reply.send(Response::Error(
                 "screenshot not natively supported by wry; \
                  inject html2canvas.js first, then use EvalJs to capture a data URL"
                     .into(),
-            )
+            ));
         }
 
         Command::PrintToPdf => {
-            Response::Error("PDF printing not supported by wry backend".into())
+            let _ = reply.send(Response::Error(
+                "PDF printing not supported by wry backend".into(),
+            ));
         }
 
         // ── Runtime ──────────────────────────────────────────────────────
-        Command::EvalJs { script } => eval_js_sync(wv, script, ipc_response, ipc_notify),
+        Command::EvalJs { script } => eval_with_cb(wv, script, reply),
 
-        Command::EvalJsNoReturn { script } => eval_js_fire(wv, script),
+        Command::EvalJsNoReturn { script } => eval_fire(wv, script, reply),
 
         Command::CallFunction { function, args } => {
             let args_str = args.join(", ");
-            let script = format!("return {function}({args_str});");
-            eval_js_sync(wv, &script, ipc_response, ipc_notify)
+            let script = format!("{function}({args_str})");
+            eval_with_cb(wv, &script, reply);
         }
 
         // ── DOM ──────────────────────────────────────────────────────────
         Command::InjectCss { css } => {
             let escaped = css.replace('\\', "\\\\").replace('`', "\\`");
             let script = format!(
-                r#"(() => {{ const s = document.createElement('style'); s.textContent = `{escaped}`; document.head.appendChild(s); }})();"#
+                r#"(() => {{ const s = document.createElement('style'); s.textContent = `{escaped}`; document.head.appendChild(s); }})()"#
             );
-            eval_js_fire(wv, &script)
+            eval_fire(wv, &script, reply);
         }
 
         Command::InjectScriptUrl { url } => {
             let escaped = url.replace('\\', "\\\\").replace('\'', "\\'");
             let script = format!(
-                r#"(() => {{ const s = document.createElement('script'); s.src = '{escaped}'; document.head.appendChild(s); }})();"#
+                r#"(() => {{ const s = document.createElement('script'); s.src = '{escaped}'; document.head.appendChild(s); }})()"#
             );
-            eval_js_fire(wv, &script)
+            eval_fire(wv, &script, reply);
         }
 
         Command::InjectScriptContent { content } => {
             let escaped = content.replace('\\', "\\\\").replace('`', "\\`");
             let script = format!(
-                r#"(() => {{ const s = document.createElement('script'); s.textContent = `{escaped}`; document.head.appendChild(s); }})();"#
+                r#"(() => {{ const s = document.createElement('script'); s.textContent = `{escaped}`; document.head.appendChild(s); }})()"#
             );
-            eval_js_fire(wv, &script)
+            eval_fire(wv, &script, reply);
         }
 
         Command::QuerySelector { selector } => {
             let sel = js_escape(selector);
             let script = format!(
-                r#"return JSON.stringify(Array.from(document.querySelectorAll('{sel}')).map(e => e.outerHTML));"#
+                r#"JSON.stringify(Array.from(document.querySelectorAll('{sel}')).map(e => e.outerHTML))"#
             );
-            eval_js_sync(wv, &script, ipc_response, ipc_notify)
+            eval_with_cb(wv, &script, reply);
         }
 
         Command::QuerySelectorText { selector } => {
             let sel = js_escape(selector);
             let script = format!(
-                r#"return JSON.stringify(Array.from(document.querySelectorAll('{sel}')).map(e => e.textContent || ''));"#
+                r#"JSON.stringify(Array.from(document.querySelectorAll('{sel}')).map(e => e.textContent || ''))"#
             );
-            eval_js_sync(wv, &script, ipc_response, ipc_notify)
+            eval_with_cb(wv, &script, reply);
         }
 
         Command::GetAttribute {
@@ -391,17 +416,17 @@ fn execute_command(
             let sel = js_escape(selector);
             let attr = js_escape(attribute);
             let script = format!(
-                r#"{{ const el = document.querySelector('{sel}'); return el ? (el.getAttribute('{attr}') || '') : ''; }}"#
+                r#"(() => {{ const el = document.querySelector('{sel}'); return el ? (el.getAttribute('{attr}') || '') : ''; }})()"#
             );
-            eval_js_sync(wv, &script, ipc_response, ipc_notify)
+            eval_with_cb(wv, &script, reply);
         }
 
         Command::Click { selector } => {
             let sel = js_escape(selector);
             let script = format!(
-                r#"{{ const el = document.querySelector('{sel}'); if (el) {{ el.click(); return 'ok'; }} return 'not_found'; }}"#
+                r#"(() => {{ const el = document.querySelector('{sel}'); if (el) {{ el.click(); return 'ok'; }} return 'not_found'; }})()"#
             );
-            eval_js_sync(wv, &script, ipc_response, ipc_notify)
+            eval_with_cb(wv, &script, reply);
         }
 
         Command::TypeText { selector, text } => {
@@ -409,12 +434,12 @@ fn execute_command(
             let script = if let Some(sel) = selector {
                 let s = js_escape(sel);
                 format!(
-                    r#"{{ const el = document.querySelector('{s}'); if (el) {{ el.focus(); }} document.execCommand('insertText', false, '{txt}'); }}"#
+                    r#"(() => {{ const el = document.querySelector('{s}'); if (el) {{ el.focus(); }} document.execCommand('insertText', false, '{txt}'); }})()"#
                 )
             } else {
                 format!(r#"document.execCommand('insertText', false, '{txt}')"#)
             };
-            eval_js_fire(wv, &script)
+            eval_fire(wv, &script, reply);
         }
 
         Command::SetValue { selector, value } => {
@@ -430,12 +455,16 @@ fn execute_command(
                     }}
                 }})()"#
             );
-            eval_js_fire(wv, &script)
+            eval_fire(wv, &script, reply);
         }
 
-        Command::ScrollBy { x, y } => eval_js_fire(wv, &format!("window.scrollBy({x}, {y})")),
+        Command::ScrollBy { x, y } => {
+            eval_fire(wv, &format!("window.scrollBy({x}, {y})"), reply)
+        }
 
-        Command::ScrollTo { x, y } => eval_js_fire(wv, &format!("window.scrollTo({x}, {y})")),
+        Command::ScrollTo { x, y } => {
+            eval_fire(wv, &format!("window.scrollTo({x}, {y})"), reply)
+        }
 
         // ── Cookies ──────────────────────────────────────────────────────
         Command::SetCookie { cookie } => {
@@ -466,16 +495,11 @@ fn execute_command(
             }
             parts.push(format!("samesite={}", same_site.as_str()));
             let cookie_str = parts.join("; ");
-            eval_js_fire(wv, &format!("document.cookie = '{cookie_str}'"))
+            eval_fire(wv, &format!("document.cookie = '{cookie_str}'"), reply);
         }
 
         Command::GetCookies { domain: _ } => {
-            eval_js_sync(
-                wv,
-                "return document.cookie;",
-                ipc_response,
-                ipc_notify,
-            )
+            eval_with_cb(wv, "document.cookie", reply);
         }
 
         Command::DeleteCookies { name, domain } => {
@@ -486,12 +510,13 @@ fn execute_command(
             } else {
                 format!("; domain={d}")
             };
-            eval_js_fire(
+            eval_fire(
                 wv,
                 &format!(
                     "document.cookie = '{n}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/{domain_part}'"
                 ),
-            )
+                reply,
+            );
         }
 
         Command::ClearCookies => {
@@ -499,64 +524,62 @@ fn execute_command(
                 document.cookie.split(';').forEach(c => {
                     const name = c.split('=')[0].trim();
                     document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
-                });
+                })
             "#;
-            eval_js_fire(wv, script)
+            eval_fire(wv, script, reply);
         }
 
         // ── localStorage ─────────────────────────────────────────────────
         Command::GetLocalStorage { key } => {
             let k = js_escape(key);
-            eval_js_sync(
-                wv,
-                &format!("return localStorage.getItem('{k}');"),
-                ipc_response,
-                ipc_notify,
-            )
+            eval_with_cb(wv, &format!("localStorage.getItem('{k}')"), reply);
         }
 
         Command::SetLocalStorage { key, value } => {
             let k = js_escape(key);
             let v = js_escape(value);
-            eval_js_fire(wv, &format!("localStorage.setItem('{k}', '{v}')"))
+            eval_fire(wv, &format!("localStorage.setItem('{k}', '{v}')"), reply);
         }
 
         Command::RemoveLocalStorage { key } => {
             let k = js_escape(key);
-            eval_js_fire(wv, &format!("localStorage.removeItem('{k}')"))
+            eval_fire(wv, &format!("localStorage.removeItem('{k}')"), reply);
         }
 
-        Command::ClearLocalStorage => eval_js_fire(wv, "localStorage.clear()"),
+        Command::ClearLocalStorage => eval_fire(wv, "localStorage.clear()", reply),
 
         // ── sessionStorage ───────────────────────────────────────────────
         Command::GetSessionStorage { key } => {
             let k = js_escape(key);
-            eval_js_sync(
-                wv,
-                &format!("return sessionStorage.getItem('{k}');"),
-                ipc_response,
-                ipc_notify,
-            )
+            eval_with_cb(wv, &format!("sessionStorage.getItem('{k}')"), reply);
         }
 
         Command::SetSessionStorage { key, value } => {
             let k = js_escape(key);
             let v = js_escape(value);
-            eval_js_fire(wv, &format!("sessionStorage.setItem('{k}', '{v}')"))
+            eval_fire(
+                wv,
+                &format!("sessionStorage.setItem('{k}', '{v}')"),
+                reply,
+            );
         }
 
         // ── Emulation ────────────────────────────────────────────────────
         Command::SetUserAgent { user_agent: _ } => {
-            Response::Error("user-agent can only be set at launch via BrowserConfig".into())
+            let _ = reply.send(Response::Error(
+                "user-agent can only be set at launch via BrowserConfig".into(),
+            ));
         }
 
         Command::SetViewport { width, height } => {
             window.set_inner_size(LogicalSize::new(*width, *height));
-            Response::Ok
+            let _ = reply.send(Response::Ok);
         }
 
         Command::SetJsEnabled { enabled: _ } => {
-            Response::Error("toggling JS at runtime is not supported by wry".into())
+            let _ = reply.send(Response::Error(
+                "toggling JS at runtime is not supported by wry".into(),
+            ));
         }
 
         // ── Cache ────────────────────────────────────────────────────────
@@ -567,10 +590,10 @@ fn execute_command(
                         const names = await caches.keys();
                         await Promise.all(names.map(n => caches.delete(n)));
                     }
+                    return 'ok';
                 })()
             "#;
-            // This is async — fire and forget since Cache API clear is best-effort.
-            eval_js_fire(wv, script)
+            eval_with_cb(wv, script, reply);
         }
 
         Command::ClearBrowsingData => {
@@ -586,9 +609,10 @@ fn execute_command(
                         const names = await caches.keys();
                         await Promise.all(names.map(n => caches.delete(n)));
                     }
+                    return 'ok';
                 })()
             "#;
-            eval_js_fire(wv, script)
+            eval_with_cb(wv, script, reply);
         }
 
         // ── Waiting ──────────────────────────────────────────────────────
@@ -599,102 +623,86 @@ fn execute_command(
             let sel = js_escape(selector);
             let script = format!(
                 r#"
-                const deadline = Date.now() + {timeout_ms};
-                async function __poll() {{
+                (async () => {{
+                    const deadline = Date.now() + {timeout_ms};
                     while (Date.now() < deadline) {{
                         if (document.querySelector('{sel}')) return 'found';
                         await new Promise(r => setTimeout(r, 100));
                     }}
                     return 'timeout';
-                }}
-                return await __poll();
+                }})()
                 "#
             );
-            eval_js_sync(wv, &script, ipc_response, ipc_notify)
+            eval_with_cb(wv, &script, reply);
         }
 
         Command::WaitForNavigation { timeout_ms } => {
             let script = format!(
                 r#"
-                return await new Promise((resolve) => {{
+                new Promise((resolve) => {{
                     const timer = setTimeout(() => resolve('timeout'), {timeout_ms});
                     window.addEventListener('load', () => {{
                         clearTimeout(timer);
                         resolve('loaded');
                     }}, {{ once: true }});
-                }});
+                }})
                 "#
             );
-            eval_js_sync(wv, &script, ipc_response, ipc_notify)
+            eval_with_cb(wv, &script, reply);
         }
 
-        Command::Close => Response::Ok,
+        Command::Close => {
+            let _ = reply.send(Response::Ok);
+        }
     }
 }
 
 // ── JS helpers ───────────────────────────────────────────────────────────────
 
-/// Evaluate JS and send the result back via IPC.  Blocks until the IPC
-/// callback fires or a timeout (5 s) elapses.
-fn eval_js_sync(
-    wv: &WebView,
-    script: &str,
-    ipc_response: &Arc<Mutex<Option<String>>>,
-    ipc_notify: &Arc<(Mutex<bool>, std::sync::Condvar)>,
-) -> Response {
-    // Clear previous IPC state.
-    *ipc_response.lock().unwrap() = None;
-    {
-        let (lock, _) = &**ipc_notify;
-        *lock.lock().unwrap() = false;
-    }
-
-    // Wrap the user script so the result is sent via IPC.
-    // The user script can use `return` to provide a value.
-    let wrapped = format!(
-        r#"
-        (async () => {{
-            try {{
-                const __result = await (async () => {{ {script} }})();
-                window.ipc.postMessage(String(__result ?? ''));
-            }} catch(e) {{
-                window.ipc.postMessage('__error__:' + e.message);
-            }}
-        }})();
-        "#
-    );
-
-    if let Err(e) = wv.evaluate_script(&wrapped) {
-        return Response::Error(format!("eval failed: {e}"));
-    }
-
-    // Wait for IPC callback.
-    let (lock, cvar) = &**ipc_notify;
-    let result = cvar
-        .wait_timeout_while(lock.lock().unwrap(), Duration::from_secs(5), |ready| {
-            !*ready
-        })
-        .unwrap();
-
-    if result.1.timed_out() {
-        return Response::Error("JS eval timed out (no IPC response in 5 s)".into());
-    }
-
-    let msg = ipc_response.lock().unwrap().take().unwrap_or_default();
-
-    if let Some(err) = msg.strip_prefix("__error__:") {
-        Response::Error(err.to_string())
-    } else {
-        Response::Text(msg)
+/// Evaluate JS and get the result via `evaluate_script_with_callback`.
+///
+/// This does NOT block the event loop.  The callback fires asynchronously
+/// on the webview thread and sends the result through the reply channel.
+fn eval_with_cb(wv: &WebView, script: &str, reply: Sender<Response>) {
+    let reply_err = reply.clone();
+    match wv.evaluate_script_with_callback(script, move |result| {
+        // The callback receives the JS result as a String.
+        // wry returns the raw JS value stringified — strings come with quotes.
+        let cleaned = unquote_js_string(&result);
+        let _ = reply.send(Response::Text(cleaned));
+    }) {
+        Ok(_) => {} // response will come via callback
+        Err(e) => {
+            let _ = reply_err.send(Response::Error(format!("eval failed: {e}")));
+        }
     }
 }
 
-/// Evaluate JS fire-and-forget (no IPC round-trip).
-fn eval_js_fire(wv: &WebView, script: &str) -> Response {
-    match wv.evaluate_script(script) {
+/// Evaluate JS fire-and-forget (no callback, immediate response).
+fn eval_fire(wv: &WebView, script: &str, reply: Sender<Response>) {
+    let resp = match wv.evaluate_script(script) {
         Ok(_) => Response::Ok,
         Err(e) => Response::Error(format!("eval failed: {e}")),
+    };
+    let _ = reply.send(resp);
+}
+
+/// Strip surrounding quotes from a JS callback result.
+///
+/// `evaluate_script_with_callback` returns strings as `"value"` (with literal
+/// quotes).  `null` and `undefined` come as-is.
+fn unquote_js_string(s: &str) -> String {
+    let trimmed = s.trim();
+    if trimmed == "null" || trimmed == "undefined" {
+        return trimmed.to_string();
     }
+    // If wrapped in double quotes, parse as JSON string to handle escapes.
+    if trimmed.starts_with('"') && trimmed.ends_with('"') {
+        if let Ok(parsed) = serde_json::from_str::<String>(trimmed) {
+            return parsed;
+        }
+    }
+    trimmed.to_string()
 }
 
 /// Escape a string for safe embedding in a JS single-quoted string literal.
