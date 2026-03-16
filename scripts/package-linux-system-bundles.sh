@@ -116,7 +116,7 @@ chmod +x "$stage_root/opt/neuroskill/skill"
 cp -R "$resources_dir/espeak-ng-data" "$stage_root/opt/neuroskill/resources/"
 cp -R "$resources_dir/neutts-samples" "$stage_root/opt/neuroskill/resources/"
 cp "$ROOT_DIR/LICENSE" "$stage_root/opt/neuroskill/LICENSE"
-cp "$ROOT_DIR/LINUX.md" "$stage_root/opt/neuroskill/LINUX.md"
+cp "$ROOT_DIR/docs/LINUX.md" "$stage_root/opt/neuroskill/LINUX.md"
 cp "$ROOT_DIR/src-tauri/icons/128x128.png" "$stage_root/usr/share/pixmaps/neuroskill.png"
 
 cat > "$stage_root/usr/bin/neuroskill" <<'EOF'

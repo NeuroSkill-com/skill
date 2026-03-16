@@ -94,7 +94,7 @@ cp -R "$resources_dir/espeak-ng-data" "$package_root/resources/"
 cp -R "$resources_dir/neutts-samples" "$package_root/resources/"
 
 cp "$ROOT_DIR/LICENSE" "$package_root/"
-cp "$ROOT_DIR/LINUX.md" "$package_root/"
+cp "$ROOT_DIR/docs/LINUX.md" "$package_root/"
 
 cat > "$package_root/neuroskill" <<'EOF'
 #!/usr/bin/env bash
