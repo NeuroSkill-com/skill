@@ -645,7 +645,7 @@ jobs:
           } else {
             $manifest = [ordered]@{
               version = $version
-              notes = "NeuroSkill™ v$version"
+              notes = "NeuroSkill$([char]0x2122) v$version"
               pub_date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
               platforms = [ordered]@{}
             }
@@ -711,13 +711,13 @@ jobs:
 
           if ($env:JOB_STATUS -eq "success") {
             $color = 3066993
-            $title = "NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} - Windows Published"
-            $desc  = "NeuroSkill™ Windows build published and ready to download."
+            $title = "NeuroSkill$([char]0x2122) Release v${{ steps.version_meta.outputs.version }} - Windows Published"
+            $desc  = "NeuroSkill$([char]0x2122) Windows build published and ready to download."
             $linkLine = "**[Download v${{ steps.version_meta.outputs.version }}]($releaseUrl)**"
           } else {
             $color = 15158332
-            $title = "NeuroSkill™ Release v${{ steps.version_meta.outputs.version }} - Windows Failed"
-            $desc  = "The NeuroSkill™ Windows release build failed. Check the run for details."
+            $title = "NeuroSkill$([char]0x2122) Release v${{ steps.version_meta.outputs.version }} - Windows Failed"
+            $desc  = "The NeuroSkill$([char]0x2122) Windows release build failed. Check the run for details."
             $linkLine = "**[View failed run]($runUrl)**"
           }
 
