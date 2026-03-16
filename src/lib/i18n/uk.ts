@@ -2186,7 +2186,11 @@ const uk: Record<string, string> = {
   "llm.tools.advanced":                 "Розширений",
   "llm.tools.executionMode":            "Режим виконання інструментів",
   "llm.tools.parallel":                 "Паралельний",
-  "llm.tools.sequential":              "Послідовний",
+  "llm.tools.sequential":              "\u041f\u043e\u0441\u043b\u0456\u0434\u043e\u0432\u043d\u0438\u0439",
+  "llm.tools.maxRounds":               "\u041c\u0430\u043a\u0441. \u0440\u0430\u0443\u043d\u0434\u0456\u0432",
+  "llm.tools.maxRoundsDesc":           "\u0421\u043a\u0456\u043b\u044c\u043a\u0438 \u0446\u0438\u043a\u043b\u0456\u0432 \u043c\u0438\u0441\u043b\u0435\u043d\u043d\u044f\u2192\u0456\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u2192\u043c\u0438\u0441\u043b\u0435\u043d\u043d\u044f \u0434\u043e\u0437\u0432\u043e\u043b\u0435\u043d\u043e \u043d\u0430 \u043f\u043e\u0432\u0456\u0434\u043e\u043c\u043b\u0435\u043d\u043d\u044f.",
+  "llm.tools.maxCallsPerRound":        "\u041c\u0430\u043a\u0441. \u0432\u0438\u043a\u043b\u0438\u043a\u0456\u0432 \u043d\u0430 \u0440\u0430\u0443\u043d\u0434",
+  "llm.tools.maxCallsPerRoundDesc":    "\u0421\u043a\u0456\u043b\u044c\u043a\u0438 \u0456\u043d\u0441\u0442\u0440\u0443\u043c\u0435\u043d\u0442\u0456\u0432 \u043c\u043e\u0434\u0435\u043b\u044c \u043c\u043e\u0436\u0435 \u0432\u0438\u043a\u043b\u0438\u043a\u0430\u0442\u0438 \u0437\u0430 \u043e\u0434\u0438\u043d \u0440\u0430\u0443\u043d\u0434.",
 
   "llm.mmproj.nThreads":             "Потоки енкодера",
   "llm.mmproj.nThreadsDesc":         "Потоки CPU для візуального/аудіо-енкодера.",

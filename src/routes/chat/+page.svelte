@@ -2113,6 +2113,46 @@
             {/each}
           </div>
         </div>
+
+        <!-- Max rounds (tool hops) -->
+        <div class="flex items-center justify-between gap-3 mt-1.5">
+          <div class="flex flex-col gap-0">
+            <span class="text-[0.6rem] font-semibold text-foreground">{t("llm.tools.maxRounds")}</span>
+            <span class="text-[0.5rem] text-muted-foreground/60 leading-snug">{t("llm.tools.maxRoundsDesc")}</span>
+          </div>
+          <div class="flex items-center gap-0.5 shrink-0">
+            {#each [1, 3, 5, 10] as val}
+              <button
+                onclick={() => updateToolConfig({ max_rounds: val })}
+                class="rounded-md border px-1.5 py-0.5 text-[0.58rem] font-semibold transition-all cursor-pointer
+                       {toolConfig.max_rounds === val
+                         ? 'border-primary/50 bg-primary/10 text-primary'
+                         : 'border-border/60 bg-background text-muted-foreground/50 hover:text-foreground'}">
+                {val}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Max calls per round -->
+        <div class="flex items-center justify-between gap-3 mt-0.5">
+          <div class="flex flex-col gap-0">
+            <span class="text-[0.6rem] font-semibold text-foreground">{t("llm.tools.maxCallsPerRound")}</span>
+            <span class="text-[0.5rem] text-muted-foreground/60 leading-snug">{t("llm.tools.maxCallsPerRoundDesc")}</span>
+          </div>
+          <div class="flex items-center gap-0.5 shrink-0">
+            {#each [1, 2, 4, 8] as val}
+              <button
+                onclick={() => updateToolConfig({ max_calls_per_round: val })}
+                class="rounded-md border px-1.5 py-0.5 text-[0.58rem] font-semibold transition-all cursor-pointer
+                       {toolConfig.max_calls_per_round === val
+                         ? 'border-primary/50 bg-primary/10 text-primary'
+                         : 'border-border/60 bg-background text-muted-foreground/50 hover:text-foreground'}">
+                {val}
+              </button>
+            {/each}
+          </div>
+        </div>
       </div>
     </div>
   {/if}
