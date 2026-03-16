@@ -110,7 +110,8 @@ btleplug = "0.11"
 serialport = "4"
 
 # Async runtime (Tauri re-exports tokio but we need 'full' for select! etc.)
-tokio = { version = "1", features = ["full"] }
+tokio      = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 
 # CSV writing
 csv = "1"

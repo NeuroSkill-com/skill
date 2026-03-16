@@ -1,0 +1,594 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 NeuroSkill.com
+//
+//! Generic device session runner.
+//!
+//! Consumes a `Box<dyn DeviceAdapter>` and drives the shared DSP / CSV / DND /
+//! emit pipeline.  All device-specific logic lives in the adapter; this module
+//! only knows about [`DeviceEvent`].
+
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use tauri::{AppHandle, Emitter, Manager};
+
+use skill_devices::session::*;
+use skill_devices::{self, BatteryEma, BatteryAlert};
+
+use crate::{
+    AppState, EegPacket, ImuPacket, MutexExt, PpgPacket, SessionDsp, ToastLevel,
+    emit_status, refresh_tray, send_toast, upsert_paired, unix_secs,
+};
+use crate::eeg_bands::BandSnapshot;
+use crate::session_csv::{CsvState, write_session_meta};
+use crate::ws_server::WsBroadcaster;
+
+// ── Public entry point ────────────────────────────────────────────────────────
+
+/// Run a device session using any [`DeviceAdapter`].
+///
+/// This single function replaces the four former session-specific event loops
+/// (`run_muse_session`, `run_mw75_session`, `run_openbci_ganglion_session`,
+/// `run_hermes_session`).
+///
+/// The caller is responsible for:
+///   1. Performing BLE scanning / connecting (device-specific).
+///   2. Constructing the adapter and passing it here.
+///   3. Wiring a `cancel_rx` oneshot for user-initiated disconnect.
+pub(crate) async fn run_device_session(
+    app:        AppHandle,
+    cancel:     tokio_util::sync::CancellationToken,
+    csv_path:   PathBuf,
+    mut adapter: Box<dyn DeviceAdapter>,
+) {
+
+    let desc = adapter.descriptor().clone();
+    let has_ppg = desc.caps.contains(DeviceCaps::PPG);
+    let has_imu = desc.caps.contains(DeviceCaps::IMU);
+    let has_battery = desc.caps.contains(DeviceCaps::BATTERY);
+    let kind = desc.kind;
+    let pipeline_ch = desc.pipeline_channels;
+    let sample_rate = desc.eeg_sample_rate;
+
+    // ── Open CSV with device-specific channel labels ─────────────────────────
+    let label_refs: Vec<&str> = desc.channel_names.iter().map(|s| s.as_str()).collect();
+    let mut csv = match CsvState::open_with_labels(&csv_path, &label_refs) {
+        Ok(c)  => c,
+        Err(e) => {
+            adapter.disconnect().await;
+            write_session_meta(&app, &csv_path);
+            crate::go_disconnected(&app, Some(format!("CSV error: {e}")), false);
+            return;
+        }
+    };
+    write_session_meta(&app, &csv_path);
+
+    // ── Session-local DSP (lock-free during sample processing) ───────────────
+    let mut dsp = SessionDsp::new(&app);
+
+    // ── Battery EMA (from skill-devices — replaces inline smoothing) ─────────
+    let mut battery_ema = BatteryEma::new(0.1);
+
+    // ── Event loop ───────────────────────────────────────────────────────────
+    let mut user_cancelled = false;
+    loop {
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => {
+                adapter.disconnect().await;
+                user_cancelled = true;
+                break;
+            }
+            ev = adapter.next_event() => {
+                let Some(ev) = ev else {
+                    app_log!(app, "bluetooth", "[{kind}] event channel closed");
+                    adapter.disconnect().await;
+                    break;
+                };
+                match ev {
+                    DeviceEvent::Connected(info) => {
+                        on_connected(&app, &mut dsp, &csv_path, &info, kind);
+                    }
+                    DeviceEvent::Disconnected => {
+                        on_disconnected(&app, kind);
+                        adapter.disconnect().await;
+                        break;
+                    }
+                    DeviceEvent::Eeg(frame) => {
+                        let temperature_raw = {
+                            let sr = app.state::<Mutex<Box<AppState>>>();
+                            let val = sr.lock_or_recover().status.temperature_raw;
+                            val
+                        };
+                        process_eeg(
+                            &app, &mut dsp, &mut csv, &csv_path,
+                            &frame, sample_rate, pipeline_ch, has_ppg,
+                            temperature_raw,
+                        );
+                    }
+                    DeviceEvent::Ppg(frame) if has_ppg => {
+                        process_ppg(&app, &mut dsp, &mut csv, &csv_path, &frame);
+                    }
+                    DeviceEvent::Imu(frame) if has_imu => {
+                        process_imu(&app, &mut dsp, &frame);
+                    }
+                    DeviceEvent::Battery(frame) if has_battery => {
+                        process_battery(&app, &mut battery_ema, &csv_path, &frame);
+                    }
+                    DeviceEvent::Meta(val) => {
+                        process_meta(&app, &csv_path, &val);
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    // ── Post-drain sleep (let CoreBluetooth delegate callbacks drain) ─────────
+    tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+
+    // ── Finalise ─────────────────────────────────────────────────────────────
+    finalize_session(&app, &mut csv, &csv_path, user_cancelled);
+}
+
+// ── Event handlers ────────────────────────────────────────────────────────────
+
+fn on_connected(
+    app:      &AppHandle,
+    dsp:      &mut SessionDsp,
+    csv_path: &Path,
+    info:     &DeviceInfo,
+    kind:     &str,
+) {
+    let dev_id = {
+        let sr = app.state::<Mutex<Box<AppState>>>();
+        let g = sr.lock_or_recover();
+        g.status.device_id.clone().unwrap_or_else(|| info.id.clone())
+    };
+
+    {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let mut s = r.lock_or_recover();
+        s.status.state       = "connected".into();
+        s.status.device_name = Some(info.name.clone());
+        s.status.bt_error    = None;
+        s.status.target_name = None;
+        s.retry_attempt               = 0;
+        s.status.retry_attempt        = 0;
+        s.status.retry_countdown_secs = 0;
+    }
+
+    dsp.accumulator.update_device(Some(dev_id.clone()), Some(info.name.clone()));
+    app_log!(app, "bluetooth", "[{kind}] connected: {} (id={dev_id})", info.name);
+    upsert_paired(app, &dev_id, &info.name);
+    refresh_tray(app);
+    emit_status(app);
+    crate::emit_devices(app);
+    write_session_meta(app, csv_path);
+
+    let payload = serde_json::json!({
+        "device_name": info.name,
+        "device_id":   dev_id,
+        "timestamp":   unix_secs(),
+    });
+    let _ = app.emit("device-connected", &payload);
+    app.state::<WsBroadcaster>().send("device-connected", &payload);
+    send_toast(app, ToastLevel::Success, "Connected",
+        &format!("{} is now streaming EEG data.", info.name));
+}
+
+fn on_disconnected(app: &AppHandle, kind: &str) {
+    let (name, device_id) = {
+        let sr = app.state::<Mutex<Box<AppState>>>();
+        let g = sr.lock_or_recover();
+        (
+            g.status.device_name.clone().unwrap_or_else(|| "unknown".into()),
+            g.status.device_id.clone(),
+        )
+    };
+    app_log!(app, "bluetooth", "[{kind}] disconnected: {name}");
+    let payload = serde_json::json!({
+        "device_name": name,
+        "device_id":   device_id,
+        "timestamp":   unix_secs(),
+        "reason":      "device_disconnected",
+    });
+    let _ = app.emit("device-disconnected", &payload);
+    app.state::<WsBroadcaster>().send("device-disconnected", &payload);
+    send_toast(app, ToastLevel::Warning, "Connection Lost",
+        &format!("{name} disconnected."));
+}
+
+// ── EEG processing ────────────────────────────────────────────────────────────
+
+fn process_eeg(
+    app:            &AppHandle,
+    dsp:            &mut SessionDsp,
+    csv:            &mut CsvState,
+    csv_path:       &Path,
+    frame:          &EegFrame,
+    sample_rate:    f64,
+    pipeline_ch:    usize,
+    has_ppg:        bool,
+    temperature_raw: u16,
+) {
+    let ts_s = frame.timestamp_s;
+    let ts_ms = ts_s * 1000.0;
+
+    // ── Sync config changes from UI ──────────────────────────────────────────
+    dsp.sync_config(app);
+
+    // ── Status write-back (brief lock) ───────────────────────────────────────
+    let (ipc_ch, count) = {
+        let sr = app.state::<Mutex<Box<AppState>>>();
+        let mut s = sr.lock_or_recover();
+        for (ch, &uv) in frame.channels.iter().enumerate() {
+            if ch < s.status.eeg.len() {
+                s.status.eeg[ch] = uv;
+            }
+        }
+        s.status.sample_count += 1;
+        (s.eeg_channel.clone(), s.status.sample_count)
+    }; // lock released — all DSP below is lock-free
+
+    // ── Per-channel: CSV write + DSP pipeline ────────────────────────────────
+    let mut filter_fired = false;
+    let mut band_fired   = false;
+    for (ch, &uv) in frame.channels.iter().enumerate() {
+        let one = [uv];
+        csv.push_eeg(ch, &one, ts_s, sample_rate);
+        if ch < pipeline_ch {
+            if dsp.filter.push(ch, &one)        { filter_fired = true; }
+            if dsp.band_analyzer.push(ch, &one) { band_fired   = true; }
+            dsp.quality.push(ch, &one);
+            dsp.artifact_detector.push(ch, &one);
+            dsp.accumulator.push(ch, &[uv as f32]);
+        }
+    }
+
+    // ── Drain filtered data → emit IPC packets ──────────────────────────────
+    let drained: Vec<(usize, Vec<f64>)> = if filter_fired {
+        (0..pipeline_ch)
+            .map(|ch| (ch, dsp.filter.drain(ch)))
+            .filter(|(_, v)| !v.is_empty())
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let spec_col = dsp.filter.take_spec_col();
+
+    let band_snap: Option<BandSnapshot> = if band_fired {
+        let snap = dsp.band_analyzer.latest.clone();
+        if let Some(ref sn) = snap {
+            dsp.accumulator.update_bands(sn.clone());
+        }
+        snap
+    } else {
+        None
+    };
+
+    // ── Write quality back (brief lock) ──────────────────────────────────────
+    if filter_fired {
+        let qualities = dsp.quality.all_qualities();
+        let sr = app.state::<Mutex<Box<AppState>>>();
+        sr.lock_or_recover().status.channel_quality = qualities;
+    }
+
+    // ── Emit filtered EEG packets via IPC ────────────────────────────────────
+    if !drained.is_empty() {
+        for (ch, samples) in drained {
+            let pkt = EegPacket { electrode: ch, samples, timestamp: ts_ms };
+            if let Some(ref ipc_ch) = ipc_ch {
+                let _ = ipc_ch.send(pkt);
+            }
+        }
+    }
+
+    // ── Emit spectrogram ─────────────────────────────────────────────────────
+    if let Some(col) = spec_col {
+        let _ = app.emit("eeg-spectrogram", &col);
+    }
+
+    // ── Band snapshot: enrich, DND, emit ─────────────────────────────────────
+    if let Some(mut snap) = band_snap {
+        let ppg = if has_ppg {
+            dsp.accumulator.latest_ppg().cloned()
+        } else {
+            None
+        };
+        let enrich_ctx = skill_devices::SnapshotContext {
+            ppg,
+            artifacts:       Some(dsp.artifact_detector.metrics()),
+            head_pose:       Some(dsp.head_pose.metrics()),
+            temperature_raw,
+            gpu:             crate::gpu_stats::read(),
+        };
+        skill_devices::enrich_band_snapshot(&mut snap, &enrich_ctx);
+
+        csv.push_metrics(csv_path, &snap);
+
+        // ── DND tick (all devices get this now) ──────────────────────────────
+        run_dnd_tick(app, &snap);
+
+        // ── Write back & emit ────────────────────────────────────────────────
+        {
+            let sr = app.state::<Mutex<Box<AppState>>>();
+            sr.lock_or_recover().latest_bands = Some(snap.clone());
+        }
+        let _ = app.emit("eeg-bands", &snap);
+        app.state::<WsBroadcaster>().send("eeg-bands", &snap);
+    }
+
+    // ── Periodic full status emit ────────────────────────────────────────────
+    if count % 256 == 0 {
+        emit_status(app);
+    }
+}
+
+// ── DND tick ──────────────────────────────────────────────────────────────────
+
+fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
+    let engage_raw = skill_devices::compute_engagement_raw(snap);
+    let focus_score = skill_devices::focus_score(engage_raw);
+    let snr_db = snap.snr;
+
+    // Brief lock: read DND config + state, run pure dnd_tick, write state back.
+    let d = {
+        let sr = app.state::<Mutex<Box<AppState>>>();
+        let mut s = sr.lock_or_recover();
+        let cfg = skill_devices::DndConfig {
+            enabled:               s.dnd_config.enabled,
+            focus_threshold:        s.dnd_config.focus_threshold as f64,
+            duration_secs:          s.dnd_config.duration_secs,
+            exit_duration_secs:     s.dnd_config.exit_duration_secs,
+            focus_lookback_secs:    s.dnd_config.focus_lookback_secs,
+            exit_notification:      s.dnd_config.exit_notification,
+            focus_mode_identifier:  s.dnd_config.focus_mode_identifier.clone(),
+            snr_exit_db:            s.dnd_config.snr_exit_db,
+        };
+        let mut dnd_state = skill_devices::DndState {
+            active:        s.dnd_active,
+            focus_samples: std::mem::take(&mut s.dnd_focus_samples),
+            score_history: std::mem::take(&mut s.dnd_score_history),
+            below_ticks:   s.dnd_below_ticks,
+            snr_low_ticks: s.dnd_snr_low_ticks,
+            os_active:     s.dnd_os_active,
+        };
+        let decision = skill_devices::dnd_tick(&cfg, &mut dnd_state, focus_score, snr_db);
+        s.dnd_focus_samples = dnd_state.focus_samples;
+        s.dnd_score_history = dnd_state.score_history;
+        s.dnd_below_ticks   = dnd_state.below_ticks;
+        s.dnd_snr_low_ticks = dnd_state.snr_low_ticks;
+        decision
+    }; // lock released
+
+    // Perform OS DND change outside the lock.
+    if let Some((enable, mode_id)) = d.set_dnd_to {
+        let ok = crate::dnd::set_dnd(enable, &mode_id);
+        if ok {
+            {
+                let sr = app.state::<Mutex<Box<AppState>>>();
+                let mut s = sr.lock_or_recover();
+                s.dnd_active        = enable;
+                s.dnd_below_ticks   = 0;
+                s.dnd_snr_low_ticks = 0;
+            }
+            let _ = app.emit("dnd-state-changed", enable);
+            app.state::<WsBroadcaster>().send("dnd-state-changed", &enable);
+            if !enable && d.send_exit_notification {
+                send_toast(app, ToastLevel::Info, "Focus mode exited", d.exit_body);
+            }
+        }
+    }
+
+    let emit_active = d.emit_active;
+    let exit_secs_remaining: f64 =
+        if emit_active && d.avg_score < d.threshold && !d.exit_held {
+            let remaining = d.exit_window.saturating_sub(d.below_ticks as usize);
+            remaining as f64 / 4.0
+        } else {
+            0.0
+        };
+
+    let eligibility = serde_json::json!({
+        "enabled":               d.enabled,
+        "focus_score":           focus_score,
+        "avg_score":             d.avg_score,
+        "sample_count":          d.sample_count,
+        "window_size":           d.window,
+        "threshold":             d.threshold,
+        "dnd_active":            emit_active,
+        "below_ticks":           d.below_ticks,
+        "exit_window_size":      d.exit_window,
+        "exit_secs_remaining":   exit_secs_remaining,
+        "exit_duration_secs":    d.exit_duration_secs,
+        "exit_held_by_lookback": d.exit_held,
+        "focus_lookback_secs":   d.focus_lookback_secs,
+        "os_active":             d.os_active,
+    });
+    let _ = app.emit("dnd-eligibility", &eligibility);
+    app.state::<WsBroadcaster>().send("dnd-eligibility", &eligibility);
+}
+
+// ── PPG processing ────────────────────────────────────────────────────────────
+
+fn process_ppg(
+    app:      &AppHandle,
+    dsp:      &mut SessionDsp,
+    csv:      &mut CsvState,
+    csv_path: &Path,
+    frame:    &PpgFrame,
+) {
+    let samples_f64 = &frame.samples;
+
+    // Brief lock: status write-back + IPC channel clone.
+    let ipc = {
+        let sr = app.state::<Mutex<Box<AppState>>>();
+        let mut s = sr.lock_or_recover();
+        if frame.channel < 3 {
+            if let Some(last) = samples_f64.last() {
+                s.status.ppg[frame.channel] = *last;
+            }
+        }
+        s.status.ppg_sample_count += samples_f64.len() as u64;
+        s.ppg_channel.clone()
+    }; // lock released
+
+    dsp.accumulator.push_ppg(frame.channel, samples_f64);
+    let ppg_vitals = dsp.accumulator.latest_ppg().cloned();
+
+    csv.push_ppg(csv_path, frame.channel, samples_f64, frame.timestamp_s, ppg_vitals.as_ref());
+
+    if let Some(ch) = ipc {
+        let _ = ch.send(PpgPacket {
+            channel:   frame.channel,
+            samples:   samples_f64.clone(),
+            timestamp: frame.timestamp_s * 1000.0,
+        });
+    }
+}
+
+// ── IMU processing ────────────────────────────────────────────────────────────
+
+fn process_imu(
+    app:   &AppHandle,
+    dsp:   &mut SessionDsp,
+    frame: &ImuFrame,
+) {
+    let accel = frame.accel;
+    let gyro = frame.gyro.unwrap_or([0.0; 3]);
+
+    {
+        let sr = app.state::<Mutex<Box<AppState>>>();
+        let mut s = sr.lock_or_recover();
+        s.status.accel = accel;
+        if frame.gyro.is_some() {
+            s.status.gyro = gyro;
+        }
+    }
+
+    // Head-pose tracker (session-local, lock-free).
+    dsp.head_pose.update(accel, gyro);
+
+    // Emit IMU IPC events.
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64() * 1000.0;
+
+    let ipc = {
+        let sr = app.state::<Mutex<Box<AppState>>>();
+        let ch = sr.lock_or_recover().imu_channel.clone();
+        ch
+    };
+    if let Some(ch) = ipc {
+        let _ = ch.send(ImuPacket {
+            sensor:    "accel".into(),
+            samples:   [accel, accel, accel],
+            timestamp: now_ms,
+        });
+        if frame.gyro.is_some() {
+            let _ = ch.send(ImuPacket {
+                sensor:    "gyro".into(),
+                samples:   [gyro, gyro, gyro],
+                timestamp: now_ms,
+            });
+        }
+    }
+}
+
+// ── Battery processing ────────────────────────────────────────────────────────
+
+fn process_battery(
+    app:          &AppHandle,
+    battery_ema:  &mut BatteryEma,
+    csv_path:     &Path,
+    frame:        &BatteryFrame,
+) {
+    let first_reading = battery_ema.is_first_reading();
+    let (smoothed, alert) = battery_ema.update(frame.level_pct);
+
+    {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let mut s = r.lock_or_recover();
+        s.status.battery = smoothed;
+        if let Some(mv) = frame.voltage_mv {
+            s.status.fuel_gauge_mv = mv;
+        }
+        if let Some(temp) = frame.temperature_raw {
+            s.status.temperature_raw = temp;
+        }
+    }
+    emit_status(app);
+
+    if first_reading {
+        write_session_meta(app, csv_path);
+    }
+
+    match alert {
+        BatteryAlert::Critical(_) => {
+            send_toast(app, ToastLevel::Error, "Battery Critical",
+                &format!("Battery at {smoothed:.0}% \u{2014} charge soon."));
+        }
+        BatteryAlert::Low(_) => {
+            send_toast(app, ToastLevel::Warning, "Low Battery",
+                &format!("Battery at {smoothed:.0}% \u{2014} consider charging."));
+        }
+        BatteryAlert::None => {}
+    }
+}
+
+// ── Meta processing ───────────────────────────────────────────────────────────
+
+fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
+    // Extract Muse-style control fields: sn, ma, fw, hw, bl, tp.
+    let obj = match val.as_object() {
+        Some(o) => o,
+        None => return,
+    };
+
+    let sn = obj.get("sn").and_then(|v| v.as_str()).map(str::to_owned);
+    let ma = obj.get("ma").and_then(|v| v.as_str()).map(str::to_owned);
+    let fw = obj.get("fw").and_then(|v| v.as_str()).map(str::to_owned);
+    let hw = obj.get("hw").and_then(|v| v.as_str()).map(str::to_owned);
+    let bl = obj.get("bl").and_then(|v| v.as_str()).map(str::to_owned);
+    let tp = obj.get("tp").and_then(|v| v.as_str()).map(str::to_owned);
+
+    if sn.is_some() || ma.is_some() || fw.is_some() || hw.is_some() {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let mut s = r.lock_or_recover();
+        if let Some(v) = sn { s.status.serial_number      = Some(v); }
+        if let Some(v) = ma { s.status.mac_address         = Some(v); }
+        if let Some(v) = fw { s.status.firmware_version    = Some(v); }
+        if let Some(v) = hw { s.status.hardware_version    = Some(v); }
+        if let Some(v) = bl { s.status.bootloader_version  = Some(v); }
+        if let Some(v) = tp { s.status.headset_preset      = Some(v); }
+        drop(s);
+        emit_status(app);
+        write_session_meta(app, csv_path);
+    }
+}
+
+// ── Session finalisation ──────────────────────────────────────────────────────
+
+fn finalize_session(
+    app:            &AppHandle,
+    csv:            &mut CsvState,
+    csv_path:       &Path,
+    user_cancelled: bool,
+) {
+    csv.flush();
+    write_session_meta(app, csv_path);
+
+    if !user_cancelled {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let mut s = r.lock_or_recover();
+        if s.status.sample_count > 0 {
+            s.pending_reconnect = true;
+        }
+    }
+    let error_msg = if user_cancelled { None } else { Some("DEVICE_DISCONNECTED".into()) };
+    crate::go_disconnected(app, error_msg, false);
+}

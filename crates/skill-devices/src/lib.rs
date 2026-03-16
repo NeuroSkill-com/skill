@@ -6,6 +6,8 @@
 //! composite EEG score computation (meditation, cognitive load, drowsiness),
 //! battery EMA smoothing, and band-snapshot enrichment.
 
+pub mod session;
+
 pub use hermes_ble;
 pub use muse_rs;
 pub use mw75;
@@ -493,6 +495,7 @@ mod tests {
             enabled: true, focus_threshold: 60.0, duration_secs: 2,
             exit_duration_secs: 2, focus_lookback_secs: 2,
             exit_notification: false, focus_mode_identifier: "test".into(),
+            snr_exit_db: 5.0,
         };
         let mut st = DndState::new();
         // Fill the window (2s × 4Hz = 8 samples).
@@ -508,6 +511,7 @@ mod tests {
             enabled: true, focus_threshold: 60.0, duration_secs: 2,
             exit_duration_secs: 2, focus_lookback_secs: 2,
             exit_notification: false, focus_mode_identifier: "test".into(),
+            snr_exit_db: 5.0,
         };
         let mut st = DndState::new();
         for _ in 0..10 { dnd_tick(&cfg, &mut st, 30.0, 10.0); }

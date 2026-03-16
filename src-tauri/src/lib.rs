@@ -92,18 +92,11 @@ mod session_csv;
 mod ble_scanner;
 pub(crate) use ble_scanner::start_background_scanner;
 
-/// Muse BLE session loop and per-event handler.
-mod muse_session;
+/// Generic device session runner (replaces per-device session modules).
+mod session_runner;
 
-/// Hermes V1 EEG headset session (8-channel ADS1299, BLE).
-mod hermes_session;
-
-/// Neurable MW75 Neuro EEG headphone session (BLE + RFCOMM).
-mod mw75_session;
-
-/// OpenBCI device sessions (Ganglion BLE and generic boards).
-mod openbci_session;
-pub(crate) use openbci_session::connect_openbci;
+/// Per-device scan / connect factories → Box<dyn DeviceAdapter>.
+mod session_connect;
 
 /// Session history listing and streaming Tauri commands.
 mod history_cmds;
@@ -322,8 +315,8 @@ use tauri::{
 use tauri_plugin_notification::NotificationExt;
 
 use session_csv::new_csv_path;
-use muse_session::run_muse_session;
-use openbci_session::run_openbci_ganglion_session;
+use session_runner::run_device_session;
+use session_connect::ConnectError;
 
 // ── Mutex poison recovery ─────────────────────────────────────────────────────
 
@@ -1139,25 +1132,58 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     let csv  = new_csv_path(app);
     let app2 = app.clone();
 
-    app_log!(app, "bluetooth", "[session] routing: target={target:?} name={target_name:?} ganglion={is_ganglion} mw75={is_mw75} hermes={is_hermes}");
+    let device_kind = if is_ganglion { "ganglion" }
+                      else if is_mw75 { "mw75" }
+                      else if is_hermes { "hermes" }
+                      else { "muse" };
 
-    if is_ganglion {
-        tauri::async_runtime::spawn(async move {
-            run_openbci_ganglion_session(app2, rx, csv, target).await;
-        });
-    } else if is_mw75 {
-        tauri::async_runtime::spawn(async move {
-            mw75_session::run_mw75_session(app2, rx, csv, target).await;
-        });
-    } else if is_hermes {
-        tauri::async_runtime::spawn(async move {
-            hermes_session::run_hermes_session(app2, rx, csv, target).await;
-        });
-    } else {
-        tauri::async_runtime::spawn(async move {
-            run_muse_session(app2, rx, csv, target).await;
-        });
+    app_log!(app, "bluetooth",
+        "[session] routing: target={target:?} name={target_name:?} kind={device_kind}");
+
+    // Set scanning state with the correct device_kind.
+    {
+        let r = app.state::<Mutex<Box<AppState>>>();
+        let mut s = r.lock_or_recover();
+        s.session_start_utc = Some(unix_secs());
+        s.status.reset_for_scanning(device_kind, &csv, target.as_deref());
     }
+    refresh_tray(app);
+    emit_status(app);
+
+    tauri::async_runtime::spawn(async move {
+        // Use a shared cancellation token so both the connect phase and the
+        // session phase observe the same cancel signal.
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let cancel2 = cancel.clone();
+
+        // Consume the oneshot in a background task that trips the token.
+        tokio::spawn(async move {
+            let _ = rx.await;
+            cancel2.cancel();
+        });
+
+        let connect_result = match device_kind {
+            "ganglion" => session_connect::connect_ganglion(&app2, &cancel, target).await,
+            "mw75"     => session_connect::connect_mw75(&app2, &cancel, target).await,
+            "hermes"   => session_connect::connect_hermes(&app2, &cancel, target).await,
+            _          => session_connect::connect_muse(&app2, &cancel, target).await,
+        };
+
+        match connect_result {
+            Ok(adapter) => {
+                run_device_session(app2, cancel, csv, adapter).await;
+            }
+            Err(ConnectError::Cancelled) => {
+                crate::go_disconnected(&app2, None, false);
+            }
+            Err(ConnectError::Bluetooth(msg)) => {
+                crate::go_disconnected(&app2, Some(msg), true);
+            }
+            Err(ConnectError::Other(msg)) => {
+                crate::go_disconnected(&app2, Some(msg), false);
+            }
+        }
+    });
 }
 
 pub(crate) fn cancel_session(app: &AppHandle) {
@@ -2065,7 +2091,7 @@ pub fn run() {
             check_ocr_models_ready, download_ocr_models,
             get_screenshot_metrics, get_screenshots_dir,
             tts_unload, tts_get_voice, tts_list_neutts_voices,
-            connect_openbci,
+            session_connect::connect_openbci,
             open_api_window,
             open_whats_new_window,
             get_whats_new_seen_version, dismiss_whats_new,

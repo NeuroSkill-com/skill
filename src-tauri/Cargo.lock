@@ -9506,6 +9506,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tempfile",
  "tokio",
+ "tokio-util",
  "tower-http",
  "ureq 2.12.1",
  "zuna-rs",
@@ -9554,6 +9555,8 @@ dependencies = [
 name = "skill-devices"
 version = "0.0.1"
 dependencies = [
+ "async-trait",
+ "bitflags 2.11.0",
  "hermes-ble",
  "muse-rs",
  "mw75",
@@ -9563,6 +9566,7 @@ dependencies = [
  "skill-constants",
  "skill-data",
  "skill-eeg",
+ "tokio",
 ]
 
 [[package]]
@@ -10999,6 +11003,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]
