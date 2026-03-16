@@ -129,6 +129,17 @@ pub struct ConfigChangeResult {
     pub stale_count:   usize,
 }
 
+/// Snapshot of embedding + OCR data for a single row (used when copying
+/// results from a duplicate screenshot).
+pub struct EmbeddingAndOcr {
+    pub embedding:     Option<Vec<f32>>,
+    pub model_backend: String,
+    pub model_id:      String,
+    pub image_size:    u32,
+    pub ocr_text:      String,
+    pub ocr_embedding: Option<Vec<f32>>,
+}
+
 /// A row queried for re-embedding.
 pub struct EmbeddableRow {
     pub id:       i64,
@@ -439,6 +450,43 @@ impl ScreenshotStore {
                 filename: r.get(1)?,
             })
         }).unwrap().filter_map(|r| r.ok()).collect()
+    }
+
+    /// Fetch the vision embedding, model provenance, OCR text, and OCR
+    /// embedding for a given row — used to copy results when consecutive
+    /// screenshots are identical.
+    pub fn get_embedding_and_ocr(&self, id: i64) -> Option<EmbeddingAndOcr> {
+        let conn = self.conn.lock_or_recover();
+        conn.query_row(
+            "SELECT embedding, embedding_dim, model_backend, model_id, image_size,
+                    ocr_text, ocr_embedding, ocr_embedding_dim
+             FROM screenshots WHERE id = ?1",
+            params![id],
+            |r| {
+                let emb_blob: Option<Vec<u8>> = r.get(0)?;
+                let emb_dim: i64 = r.get(1)?;
+                let embedding = emb_blob.map(|b| {
+                    let v = crate::util::blob_to_f32(&b);
+                    debug_assert_eq!(v.len(), emb_dim as usize);
+                    v
+                });
+                let ocr_emb_blob: Option<Vec<u8>> = r.get(6)?;
+                let ocr_emb_dim: i64 = r.get(7)?;
+                let ocr_embedding = ocr_emb_blob.map(|b| {
+                    let v = crate::util::blob_to_f32(&b);
+                    debug_assert_eq!(v.len(), ocr_emb_dim as usize);
+                    v
+                });
+                Ok(EmbeddingAndOcr {
+                    embedding,
+                    model_backend: r.get(2)?,
+                    model_id:      r.get(3)?,
+                    image_size:    r.get::<_, i64>(4)? as u32,
+                    ocr_text:      r.get::<_, String>(5).unwrap_or_default(),
+                    ocr_embedding,
+                })
+            },
+        ).ok()
     }
 
     /// Get the timestamp for a row by id.

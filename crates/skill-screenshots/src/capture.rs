@@ -11,6 +11,8 @@
 //! stores the raw embedding alongside metadata in SQLite + HNSW.  The shared
 //! `YYYYMMDDHHmmss` timestamp is the cross-modal join key to EEG embeddings.
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -854,6 +856,9 @@ struct EmbedJob {
     /// Whether OCR should run on `resized_png` in the embed thread.
     run_ocr:     bool,
     config:      ScreenshotConfig,
+    /// When set, the screenshot is identical to a previous one — copy
+    /// embedding + OCR from this row instead of running ML inference.
+    copy_from_row: Option<i64>,
 }
 
 // ── Background worker ─────────────────────────────────────────────────────────
@@ -918,6 +923,12 @@ pub fn run_screenshot_worker(
     const MAX_BACKOFF: u64 = 4;
     const BACKOFF_STEPS: [u64; 4] = [1, 2, 3, 4];
 
+    // Duplicate detection: hash the resized PNG and compare with the
+    // previous capture.  When identical, the embed thread can copy
+    // OCR + embeddings from the previous row instead of re-running ML.
+    let mut prev_screenshot_hash: u64 = 0;
+    let mut prev_row_id: Option<i64> = None;
+
     loop {
         // Re-read config + session state
         let config = ctx.config();
@@ -957,6 +968,17 @@ pub fn run_screenshot_worker(
         metrics.resize_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         drop(captured); // free full-res capture immediately
+
+        // ── Duplicate detection via fast hash ──
+        let mut hasher = DefaultHasher::new();
+        resized_png.hash(&mut hasher);
+        let current_hash = hasher.finish();
+        let copy_from = if current_hash == prev_screenshot_hash && prev_row_id.is_some() {
+            eprintln!("[screenshot] duplicate detected — will copy OCR + embeddings from previous row");
+            prev_row_id
+        } else {
+            None
+        };
 
         // ── Save to disk as WebP + SQLite + context ──
         let t0 = Instant::now();
@@ -1013,9 +1035,13 @@ pub fn run_screenshot_worker(
                 resized_png,
                 run_ocr: config.ocr_enabled,
                 config: config.clone(),
+                copy_from_row: copy_from,
             }) {
                 Ok(()) => {
                     metrics.queue_depth.fetch_add(1, Ordering::Relaxed);
+                    // Track for duplicate detection on next iteration
+                    prev_screenshot_hash = current_hash;
+                    prev_row_id = Some(row_id);
                     // Successful send — recover toward base interval
                     consecutive_ok += 1;
                     if consecutive_ok >= 3 && backoff_multiplier > 1 {
@@ -1190,6 +1216,49 @@ fn run_embed_thread(
 
         let embed_start = Instant::now();
         let config = &job.config;
+
+        // ── Fast path: duplicate screenshot — copy from previous row ──
+        if let Some(src_id) = job.copy_from_row {
+            if let Some(prev) = store.get_embedding_and_ocr(src_id) {
+                // Copy vision embedding
+                if let Some(ref emb) = prev.embedding {
+                    let id = hnsw.len() as u64;
+                    hnsw.insert(emb.clone(), job.ts_i64);
+                    inserts_since_save += 1;
+                    if inserts_since_save >= SCREENSHOT_HNSW_SAVE_EVERY {
+                        save_hnsw(&hnsw, &skill_dir);
+                        inserts_since_save = 0;
+                    }
+                    store.update_embedding(
+                        job.row_id, emb, Some(id),
+                        &prev.model_backend, &prev.model_id, prev.image_size,
+                    );
+                }
+                // Copy OCR text + OCR embedding
+                if !prev.ocr_text.is_empty() {
+                    if let Some(ref ocr_emb) = prev.ocr_embedding {
+                        let id = ocr_hnsw.len() as u64;
+                        ocr_hnsw.insert(ocr_emb.clone(), job.ts_i64);
+                        ocr_inserts_since_save += 1;
+                        if ocr_inserts_since_save >= SCREENSHOT_HNSW_SAVE_EVERY {
+                            save_ocr_hnsw(&ocr_hnsw, &skill_dir);
+                            ocr_inserts_since_save = 0;
+                        }
+                        store.update_ocr(job.row_id, &prev.ocr_text, Some(ocr_emb), Some(id));
+                    } else {
+                        store.update_ocr(job.row_id, &prev.ocr_text, None, None);
+                    }
+                }
+                eprintln!("[screenshot-embed] copied OCR + embeddings from row {src_id} → {}",
+                    job.row_id);
+                metrics.embeds.fetch_add(1, Ordering::Relaxed);
+                metrics.embed_total_us.store(embed_start.elapsed().as_micros() as u64, Ordering::Relaxed);
+                metrics.last_embed_unix.store(now_ms(), Ordering::Relaxed);
+                continue;
+            }
+            // Fallback: source row missing/corrupted — proceed with normal embedding
+            eprintln!("[screenshot-embed] copy source row {src_id} not found — running full pipeline");
+        }
 
         // Hot-reload vision encoder if model changed
         if config.embed_backend != last_backend || config.fastembed_model != last_model {
