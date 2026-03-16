@@ -11,6 +11,7 @@ Provides two pluggable TTS backends — **KittenTTS** (lightweight, fast) and **
 | Module | Description |
 |---|---|
 | `config` | `NeuttsConfig` — backbone repo, voice ID, and tuning parameters |
+| `log` | Standalone logger with pluggable callback sink and `tts_log!` macro |
 | `kitten` | KittenTTS backend: model loading, voice management, speak/stop command channel, audio playback |
 | `neutts` | NeuTTS neural backend: model loading, sample caching with SHA-256, wgpu inference |
 
@@ -25,6 +26,9 @@ Provides two pluggable TTS backends — **KittenTTS** (lightweight, fast) and **
 
 | Function | Description |
 |---|---|
+| `log::set_log_callback(cb)` | Install a custom log sink (e.g. route through `SkillLogger`) |
+| `log::set_log_enabled(bool)` | Enable / disable TTS log output at runtime |
+| `set_logging(bool)` | Legacy alias for `log::set_log_enabled` |
 | `init_tts_dirs(dir)` | Create TTS data directories |
 | `init_espeak_bundled_data_path` / `init_espeak_data_path` | Set up eSpeak phonemizer data |
 | `play_f32_audio(samples, sample_rate)` | Play raw f32 PCM via rodio |

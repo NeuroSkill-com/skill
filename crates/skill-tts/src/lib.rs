@@ -10,6 +10,24 @@
 //! - Core TTS logic: audio output, espeak init, backend routing, progress events
 
 pub mod config;
+pub mod log;
+
+/// Log a message from the TTS subsystem.
+///
+/// ```ignore
+/// tts_log!("tts", "KittenTTS ready (voices={voices:?})");
+/// tts_log!("neutts", "backbone ready (repo={repo})");
+/// ```
+///
+/// Short-circuits (no `format!` allocation) when logging is disabled.
+#[allow(unused_macros)]
+macro_rules! tts_log {
+    ($tag:expr, $($arg:tt)*) => {
+        if $crate::log::log_enabled() {
+            $crate::log::write_log($tag, &format!($($arg)*));
+        }
+    };
+}
 
 #[cfg(feature = "tts-kitten")]
 pub mod kitten;
@@ -20,7 +38,11 @@ pub mod neutts;
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 use std::num::NonZero;
 use std::path::PathBuf;
-use std::sync::{OnceLock, atomic::{AtomicBool, Ordering}};
+use std::sync::OnceLock;
+#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+use std::sync::atomic::Ordering;
+#[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
+use std::sync::atomic::AtomicBool;
 
 pub use config::NeuttsConfig;
 
@@ -69,18 +91,13 @@ pub fn set_skill_dir(dir: PathBuf) {
 }
 
 // ─── Logging ──────────────────────────────────────────────────────────────────
+//
+// See `log` module for the full API.  The `tts_log!` macro is re-exported
+// at crate root by `#[macro_export]`.  Legacy `set_logging` delegates to
+// `log::set_log_enabled` for backwards compatibility.
 
-static TTS_LOGGING: AtomicBool = AtomicBool::new(false);
-
-#[allow(dead_code)]
-pub fn set_logging(enable: bool) { TTS_LOGGING.store(enable, Ordering::Relaxed); }
-
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
-pub fn tts_log(msg: &str) {
-    if TTS_LOGGING.load(Ordering::Relaxed) {
-        eprintln!("[tts] {msg}");
-    }
-}
+/// Enable or disable TTS log output (backwards-compatible wrapper).
+pub fn set_logging(enable: bool) { log::set_log_enabled(enable); }
 
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
@@ -198,7 +215,7 @@ pub fn tts_shutdown() {
         let timeout = std::time::Duration::from_secs(8);
         let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
         if kitten::try_shutdown(tx) && rx.recv_timeout(timeout).is_err() {
-            eprintln!("[tts] KittenTTS shutdown timed out — forcing drop");
+            tts_log!("tts", "KittenTTS shutdown timed out \u{2014} forcing drop");
         }
     }
 
@@ -207,7 +224,7 @@ pub fn tts_shutdown() {
         let timeout = std::time::Duration::from_secs(8);
         let (tx, rx) = std::sync::mpsc::sync_channel::<()>(0);
         if neutts::try_shutdown(tx) && rx.recv_timeout(timeout).is_err() {
-            eprintln!("[neutts] shutdown timed out — forcing drop");
+            tts_log!("neutts", "shutdown timed out \u{2014} forcing drop");
         }
     }
 }
