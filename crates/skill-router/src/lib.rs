@@ -486,6 +486,13 @@ pub const COMMANDS: &[&str] = &[
     "say",
     "dnd",
     "dnd_set",
+    "sleep_schedule",
+    "sleep_schedule_set",
+    // HealthKit commands
+    "health_sync",
+    "health_query",
+    "health_summary",
+    "health_metric_types",
     // LLM commands (when the `llm` feature is enabled in the host binary)
     "llm_status",
     "llm_start",

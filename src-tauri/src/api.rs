@@ -211,6 +211,16 @@ pub fn router(state: SharedState) -> Router {
         .route("/llm/logs",             get(llm_logs_get))
         .route("/llm/chat",             post(llm_chat_post))
 
+        // ── HealthKit endpoints (iOS companion app sync + query) ────────
+        .route("/health/sync",         post(health_sync_post))
+        .route("/health/query",        post(health_query_post))
+        .route("/health/summary",      get(health_summary_get).post(health_summary_post))
+        .route("/health/metric_types", get(health_metric_types_get))
+        .route("/v1/health/sync",         post(health_sync_post))
+        .route("/v1/health/query",        post(health_query_post))
+        .route("/v1/health/summary",      get(health_summary_get).post(health_summary_post))
+        .route("/v1/health/metric_types", get(health_metric_types_get))
+
         // ── CORS: allow all origins so browsers / notebooks can call freely
         // ── Static file serving for screenshot images ────────────────
         .route("/screenshots/{*path}", get(screenshot_file_get))
@@ -311,6 +321,7 @@ async fn root_get(
                 "create_calibration","update_calibration","delete_calibration",
                 "run_calibration",
                 "dnd","dnd_set",
+                "sleep_schedule","sleep_schedule_set",
                 "llm_status","llm_start","llm_stop","llm_catalog",
                 "llm_download","llm_cancel_download","llm_delete","llm_logs",
                 "llm_chat (WebSocket streaming + POST /llm/chat non-streaming, persisted to chat history)"
@@ -336,6 +347,11 @@ async fn root_get(
                 "DELETE /v1/calibrations/{id}":     "delete calibration profile",
                 "GET  /v1/dnd":                     "DND automation status",
                 "POST /v1/dnd":                     "force-enable/disable DND: { enabled: bool }",
+                "POST /v1/health/sync":             "upsert HealthKit data from iOS: { sleep?, workouts?, heart_rate?, steps?, mindfulness?, metrics? }",
+                "POST /v1/health/query":            "query health data: { type, start_utc?, end_utc?, limit?, metric_type? }",
+                "GET  /v1/health/summary":          "aggregate health counts (last 24h default)",
+                "POST /v1/health/summary":          "aggregate health counts: { start_utc, end_utc }",
+                "GET  /v1/health/metric_types":     "list all stored metric types",
                 "note":                             "/v1/models /v1/chat/completions /v1/completions /v1/embeddings are served by the LLM sub-router"
             },
             "rest_legacy": {
@@ -1152,6 +1168,71 @@ async fn handle_ws_text(state: &SharedState, peer: &str, text: &str) -> Option<S
     };
 
     serde_json::to_string(&response).ok()
+}
+
+// ── HealthKit REST handlers ──────────────────────────────────────────────────
+
+/// `POST /v1/health/sync` — upsert Apple HealthKit data from iOS companion.
+///
+/// This is the primary endpoint your iOS app calls to push HealthKit data.
+/// The payload is a JSON object with typed sample arrays:
+///
+/// ```json
+/// {
+///   "sleep": [{ "source_id": "watch", "start_utc": 1740000000, "end_utc": 1740028800, "value": "REM" }],
+///   "workouts": [{ "workout_type": "Running", "start_utc": ..., "end_utc": ..., "duration_secs": 3600,
+///                   "active_calories": 450, "distance_meters": 8000, "avg_heart_rate": 145 }],
+///   "heart_rate": [{ "timestamp": 1740030000, "bpm": 72.0, "context": "sedentary" }],
+///   "steps": [{ "start_utc": 1740000000, "end_utc": 1740086400, "count": 9500 }],
+///   "mindfulness": [{ "start_utc": 1740040000, "end_utc": 1740041200 }],
+///   "metrics": [{ "metric_type": "restingHeartRate", "timestamp": 1740000000, "value": 58.0, "unit": "bpm" }]
+/// }
+/// ```
+///
+/// All arrays are optional.  Duplicates are ignored (idempotent upsert by
+/// source_id + timestamps).
+async fn health_sync_post(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "health_sync", merge(json!({}), body)).await
+}
+
+/// `POST /v1/health/query` — query stored HealthKit data by type and range.
+///
+/// ```json
+/// { "type": "sleep", "start_utc": 1740000000, "end_utc": 1740086400, "limit": 100 }
+/// ```
+///
+/// Valid types: `sleep`, `workouts`, `heart_rate`, `steps`, `metrics`.
+/// For `metrics`, also provide `"metric_type": "restingHeartRate"`.
+async fn health_query_post(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "health_query", merge(json!({}), body)).await
+}
+
+/// `GET /v1/health/summary` — aggregate counts (default: last 24h).
+async fn health_summary_get(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "health_summary", json!({})).await
+}
+
+/// `POST /v1/health/summary` — aggregate counts for a custom range.
+async fn health_summary_post(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "health_summary", merge(json!({}), body)).await
+}
+
+/// `GET /v1/health/metric_types` — list all distinct metric types.
+async fn health_metric_types_get(
+    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+) -> Response {
+    cmd(&s, &peer_str(addr), "health_metric_types", json!({})).await
 }
 
 // ── Screenshot static file serving ───────────────────────────────────────────

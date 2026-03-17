@@ -31,6 +31,8 @@ const CLI_VERSION = "1.1.0";
  *   search                         ANN EEG-similarity search (auto: last session, k=5)
  *   compare                        Side-by-side A/B metrics (auto: last 2 sessions)
  *   sleep [index]                  Sleep staging — index selects session (0=latest, 1=prev, …)
+ *   sleep-schedule                 Show current sleep schedule (bedtime, wake time, preset)
+ *   sleep-schedule set [opts]      Update sleep schedule: --bedtime HH:MM --wake HH:MM --preset <id>
  *   calibrate                      Open calibration window and start immediately
  *   timer                          Open focus-timer window and start work phase immediately
  *   umap                           3D UMAP projection with live progress bar
@@ -687,6 +689,12 @@ interface Args {
   hookRecent?: number;
   /** Hook name captured as second positional arg for hooks add/remove/enable/disable/update. */
   hookName?: string;
+  /** Bedtime for `sleep-schedule set --bedtime HH:MM` (24-h format). */
+  bedtime?: string;
+  /** Wake time for `sleep-schedule set --wake HH:MM` (24-h format). */
+  wake?: string;
+  /** Preset id for `sleep-schedule set --preset <id>`. */
+  preset?: string;
   /**
    * Vision projector filename for `llm add --mmproj <filename>`.
    * When specified alongside `llm add`, both the model and the mmproj are
@@ -764,6 +772,7 @@ function parseArgs(): Args {
     "--system", "--max-tokens", "--temperature", "--image", "--mmproj",
     "--keywords", "--scenario", "--command", "--threshold", "--recent", "--hook-text",
     "--actions", "--loops", "--break", "--auto-start", "--name",
+    "--bedtime", "--wake", "--preset",
   ]);
 
   let i = 0;
@@ -833,6 +842,9 @@ function parseArgs(): Args {
     else if (a === "--break")       { args.calBreak     = nextInt("--break"); }
     else if (a === "--auto-start")  { args.calAutoStart = true; }
     else if (a === "--name")        { args.calName      = argv[++i]; }
+    else if (a === "--bedtime")     { args.bedtime      = argv[++i]; }
+    else if (a === "--wake")        { args.wake          = argv[++i]; }
+    else if (a === "--preset")      { args.preset        = argv[++i]; }
     // ── Positional arguments ─────────────────────────────────────────────
     else if (!args.command)      { args.command = a.toLowerCase(); }
     else if (args.command === "label"         && !args.text)    { args.text    = a; }
@@ -885,6 +897,9 @@ function parseArgs(): Args {
     }
     else if (args.command === "dnd" && !args.subAction && (a === "on" || a === "off")) {
       args.subAction = a; // "on" or "off" → maps to dnd_set { enabled: true/false }
+    }
+    else if (args.command === "sleep-schedule" && !args.subAction && a === "set") {
+      args.subAction = "set";
     }
     else if (args.command === "calibrations"  && !args.subAction) {
       // calibrations [list|get|create|update|delete] [<id-or-name>]
@@ -962,6 +977,8 @@ ${m("calibrations delete <id-or-name>",              "delete a calibration profi
 ${m("calibrate [--profile <name-or-id>]",            "open calibration window and start profile immediately")}
 ${m("timer",                                         "open focus-timer window and start work phase immediately")}
 ${m("umap [--a-start .. --a-end .. --b-start .. --b-end ..]", "3D UMAP projection (waits for result)")}
+${m("sleep-schedule",                                   "show current sleep schedule (bedtime, wake time, duration, preset)")}
+${m("sleep-schedule set --bedtime HH:MM --wake HH:MM",  "update sleep schedule (supports --preset <id>)")}
 ${m("dnd [on|off]",                                    "show DND automation status; 'on'/'off' force-overrides immediately")}
 ${m("llm status",                                      "LLM server status (stopped/loading/running)")}
 ${m("llm start",                                     "load active model and start LLM inference server")}
@@ -1251,6 +1268,28 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}#     N2    421  (39.9%)${RESET}
   ${DIM}#     N3    298  (28.3%)${RESET}
   ${DIM}#     REM   112  (10.6%)${RESET}
+
+  ${BOLD}sleep-schedule${RESET} — view or update your sleep schedule
+  ${DIM}$${RESET} npx tsx cli.ts sleep-schedule                     ${DIM}# show current schedule${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts sleep-schedule --json
+  ${DIM}$${RESET} npx tsx cli.ts sleep-schedule set --bedtime 23:00 --wake 07:00
+  ${DIM}$${RESET} npx tsx cli.ts sleep-schedule set --preset early_bird
+  ${DIM}$${RESET} npx tsx cli.ts sleep-schedule set --bedtime 01:00 --wake 09:00 --preset custom
+  ${DIM}# Output:${RESET}
+  ${DIM}#   ⚡ sleep-schedule  current schedule${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#     Sleep Schedule${RESET}
+  ${DIM}#       bedtime    23:00${RESET}
+  ${DIM}#       wake       07:00${RESET}
+  ${DIM}#       duration   8h  (480 min)${RESET}
+  ${DIM}#       preset     default${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#     Available presets:${RESET}
+  ${DIM}#       ● default           23:00 — 07:00  (8h)${RESET}
+  ${DIM}#       ○ early_bird        21:30 — 05:30  (8h)${RESET}
+  ${DIM}#       ○ night_owl         01:00 — 09:00  (8h)${RESET}
+  ${DIM}#       ○ short_sleeper     00:00 — 06:00  (6h)${RESET}
+  ${DIM}#       ○ long_sleeper      22:00 — 08:00  (10h)${RESET}
 
   ${BOLD}umap${RESET} — 3D UMAP projection with progress (auto: last 2 sessions)
   ${DIM}$${RESET} npx tsx cli.ts umap                                ${DIM}# auto: last 2 sessions${RESET}
@@ -3479,6 +3518,107 @@ function progressBar(pct: number, width: number): string {
 }
 
 /**
+ * `sleep-schedule [set]` — Show or update the sleep schedule configuration.
+ *
+ * Without a subaction, prints the current schedule (bedtime, wake time,
+ * duration, and active preset).
+ *
+ * With `set`, updates one or more fields:
+ * - `--bedtime HH:MM` — set bedtime (24-h format)
+ * - `--wake HH:MM`    — set wake-up time (24-h format)
+ * - `--preset <id>`   — apply a named preset
+ *   (default, early_bird, night_owl, short_sleeper, long_sleeper)
+ *
+ * @param args - Parsed CLI args; `subAction` is `"set"` or undefined.
+ */
+async function cmdSleepSchedule(args: Args): Promise<void> {
+  const sub = args.subAction;
+
+  if (sub === "set") {
+    // Build the update payload — only include fields that were provided
+    const payload: Record<string, unknown> = { command: "sleep_schedule_set" };
+    if (args.bedtime) payload.bedtime   = args.bedtime;
+    if (args.wake)    payload.wake_time = args.wake;
+    if (args.preset)  payload.preset    = args.preset;
+
+    if (!args.bedtime && !args.wake && !args.preset) {
+      printError("sleep-schedule set requires at least one of: --bedtime HH:MM, --wake HH:MM, --preset <id>");
+    }
+
+    print(`${BOLD}⚡ sleep-schedule set${RESET}`);
+    if (args.bedtime) print(`  ${DIM}bedtime:${RESET}  ${CYAN}${args.bedtime}${RESET}`);
+    if (args.wake)    print(`  ${DIM}wake:${RESET}     ${CYAN}${args.wake}${RESET}`);
+    if (args.preset)  print(`  ${DIM}preset:${RESET}   ${CYAN}${args.preset}${RESET}`);
+
+    const r = await send(payload as any);
+    if (!r.ok) printError(`sleep_schedule_set failed: ${r.error ?? "unknown error"}`);
+
+    if (!jsonMode) {
+      print("");
+      print(`  ${GREEN}updated${RESET}`);
+      print(`  ${DIM}bedtime:${RESET}  ${CYAN}${r.bedtime}${RESET}`);
+      print(`  ${DIM}wake:${RESET}     ${CYAN}${r.wake_time}${RESET}`);
+      print(`  ${DIM}duration:${RESET} ${CYAN}${fmtSleepDuration(r.duration_minutes)}${RESET}`);
+      print(`  ${DIM}preset:${RESET}   ${CYAN}${r.preset}${RESET}`);
+    }
+
+    printResult(r);
+    return;
+  }
+
+  // ── Show current schedule ───────────────────────────────────────────────
+  print(`${BOLD}⚡ sleep-schedule${RESET}  ${DIM}current schedule${RESET}`);
+
+  const r = await send({ command: "sleep_schedule" });
+
+  if (jsonMode) {
+    printResult(r);
+    return;
+  }
+
+  const dur = r.duration_minutes ?? 0;
+  const h = Math.floor(dur / 60);
+  const m = dur % 60;
+
+  print("");
+  print(`  ${CYAN}Sleep Schedule${RESET}`);
+  print(`    bedtime    ${BOLD}${r.bedtime}${RESET}`);
+  print(`    wake       ${BOLD}${r.wake_time}${RESET}`);
+  print(`    duration   ${BOLD}${fmtSleepDuration(dur)}${RESET}  ${DIM}(${dur} min)${RESET}`);
+  print(`    preset     ${CYAN}${r.preset}${RESET}`);
+  print("");
+
+  // Show available presets
+  const presets = [
+    { id: "default",       bed: "23:00", wake: "07:00", h: 8 },
+    { id: "early_bird",    bed: "21:30", wake: "05:30", h: 8 },
+    { id: "night_owl",     bed: "01:00", wake: "09:00", h: 8 },
+    { id: "short_sleeper", bed: "00:00", wake: "06:00", h: 6 },
+    { id: "long_sleeper",  bed: "22:00", wake: "08:00", h: 10 },
+  ];
+
+  print(`  ${DIM}Available presets:${RESET}`);
+  for (const p of presets) {
+    const active = r.preset === p.id;
+    const marker = active ? `${GREEN}●${RESET}` : `${DIM}○${RESET}`;
+    print(`    ${marker}  ${(active ? BOLD : "") + p.id.padEnd(16) + (active ? RESET : "")}  ${DIM}${p.bed} — ${p.wake}  (${p.h}h)${RESET}`);
+  }
+
+  print("");
+  print(`  ${DIM}Set:  sleep-schedule set --bedtime 23:00 --wake 07:00${RESET}`);
+  print(`  ${DIM}      sleep-schedule set --preset early_bird${RESET}`);
+
+  printResult(r);
+}
+
+function fmtSleepDuration(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+/**
  * `dnd [on|off]` — Show DND automation status, or force-override it.
  *
  * With no subcommand, sends `{ command: "dnd" }` and prints the full status
@@ -4707,6 +4847,9 @@ async function main(): Promise<void> {
         break;
       case "timer":
         await cmdTimer();
+        break;
+      case "sleep-schedule":
+        await cmdSleepSchedule(args);
         break;
       case "dnd":
         await cmdDnd(args);

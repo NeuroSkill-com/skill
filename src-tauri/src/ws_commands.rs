@@ -1598,6 +1598,78 @@ pub fn dnd_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     Ok(serde_json::json!({ "enabled": enabled, "ok": ok }))
 }
 
+// ── sleep schedule ────────────────────────────────────────────────────────────
+
+/// `sleep_schedule` — return the current sleep schedule configuration.
+///
+/// ```json
+/// { "command": "sleep_schedule" }
+/// ```
+///
+/// Response:
+/// ```json
+/// { "bedtime": "23:00", "wake_time": "07:00", "preset": "default",
+///   "duration_minutes": 480 }
+/// ```
+pub fn sleep_schedule(app: &AppHandle) -> Result<Value, String> {
+    let s = app.state::<Mutex<Box<AppState>>>();
+    let guard = s.lock_or_recover();
+    let cfg = &guard.sleep_config;
+    let dur = cfg.duration_minutes();
+    Ok(serde_json::json!({
+        "bedtime":          cfg.bedtime,
+        "wake_time":        cfg.wake_time,
+        "preset":           cfg.preset,
+        "duration_minutes": dur,
+    }))
+}
+
+/// `sleep_schedule_set` — update the sleep schedule.
+///
+/// ```json
+/// { "command": "sleep_schedule_set", "bedtime": "23:00", "wake_time": "07:00", "preset": "default" }
+/// ```
+///
+/// All fields are optional — only the fields present are updated; omitted
+/// fields keep their current value.
+pub fn sleep_schedule_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    use crate::settings::SleepPreset;
+
+    let s = app.state::<Mutex<Box<AppState>>>();
+    let mut guard = s.lock_or_recover();
+
+    if let Some(v) = msg.get("bedtime").and_then(|v| v.as_str()) {
+        guard.sleep_config.bedtime = v.to_string();
+    }
+    if let Some(v) = msg.get("wake_time").and_then(|v| v.as_str()) {
+        guard.sleep_config.wake_time = v.to_string();
+    }
+    if let Some(v) = msg.get("preset").and_then(|v| v.as_str()) {
+        guard.sleep_config.preset = match v {
+            "default"       => SleepPreset::Default,
+            "early_bird"    => SleepPreset::EarlyBird,
+            "night_owl"     => SleepPreset::NightOwl,
+            "short_sleeper" => SleepPreset::ShortSleeper,
+            "long_sleeper"  => SleepPreset::LongSleeper,
+            _               => SleepPreset::Custom,
+        };
+    }
+
+    let cfg = guard.sleep_config.clone();
+    let dur = cfg.duration_minutes();
+    drop(guard);
+
+    crate::save_settings(app);
+
+    Ok(serde_json::json!({
+        "ok":               true,
+        "bedtime":          cfg.bedtime,
+        "wake_time":        cfg.wake_time,
+        "preset":           cfg.preset,
+        "duration_minutes": dur,
+    }))
+}
+
 // ── say ───────────────────────────────────────────────────────────────────────
 
 /// `say` — synthesise `text` via TTS and play it on the default audio output.
@@ -2134,6 +2206,126 @@ fn screenshots_around(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     }))
 }
 
+// ── HealthKit commands ─────────────────────────────────────────────────────────
+
+/// `health_sync` — upsert Apple HealthKit data from the iOS companion app.
+///
+/// Accepts a batch payload with typed sample arrays.  Idempotent — sending
+/// the same samples again is safe (deduplication by source + timestamps).
+///
+/// ```json
+/// { "command": "health_sync",
+///   "sleep": [{ "source_id": "watch", "start_utc": 1740000000, "end_utc": 1740028800, "value": "REM" }],
+///   "workouts": [{ "workout_type": "Running", "start_utc": 1740030000, "end_utc": 1740033600,
+///                   "duration_secs": 3600, "active_calories": 450, "distance_meters": 8000 }],
+///   "heart_rate": [{ "timestamp": 1740030000, "bpm": 72.0, "context": "sedentary" }],
+///   "steps": [{ "start_utc": 1740000000, "end_utc": 1740086400, "count": 9500 }],
+///   "mindfulness": [{ "start_utc": 1740040000, "end_utc": 1740041200 }],
+///   "metrics": [{ "metric_type": "restingHeartRate", "timestamp": 1740000000, "value": 58.0, "unit": "bpm" }]
+/// }
+/// ```
+fn health_sync(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let payload: skill_data::health_store::HealthSyncPayload =
+        serde_json::from_value(msg.clone()).map_err(|e| format!("invalid health_sync payload: {e}"))?;
+
+    let st = app.state::<Mutex<Box<AppState>>>();
+    let store = {
+        let s = st.lock_or_recover();
+        s.health_store.clone()
+    };
+    let store = store.ok_or_else(|| "health store not available".to_string())?;
+    let result = store.sync(&payload);
+    eprintln!(
+        "[health] sync: sleep={} workouts={} hr={} steps={} mindful={} metrics={}",
+        result.sleep_upserted, result.workouts_upserted, result.heart_rate_upserted,
+        result.steps_upserted, result.mindfulness_upserted, result.metrics_upserted,
+    );
+    serde_json::to_value(&result).map_err(|e| e.to_string())
+}
+
+/// `health_query` — query stored HealthKit data by type and time range.
+///
+/// ```json
+/// { "command": "health_query", "type": "sleep", "start_utc": 1740000000, "end_utc": 1740086400, "limit": 100 }
+/// ```
+///
+/// Valid `type` values: `sleep`, `workouts`, `heart_rate`, `steps`, `metrics`.
+/// For `metrics`, an additional `metric_type` field is required (e.g. `"restingHeartRate"`).
+fn health_query(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let data_type = msg.get("type").and_then(|v| v.as_str())
+        .ok_or_else(|| "missing required field: \"type\" (sleep|workouts|heart_rate|steps|metrics)".to_string())?;
+    let start_utc = msg.get("start_utc").and_then(|v| v.as_i64()).unwrap_or(0);
+    let end_utc   = msg.get("end_utc").and_then(|v| v.as_i64())
+        .unwrap_or_else(|| std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
+    let limit     = msg.get("limit").and_then(|v| v.as_i64()).unwrap_or(500).clamp(1, 10_000);
+
+    let st = app.state::<Mutex<Box<AppState>>>();
+    let store = {
+        let s = st.lock_or_recover();
+        s.health_store.clone()
+    };
+    let store = store.ok_or_else(|| "health store not available".to_string())?;
+
+    match data_type {
+        "sleep" => {
+            let rows = store.query_sleep(start_utc, end_utc, limit);
+            Ok(serde_json::json!({ "type": "sleep", "count": rows.len(), "results": rows }))
+        }
+        "workouts" => {
+            let rows = store.query_workouts(start_utc, end_utc, limit);
+            Ok(serde_json::json!({ "type": "workouts", "count": rows.len(), "results": rows }))
+        }
+        "heart_rate" => {
+            let rows = store.query_heart_rate(start_utc, end_utc, limit);
+            Ok(serde_json::json!({ "type": "heart_rate", "count": rows.len(), "results": rows }))
+        }
+        "steps" => {
+            let rows = store.query_steps(start_utc, end_utc, limit);
+            Ok(serde_json::json!({ "type": "steps", "count": rows.len(), "results": rows }))
+        }
+        "metrics" => {
+            let metric_type = msg.get("metric_type").and_then(|v| v.as_str())
+                .ok_or_else(|| "\"metric_type\" required when type=\"metrics\" (e.g. \"restingHeartRate\")".to_string())?;
+            let rows = store.query_metrics(metric_type, start_utc, end_utc, limit);
+            Ok(serde_json::json!({ "type": "metrics", "metric_type": metric_type, "count": rows.len(), "results": rows }))
+        }
+        other => Err(format!("invalid health data type: \"{other}\" — must be sleep|workouts|heart_rate|steps|metrics")),
+    }
+}
+
+/// `health_summary` — aggregate counts for a time range.
+///
+/// ```json
+/// { "command": "health_summary", "start_utc": 1740000000, "end_utc": 1740086400 }
+/// ```
+fn health_summary(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let start_utc = msg.get("start_utc").and_then(|v| v.as_i64()).unwrap_or(0);
+    let end_utc   = msg.get("end_utc").and_then(|v| v.as_i64())
+        .unwrap_or_else(|| std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
+
+    let st = app.state::<Mutex<Box<AppState>>>();
+    let store = {
+        let s = st.lock_or_recover();
+        s.health_store.clone()
+    };
+    let store = store.ok_or_else(|| "health store not available".to_string())?;
+    Ok(store.summary(start_utc, end_utc))
+}
+
+/// `health_metric_types` — list all distinct metric types in the database.
+fn health_metric_types(app: &AppHandle) -> Result<Value, String> {
+    let st = app.state::<Mutex<Box<AppState>>>();
+    let store = {
+        let s = st.lock_or_recover();
+        s.health_store.clone()
+    };
+    let store = store.ok_or_else(|| "health store not available".to_string())?;
+    let types = store.list_metric_types();
+    Ok(serde_json::json!({ "metric_types": types }))
+}
+
 // ── Central dispatcher ────────────────────────────────────────────────────────
 
 /// Dispatch a named command to the appropriate handler function.
@@ -2175,9 +2367,16 @@ pub async fn dispatch(
         "say"                 => say(app, msg).await,
         "dnd"                 => dnd_status(app),
         "dnd_set"             => dnd_set(app, msg),
+        "sleep_schedule"      => sleep_schedule(app),
+        "sleep_schedule_set"  => sleep_schedule_set(app, msg),
         // ── Screenshot search ─────────────────────────────────────────────
         "search_screenshots"  => search_screenshots(app, msg),
         "screenshots_around"  => screenshots_around(app, msg),
+        // ── HealthKit ─────────────────────────────────────────────────────
+        "health_sync"         => health_sync(app, msg),
+        "health_query"        => health_query(app, msg),
+        "health_summary"      => health_summary(app, msg),
+        "health_metric_types" => health_metric_types(app),
         // ── LLM commands (llm_chat is handled before dispatch — see api.rs) ──
         #[cfg(feature = "llm")]
         "llm_status"          => llm_status(app),

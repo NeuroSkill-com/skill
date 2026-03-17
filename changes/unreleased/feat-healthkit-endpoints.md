@@ -1,0 +1,3 @@
+### Features
+
+- **HealthKit data ingestion endpoints**: Added HTTP REST and WebSocket endpoints to receive Apple HealthKit data from a companion iOS app. New endpoints: `POST /v1/health/sync` (idempotent batch upsert of sleep, workouts, heart rate, steps, mindfulness, and generic metrics), `POST /v1/health/query` (query by type and time range), `GET /v1/health/summary` (aggregate counts), `GET /v1/health/metric_types` (list stored metric types). Data is stored in `~/.skill/health.sqlite` via a new `health_store` module in `skill-data`. All endpoints are also available as WS commands (`health_sync`, `health_query`, `health_summary`, `health_metric_types`).

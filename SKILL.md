@@ -30,6 +30,7 @@ automation pipeline.
    - [search](#search)
    - [compare](#compare)
    - [sleep](#sleep)
+   - [sleep-schedule](#sleep-schedule)
    - [umap](#umap)
    - [listen](#listen)
    - [notify](#notify)
@@ -613,6 +614,9 @@ node cli.ts listen --seconds 60 --json | jq '[.[] | select(.event == "hook") | .
 | `--max-tokens <n>` | (`llm chat`) Maximum tokens to generate per turn (default 2048) |
 | `--image <path>` | (`llm chat`) Attach image file (can repeat: `--image a.jpg --image b.png`) |
 | `--mmproj <file>` | (`llm add`) Also download a vision projector from the same repo |
+| `--bedtime <HH:MM>` | (`sleep-schedule set`) Bedtime in 24-h format (e.g. `23:00`) |
+| `--wake <HH:MM>` | (`sleep-schedule set`) Wake-up time in 24-h format (e.g. `07:00`) |
+| `--preset <id>` | (`sleep-schedule set`) Apply a named preset: `default`, `early_bird`, `night_owl`, `short_sleeper`, `long_sleeper` |
 
 ---
 
@@ -1799,6 +1803,118 @@ curl -s -X POST http://127.0.0.1:8375/ \
 ```
 
 > **Stage codes:** `0` = Wake, `1` = N1, `2` = N2, `3` = N3, `4` = REM.
+
+---
+
+### `sleep-schedule`
+
+View or update the sleep schedule used for session classification and sleep staging analysis.
+The schedule defines your expected bedtime and wake-up time, and can be set to one of five
+built-in presets or a fully custom window.
+
+```bash
+# Show current schedule:
+node cli.ts sleep-schedule
+node cli.ts sleep-schedule --json
+
+# Update with explicit times:
+node cli.ts sleep-schedule set --bedtime 23:00 --wake 07:00
+node cli.ts sleep-schedule set --bedtime 01:00 --wake 09:00
+
+# Apply a named preset:
+node cli.ts sleep-schedule set --preset early_bird
+node cli.ts sleep-schedule set --preset night_owl
+
+# Combine preset with override:
+node cli.ts sleep-schedule set --preset short_sleeper
+node cli.ts sleep-schedule set --bedtime 00:30 --wake 06:30 --preset custom
+```
+
+**Available presets:**
+
+| Preset | Bedtime | Wake | Duration |
+|---|---|---|---|
+| `default` | 23:00 | 07:00 | 8 h |
+| `early_bird` | 21:30 | 05:30 | 8 h |
+| `night_owl` | 01:00 | 09:00 | 8 h |
+| `short_sleeper` | 00:00 | 06:00 | 6 h |
+| `long_sleeper` | 22:00 | 08:00 | 10 h |
+
+When you set `--bedtime` or `--wake` without `--preset`, the preset is automatically
+set to `custom`.
+
+**HTTP:**
+```bash
+# Get current schedule:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"sleep_schedule"}'
+
+# Update schedule:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"sleep_schedule_set","bedtime":"23:00","wake_time":"07:00","preset":"default"}'
+
+# Apply a preset (only the fields you send are updated):
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"sleep_schedule_set","preset":"early_bird","bedtime":"21:30","wake_time":"05:30"}'
+```
+
+**Example output (default):**
+```
+⚡ sleep-schedule  current schedule
+
+  Sleep Schedule
+    bedtime    23:00
+    wake       07:00
+    duration   8h  (480 min)
+    preset     default
+
+  Available presets:
+    ● default           23:00 — 07:00  (8h)
+    ○ early_bird        21:30 — 05:30  (8h)
+    ○ night_owl         01:00 — 09:00  (8h)
+    ○ short_sleeper     00:00 — 06:00  (6h)
+    ○ long_sleeper      22:00 — 08:00  (10h)
+```
+
+**Example output (set):**
+```
+⚡ sleep-schedule set
+  bedtime:  01:00
+  wake:     09:00
+  preset:   night_owl
+
+  updated
+  bedtime:  01:00
+  wake:     09:00
+  duration: 8h
+  preset:   night_owl
+```
+
+**JSON response (get):**
+```jsonc
+{
+  "command": "sleep_schedule",
+  "bedtime": "23:00",
+  "wake_time": "07:00",
+  "preset": "default",
+  "duration_minutes": 480
+}
+```
+
+**JSON response (set):**
+```jsonc
+{
+  "command": "sleep_schedule_set",
+  "ok": true,
+  "bedtime": "01:00",
+  "wake_time": "09:00",
+  "preset": "night_owl",
+  "duration_minutes": 480
+}
+```
 
 ---
 

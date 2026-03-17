@@ -27,3 +27,4 @@ pub mod gpu_stats;
 pub mod ppg_analysis;
 pub mod dnd;
 pub mod device;
+pub mod health_store;

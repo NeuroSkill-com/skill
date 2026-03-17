@@ -255,6 +255,7 @@ pub struct AppState {
     pub screenshot_config:  ScreenshotConfig,
     pub screenshot_store: Option<std::sync::Arc<screenshot_store::ScreenshotStore>>,
     pub screenshot_metrics: std::sync::Arc<screenshot::ScreenshotMetrics>,
+    pub health_store: Option<std::sync::Arc<skill_data::health_store::HealthStore>>,
     pub llm: Box<LlmState>,
 }
 
@@ -290,6 +291,7 @@ impl Default for AppState {
 
         init_tts_dirs(&skill_dir);
 
+        let health_store = skill_data::health_store::HealthStore::open(&skill_dir).map(std::sync::Arc::new);
         let model_config    = load_model_config(&skill_dir);
         let model_status    = std::sync::Arc::new(std::sync::Mutex::new(EegModelStatus::default()));
         let download_cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -394,6 +396,7 @@ impl Default for AppState {
             screenshot_config:  ScreenshotConfig::default(),
             screenshot_store:   None,
             screenshot_metrics: std::sync::Arc::new(screenshot::ScreenshotMetrics::new()),
+            health_store: health_store,
         }
     }
 }
