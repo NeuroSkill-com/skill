@@ -1219,13 +1219,13 @@ the Free Software Foundation, version 3 only. -->
 
 <!-- ── Device row snippet ──────────────────────────────────────────────────── -->
 {#snippet deviceRow(dev: DiscoveredDevice)}
+  {@const imgSrc = deviceImage(dev.name, dev.hardware_version)}
   <div class="flex items-center gap-3 px-4 py-3
               transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.02]
               {dev.is_preferred ? 'bg-blue-50 dark:bg-blue-950/20' : ''}
               {!dev.is_paired ? 'opacity-80' : ''}">
 
     <!-- Device photo -->
-    {@const imgSrc = deviceImage(dev.name, dev.hardware_version)}
     {#if imgSrc}
       <img src={imgSrc} alt={dev.name}
            class="w-12 h-12 object-contain rounded-lg shrink-0
