@@ -621,16 +621,15 @@ fn setup_external_renderer(app: &mut tauri::App) {
         let parsed_url: tauri::Url = url.parse()
             .map_err(|e| format!("invalid URL: {e}"))?;
 
-        // Channel to detect page-load completion.
+        // Channel to detect initial page-load completion (DOM ready).
         let (load_tx, load_rx) = mpsc::sync_channel::<()>(1);
 
-        // Create a hidden webview with page-load detection.
         let window = tauri::WebviewWindowBuilder::new(
             &handle,
             &label,
             tauri::WebviewUrl::External(parsed_url),
         )
-        .title("__SKILL_HEADLESS_LOADING__")
+        .title("__SKILL_LOADING__")
         .visible(false)
         .inner_size(1280.0, 720.0)
         .on_page_load(move |_wv, payload| {
@@ -641,56 +640,99 @@ fn setup_external_renderer(app: &mut tauri::App) {
         .build()
         .map_err(|e| format!("webview creation failed: {e}"))?;
 
-        // ── Wait for page load, cancellation, or timeout (30s) ──────
+        // ── Phase 1: Wait for initial DOM load (or timeout / cancel) ─
         let deadline = Instant::now() + Duration::from_secs(30);
-        let mut page_loaded = false;
 
         loop {
-            // Check cancellation.
+            if skill_headless::is_fetch_cancelled() {
+                let _ = window.destroy();
+                return Err("cancelled by user".into());
+            }
+            if load_rx.try_recv().is_ok() { break; }
+            if Instant::now() > deadline {
+                let _ = window.destroy();
+                return Err("page load timeout (30s)".into());
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        // ── Phase 2: Wait for content to stabilise (SPA rendering) ───
+        // SPAs fire PageLoadEvent::Finished when the shell loads, then
+        // fetch data via XHR and render it.  We poll body text length
+        // and wait until it stabilises (same length for 3 consecutive
+        // checks 500ms apart) or 15s passes.
+        let stability_js = r#"
+            (function() {
+                try {
+                    document.title = '__SKILL_LEN__' + (document.body ? document.body.innerText.length : 0);
+                } catch(e) { document.title = '__SKILL_LEN__0'; }
+            })();
+        "#;
+
+        let settle_deadline = Instant::now() + Duration::from_secs(15);
+        let mut last_len: Option<usize> = None;
+        let mut stable_count = 0;
+
+        loop {
             if skill_headless::is_fetch_cancelled() {
                 let _ = window.destroy();
                 return Err("cancelled by user".into());
             }
 
-            // Check page load (non-blocking).
-            if load_rx.try_recv().is_ok() {
-                page_loaded = true;
-                // Small extra delay for JS rendering after DOM load.
-                std::thread::sleep(Duration::from_millis(800));
-                break;
+            let _ = window.eval(stability_js);
+            std::thread::sleep(Duration::from_millis(500));
+
+            if let Ok(title) = window.title() {
+                if let Some(len_str) = title.strip_prefix("__SKILL_LEN__") {
+                    if let Ok(len) = len_str.parse::<usize>() {
+                        if len > 100 { // Minimum content threshold
+                            if last_len == Some(len) {
+                                stable_count += 1;
+                                if stable_count >= 3 {
+                                    break; // Content stabilised!
+                                }
+                            } else {
+                                stable_count = 0;
+                            }
+                            last_len = Some(len);
+                        }
+                    }
+                }
             }
 
-            // Check timeout.
-            if Instant::now() > deadline {
-                break;
+            if Instant::now() > settle_deadline {
+                break; // Timeout — extract what we have.
             }
-
-            std::thread::sleep(Duration::from_millis(100));
         }
 
-        // Check cancellation again after wait.
         if skill_headless::is_fetch_cancelled() {
             let _ = window.destroy();
             return Err("cancelled by user".into());
         }
 
-        // ── Extract visible text ────────────────────────────────────
+        // ── Phase 3: Extract visible text ────────────────────────────
         let extract_js = r#"
             (function() {
                 try {
                     function extractText(node) {
                         if (!node) return '';
                         var tag = (node.tagName || '').toLowerCase();
-                        if (tag === 'script' || tag === 'style' || tag === 'noscript' || tag === 'svg') return '';
+                        if (tag === 'script' || tag === 'style' || tag === 'noscript'
+                            || tag === 'svg' || tag === 'nav' || tag === 'footer'
+                            || tag === 'header') return '';
+                        var style = node.nodeType === 1 ? getComputedStyle(node) : null;
+                        if (style && (style.display === 'none' || style.visibility === 'hidden')) return '';
                         if (node.nodeType === 3) return node.textContent;
                         var parts = [];
                         for (var i = 0; i < node.childNodes.length; i++) {
                             parts.push(extractText(node.childNodes[i]));
                         }
                         var text = parts.join(' ');
-                        var block = tag === 'br' || tag === 'p' || tag === 'div' || tag === 'li' ||
-                            tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' ||
-                            tag === 'h5' || tag === 'h6' || tag === 'tr' || tag === 'td';
+                        var block = style && (style.display === 'block' || style.display === 'flex'
+                            || style.display === 'grid' || style.display === 'table'
+                            || tag === 'br' || tag === 'p' || tag === 'div' || tag === 'li'
+                            || tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4'
+                            || tag === 'h5' || tag === 'h6' || tag === 'tr');
                         return block ? '\n' + text + '\n' : text;
                     }
                     var raw = extractText(document.body || document.documentElement);
@@ -702,48 +744,30 @@ fn setup_external_renderer(app: &mut tauri::App) {
             })();
         "#;
 
-        // Try extraction up to 2 times (first attempt may get partial
-        // content if JS widgets are still loading).
-        let max_attempts = if page_loaded { 2 } else { 1 };
-        for attempt in 0..max_attempts {
-            if attempt > 0 {
-                std::thread::sleep(Duration::from_millis(1500));
-                if skill_headless::is_fetch_cancelled() {
+        let _ = window.eval(extract_js);
+
+        // Poll for the extraction result.
+        let extract_deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            std::thread::sleep(Duration::from_millis(100));
+
+            if skill_headless::is_fetch_cancelled() {
+                let _ = window.destroy();
+                return Err("cancelled by user".into());
+            }
+
+            if let Ok(title) = window.title() {
+                if let Some(text) = title.strip_prefix("__SKILL_DONE__") {
                     let _ = window.destroy();
-                    return Err("cancelled by user".into());
+                    return Ok(text.to_string());
                 }
             }
 
-            let _ = window.eval(extract_js);
-
-            // Poll title for the extraction result.
-            let poll_deadline = Instant::now() + Duration::from_secs(5);
-            loop {
-                std::thread::sleep(Duration::from_millis(100));
-
-                if skill_headless::is_fetch_cancelled() {
-                    let _ = window.destroy();
-                    return Err("cancelled by user".into());
-                }
-
-                if let Ok(title) = window.title() {
-                    if let Some(text) = title.strip_prefix("__SKILL_DONE__") {
-                        if !text.trim().is_empty() || attempt == max_attempts - 1 {
-                            let _ = window.destroy();
-                            return Ok(text.to_string());
-                        }
-                        break; // Empty — retry.
-                    }
-                }
-
-                if Instant::now() > poll_deadline {
-                    break;
-                }
-            }
+            if Instant::now() > extract_deadline { break; }
         }
 
         let _ = window.destroy();
-        Err("timeout extracting page content".into())
+        Err("content extraction timeout".into())
     });
 }
 

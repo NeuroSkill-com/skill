@@ -137,31 +137,22 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 // First try the headless browser; if it's unavailable (e.g.
                 // macOS inside Tauri where tao can't create a second event
                 // loop), fall back to plain HTTP fetch + HTML tag stripping.
+                // Fetch top result pages in parallel and attach rendered text.
+                // Uses headless_render_urls (standalone browser) if available,
+                // otherwise fetch_urls_parallel (external renderer → HTTP).
                 if render && !results.is_empty() {
                     let urls: Vec<String> = results.iter()
                         .take(render_count)
                         .filter_map(|r| r.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()))
                         .collect();
 
-                    let rendered = search::headless_render_urls(&urls);
+                    let rendered = search::headless_render_urls(&urls)
+                        .unwrap_or_else(|| search::fetch_urls_parallel(&urls));
 
-                    if let Some(rendered) = rendered {
-                        for (i, content) in rendered.into_iter().enumerate() {
-                            if i < results.len() {
-                                if let Some(obj) = results[i].as_object_mut() {
-                                    obj.insert("rendered_text".to_string(), json!(content));
-                                }
-                            }
-                        }
-                    } else {
-                        // Headless unavailable — fetch in parallel via HTTP.
-                        tool_log!("tool:web_search", "[render] headless unavailable, falling back to parallel HTTP fetch");
-                        let fetched = search::fetch_urls_parallel(&urls);
-                        for (i, content) in fetched.into_iter().enumerate() {
-                            if i < results.len() {
-                                if let Some(obj) = results[i].as_object_mut() {
-                                    obj.insert("rendered_text".to_string(), json!(content));
-                                }
+                    for (i, content) in rendered.into_iter().enumerate() {
+                        if i < results.len() {
+                            if let Some(obj) = results[i].as_object_mut() {
+                                obj.insert("rendered_text".to_string(), json!(content));
                             }
                         }
                     }
