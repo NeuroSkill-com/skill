@@ -5,15 +5,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use serde::{Serialize, Deserialize};
 use skill_data::session_csv::metrics_csv_path;
 use skill_data::util::{unix_to_ts, ts_to_unix};
 
 use super::{
-    CsvMetricsResult, SessionMetrics, SessionEntry, EpochRow,
+    CsvMetricsResult, SessionMetrics, EpochRow,
     SleepStages, SleepEpoch, SleepSummary,
-    EmbeddingSession, HistoryStats,
-    load_metrics_csv, list_sessions_for_day, list_session_days,
+    load_metrics_csv,
 };
 
 // ── Disk cache ────────────────────────────────────────────────────────────────

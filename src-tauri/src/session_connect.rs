@@ -235,7 +235,7 @@ pub(crate) async fn connect_mw75(
         };
         let mut adapter = Mw75Adapter::new(rx, handle.clone(), Some(info));
         adapter.set_rfcomm(rfcomm);
-        return Ok(Box::new(adapter));
+        Ok(Box::new(adapter))
     }
 
     #[cfg(not(feature = "mw75-rfcomm"))]
@@ -386,7 +386,7 @@ pub(crate) async fn connect_ganglion(
 
     let desc = OpenBciAdapter::make_descriptor(
         "ganglion", 4,
-        crate::session_csv::EEG_SAMPLE_RATE as f64,
+        crate::session_csv::EEG_SAMPLE_RATE,
         ch_labels,
     );
     let info = DeviceInfo {

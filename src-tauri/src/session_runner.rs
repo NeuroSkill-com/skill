@@ -202,6 +202,7 @@ fn on_disconnected(app: &AppHandle, kind: &str) {
 
 // ── EEG processing ────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn process_eeg(
     app:            &AppHandle,
     dsp:            &mut SessionDsp,

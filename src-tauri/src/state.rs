@@ -397,7 +397,7 @@ impl Default for AppState {
             screenshot_config:  ScreenshotConfig::default(),
             screenshot_store:   None,
             screenshot_metrics: std::sync::Arc::new(screenshot::ScreenshotMetrics::new()),
-            health_store: health_store,
+            health_store,
         }
     }
 }

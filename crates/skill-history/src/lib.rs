@@ -5,13 +5,12 @@
 // Pure library crate — no Tauri dependencies.  Thin Tauri IPC wrappers
 // live in `src-tauri/src/{history_cmds,session_analysis}.rs`.
 
-use std::collections::HashMap;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use skill_data::label_store::LabelRow;
 use skill_data::session_csv::{metrics_csv_path, ppg_csv_path};
-use skill_data::util::{unix_to_ts, ts_to_unix};
+use skill_data::util::ts_to_unix;
 
 pub mod cache;
 
