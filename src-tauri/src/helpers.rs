@@ -186,6 +186,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         do_not_disturb:         s.dnd_config.clone(),
         llm:                    s.llm.config.clone(),
         screenshot:             s.screenshot_config.clone(),
+        sleep:                  s.sleep_config.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);

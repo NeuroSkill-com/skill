@@ -141,6 +141,71 @@ impl Default for OpenBciConfig {
     }
 }
 
+// ── Sleep schedule ─────────────────────────────────────────────────────────────
+
+/// Named sleep-schedule preset.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum SleepPreset {
+    /// Default 23:00–07:00 (8 h).
+    #[default]
+    Default,
+    /// Early bird: 21:30–05:30 (8 h).
+    EarlyBird,
+    /// Night owl: 01:00–09:00 (8 h).
+    NightOwl,
+    /// Short sleeper: 00:00–06:00 (6 h).
+    ShortSleeper,
+    /// Long sleeper: 22:00–08:00 (10 h).
+    LongSleeper,
+    /// User-edited values that don't match any built-in preset.
+    Custom,
+}
+
+/// User-configurable sleep schedule, persisted in `settings.json`.
+///
+/// Times are stored as `"HH:MM"` strings in 24-hour format so they
+/// round-trip cleanly through JSON without time-zone ambiguity.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SleepConfig {
+    /// Bedtime in `"HH:MM"` 24-h format.
+    pub bedtime: String,
+    /// Wake-up time in `"HH:MM"` 24-h format.
+    pub wake_time: String,
+    /// Which preset (if any) these times correspond to.
+    pub preset: SleepPreset,
+}
+
+impl Default for SleepConfig {
+    fn default() -> Self {
+        Self {
+            bedtime:   "23:00".into(),
+            wake_time: "07:00".into(),
+            preset:    SleepPreset::Default,
+        }
+    }
+}
+
+impl SleepConfig {
+    /// Sleep duration in minutes (handles overnight wrap).
+    pub fn duration_minutes(&self) -> u32 {
+        let (bh, bm) = parse_hhmm(&self.bedtime);
+        let (wh, wm) = parse_hhmm(&self.wake_time);
+        let bed  = bh * 60 + bm;
+        let wake = wh * 60 + wm;
+        if wake >= bed { wake - bed } else { (24 * 60 - bed) + wake }
+    }
+}
+
+/// Parse `"HH:MM"` → `(hour, minute)`.  Falls back to `(0, 0)` on bad input.
+fn parse_hhmm(s: &str) -> (u32, u32) {
+    let mut parts = s.splitn(2, ':');
+    let h: u32 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+    let m: u32 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+    (h.min(23), m.min(59))
+}
+
 // ── UMAP config ────────────────────────────────────────────────────────────────
 
 /// User-configurable UMAP parameters, persisted to `~/.skill/umap_config.json`.
@@ -501,6 +566,9 @@ pub struct UserSettings {
     /// Screenshot capture + vision embedding configuration.
     #[serde(default)]
     pub screenshot: ScreenshotConfig,
+    /// Sleep schedule configuration.
+    #[serde(default)]
+    pub sleep: SleepConfig,
 }
 
 pub fn default_tts_preload() -> bool { true }
@@ -607,6 +675,7 @@ impl Default for UserSettings {
             llm:                           LlmConfig::default(),
             accent_color:                  default_accent_color(),
             screenshot:                    ScreenshotConfig::default(),
+            sleep:                         SleepConfig::default(),
         }
     }
 }

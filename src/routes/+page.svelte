@@ -742,10 +742,12 @@ the Free Software Foundation, version 3 only. -->
 
 <main class="h-full min-h-0 overflow-y-auto p-2 flex flex-col items-center" onscroll={handleScroll}
       aria-label="Dashboard">
-  <!-- GPU utilisation chart — always visible when GPU stats are available -->
+  <!-- GPU utilisation chart — only visible during an active session -->
+  {#if status.state === "connected"}
   <div class="w-full max-w-[460px]">
     <GpuChart />
   </div>
+  {/if}
 
   <!-- ── ZUNA model download / retry progress banner ─────────────────────── -->
   {#if modelDlVisible}
@@ -1436,7 +1438,8 @@ the Free Software Foundation, version 3 only. -->
         {/if}
       {/if}
 
-      <!-- ════ Band Powers (always in DOM — above waveforms) ═════════════════ -->
+      <!-- ════ Band Powers & EEG Waveforms — only during active session ════ -->
+      {#if status.state === "connected"}
       <Separator class="bg-border dark:bg-white/[0.06]" />
 
       <div class="flex flex-col gap-2">
@@ -1444,25 +1447,21 @@ the Free Software Foundation, version 3 only. -->
           <p class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
             {t("dashboard.bandPowers")}
           </p>
-          {#if status.state === "connected"}
-            <span class="text-[0.5rem] text-green-500 live-blink">●</span>
-          {/if}
+          <span class="text-[0.5rem] text-green-500 live-blink">●</span>
         </div>
         <BandChart bind:this={bandChartEl} chNames={chLabels} chColors={chColors} />
       </div>
 
-      <!-- ════ EEG Waveforms (always in DOM) ════════════════════════════════ -->
       <Separator class="bg-border dark:bg-white/[0.06]" />
 
       <div class="flex flex-col gap-2">
         <div class="flex items-center gap-1.5">
           <p class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("dashboard.eegWaveforms")}</p>
-          {#if status.state === "connected"}
-            <span class="text-[0.5rem] text-red-500 live-blink">●</span>
-          {/if}
+          <span class="text-[0.5rem] text-red-500 live-blink">●</span>
         </div>
         <EegChart bind:this={chartEl} numChannels={chLabels.length} chLabels={chLabels} chColors={chColors} />
       </div>
+      {/if}
 
     </CardContent>
 

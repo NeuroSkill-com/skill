@@ -755,6 +755,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
         s.dnd_config  = data.do_not_disturb;
         s.llm.config  = data.llm;
+        s.sleep_config      = data.sleep;
         s.screenshot_config = data.screenshot;
         if let Some(os_active) = crate::dnd::query_os_active() {
             if !os_active { s.dnd_active = false; }
