@@ -10,13 +10,18 @@ use super::exec::truncate_text;
 
 /// Strip HTML to plain text.
 ///
-/// Removes `<script>…</script>`, `<style>…</style>`, `<noscript>…</noscript>`,
-/// and `<svg>…</svg>` blocks entirely (including their content), then strips
-/// all remaining HTML tags and decodes common HTML entities.
+/// Strip HTML to clean readable text.
+///
+/// Removes `<head>…</head>`, `<script>…</script>`, `<style>…</style>`,
+/// `<noscript>…</noscript>`, `<svg>…</svg>`, HTML comments, and inline
+/// JSON-LD blocks.  Then strips all remaining HTML tags and decodes
+/// common HTML entities.
 pub(crate) fn strip_html_tags(s: &str) -> String {
     // Phase 1: Remove entire blocks that should not appear as text.
+    // Order matters: strip <head> first (contains most scripts/styles),
+    // then individual script/style tags that might be in the body.
     let mut cleaned = s.to_string();
-    for tag in &["script", "style", "noscript", "svg"] {
+    for tag in &["head", "script", "style", "noscript", "svg", "nav", "footer"] {
         loop {
             let open = format!("<{}", tag);
             let close = format!("</{}>", tag);
@@ -33,6 +38,17 @@ pub(crate) fn strip_html_tags(s: &str) -> String {
         }
     }
 
+    // Phase 1b: Remove HTML comments <!-- ... -->.
+    loop {
+        let Some(start) = cleaned.find("<!--") else { break };
+        if let Some(end_rel) = cleaned[start..].find("-->") {
+            cleaned.replace_range(start..start + end_rel + 3, " ");
+        } else {
+            cleaned.truncate(start);
+            break;
+        }
+    }
+
     // Phase 2: Strip remaining HTML tags.
     let mut out = String::with_capacity(cleaned.len());
     let mut in_tag = false;
@@ -46,7 +62,8 @@ pub(crate) fn strip_html_tags(s: &str) -> String {
     }
 
     // Phase 3: Decode HTML entities.
-    out.replace("&amp;", "&")
+    let decoded = out
+       .replace("&amp;", "&")
        .replace("&lt;", "<")
        .replace("&gt;", ">")
        .replace("&quot;", "\"")
@@ -58,7 +75,72 @@ pub(crate) fn strip_html_tags(s: &str) -> String {
        .replace("&#8217;", "'")
        .replace("&#8220;", "\"")
        .replace("&#8221;", "\"")
-       .replace("&#176;", "\u{00B0}")
+       .replace("&#176;", "\u{00B0}");
+
+    // Phase 4: Remove inline JSON-LD / schema.org blocks that survived
+    // (e.g. from SSR frameworks that embed JSON outside script tags).
+    strip_json_ld_blocks(&decoded)
+}
+
+/// Remove JSON-like blocks that look like schema.org / JSON-LD data.
+///
+/// These are `{...}` blocks that contain `"@context"`, `"@type"`, or
+/// `"schema.org"` — structured data that is meaningless to users.
+fn strip_json_ld_blocks(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            // Find matching closing brace.
+            let mut depth = 1;
+            let mut j = i + 1;
+            let mut in_str = false;
+            let mut escaped = false;
+
+            while j < bytes.len() && depth > 0 {
+                if in_str {
+                    if escaped { escaped = false; }
+                    else if bytes[j] == b'\\' { escaped = true; }
+                    else if bytes[j] == b'"' { in_str = false; }
+                } else {
+                    match bytes[j] {
+                        b'"' => in_str = true,
+                        b'{' => depth += 1,
+                        b'}' => depth -= 1,
+                        _ => {}
+                    }
+                }
+                j += 1;
+            }
+
+            if depth == 0 {
+                let block = &s[i..j];
+                // Only remove if it looks like JSON-LD / schema.org.
+                let is_json_ld = block.contains("@context")
+                    || block.contains("@type")
+                    || block.contains("schema.org")
+                    || block.contains("\"url\":")
+                       && block.contains("\"name\":")
+                       && block.len() > 200;
+
+                if is_json_ld {
+                    result.push(' ');
+                    i = j;
+                    continue;
+                }
+            }
+
+            result.push('{');
+            i += 1;
+        } else {
+            result.push(s[i..].chars().next().unwrap_or(' '));
+            i += s[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+        }
+    }
+
+    result
 }
 
 /// Pool of realistic browser User-Agent strings, rotated randomly to reduce
@@ -364,8 +446,8 @@ pub(crate) fn score_rendered_text(text: &str) -> u32 {
     let words: Vec<&str> = text.split_whitespace().collect();
     let word_count = words.len();
 
-    // Too short — probably not useful content.
-    if word_count < 20 { return word_count as u32; }
+    // Very short text — score by word count alone.
+    if word_count < 5 { return word_count as u32; }
 
     let mut score: u32 = 0;
 
@@ -374,16 +456,24 @@ pub(crate) fn score_rendered_text(text: &str) -> u32 {
 
     // Bonus for numbers (temperatures, percentages, times, dates).
     let digit_count = text.chars().filter(|c| c.is_ascii_digit()).count();
-    score += (digit_count.min(50) * 2) as u32;
+    score += (digit_count.min(50) * 3) as u32;
 
-    // Bonus for degree symbols, % signs (weather/data indicators).
+    // Bonus for degree symbols, % signs (weather/data/measurement indicators).
     let data_indicators = text.matches('\u{00B0}').count()  // °
         + text.matches('%').count()
         + text.matches("mph").count()
         + text.matches("km/h").count()
-        + text.matches("°F").count()
-        + text.matches("°C").count();
-    score += (data_indicators * 10) as u32;
+        + text.matches("\u{00B0}F").count()  // °F
+        + text.matches("\u{00B0}C").count()  // °C
+        + text.matches("humidity").count()
+        + text.matches("wind").count()
+        + text.matches("forecast").count()
+        + text.matches("temperature").count()
+        + text.matches("cloudy").count()
+        + text.matches("sunny").count()
+        + text.matches("rain").count()
+        + text.matches("snow").count();
+    score += (data_indicators * 15) as u32;
 
     // Penalty for CSS/JS garbage that leaked through.
     let garbage_indicators = text.matches('{').count()
@@ -393,7 +483,9 @@ pub(crate) fn score_rendered_text(text: &str) -> u32 {
         + text.matches("function(").count()
         + text.matches("var ").count()
         + text.matches("padding:").count()
-        + text.matches("margin:").count();
+        + text.matches("margin:").count()
+        + text.matches("@context").count() * 5
+        + text.matches("schema.org").count() * 5;
     score = score.saturating_sub((garbage_indicators * 15) as u32);
 
     // Penalty for very repetitive text (nav menus, footer links).
@@ -844,5 +936,63 @@ mod web_search_tests {
         let results = parse_ddg_html(html);
         assert_eq!(results.len(), 1);
         assert_eq!(results[0]["url"], "https://example.com/page");
+    }
+
+    /// Verify that strip_html_tags removes JSON-LD, head, script, style, nav.
+    #[test]
+    fn test_strip_html_weather_page() {
+        let html = r#"<html>
+<head>
+  <title>Boston Weather | AccuWeather</title>
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"Organization","name":"AccuWeather",
+   "url":"https://www.accuweather.com","sameAs":["https://facebook.com/AccuWeather"]}
+  </script>
+  <style>.header{color:red} body{font-family:sans-serif}</style>
+  <meta name="description" content="Weather forecast">
+</head>
+<body>
+  <nav><a href="/">Home</a><a href="/weather">Weather</a></nav>
+  <div class="current">
+    <h1>Boston, MA Weather</h1>
+    <p>Current Temperature: 45&#176;F</p>
+    <p>Partly cloudy, Wind: 10 mph NW</p>
+  </div>
+  <script>var analytics = {id: 123};</script>
+  <footer>Copyright 2026 AccuWeather</footer>
+</body></html>"#;
+
+        let text = strip_html_tags(html);
+        let clean: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+
+        // Must contain actual weather data.
+        assert!(clean.contains("45\u{00B0}F"), "missing temperature, got: {clean}");
+        assert!(clean.contains("Partly cloudy"), "missing conditions, got: {clean}");
+        assert!(clean.contains("10 mph"), "missing wind, got: {clean}");
+
+        // Must NOT contain JSON-LD, CSS, JS, nav, or footer.
+        assert!(!clean.contains("@context"), "JSON-LD leaked: {clean}");
+        assert!(!clean.contains("schema.org"), "schema.org leaked: {clean}");
+        assert!(!clean.contains("font-family"), "CSS leaked: {clean}");
+        assert!(!clean.contains("analytics"), "JS leaked: {clean}");
+        assert!(!clean.contains("Copyright"), "footer leaked: {clean}");
+        assert!(!clean.contains("Home"), "nav leaked: {clean}");
+    }
+
+    /// Verify score_rendered_text gives high scores to weather content.
+    #[test]
+    fn test_score_weather_vs_garbage() {
+        let weather = "Boston, MA Weather Current Temperature: 45\u{00B0}F Partly cloudy Wind: 10 mph NW Humidity: 62% Forecast: High 52\u{00B0}F Low 38\u{00B0}F";
+        let garbage = r#"{"@context":"https://schema.org","@type":"Organization","name":"AccuWeather","url":"https://www.accuweather.com"}"#;
+        let css = "@font-face{font-display:swap;font-family:Arthouse} .header{color:red;padding:10px;margin:0}";
+
+        let w_score = score_rendered_text(weather);
+        let g_score = score_rendered_text(garbage);
+        let c_score = score_rendered_text(css);
+
+        assert!(w_score > 100, "weather score too low: {w_score}");
+        assert!(g_score < 30, "garbage score too high: {g_score}");
+        assert!(c_score < 30, "css score too high: {c_score}");
+        assert!(w_score > g_score * 3, "weather ({w_score}) should be much higher than garbage ({g_score})");
     }
 }
