@@ -169,6 +169,8 @@ pub fn cancel_tool_call(
     if let Some(srv) = guard.as_ref() {
         srv.cancelled_tool_calls.lock().unwrap().insert(tool_call_id);
     }
+    // Also cancel any in-progress external page fetch (headless webview).
+    skill_headless::cancel_current_fetch();
 }
 
 // ── Chat window ───────────────────────────────────────────────────────────────

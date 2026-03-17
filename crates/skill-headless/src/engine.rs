@@ -41,6 +41,10 @@ use crate::session::Cookie;
 /// application (e.g. Tauri) owns the main-thread event loop.
 static HEADLESS_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
 
+/// Global cancellation flag for the current external fetch operation.
+/// Checked during the page-load wait loop so users can interrupt slow pages.
+static FETCH_CANCELLED: AtomicBool = AtomicBool::new(false);
+
 /// External page renderer provided by the host application (e.g. Tauri).
 ///
 /// When set, `external_fetch_page` uses this instead of launching a
@@ -1092,7 +1096,21 @@ fn js_timestamp() -> f64 {
 /// Returns `None` if no external renderer is registered.
 /// Returns `Some(Ok(text))` on success or `Some(Err(msg))` on failure.
 pub fn external_fetch_page(url: &str, wait_ms: u64) -> Option<Result<String, String>> {
+    FETCH_CANCELLED.store(false, Ordering::Relaxed);
     EXTERNAL_RENDERER.get().map(|f| f(url, wait_ms))
+}
+
+/// Signal the current external fetch to abort.
+///
+/// Called from the UI when the user cancels a tool call.  The external
+/// renderer checks this flag during its page-load wait loop.
+pub fn cancel_current_fetch() {
+    FETCH_CANCELLED.store(true, Ordering::Relaxed);
+}
+
+/// Check whether the current fetch has been cancelled.
+pub fn is_fetch_cancelled() -> bool {
+    FETCH_CANCELLED.load(Ordering::Relaxed)
 }
 
 

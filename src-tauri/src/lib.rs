@@ -608,7 +608,8 @@ fn run_blocking_exit_shutdown(app: &tauri::AppHandle) {
 fn setup_external_renderer(app: &mut tauri::App) {
     let handle = app.handle().clone();
 
-    skill_headless::Browser::set_external_renderer(move |url, wait_ms| {
+    skill_headless::Browser::set_external_renderer(move |url, _wait_ms| {
+        use std::sync::mpsc;
         use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
         let ts = SystemTime::now()
@@ -617,11 +618,13 @@ fn setup_external_renderer(app: &mut tauri::App) {
             .as_millis();
         let label = format!("hfetch_{}", ts);
 
-        // Parse URL — reject obviously invalid ones early.
         let parsed_url: tauri::Url = url.parse()
             .map_err(|e| format!("invalid URL: {e}"))?;
 
-        // Create a hidden webview window.
+        // Channel to detect page-load completion.
+        let (load_tx, load_rx) = mpsc::sync_channel::<()>(1);
+
+        // Create a hidden webview with page-load detection.
         let window = tauri::WebviewWindowBuilder::new(
             &handle,
             &label,
@@ -630,16 +633,48 @@ fn setup_external_renderer(app: &mut tauri::App) {
         .title("__SKILL_HEADLESS_LOADING__")
         .visible(false)
         .inner_size(1280.0, 720.0)
+        .on_page_load(move |_wv, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                let _ = load_tx.send(());
+            }
+        })
         .build()
         .map_err(|e| format!("webview creation failed: {e}"))?;
 
-        // Wait for the page to load.  Weather sites and SPAs can be slow,
-        // so we wait the requested duration (typically 4s).
-        std::thread::sleep(Duration::from_millis(wait_ms));
+        // ── Wait for page load, cancellation, or timeout (30s) ──────
+        let deadline = Instant::now() + Duration::from_secs(30);
+        let mut page_loaded = false;
 
-        // Extract visible text by setting document.title, which we can
-        // read back with window.title().  We try the extraction multiple
-        // times because the page might still be rendering.
+        loop {
+            // Check cancellation.
+            if skill_headless::is_fetch_cancelled() {
+                let _ = window.destroy();
+                return Err("cancelled by user".into());
+            }
+
+            // Check page load (non-blocking).
+            if load_rx.try_recv().is_ok() {
+                page_loaded = true;
+                // Small extra delay for JS rendering after DOM load.
+                std::thread::sleep(Duration::from_millis(800));
+                break;
+            }
+
+            // Check timeout.
+            if Instant::now() > deadline {
+                break;
+            }
+
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        // Check cancellation again after wait.
+        if skill_headless::is_fetch_cancelled() {
+            let _ = window.destroy();
+            return Err("cancelled by user".into());
+        }
+
+        // ── Extract visible text ────────────────────────────────────
         let extract_js = r#"
             (function() {
                 try {
@@ -667,34 +702,46 @@ fn setup_external_renderer(app: &mut tauri::App) {
             })();
         "#;
 
-        // Try eval up to 3 times (page might still be loading).
-        for attempt in 0..3 {
+        // Try extraction up to 2 times (first attempt may get partial
+        // content if JS widgets are still loading).
+        let max_attempts = if page_loaded { 2 } else { 1 };
+        for attempt in 0..max_attempts {
             if attempt > 0 {
-                std::thread::sleep(Duration::from_millis(1000));
+                std::thread::sleep(Duration::from_millis(1500));
+                if skill_headless::is_fetch_cancelled() {
+                    let _ = window.destroy();
+                    return Err("cancelled by user".into());
+                }
             }
+
             let _ = window.eval(extract_js);
 
-            // Poll the title until the marker appears.
-            let poll_deadline = Instant::now() + Duration::from_secs(3);
+            // Poll title for the extraction result.
+            let poll_deadline = Instant::now() + Duration::from_secs(5);
             loop {
                 std::thread::sleep(Duration::from_millis(100));
+
+                if skill_headless::is_fetch_cancelled() {
+                    let _ = window.destroy();
+                    return Err("cancelled by user".into());
+                }
+
                 if let Ok(title) = window.title() {
                     if let Some(text) = title.strip_prefix("__SKILL_DONE__") {
-                        if !text.trim().is_empty() || attempt == 2 {
+                        if !text.trim().is_empty() || attempt == max_attempts - 1 {
                             let _ = window.destroy();
                             return Ok(text.to_string());
                         }
-                        // Empty result on first attempts — page might still be loading.
-                        break;
+                        break; // Empty — retry.
                     }
                 }
+
                 if Instant::now() > poll_deadline {
                     break;
                 }
             }
         }
 
-        // All attempts exhausted — return whatever we have.
         let _ = window.destroy();
         Err("timeout extracting page content".into())
     });
