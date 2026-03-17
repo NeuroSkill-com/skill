@@ -224,7 +224,7 @@
 
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, Mutex as StdMutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+
 
 use tower_http::cors::{CorsLayer, AllowOrigin, AllowHeaders, AllowMethods};
 use axum::http::{Method, HeaderName};
@@ -279,7 +279,7 @@ impl WsTracker {
     }
 
     pub fn add_client(&mut self, peer: &str) {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+        let now = crate::unix_secs();
         self.clients.push(WsClient { peer: peer.to_owned(), connected_at: now });
     }
 
@@ -288,7 +288,7 @@ impl WsTracker {
     }
 
     pub fn log_request(&mut self, peer: &str, command: &str, ok: bool) {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+        let now = crate::unix_secs();
         self.requests.push(WsRequestLog {
             timestamp: now, peer: peer.to_owned(), command: command.to_owned(), ok,
         });
