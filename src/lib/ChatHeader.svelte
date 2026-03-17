@@ -27,6 +27,7 @@
     onStopServer: () => void;
     onNewChat: () => void;
     onToggleEeg: () => void;
+    onToggleContextBreakdown: () => void;
   }
 
   let {
@@ -51,6 +52,7 @@
     onStopServer,
     onNewChat,
     onToggleEeg,
+    onToggleContextBreakdown,
   }: Props = $props();
 </script>
 
@@ -101,15 +103,18 @@
     </button>
   {/if}
 
-  <!-- Context usage circular indicator -->
+  <!-- Context usage circular indicator (clickable for breakdown) -->
   {#if nCtx > 0}
     {@const ctxPct = liveUsedTokens > 0 ? Math.min(Math.round((liveUsedTokens / nCtx) * 100), 100) : 0}
     {@const ctxIsEstimate = realPromptTokens === null && liveUsedTokens > 0}
     {@const ringStroke = ctxPct >= 90 ? 'stroke-red-500' : ctxPct >= 70 ? 'stroke-amber-500' : 'stroke-primary'}
     {@const circumference = 2 * Math.PI * 7}
     {@const dashOffset = circumference - (circumference * ctxPct / 100)}
-    <div class="flex items-center gap-1 shrink-0 select-none"
-         title="{t('chat.ctxUsage')}: {ctxIsEstimate ? '~' : ''}{liveUsedTokens.toLocaleString()}/{nCtx.toLocaleString()} ({ctxPct}%)">
+    <button
+      onclick={onToggleContextBreakdown}
+      class="flex items-center gap-1 shrink-0 select-none rounded-md px-1 py-0.5
+             hover:bg-muted/60 transition-colors cursor-pointer"
+      title="{t('chat.ctxUsage')}: {ctxIsEstimate ? '~' : ''}{liveUsedTokens.toLocaleString()}/{nCtx.toLocaleString()} ({ctxPct}%) — {t('chat.ctx.clickToInspect')}">
       <svg viewBox="0 0 18 18" class="w-4 h-4 -rotate-90">
         <circle cx="9" cy="9" r="7" fill="none" stroke-width="2.2"
                 class="stroke-muted-foreground/15" />
@@ -123,7 +128,7 @@
                     {ctxPct >= 90 ? 'text-red-500' : ctxPct >= 70 ? 'text-amber-500' : 'text-muted-foreground/60'}">
         {ctxPct}%
       </span>
-    </div>
+    </button>
   {/if}
 
   <!-- EEG context badge -->

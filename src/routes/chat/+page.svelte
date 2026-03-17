@@ -28,6 +28,7 @@
   import ChatToolsPanel               from "$lib/ChatToolsPanel.svelte";
   import ChatMessageList              from "$lib/ChatMessageList.svelte";
   import ChatInputBar                 from "$lib/ChatInputBar.svelte";
+  import ChatContextBreakdown, { type ContextSegment } from "$lib/ChatContextBreakdown.svelte";
   import { t }                        from "$lib/i18n/index.svelte";
   import { chatTitlebarState }        from "$lib/chat-titlebar.svelte";
   import { buildEegBlock }            from "$lib/chat-eeg";
@@ -121,6 +122,7 @@
   // ── Settings panel ─────────────────────────────────────────────────────────
   let showSettings   = $state(false);
   let showTools      = $state(false);
+  let showContextBreakdown = $state(false);
   let temperature    = $state(0.8);
   let maxTokens      = $state(2048);
   let topK           = $state(40);
@@ -188,6 +190,78 @@
   const liveUsedTokens = $derived.by(() => {
     if (realPromptTokens !== null) return realPromptTokens + streamCompletionToks;
     return estimatedPromptTokens + streamCompletionToks;
+  });
+
+  // ── Context breakdown segments ─────────────────────────────────────────────
+  const contextSegments = $derived.by((): ContextSegment[] => {
+    const segs: ContextSegment[] = [];
+
+    // 1. System prompt
+    const sysTokens = estimateTokens(systemPrompt) + 4; // +role overhead
+    if (sysTokens > 0) {
+      segs.push({ key: "system", labelKey: "chat.ctx.system", tokens: sysTokens, color: "#8b5cf6" });
+    }
+
+    // 2. EEG context
+    if (eegActive && latestBands) {
+      const eegBlock = buildEegBlock(latestBands);
+      const eegTokens = estimateTokens(eegBlock);
+      segs.push({ key: "eeg", labelKey: "chat.ctx.eeg", tokens: eegTokens, color: "#06b6d4" });
+    }
+
+    // 3. Tool definitions (injected into the prompt when tools are enabled)
+    if (supportsTools && toolConfig.enabled) {
+      const enabledCount = [toolConfig.date, toolConfig.location, toolConfig.web_search,
+        toolConfig.web_fetch, toolConfig.bash, toolConfig.read_file,
+        toolConfig.write_file, toolConfig.edit_file].filter(Boolean).length;
+      if (enabledCount > 0) {
+        const toolDefTokens = nCtx <= 4096 ? 30 : 500;
+        segs.push({ key: "toolDefs", labelKey: "chat.ctx.toolDefs", tokens: toolDefTokens, color: "#f59e0b" });
+      }
+    }
+
+    // 4. User messages
+    let userTokens = 0;
+    let assistantTokens = 0;
+    let thinkingTokens = 0;
+    let toolResultTokens = 0;
+
+    for (const m of messages) {
+      const contentToks = estimateTokens(m.content) + 4; // +role overhead
+      const leadInToks = m.leadIn ? estimateTokens(m.leadIn) : 0;
+
+      if (m.role === "user") {
+        userTokens += contentToks;
+      } else if (m.role === "assistant") {
+        assistantTokens += contentToks + leadInToks;
+        if (m.thinking) {
+          thinkingTokens += estimateTokens(m.thinking);
+        }
+        if (m.toolUses) {
+          for (const tu of m.toolUses) {
+            if (tu.args) toolResultTokens += estimateTokens(JSON.stringify(tu.args));
+            if (tu.result) toolResultTokens += estimateTokens(JSON.stringify(tu.result));
+          }
+        }
+      }
+    }
+
+    // Current input (not yet sent)
+    if (input.trim()) {
+      userTokens += estimateTokens(input) + 4;
+    }
+
+    if (userTokens > 0) segs.push({ key: "user", labelKey: "chat.ctx.user", tokens: userTokens, color: "#3b82f6" });
+    if (assistantTokens > 0) segs.push({ key: "assistant", labelKey: "chat.ctx.assistant", tokens: assistantTokens, color: "#10b981" });
+    if (thinkingTokens > 0) segs.push({ key: "thinking", labelKey: "chat.ctx.thinking", tokens: thinkingTokens, color: "#a855f7" });
+    if (toolResultTokens > 0) segs.push({ key: "toolResults", labelKey: "chat.ctx.toolResults", tokens: toolResultTokens, color: "#ef4444" });
+
+    // 5. Completion tokens (currently generating)
+    if (streamCompletionToks > 0) {
+      segs.push({ key: "completion", labelKey: "chat.ctx.completion", tokens: streamCompletionToks, color: "#64748b" });
+    }
+
+    return segs;
   });
 
   // ── Helpers ────────────────────────────────────────────────────────────────
@@ -838,7 +912,18 @@
       onStopServer={stopServer}
       onNewChat={newChat}
       onToggleEeg={() => eegContext = !eegContext}
+      onToggleContextBreakdown={() => showContextBreakdown = !showContextBreakdown}
     />
+
+    {#if showContextBreakdown && nCtx > 0}
+      <ChatContextBreakdown
+        segments={contextSegments}
+        totalUsed={liveUsedTokens}
+        {nCtx}
+        isEstimate={realPromptTokens === null && liveUsedTokens > 0}
+        onClose={() => showContextBreakdown = false}
+      />
+    {/if}
 
     {#if showSettings}
       <ChatSettingsPanel
