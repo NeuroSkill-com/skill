@@ -593,6 +593,7 @@ the Free Software Foundation, version 3 only. -->
       </CardContent>
     {:else}
       {#each devices as dev, i (dev.id)}
+        {@const imgSrc = deviceImage(dev.name, dev.hardware_version)}
         {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
 
         <div class="flex items-center gap-3 px-4 py-3
@@ -601,7 +602,6 @@ the Free Software Foundation, version 3 only. -->
                     {!dev.is_paired ? 'opacity-80' : ''}">
 
           <!-- Device photo -->
-          {@const imgSrc = deviceImage(dev.name, dev.hardware_version)}
           {#if imgSrc}
             <img src={imgSrc} alt={dev.name}
                  class="w-12 h-12 object-contain rounded-lg shrink-0
