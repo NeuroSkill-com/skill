@@ -288,6 +288,124 @@ pub(crate) fn searxng_search(agent: &ureq::Agent, base_url: &str, query: &str) -
     results
 }
 
+// ── Parallel URL fetching + quality scoring ───────────────────────────────────
+
+/// Fetch multiple URLs in parallel and return the rendered text for each.
+///
+/// For each URL, tries the external renderer (Tauri webview) first, then
+/// falls back to plain HTTP + HTML stripping.  All URLs are fetched
+/// concurrently using scoped threads so the total time ≈ the slowest URL.
+pub(crate) fn fetch_urls_parallel(urls: &[String]) -> Vec<String> {
+    use skill_headless::Browser;
+
+    let has_ext = Browser::has_external_renderer();
+
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = urls
+            .iter()
+            .map(|url| {
+                scope.spawn(move || fetch_single_url(url, has_ext))
+            })
+            .collect();
+
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or_default())
+            .collect()
+    })
+}
+
+/// Fetch a single URL: try external renderer, fall back to HTTP.
+fn fetch_single_url(url: &str, has_ext: bool) -> String {
+    // Try external renderer first (Tauri webview).
+    if has_ext {
+        tool_log!("tool:web_search", "[render:external] visiting {}", url);
+        match skill_headless::external_fetch_page(url, 4000) {
+            Some(Ok(t)) if !t.trim().is_empty() => {
+                return truncate_text(&t, 2_000);
+            }
+            Some(Ok(_)) => {
+                tool_log!("tool:web_search", "[render:external] empty for {}, trying HTTP", url);
+            }
+            Some(Err(e)) => {
+                tool_log!("tool:web_search", "[render:external] failed for {}: {}, trying HTTP", url, e);
+            }
+            None => {}
+        }
+    }
+
+    // Fall back to plain HTTP fetch + HTML stripping.
+    tool_log!("tool:web_search", "[render:http] fetching {}", url);
+    let agent = browser_agent();
+    match set_browser_headers(agent.get(url)).call() {
+        Ok(resp) => {
+            let body = resp.into_string().unwrap_or_default();
+            let stripped = strip_html_tags(&body);
+            let cleaned: String = stripped.split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ");
+            truncate_text(&cleaned, 2_000)
+        }
+        Err(e) => {
+            tool_log!("tool:web_search", "[render:http] failed for {}: {}", url, e);
+            String::new()
+        }
+    }
+}
+
+/// Score rendered text quality (higher = better).
+///
+/// Used to pick the best result to include in the compact output.
+/// Scores based on: text length, word count, presence of numbers
+/// (temperatures, percentages), and absence of CSS/JS garbage.
+pub(crate) fn score_rendered_text(text: &str) -> u32 {
+    if text.is_empty() { return 0; }
+
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let word_count = words.len();
+
+    // Too short — probably not useful content.
+    if word_count < 20 { return word_count as u32; }
+
+    let mut score: u32 = 0;
+
+    // Base score: word count (capped at 200).
+    score += (word_count.min(200)) as u32;
+
+    // Bonus for numbers (temperatures, percentages, times, dates).
+    let digit_count = text.chars().filter(|c| c.is_ascii_digit()).count();
+    score += (digit_count.min(50) * 2) as u32;
+
+    // Bonus for degree symbols, % signs (weather/data indicators).
+    let data_indicators = text.matches('\u{00B0}').count()  // °
+        + text.matches('%').count()
+        + text.matches("mph").count()
+        + text.matches("km/h").count()
+        + text.matches("°F").count()
+        + text.matches("°C").count();
+    score += (data_indicators * 10) as u32;
+
+    // Penalty for CSS/JS garbage that leaked through.
+    let garbage_indicators = text.matches('{').count()
+        + text.matches('}').count()
+        + text.matches("font-").count()
+        + text.matches("display:").count()
+        + text.matches("function(").count()
+        + text.matches("var ").count()
+        + text.matches("padding:").count()
+        + text.matches("margin:").count();
+    score = score.saturating_sub((garbage_indicators * 15) as u32);
+
+    // Penalty for very repetitive text (nav menus, footer links).
+    let unique_words: std::collections::HashSet<&str> = words.iter().copied().collect();
+    let uniqueness = (unique_words.len() as f32) / (word_count as f32);
+    if uniqueness < 0.3 {
+        score /= 2;
+    }
+
+    score
+}
+
 // ── Headless browser helpers ──────────────────────────────────────────────────
 
 /// Fetch a single URL using the headless browser, returning a JSON result.
@@ -468,52 +586,10 @@ pub(crate) fn headless_fetch_url(
 pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
     use skill_headless::{Browser, BrowserConfig, Command};
 
-    // If the standalone browser is unavailable, try the external renderer
-    // (Tauri's webview) before returning None (which triggers HTTP fallback).
+    // If the standalone browser is unavailable, fetch all URLs in parallel
+    // using the external renderer (Tauri webview) with HTTP fallback.
     if Browser::is_unavailable() {
-        let has_ext = Browser::has_external_renderer();
-        let mut results = Vec::with_capacity(urls.len());
-
-        for url in urls {
-            let mut text: Option<String> = None;
-
-            // Try external renderer first (Tauri webview).
-            if has_ext {
-                tool_log!("tool:web_search", "[render:external] visiting {}", url);
-                match skill_headless::external_fetch_page(url, 4000) {
-                    Some(Ok(t)) if !t.trim().is_empty() => {
-                        text = Some(t);
-                    }
-                    Some(Ok(_)) => {
-                        tool_log!("tool:web_search", "[render:external] empty result for {}, trying HTTP", url);
-                    }
-                    Some(Err(e)) => {
-                        tool_log!("tool:web_search", "[render:external] failed for {}: {}, trying HTTP", url, e);
-                    }
-                    None => {}
-                }
-            }
-
-            // Fall back to plain HTTP fetch + HTML stripping.
-            if text.is_none() {
-                tool_log!("tool:web_search", "[render:http] fetching {}", url);
-                let agent = browser_agent();
-                if let Ok(resp) = set_browser_headers(agent.get(url)).call() {
-                    let body = resp.into_string().unwrap_or_default();
-                    let stripped = strip_html_tags(&body);
-                    let cleaned: String = stripped.split_whitespace()
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    if !cleaned.trim().is_empty() {
-                        text = Some(cleaned);
-                    }
-                }
-            }
-
-            results.push(truncate_text(text.as_deref().unwrap_or(""), 2_000));
-        }
-
-        return Some(results);
+        return Some(fetch_urls_parallel(urls));
     }
 
     let browser = match Browser::launch(BrowserConfig {
