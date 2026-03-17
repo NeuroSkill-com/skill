@@ -193,6 +193,7 @@ mod active_window;
 mod about;
 use about::{get_about_info, open_about_window};
 
+mod calibration_service;
 mod window_cmds;
 pub(crate) use window_cmds::open_calibration_window_inner;
 use window_cmds::{

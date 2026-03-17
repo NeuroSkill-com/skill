@@ -859,18 +859,15 @@ pub fn umap_poll(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
 /// `list_calibrations` — return all saved calibration profiles.
 pub fn list_calibrations(app: &AppHandle) -> Result<Value, String> {
-    let s = app.app_state();
-    let guard = s.lock_or_recover();
-    Ok(serde_json::json!({ "profiles": guard.calibration_profiles }))
+    let profiles = crate::calibration_service::list_profiles(app);
+    Ok(serde_json::json!({ "profiles": profiles }))
 }
 
 /// `get_calibration { "id": "…" }` — return a single profile by ID.
 pub fn get_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let id = msg.get("id").and_then(|v| v.as_str())
         .ok_or_else(|| "missing required field: \"id\" (string)".to_string())?;
-    let s = app.app_state();
-    let guard = s.lock_or_recover();
-    guard.calibration_profiles.iter().find(|p| p.id == id)
+    crate::calibration_service::get_profile(app, id)
         .map(|p| serde_json::json!({ "profile": p }))
         .ok_or_else(|| format!("profile not found: {id}"))
 }
@@ -892,7 +889,7 @@ pub fn create_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String>
     let auto_start  = msg.get("auto_start").and_then(|v| v.as_bool()).unwrap_or(false);
 
     let profile = crate::CalibrationProfile {
-        id:                   crate::new_profile_id(),
+        id:                   String::new(), // overwritten by create_profile
         name,
         actions,
         break_duration_secs:  break_secs,
@@ -901,63 +898,44 @@ pub fn create_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String>
         last_calibration_utc: None,
     };
 
-    let st = app.app_state();
-    {
-        let mut s = st.lock_or_recover();
-        s.calibration_profiles.push(profile.clone());
-    }
-    crate::save_settings_handle(app);
-    Ok(serde_json::json!({ "profile": profile }))
+    let created = crate::calibration_service::create_profile(app, profile);
+    Ok(serde_json::json!({ "profile": created }))
 }
 
-/// `update_calibration { "id": "…", …fields… }` — update an existing profile.
+/// `update_calibration { "id": "…", …fields… }` — partial-update an existing profile.
 pub fn update_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let id = msg.get("id").and_then(|v| v.as_str())
         .ok_or_else(|| "missing required field: \"id\"".to_string())?;
 
-    let st = app.app_state();
-    let mut s = st.lock_or_recover();
-    let p = s.calibration_profiles.iter_mut().find(|p| p.id == id)
+    // Fetch the existing profile, apply partial updates from msg, then save.
+    let mut profile = crate::calibration_service::get_profile(app, id)
         .ok_or_else(|| format!("profile not found: {id}"))?;
 
     if let Some(name) = msg.get("name").and_then(|v| v.as_str()) {
-        p.name = name.to_owned();
+        profile.name = name.to_owned();
     }
     if let Some(actions) = msg.get("actions").and_then(|v| serde_json::from_value::<Vec<crate::CalibrationAction>>(v.clone()).ok()) {
-        if !actions.is_empty() { p.actions = actions; }
+        if !actions.is_empty() { profile.actions = actions; }
     }
     if let Some(b) = msg.get("break_duration_secs").and_then(|v| v.as_u64()) {
-        p.break_duration_secs = b as u32;
+        profile.break_duration_secs = b as u32;
     }
     if let Some(n) = msg.get("loop_count").and_then(|v| v.as_u64()) {
-        p.loop_count = n as u32;
+        profile.loop_count = n as u32;
     }
     if let Some(a) = msg.get("auto_start").and_then(|v| v.as_bool()) {
-        p.auto_start = a;
+        profile.auto_start = a;
     }
-    let ret = p.clone();
-    drop(s);
-    crate::save_settings_handle(app);
-    Ok(serde_json::json!({ "profile": ret }))
+
+    let updated = crate::calibration_service::update_profile(app, profile)?;
+    Ok(serde_json::json!({ "profile": updated }))
 }
 
 /// `delete_calibration { "id": "…" }` — remove a profile.
 pub fn delete_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let id = msg.get("id").and_then(|v| v.as_str())
         .ok_or_else(|| "missing required field: \"id\"".to_string())?;
-    let st = app.app_state();
-    {
-        let mut s = st.lock_or_recover();
-        if s.calibration_profiles.len() <= 1 {
-            return Err("Cannot delete the last calibration profile".into());
-        }
-        s.calibration_profiles.retain(|p| p.id != id);
-        if s.active_calibration_id == id {
-            s.active_calibration_id = s.calibration_profiles.first()
-                .map(|p| p.id.clone()).unwrap_or_default();
-        }
-    }
-    crate::save_settings_handle(app);
+    crate::calibration_service::delete_profile(app, id)?;
     Ok(serde_json::json!({}))
 }
 

@@ -41,6 +41,8 @@ pub use skill_tools::parse as tools;
 
 #[cfg(feature = "llm")]
 pub mod engine;
+#[cfg(feature = "llm")]
+pub mod handlers;
 
 // Re-export the most-used types at crate root for convenience.
 pub use config::{LlmConfig, LlmToolConfig, ToolExecutionMode};
@@ -52,6 +54,8 @@ pub use engine::{
     LlmLogFile, LlmServerState, LlmStateCell, LlmStatus,
     BeforeToolCallFn, AfterToolCallFn, ToolEvent,
     cell_status, extract_images_from_messages, init, new_log_buffer,
-    new_state_cell, push_log, router, shutdown_cell,
+    new_state_cell, push_log, shutdown_cell,
     run_chat_with_builtin_tools,
 };
+#[cfg(feature = "llm")]
+pub use handlers::router;
