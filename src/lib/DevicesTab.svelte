@@ -539,16 +539,19 @@ the Free Software Foundation, version 3 only. -->
               </svg>
             </button>
 
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
               {#each company.devices as item (item.name)}
                 <button
                   onclick={() => expandSupportedCompany(company.id)}
-                  class="flex flex-col items-center gap-1.5 rounded-lg border border-border/70
-                         dark:border-white/[0.06] bg-background/60 px-2 py-2 hover:bg-muted/50"
+                  class="flex flex-col items-stretch gap-2 rounded-lg border border-border/70
+                         dark:border-white/[0.06] bg-background/60 px-2.5 py-2.5 hover:bg-muted/50
+                         min-h-[126px]"
                   aria-label={`${company.name} ${item.name}`}
                 >
-                  <img src={item.image} alt={item.name} class="w-12 h-12 object-contain rounded-md" />
-                  <span class="text-[0.62rem] text-center leading-tight text-foreground/85">{item.name}</span>
+                  <div class="w-full h-16 rounded-md bg-white border border-border/60 flex items-center justify-center p-1.5">
+                    <img src={item.image} alt={item.name} class="w-full h-full object-contain" />
+                  </div>
+                  <span class="text-[0.62rem] text-center leading-tight text-foreground/85 min-h-[30px] flex items-center justify-center">{item.name}</span>
                 </button>
               {/each}
             </div>
