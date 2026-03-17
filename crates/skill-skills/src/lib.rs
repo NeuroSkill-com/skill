@@ -248,12 +248,21 @@ pub fn format_skills_for_prompt(skills: &[Skill]) -> String {
     lines.join("\n")
 }
 
-/// Return the default user skill data directory (`~/.skill`).
+/// Return the default user skill data directory.
+///
+/// | Platform | Path |
+/// |---|---|
+/// | macOS / Linux | `~/.skill` |
+/// | Windows | `%LOCALAPPDATA%\NeuroSkill` |
 pub fn default_skill_dir() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         dirs::data_local_dir()
-            .unwrap_or_else(|| std::env::temp_dir())
+            .unwrap_or_else(|| {
+                std::env::var("APPDATA")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|_| std::env::temp_dir())
+            })
             .join("NeuroSkill")
     }
     #[cfg(not(target_os = "windows"))]

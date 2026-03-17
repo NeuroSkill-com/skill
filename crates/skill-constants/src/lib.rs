@@ -53,8 +53,6 @@ pub mod prelude {
         WS_HOST, WS_DEFAULT_PORT, WS_BROADCAST_CAPACITY,
     };
 
-    // Platform-specific re-exports.
-    #[cfg(not(target_os = "windows"))]
     pub use crate::SKILL_DIR;
 
     // Agent Skills
@@ -524,7 +522,10 @@ pub const APP_ACKNOWLEDGEMENTS: &str =
 // ── Skill data directory ──────────────────────────────────────────────────────
 
 /// The skill data directory name used on macOS and Linux (`~/.skill`).
-#[cfg(not(target_os = "windows"))]
+/// On Windows the *user-global* data directory is `%LOCALAPPDATA%\NeuroSkill`
+/// (see `skill-settings::default_skill_dir`), but this constant is still used
+/// for *project-local* config directories (`.skill/` in the project root) on
+/// all platforms.
 pub const SKILL_DIR: &str = ".skill";
 
 /// Subdirectory under `SKILL_DIR` (or project root) for Agent Skills.
