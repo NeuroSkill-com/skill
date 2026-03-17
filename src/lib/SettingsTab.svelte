@@ -319,10 +319,10 @@ the Free Software Foundation, version 3 only. -->
     const n = name.toLowerCase();
     const isAthena = hw === "p50" || n.includes("muses");
     if (isAthena)                                                              return "/devices/muse-s-athena.jpg";
-    if (n.includes("muse-s") || n.includes("muse s"))                         return "/devices/muse-s.jpg";
-    if (n.includes("muse-2") || n.includes("muse2") || n.includes("muse 2")) return "/devices/muse-2.jpg";
-    if (n.includes("muse"))                                                    return "/devices/muse-1.jpg";
-    if (n.includes("mw75") || n.includes("neurable"))                         return "/devices/mw75.jpg";
+    if (n.includes("muse-s") || n.includes("muse s"))                         return "/devices/muse-s-gen1.jpg";
+    if (n.includes("muse-2") || n.includes("muse2") || n.includes("muse 2")) return "/devices/muse-gen2.jpg";
+    if (n.includes("muse"))                                                    return "/devices/muse-gen1.jpg";
+    if (n.includes("mw75") || n.includes("neurable"))                         return "/devices/muse-mw75.jpg";
     return null;
   }
 
@@ -355,13 +355,13 @@ the Free Software Foundation, version 3 only. -->
 
   /** Map an OpenBCI board key to its static image path. */
   const OPENBCI_IMAGES: Record<string, string> = {
-    ganglion:         "/devices/ganglion.jpg",
-    ganglion_wifi:    "/devices/ganglion-wifi.jpg",
-    cyton:            "/devices/cyton.png",
-    cyton_wifi:       "/devices/cyton-wifi.jpg",
-    cyton_daisy:      "/devices/cyton-daisy.jpg",
-    cyton_daisy_wifi: "/devices/cyton-daisy-wifi.jpg",
-    galea:            "/devices/galea.jpg",
+    ganglion:         "/devices/openbci-ganglion.jpg",
+    ganglion_wifi:    "/devices/openbci-ganglion-wifi.jpg",
+    cyton:            "/devices/openbci-cyton.png",
+    cyton_wifi:       "/devices/openbci-cyton-wifi.jpg",
+    cyton_daisy:      "/devices/openbci-cyton-daisy.jpg",
+    cyton_daisy_wifi: "/devices/openbci-cyton-daisy-wifi.jpg",
+    galea:            "/devices/openbci-galea.jpg",
   };
 
   // ── Devices ────────────────────────────────────────────────────────────────
@@ -717,7 +717,7 @@ the Free Software Foundation, version 3 only. -->
         <div class="flex flex-col gap-2">
           <!-- WiFi Shield photo -->
           <div class="flex items-center gap-3">
-            <img src="/devices/wifi-shield.png" alt="OpenBCI WiFi Shield"
+            <img src="/devices/openbci-wifi-shield.png" alt="OpenBCI WiFi Shield"
                  class="h-16 w-16 object-contain rounded-lg shrink-0
                         bg-muted/30 dark:bg-white/[0.03] p-1
                         border border-border dark:border-white/[0.06]" />
