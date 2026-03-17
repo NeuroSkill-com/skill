@@ -12,7 +12,7 @@ use btleplug::api::{
 };
 use btleplug::platform::{Adapter as BtPlatformAdapter, Manager as BtPlatformManager};
 use futures_util::StreamExt;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use crate::AppStateExt;
 use crate::{

@@ -509,6 +509,154 @@ pub(crate) async fn connect_openbci_board(
     Ok((Box::new(OpenBciAdapter::start(stream_handle, desc, info)), kind_str))
 }
 
+// ── Emotiv (Cortex WebSocket API) ──────────────────────────────────────────────
+
+pub(crate) async fn connect_emotiv(
+    app:    &AppHandle,
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
+    use skill_devices::emotiv::prelude::*;
+    use skill_devices::session::emotiv::EmotivAdapter;
+
+    app_log!(app, "bluetooth", "[emotiv] connecting via Cortex API…");
+
+    let device_api = {
+        let r = app.app_state();
+        let s = r.lock_or_recover();
+        s.device_api_config.clone()
+    };
+
+    let client_id = if device_api.emotiv_client_id.trim().is_empty() {
+        std::env::var("EMOTIV_CLIENT_ID").unwrap_or_default()
+    } else {
+        device_api.emotiv_client_id
+    };
+
+    let client_secret = if device_api.emotiv_client_secret.trim().is_empty() {
+        std::env::var("EMOTIV_CLIENT_SECRET").unwrap_or_default()
+    } else {
+        device_api.emotiv_client_secret
+    };
+
+    let config = CortexClientConfig {
+        client_id,
+        client_secret,
+        ..Default::default()
+    };
+
+    if config.client_id.is_empty() || config.client_secret.is_empty() {
+        return Err(ConnectError::Other(
+            "Emotiv credentials not configured.\n\n\
+             Set Emotiv credentials in Settings → Devices → Device API, or set\n\
+             EMOTIV_CLIENT_ID and EMOTIV_CLIENT_SECRET environment variables\n\
+             (from https://www.emotiv.com/my-account/cortex-apps/)."
+            .into(),
+        ));
+    }
+
+    let client = CortexClient::new(config);
+
+    let connect_result = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
+        r = client.connect() => r.map_err(|e| format!("{e}")),
+    };
+
+    let (rx, handle) = match connect_result {
+        Ok(v) => v,
+        Err(msg) => {
+            app_log!(app, "bluetooth", "[emotiv] connect failed: {msg}");
+            return Err(ConnectError::Other(format!(
+                "Emotiv Cortex connection failed: {msg}\n\n\
+                 Make sure the EMOTIV Launcher is running and a headset is connected."
+            )));
+        }
+    };
+
+    // Subscribe to EEG, motion, and device (battery) streams.
+    tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
+        r = handle.subscribe(&[STREAM_EEG, STREAM_MOT, STREAM_DEV]) => {
+            if let Err(e) = r {
+                app_log!(app, "bluetooth", "[emotiv] subscribe failed: {e}");
+                return Err(ConnectError::Other(format!("Emotiv subscribe failed: {e}")));
+            }
+        }
+    }
+
+    app_log!(app, "bluetooth", "[emotiv] connected — streaming EEG at {} Hz",
+        skill_constants::EMOTIV_SAMPLE_RATE);
+
+    Ok(Box::new(EmotivAdapter::new_epoc(rx, handle)))
+}
+
+// ── IDUN Guardian (BLE) ───────────────────────────────────────────────────────
+
+pub(crate) async fn connect_idun(
+    app:    &AppHandle,
+    cancel: &tokio_util::sync::CancellationToken,
+) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
+    use skill_devices::idun::prelude::*;
+    use skill_devices::session::idun::IdunAdapter;
+
+    // BT check
+    if let Err((msg, _)) = bluetooth_ok().await {
+        return Err(ConnectError::Bluetooth(msg));
+    }
+
+    let idun_token = {
+        let r = app.app_state();
+        let s = r.lock_or_recover();
+        s.device_api_config.idun_api_token.clone()
+    };
+
+    let config = GuardianClientConfig {
+        api_token: if idun_token.trim().is_empty() { None } else { Some(idun_token) },
+        ..GuardianClientConfig::default()
+    };
+    let client = GuardianClient::new(config);
+    app_log!(app, "bluetooth", "[idun] connecting…");
+
+    let connect_result = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
+        r = client.connect() => r.map_err(|e| format!("{e}")),
+    };
+
+    let (rx, handle) = match connect_result {
+        Ok(v) => v,
+        Err(msg) => {
+            app_log!(app, "bluetooth", "[idun] connect failed: {msg}");
+            let (m, _) = classify_bt_error(&msg);
+            return Err(ConnectError::Bluetooth(m));
+        }
+    };
+
+    app_log!(app, "bluetooth", "[idun] BLE connected, starting recording…");
+
+    // Start EEG + IMU streaming.
+    tokio::select! {
+        biased;
+        _ = cancel.cancelled() => {
+            let _ = handle.disconnect().await;
+            return Err(ConnectError::Cancelled);
+        }
+        r = handle.start_recording() => {
+            if let Err(e) = r {
+                app_log!(app, "bluetooth", "[idun] start_recording failed: {e}");
+                let _ = handle.disconnect().await;
+                return Err(ConnectError::Other(format!("IDUN start_recording failed: {e}")));
+            }
+        }
+    }
+
+    app_log!(app, "bluetooth", "[idun] streaming started — 1ch EEG at {} Hz",
+        skill_constants::IDUN_SAMPLE_RATE);
+
+    Ok(Box::new(IdunAdapter::new(rx, handle)))
+}
+
 // ── Tauri command: connect_openbci ────────────────────────────────────────────
 
 /// Connect to any non-BLE OpenBCI board using the current `openbci_config`
