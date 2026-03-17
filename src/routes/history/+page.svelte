@@ -29,20 +29,15 @@ the Free Software Foundation, version 3 only. -->
     fmtDayKey, fmtDurationRange, fmtDateTimeLocale, fmtTimeShort,
     dateToLocalKey, fromUnix, pad, setupHiDpiCanvas, getDpr,
   } from "$lib/format";
-
-  // ── Types ───────────────────────────────────────────────────────────────
-  interface SessionEntry {
-    csv_file: string; csv_path: string;
-    session_start_utc: number | null; session_end_utc: number | null;
-    device_name: string | null; serial_number: string | null;
-    battery_pct: number | null; total_samples: number | null;
-    sample_rate_hz: number | null; labels: LabelRow[];
-    file_size_bytes: number;
-  }
-  interface HistoryStatsData {
-    total_sessions: number; total_secs: number;
-    this_week_secs: number; last_week_secs: number;
-  }
+  import {
+    type SessionEntry, type HistoryStatsData,
+    GRID_COLS, GRID_ROWS, GRID_BIN,
+    SESSION_COLORS, sessionColor,
+    fmtDurCompact, totalDurationSecs, labelsForDay,
+    LABEL_PROXIMITY_SECS, assignLabelRainbowColors, labelRelations,
+    dateKey, dateLabel, fmtTime, fmtDuration, fmtSize, fmtSamples, dayPct,
+    secToUtcDir, localDayBounds,
+  } from "$lib/history-helpers";
 
   // ── Pagination state ────────────────────────────────────────────────────
   /** All recording day keys (YYYYMMDD UTC), newest first — used only for fetching. */
@@ -213,19 +208,7 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Local-day helpers ────────────────────────────────────────────────────
   /** Convert a UTC Unix-seconds value to its UTC YYYYMMDD directory name. */
-  function secToUtcDir(sec: number): string {
-    const d = new Date(sec * 1000);
-    return `${d.getUTCFullYear()}${String(d.getUTCMonth()+1).padStart(2,"0")}${String(d.getUTCDate()).padStart(2,"0")}`;
-  }
 
-  /** Local [midnight, nextMidnight) in Unix seconds for a YYYY-MM-DD local key. */
-  function localDayBounds(localKey: string): { startSec: number; endSec: number } {
-    const [y, m, d] = localKey.split("-").map(Number);
-    return {
-      startSec: new Date(y, m - 1, d).getTime() / 1000,
-      endSec:   new Date(y, m - 1, d + 1).getTime() / 1000,
-    };
-  }
 
   /** Build a sorted (newest-first) list of unique LOCAL YYYY-MM-DD day keys
    *  from the UTC YYYYMMDD directory names.
@@ -791,9 +774,6 @@ the Free Software Foundation, version 3 only. -->
   }
 
   // ── Day-grid heatmap (24 cols × 720 rows) ────────────────────────────────
-  const GRID_COLS = 24;          // one column per hour
-  const GRID_ROWS = 720;         // 3600s / 5s = 720 rows per hour
-  const GRID_BIN  = 5;           // seconds per row
 
   /** Tooltip state for the day-grid canvas. */
   let gridTooltip = $state<{ x: number; y: number; hour: number; row: number; time: string; values: { label: string; val: string; color: string }[] } | null>(null);
@@ -1072,24 +1052,6 @@ the Free Software Foundation, version 3 only. -->
   }
 
   /** Format a compact duration from total seconds (e.g. "2h 15m"). */
-  function fmtDurCompact(secs: number): string {
-    if (secs <= 0) return "";
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    if (h > 0 && m > 0) return `${h}h ${m}m`;
-    if (h > 0) return `${h}h`;
-    return `${m}m`;
-  }
-
-  /** Total recording seconds for a list of sessions. */
-  function totalDurationSecs(sessionList: SessionEntry[]): number {
-    let total = 0;
-    for (const s of sessionList) {
-      if (s.session_start_utc && s.session_end_utc)
-        total += s.session_end_utc - s.session_start_utc;
-    }
-    return total;
-  }
 
   /** Compute day-level aggregate metrics from loaded timeseries. */
   function dayAggregateMetrics(sessionList: SessionEntry[]): { avgRelax: number; avgEngage: number; totalEpochs: number } | null {
@@ -1104,11 +1066,6 @@ the Free Software Foundation, version 3 only. -->
   }
 
   /** Collect all labels for a day from sessions. */
-  function labelsForDay(dayKey: string, sessionsForDay: SessionEntry[]): LabelRow[] {
-    const all: LabelRow[] = [];
-    for (const s of sessionsForDay) all.push(...s.labels);
-    return all;
-  }
 
   /** Check if timeseries data is loaded for any session on a given day. */
   function hasTsForDay(sessionsForDay: SessionEntry[]): boolean {
@@ -1287,71 +1244,6 @@ the Free Software Foundation, version 3 only. -->
     if (tw === 0 && lw === 0) return null;
     return { thisWeek: tw, lastWeek: lw, pctChange: lw > 0 ? ((tw - lw) / lw) * 100 : 0 };
   });
-
-  // ── Helpers ──────────────────────────────────────────────────────────────
-  function dateKey(utc: number): string {
-    return dateToLocalKey(fromUnix(utc));
-  }
-  function dateLabel(key: string): string {
-    const [y, m, d] = key.split("-").map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-      weekday: "long", year: "numeric", month: "long", day: "numeric",
-    });
-  }
-  function fmtTime(utc: number | null): string {
-    if (!utc) return "–";
-    return fmtDateTimeLocale(utc);
-  }
-
-  function fmtDuration(start: number | null, end: number | null): string {
-    return fmtDurationRange(start, end);
-  }
-  function fmtSize(bytes: number): string {
-    if (!bytes) return "–";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1048576) return `${(bytes/1024).toFixed(1)} KB`;
-    return `${(bytes/1048576).toFixed(1)} MB`;
-  }
-  function fmtSamples(n: number | null): string {
-    if (!n) return "–";
-    return n >= 1000 ? `${(n/1000).toFixed(1)}k` : String(n);
-  }
-  function dayPct(utc: number, dayStart: number): number {
-    return Math.max(0, Math.min(100, ((utc - dayStart) / 86400) * 100));
-  }
-  const SESSION_COLORS = ["#3b82f6","#10b981","#f59e0b","#ef4444","#8b5cf6","#ec4899","#06b6d4"];
-  function sessionColor(idx: number): string { return SESSION_COLORS[idx % SESSION_COLORS.length]; }
-
-  /** Assign rainbow HSL colors to labels based on their temporal proximity.
-   *  Labels sorted by time get evenly distributed hues across the rainbow,
-   *  so nearby labels share similar colors and distant ones are visually distinct. */
-  function assignLabelRainbowColors(labels: LabelRow[]): Map<number, string> {
-    const colorMap = new Map<number, string>();
-    if (labels.length === 0) return colorMap;
-    const sorted = [...labels].sort((a, b) => a.eeg_start - b.eeg_start);
-    for (let i = 0; i < sorted.length; i++) {
-      const hue = labels.length === 1 ? 180 : (i / (sorted.length - 1)) * 300; // 0 (red) → 300 (magenta)
-      colorMap.set(sorted[i].id, `hsl(${hue}, 80%, 55%)`);
-    }
-    return colorMap;
-  }
-
-  /** Proximity threshold in seconds — labels within this window are "close". */
-  const LABEL_PROXIMITY_SEC = 300; // 5 minutes
-
-  /** Given a hovered label and all labels in context, returns:
-   *  - exactIds:  set of label ids with the exact same text
-   *  - closeIds:  set of label ids temporally close (within LABEL_PROXIMITY_SEC)
-   *  The hovered label itself is in both sets. */
-  function labelRelations(hovered: LabelRow, all: LabelRow[]): { exactIds: Set<number>; closeIds: Set<number> } {
-    const exactIds = new Set<number>();
-    const closeIds = new Set<number>();
-    for (const l of all) {
-      if (l.text === hovered.text) exactIds.add(l.id);
-      if (Math.abs(l.eeg_start - hovered.eeg_start) <= LABEL_PROXIMITY_SEC) closeIds.add(l.id);
-    }
-    return { exactIds, closeIds };
-  }
 
   /** Collect ALL labels across every session on the current day, for cross-session matching. */
   const allDayLabels = $derived.by((): LabelRow[] => sessions.flatMap(s => s.labels));
