@@ -5,6 +5,13 @@ Session history, metrics, time-series, sleep staging, and cross-session analysis
 Pure library crate — **zero Tauri dependencies**. Thin IPC wrappers live in
 `src-tauri/src/{history_cmds,session_analysis}.rs`.
 
+## Modules
+
+| Module | Description |
+|---|---|
+| `lib.rs` | Session listing, type definitions, raw metrics CSV parsing |
+| `cache.rs` | Disk-cached metrics, downsampling, sleep staging, cross-session analysis |
+
 ## API
 
 ### Session listing

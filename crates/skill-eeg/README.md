@@ -12,6 +12,7 @@ Real-time digital signal processing for 4-channel EEG (Muse / OpenBCI). Covers t
 |---|---|
 | `eeg_filter` | `EegFilter` — per-channel overlap-add pipeline: high-pass, low-pass, notch (50/60 Hz), and spectrogram extraction. Configurable via `FilterConfig` with presets (`full_band_us`, `full_band_eu`, `passthrough`). Outputs `SpectrogramColumn` for live visualization. |
 | `eeg_bands` | `BandAnalyzer` — accumulates filtered samples and computes `BandPowers` / `BandSnapshot` (delta through high-gamma) across all channels |
+| `band_metrics` | Advanced metric functions: spectral edge frequency, spectral centroid, Hjorth parameters, permutation/sample entropy, DFA, Higuchi fractal dimension, PAC |
 | `eeg_quality` | `QualityMonitor` — per-channel signal-quality classification (`Good` / `Fair` / `Bad`) based on amplitude statistics |
 | `artifact_detection` | `ArtifactDetector` — detects blink, jaw-clench, and motion artifacts; outputs `ArtifactMetrics` |
 | `head_pose` | Head orientation estimation from electrode impedance asymmetry |

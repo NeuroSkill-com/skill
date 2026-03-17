@@ -12,6 +12,7 @@ Periodically captures screenshots, embeds them with a CLIP vision model (via `fa
 |---|---|
 | `config` | `ScreenshotConfig` — interval, image size, quality, embed backend, OCR engine, GPU toggle, and model selection with sensible defaults |
 | `context` | `ScreenshotContext` trait — abstraction for active-window info and session state so the worker is decoupled from Tauri |
+| `platform` | Platform-specific window capture: macOS (CGWindowListCreateImage), Linux (grim/import), Windows (win32 API). Image decoding via `image` crate. |
 | `capture` | Core worker loop (`run_screenshot_worker`), embedding/OCR model loading, HNSW search, and re-embed/rebuild utilities |
 
 ## Key functions
