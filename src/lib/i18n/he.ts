@@ -2699,6 +2699,17 @@ const he: Record<string, string> = {
 
   "settingsTabs.screenshots": "Screenshots",
   "settingsTabs.sleep":       "שינה",
+  "settingsTabs.devices":     "מכשירים",
+
+  "devices.title":             "מכשירים",
+  "devices.subtitle":          "ניהול מכשירי BCI משויכים ומזוהים, עיבוד אותות ושילוב EEG.",
+  "devices.pairedCount":       "{n} משויכים",
+  "devices.pairedDevices":     "מכשירים משויכים",
+  "devices.discoveredDevices": "מכשירים שזוהו",
+  "devices.noPaired":          "אין מכשירים משויכים",
+  "devices.noPairedHint":      "הפעל את אוזניות ה-BCI שלך והיא תופיע כאן לאחר זיהוי. שייך אותה לחיבורים אוטומטיים.",
+  "devices.noDiscovered":      "אין מכשירים בקרבת מקום",
+  "devices.noDiscoveredHint":  "הפעל את אוזניות ה-BCI שלך ומקם אותה בטווח Bluetooth. מכשירים שזוהו יופיעו כאן באופן אוטומטי.",
 
   "sleepSettings.title":                         "לוח זמני שינה",
   "sleepSettings.subtitle":                      "הגדר את שעות השינה שלך לניתוח שינה וסיווג הפעלות.",

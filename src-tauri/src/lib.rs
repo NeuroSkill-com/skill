@@ -46,10 +46,14 @@ mod global_eeg_index;
 use global_eeg_index::GlobalEegIndex;
 
 
-use skill_eeg::eeg_quality::SignalQuality;
-
 mod session_dsp;
 pub(crate) use session_dsp::SessionDsp;
+
+mod lifecycle;
+pub(crate) use lifecycle::{start_session, cancel_session, go_disconnected};
+
+mod quit;
+pub(crate) use quit::confirm_and_quit;
 
 mod commands;
 mod job_queue;
@@ -290,9 +294,6 @@ use tauri::{
     AppHandle, Emitter, Manager,
 };
 
-use session_csv::new_csv_path;
-use session_runner::run_device_session;
-use session_connect::ConnectError;
 
 // ── Core types (re-exported from state.rs) ────────────────────────────────────
 
@@ -320,256 +321,11 @@ pub(crate) use helpers::{
 pub(crate) use skill_data::util::MutexExt;
 
 
-// ── Reconnect backoff ─────────────────────────────────────────────────────────
 
-/// Reconnect backoff: 1 s → 2 s → 3 s → 5 s, then stays at 5 s indefinitely.
-fn retry_delay_secs(attempt: u32) -> u32 {
-    match attempt { 0 => 1, 1 => 2, 2 => 3, _ => 5 }
-}
-
-// ── Disconnect / retry ────────────────────────────────────────────────────────
-
-pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: bool) {
-    let (retry, attempt) = {
-        let r = app.app_state();
-        let s = r.lock_or_recover();
-        (s.pending_reconnect && !is_bt, s.retry_attempt)
-    };
-    let delay = if retry { retry_delay_secs(attempt) } else { 0 };
-
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        if is_bt {
-            s.pending_reconnect = false;
-            s.retry_attempt     = 0;
-        } else if !retry {
-            s.retry_attempt = 0;
-        }
-        s.status.state = if retry        { "scanning".into()      }
-                         else if is_bt   { "bt_off".into()        }
-                         else            { "disconnected".into()  };
-        s.status.device_name        = None;
-        s.status.device_id          = None;
-        s.status.device_kind        = "unknown".into();
-        s.status.serial_number      = None;
-        s.status.mac_address        = None;
-        s.status.firmware_version   = None;
-        s.status.hardware_version   = None;
-        s.status.bootloader_version = None;
-        s.status.headset_preset     = None;
-        s.status.battery            = 0.0;
-        s.status.eeg                = vec![f64::NAN; 4];
-        s.status.ppg                = vec![0.0; 3];
-        s.status.ppg_sample_count   = 0;
-        s.status.bt_error           = if retry { None } else { error };
-        s.status.target_name        = None;
-        s.status.retry_attempt        = if retry { attempt + 1 } else { 0 };
-        s.status.retry_countdown_secs = delay;
-        s.stream       = None;
-        s.battery_ema  = None;
-        s.latest_bands = None;
-        // Reset session timestamp so screenshot "sessions only" gate works.
-        // Even during auto-reconnect the device is not streaming data,
-        // so this is not an active session.
-        s.session_start_utc = None;
-        // DSP objects live in SessionDsp (session-local, lock-free).
-        // They are dropped when the session task exits; the next session
-        // creates a fresh set.  No reset needed here.
-        s.status.channel_quality = vec![SignalQuality::default(); crate::constants::EEG_CHANNELS];
-    }
-    refresh_tray(app);
-    emit_status(app);
-
-    if retry {
-        let app = app.clone();
-        tauri::async_runtime::spawn(async move {
-            app_log!(app, "bluetooth",
-                "[reconnect] scheduling attempt #{} in {}s (backoff schedule: 1→2→3→5s)",
-                attempt + 1, delay);
-            for remaining in (1..=delay).rev() {
-                {
-                    let r = app.app_state();
-                    if !r.lock_or_recover().pending_reconnect { return; }
-                }
-                app.app_state().lock_or_recover()
-                    .status.retry_countdown_secs = remaining;
-                emit_status(&app);
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-            let preferred = {
-                let r = app.app_state();
-                let mut s = r.lock_or_recover();
-                if !s.pending_reconnect { return; }
-                s.retry_attempt += 1;
-                s.status.retry_countdown_secs = 0;
-                s.preferred_id.clone()
-                    .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
-            };
-            app_log!(app, "bluetooth",
-                "[reconnect] attempt #{} — waited {delay}s — target={preferred:?}", attempt + 1);
-            start_session(&app, preferred);
-        });
-    }
-}
-
-// ── Session lifecycle ─────────────────────────────────────────────────────────
-
-pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        if s.stream.is_some() { return; }
-        s.pending_reconnect = true;
-    }
-    let (tx, rx) = tokio::sync::oneshot::channel();
-
-    let target = preferred_id.or_else(|| {
-        let r = app.app_state();
-        let s = r.lock_or_recover();
-        s.preferred_id.clone()
-            .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
-    });
-
-    let target_name: Option<String> = target.as_ref().and_then(|id| {
-        let r = app.app_state();
-        let s = r.lock_or_recover();
-        s.status.paired_devices.iter()
-            .find(|d| &d.id == id).map(|d| d.name.clone())
-            .or_else(|| s.discovered.iter().find(|d| &d.id == id).map(|d| d.name.clone()))
-    });
-    let target_lower = target_name.as_deref().map(|n| n.to_lowercase());
-    let is_ganglion = target_lower.as_deref().map(|n| {
-        n.starts_with("ganglion") || n.starts_with("simblee")
-    }).unwrap_or(false);
-    let is_mw75 = target_lower.as_deref().map(|n| {
-        n.contains("mw75")
-    }).unwrap_or(false);
-    let is_hermes = target_lower.as_deref().map(|n| {
-        n.starts_with("hermes")
-    }).unwrap_or(false);
-
-    app.app_state().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
-    let csv  = new_csv_path(app);
-    let app2 = app.clone();
-
-    let device_kind = if is_ganglion { "ganglion" }
-                      else if is_mw75 { "mw75" }
-                      else if is_hermes { "hermes" }
-                      else { "muse" };
-
-    app_log!(app, "bluetooth",
-        "[session] routing: target={target:?} name={target_name:?} kind={device_kind}");
-
-    // Set scanning state with the correct device_kind.
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        s.session_start_utc = Some(unix_secs());
-        s.status.reset_for_scanning(device_kind, &csv, target.as_deref());
-    }
-    refresh_tray(app);
-    emit_status(app);
-
-    tauri::async_runtime::spawn(async move {
-        // Use a shared cancellation token so both the connect phase and the
-        // session phase observe the same cancel signal.
-        let cancel = tokio_util::sync::CancellationToken::new();
-        let cancel2 = cancel.clone();
-
-        // Consume the oneshot in a background task that trips the token.
-        tokio::spawn(async move {
-            let _ = rx.await;
-            cancel2.cancel();
-        });
-
-        let connect_result = match device_kind {
-            "ganglion" => session_connect::connect_ganglion(&app2, &cancel, target).await,
-            "mw75"     => session_connect::connect_mw75(&app2, &cancel, target).await,
-            "hermes"   => session_connect::connect_hermes(&app2, &cancel, target).await,
-            _          => session_connect::connect_muse(&app2, &cancel, target).await,
-        };
-
-        match connect_result {
-            Ok(adapter) => {
-                run_device_session(app2, cancel, csv, adapter).await;
-            }
-            Err(ConnectError::Cancelled) => {
-                crate::go_disconnected(&app2, None, false);
-            }
-            Err(ConnectError::Bluetooth(msg)) => {
-                crate::go_disconnected(&app2, Some(msg), true);
-            }
-            Err(ConnectError::Other(msg)) => {
-                crate::go_disconnected(&app2, Some(msg), false);
-            }
-        }
-    });
-}
-
-pub(crate) fn cancel_session(app: &AppHandle) {
-    let tx = app.app_state().lock_or_recover().stream.take().map(|sh| sh.cancel_tx);
-    if let Some(tx) = tx { let _ = tx.send(()); }
-}
 
 // ── Quit confirmation dialog ──────────────────────────────────────────────────
 
-fn confirm_and_quit(app: AppHandle) {
-    let lang = {
-        let s = app.app_state();
-        let g = s.lock_or_recover();
-        g.language.clone()
-    };
-    std::thread::spawn(move || {
-        if quit_confirmed(&lang, &app) { app.exit(0); }
-    });
-}
 
-#[cfg(not(target_os = "macos"))]
-fn quit_confirmed(lang: &str, app: &AppHandle) -> bool {
-    use tauri::Manager;
-    let (title, description) = quit_dialog_strings(lang);
-    let mut dialog = rfd::MessageDialog::new()
-        .set_title(title)
-        .set_description(description)
-        .set_buttons(rfd::MessageButtons::YesNo);
-    // Set the parent window so the dialog appears focused / modal
-    if let Some(win) = app.get_webview_window("main") {
-        dialog = dialog.set_parent(&win);
-    }
-    dialog.show() == rfd::MessageDialogResult::Yes
-}
-
-#[cfg(target_os = "macos")]
-fn quit_confirmed(lang: &str, _app: &AppHandle) -> bool {
-    use dispatch2::DispatchQueue;
-    use objc2::MainThreadMarker;
-    use objc2_app_kit::{NSAlert, NSAlertFirstButtonReturn};
-    use objc2_foundation::NSString;
-
-    let (title, description) = quit_dialog_strings(lang);
-    let mut confirmed = false;
-    DispatchQueue::main().exec_sync(|| {
-        let mtm = unsafe { MainThreadMarker::new_unchecked() };
-        let alert = NSAlert::new(mtm);
-        alert.setMessageText(&NSString::from_str(title));
-        alert.setInformativeText(&NSString::from_str(description));
-        alert.addButtonWithTitle(&NSString::from_str("Yes"));
-        alert.addButtonWithTitle(&NSString::from_str("No"));
-        confirmed = alert.runModal() == NSAlertFirstButtonReturn;
-    });
-    confirmed
-}
-
-fn quit_dialog_strings(lang: &str) -> (&'static str, &'static str) {
-    match lang {
-        "de" => ("NeuroSkill™ beenden", "Möchten Sie NeuroSkill™ wirklich beenden?"),
-        "fr" => ("Quitter NeuroSkill™", "Voulez-vous vraiment quitter NeuroSkill™ ?"),
-        "he" => ("לצאת מ-NeuroSkill™", "האם אתה בטוח שברצונך לצאת מ-NeuroSkill™?"),
-        "uk" => ("Вийти з NeuroSkill™", "Ви впевнені, що хочете вийти з NeuroSkill™?"),
-        _    => ("Quit NeuroSkill™",    "Are you sure you want to quit NeuroSkill™?"),
-    }
-}
 
 static EXIT_SHUTDOWN_STARTED: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
@@ -869,10 +625,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     tauri::async_runtime::spawn(async move { serve_handle.serve(ws_app).await; });
     app.manage(broadcaster);
 
-    let logger_arc = {
+    let (logger_arc, skill_dir) = {
         let r = app.app_state();
         let g = r.lock_or_recover();
-        g.logger.clone()
+        (g.logger.clone(), g.skill_dir.clone())
     };
     app.manage(logger_arc);
 
@@ -880,12 +636,6 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     crate::tts::init_tts_logger(app.handle());
     crate::llm::init_llm_logger(app.handle());
     crate::llm::init_tool_logger(app.handle());
-
-    let skill_dir = {
-        let r = app.app_state();
-        let g = r.lock_or_recover();
-        g.skill_dir.clone()
-    };
     let data = load_settings(&skill_dir);
     {
         let r = app.app_state();
@@ -956,38 +706,38 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
-    // Auto-start the LLM server if configured and a model is available.
-    let llm_autostart = {
+    // ── Gather values from AppState in a single lock acquisition ─────
+    // Avoids 4 separate lock/unlock cycles that were here previously.
+    let (llm_autostart, llm_has_model, model_code, model_status, hf_repo) = {
         let r = app.app_state();
         let s = r.lock_or_recover();
-        s.llm.config.enabled && s.llm.config.autostart
+        let autostart = s.llm.config.enabled && s.llm.config.autostart;
+        let has_model = s.llm.config.model_path.as_ref()
+            .map(|p| p.exists()).unwrap_or(false);
+        (
+            autostart,
+            has_model,
+            s.text_embedding_model.clone(),
+            s.model_status.clone(),
+            s.model_config.hf_repo.clone(),
+        )
     };
-    if llm_autostart {
+
+    // Auto-start the LLM server if configured and a model is available.
+    if llm_autostart && llm_has_model {
         #[cfg(feature = "llm")]
         {
-            let has_model = {
-                let r = app.app_state();
-                let s = r.lock_or_recover();
-                s.llm.config.model_path.as_ref().map(|p| p.exists()).unwrap_or(false)
-            };
-            if has_model {
-                let app_handle = app.handle().clone();
-                // Small delay so the main window can render first.
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                    let state = app_handle.state::<Mutex<Box<AppState>>>();
-                    crate::llm::cmds::start_llm_server(app_handle.clone(), state).ok();
-                });
-            }
+            let app_handle = app.handle().clone();
+            // Small delay so the main window can render first.
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                let state = app_handle.state::<Mutex<Box<AppState>>>();
+                crate::llm::cmds::start_llm_server(app_handle.clone(), state).ok();
+            });
         }
     }
 
     {
-        let model_code = {
-            let r = app.app_state();
-            let g = r.lock_or_recover();
-            g.text_embedding_model.clone()
-        };
         let skill_dir_emb = skill_dir.clone();
         let embedder_arc  = std::sync::Arc::clone(
             &*app.state::<std::sync::Arc<EmbedderState>>()
@@ -1007,31 +757,19 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ── Startup weights probe ─────────────────────────────────────────
-    {
-        let model_status = {
-            let r = app.app_state();
-            let g = r.lock_or_recover();
-            g.model_status.clone()
-        };
-        let hf_repo = {
-            let r = app.app_state();
-            let g = r.lock_or_recover();
-            g.model_config.hf_repo.clone()
-        };
-        std::thread::Builder::new()
-            .name("weights-probe".into())
-            .spawn(move || {
-                if let Some((w, _c)) = skill_exg::probe_hf_weights(&hf_repo) {
-                    let mut st = model_status.lock_or_recover();
-                    st.weights_found  = true;
-                    st.weights_path   = Some(w.display().to_string());
-                    eprintln!("[embedder] startup probe: weights found at {}", w.display());
-                } else {
-                    eprintln!("[embedder] startup probe: weights not found in HuggingFace cache");
-                }
-            })
-            .expect("[weights-probe] failed to spawn");
-    }
+    std::thread::Builder::new()
+        .name("weights-probe".into())
+        .spawn(move || {
+            if let Some((w, _c)) = skill_exg::probe_hf_weights(&hf_repo) {
+                let mut st = model_status.lock_or_recover();
+                st.weights_found  = true;
+                st.weights_path   = Some(w.display().to_string());
+                eprintln!("[embedder] startup probe: weights found at {}", w.display());
+            } else {
+                eprintln!("[embedder] startup probe: weights not found in HuggingFace cache");
+            }
+        })
+        .expect("[weights-probe] failed to spawn");
 
     // ── Global cross-day EEG HNSW index ──────────────────────────────
     {
@@ -1754,25 +1492,4 @@ pub fn run() {
         });
 }
 
-// ── Unit tests ────────────────────────────────────────────────────────────────
 
-#[cfg(test)]
-mod tests {
-    use super::retry_delay_secs;
-
-    #[test]
-    fn backoff_schedule_1_2_3_5() {
-        assert_eq!(retry_delay_secs(0), 1, "attempt 0 → 1 s");
-        assert_eq!(retry_delay_secs(1), 2, "attempt 1 → 2 s");
-        assert_eq!(retry_delay_secs(2), 3, "attempt 2 → 3 s");
-        assert_eq!(retry_delay_secs(3), 5, "attempt 3 → 5 s");
-    }
-
-    #[test]
-    fn backoff_capped_at_5s() {
-        for attempt in 3u32..=100 {
-            assert_eq!(retry_delay_secs(attempt), 5,
-                "attempt {attempt} should be capped at 5 s");
-        }
-    }
-}

@@ -2709,6 +2709,17 @@ const de: Record<string, string> = {
 
   "settingsTabs.screenshots": "Screenshots",
   "settingsTabs.sleep":       "Schlaf",
+  "settingsTabs.devices":     "Geräte",
+
+  "devices.title":             "Geräte",
+  "devices.subtitle":          "Gekoppelte und erkannte BCI-Geräte verwalten, Signalverarbeitung und EEG-Einbettung.",
+  "devices.pairedCount":       "{n} gekoppelt",
+  "devices.pairedDevices":     "Gekoppelte Geräte",
+  "devices.discoveredDevices": "Erkannte Geräte",
+  "devices.noPaired":          "Keine gekoppelten Geräte",
+  "devices.noPairedHint":      "Schalten Sie Ihr BCI-Headset ein. Es erscheint hier, sobald es erkannt wird. Koppeln Sie es für automatische Verbindungen.",
+  "devices.noDiscovered":      "Keine Geräte in der Nähe",
+  "devices.noDiscoveredHint":  "Schalten Sie Ihr BCI-Headset ein und platzieren Sie es in Bluetooth-Reichweite. Erkannte Geräte erscheinen hier automatisch.",
 
   "sleepSettings.title":                         "Schlafplan",
   "sleepSettings.subtitle":                      "Legen Sie Ihre Schlafenszeiten für die Schlafanalyse und Sitzungsklassifikation fest.",

@@ -353,6 +353,27 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "[ok] CXX=C:\LLVM\bin\clang++.exe"
 
+      # ── Verify lld-link is available ────────────────────────────────────────
+      # LLVM 19 (installed above) ships lld-link.exe — a drop-in replacement
+      # for MSVC's link.exe that is significantly faster for large Rust
+      # projects.  Detect it and export the linker env var for cargo.
+      - name: Detect lld-link (fast LLVM linker)
+        shell: powershell
+        run: |
+          $lldLink = Get-ChildItem "C:\LLVM" -Recurse -Filter "lld-link.exe" `
+                       -ErrorAction SilentlyContinue |
+                       Select-Object -First 1
+          if ($lldLink) {
+            $dir = Split-Path $lldLink.FullName
+            # Cargo env-var form: CARGO_TARGET_<TRIPLE>_LINKER
+            "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$($lldLink.FullName)" |
+              Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "[ok] lld-link found: $($lldLink.FullName)"
+            Write-Host "[ok] Set CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER for fast linking"
+          } else {
+            Write-Host "[info] lld-link not found under C:\LLVM; falling back to MSVC link.exe"
+          }
+
       # ── Build frontend ────────────────────────────────────────────────────────
       - name: Build frontend
         run: npm run build
@@ -360,59 +381,49 @@ jobs:
       - name: Verify Tauri frontend bundle structure
         run: npm run -s verify:tauri:frontend
 
-      # ── Build + package (local-proven Windows NSIS path) ─────────────────────
+      # ── Compile Rust (cargo build only) ──────────────────────────────────────
       #
-      # Use the same command path that is stable on local Windows:
-      #   npm run taur:build:win:nsis
+      # Split from packaging so CI timing shows compile vs NSIS separately.
+      # --features custom-protocol is required: without it Tauri compiles in
+      # dev mode and the binary tries to load the UI from localhost:1420
+      # instead of serving the embedded SvelteKit build output.
+      - name: Compile (Rust)
+        shell: bash
+        env:
+          ESPEAK_LIB_DIR:    ${{ github.workspace }}/src-tauri/espeak-static/lib
+          VULKAN_SDK:        ${{ env.VULKAN_SDK }}
+          LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
+          RUSTC_WRAPPER:     sccache
+        run: |
+          set -euo pipefail
+          cd src-tauri
+          cargo build --release --features custom-protocol
+
+      # ── Package NSIS installer ───────────────────────────────────────────────
       #
-      # That path compiles with --no-bundle and then runs scripts/create-windows-
-      # nsis.ps1.  After installer generation, CI optionally signs the installer
-      # (when CERTIFICATE_THUMBPRINT exists), then creates/signs updater artifacts
-      # (.nsis.zip + .nsis.zip.sig) for latest.json.
-      - name: Build Tauri (Windows — NSIS)
+      # Runs the NSIS packaging script against the pre-built binary, then
+      # optionally signs the installer and creates updater artifacts.
+      - name: Package NSIS installer
         shell: powershell
         env:
-          ESPEAK_LIB_DIR:                     ${{ github.workspace }}/src-tauri/espeak-static/lib
           TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # VULKAN_SDK was written to $GITHUB_ENV by the install step above;
-          # re-exposing it here makes it visible to CMake's FindVulkan module
-          # and to llama.cpp's build system inside the cargo build invocation.
-          VULKAN_SDK: ${{ env.VULKAN_SDK }}
-          # Set by "Ensure standalone LLVM and export LIBCLANG_PATH" above.
-          # Points clang-sys at the standalone LLVM's libclang.dll, bypassing
-          # VS's bundled Clang 19 which lacks __builtin_ia32_* MMX intrinsics.
-          LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
-          RUSTC_WRAPPER: sccache
         run: |
+          & powershell -ExecutionPolicy Bypass -File scripts/create-windows-nsis.ps1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "[error] create-windows-nsis.ps1 failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+
           $bundleDirCandidates = @(
             (Join-Path $PWD "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"),
             (Join-Path $PWD "src-tauri/target/release/bundle/nsis")
           )
-          & npm run taur:build:win:nsis
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "[error] npm run taur:build:win:nsis failed with exit code $LASTEXITCODE"
-            foreach ($candidate in $bundleDirCandidates) {
-              if (Test-Path $candidate) {
-                Write-Host "[diag] bundle dir snapshot: $candidate"
-                Get-ChildItem -Path $candidate -File -ErrorAction SilentlyContinue |
-                  Select-Object Name, Length |
-                  Format-Table -AutoSize |
-                  Out-String |
-                  Write-Host
-              } else {
-                Write-Host "[diag] bundle dir not found: $candidate"
-              }
-            }
-            exit $LASTEXITCODE
-          }
 
           $bundleDir = $null
           $installer = $null
           foreach ($candidate in $bundleDirCandidates) {
-            if (-not (Test-Path $candidate)) {
-              continue
-            }
+            if (-not (Test-Path $candidate)) { continue }
             $candidateInstaller = Get-ChildItem -Path $candidate -File -Filter "*.exe" -ErrorAction SilentlyContinue |
               Where-Object { $_.Name -notmatch "(?i)uninstall" } |
               Sort-Object LastWriteTime -Descending |
@@ -425,7 +436,7 @@ jobs:
           }
 
           if (-not $installer) {
-            Write-Host "[error] NSIS installer .exe not found in expected bundle directories after taur:build:win:nsis"
+            Write-Host "[error] NSIS installer .exe not found in expected bundle directories"
             foreach ($candidate in $bundleDirCandidates) {
               if (Test-Path $candidate) {
                 Write-Host "[diag] bundle dir snapshot: $candidate"

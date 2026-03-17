@@ -82,7 +82,7 @@
       const cfg = await invoke<any>("get_llm_config");
       cfg.tools = { ...toolConfig };
       await invoke("set_llm_config", { config: cfg });
-    } catch {}
+    } catch (e) { console.warn("[chat] failed to persist tool config:", e); }
   }
 
   // ── Generation state ───────────────────────────────────────────────────────
@@ -141,7 +141,7 @@
   async function saveSessionParams() {
     if (sessionId <= 0) return;
     const p = { temperature, maxTokens, topK, topP, thinkingLevel };
-    try { await invoke("set_session_params", { id: sessionId, paramsJson: JSON.stringify(p) }); } catch {}
+    try { await invoke("set_session_params", { id: sessionId, paramsJson: JSON.stringify(p) }); } catch (e) { console.warn("[chat] failed to save session params:", e); }
   }
 
   async function loadSessionParams(id: number): Promise<boolean> {
@@ -155,7 +155,7 @@
       if (p.topP        !== undefined) topP        = p.topP;
       if (p.thinkingLevel !== undefined) thinkingLevel = p.thinkingLevel;
       return true;
-    } catch { return false; }
+    } catch (e) { console.warn("[chat] failed to load session params:", e); return false; }
   }
 
   const thinkingBudget = $derived(
@@ -293,7 +293,7 @@
   /** Cancel a specific tool call. */
   async function cancelToolCall(msgId: number, tuIdx: number, toolCallId: string | undefined) {
     if (!toolCallId) return;
-    try { await invoke("cancel_tool_call", { toolCallId }); } catch {}
+    try { await invoke("cancel_tool_call", { toolCallId }); } catch (e) { console.warn("[chat] cancel_tool_call failed:", e); }
     messages = messages.map(m => {
       if (m.id !== msgId) return m;
       const uses = [...(m.toolUses ?? [])];
@@ -394,7 +394,7 @@
   function abort() {
     if (aborting) return;
     aborting = true;
-    invoke("abort_llm_stream").catch(() => {}).finally(() => { aborting = false; });
+    invoke("abort_llm_stream").catch(e => console.warn("[chat] abort failed:", e)).finally(() => { aborting = false; });
   }
 
   // ── Chat ───────────────────────────────────────────────────────────────────
@@ -419,13 +419,13 @@
     const isFirstUserMsg = !messages.some(m => m.role === "user" && m.content.trim());
     if (isFirstUserMsg && text && sessionId > 0) {
       const autoTitle = text.slice(0, 60).replace(/\n+/g, " ").trim();
-      invoke("rename_chat_session", { id: sessionId, title: autoTitle }).catch(() => {});
+      invoke("rename_chat_session", { id: sessionId, title: autoTitle }).catch(e => console.warn("[chat] rename failed:", e));
       sidebarRef?.updateTitle(sessionId, autoTitle);
     }
 
     messages = [...messages, userMsg];
     if (sessionId > 0 && text) {
-      invoke("save_chat_message", { sessionId, role: "user", content: text, thinking: null }).catch(() => {});
+      invoke("save_chat_message", { sessionId, role: "user", content: text, thinking: null }).catch(e => console.warn("[chat] save user msg failed:", e));
     }
 
     const assistantMsg: Message = { id: ++msgId, role: "assistant", content: "", pending: true };
@@ -629,9 +629,9 @@
                 detail: tu.detail ?? null, tool_call_id: tu.toolCallId ?? null,
                 args: tu.args ?? null, result: tu.result ?? null, created_at: 0,
               }));
-              invoke("save_chat_tool_calls", { messageId, toolCalls }).catch(() => {});
+              invoke("save_chat_tool_calls", { messageId, toolCalls }).catch(e => console.warn("[chat] save tool calls failed:", e));
             }
-          }).catch(() => {});
+          }).catch(e => console.warn("[chat] save assistant msg failed:", e));
         }
       }
     }

@@ -1,0 +1,4 @@
+# Clippy configuration for NeuroSkill
+# Run: cargo clippy --all-targets --all-features
+too-many-arguments-threshold = 8
+type-complexity-threshold = 300

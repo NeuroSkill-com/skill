@@ -2937,6 +2937,18 @@ const en: Record<string, string> = {
   // ── Screenshots tab ───────────────────────────────────────────────────────
   "settingsTabs.screenshots":                    "Screenshots",
   "settingsTabs.sleep":                          "Sleep",
+  "settingsTabs.devices":                        "Devices",
+
+  // ── Devices tab ──────────────────────────────────────────────────────────
+  "devices.title":             "Devices",
+  "devices.subtitle":          "Manage paired and discovered BCI devices, signal processing, and EEG embedding.",
+  "devices.pairedCount":       "{n} paired",
+  "devices.pairedDevices":     "Paired Devices",
+  "devices.discoveredDevices": "Discovered Devices",
+  "devices.noPaired":          "No paired devices",
+  "devices.noPairedHint":      "Power on your BCI headset and it will appear here once discovered. Pair it to enable automatic connections.",
+  "devices.noDiscovered":      "No nearby devices",
+  "devices.noDiscoveredHint":  "Power on your BCI headset and place it within Bluetooth range. Discovered devices will appear here automatically.",
 
   "sleepSettings.title":                         "Sleep Schedule",
   "sleepSettings.subtitle":                      "Set your sleeping hours for sleep analysis and session classification.",

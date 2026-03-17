@@ -141,6 +141,20 @@ CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 # The flag is passed through -C link-args so it works without a separate
 # .cargo/config linker directive.  It only affects the main thread; worker
 # threads set their own size via std::thread::Builder::stack_size.
+# ── Windows MSVC: fast linker (lld-link) ─────────────────────────────────────
+#
+# lld-link is LLVM's drop-in replacement for MSVC's link.exe.  It is
+# significantly faster for large Rust projects (the Windows release build
+# spends most of its time linking).  When LLVM is installed (winget or CI),
+# lld-link.exe is available in the LLVM bin directory.
+#
+# The linker is set via CARGO_TARGET_*_LINKER in the CI workflow and in
+# tauri-build.js (auto-detected).  Do NOT hardcode it here because it
+# breaks builds for developers who don't have LLVM installed — they
+# fall back to the default MSVC link.exe which always works.
+#
+# Install: winget install LLVM.LLVM
+
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "link-args=/STACK:8388608"]
 

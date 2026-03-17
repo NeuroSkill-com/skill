@@ -153,6 +153,32 @@ impl Default for DeviceStatus {
 }
 
 impl DeviceStatus {
+    /// Reset device-specific fields when transitioning to a disconnected state.
+    ///
+    /// Sets the state string and clears all device identity, telemetry, and
+    /// error fields.  Call this instead of manually zeroing 15+ fields in
+    /// `go_disconnected` / reconnect paths.
+    pub fn reset_disconnected(&mut self, new_state: &str) {
+        self.state               = new_state.into();
+        self.device_name         = None;
+        self.device_id           = None;
+        self.device_kind         = "unknown".into();
+        self.serial_number       = None;
+        self.mac_address         = None;
+        self.firmware_version    = None;
+        self.hardware_version    = None;
+        self.bootloader_version  = None;
+        self.headset_preset      = None;
+        self.battery             = 0.0;
+        self.eeg                 = vec![f64::NAN; EEG_CHANNELS];
+        self.ppg                 = vec![0.0; 3];
+        self.ppg_sample_count    = 0;
+        self.bt_error            = None;
+        self.target_name         = None;
+        self.retry_attempt       = 0;
+        self.retry_countdown_secs = 0;
+    }
+
     /// Reset transient fields for a new scanning cycle.
     pub fn reset_for_scanning(
         &mut self,

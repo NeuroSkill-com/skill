@@ -307,7 +307,7 @@ fastembed = { version = "5.11.0" }
 # llama-cpp-4 with Vulkan GPU offload — merged with the base [dependencies]
 # entry so that when the `llm` feature is active the Vulkan backend is compiled
 # in automatically on Linux and Windows.
-llama-cpp-4 = { version = "0.2.10", optional = true, features = ["vulkan"] }
+llama-cpp-4 = { version = "0.2.12", optional = true, features = ["vulkan"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -2704,6 +2704,17 @@ const uk: Record<string, string> = {
 
   "settingsTabs.screenshots": "Screenshots",
   "settingsTabs.sleep":       "Сон",
+  "settingsTabs.devices":     "Пристрої",
+
+  "devices.title":             "Пристрої",
+  "devices.subtitle":          "Керуйте підключеними та виявленими BCI-пристроями, обробкою сигналу та вбудовуванням ЕЕГ.",
+  "devices.pairedCount":       "{n} підключено",
+  "devices.pairedDevices":     "Підключені пристрої",
+  "devices.discoveredDevices": "Виявлені пристрої",
+  "devices.noPaired":          "Немає підключених пристроїв",
+  "devices.noPairedHint":      "Увімкніть BCI-гарнітуру, і вона з'явиться тут після виявлення. Підключіть її для автоматичних з'єднань.",
+  "devices.noDiscovered":      "Немає пристроїв поблизу",
+  "devices.noDiscoveredHint":  "Увімкніть BCI-гарнітуру та розмістіть її в зоні дії Bluetooth. Виявлені пристрої з'являться тут автоматично.",
 
   "sleepSettings.title":                         "Розклад сну",
   "sleepSettings.subtitle":                      "Налаштуйте години сну для аналізу сну та класифікації сеансів.",
