@@ -686,8 +686,8 @@ description: A helpful skill
         }
         let result = load_skills_from_dir(&skills_dir, "bundled", true);
         assert!(
-            result.skills.len() >= 5,
-            "expected at least 5 skills from the submodule, got {}: {:?}",
+            result.skills.len() >= 10,
+            "expected at least 10 skills from the submodule, got {}: {:?}",
             result.skills.len(),
             result.skills.iter().map(|s| &s.name).collect::<Vec<_>>()
         );
