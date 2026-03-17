@@ -5,7 +5,7 @@
 ### Bugfixes
 
 - **Web search no longer stalls after returning URLs**: Improved `web_search` tool description to instruct the LLM to use `render=true` for factual/current-data queries (weather, prices, scores, news). When `render=false`, the tool result now includes a follow-up hint telling the model to fetch page content. Added a weather example to the system prompt so the model learns the correct pattern.
-- **Context window no longer fills up after web search**: Web search results are now capped (default 5 instead of 10), long URLs are truncated, empty snippets are removed, and old tool results (location, earlier searches) are aggressively compressed in subsequent rounds. This leaves enough context for the LLM to continue with follow-up tool calls like `web_fetch`.
+- **Context window no longer fills up after web search**: When compression is enabled (default), `web_search` now returns a compact text summary instead of verbose JSON — cutting result size by ~50%. `web_fetch` content is capped to the configured max-result-chars (2 K default, 1 K aggressive) instead of the previous hardcoded 12 K. Headless-rendered page text per URL reduced from 4 K to 2 K chars. Old tool results are further compressed in subsequent rounds. Combined, this leaves enough context for the LLM to continue with follow-up tool calls.
 
 ### UI
 

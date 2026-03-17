@@ -152,14 +152,51 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
 
                 if results.is_empty() {
                     json!({ "ok": true, "tool": "web_search", "query": query, "results": [], "note": "no results found" })
+                } else if compression.should_compress_old_results() {
+                    // ── Compact text format ─────────────────────────────
+                    // Instead of returning verbose JSON (which eats context),
+                    // emit a concise text list the model can parse instantly.
+                    let max_chars = compression.effective_max_search_result_chars();
+                    let mut compact = format!("web_search query=\"{}\" results={}{}:\n",
+                        query, results.len(), if render { " rendered=true" } else { "" });
+
+                    for (i, r) in results.iter().enumerate() {
+                        let title = r.get("title").and_then(|t| t.as_str()).unwrap_or("?");
+                        let url   = r.get("url").and_then(|u| u.as_str()).unwrap_or("");
+                        let snip  = r.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
+
+                        let mut entry = format!("{}. {}\n   {}\n", i + 1, title, url);
+                        if !snip.is_empty() {
+                            entry.push_str(&format!("   {}\n", truncate_text(snip, 150)));
+                        }
+
+                        // If rendered text is available, include a truncated portion.
+                        if let Some(rendered) = r.get("rendered_text").and_then(|t| t.as_str()) {
+                            if !rendered.is_empty() {
+                                let max_rendered = (max_chars / results.len()).min(1500);
+                                entry.push_str(&format!("   --- page content ---\n   {}\n",
+                                    truncate_text(rendered, max_rendered)));
+                            }
+                        }
+
+                        if compact.len() + entry.len() > max_chars {
+                            compact.push_str("...(remaining results omitted for context)\n");
+                            break;
+                        }
+                        compact.push_str(&entry);
+                    }
+
+                    if !render {
+                        compact.push_str("Note: only links returned. Use web_fetch to read a page, or re-call with render=true.\n");
+                    }
+
+                    json!({ "ok": true, "tool": "web_search", "compact": compact })
                 } else {
+                    // Compression off — return full JSON.
                     let mut result = json!({ "ok": true, "tool": "web_search", "query": query, "results": results });
                     if render {
                         result["rendered"] = json!(true);
                     } else {
-                        // When render=false, add a hint so the LLM knows it
-                        // should follow up with web_fetch or re-search with
-                        // render=true to get actual page content.
                         result["hint"] = json!("These are search result links only. To get actual content, use web_fetch on a URL or re-call web_search with render=true.");
                     }
                     result
@@ -174,6 +211,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             }
 
             let render = args.get("render").and_then(|v| v.as_bool()).unwrap_or(false);
+            let max_content = allowed_tools.context_compression.effective_max_result_chars().max(1000);
 
             if render {
                 // ── Headless browser rendering path ──────────────────
@@ -182,9 +220,18 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 let eval_js = args.get("eval_js").and_then(|v| v.as_str()).map(|s| s.to_string());
                 let url_for_fetch = url.clone();
 
-                tokio::task::spawn_blocking(move || {
+                let mut result = tokio::task::spawn_blocking(move || {
                     search::headless_fetch_url(&url_for_fetch, wait_ms, selector.as_deref(), eval_js.as_deref())
-                }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }))
+                }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }));
+
+                // Cap rendered content to the configured limit.
+                if let Some(content) = result.get("content").and_then(|c| c.as_str()).map(|s| s.to_string()) {
+                    if content.len() > max_content {
+                        result["content"] = json!(truncate_text(&content, max_content));
+                        result["truncated"] = json!(true);
+                    }
+                }
+                result
             } else {
                 // ── Plain HTTP fetch path (original) ─────────────────
                 let url_for_fetch = url.clone();
@@ -209,8 +256,8 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                                 "url": url_for_fetch,
                                 "status": status,
                                 "content_type": content_type,
-                                "content": truncate_text(&body, 12_000),
-                                "truncated": body.chars().count() > 12_000,
+                                "content": truncate_text(&body, max_content),
+                                "truncated": body.chars().count() > max_content,
                             })
                         }
                         Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_for_fetch, "error": e.to_string() }),

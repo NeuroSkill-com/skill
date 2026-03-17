@@ -414,7 +414,7 @@ pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
         match browser.send(Command::EvalJs { script: text_script.to_string() }) {
             Ok(r) => {
                 let text = r.as_text().unwrap_or("").to_string();
-                results.push(truncate_text(&text, 4_000));
+                results.push(truncate_text(&text, 2_000));
             }
             Err(e) => {
                 results.push(format!("[error: content extraction failed: {e}]"));

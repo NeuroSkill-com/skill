@@ -102,30 +102,33 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression
 /// Extracts just the query and a condensed list of titles + URLs,
 /// dropping snippets and other metadata to save context.
 fn compact_web_search_result(content: &str, max_chars: usize) -> String {
-    // Try to parse the JSON and re-serialize a compact version.
+    // If the result is already in compact text format, just truncate.
     if let Ok(v) = serde_json::from_str::<Value>(content) {
-        let query = v.get("query").and_then(|q| q.as_str()).unwrap_or("?");
-        let hint = v.get("hint").and_then(|h| h.as_str()).unwrap_or("");
+        if let Some(compact_text) = v.get("compact").and_then(|c| c.as_str()) {
+            if compact_text.len() <= max_chars {
+                return compact_text.to_string();
+            }
+            return format!("{}…", &compact_text[..max_chars]);
+        }
 
-        let mut compact = format!("web_search results for \"{}\":\n", query);
+        // Legacy JSON format — convert to compact text.
+        let query = v.get("query").and_then(|q| q.as_str()).unwrap_or("?");
+        let mut compact = format!("web_search \"{}\":\n", query);
         if let Some(results) = v.get("results").and_then(|r| r.as_array()) {
             for (i, r) in results.iter().enumerate() {
                 let title = r.get("title").and_then(|t| t.as_str()).unwrap_or("?");
                 let url = r.get("url").and_then(|u| u.as_str()).unwrap_or("");
                 let line = format!("{}. {} - {}\n", i + 1, title, url);
-                if compact.len() + line.len() > max_chars - 60 {
-                    compact.push_str("…[more results truncated]\n");
+                if compact.len() + line.len() > max_chars - 40 {
+                    compact.push_str("…[truncated]\n");
                     break;
                 }
                 compact.push_str(&line);
             }
         }
-        if !hint.is_empty() {
-            compact.push_str(&format!("Hint: {}\n", hint));
-        }
         compact
     } else {
         // Fallback: raw truncation.
-        format!("{}…\n[truncated]", &content[..content.len().min(max_chars)])
+        format!("{}…", &content[..content.len().min(max_chars)])
     }
 }
