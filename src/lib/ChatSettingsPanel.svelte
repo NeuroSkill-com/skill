@@ -153,11 +153,11 @@
     <div class="grid grid-cols-4 gap-1.5 rounded-lg border border-cyan-500/20
                  bg-cyan-500/5 px-2 py-1.5">
       {#each [
-        { label: "SNR",   val: b.snr.toFixed(1) + "dB" },
-        { label: "Mood",  val: b.mood.toFixed(0) + "/100" },
+        { label: "SNR",   val: (b.snr ?? 0).toFixed(1) + "dB" },
+        { label: "Mood",  val: (b.mood ?? 0).toFixed(0) + "/100" },
         { label: "α",     val: (rA*100).toFixed(0) + "%" },
-        { label: "β/α",   val: b.bar.toFixed(2) },
-        { label: "θ/α",   val: b.tar.toFixed(2) },
+        { label: "β/α",   val: (b.bar ?? 0).toFixed(2) },
+        { label: "θ/α",   val: (b.tar ?? 0).toFixed(2) },
         { label: "FAA",   val: (b.faa>=0?"+":"")+b.faa.toFixed(2) },
         ...(b.hr != null ? [{ label: "HR", val: b.hr.toFixed(0)+"bpm" }] : []),
         ...(b.meditation != null ? [{ label: "Med", val: b.meditation.toFixed(0)+"/100" }] : []),

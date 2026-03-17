@@ -5,7 +5,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { Button } from "$lib/components/ui/button";
   import { t } from "$lib/i18n/index.svelte";
-  import { fmtDateTimeLocale } from "$lib/format";
+  import { fmtDateTimeLocale, fmtGB } from "$lib/format";
 
   type DownloadState = "not_downloaded" | "downloading" | "paused" | "downloaded" | "failed" | "cancelled";
 
@@ -59,10 +59,7 @@
     await load();
   }
 
-  function fmtSize(gb: number): string {
-    if (gb < 1) return `${(gb * 1024).toFixed(0)} MB`;
-    return `${gb.toFixed(1)} GB`;
-  }
+  const fmtSize = fmtGB;
 
   function fmtInitiated(unix: number | null): string {
     if (!unix) return t("downloads.initiatedUnknown");

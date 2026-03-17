@@ -8,7 +8,8 @@
 
 import type { LabelRow } from "$lib/types";
 import type { EpochRow }  from "$lib/dashboard/SessionDetail.svelte";
-import { fmtTimeShort, dateToLocalKey, fromUnix, pad } from "$lib/format";
+import { fmtTimeShort, dateToLocalKey, fromUnix, pad, fmtBytes } from "$lib/format";
+import { SESSION_COLORS } from "$lib/constants";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -34,8 +35,7 @@ export const GRID_BIN  = 5;
 
 // ── Session colors ───────────────────────────────────────────────────────────
 
-export const SESSION_COLORS = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#06b6d4','#f43f5e','#22d3ee','#84cc16'];
-export function sessionColor(idx: number): string { return SESSION_COLORS[idx % SESSION_COLORS.length]; }
+export { SESSION_COLORS, sessionColor } from "$lib/constants";
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -137,12 +137,7 @@ export function fmtDuration(start: number | null, end: number | null): string {
   return h > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-export function fmtSize(bytes: number): string {
-  if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + " GB";
-  if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + " MB";
-  if (bytes >= 1e3) return (bytes / 1e3).toFixed(1) + " KB";
-  return bytes + " B";
-}
+export { fmtBytes as fmtSize } from "$lib/format";
 
 export function fmtSamples(n: number | null): string {
   if (!n) return "—";

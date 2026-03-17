@@ -196,65 +196,10 @@ export const SYSTEM_PROMPT_PRESETS: { key: string; icon: string; prompt: string 
   },
 ];
 
-// ── EEG band snapshot type (mirrors Rust BandSnapshot) ──────────────────────
-
-export interface BandPowers {
-  channel:       string;
-  rel_delta:     number;
-  rel_theta:     number;
-  rel_alpha:     number;
-  rel_beta:      number;
-  rel_gamma:     number;
-  rel_high_gamma: number;
-  dominant:      string;
-  dominant_symbol: string;
-}
-
-export interface BandSnapshot {
-  timestamp:     number;
-  channels:      BandPowers[];
-  faa:           number;
-  tar:           number;
-  bar:           number;
-  dtr:           number;
-  pse:           number;
-  apf:           number;
-  bps:           number;
-  snr:           number;
-  coherence:     number;
-  mu_suppression: number;
-  mood:          number;
-  tbr:           number;
-  sef95:         number;
-  hjorth_activity: number;
-  hjorth_mobility: number;
-  hjorth_complexity: number;
-  permutation_entropy: number;
-  higuchi_fd:    number;
-  dfa_exponent:  number;
-  sample_entropy: number;
-  pac_theta_gamma: number;
-  laterality_index: number;
-  headache_index: number;
-  migraine_index: number;
-  consciousness_lzc: number;
-  consciousness_wakefulness: number;
-  consciousness_integration: number;
-  hr?:           number;
-  rmssd?:        number;
-  sdnn?:         number;
-  pnn50?:        number;
-  lf_hf_ratio?:  number;
-  respiratory_rate?: number;
-  spo2_estimate?: number;
-  perfusion_index?: number;
-  stress_index?: number;
-  blink_count?:  number;
-  blink_rate?:   number;
-  meditation?:   number;
-  cognitive_load?: number;
-  drowsiness?:   number;
-}
+// ── EEG band snapshot — re-exported from the canonical BandChart module ─────
+// The full BandPowers / BandSnapshot interfaces live in BandChart.svelte.
+// Re-export here so chat-related code doesn't need to import from a UI component.
+export type { BandPowers, BandSnapshot } from "$lib/BandChart.svelte";
 
 // ── Conversion helpers ──────────────────────────────────────────────────────
 

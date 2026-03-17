@@ -16,6 +16,7 @@
   import { Button }                   from "$lib/components/ui/button";
   import { Card, CardContent }        from "$lib/components/ui/card";
   import { t }                        from "$lib/i18n/index.svelte";
+  import { fmtGB }                    from "$lib/format";
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -252,10 +253,7 @@
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
-  function fmtSize(gb: number): string {
-    if (gb < 1) return `${(gb * 1024).toFixed(0)} MB`;
-    return `${gb.toFixed(1)} GB`;
-  }
+  const fmtSize = fmtGB;
 
   function vendorLabel(repo: string): string {
     const owner = repo.split("/")[0] ?? repo;

@@ -142,7 +142,7 @@
       </svg>
       <span>{t("chat.eeg.label")}</span>
       {#if eegContext && latestBands}
-        <span class="tabular-nums opacity-70">{latestBands.snr.toFixed(1)}dB</span>
+        <span class="tabular-nums opacity-70">{(latestBands.snr ?? 0).toFixed(1)}dB</span>
       {/if}
     </button>
   {/if}

@@ -32,11 +32,11 @@ export function buildEegBlock(b: BandSnapshot): string {
 
   const lines: string[] = [
     "--- Live EEG Brain State (auto-updated) ---",
-    `Signal quality (SNR): ${f1(b.snr)} dB | Dominant band: ${dominant}`,
+    `Signal quality (SNR): ${f1(b.snr ?? 0)} dB | Dominant band: ${dominant}`,
     `Relative band powers: δ=${pct(rD)} θ=${pct(rT)} α=${pct(rA)} β=${pct(rB)} γ=${pct(rG)}`,
-    `Mood: ${b.mood.toFixed(0)}/100 | FAA (approach): ${f2(b.faa)}`,
-    `TAR (θ/α — drowsiness): ${f1(b.tar)} | BAR (β/α — focus/stress): ${f1(b.bar)}`,
-    `Coherence (α sync): ${(b.coherence * 100).toFixed(0)}% | Consciousness: wakefulness=${b.consciousness_wakefulness.toFixed(0)} integration=${b.consciousness_integration.toFixed(0)}`,
+    `Mood: ${(b.mood ?? 0).toFixed(0)}/100 | FAA (approach): ${f2(b.faa)}`,
+    `TAR (θ/α — drowsiness): ${f1(b.tar ?? 0)} | BAR (β/α — focus/stress): ${f1(b.bar ?? 0)}`,
+    `Coherence (α sync): ${((b.coherence ?? 0) * 100).toFixed(0)}% | Consciousness: wakefulness=${(b.consciousness_wakefulness ?? 0).toFixed(0)} integration=${(b.consciousness_integration ?? 0).toFixed(0)}`,
   ];
 
   if (b.meditation   != null) lines.push(`Meditation: ${b.meditation.toFixed(0)}/100`);

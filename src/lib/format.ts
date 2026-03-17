@@ -247,3 +247,19 @@ export function setupHiDpiCanvas(
 export function getDpr(): number {
   return devicePixelRatio || 1;
 }
+
+// ── Size formatting ──────────────────────────────────────────────────────────
+
+/** Format a byte count as a human-readable string (e.g. "1.5 MB"). */
+export function fmtBytes(bytes: number): string {
+  if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + " GB";
+  if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + " MB";
+  if (bytes >= 1e3) return (bytes / 1e3).toFixed(1) + " KB";
+  return bytes + " B";
+}
+
+/** Format a size given in gigabytes as a human-readable string (e.g. "3.2 GB"). */
+export function fmtGB(gb: number): string {
+  if (gb >= 1) return gb.toFixed(1) + " GB";
+  return (gb * 1024).toFixed(0) + " MB";
+}

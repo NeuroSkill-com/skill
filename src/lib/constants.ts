@@ -360,3 +360,11 @@ export const JOB_POLL_INTERVAL_MS = 300;
 
 /** UMAP poll interval (ms). */
 export const UMAP_POLL_INTERVAL_MS = 500;
+
+// ── Session colors ───────────────────────────────────────────────────────────
+
+/** Shared palette for session segments across history, compare, and timeline views. */
+export const SESSION_COLORS = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#06b6d4','#f43f5e','#22d3ee','#84cc16'];
+
+/** Look up a session color by index (wraps around). */
+export function sessionColor(idx: number): string { return SESSION_COLORS[idx % SESSION_COLORS.length]; }

@@ -6,7 +6,7 @@
  * Extracted from `routes/compare/+page.svelte`.
  */
 
-import { BANDS }     from "$lib/constants";
+import { BANDS, SESSION_COLORS } from "$lib/constants";
 import type { SessionMetrics } from "$lib/dashboard/SessionDetail.svelte";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ export interface ClusterAnalysis {
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-export const SESSION_COLORS = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#06b6d4','#f43f5e','#22d3ee','#84cc16'];
+export { SESSION_COLORS } from "$lib/constants";
 
 export const bandKeys = ["rel_delta", "rel_theta", "rel_alpha", "rel_beta", "rel_gamma"] as const;
 export type BK = typeof bandKeys[number];
