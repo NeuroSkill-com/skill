@@ -74,7 +74,7 @@ mod response;
 mod session;
 
 pub use command::Command;
-pub use engine::{Browser, BrowserConfig, Mode};
+pub use engine::{Browser, BrowserConfig, Mode, external_fetch_page};
 pub use error::HeadlessError;
 pub use intercept::{
     InterceptStore, InterceptedRequest, InterceptedResponse, NavigationEvent, NetworkLog,

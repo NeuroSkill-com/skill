@@ -177,6 +177,7 @@ skill-jobs  = { path = "../crates/skill-jobs" }
 skill-settings = { path = "../crates/skill-settings" }
 skill-llm   = { path = "../crates/skill-llm" }
 skill-tools = { path = "../crates/skill-tools" }
+skill-headless = { path = "../crates/skill-headless" }
 skill-eeg  = { path = "../crates/skill-eeg" }
 skill-tts  = { path = "../crates/skill-tts" }
 skill-data      = { path = "../crates/skill-data" }

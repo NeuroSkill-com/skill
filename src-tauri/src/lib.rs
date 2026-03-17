@@ -594,12 +594,112 @@ fn run_blocking_exit_shutdown(app: &tauri::AppHandle) {
     tts_shutdown();
 }
 
+// ── External renderer for macOS headless webview ──────────────────────────────
+
+/// Register a Tauri-based external renderer for the headless browser subsystem.
+///
+/// On macOS, tao cannot create a second event loop — this function provides
+/// an alternative that reuses Tauri's existing webview infrastructure.
+///
+/// The renderer creates a hidden `WebviewWindow`, navigates to the URL,
+/// waits for the page to load, extracts the visible text via `eval()` +
+/// `title()` polling, and returns the content.
+#[cfg(target_os = "macos")]
+fn setup_external_renderer(app: &mut tauri::App) {
+    use tauri::Manager;
+    let handle = app.handle().clone();
+
+    skill_headless::Browser::set_external_renderer(move |url, wait_ms| {
+        use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis();
+        let label = format!("hfetch_{}", ts);
+
+        // Parse URL — reject obviously invalid ones early.
+        let parsed_url: tauri::Url = url.parse()
+            .map_err(|e| format!("invalid URL: {e}"))?;
+
+        // Create a hidden webview window.
+        let window = tauri::WebviewWindowBuilder::new(
+            &handle,
+            &label,
+            tauri::WebviewUrl::External(parsed_url),
+        )
+        .title("__SKILL_HEADLESS_LOADING__")
+        .visible(false)
+        .inner_size(1280.0, 720.0)
+        .build()
+        .map_err(|e| format!("webview creation failed: {e}"))?;
+
+        // Wait for the page to load.
+        std::thread::sleep(Duration::from_millis(wait_ms));
+
+        // Extract visible text by setting document.title, which we can
+        // read back with window.title().
+        let extract_js = r#"
+            (function() {
+                function extractText(node) {
+                    if (!node) return '';
+                    var tag = (node.tagName || '').toLowerCase();
+                    if (tag === 'script' || tag === 'style' || tag === 'noscript' || tag === 'svg') return '';
+                    if (node.nodeType === 3) return node.textContent;
+                    var parts = [];
+                    for (var i = 0; i < node.childNodes.length; i++) {
+                        parts.push(extractText(node.childNodes[i]));
+                    }
+                    var text = parts.join(' ');
+                    var block = tag === 'br' || tag === 'p' || tag === 'div' || tag === 'li' ||
+                        tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' ||
+                        tag === 'h5' || tag === 'h6' || tag === 'tr' || tag === 'td';
+                    return block ? '\n' + text + '\n' : text;
+                }
+                var raw = extractText(document.body || document.documentElement);
+                var clean = raw.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+                document.title = '__SKILL_DONE__' + clean.substring(0, 100000);
+            })();
+        "#;
+
+        window.eval(extract_js).map_err(|e| format!("eval failed: {e}"))?;
+
+        // Poll the title until the marker appears or timeout.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        let result = loop {
+            std::thread::sleep(Duration::from_millis(100));
+            if let Ok(title) = window.title() {
+                if let Some(text) = title.strip_prefix("__SKILL_DONE__") {
+                    break Ok(text.to_string());
+                }
+            }
+            if Instant::now() > deadline {
+                break Err("timeout extracting page content".into());
+            }
+        };
+
+        // Close the hidden window.
+        let _ = window.destroy();
+
+        result
+    });
+}
+
 // ── App setup (extracted to reduce `run()` stack frame) ───────────────────────
 
 /// Extracted from the `.setup()` closure so LLVM does not merge its locals
 /// into the already-huge `run()` stack frame produced by `generate_handler!`.
 #[inline(never)]
 fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    // On macOS, the headless browser (tao) cannot create a second event loop
+    // because Tauri already owns the main thread.  Disable the standalone
+    // browser and register an external renderer that reuses Tauri's webview.
+    #[cfg(target_os = "macos")]
+    {
+        skill_headless::Browser::set_unavailable();
+        setup_external_renderer(app);
+    }
+
     {
         use tauri::Manager;
         let resource_dir = app.path().resource_dir()

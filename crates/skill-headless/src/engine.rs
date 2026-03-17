@@ -36,6 +36,20 @@ use crate::intercept::{
 use crate::response::Response;
 use crate::session::Cookie;
 
+/// Global flag: when `true`, `Browser::launch` returns `Err` immediately.
+/// Set once at app startup via `Browser::set_unavailable()` when the host
+/// application (e.g. Tauri) owns the main-thread event loop.
+static HEADLESS_UNAVAILABLE: AtomicBool = AtomicBool::new(false);
+
+/// External page renderer provided by the host application (e.g. Tauri).
+///
+/// When set, `external_fetch_page` uses this instead of launching a
+/// standalone headless browser.  The function receives `(url, wait_ms)`
+/// and must return the visible text content of the rendered page.
+static EXTERNAL_RENDERER: std::sync::OnceLock<
+    Box<dyn Fn(&str, u64) -> Result<String, String> + Send + Sync>,
+> = std::sync::OnceLock::new();
+
 // ── Configuration ────────────────────────────────────────────────────────────
 
 /// Display mode for the browser session.
@@ -141,23 +155,51 @@ impl Browser {
     /// - **macOS**: uses WKWebView.  Must *not* be called from the main
     ///   thread if another NSApplication run loop is active.
     /// - **Windows**: uses WebView2 (Edge Chromium).
+    /// Mark the headless browser as unavailable for this process.
+    ///
+    /// Call this once at startup when another GUI framework (Tauri, Cocoa,
+    /// etc.) owns the main-thread event loop.  On macOS, tao panics if a
+    /// second event loop is created on a non-main thread — this flag
+    /// prevents `Browser::launch` from even trying.
+    ///
+    /// This is a no-op on Linux/Windows where `with_any_thread(true)` is
+    /// available.
+    pub fn set_unavailable() {
+        HEADLESS_UNAVAILABLE.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether the headless browser has been marked as unavailable.
+    pub fn is_unavailable() -> bool {
+        HEADLESS_UNAVAILABLE.load(Ordering::Relaxed)
+    }
+
+    /// Register an external page renderer.
+    ///
+    /// The host application (e.g. Tauri) can provide a function that
+    /// renders a URL using its own webview infrastructure and returns
+    /// the visible text.  This is used as a fallback when the standalone
+    /// headless browser is unavailable (macOS inside Tauri).
+    ///
+    /// The function signature is `(url: &str, wait_ms: u64) -> Result<String, String>`.
+    pub fn set_external_renderer(
+        f: impl Fn(&str, u64) -> Result<String, String> + Send + Sync + 'static,
+    ) {
+        let _ = EXTERNAL_RENDERER.set(Box::new(f));
+    }
+
+    /// Whether an external renderer is registered.
+    pub fn has_external_renderer() -> bool {
+        EXTERNAL_RENDERER.get().is_some()
+    }
+
     pub fn launch(config: BrowserConfig) -> Result<Self, HeadlessError> {
-        // On macOS, tao requires the event loop on the main thread.  When
-        // another NSApplication run loop is already active (e.g. Tauri),
-        // spawning a second event loop on a background thread will panic
-        // with "EventLoop must be created on the main thread!" — and since
-        // the panic happens on the spawned thread inside an `extern "C"`
-        // callback, it aborts the entire process.
-        //
-        // Detect this situation early and return an error so callers can
-        // fall back to plain HTTP fetch.
-        #[cfg(target_os = "macos")]
-        {
-            if is_macos_main_runloop_running() {
-                return Err(HeadlessError::InitFailed(
-                    "headless browser unavailable: macOS main run loop is already active (Tauri)".into()
-                ));
-            }
+        // On macOS inside a Tauri app, tao panics when a second event loop
+        // is created on a background thread.  The app must call
+        // `Browser::set_unavailable()` at startup to prevent this.
+        if HEADLESS_UNAVAILABLE.load(Ordering::Relaxed) {
+            return Err(HeadlessError::InitFailed(
+                "headless browser unavailable: main event loop is owned by the host application".into()
+            ));
         }
 
         let timeout = config.timeout;
@@ -1043,38 +1085,14 @@ fn js_timestamp() -> f64 {
         * 1000.0
 }
 
-// ── macOS run-loop guard ─────────────────────────────────────────────────────
+// ── External renderer access ─────────────────────────────────────────────────
 
-/// Check whether the macOS NSApplication main run loop is already running.
+/// Render a URL using the registered external renderer (if any).
 ///
-/// When Tauri (or any Cocoa app) owns the main thread, creating a second
-/// tao `EventLoop` on a background thread panics and aborts.  This function
-/// lets us detect that situation *before* spawning the thread.
-#[cfg(target_os = "macos")]
-fn is_macos_main_runloop_running() -> bool {
-    // NSRunLoop.mainRunLoop.currentMode != nil means the main run loop is
-    // actively running.  In a headless CLI context this returns nil/false,
-    // so Browser::launch proceeds normally.
-    //
-    // Safety: these are standard Objective-C runtime calls with no side
-    // effects.  The return value is an autoreleased NSString* (or nil).
-    use std::ffi::c_void;
-
-    #[link(name = "objc", kind = "dylib")]
-    extern "C" {
-        fn objc_getClass(name: *const u8) -> *const c_void;
-        fn sel_registerName(name: *const u8) -> *const c_void;
-        fn objc_msgSend(receiver: *const c_void, sel: *const c_void, ...) -> *const c_void;
-    }
-
-    unsafe {
-        let cls = objc_getClass(b"NSRunLoop\0".as_ptr());
-        if cls.is_null() { return false; }
-        let sel_main = sel_registerName(b"mainRunLoop\0".as_ptr());
-        let main_loop = objc_msgSend(cls, sel_main);
-        if main_loop.is_null() { return false; }
-        let sel_mode = sel_registerName(b"currentMode\0".as_ptr());
-        let mode = objc_msgSend(main_loop, sel_mode);
-        !mode.is_null()
-    }
+/// Returns `None` if no external renderer is registered.
+/// Returns `Some(Ok(text))` on success or `Some(Err(msg))` on failure.
+pub fn external_fetch_page(url: &str, wait_ms: u64) -> Option<Result<String, String>> {
+    EXTERNAL_RENDERER.get().map(|f| f(url, wait_ms))
 }
+
+

@@ -9512,6 +9512,7 @@ dependencies = [
  "skill-devices",
  "skill-eeg",
  "skill-exg",
+ "skill-headless",
  "skill-history",
  "skill-jobs",
  "skill-label-index",

@@ -252,6 +252,30 @@ pub(crate) fn headless_fetch_url(
 ) -> Value {
     use skill_headless::{Browser, BrowserConfig, Command};
 
+    // If the standalone browser is unavailable, try the external renderer
+    // (Tauri's webview) before falling back to plain HTTP.
+    if Browser::is_unavailable() {
+        if let Some(result) = skill_headless::external_fetch_page(url, wait_ms) {
+            match result {
+                Ok(text) => {
+                    let text = truncate_text(&text, 12_000);
+                    return json!({
+                        "ok": true,
+                        "tool": "web_fetch",
+                        "url": url,
+                        "mode": "external_renderer",
+                        "content": text,
+                        "truncated": text.len() >= 12_000,
+                    });
+                }
+                Err(e) => {
+                    return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("external renderer: {e}"), "fallback": true });
+                }
+            }
+        }
+        return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": "headless browser unavailable on this platform", "fallback": true });
+    }
+
     let browser = match Browser::launch(BrowserConfig {
         user_agent: Some(random_ua().to_string()),
         timeout: std::time::Duration::from_secs(30),
@@ -369,6 +393,25 @@ pub(crate) fn headless_fetch_url(
 /// result in an error string at that index instead of content.
 pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
     use skill_headless::{Browser, BrowserConfig, Command};
+
+    // If the standalone browser is unavailable, try the external renderer
+    // (Tauri's webview) before returning None (which triggers HTTP fallback).
+    if Browser::is_unavailable() {
+        if Browser::has_external_renderer() {
+            let mut results = Vec::with_capacity(urls.len());
+            for url in urls {
+                tool_log!("tool:web_search", "[render:external] visiting {}", url);
+                match skill_headless::external_fetch_page(url, 2500) {
+                    Some(Ok(text)) => results.push(truncate_text(&text, 2_000)),
+                    Some(Err(e))   => results.push(format!("[error: {e}]")),
+                    None           => results.push("[error: external renderer not available]".into()),
+                }
+            }
+            return Some(results);
+        }
+        tool_log!("tool:web_search", "[render] headless unavailable, no external renderer");
+        return None;
+    }
 
     let browser = match Browser::launch(BrowserConfig {
         user_agent: Some(random_ua().to_string()),
