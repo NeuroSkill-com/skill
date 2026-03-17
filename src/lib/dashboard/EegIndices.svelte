@@ -45,7 +45,7 @@ the Free Software Foundation, version 3 only. -->
         { k: "bps", v: bps.toFixed(2), c: '#6b7280' },
         { k: "snr", v: snr.toFixed(1)+' dB', c: snr>10?'#22c55e':snr<3?'#ef4444':'#f59e0b' },
         { k: "coherence", v: coherence.toFixed(3), c: '#6b7280' },
-        ...(showMu ? [{ k: "muSuppression", v: mu.toFixed(3), c: mu<0.8?'#a855f7':'#6b7280' }] : []),
+        ...(showMu ? [{ k: "muSuppression", v: mu.toFixed(3), c: mu<0.8?'var(--color-violet-500)':'#6b7280' }] : []),
         { k: "tbr", v: tbr.toFixed(2), c: tbr>3?'#ef4444':tbr>2?'#f59e0b':'#6b7280', bar: Math.min(100,tbr*20), bg:'bg-rose-400' },
         { k: "sef95", v: sef95.toFixed(1)+' Hz', c: '#6b7280', bar: Math.min(100,sef95/128*100), bg:'bg-sky-400' },
         { k: "spectralCentroid", v: sc.toFixed(1)+' Hz', c: '#6b7280', bar: Math.min(100,sc/60*100), bg:'bg-cyan-500' },

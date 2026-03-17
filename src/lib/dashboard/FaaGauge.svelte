@@ -17,7 +17,7 @@ the Free Software Foundation, version 3 only. -->
                                  "aria-valuenow": Math.round(faa * 1000) / 1000, "aria-valuemin": -1, "aria-valuemax": 1 }}>
     <div class="flex items-center justify-end -mt-1 mb-0.5">
       <span class="text-[0.65rem] font-bold tabular-nums shrink-0"
-            style="color:{Math.abs(faa) > 0.3 ? '#a855f7' : '#6b7280'}">
+            style="color:{Math.abs(faa) > 0.3 ? 'var(--color-violet-500)' : '#6b7280'}">
         {faa >= 0 ? "+" : ""}{faa.toFixed(3)}
       </span>
     </div>
