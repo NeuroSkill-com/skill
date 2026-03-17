@@ -7,3 +7,5 @@
 - **Split `settings_cmds.rs` (1,789 → 3 files)**: Extracted `dnd_cmds.rs` (207 lines, Do Not Disturb automation commands) and `hook_cmds.rs` (274 lines, hook distance suggestion and audit log), reducing `mod.rs` to 1,341 lines.
 
 - **Split `skill-commands` crate `lib.rs` (1,710 → 2 files)**: Extracted `graph.rs` (803 lines, DOT and SVG generation for interactive search results), reducing `lib.rs` to 917 lines.
+
+- **Extract `chat-utils.ts` from `chat/+page.svelte` (2,945 → 2,720 lines)**: Moved pure utility functions (tool-call fence stripping, danger detection, assistant output parsing) into a standalone TypeScript module for testability and reuse.
