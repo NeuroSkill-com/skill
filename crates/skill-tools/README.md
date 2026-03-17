@@ -13,7 +13,8 @@ Implements the function-calling layer for the local LLM: declares the available 
 | `types` | `LlmToolConfig` — per-tool enable/disable flags and `ToolExecutionMode` (auto / confirm / deny) |
 | `parse` | Tool-call extraction from raw LLM output, JSON schema validation, system-prompt injection, and stripping of tool-call blocks. Core types: `Tool`, `ToolCall`, `ToolFunction`, `ChatMessage`, `MessageContent`, `ContentPart`. |
 | `defs` | `builtin_llm_tools()` — registry of all built-in tool definitions with JSON schemas; `enabled_builtin_llm_tools()` / `filter_allowed_tool_defs()` — config-aware filtering |
-| `exec` | Tool execution: `resolve_tool_path`, `check_bash_safety`, `check_path_safety`, `truncate_text`; runs shell commands, reads/writes files, performs web searches |
+| `exec` | Tool execution: `resolve_tool_path`, `check_bash_safety`, `check_path_safety`, `truncate_text`; runs shell commands, reads/writes files |
+| `search` | Web search backends: DuckDuckGo HTML, Brave API, SearXNG; headless URL fetch and rendering |
 | `context` | Token estimation and context-window management: `estimate_tokens`, `estimate_messages_tokens`, `trim_messages_to_fit` |
 | `log` | Standalone pluggable logger for tool-call tracing. Install a custom sink with `set_log_callback`; toggle at runtime with `set_log_enabled`. Falls back to `eprintln!` when no callback is registered. Use the `tool_log!` macro from call sites. |
 

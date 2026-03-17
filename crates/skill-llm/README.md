@@ -13,7 +13,8 @@ Manages the full lifecycle of a local large language model: model catalog and do
 | `catalog` | `LlmCatalog` — JSON-backed model registry with HuggingFace download, cache validation, auto-selection, and mmproj pairing. `download_file()` handles resumable streaming downloads with progress. |
 | `chat_store` | `ChatStore` — SQLite-backed conversation persistence. Sessions, messages, and tool-call history with archive/unarchive support. |
 | `config` | `LlmConfig` — runtime configuration: model path, context size, GPU layers, temperature, top-p, etc. |
-| `engine` | Inference engine wrapping `llama-cpp-4`: model loading, prompt formatting, streaming token generation, and vision embedding |
+| `engine` | Inference engine wrapping `llama-cpp-4`: model loading, prompt formatting, streaming token generation, tool orchestration, and vision embedding |
+| `handlers` | HTTP/REST handlers for the `/v1/*` API: chat completions, text completions, embeddings, auth, and router builder |
 | `event` | Event types for streaming inference progress |
 | `log` | Standalone logger with pluggable callback sink and `llm_log!` macro |
 

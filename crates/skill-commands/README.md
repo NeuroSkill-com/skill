@@ -18,6 +18,13 @@ Core search and visualization engine for NeuroSkill's embedding space. Provides 
 | `NeighborMetrics` | Per-neighbour distance/band/score breakdown |
 | `SessionRef` | Reference to a recording session by date and time range |
 
+## Modules
+
+| Module | Description |
+|---|---|
+| `lib.rs` | Search engine: K-NN over HNSW indices, streaming results, session lookup, labels |
+| `graph.rs` | DOT and SVG graph generation for interactive search visualization |
+
 ## Key functions
 
 | Function | Description |
@@ -25,7 +32,7 @@ Core search and visualization engine for NeuroSkill's embedding space. Provides 
 | `search_embeddings_in_range` | K-NN search over a date range of HNSW indices |
 | `stream_search_inner` | Streaming variant that emits `SearchProgress` updates |
 | `generate_dot` / `generate_svg` | Produce DOT or SVG graph from nodes and edges |
-| `pca_2d` | Project high-dimensional embeddings to 2-D via PCA |
+| `dot_esc` / `dot_node_label` | DOT escaping and label formatting helpers |
 | `list_date_dirs` / `load_day_index` | Discover and load daily embedding indices |
 | `get_labels_for` / `get_labels_near` | Query labels by exact or windowed timestamp |
 | `unix_to_ts` / `ts_to_unix` / `fmt_unix_utc` | Timestamp conversion helpers |
