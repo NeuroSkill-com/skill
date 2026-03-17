@@ -633,54 +633,70 @@ fn setup_external_renderer(app: &mut tauri::App) {
         .build()
         .map_err(|e| format!("webview creation failed: {e}"))?;
 
-        // Wait for the page to load.
+        // Wait for the page to load.  Weather sites and SPAs can be slow,
+        // so we wait the requested duration (typically 4s).
         std::thread::sleep(Duration::from_millis(wait_ms));
 
         // Extract visible text by setting document.title, which we can
-        // read back with window.title().
+        // read back with window.title().  We try the extraction multiple
+        // times because the page might still be rendering.
         let extract_js = r#"
             (function() {
-                function extractText(node) {
-                    if (!node) return '';
-                    var tag = (node.tagName || '').toLowerCase();
-                    if (tag === 'script' || tag === 'style' || tag === 'noscript' || tag === 'svg') return '';
-                    if (node.nodeType === 3) return node.textContent;
-                    var parts = [];
-                    for (var i = 0; i < node.childNodes.length; i++) {
-                        parts.push(extractText(node.childNodes[i]));
+                try {
+                    function extractText(node) {
+                        if (!node) return '';
+                        var tag = (node.tagName || '').toLowerCase();
+                        if (tag === 'script' || tag === 'style' || tag === 'noscript' || tag === 'svg') return '';
+                        if (node.nodeType === 3) return node.textContent;
+                        var parts = [];
+                        for (var i = 0; i < node.childNodes.length; i++) {
+                            parts.push(extractText(node.childNodes[i]));
+                        }
+                        var text = parts.join(' ');
+                        var block = tag === 'br' || tag === 'p' || tag === 'div' || tag === 'li' ||
+                            tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' ||
+                            tag === 'h5' || tag === 'h6' || tag === 'tr' || tag === 'td';
+                        return block ? '\n' + text + '\n' : text;
                     }
-                    var text = parts.join(' ');
-                    var block = tag === 'br' || tag === 'p' || tag === 'div' || tag === 'li' ||
-                        tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' ||
-                        tag === 'h5' || tag === 'h6' || tag === 'tr' || tag === 'td';
-                    return block ? '\n' + text + '\n' : text;
+                    var raw = extractText(document.body || document.documentElement);
+                    var clean = raw.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+                    document.title = '__SKILL_DONE__' + clean.substring(0, 100000);
+                } catch(e) {
+                    document.title = '__SKILL_DONE__' + (document.body ? document.body.innerText || '' : '');
                 }
-                var raw = extractText(document.body || document.documentElement);
-                var clean = raw.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-                document.title = '__SKILL_DONE__' + clean.substring(0, 100000);
             })();
         "#;
 
-        window.eval(extract_js).map_err(|e| format!("eval failed: {e}"))?;
+        // Try eval up to 3 times (page might still be loading).
+        for attempt in 0..3 {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_millis(1000));
+            }
+            let _ = window.eval(extract_js);
 
-        // Poll the title until the marker appears or timeout.
-        let deadline = Instant::now() + Duration::from_secs(10);
-        let result = loop {
-            std::thread::sleep(Duration::from_millis(100));
-            if let Ok(title) = window.title() {
-                if let Some(text) = title.strip_prefix("__SKILL_DONE__") {
-                    break Ok(text.to_string());
+            // Poll the title until the marker appears.
+            let poll_deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                std::thread::sleep(Duration::from_millis(100));
+                if let Ok(title) = window.title() {
+                    if let Some(text) = title.strip_prefix("__SKILL_DONE__") {
+                        if !text.trim().is_empty() || attempt == 2 {
+                            let _ = window.destroy();
+                            return Ok(text.to_string());
+                        }
+                        // Empty result on first attempts — page might still be loading.
+                        break;
+                    }
+                }
+                if Instant::now() > poll_deadline {
+                    break;
                 }
             }
-            if Instant::now() > deadline {
-                break Err("timeout extracting page content".into());
-            }
-        };
+        }
 
-        // Close the hidden window.
+        // All attempts exhausted — return whatever we have.
         let _ = window.destroy();
-
-        result
+        Err("timeout extracting page content".into())
     });
 }
 
