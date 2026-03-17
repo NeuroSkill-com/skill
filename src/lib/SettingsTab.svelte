@@ -535,7 +535,7 @@ the Free Software Foundation, version 3 only. -->
                 aria-label={`${t(company.nameKey)} ${t(item.nameKey)}`}
               >
                 <div class="w-full h-16 rounded-md bg-white border border-border/60 flex items-center justify-center p-1.5">
-                  <img src={item.image} alt={t(item.nameKey)} class="w-full h-full object-contain" />
+                  <img src={item.image} alt={t(item.nameKey)} class="w-full h-full object-cover" />
                 </div>
                 <span class="text-[0.62rem] text-center leading-tight text-foreground/85 min-h-[30px] flex items-center justify-center">{t(item.nameKey)}</span>
               </button>
@@ -604,7 +604,7 @@ the Free Software Foundation, version 3 only. -->
           <!-- Device photo -->
           {#if imgSrc}
             <img src={imgSrc} alt={dev.name}
-                 class="w-12 h-12 object-contain rounded-lg shrink-0
+                 class="w-12 h-12 object-cover rounded-lg shrink-0
                         {imgSrc.endsWith('.png') || imgSrc.endsWith('.svg') ? 'bg-white p-1' : 'bg-muted/40 dark:bg-white/[0.04]'}
                         {!dev.is_paired ? 'grayscale opacity-60' : ''}" />
           {:else}
@@ -771,7 +771,7 @@ the Free Software Foundation, version 3 only. -->
             <img
               src={OPENBCI_IMAGES[openbci.board]}
               alt={t(`settings.openbciBoard${openbci.board.replace(/_([a-z])/g, (_, c) => c.toUpperCase()).replace(/^./, s => s.toUpperCase())}`) || openbci.board}
-              class="h-36 max-w-full object-contain rounded-xl
+              class="h-36 max-w-full object-cover rounded-xl
                      bg-muted/30 dark:bg-white/[0.03] p-2
                      border border-border dark:border-white/[0.06]
                      transition-all duration-200" />
@@ -831,7 +831,7 @@ the Free Software Foundation, version 3 only. -->
           <!-- WiFi Shield photo -->
           <div class="flex items-center gap-3">
             <img src="/devices/openbci-wifi-shield.png" alt="OpenBCI WiFi Shield"
-                 class="h-16 w-16 object-contain rounded-lg shrink-0
+                 class="h-16 w-16 object-cover rounded-lg shrink-0
                         bg-muted/30 dark:bg-white/[0.03] p-1
                         border border-border dark:border-white/[0.06]" />
             <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciWifiShieldIp")}</p>
