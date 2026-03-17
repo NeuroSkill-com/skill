@@ -221,7 +221,7 @@ jobs:
           npm run build
           npm run -s verify:tauri:frontend
           cd src-tauri
-          cargo build --release --target aarch64-apple-darwin --features custom-protocol
+          cargo build --release --target aarch64-apple-darwin --features custom-protocol,llm-metal
 
       # ── Assemble .app bundle ──────────────────────────────────────────────
       #
