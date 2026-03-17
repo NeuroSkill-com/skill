@@ -54,7 +54,7 @@ fn fuzzy_score(query: &str, candidate: &str) -> f32 {
     if q.contains(&c) {
         return 0.88;
     }
-    if crate::eeg_embeddings::fuzzy_match(&q, &c) {
+    if skill_exg::fuzzy_match(&q, &c) {
         return 0.75;
     }
     0.0
@@ -1347,7 +1347,7 @@ fn suggest_hook_distances_sync(
 
     let matched: Vec<(i64, String, u64, u64)> = all_labels
         .into_iter()
-        .filter(|(_, text, _, _)| kws.iter().any(|k| crate::eeg_embeddings::fuzzy_match(k, text)))
+        .filter(|(_, text, _, _)| kws.iter().any(|k| skill_exg::fuzzy_match(k, text)))
         .collect();
 
     let label_n = matched.len();
@@ -1398,7 +1398,7 @@ fn suggest_hook_distances_sync(
     let mut distances: Vec<f32> = Vec::with_capacity(samples.len() * refs.len());
     for sample in &samples {
         for r in &refs {
-            let d = crate::eeg_embeddings::cosine_distance(sample, r);
+            let d = skill_exg::cosine_distance(sample, r);
             if d < 2.0 {
                 distances.push(d);
             }
