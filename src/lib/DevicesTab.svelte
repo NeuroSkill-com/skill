@@ -237,6 +237,12 @@ the Free Software Foundation, version 3 only. -->
     if (n.includes("flex")) {
       return "/devices/emotiv-flex-saline.webp";
     }
+    if (n.includes("mn8")) {
+      return "/devices/emotiv-mn8.webp";
+    }
+    if (n.includes("x-trodes") || n.includes("xtrodes") || n.includes("x trodes")) {
+      return "/devices/emotiv-x-trodes.webp";
+    }
     if (n.includes("epoc") || n.includes("emotiv")) {
       return "/devices/emotiv-epoc-x.webp";
     }
