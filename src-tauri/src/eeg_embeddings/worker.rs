@@ -341,10 +341,7 @@ fn load_recent_label_texts(skill_dir: &Path, limit: usize) -> Vec<String> {
     if !labels_db.exists() {
         return Vec::new();
     }
-    let Ok(conn) = rusqlite::Connection::open_with_flags(
-        &labels_db,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ) else {
+    let Ok(conn) = skill_data::util::open_readonly(&labels_db) else {
         return Vec::new();
     };
 

@@ -110,10 +110,7 @@ pub(super) fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, Strin
     if !labels_db.exists() {
         return Ok(serde_json::json!({ "suggestion": empty }));
     }
-    let Ok(conn) = rusqlite::Connection::open_with_flags(
-        &labels_db,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ) else {
+    let Ok(conn) = skill_data::util::open_readonly(&labels_db) else {
         return Ok(serde_json::json!({ "suggestion": empty }));
     };
 
@@ -184,10 +181,7 @@ pub(super) fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, Strin
             if !db.exists() {
                 continue;
             }
-            let Ok(conn) = rusqlite::Connection::open_with_flags(
-                &db,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            ) else {
+            let Ok(conn) = skill_data::util::open_readonly(&db) else {
                 continue;
             };
 

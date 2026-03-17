@@ -32,9 +32,8 @@ pub async fn query_annotations(
     tokio::task::spawn_blocking(move || {
         let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
         if !labels_db.exists() { return vec![]; }
-        let conn = match rusqlite::Connection::open_with_flags(
-            &labels_db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) { Ok(c) => c, Err(_) => return vec![] };
+        let conn = match skill_data::util::open_readonly(&labels_db)
+        { Ok(c) => c, Err(_) => return vec![] };
         let query = if start_utc.is_some() && end_utc.is_some() {
             "SELECT id, eeg_start, eeg_end, label_start, label_end, text, context, created_at \
              FROM labels WHERE eeg_end >= ?1 AND eeg_start <= ?2 ORDER BY created_at DESC"
@@ -82,10 +81,7 @@ pub async fn get_recent_labels(
         let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
         if !labels_db.exists() { return vec![]; }
 
-        let conn = match rusqlite::Connection::open_with_flags(
-            &labels_db,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) {
+        let conn = match skill_data::util::open_readonly(&labels_db) {
             Ok(c) => c,
             Err(_) => return vec![],
         };

@@ -78,9 +78,7 @@ fn suggest_hook_distances_sync(
     if !labels_db.exists() {
         return empty;
     }
-    let Ok(conn) = rusqlite::Connection::open_with_flags(
-        &labels_db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ) else {
+    let Ok(conn) = skill_data::util::open_readonly(&labels_db) else {
         return empty;
     };
 
@@ -210,9 +208,7 @@ fn sample_recent_eeg_embeddings(skill_dir: &std::path::Path, max: usize) -> Vec<
     for dir in &date_dirs {
         let db = dir.join(crate::constants::SQLITE_FILE);
         if !db.exists() { continue; }
-        let Ok(conn) = rusqlite::Connection::open_with_flags(
-            &db, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) else { continue };
+        let Ok(conn) = skill_data::util::open_readonly(&db) else { continue };
 
         let Ok(mut stmt) = conn.prepare(
             "SELECT eeg_embedding FROM embeddings ORDER BY timestamp DESC LIMIT ?1",

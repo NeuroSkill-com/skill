@@ -133,10 +133,7 @@ pub async fn suggest_hook_keywords(
 
         // ── Fuzzy suggestions from labels.sqlite ───────────────────────────
         if labels_db.exists() {
-            if let Ok(conn) = rusqlite::Connection::open_with_flags(
-                &labels_db,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            ) {
+            if let Ok(conn) = skill_data::util::open_readonly(&labels_db) {
                 if let Ok(mut stmt) = conn.prepare(
                     "SELECT text FROM labels
                      WHERE length(trim(text)) > 0

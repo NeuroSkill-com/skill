@@ -9,6 +9,116 @@ use crate::skill_log::SkillLogger;
 use crate::constants::{HNSW_INDEX_FILE, SQLITE_FILE};
 use skill_exg::EpochMetrics;
 
+// ── Metrics JSON serialization ─────────────────────────────────────────────────
+
+/// Serialise all computed metrics into a single JSON object string.
+///
+/// Shared by both `DayStore::insert` and `DayStore::insert_metrics_only`
+/// to avoid duplicating the ~60-field serialization logic.
+fn metrics_to_json(
+    m: &EpochMetrics,
+    ppg_averages: Option<&[f64; 3]>,
+    band_channels_json: Option<&str>,
+) -> String {
+    use serde_json::{Map, Value};
+
+    let nn = |v: f64| -> Value {
+        if v > 0.0 { Value::Number(serde_json::Number::from_f64(v).unwrap_or(serde_json::Number::from(0))) }
+        else { Value::Null }
+    };
+    let f32v = |v: f32| -> Value {
+        Value::Number(serde_json::Number::from_f64(v as f64).unwrap_or(serde_json::Number::from(0)))
+    };
+    let f64v = |v: f64| -> Value {
+        Value::Number(serde_json::Number::from_f64(v).unwrap_or(serde_json::Number::from(0)))
+    };
+    let u64v = |v: u64| -> Value { Value::Number(v.into()) };
+
+    let mut o = Map::with_capacity(64);
+
+    // Band powers
+    o.insert("rel_delta".into(),      f32v(m.rel_delta));
+    o.insert("rel_theta".into(),      f32v(m.rel_theta));
+    o.insert("rel_alpha".into(),      f32v(m.rel_alpha));
+    o.insert("rel_beta".into(),       f32v(m.rel_beta));
+    o.insert("rel_gamma".into(),      f32v(m.rel_gamma));
+    o.insert("rel_high_gamma".into(), f32v(m.rel_high_gamma));
+    // Scores
+    o.insert("relaxation_score".into(), f32v(m.relaxation));
+    o.insert("engagement_score".into(), f32v(m.engagement));
+    o.insert("faa".into(),              f32v(m.faa));
+    // Cross-band ratios
+    o.insert("tar".into(), f32v(m.tar));
+    o.insert("bar".into(), f32v(m.bar));
+    o.insert("dtr".into(), f32v(m.dtr));
+    o.insert("tbr".into(), f32v(m.tbr));
+    // Spectral
+    o.insert("pse".into(),              f32v(m.pse));
+    o.insert("apf".into(),              f32v(m.apf));
+    o.insert("bps".into(),              f32v(m.bps));
+    o.insert("snr".into(),              f32v(m.snr));
+    o.insert("sef95".into(),            f32v(m.sef95));
+    o.insert("spectral_centroid".into(),f32v(m.spectral_centroid));
+    // Synchrony / suppression
+    o.insert("coherence".into(),      f32v(m.coherence));
+    o.insert("mu_suppression".into(), f32v(m.mu_suppression));
+    // Composite
+    o.insert("mood".into(), f32v(m.mood));
+    // Hjorth
+    o.insert("hjorth_activity".into(),   f32v(m.hjorth_activity));
+    o.insert("hjorth_mobility".into(),   f32v(m.hjorth_mobility));
+    o.insert("hjorth_complexity".into(), f32v(m.hjorth_complexity));
+    // Nonlinear
+    o.insert("permutation_entropy".into(), f32v(m.permutation_entropy));
+    o.insert("higuchi_fd".into(),          f32v(m.higuchi_fd));
+    o.insert("dfa_exponent".into(),        f32v(m.dfa_exponent));
+    o.insert("sample_entropy".into(),      f32v(m.sample_entropy));
+    o.insert("pac_theta_gamma".into(),     f32v(m.pac_theta_gamma));
+    o.insert("laterality_index".into(),    f32v(m.laterality_index));
+    // PPG-derived (null when sensor absent / zero)
+    o.insert("hr".into(),               nn(m.hr));
+    o.insert("rmssd".into(),            nn(m.rmssd));
+    o.insert("sdnn".into(),             nn(m.sdnn));
+    o.insert("pnn50".into(),            if m.hr > 0.0 { f64v(m.pnn50) } else { Value::Null });
+    o.insert("lf_hf_ratio".into(),      nn(m.lf_hf_ratio));
+    o.insert("respiratory_rate".into(), nn(m.respiratory_rate));
+    o.insert("spo2_estimate".into(),    nn(m.spo2_estimate));
+    o.insert("perfusion_idx".into(),    nn(m.perfusion_index));
+    o.insert("stress_index".into(),     nn(m.stress_index));
+    // Raw PPG averages
+    if let Some(ppg) = ppg_averages {
+        o.insert("ppg_ambient".into(),  f64v(ppg[0]));
+        o.insert("ppg_infrared".into(), f64v(ppg[1]));
+        o.insert("ppg_red".into(),      f64v(ppg[2]));
+    }
+    // Artifact / head pose
+    o.insert("blink_count".into(),  u64v(m.blink_count));
+    o.insert("blink_rate".into(),   f64v(m.blink_rate));
+    o.insert("head_pitch".into(),   f64v(m.head_pitch));
+    o.insert("head_roll".into(),    f64v(m.head_roll));
+    o.insert("stillness".into(),    f64v(m.stillness));
+    o.insert("nod_count".into(),    u64v(m.nod_count));
+    o.insert("shake_count".into(),  u64v(m.shake_count));
+    // Composite scores (null when absent)
+    o.insert("meditation".into(),     nn(m.meditation));
+    o.insert("cognitive_load".into(), nn(m.cognitive_load));
+    o.insert("drowsiness".into(),     nn(m.drowsiness));
+    // Headache / migraine
+    o.insert("headache_index".into(), f32v(m.headache_index));
+    o.insert("migraine_index".into(), f32v(m.migraine_index));
+    // Consciousness
+    o.insert("consciousness_lzc".into(),         f32v(m.consciousness_lzc));
+    o.insert("consciousness_wakefulness".into(),  f32v(m.consciousness_wakefulness));
+    o.insert("consciousness_integration".into(),  f32v(m.consciousness_integration));
+    // Per-channel band powers
+    let band_channels_val: Value = band_channels_json
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or(Value::Null);
+    o.insert("band_channels".into(), band_channels_val);
+
+    Value::Object(o).to_string()
+}
+
 // ── Per-day storage (HNSW index + SQLite database) ────────────────────────────
 
 pub(in crate::eeg_embeddings) struct DayStore {
@@ -138,117 +248,7 @@ impl DayStore {
 
         // ── SQLite ────────────────────────────────────────────────────────────
         let blob: Vec<u8> = embedding.iter().flat_map(|v| v.to_le_bytes()).collect();
-
-        // Serialise all computed metrics into a single JSON object.
-        // Consumers query individual fields with json_extract(metrics_json, '$.field').
-        //
-        // Built with serde_json::Map rather than the json!{} macro: the macro
-        // expands recursively (one level per key) and panics the compiler with
-        // "recursion limit reached" once the object exceeds ~30 fields.
-        let metrics_json: Option<String> = metrics.map(|m| {
-            use serde_json::{Map, Value};
-
-            // Helper: f64 → Value::Number, or Null when the sensor returned 0.
-            let nn = |v: f64| -> Value {
-                if v > 0.0 { Value::Number(serde_json::Number::from_f64(v).unwrap_or(serde_json::Number::from(0))) }
-                else { Value::Null }
-            };
-            // Helper: f32 → Value::Number (always present, even when zero).
-            let f32v = |v: f32| -> Value {
-                Value::Number(serde_json::Number::from_f64(v as f64).unwrap_or(serde_json::Number::from(0)))
-            };
-            // Helper: f64 → Value::Number (always present).
-            let f64v = |v: f64| -> Value {
-                Value::Number(serde_json::Number::from_f64(v).unwrap_or(serde_json::Number::from(0)))
-            };
-            // Helper: u64 → Value::Number.
-            let u64v = |v: u64| -> Value { Value::Number(v.into()) };
-
-            let mut o = Map::with_capacity(64);
-
-            // Band powers
-            o.insert("rel_delta".into(),      f32v(m.rel_delta));
-            o.insert("rel_theta".into(),      f32v(m.rel_theta));
-            o.insert("rel_alpha".into(),      f32v(m.rel_alpha));
-            o.insert("rel_beta".into(),       f32v(m.rel_beta));
-            o.insert("rel_gamma".into(),      f32v(m.rel_gamma));
-            o.insert("rel_high_gamma".into(), f32v(m.rel_high_gamma));
-            // Scores
-            o.insert("relaxation_score".into(), f32v(m.relaxation));
-            o.insert("engagement_score".into(), f32v(m.engagement));
-            o.insert("faa".into(),              f32v(m.faa));
-            // Cross-band ratios
-            o.insert("tar".into(), f32v(m.tar));
-            o.insert("bar".into(), f32v(m.bar));
-            o.insert("dtr".into(), f32v(m.dtr));
-            o.insert("tbr".into(), f32v(m.tbr));
-            // Spectral
-            o.insert("pse".into(),              f32v(m.pse));
-            o.insert("apf".into(),              f32v(m.apf));
-            o.insert("bps".into(),              f32v(m.bps));
-            o.insert("snr".into(),              f32v(m.snr));
-            o.insert("sef95".into(),            f32v(m.sef95));
-            o.insert("spectral_centroid".into(),f32v(m.spectral_centroid));
-            // Synchrony / suppression
-            o.insert("coherence".into(),      f32v(m.coherence));
-            o.insert("mu_suppression".into(), f32v(m.mu_suppression));
-            // Composite
-            o.insert("mood".into(), f32v(m.mood));
-            // Hjorth
-            o.insert("hjorth_activity".into(),   f32v(m.hjorth_activity));
-            o.insert("hjorth_mobility".into(),   f32v(m.hjorth_mobility));
-            o.insert("hjorth_complexity".into(), f32v(m.hjorth_complexity));
-            // Nonlinear
-            o.insert("permutation_entropy".into(), f32v(m.permutation_entropy));
-            o.insert("higuchi_fd".into(),          f32v(m.higuchi_fd));
-            o.insert("dfa_exponent".into(),        f32v(m.dfa_exponent));
-            o.insert("sample_entropy".into(),      f32v(m.sample_entropy));
-            o.insert("pac_theta_gamma".into(),     f32v(m.pac_theta_gamma));
-            o.insert("laterality_index".into(),    f32v(m.laterality_index));
-            // PPG-derived (null when sensor absent / zero)
-            o.insert("hr".into(),               nn(m.hr));
-            o.insert("rmssd".into(),            nn(m.rmssd));
-            o.insert("sdnn".into(),             nn(m.sdnn));
-            o.insert("pnn50".into(),            if m.hr > 0.0 { f64v(m.pnn50) } else { Value::Null });
-            o.insert("lf_hf_ratio".into(),      nn(m.lf_hf_ratio));
-            o.insert("respiratory_rate".into(), nn(m.respiratory_rate));
-            o.insert("spo2_estimate".into(),    nn(m.spo2_estimate));
-            o.insert("perfusion_idx".into(),    nn(m.perfusion_index));
-            o.insert("stress_index".into(),     nn(m.stress_index));
-            // Raw PPG averages
-            if let Some(ppg) = ppg_averages {
-                o.insert("ppg_ambient".into(),  f64v(ppg[0]));
-                o.insert("ppg_infrared".into(), f64v(ppg[1]));
-                o.insert("ppg_red".into(),      f64v(ppg[2]));
-            }
-            // Artifact / head pose
-            o.insert("blink_count".into(),  u64v(m.blink_count));
-            o.insert("blink_rate".into(),   f64v(m.blink_rate));
-            o.insert("head_pitch".into(),   f64v(m.head_pitch));
-            o.insert("head_roll".into(),    f64v(m.head_roll));
-            o.insert("stillness".into(),    f64v(m.stillness));
-            o.insert("nod_count".into(),    u64v(m.nod_count));
-            o.insert("shake_count".into(),  u64v(m.shake_count));
-            // Composite scores (null when absent)
-            o.insert("meditation".into(),     nn(m.meditation));
-            o.insert("cognitive_load".into(), nn(m.cognitive_load));
-            o.insert("drowsiness".into(),     nn(m.drowsiness));
-            // Headache / migraine
-            o.insert("headache_index".into(), f32v(m.headache_index));
-            o.insert("migraine_index".into(), f32v(m.migraine_index));
-            // Consciousness
-            o.insert("consciousness_lzc".into(),         f32v(m.consciousness_lzc));
-            o.insert("consciousness_wakefulness".into(),  f32v(m.consciousness_wakefulness));
-            o.insert("consciousness_integration".into(),  f32v(m.consciousness_integration));
-            // Per-channel band powers — re-parse the pre-serialised JSON array
-            // so it nests cleanly instead of being double-encoded as a string.
-            let band_channels_val: Value = band_channels_json
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or(Value::Null);
-            o.insert("band_channels".into(), band_channels_val);
-
-            Value::Object(o).to_string()
-        });
+        let metrics_json: Option<String> = metrics.map(|m| metrics_to_json(m, ppg_averages, band_channels_json));
 
         let r = self.conn.execute(
             "INSERT INTO embeddings
@@ -281,81 +281,7 @@ impl DayStore {
         ppg_averages:       Option<&[f64; 3]>,
         band_channels_json: Option<&str>,
     ) -> usize {
-        // Reuse the same JSON serialisation helper as `insert`.
-        let metrics_json: Option<String> = metrics.map(|m| {
-            use serde_json::{Map, Value};
-            let nn  = |v: f64| -> Value { if v > 0.0 { Value::Number(serde_json::Number::from_f64(v).unwrap_or(serde_json::Number::from(0))) } else { Value::Null } };
-            let f32v = |v: f32| -> Value { Value::Number(serde_json::Number::from_f64(v as f64).unwrap_or(serde_json::Number::from(0))) };
-            let f64v = |v: f64| -> Value { Value::Number(serde_json::Number::from_f64(v).unwrap_or(serde_json::Number::from(0))) };
-            let u64v = |v: u64| -> Value { Value::Number(v.into()) };
-
-            let mut o = Map::with_capacity(64);
-            o.insert("rel_delta".into(), f32v(m.rel_delta));
-            o.insert("rel_theta".into(), f32v(m.rel_theta));
-            o.insert("rel_alpha".into(), f32v(m.rel_alpha));
-            o.insert("rel_beta".into(),  f32v(m.rel_beta));
-            o.insert("rel_gamma".into(), f32v(m.rel_gamma));
-            o.insert("rel_high_gamma".into(), f32v(m.rel_high_gamma));
-            o.insert("relaxation_score".into(), f32v(m.relaxation));
-            o.insert("engagement_score".into(), f32v(m.engagement));
-            o.insert("faa".into(), f32v(m.faa));
-            o.insert("tar".into(), f32v(m.tar));
-            o.insert("bar".into(), f32v(m.bar));
-            o.insert("dtr".into(), f32v(m.dtr));
-            o.insert("tbr".into(), f32v(m.tbr));
-            o.insert("pse".into(), f32v(m.pse));
-            o.insert("apf".into(), f32v(m.apf));
-            o.insert("bps".into(), f32v(m.bps));
-            o.insert("snr".into(), f32v(m.snr));
-            o.insert("sef95".into(), f32v(m.sef95));
-            o.insert("spectral_centroid".into(), f32v(m.spectral_centroid));
-            o.insert("coherence".into(),      f32v(m.coherence));
-            o.insert("mu_suppression".into(), f32v(m.mu_suppression));
-            o.insert("mood".into(), f32v(m.mood));
-            o.insert("hjorth_activity".into(),   f32v(m.hjorth_activity));
-            o.insert("hjorth_mobility".into(),   f32v(m.hjorth_mobility));
-            o.insert("hjorth_complexity".into(), f32v(m.hjorth_complexity));
-            o.insert("permutation_entropy".into(), f32v(m.permutation_entropy));
-            o.insert("higuchi_fd".into(),          f32v(m.higuchi_fd));
-            o.insert("dfa_exponent".into(),        f32v(m.dfa_exponent));
-            o.insert("sample_entropy".into(),      f32v(m.sample_entropy));
-            o.insert("pac_theta_gamma".into(),     f32v(m.pac_theta_gamma));
-            o.insert("laterality_index".into(),    f32v(m.laterality_index));
-            o.insert("hr".into(),               nn(m.hr));
-            o.insert("rmssd".into(),            nn(m.rmssd));
-            o.insert("sdnn".into(),             nn(m.sdnn));
-            o.insert("pnn50".into(),            nn(m.pnn50));
-            o.insert("lf_hf_ratio".into(),      nn(m.lf_hf_ratio));
-            o.insert("respiratory_rate".into(), nn(m.respiratory_rate));
-            o.insert("spo2_estimate".into(),    nn(m.spo2_estimate));
-            o.insert("perfusion_idx".into(),    nn(m.perfusion_index));
-            o.insert("stress_index".into(),     nn(m.stress_index));
-            if let Some(ppg) = ppg_averages {
-                o.insert("ppg_ambient".into(),  f64v(ppg[0]));
-                o.insert("ppg_infrared".into(), f64v(ppg[1]));
-                o.insert("ppg_red".into(),      f64v(ppg[2]));
-            }
-            o.insert("blink_count".into(),  u64v(m.blink_count));
-            o.insert("blink_rate".into(),   f64v(m.blink_rate));
-            o.insert("head_pitch".into(),   f64v(m.head_pitch));
-            o.insert("head_roll".into(),    f64v(m.head_roll));
-            o.insert("stillness".into(),    f64v(m.stillness));
-            o.insert("nod_count".into(),    u64v(m.nod_count));
-            o.insert("shake_count".into(),  u64v(m.shake_count));
-            o.insert("meditation".into(),     nn(m.meditation));
-            o.insert("cognitive_load".into(), nn(m.cognitive_load));
-            o.insert("drowsiness".into(),     nn(m.drowsiness));
-            o.insert("headache_index".into(), f32v(m.headache_index));
-            o.insert("migraine_index".into(), f32v(m.migraine_index));
-            o.insert("consciousness_lzc".into(),         f32v(m.consciousness_lzc));
-            o.insert("consciousness_wakefulness".into(),  f32v(m.consciousness_wakefulness));
-            o.insert("consciousness_integration".into(),  f32v(m.consciousness_integration));
-            let band_channels_val: Value = band_channels_json
-                .and_then(|s| serde_json::from_str(s).ok())
-                .unwrap_or(Value::Null);
-            o.insert("band_channels".into(), band_channels_val);
-            Value::Object(o).to_string()
-        });
+        let metrics_json: Option<String> = metrics.map(|m| metrics_to_json(m, ppg_averages, band_channels_json));
 
         // hnsw_id = 0 (sentinel) — no HNSW entry.
         let r = self.conn.execute(

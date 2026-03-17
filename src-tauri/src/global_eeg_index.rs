@@ -42,7 +42,7 @@ use std::{
 };
 
 use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
-use rusqlite::{Connection, OpenFlags};
+
 use serde::Serialize;
 
 use crate::MutexExt;
@@ -145,10 +145,7 @@ pub fn rebuild_from_scratch(skill_dir: &Path) -> LabeledIndex<Cosine, i64> {
         }
         days_scanned += 1;
 
-        let Ok(conn) = Connection::open_with_flags(
-            &db_path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        ) else {
+        let Ok(conn) = skill_data::util::open_readonly(&db_path) else {
             eprintln!("[global_idx] could not open {}", db_path.display());
             continue;
         };
