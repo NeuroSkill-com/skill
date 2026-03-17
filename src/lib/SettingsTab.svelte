@@ -534,7 +534,7 @@ the Free Software Foundation, version 3 only. -->
                        min-h-[126px]"
                 aria-label={`${t(company.nameKey)} ${t(item.nameKey)}`}
               >
-                <div class="w-full h-16 rounded-md bg-white border border-border/60 flex items-center justify-center p-1.5">
+                <div class="w-full h-16 rounded-md overflow-hidden">
                   <img src={item.image} alt={t(item.nameKey)} class="w-full h-full object-cover" />
                 </div>
                 <span class="text-[0.62rem] text-center leading-tight text-foreground/85 min-h-[30px] flex items-center justify-center">{t(item.nameKey)}</span>
@@ -603,10 +603,11 @@ the Free Software Foundation, version 3 only. -->
 
           <!-- Device photo -->
           {#if imgSrc}
-            <img src={imgSrc} alt={dev.name}
-                 class="w-12 h-12 object-cover rounded-lg shrink-0
-                        {imgSrc.endsWith('.png') || imgSrc.endsWith('.svg') ? 'bg-white' : 'bg-muted/40 dark:bg-white/[0.04]'}
-                        {!dev.is_paired ? 'grayscale opacity-60' : ''}" />
+            <div class="w-12 h-12 rounded-lg shrink-0 overflow-hidden
+                      {imgSrc.endsWith('.png') || imgSrc.endsWith('.svg') ? 'bg-white' : 'bg-muted/40 dark:bg-white/[0.04]'}
+                      {!dev.is_paired ? 'grayscale opacity-60' : ''}">
+              <img src={imgSrc} alt={dev.name} class="w-full h-full object-cover" />
+            </div>
           {:else}
             <div class="w-12 h-12 rounded-lg shrink-0 bg-muted/40 dark:bg-white/[0.04]
                         flex items-center justify-center text-2xl
