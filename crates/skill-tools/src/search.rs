@@ -252,20 +252,13 @@ pub(crate) fn headless_fetch_url(
 ) -> Value {
     use skill_headless::{Browser, BrowserConfig, Command};
 
-    // Catch panics from headless browser (on macOS, tao panics if the event
-    // loop is created on a non-main thread, which happens inside Tauri).
-    let launch_result = std::panic::catch_unwind(|| {
-        Browser::launch(BrowserConfig {
-            user_agent: Some(random_ua().to_string()),
-            timeout: std::time::Duration::from_secs(30),
-            ..Default::default()
-        })
-    });
-
-    let browser = match launch_result {
-        Ok(Ok(b)) => b,
-        Ok(Err(e)) => return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("headless launch failed: {e}"), "fallback": true }),
-        Err(_) => return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": "headless browser unavailable on this platform (use render=false)", "fallback": true }),
+    let browser = match Browser::launch(BrowserConfig {
+        user_agent: Some(random_ua().to_string()),
+        timeout: std::time::Duration::from_secs(30),
+        ..Default::default()
+    }) {
+        Ok(b) => b,
+        Err(e) => return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("headless launch failed: {e}"), "fallback": true }),
     };
 
     // Navigate to the URL.
@@ -377,24 +370,14 @@ pub(crate) fn headless_fetch_url(
 pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
     use skill_headless::{Browser, BrowserConfig, Command};
 
-    // Catch panics from headless browser (on macOS inside Tauri, tao panics
-    // because the event loop must be on the main thread).
-    let launch_result = std::panic::catch_unwind(|| {
-        Browser::launch(BrowserConfig {
-            user_agent: Some(random_ua().to_string()),
-            timeout: std::time::Duration::from_secs(20),
-            ..Default::default()
-        })
-    });
-
-    let browser = match launch_result {
-        Ok(Ok(b)) => b,
-        Ok(Err(e)) => {
+    let browser = match Browser::launch(BrowserConfig {
+        user_agent: Some(random_ua().to_string()),
+        timeout: std::time::Duration::from_secs(20),
+        ..Default::default()
+    }) {
+        Ok(b) => b,
+        Err(e) => {
             tool_log!("tool:web_search", "[render] headless launch failed: {}", e);
-            return None;
-        }
-        Err(_) => {
-            tool_log!("tool:web_search", "[render] headless browser unavailable on this platform");
             return None;
         }
     };

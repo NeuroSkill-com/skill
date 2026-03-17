@@ -142,6 +142,24 @@ impl Browser {
     ///   thread if another NSApplication run loop is active.
     /// - **Windows**: uses WebView2 (Edge Chromium).
     pub fn launch(config: BrowserConfig) -> Result<Self, HeadlessError> {
+        // On macOS, tao requires the event loop on the main thread.  When
+        // another NSApplication run loop is already active (e.g. Tauri),
+        // spawning a second event loop on a background thread will panic
+        // with "EventLoop must be created on the main thread!" — and since
+        // the panic happens on the spawned thread inside an `extern "C"`
+        // callback, it aborts the entire process.
+        //
+        // Detect this situation early and return an error so callers can
+        // fall back to plain HTTP fetch.
+        #[cfg(target_os = "macos")]
+        {
+            if is_macos_main_runloop_running() {
+                return Err(HeadlessError::InitFailed(
+                    "headless browser unavailable: macOS main run loop is already active (Tauri)".into()
+                ));
+            }
+        }
+
         let timeout = config.timeout;
         let closed = Arc::new(AtomicBool::new(false));
         let closed2 = closed.clone();
@@ -1023,4 +1041,40 @@ fn js_timestamp() -> f64 {
         .unwrap_or_default()
         .as_secs_f64()
         * 1000.0
+}
+
+// ── macOS run-loop guard ─────────────────────────────────────────────────────
+
+/// Check whether the macOS NSApplication main run loop is already running.
+///
+/// When Tauri (or any Cocoa app) owns the main thread, creating a second
+/// tao `EventLoop` on a background thread panics and aborts.  This function
+/// lets us detect that situation *before* spawning the thread.
+#[cfg(target_os = "macos")]
+fn is_macos_main_runloop_running() -> bool {
+    // NSRunLoop.mainRunLoop.currentMode != nil means the main run loop is
+    // actively running.  In a headless CLI context this returns nil/false,
+    // so Browser::launch proceeds normally.
+    //
+    // Safety: these are standard Objective-C runtime calls with no side
+    // effects.  The return value is an autoreleased NSString* (or nil).
+    use std::ffi::c_void;
+
+    #[link(name = "objc", kind = "dylib")]
+    extern "C" {
+        fn objc_getClass(name: *const u8) -> *const c_void;
+        fn sel_registerName(name: *const u8) -> *const c_void;
+        fn objc_msgSend(receiver: *const c_void, sel: *const c_void, ...) -> *const c_void;
+    }
+
+    unsafe {
+        let cls = objc_getClass(b"NSRunLoop\0".as_ptr());
+        if cls.is_null() { return false; }
+        let sel_main = sel_registerName(b"mainRunLoop\0".as_ptr());
+        let main_loop = objc_msgSend(cls, sel_main);
+        if main_loop.is_null() { return false; }
+        let sel_mode = sel_registerName(b"currentMode\0".as_ptr());
+        let mode = objc_msgSend(main_loop, sel_mode);
+        !mode.is_null()
+    }
 }
