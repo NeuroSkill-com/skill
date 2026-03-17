@@ -124,8 +124,10 @@ the Free Software Foundation, version 3 only. -->
   let openbciError     = $state("");
   let openbciExpanded  = $state(false); // collapsed by default
   let deviceApi        = $state<DeviceApiConfig>({ emotiv_client_id: "", emotiv_client_secret: "", idun_api_token: "" });
-  let deviceApiChanged = $state(false);
-  let deviceApiSaved   = $state(false);
+  let emotivApiChanged = $state(false);
+  let emotivApiSaved   = $state(false);
+  let idunApiChanged   = $state(false);
+  let idunApiSaved     = $state(false);
   let emotivSecretVisible = $state(false);
   let idunTokenVisible = $state(false);
   let emotivApiExpanded = $state(false);
@@ -159,11 +161,18 @@ the Free Software Foundation, version 3 only. -->
     }
   }
 
-  async function saveDeviceApi() {
+  async function saveEmotivApi() {
     await invoke("set_device_api_config", { config: deviceApi });
-    deviceApiChanged = false;
-    deviceApiSaved   = true;
-    setTimeout(() => { deviceApiSaved = false; }, 2000);
+    emotivApiChanged = false;
+    emotivApiSaved   = true;
+    setTimeout(() => { emotivApiSaved = false; }, 2000);
+  }
+
+  async function saveIdunApi() {
+    await invoke("set_device_api_config", { config: deviceApi });
+    idunApiChanged = false;
+    idunApiSaved   = true;
+    setTimeout(() => { idunApiSaved = false; }, 2000);
   }
 
   // Derived: which connection type this board uses
@@ -894,7 +903,7 @@ the Free Software Foundation, version 3 only. -->
             id="settings-emotiv-client-id"
             type="text"
             bind:value={deviceApi.emotiv_client_id}
-            oninput={() => { deviceApiChanged = true; }}
+            oninput={() => { emotivApiChanged = true; }}
             placeholder="Emotiv Cortex Client ID"
             class="text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
         </div>
@@ -906,7 +915,7 @@ the Free Software Foundation, version 3 only. -->
               id="settings-emotiv-client-secret"
               type={emotivSecretVisible ? "text" : "password"}
               bind:value={deviceApi.emotiv_client_secret}
-              oninput={() => { deviceApiChanged = true; }}
+              oninput={() => { emotivApiChanged = true; }}
               placeholder="Emotiv Cortex Client Secret"
               class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
             <Button size="sm" variant="outline"
@@ -915,6 +924,19 @@ the Free Software Foundation, version 3 only. -->
               {emotivSecretVisible ? "hide" : "show"}
             </Button>
           </div>
+        </div>
+
+        <div class="flex justify-end">
+          <Button size="sm"
+            variant={emotivApiSaved ? "secondary" : "outline"}
+            class="text-[0.66rem] h-7 px-3
+              {emotivApiSaved ? 'text-green-600 dark:text-green-400 border-green-500/30' :
+              emotivApiChanged ? 'border-primary/50 text-primary' :
+              'border-border dark:border-white/10 text-muted-foreground'}"
+            onclick={saveEmotivApi}
+            disabled={!emotivApiChanged && !emotivApiSaved}>
+            {emotivApiSaved ? "Saved" : "Save"}
+          </Button>
         </div>
       {/if}
 
@@ -953,7 +975,7 @@ the Free Software Foundation, version 3 only. -->
               id="settings-idun-api-token"
               type={idunTokenVisible ? "text" : "password"}
               bind:value={deviceApi.idun_api_token}
-              oninput={() => { deviceApiChanged = true; }}
+              oninput={() => { idunApiChanged = true; }}
               placeholder="IDUN API Token"
               class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
             <Button size="sm" variant="outline"
@@ -963,20 +985,20 @@ the Free Software Foundation, version 3 only. -->
             </Button>
           </div>
         </div>
-      {/if}
 
-      <div class="flex justify-end">
-        <Button size="sm"
-          variant={deviceApiSaved ? "secondary" : "outline"}
-          class="text-[0.66rem] h-7 px-3
-            {deviceApiSaved ? 'text-green-600 dark:text-green-400 border-green-500/30' :
-            deviceApiChanged ? 'border-primary/50 text-primary' :
-            'border-border dark:border-white/10 text-muted-foreground'}"
-          onclick={saveDeviceApi}
-          disabled={!deviceApiChanged && !deviceApiSaved}>
-          {deviceApiSaved ? "Saved" : "Save"}
-        </Button>
-      </div>
+        <div class="flex justify-end">
+          <Button size="sm"
+            variant={idunApiSaved ? "secondary" : "outline"}
+            class="text-[0.66rem] h-7 px-3
+              {idunApiSaved ? 'text-green-600 dark:text-green-400 border-green-500/30' :
+              idunApiChanged ? 'border-primary/50 text-primary' :
+              'border-border dark:border-white/10 text-muted-foreground'}"
+            onclick={saveIdunApi}
+            disabled={!idunApiChanged && !idunApiSaved}>
+            {idunApiSaved ? "Saved" : "Save"}
+          </Button>
+        </div>
+      {/if}
     </CardContent>
   </Card>
 </section>
