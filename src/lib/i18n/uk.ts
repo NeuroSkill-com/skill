@@ -2514,6 +2514,7 @@ const uk: Record<string, string> = {
   "chat.tools.commandLabel":            "Команда",
   "chat.tools.fileLabel":               "Файл",
   "chat.tools.queryLabel":              "Запит",
+  "chat.tools.sourcesLabel":            "Джерела",
   "chat.tools.contentLabel":            "Вміст",
   "chat.tools.editOldLabel":            "Знайти",
   "chat.tools.editNewLabel":            "Замінити",

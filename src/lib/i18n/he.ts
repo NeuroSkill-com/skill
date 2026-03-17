@@ -2326,6 +2326,7 @@ const he: Record<string, string> = {
   "chat.tools.commandLabel":            "פקודה",
   "chat.tools.fileLabel":               "קובץ",
   "chat.tools.queryLabel":              "שאילתה",
+  "chat.tools.sourcesLabel":            "מקורות",
   "chat.tools.contentLabel":            "תוכן",
   "chat.tools.editOldLabel":            "חיפוש",
   "chat.tools.editNewLabel":            "החלפה",

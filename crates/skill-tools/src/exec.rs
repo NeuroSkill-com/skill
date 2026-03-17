@@ -195,6 +195,28 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                         .map(|(i, _)| *i)
                         .collect();
 
+                    // Build sources array for the UI (not included in compact
+                    // text for the LLM, but stored in the result JSON for the
+                    // tool card to display).
+                    let sources: Vec<Value> = results.iter().enumerate()
+                        .map(|(i, r)| {
+                            let url = r.get("url").and_then(|u| u.as_str()).unwrap_or("");
+                            let title = r.get("title").and_then(|t| t.as_str()).unwrap_or("");
+                            let rendered = r.get("rendered_text").and_then(|t| t.as_str()).unwrap_or("");
+                            let score = scored.iter().find(|(idx,_)| *idx == i).map(|(_,s)| *s).unwrap_or(0);
+                            let domain = url.split('/').nth(2).unwrap_or(url);
+                            json!({
+                                "domain": domain,
+                                "url": url,
+                                "title": title,
+                                "score": score,
+                                "best": best_rendered.contains(&i),
+                                "chars": rendered.len(),
+                                "preview": truncate_text(rendered, 300),
+                            })
+                        })
+                        .collect();
+
                     let mut compact = format!("web_search query=\"{}\" results={}{}:\n",
                         query, results.len(), if render { " rendered=true" } else { "" });
 
@@ -235,7 +257,11 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                         compact.push_str("Note: only links returned. Use web_fetch to read a page, or re-call with render=true.\n");
                     }
 
-                    json!({ "ok": true, "tool": "web_search", "compact": compact })
+                    let mut result = json!({ "ok": true, "tool": "web_search", "compact": compact });
+                    if render && !sources.is_empty() {
+                        result["sources"] = json!(sources);
+                    }
+                    result
                 } else {
                     // Compression off — return full JSON.
                     let mut result = json!({ "ok": true, "tool": "web_search", "query": query, "results": results });

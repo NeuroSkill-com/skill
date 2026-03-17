@@ -2519,6 +2519,7 @@ const de: Record<string, string> = {
   "chat.tools.commandLabel":            "Befehl",
   "chat.tools.fileLabel":               "Datei",
   "chat.tools.queryLabel":              "Abfrage",
+  "chat.tools.sourcesLabel":            "Quellen",
   "chat.tools.contentLabel":            "Inhalt",
   "chat.tools.editOldLabel":            "Suchen",
   "chat.tools.editNewLabel":            "Ersetzen",

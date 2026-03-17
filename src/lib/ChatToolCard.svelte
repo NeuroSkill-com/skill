@@ -14,6 +14,14 @@
 
   let { tu, onToggleExpand, onCancel }: Props = $props();
 
+  // Track which source indices are expanded.
+  let expandedSources = $state(new Set<number>());
+  function toggleSource(i: number) {
+    const next = new Set(expandedSources);
+    if (next.has(i)) next.delete(i); else next.add(i);
+    expandedSources = next;
+  }
+
   const icons: Record<string, string> = {
     date: "🕐", location: "📍", web_search: "🔍", web_fetch: "🌐",
     bash: "💻", read_file: "📄", write_file: "✏️", edit_file: "🔧", search_output: "🔎",
@@ -211,7 +219,7 @@
                         text-foreground select-text">{tu.args.content}</pre>
           {/if}
         </div>
-      <!-- Web search: show query -->
+      <!-- Web search: show query + sources -->
       {:else if tu.tool === "web_search" && tu.args?.query}
         <div class="flex flex-col gap-0.5">
           <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
@@ -221,6 +229,69 @@
                       bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2
                       text-foreground select-text">{tu.args.query}</pre>
         </div>
+        <!-- Sources: per-domain fetch results -->
+        {#if tu.result?.sources?.length}
+          <div class="flex flex-col gap-1 mt-1">
+            <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
+              {t("chat.tools.sourcesLabel")}
+            </span>
+            {#each tu.result.sources as src, si}
+              {@const expanded = expandedSources.has(si)}
+              <div class="rounded-lg border transition-colors
+                          {src.best
+                            ? 'border-emerald-500/30 bg-emerald-500/5'
+                            : src.chars > 0
+                              ? 'border-border/40 bg-black/3 dark:bg-white/3'
+                              : 'border-border/20 bg-transparent opacity-50'}">
+                <button
+                  onclick={() => { if (src.preview) toggleSource(si); }}
+                  class="w-full flex items-center gap-2 px-2.5 py-1.5 text-left
+                         {src.preview ? 'cursor-pointer hover:bg-black/5 dark:hover:bg-white/5' : 'cursor-default'}">
+                  <!-- Expand chevron -->
+                  {#if src.preview}
+                    <svg viewBox="0 0 16 16" fill="currentColor" class="w-2.5 h-2.5 shrink-0 opacity-40
+                         transition-transform {expanded ? 'rotate-90' : ''}">
+                      <path d="M6 3l5 5-5 5V3z"/>
+                    </svg>
+                  {/if}
+                  <!-- Domain -->
+                  <span class="text-[0.62rem] font-medium text-foreground truncate min-w-0 flex-1">
+                    {src.domain}
+                  </span>
+                  <!-- Quality badge -->
+                  {#if src.best}
+                    <span class="shrink-0 text-[0.5rem] font-semibold px-1.5 py-0.5 rounded-full
+                                 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                      best
+                    </span>
+                  {:else if src.chars > 0}
+                    <span class="shrink-0 text-[0.5rem] text-muted-foreground/40 tabular-nums">
+                      {src.chars > 1000 ? `${Math.round(src.chars/1000)}k` : src.chars} chars
+                    </span>
+                  {:else}
+                    <span class="shrink-0 text-[0.5rem] text-muted-foreground/30">empty</span>
+                  {/if}
+                  <!-- Score -->
+                  <span class="shrink-0 text-[0.48rem] text-muted-foreground/30 tabular-nums w-6 text-right">
+                    {src.score}
+                  </span>
+                </button>
+                <!-- Expanded preview -->
+                {#if expanded && src.preview}
+                  <div class="border-t border-current/5 px-2.5 py-2">
+                    <a href={src.url} target="_blank" rel="noopener noreferrer"
+                       class="text-[0.55rem] text-primary/70 hover:text-primary underline break-all block mb-1">
+                      {src.url}
+                    </a>
+                    <pre class="font-mono text-[0.58rem] leading-relaxed whitespace-pre-wrap break-all
+                                bg-black/5 dark:bg-white/5 rounded px-2 py-1.5 max-h-40 overflow-y-auto
+                                text-foreground/80 select-text">{src.preview}</pre>
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
       <!-- Web fetch: show URL -->
       {:else if tu.tool === "web_fetch" && tu.args?.url}
         <div class="flex flex-col gap-0.5">
