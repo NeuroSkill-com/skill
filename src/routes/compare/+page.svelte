@@ -15,11 +15,10 @@ the Free Software Foundation, version 3 only. -->
   import { useWindowTitle } from "$lib/window-title.svelte";
   import DisclaimerFooter  from "$lib/DisclaimerFooter.svelte";
   import Hypnogram         from "$lib/Hypnogram.svelte";
-  import { BANDS }         from "$lib/constants";
   import UmapViewer3D      from "$lib/UmapViewer3D.svelte";
   import { TimeSeriesChart } from "$lib/dashboard";
   import type { Series }   from "$lib/dashboard/TimeSeriesChart.svelte";
-  import * as Card         from "$lib/components/ui/card";
+
   import { Spinner }       from "$lib/components/ui/spinner";
   import { getResolved }   from "$lib/theme-store.svelte";
   import type { SessionMetrics, EpochRow } from "$lib/dashboard/SessionDetail.svelte";
@@ -28,19 +27,24 @@ the Free Software Foundation, version 3 only. -->
   import {
     fmtSecs, fmtTime, fmtDateTime, fmtDuration, pad,
     fmtDateIso, fmtDayKey, fmtDateTimeLocalInput, parseDateTimeLocalInput,
-    dateToLocalKey, fromUnix, setupHiDpiCanvas,
+    dateToLocalKey, fromUnix,
   } from "$lib/format";
   import type { UmapPoint, UmapResult, UmapProgress } from "$lib/types";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-
-  /** A contiguous recording range discovered from embedding timestamps. */
-  interface EmbeddingSession {
-    start_utc: number;
-    end_utc:   number;
-    n_epochs:  number;
-    day:       string;
-  }
+  // ── Extracted modules ──────────────────────────────────────────────────────
+  import {
+    type EmbeddingSession, type InsightDelta, type ClusterAnalysis,
+    SESSION_COLORS, bandKeys, bandMeta, scoreKeys, radarMetrics,
+    advancedMetrics, insightMetrics,
+    HIGHER_IS_BETTER, LOWER_IS_BETTER,
+    bv, pct, diff, scoreDiff, dc, sdc,
+    analyzeUmapClusters, generateUmapPlaceholder, computeInsightDeltas,
+  } from "$lib/compare-types";
+  import {
+    HEATMAP_ROW_H, HEATMAP_LABEL_W,
+    drawSpectrum, drawDiffChart, drawRadar,
+    drawBandHeatmap, drawScoreHeatmap, drawBandDiffHeatmap,
+  } from "$lib/compare-canvas";
 
   // ── State ──────────────────────────────────────────────────────────────────
   let sessions    = $state<EmbeddingSession[]>([]);
@@ -93,20 +97,7 @@ the Free Software Foundation, version 3 only. -->
   // Placeholder UMAP data — shown while real UMAP computes
   let umapPlaceholder = $state<UmapResult | null>(null);
 
-  function gaussRand(): number {
-    return Math.sqrt(-2 * Math.log(Math.random() || 1e-10)) * Math.cos(Math.PI * 2 * Math.random());
-  }
 
-  function generateUmapPlaceholder(nA: number, nB: number): UmapResult {
-    const points: UmapPoint[] = [];
-    for (let i = 0; i < nA; i++) {
-      points.push({ x: -3 + gaussRand()*3, y: gaussRand()*3, z: gaussRand()*3, session: 0, utc: 0 });
-    }
-    for (let i = 0; i < nB; i++) {
-      points.push({ x: 3 + gaussRand()*3, y: gaussRand()*3, z: gaussRand()*3, session: 1, utc: 0 });
-    }
-    return { points, n_a: nA, n_b: nB, dim: 0 };
-  }
 
   // Job queue types
   interface JobTicket { job_id: number; estimated_ready_utc: number; queue_position: number; estimated_secs: number; }
@@ -147,8 +138,7 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Timeline / range-picker helpers ─────────────────────────────────────────
 
-  /** Session color palette (mirrors history view). */
-  const SESSION_COLORS = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#06b6d4','#f43f5e','#22d3ee','#84cc16'];
+
 
   /**
    * Svelte action: attach a non-passive wheel listener so we can call
@@ -638,89 +628,6 @@ the Free Software Foundation, version 3 only. -->
     poll();
   }
 
-  // ── Band data helpers ──────────────────────────────────────────────────────
-  const bandKeys = ["rel_delta", "rel_theta", "rel_alpha", "rel_beta", "rel_gamma"] as const;
-  const bandMeta = BANDS.slice(0, 5);
-  type BK = typeof bandKeys[number];
-
-  function bv(m: SessionMetrics | null, k: BK): number { return m ? (m[k] ?? 0) : 0; }
-  function pct(v: number): string { return (v * 100).toFixed(1); }
-
-  function diff(a: number, b: number): string {
-    const d = a - b;
-    if (Math.abs(d) < 0.001) return "—";
-    return `${d > 0 ? "+" : ""}${(d * 100).toFixed(1)}`;
-  }
-  function scoreDiff(a: number, b: number): string {
-    const d = a - b;
-    if (Math.abs(d) < 0.1) return "—";
-    return `${d > 0 ? "+" : ""}${d.toFixed(1)}`;
-  }
-  function dc(a: number, b: number): string {
-    const d = a - b;
-    if (Math.abs(d) < 0.001) return "text-muted-foreground/40";
-    return d > 0 ? "text-emerald-500" : "text-red-400";
-  }
-  function sdc(a: number, b: number): string {
-    const d = a - b;
-    if (Math.abs(d) < 0.1) return "text-muted-foreground/40";
-    return d > 0 ? "text-emerald-500" : "text-red-400";
-  }
-
-  const scoreKeys = [
-    { key: "relaxation" as const, color: "#10b981", label: "dashboard.relaxation" },
-    { key: "engagement" as const, color: "#f59e0b", label: "dashboard.engagement" },
-  ];
-
-  /** Metric row descriptor for the advanced metrics table. */
-  interface MRow { key: keyof SessionMetrics; label: string; unit: string; fmt: (v: number) => string; }
-  const fmtF3 = (v: number) => v.toFixed(3);
-  const fmtF2 = (v: number) => v.toFixed(2);
-  const fmtF1 = (v: number) => v.toFixed(1);
-  const advancedMetrics: MRow[] = [
-    { key: "tar",                label: "compare.tar",               unit: "",    fmt: fmtF3 },
-    { key: "bar",                label: "compare.bar",               unit: "",    fmt: fmtF3 },
-    { key: "dtr",                label: "compare.dtr",               unit: "",    fmt: fmtF3 },
-    { key: "tbr",                label: "compare.tbr",               unit: "",    fmt: fmtF3 },
-    { key: "pse",                label: "compare.pse",               unit: "",    fmt: fmtF3 },
-    { key: "apf",                label: "compare.apf",               unit: "Hz",  fmt: fmtF2 },
-    { key: "sef95",              label: "compare.sef95",             unit: "Hz",  fmt: fmtF2 },
-    { key: "spectral_centroid",  label: "compare.spectralCentroid",  unit: "Hz",  fmt: fmtF2 },
-    { key: "bps",                label: "compare.bps",               unit: "",    fmt: fmtF3 },
-    { key: "snr",                label: "compare.snr",               unit: "dB",  fmt: fmtF1 },
-    { key: "coherence",          label: "compare.coherence",         unit: "",    fmt: fmtF3 },
-    { key: "mu_suppression",     label: "compare.muSuppression",     unit: "",    fmt: fmtF3 },
-    { key: "mood",               label: "compare.mood",              unit: "",    fmt: fmtF1 },
-    { key: "hjorth_activity",    label: "compare.hjorthActivity",    unit: "µV²", fmt: fmtF3 },
-    { key: "hjorth_mobility",    label: "compare.hjorthMobility",    unit: "",    fmt: fmtF3 },
-    { key: "hjorth_complexity",  label: "compare.hjorthComplexity",  unit: "",    fmt: fmtF3 },
-    { key: "permutation_entropy",label: "compare.permEntropy",       unit: "",    fmt: fmtF3 },
-    { key: "higuchi_fd",         label: "compare.higuchiFd",         unit: "",    fmt: fmtF3 },
-    { key: "dfa_exponent",       label: "compare.dfaExponent",       unit: "",    fmt: fmtF3 },
-    { key: "sample_entropy",     label: "compare.sampleEntropy",     unit: "",    fmt: fmtF3 },
-    { key: "pac_theta_gamma",    label: "compare.pacThetaGamma",     unit: "",    fmt: fmtF3 },
-    { key: "laterality_index",   label: "compare.lateralityIndex",   unit: "",    fmt: fmtF3 },
-    { key: "hr",                 label: "compare.hr",                unit: "bpm", fmt: fmtF1 },
-    { key: "rmssd",              label: "compare.rmssd",             unit: "ms",  fmt: fmtF1 },
-    { key: "sdnn",               label: "compare.sdnn",              unit: "ms",  fmt: fmtF1 },
-    { key: "pnn50",              label: "compare.pnn50",             unit: "%",   fmt: fmtF1 },
-    { key: "lf_hf_ratio",        label: "compare.lfHfRatio",         unit: "",    fmt: fmtF2 },
-    { key: "respiratory_rate",   label: "compare.respiratoryRate",   unit: "bpm", fmt: fmtF1 },
-    { key: "spo2_estimate",      label: "compare.spo2",              unit: "%",   fmt: fmtF1 },
-    { key: "perfusion_index",    label: "compare.perfusionIndex",    unit: "%",   fmt: fmtF2 },
-    { key: "stress_index",       label: "compare.stressIndex",       unit: "",    fmt: fmtF1 },
-    { key: "meditation",         label: "compare.meditation",        unit: "",    fmt: fmtF1 },
-    { key: "cognitive_load",     label: "compare.cognitiveLoad",     unit: "",    fmt: fmtF1 },
-    { key: "drowsiness",         label: "compare.drowsiness",        unit: "",    fmt: fmtF1 },
-    { key: "blink_count",        label: "compare.blinkCount",        unit: "",    fmt: fmtF1 },
-    { key: "blink_rate",         label: "compare.blinkRate",         unit: "/min",fmt: fmtF1 },
-    { key: "head_pitch",         label: "compare.headPitch",         unit: "°",   fmt: fmtF1 },
-    { key: "head_roll",          label: "compare.headRoll",          unit: "°",   fmt: fmtF1 },
-    { key: "stillness",          label: "compare.stillness",         unit: "",    fmt: fmtF1 },
-    { key: "nod_count",          label: "compare.nodCount",          unit: "",    fmt: fmtF1 },
-    { key: "shake_count",        label: "compare.shakeCount",        unit: "",    fmt: fmtF1 },
-  ];
-
   const canCompare = $derived(
     aValid && bValid &&
     (aStartUtc !== bStartUtc || aEndUtc !== bEndUtc)
@@ -762,595 +669,33 @@ the Free Software Foundation, version 3 only. -->
     setTimeout(() => copied = false, 2000);
   }
 
-  // ── Client-side insights ─────────────────────────────────────────────────
-  /** Compare A vs B for a set of key metrics, classify as improved/declined. */
-  interface InsightDelta {
-    label: string;
-    key: keyof SessionMetrics;
-    a: number;
-    b: number;
-    delta: number;
-    pctChange: number;
-    direction: "improved" | "declined" | "stable";
-  }
-
-  /** Metrics where higher B value = improvement. */
-  const HIGHER_IS_BETTER = new Set<keyof SessionMetrics>([
-    "relaxation", "engagement", "meditation", "coherence", "snr",
-    "mu_suppression", "stillness", "spo2_estimate", "pnn50", "rmssd", "sdnn",
-  ]);
-  /** Metrics where lower B value = improvement. */
-  const LOWER_IS_BETTER = new Set<keyof SessionMetrics>([
-    "stress_index", "cognitive_load", "drowsiness", "blink_rate", "lf_hf_ratio",
-  ]);
-
-  const insightMetrics: { key: keyof SessionMetrics; label: string }[] = [
-    { key: "relaxation", label: "Relaxation" },
-    { key: "engagement", label: "Engagement" }, { key: "meditation", label: "Meditation" },
-    { key: "cognitive_load", label: "Cog. Load" }, { key: "drowsiness", label: "Drowsiness" },
-    { key: "stress_index", label: "Stress" }, { key: "coherence", label: "Coherence" },
-    { key: "snr", label: "SNR" }, { key: "mu_suppression", label: "μ Suppression" },
-    { key: "hr", label: "Heart Rate" }, { key: "rmssd", label: "RMSSD" },
-    { key: "sdnn", label: "SDNN" }, { key: "pnn50", label: "pNN50" },
-    { key: "stillness", label: "Stillness" }, { key: "blink_rate", label: "Blink Rate" },
-    { key: "lf_hf_ratio", label: "LF/HF" },
-  ];
-
-  const insightDeltas = $derived.by((): InsightDelta[] => {
+  // ── Client-side insights (types + logic in compare-types.ts) ──────────────
+  const insightDeltas = $derived.by(() => {
     if (!metricsA || !metricsB) return [];
-    return insightMetrics.map(m => {
-      const a = Number(metricsA![m.key]) || 0;
-      const b = Number(metricsB![m.key]) || 0;
-      const delta = b - a;
-      const pctChange = a !== 0 ? (delta / Math.abs(a)) * 100 : 0;
-      let direction: "improved" | "declined" | "stable" = "stable";
-      if (Math.abs(pctChange) > 3) { // >3% threshold to be notable
-        if (HIGHER_IS_BETTER.has(m.key)) direction = delta > 0 ? "improved" : "declined";
-        else if (LOWER_IS_BETTER.has(m.key)) direction = delta < 0 ? "improved" : "declined";
-      }
-      return { label: m.label, key: m.key, a, b, delta, pctChange, direction };
-    });
+    return computeInsightDeltas(metricsA, metricsB);
   });
-
   const improved = $derived(insightDeltas.filter(d => d.direction === "improved"));
   const declined = $derived(insightDeltas.filter(d => d.direction === "declined"));
-
   const sleepAnalysisA = $derived(sleepA ? analyzeSleep(sleepA) : null);
   const sleepAnalysisB = $derived(sleepB ? analyzeSleep(sleepB) : null);
 
-  // ── UMAP cluster analysis ──────────────────────────────────────────────────
-  interface ClusterAnalysis {
-    separationScore: number;
-    interCluster: number;
-    intraSpreadA: number;
-    intraSpreadB: number;
-  }
-
-  function analyzeUmapClusters(result: UmapResult): ClusterAnalysis | null {
-    const pts = result.points;
-    if (pts.length < 4) return null;
-    const ptsA = pts.filter(p => p.session === 0);
-    const ptsB = pts.filter(p => p.session === 1);
-    if (ptsA.length < 2 || ptsB.length < 2) return null;
-
-    const centroid = (arr: UmapPoint[]) => ({
-      x: arr.reduce((s, p) => s + p.x, 0) / arr.length,
-      y: arr.reduce((s, p) => s + p.y, 0) / arr.length,
-      z: arr.reduce((s, p) => s + p.z, 0) / arr.length,
-    });
-    const dist = (a: {x:number;y:number;z:number}, b: {x:number;y:number;z:number}) =>
-      Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2 + (a.z-b.z)**2);
-
-    const cA = centroid(ptsA);
-    const cB = centroid(ptsB);
-    const interCluster = dist(cA, cB);
-    const intraSpreadA = Math.sqrt(ptsA.reduce((s, p) => s + dist(p, cA)**2, 0) / ptsA.length);
-    const intraSpreadB = Math.sqrt(ptsB.reduce((s, p) => s + dist(p, cB)**2, 0) / ptsB.length);
-    const avgIntra = (intraSpreadA + intraSpreadB) / 2;
-    const separationScore = avgIntra > 0 ? interCluster / avgIntra : 0;
-
-    return { separationScore, interCluster, intraSpreadA, intraSpreadB };
-  }
-
   const umapAnalysis = $derived(umapResult ? analyzeUmapClusters(umapResult) : null);
 
-  // ── Radar chart ────────────────────────────────────────────────────────────
-  const radarMetrics = [
-    { key: "relaxation" as const,     label: "Relax",      max: 100, color: "#10b981" },
-    { key: "engagement" as const,     label: "Engage",     max: 100, color: "#f59e0b" },
-    { key: "meditation" as const,     label: "Meditation", max: 100, color: "#8b5cf6" },
-    { key: "cognitive_load" as const, label: "Cog Load",   max: 100, color: "#0ea5e9" },
-    { key: "drowsiness" as const,     label: "Drowsiness", max: 100, color: "#ef4444" },
-  ];
 
-  let radarCanvas = $state<HTMLCanvasElement | null>(null);
-
-  function drawRadar(canvas: HTMLCanvasElement, a: SessionMetrics, b: SessionMetrics) {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const ctx = setupHiDpiCanvas(canvas, w, h);
-
-    const cx = w / 2, cy = h / 2;
-    const radius = Math.min(cx, cy) - 28;
-    const n = radarMetrics.length;
-    const angleStep = (Math.PI * 2) / n;
-
-    // Grid rings
-    for (let ring = 1; ring <= 4; ring++) {
-      const r = (ring / 4) * radius;
-      ctx.beginPath();
-      for (let i = 0; i <= n; i++) {
-        const angle = i * angleStep - Math.PI / 2;
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.strokeStyle = "rgba(128,128,128,0.12)";
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-    }
-
-    // Axis lines + labels
-    ctx.font = "600 9px ui-sans-serif, system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    for (let i = 0; i < n; i++) {
-      const angle = i * angleStep - Math.PI / 2;
-      const ex = cx + Math.cos(angle) * radius;
-      const ey = cy + Math.sin(angle) * radius;
-      ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.lineTo(ex, ey);
-      ctx.strokeStyle = "rgba(128,128,128,0.15)";
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-
-      // Label
-      const lx = cx + Math.cos(angle) * (radius + 16);
-      const ly = cy + Math.sin(angle) * (radius + 16);
-      ctx.fillStyle = radarMetrics[i].color;
-      ctx.globalAlpha = 0.8;
-      ctx.fillText(radarMetrics[i].label, lx, ly);
-      ctx.globalAlpha = 1;
-    }
-
-    // Draw polygon
-    function drawPoly(metrics: SessionMetrics, color: string, alpha: number) {
-      ctx.beginPath();
-      for (let i = 0; i < n; i++) {
-        const angle = i * angleStep - Math.PI / 2;
-        const val = Number(metrics[radarMetrics[i].key]) || 0;
-        const r = (Math.min(val, radarMetrics[i].max) / radarMetrics[i].max) * radius;
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.globalAlpha = alpha * 0.2;
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = alpha;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      // Dots
-      for (let i = 0; i < n; i++) {
-        const angle = i * angleStep - Math.PI / 2;
-        const val = Number(metrics[radarMetrics[i].key]) || 0;
-        const r = (Math.min(val, radarMetrics[i].max) / radarMetrics[i].max) * radius;
-        const x = cx + Math.cos(angle) * r;
-        const y = cy + Math.sin(angle) * r;
-        ctx.beginPath();
-        ctx.arc(x, y, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = color;
-        ctx.globalAlpha = alpha;
-        ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    drawPoly(a, "#3b82f6", 0.9);  // A = blue
-    drawPoly(b, "#f59e0b", 0.65); // B = amber (semi-transparent)
-  }
 
   // Re-render radar when metrics change
   $effect(() => {
     if (metricsA && metricsB && radarCanvas) drawRadar(radarCanvas, metricsA, metricsB);
   });
 
-  // ── Spectrum canvas rendering ──────────────────────────────────────────────
-
-  /** Draw a horizontal stacked band-power bar on a canvas. */
-  function drawSpectrum(canvas: HTMLCanvasElement, m: SessionMetrics, label: string) {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const ctx = setupHiDpiCanvas(canvas, w, h);
-
-    const vals = bandKeys.map(k => m[k] ?? 0);
-    let sum = vals.reduce((a, b) => a + b, 0);
-    if (sum < 1e-6) sum = 1;
-
-    const barY = 0;
-    const barH = h;
-    const r = 8;
-
-    // Clip to rounded rect
-    ctx.save();
-    ctx.beginPath();
-    roundRect(ctx, 0, barY, w, barH, r);
-    ctx.clip();
-
-    // Draw stacked segments
-    let x = 0;
-    for (let i = 0; i < 5; i++) {
-      const segW = (vals[i] / sum) * w;
-      ctx.fillStyle = bandMeta[i].color;
-      ctx.globalAlpha = 0.82;
-      ctx.fillRect(x, barY, segW + 0.5, barH);
-      x += segW;
-    }
-
-    // Dark scrim
-    ctx.globalAlpha = 0.38;
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, barY, w, barH);
-    ctx.globalAlpha = 1;
-
-    // Draw percentage labels within each segment
-    x = 0;
-    ctx.textBaseline = "middle";
-    ctx.textAlign = "center";
-    for (let i = 0; i < 5; i++) {
-      const segW = (vals[i] / sum) * w;
-      if (segW > 32) {
-        ctx.font = "bold 11px ui-sans-serif, system-ui, sans-serif";
-        ctx.fillStyle = "#fff";
-        ctx.globalAlpha = 0.95;
-        ctx.fillText(`${bandMeta[i].sym} ${Math.round(vals[i] / sum * 100)}%`, x + segW / 2, barH / 2);
-      }
-      x += segW;
-    }
-
-    ctx.restore();
-  }
-
-  /** Draw a diff bar — each band as grouped vertical bars (A vs B). */
-  function drawDiffChart(canvas: HTMLCanvasElement, a: SessionMetrics, b: SessionMetrics) {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
-    const ctx = setupHiDpiCanvas(canvas, w, h);
-
-    const ml = 4, mr = 4, mt = 14, mb = 16;
-    const cw = w - ml - mr;
-    const ch = h - mt - mb;
-
-    // Get max value for scale
-    const valsA = bandKeys.map(k => a[k] ?? 0);
-    const valsB = bandKeys.map(k => b[k] ?? 0);
-    const maxVal = Math.max(...valsA, ...valsB, 0.01);
-
-    const nBands = 5;
-    const groupW = cw / nBands;
-    const barW   = groupW * 0.32;
-    const gap    = groupW * 0.06;
-
-    // Draw bars
-    for (let i = 0; i < nBands; i++) {
-      const gx = ml + i * groupW;
-
-      // Bar A
-      const hA = (valsA[i] / maxVal) * ch;
-      ctx.fillStyle = bandMeta[i].color;
-      ctx.globalAlpha = 0.9;
-      roundedBar(ctx, gx + groupW / 2 - barW - gap / 2, mt + ch - hA, barW, hA, 3);
-      ctx.fill();
-
-      // Bar B
-      const hB = (valsB[i] / maxVal) * ch;
-      ctx.globalAlpha = 0.45;
-      roundedBar(ctx, gx + groupW / 2 + gap / 2, mt + ch - hB, barW, hB, 3);
-      ctx.fill();
-
-      // Band label at bottom
-      ctx.globalAlpha = 1;
-      ctx.font = "bold 9px ui-monospace, 'JetBrains Mono', monospace";
-      ctx.fillStyle = bandMeta[i].color;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillText(bandMeta[i].sym, gx + groupW / 2, mt + ch + 4);
-    }
-
-    // Legend: A (solid) / B (faded)
-    ctx.font = "bold 8px ui-sans-serif, system-ui, sans-serif";
-    ctx.textBaseline = "top";
-    ctx.textAlign = "left";
-    ctx.fillStyle = getComputedStyle(canvas).getPropertyValue("color") || "#888";
-    ctx.globalAlpha = 0.7;
-    ctx.fillText("A ■  B ▪", ml + 2, 2);
-    ctx.globalAlpha = 1;
-  }
-
-  function roundedBar(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-    if (h < r * 2) r = h / 2;
-    if (r < 0) r = 0;
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h);
-    ctx.lineTo(x, y + h);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  }
-
-  function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  }
-
   // ── Heatmap state ─────────────────────────────────────────────────────────
+  let radarCanvas = $state<HTMLCanvasElement | null>(null);
   let hmBandCanvasA    = $state<HTMLCanvasElement | null>(null);
   let hmBandCanvasB    = $state<HTMLCanvasElement | null>(null);
   let hmBandDiffCanvas = $state<HTMLCanvasElement | null>(null);
   let hmScoreCanvasA   = $state<HTMLCanvasElement | null>(null);
   let hmScoreCanvasB   = $state<HTMLCanvasElement | null>(null);
   let showHeatmaps     = $state(false);
-
-  /** RGB triples for the low (dark) and high (vivid) end of each band row. */
-  const HM_BANDS_DEF = [
-    { key: "rd" as const, sym: "δ", lo: [20, 20, 50]  as [number,number,number], hi: [99,  102, 241] as [number,number,number] },
-    { key: "rt" as const, sym: "θ", lo: [25, 15, 55]  as [number,number,number], hi: [139,  92, 246] as [number,number,number] },
-    { key: "ra" as const, sym: "α", lo: [10, 40, 20]  as [number,number,number], hi: [34,  197,  94] as [number,number,number] },
-    { key: "rb" as const, sym: "β", lo: [10, 30, 60]  as [number,number,number], hi: [59,  130, 246] as [number,number,number] },
-    { key: "rg" as const, sym: "γ", lo: [55, 45, 10]  as [number,number,number], hi: [245, 158,  11] as [number,number,number] },
-  ] as const;
-
-  /** RGB triples for the low (dark) and high (vivid) end of each score row. */
-  const HM_SCORES_DEF = [
-    { key: "relaxation"  as const, sym: "Rlx", lo: [10, 45,  35] as [number,number,number], hi: [16,  185, 129] as [number,number,number] },
-    { key: "engagement"  as const, sym: "Eng", lo: [55, 45,  10] as [number,number,number], hi: [245, 158,  11] as [number,number,number] },
-    { key: "med"         as const, sym: "Med", lo: [35, 15,  70] as [number,number,number], hi: [139,  92, 246] as [number,number,number] },
-    { key: "cog"         as const, sym: "Cog", lo: [10, 35,  55] as [number,number,number], hi: [14,  165, 233] as [number,number,number] },
-    { key: "drow"        as const, sym: "Drw", lo: [55, 10,  10] as [number,number,number], hi: [239,  68,  68] as [number,number,number] },
-  ] as const;
-
-  /** Linearly interpolate two RGB triples and return an rgba() string. */
-  function lerpRgba(lo: [number,number,number], hi: [number,number,number], t: number, alpha: number): string {
-    const r = Math.round(lo[0] + (hi[0] - lo[0]) * t);
-    const g = Math.round(lo[1] + (hi[1] - lo[1]) * t);
-    const b = Math.round(lo[2] + (hi[2] - lo[2]) * t);
-    return `rgba(${r},${g},${b},${alpha})`;
-  }
-
-  const HEATMAP_ROW_H  = 14;  // px per row
-  const HEATMAP_LABEL_W = 22; // px for the left-side label column
-
-  /**
-   * Draw a multi-row heatmap on `canvas`.
-   * `rows` defines each row: { sym, values (0-1 raw), lo, hi }.
-   * Values are per-row normalised so each row's range fills the full color scale.
-   */
-  function drawBandHeatmap(canvas: HTMLCanvasElement, ts: EpochRow[], dark: boolean) {
-    if (!canvas || ts.length < 2) return;
-    const rows = HM_BANDS_DEF;
-    const nRows = rows.length;
-    const cssH  = HEATMAP_ROW_H * nRows;
-    const cssW  = canvas.clientWidth;
-    if (cssW <= 0) return;
-
-    const ctx = setupHiDpiCanvas(canvas, cssW, cssH);
-    // Fill background explicitly so alpha-blended cells composite correctly in
-    // both dark (#0e0e1a) and light (#f5f5fa) mode.
-    ctx.fillStyle = dark ? "#0e0e1a" : "#f5f5fa";
-    ctx.fillRect(0, 0, cssW, cssH);
-
-    const plotW  = cssW - HEATMAP_LABEL_W;
-    const nCols  = ts.length;
-    const colW   = plotW / nCols;
-
-    for (let ri = 0; ri < nRows; ri++) {
-      const { key, sym, lo, hi } = rows[ri];
-      const vals = ts.map(r => r[key] as number);
-      const vMin = Math.min(...vals);
-      const vMax = Math.max(...vals);
-      const vRange = vMax - vMin || 1;
-      const y0 = ri * HEATMAP_ROW_H;
-
-      // Label
-      ctx.font = "bold 8px ui-monospace, 'JetBrains Mono', monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = lerpRgba(lo, hi, 0.85, 0.9);
-      ctx.fillText(sym, HEATMAP_LABEL_W / 2, y0 + HEATMAP_ROW_H / 2);
-
-      // Cells
-      for (let ci = 0; ci < nCols; ci++) {
-        const t = Math.max(0, Math.min(1, (vals[ci] - vMin) / vRange));
-        ctx.fillStyle = lerpRgba(lo, hi, t, 0.15 + t * 0.85);
-        ctx.fillRect(HEATMAP_LABEL_W + ci * colW, y0, colW + 0.5, HEATMAP_ROW_H);
-      }
-
-      // Row separator
-      if (ri < nRows - 1) {
-        ctx.fillStyle = "rgba(0,0,0,0.35)";
-        ctx.fillRect(HEATMAP_LABEL_W, y0 + HEATMAP_ROW_H - 0.5, plotW, 1);
-      }
-    }
-  }
-
-  /**
-   * Draw a score heatmap (Focus, Relaxation, Engagement, Meditation, CogLoad, Drowsiness).
-   * Scores are on a 0-100 scale; each row is normalised independently.
-   */
-  function drawScoreHeatmap(canvas: HTMLCanvasElement, ts: EpochRow[], dark: boolean) {
-    if (!canvas || ts.length < 2) return;
-    const rows  = HM_SCORES_DEF;
-    const nRows = rows.length;
-    const cssH  = HEATMAP_ROW_H * nRows;
-    const cssW  = canvas.clientWidth;
-    if (cssW <= 0) return;
-
-    const ctx = setupHiDpiCanvas(canvas, cssW, cssH);
-    ctx.fillStyle = dark ? "#0e0e1a" : "#f5f5fa";
-    ctx.fillRect(0, 0, cssW, cssH);
-
-    const plotW = cssW - HEATMAP_LABEL_W;
-    const nCols = ts.length;
-    const colW  = plotW / nCols;
-
-    for (let ri = 0; ri < nRows; ri++) {
-      const { key, sym, lo, hi } = rows[ri];
-      const vals = ts.map(r => r[key] as number);
-      const vMin = Math.min(...vals);
-      const vMax = Math.max(...vals);
-      const vRange = vMax - vMin || 1;
-      const y0 = ri * HEATMAP_ROW_H;
-
-      // Label
-      ctx.font = "bold 7px ui-monospace, 'JetBrains Mono', monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = lerpRgba(lo, hi, 0.85, 0.9);
-      ctx.fillText(sym, HEATMAP_LABEL_W / 2, y0 + HEATMAP_ROW_H / 2);
-
-      // Cells
-      for (let ci = 0; ci < nCols; ci++) {
-        const t = Math.max(0, Math.min(1, (vals[ci] - vMin) / vRange));
-        ctx.fillStyle = lerpRgba(lo, hi, t, 0.15 + t * 0.85);
-        ctx.fillRect(HEATMAP_LABEL_W + ci * colW, y0, colW + 0.5, HEATMAP_ROW_H);
-      }
-
-      if (ri < nRows - 1) {
-        ctx.fillStyle = "rgba(0,0,0,0.35)";
-        ctx.fillRect(HEATMAP_LABEL_W, y0 + HEATMAP_ROW_H - 0.5, plotW, 1);
-      }
-    }
-  }
-
-  /**
-   * Draw a diverging diff heatmap: (B − A) per band, time-proportionally aligned.
-   * Blue  = A dominates, Red = B dominates, near-black = equal.
-   * A and B are resampled to a fixed number of display columns so sessions of
-   * different lengths are still directly comparable.
-   */
-  function drawBandDiffHeatmap(canvas: HTMLCanvasElement, tsA: EpochRow[], tsB: EpochRow[], dark: boolean) {
-    if (!canvas || tsA.length < 2 || tsB.length < 2) return;
-    const rows  = HM_BANDS_DEF;
-    const nRows = rows.length;
-    const cssH  = HEATMAP_ROW_H * nRows + 12; // extra 12px for colour legend bar
-    const cssW  = canvas.clientWidth;
-    if (cssW <= 0) return;
-
-    const ctx = setupHiDpiCanvas(canvas, cssW, cssH);
-    ctx.fillStyle = dark ? "#0e0e1a" : "#f5f5fa";
-    ctx.fillRect(0, 0, cssW, cssH);
-
-    // Choose display column count = max session length, capped at 400
-    const nDisplay = Math.min(Math.max(tsA.length, tsB.length), 400);
-    const plotW    = cssW - HEATMAP_LABEL_W;
-    const colW     = plotW / nDisplay;
-
-    // Pre-compute proportional sample indices
-    function sampleIdx(tsLen: number, col: number): number {
-      return Math.min(Math.round(col / (nDisplay - 1) * (tsLen - 1)), tsLen - 1);
-    }
-
-    // Diverging colour stops — neutral shifts with theme so near-zero cells
-    // blend into the background instead of showing as an opaque dark slab.
-    const BLUE_LO:  [number,number,number] = [10,  50, 200]; // strong blue  (A >> B)
-    const BLUE_MID: [number,number,number] = [40,  80, 160]; // soft blue
-    const NEUTRAL:  [number,number,number] = dark
-      ? [18,  18,  28]   // near-black   (≈ equal, dark mode)
-      : [230, 230, 242]; // near-white   (≈ equal, light mode)
-    const RED_MID:  [number,number,number] = [160, 40,  40]; // soft red
-    const RED_HI:   [number,number,number] = [220, 30,  30]; // strong red   (B >> A)
-
-    function diffColor(d: number): string {
-      // d in [-1, +1]: negative = blue side (A > B), positive = red side (B > A)
-      const absD = Math.abs(d);
-      const alpha = 0.12 + absD * 0.88;
-      if (d < 0) {
-        // Blue side: neutral → BLUE_MID → BLUE_LO
-        const t = Math.min(absD, 1);
-        const lo = t < 0.5 ? lerpRgba(NEUTRAL, BLUE_MID, t * 2, alpha) : lerpRgba(BLUE_MID, BLUE_LO, (t - 0.5) * 2, alpha);
-        return lo;
-      } else {
-        // Red side: neutral → RED_MID → RED_HI
-        const t = Math.min(d, 1);
-        return t < 0.5 ? lerpRgba(NEUTRAL, RED_MID, t * 2, alpha) : lerpRgba(RED_MID, RED_HI, (t - 0.5) * 2, alpha);
-      }
-    }
-
-    // Per-band: find the max absolute diff to normalise across all columns
-    // (per-band normalisation so weak bands aren't lost to a dominant band's scale)
-    for (let ri = 0; ri < nRows; ri++) {
-      const { key, sym, lo, hi } = rows[ri];
-      const y0 = ri * HEATMAP_ROW_H;
-
-      // Collect diffs
-      const diffs: number[] = [];
-      for (let c = 0; c < nDisplay; c++) {
-        const iA = sampleIdx(tsA.length, c);
-        const iB = sampleIdx(tsB.length, c);
-        diffs.push((tsB[iB][key] as number) - (tsA[iA][key] as number));
-      }
-      const maxAbsDiff = Math.max(...diffs.map(Math.abs), 0.001);
-
-      // Label
-      ctx.font = "bold 8px ui-monospace, 'JetBrains Mono', monospace";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = lerpRgba(lo, hi, 0.75, 0.8);
-      ctx.fillText(sym, HEATMAP_LABEL_W / 2, y0 + HEATMAP_ROW_H / 2);
-
-      // Cells
-      for (let c = 0; c < nDisplay; c++) {
-        const normD = diffs[c] / maxAbsDiff; // [-1, +1]
-        ctx.fillStyle = diffColor(normD);
-        ctx.fillRect(HEATMAP_LABEL_W + c * colW, y0, colW + 0.5, HEATMAP_ROW_H);
-      }
-
-      if (ri < nRows - 1) {
-        ctx.fillStyle = "rgba(0,0,0,0.35)";
-        ctx.fillRect(HEATMAP_LABEL_W, y0 + HEATMAP_ROW_H - 0.5, plotW, 1);
-      }
-    }
-
-    // Colour legend bar at bottom
-    const legendY = nRows * HEATMAP_ROW_H + 2;
-    const legendH = 6;
-    const nStops  = 80;
-    const sw = plotW / nStops;
-    for (let i = 0; i < nStops; i++) {
-      const d = (i / (nStops - 1)) * 2 - 1; // -1 .. +1
-      ctx.fillStyle = diffColor(d);
-      ctx.globalAlpha = 1;
-      ctx.fillRect(HEATMAP_LABEL_W + i * sw, legendY, sw + 0.5, legendH);
-    }
-    ctx.globalAlpha = 1;
-
-    // Legend labels — use darker tones in light mode for legibility
-    ctx.font = "7px ui-sans-serif, system-ui, sans-serif";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = dark ? "rgba(100,120,200,0.9)" : "rgba(40,80,200,0.9)";
-    ctx.textAlign = "left";
-    ctx.fillText("A>B", HEATMAP_LABEL_W, legendY + legendH + 1);
-    ctx.fillStyle = dark ? "rgba(200,70,70,0.9)" : "rgba(180,30,30,0.9)";
-    ctx.textAlign = "right";
-    ctx.fillText("B>A", cssW, legendY + legendH + 1);
-  }
-
   // Re-render heatmaps when time-series data, visibility, or theme changes
   $effect(() => {
     if (!showHeatmaps) return;
@@ -1363,9 +708,6 @@ the Free Software Foundation, version 3 only. -->
     if (hmScoreCanvasB  && tsB.length > 2) drawScoreHeatmap(hmScoreCanvasB, tsB, dark);
   });
 
-  // UMAP colors (used in legend below the 3D viewer)
-  const UMAP_COLOR_A = "#3b82f6";  // blue
-  const UMAP_COLOR_B = "#f59e0b";  // amber
 
   // Re-render canvases when metrics or theme changes
   $effect(() => {
@@ -2434,11 +1776,11 @@ the Free Software Foundation, version 3 only. -->
             <!-- Footer legend -->
             <div class="flex items-center gap-4 text-[0.42rem] text-muted-foreground/60 px-4 py-3 shrink-0">
               <div class="flex items-center gap-1">
-                <span class="inline-block w-2 h-2 rounded-full" style="background:{UMAP_COLOR_A}"></span>
+                <span class="inline-block w-2 h-2 rounded-full" style="background:#3b82f6"></span>
                 <span>A ({(umapResult ?? umapPlaceholder)?.n_a ?? 0})</span>
               </div>
               <div class="flex items-center gap-1">
-                <span class="inline-block w-2 h-2 rounded-full" style="background:{UMAP_COLOR_B}"></span>
+                <span class="inline-block w-2 h-2 rounded-full" style="background:#f59e0b"></span>
                 <span>B ({(umapResult ?? umapPlaceholder)?.n_b ?? 0})</span>
               </div>
               <span class="ml-auto italic">{t("compare.umapDesc")}</span>
