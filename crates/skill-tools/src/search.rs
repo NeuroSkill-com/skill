@@ -58,6 +58,30 @@ pub(crate) fn random_ua() -> &'static str {
     BROWSER_USER_AGENTS[idx]
 }
 
+/// Build a ureq agent with browser-like defaults (redirects, timeouts).
+pub(crate) fn browser_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(std::time::Duration::from_secs(3))
+        .timeout_read(std::time::Duration::from_secs(10))
+        .redirects(5)
+        .build()
+}
+
+/// Apply standard browser headers to a ureq request.
+///
+/// Many sites (AccuWeather, weather.com, etc.) return 403 if the request
+/// is missing `Accept`, `Accept-Language`, or other headers that real
+/// browsers send.
+pub(crate) fn set_browser_headers(req: ureq::Request) -> ureq::Request {
+    req.set("User-Agent", random_ua())
+       .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+       .set("Accept-Language", "en-US,en;q=0.5")
+       .set("Accept-Encoding", "identity")
+       .set("DNT", "1")
+       .set("Connection", "keep-alive")
+       .set("Upgrade-Insecure-Requests", "1")
+}
+
 /// Fallback search: scrape DuckDuckGo HTML lite page.
 ///
 /// Mimics a real browser form submission: the lite page has a `<form>` that
@@ -272,11 +296,8 @@ pub(crate) fn headless_fetch_url(
 
         // Fall back to plain HTTP.
         tool_log!("tool:web_fetch", "[render] external renderer failed/empty, falling back to HTTP for {}", url);
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(std::time::Duration::from_secs(3))
-            .timeout_read(std::time::Duration::from_secs(8))
-            .build();
-        return match agent.get(url).set("User-Agent", random_ua()).call() {
+        let agent = browser_agent();
+        return match set_browser_headers(agent.get(url)).call() {
             Ok(resp) => {
                 let status = resp.status();
                 let body = resp.into_string().unwrap_or_default();
@@ -444,11 +465,8 @@ pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
             // Fall back to plain HTTP fetch + HTML stripping.
             if text.is_none() {
                 tool_log!("tool:web_search", "[render:http] fetching {}", url);
-                let agent = ureq::AgentBuilder::new()
-                    .timeout_connect(std::time::Duration::from_secs(3))
-                    .timeout_read(std::time::Duration::from_secs(8))
-                    .build();
-                if let Ok(resp) = agent.get(url).set("User-Agent", random_ua()).call() {
+                let agent = browser_agent();
+                if let Ok(resp) = set_browser_headers(agent.get(url)).call() {
                     let body = resp.into_string().unwrap_or_default();
                     let stripped = strip_html_tags(&body);
                     let cleaned: String = stripped.split_whitespace()

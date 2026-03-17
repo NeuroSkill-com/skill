@@ -156,13 +156,10 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     } else {
                         // Headless unavailable — fall back to plain HTTP fetch.
                         tool_log!("tool:web_search", "[render] headless unavailable, falling back to HTTP fetch");
-                        let fetch_agent = ureq::AgentBuilder::new()
-                            .timeout_connect(std::time::Duration::from_secs(3))
-                            .timeout_read(std::time::Duration::from_secs(8))
-                            .build();
+                        let fetch_agent = search::browser_agent();
                         for (i, url) in urls.iter().enumerate().take(render_count) {
                             if i >= results.len() { break; }
-                            match fetch_agent.get(url).set("User-Agent", search::random_ua()).call() {
+                            match search::set_browser_headers(fetch_agent.get(url)).call() {
                                 Ok(resp) => {
                                     let body = resp.into_string().unwrap_or_default();
                                     let text = search::strip_html_tags(&body);
@@ -263,11 +260,8 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     tool_log!("tool:web_fetch", "[render] headless unavailable, falling back to HTTP fetch");
                     let url_fallback = url.clone();
                     result = tokio::task::spawn_blocking(move || {
-                        let agent = ureq::AgentBuilder::new()
-                            .timeout_connect(std::time::Duration::from_secs(3))
-                            .timeout_read(std::time::Duration::from_secs(8))
-                            .build();
-                        match agent.get(&url_fallback).set("User-Agent", search::random_ua()).call() {
+                        let agent = search::browser_agent();
+                        match search::set_browser_headers(agent.get(&url_fallback)).call() {
                             Ok(r) => {
                                 let status = r.status();
                                 let body = r.into_string().unwrap_or_default();
@@ -300,14 +294,8 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 // ── Plain HTTP fetch path (original) ─────────────────
                 let url_for_fetch = url.clone();
                 tokio::task::spawn_blocking(move || {
-                    let agent = ureq::AgentBuilder::new()
-                        .timeout_connect(std::time::Duration::from_secs(3))
-                        .timeout_read(std::time::Duration::from_secs(8))
-                        .build();
-                    let resp = agent
-                        .get(&url_for_fetch)
-                        .set("User-Agent", search::random_ua())
-                        .call();
+                    let agent = search::browser_agent();
+                    let resp = search::set_browser_headers(agent.get(&url_for_fetch)).call();
 
                     match resp {
                         Ok(r) => {
