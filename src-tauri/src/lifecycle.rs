@@ -26,6 +26,8 @@ use crate::{
 const GANGLION_PREFIXES: &[&str] = &["ganglion", "simblee"];
 const MW75_SUBSTRING: &str = "mw75";
 const HERMES_PREFIX: &str = "hermes";
+const EMOTIV_PREFIXES: &[&str] = &["emotiv", "epoc", "insight", "flex"];
+const IDUN_PREFIXES: &[&str] = &["idun", "ige", "guardian"];
 
 /// Determine device kind from the target name (lowercased).
 fn detect_device_kind(name_lower: Option<&str>) -> &'static str {
@@ -33,6 +35,8 @@ fn detect_device_kind(name_lower: Option<&str>) -> &'static str {
         Some(n) if GANGLION_PREFIXES.iter().any(|p| n.starts_with(p)) => "ganglion",
         Some(n) if n.contains(MW75_SUBSTRING) => "mw75",
         Some(n) if n.starts_with(HERMES_PREFIX) => "hermes",
+        Some(n) if EMOTIV_PREFIXES.iter().any(|p| n.starts_with(p)) => "emotiv",
+        Some(n) if IDUN_PREFIXES.iter().any(|p| n.starts_with(p)) => "idun",
         _ => "muse",
     }
 }
@@ -183,6 +187,8 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
             "ganglion" => crate::session_connect::connect_ganglion(&app2, &cancel, target).await,
             "mw75"     => crate::session_connect::connect_mw75(&app2, &cancel, target).await,
             "hermes"   => crate::session_connect::connect_hermes(&app2, &cancel, target).await,
+            "emotiv"   => crate::session_connect::connect_emotiv(&app2, &cancel).await,
+            "idun"     => crate::session_connect::connect_idun(&app2, &cancel).await,
             _          => crate::session_connect::connect_muse(&app2, &cancel, target).await,
         };
 
@@ -244,6 +250,20 @@ mod tests {
     #[test]
     fn detect_device_kind_hermes() {
         assert_eq!(detect_device_kind(Some("hermes-abc")), "hermes");
+    }
+
+    #[test]
+    fn detect_device_kind_emotiv() {
+        assert_eq!(detect_device_kind(Some("emotiv-epoc-x")), "emotiv");
+        assert_eq!(detect_device_kind(Some("epoc-abc")), "emotiv");
+        assert_eq!(detect_device_kind(Some("insight-5ch")), "emotiv");
+    }
+
+    #[test]
+    fn detect_device_kind_idun() {
+        assert_eq!(detect_device_kind(Some("idun-guardian")), "idun");
+        assert_eq!(detect_device_kind(Some("ige-abcdef")), "idun");
+        assert_eq!(detect_device_kind(Some("guardian-001")), "idun");
     }
 
     #[test]

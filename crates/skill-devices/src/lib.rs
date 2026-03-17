@@ -12,6 +12,8 @@ pub use hermes_ble;
 pub use muse_rs;
 pub use mw75;
 pub use openbci;
+pub use emotiv;
+pub use idun;
 
 use std::collections::VecDeque;
 use skill_eeg::eeg_bands::BandSnapshot;

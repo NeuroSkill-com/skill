@@ -26,6 +26,8 @@ pub mod muse;
 pub mod mw75;
 pub mod hermes;
 pub mod openbci;
+pub mod emotiv;
+pub mod idun;
 
 #[cfg(test)]
 mod tests;
