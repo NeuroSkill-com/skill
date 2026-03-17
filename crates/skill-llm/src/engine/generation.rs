@@ -51,14 +51,21 @@ pub(super) fn run_generation(
         return;
     }
 
-    let mut batch = LlamaBatch::new(n_ctx, 1);
-    for (i, &tok) in tokens.iter().enumerate() {
-        if batch.add(tok, i as i32, &[0], i == n_prompt - 1).is_err() { break; }
-    }
-    if ctx.decode(&mut batch).is_err() {
-        llm_error!(app, log_buf, log_file, "decode error on prompt");
-        token_tx.send(InferToken::Error("decode error on prompt".into())).ok();
-        return;
+    let n_batch = ctx.n_batch() as usize;
+    let mut i = 0;
+    while i < n_prompt {
+        let end = (i + n_batch).min(n_prompt);
+        let mut batch = LlamaBatch::new(end - i, 1);
+        for j in i..end {
+            let logits = j == n_prompt - 1;
+            if batch.add(tokens[j], j as i32, &[0], logits).is_err() { break; }
+        }
+        if ctx.decode(&mut batch).is_err() {
+            llm_error!(app, log_buf, log_file, "decode error on prompt (batch at token {i})");
+            token_tx.send(InferToken::Error("decode error on prompt".into())).ok();
+            return;
+        }
+        i = end;
     }
 
     run_sampling_loop(model, ctx, app, log_buf, log_file, &params, token_tx, n_prompt);

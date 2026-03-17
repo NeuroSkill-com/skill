@@ -4502,6 +4502,49 @@ async function cmdLlm(args: Args): Promise<void> {
       if (args.temperature !== undefined) genParams.temperature = args.temperature;
       if (args.maxTokens   !== undefined) genParams.max_tokens  = args.maxTokens;
 
+      // ── Known LLM error patterns → actionable diagnostics ─────────────────
+      /**
+       * Inspect an LLM error message and return an enriched version with a
+       * human-readable hint when it matches a known failure pattern.
+       *
+       * Known patterns:
+       * - `n_tokens_all <= cparams.n_batch` — prompt exceeded llama.cpp batch
+       *   size.  This was a crash-level abort prior to the batched-decode fix.
+       * - `prompt too long (N >= n_ctx M)` — prompt exceeds the context window.
+       * - `decode error on prompt` — native decode failure (GPU OOM, driver).
+       * - `template error:` — chat template could not be applied.
+       * - `generation task panicked` — native code panic/abort (usually GGML).
+       * - `tokenization failed` — model failed to tokenize the input.
+       */
+      function classifyLlmError(msg: string): string {
+        const lower = msg.toLowerCase();
+        if (lower.includes("n_tokens_all") && lower.includes("n_batch")) {
+          return `${msg}\n  → Prompt batch exceeded llama.cpp n_batch limit. ` +
+            `This is a known bug (now fixed in batched-decode). Update to the latest build.`;
+        }
+        if (lower.includes("prompt too long") || (lower.includes("n_ctx") && lower.includes(">="))) {
+          return `${msg}\n  → Prompt + conversation history exceeds the model context window. ` +
+            `Try a shorter message, start a new chat, or increase n_ctx in Settings → LLM.`;
+        }
+        if (lower.includes("decode error")) {
+          return `${msg}\n  → Native decode failure during prompt ingestion. ` +
+            `Possible causes: GPU out of memory, driver crash, or corrupted model file.`;
+        }
+        if (lower.includes("template error")) {
+          return `${msg}\n  → The model's chat template could not be applied. ` +
+            `The model file may be corrupted or incompatible — try re-downloading it.`;
+        }
+        if (lower.includes("generation task panicked") || lower.includes("ggml_assert")) {
+          return `${msg}\n  → The inference engine crashed (native abort/panic). ` +
+            `This usually indicates a llama.cpp assertion failure — update to the latest build.`;
+        }
+        if (lower.includes("tokenization failed")) {
+          return `${msg}\n  → The model failed to tokenize the input. ` +
+            `The model file may be corrupted — try re-downloading it.`;
+        }
+        return msg;
+      }
+
       // ── Stream one assistant turn, returns accumulated text ───────────────
       /**
        * Send a `llm_chat` WebSocket command with the current conversation
@@ -4601,7 +4644,7 @@ async function cmdLlm(args: Args): Promise<void> {
             });
           } catch (e: any) { printError(`POST /llm/chat failed: ${e.message}`); }
           const r = await res!.json();
-          if (!r.ok) { printResult(r); printError(r.error ?? "llm chat failed"); }
+          if (!r.ok) { printResult(r); printError(classifyLlmError(r.error ?? "llm chat failed")); }
           print(r.text);
           if (!jsonMode) {
             print(`\n${DIM}  finish: ${r.prompt_tokens}+${r.completion_tokens} tokens, n_ctx=${r.n_ctx}, session=${r.session_id ?? 0}${RESET}`);
@@ -4614,7 +4657,11 @@ async function cmdLlm(args: Args): Promise<void> {
         history.push(buildUserMessage(args.text, imgParts));
         const imgNote = imgParts.length > 0 ? ` ${DIM}[${imgParts.length} image(s)]${RESET}` : "";
         print(`${BOLD}🤖 llm chat${RESET} ${DIM}${args.text}${RESET}${imgNote}\n`);
-        const result = await streamTurn(history as Array<{ role: string; content: string }>);
+        const result = await streamTurn(history as Array<{ role: string; content: string }>)
+          .catch((e: any) => {
+            const diagnosed = classifyLlmError(e.message ?? String(e));
+            printError(`llm chat: ${diagnosed}`);
+          });
         if (!jsonMode) {
           print(`\n${DIM}  finish: ${result.promptTokens}+${result.completionTokens} tokens, n_ctx=${result.nCtx}, session=${result.sessionId}${RESET}`);
         } else {
@@ -4764,7 +4811,8 @@ async function cmdLlm(args: Args): Promise<void> {
             sessionId || undefined,
           );
         } catch (e: any) {
-          process.stdout.write(`\n${RED}Error: ${e.message}${RESET}\n\n`);
+          const diagnosed = classifyLlmError(e.message ?? String(e));
+          process.stdout.write(`\n${RED}Error: ${diagnosed}${RESET}\n\n`);
           history.pop(); // remove the user message so history stays consistent
           continue;
         }
