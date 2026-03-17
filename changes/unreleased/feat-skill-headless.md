@@ -1,3 +1,0 @@
-### Features
-
-- **skill-headless crate**: New headless browser engine providing a CDP-like command API over wry/tao. Supports navigation, JS evaluation, DOM queries, CSS/script injection, cookie and storage management, viewport emulation, cache clearing, screenshots (canvas-based DOM walker), and element wait primitives — all driven from any thread via a channel-based command/response protocol over an off-screen system webview. Includes 29 advanced tests covering HTML rendering (background, font, flexbox, grid, positioning), PNG screenshots at multiple sizes, viewport resizing (320x240 to 1920x1080), WebGL/WebGL2 context creation and shader compilation, and custom user-agent injection.

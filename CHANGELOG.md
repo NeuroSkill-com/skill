@@ -8,6 +8,244 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.41] — 2026-03-17
+
+### Features
+
+- **Agent Skills discovery**: Added `skill-skills` crate that discovers `SKILL.md` files from `~/.skill/skills/` (user), `<cwd>/.skill/skills/` (project), and the bundled `skills/` git submodule. Discovered skills are injected into the LLM system prompt as an `<available_skills>` XML block so the model can load specialised instructions via `read_file` on demand. Skills require a `description` in YAML frontmatter; invalid index-style `SKILL.md` files (without description) allow recursion into subdirectories. Deduplication by name (first wins) and symlink real-path. Added `skills` git submodule from `https://github.com/NeuroSkill-com/skills.git` providing 10+ bundled EEG/protocol skills.
+
+- **CLI: screenshot search commands**: Added `search-images` and `screenshots-around` CLI commands. `search-images "query"` searches screenshots by OCR text in semantic (embedding HNSW) or substring (SQL LIKE) mode. `screenshots-around --at <utc>` finds screenshots near a given timestamp within a configurable window. Both commands support `--json`, `--full`, and `--k` flags. Also added the corresponding `search_screenshots` and `screenshots_around` WebSocket/HTTP commands to the server dispatcher.
+
+- **Configurable SNR exit threshold for DND**: The SNR level below which focus mode is forcibly deactivated is now a user setting (`snr_exit_db`) instead of a hardcoded constant. Default changed from 5 dB to 0 dB so DND only exits when the signal is completely lost. A new preset picker in the DND settings UI lets users choose 0 / 3 / 5 / 10 / 15 dB. Translations added for EN, DE, FR, UK, HE.
+
+- **Context breakdown inspector**: Click the context usage ring in the chat header to open a popover showing the proportional breakdown of context window usage — system prompt, EEG context, tool definitions, user messages, assistant messages, thinking/reasoning, tool results, and current completion tokens. Includes a stacked bar visualization and detailed legend with token counts and percentages. Localized in all 5 languages.
+
+- **skill-headless: Headless / Headful modes**: Replaced the `visible: bool` flag with a `Mode` enum (`Mode::Headless` and `Mode::Headful`). Headless mode positions the window off-screen so nothing is ever shown to the user while still giving the webview real pixel dimensions. Headful mode shows the window on-screen for debugging, demos, or interactive automation. In headless mode, `SetViewport` ensures the window stays off-screen after resize.
+
+- **skill-headless: network interception**: Added request/response interception support. `EnableInterception` monkey-patches `fetch()` and `XMLHttpRequest` to capture all HTTP traffic. Navigation events are recorded via wry's navigation handler. `SetBlockedUrls` blocks navigations matching URL substring patterns. `GetInterceptedRequests` retrieves the full network log (requests, responses, navigations) with optional clear-on-read. Includes 11 tests covering fetch GET/POST, XHR with custom headers, navigation capture, URL blocking, and log clearing.
+
+- **HealthKit data ingestion endpoints**: Added HTTP REST and WebSocket endpoints to receive Apple HealthKit data from a companion iOS app. New endpoints: `POST /v1/health/sync` (idempotent batch upsert of sleep, workouts, heart rate, steps, mindfulness, and generic metrics), `POST /v1/health/query` (query by type and time range), `GET /v1/health/summary` (aggregate counts), `GET /v1/health/metric_types` (list stored metric types). Data is stored in `~/.skill/health.sqlite` via a new `health_store` module in `skill-data`. All endpoints are also available as WS commands (`health_sync`, `health_query`, `health_summary`, `health_metric_types`).
+
+- **Standalone LLM logger**: Added `skill_llm::log` module with pluggable callback sink (`set_log_callback`) and `llm_log!` macro. All `eprintln!("[llm] ...")` / `eprintln!("[chat_store] ...")` calls in `engine.rs` and `chat_store.rs` now route through the unified logger. On the Tauri side, `llm::init_llm_logger()` wires LLM output through `SkillLogger` so the `llm` and `chat_store` subsystem toggles in log config control visibility. Added `llm` and `chat_store` fields to `LogConfig`, new rows in the Settings logging grid, and i18n keys for all five locales (en, de, fr, uk, he). Also fixed the TtsTab `LogConfig` interface to include the missing `hooks` field.
+
+- **LLM auto-start on launch**: Added `autostart` field to `LlmConfig`. When enabled + a model is downloaded and selected, the LLM server starts automatically during app setup with a 500ms delay to let the UI render first. Toggle added to the LLM settings tab.
+- **Atomic model switch**: New `switch_llm_model` Tauri command that atomically stops the running server, waits for full shutdown, sets the new active model, and starts the new one — eliminating the fragile 150ms sleep race in the frontend.
+- **Abort feedback in chat**: The stop/abort button now shows a spinner and "Aborting…" state while the abort is in flight, and is disabled to prevent double-clicks.
+- **Context window warning**: A warning banner appears above the chat input when context usage exceeds 85% (amber) or 95% (red), showing the current usage percentage.
+- **Per-session generation params**: Temperature, max tokens, top-k, top-p, and thinking level are now saved per chat session (new `params` column in `chat_sessions` table). Params auto-save on change (debounced 500ms) and restore when switching sessions.
+- **Regenerate button**: Hover over the last assistant message to see a "Regenerate" button that removes the response and re-sends the last user message with current params.
+- **Edit & resend on user messages**: Hover over any user message to see "Edit & resend" which populates the input with that message's text and removes all subsequent messages.
+- **Live tok/s indicator**: During streaming, a live tokens-per-second counter is shown below the assistant message. After completion, the final tok/s is included in the timing line alongside TTFT and token counts.
+- **Open LLM settings from chat**: The empty chat state (when server is stopped) now includes an "Open LLM settings" button alongside "Start server".
+- **Reduced settings panel height**: Chat settings and tools panels reduced from 50vh to 40vh max to leave more room for the message list on small screens.
+
+- **Best-result scoring for web search**: Rendered page content is now scored by text quality (word count, presence of numbers/data indicators like temperatures and percentages, uniqueness of words) with penalties for CSS/JS garbage. Only the best 1-2 results are included in the compact output instead of all 5, giving the LLM focused, high-quality content to summarize.
+
+- **Configurable web search provider**: the `web_search` tool now supports three backends — **DuckDuckGo** (default, no API key), **Brave Search** (free tier: 2,000 queries/month with API key), and **SearXNG** (self-hosted instance URL). A new `WebSearchProvider` config struct holds the backend choice, Brave API key, and SearXNG URL. Each backend falls back to DuckDuckGo HTML scraping if it fails.
+- **Search provider UI**: added a backend selector (DuckDuckGo / Brave / SearXNG) to the Tools settings tab, with conditional API key and URL inputs.
+
+- **Skill API tool for LLM chat**: Added a built-in `skill` tool that gives the LLM direct access to the full NeuroSkill WebSocket API. The LLM can now query device status, list sessions, create labels, search EEG embeddings, manage hooks, control DND, run calibrations, and more — all without requiring the user to copy-paste data. The tool connects to the local HTTP API server and supports all commands from the CLI (status, sessions, session_metrics, label, search_labels, interactive_search, search, compare, sleep, say, notify, calibrate, timer, hooks, dnd, calibrations CRUD, umap, and read-only LLM management). Dangerous LLM self-management commands (start/stop/delete/select) are blocked for safety. Enabled by default via the `skill_api` toggle in Settings → LLM → Tools.
+
+- **skill-headless crate**: New headless browser engine providing a CDP-like command API over wry/tao. Supports navigation, JS evaluation, DOM queries, CSS/script injection, cookie and storage management, viewport emulation, cache clearing, screenshots (canvas-based DOM walker), and element wait primitives — all driven from any thread via a channel-based command/response protocol over an off-screen system webview. Includes 29 advanced tests covering HTML rendering (background, font, flexbox, grid, positioning), PNG screenshots at multiple sizes, viewport resizing (320x240 to 1920x1080), WebGL/WebGL2 context creation and shader compilation, and custom user-agent injection.
+
+- **Sleep schedule settings**: Added a new "Sleep" section in Settings with configurable bedtime and wake-up time. Includes five presets (Default 23:00–07:00, Early Bird 21:30–05:30, Night Owl 01:00–09:00, Short Sleeper 00:00–06:00, Long Sleeper 22:00–08:00), a 24-hour clock visualization, and duration summary. Sleep window is persisted and can be used for session classification and sleep staging analysis.
+
+- **Tool-call logging toggle in Settings**: Added a `tools` flag to the logging configuration so users can enable/disable tool-call logging from Settings. The toggle controls the `skill-tools::log` subsystem which traces tool invocations, safety approvals, completion times, and errors. Wired into the central `SkillLogger` with `init_tool_logger` callback and `set_tool_logging` runtime toggle. Added i18n strings for en, de, fr, uk, he.
+
+- **Separate tool-call logger**: Added a standalone pluggable logger (`skill-tools::log`) for tool-call tracing, following the same pattern as `skill-llm::log`. Logs tool invocations (name + args), completion times, safety approval events, and errors. Use `set_log_callback` to route output to the app logger and `set_log_enabled` to toggle at runtime. The `tool_log!` macro short-circuits formatting when logging is disabled.
+
+- **Configurable tool context compression**: Added a new "Context compression" setting (Off / Normal / Aggressive) in Settings → LLM → Tools that controls how tool results are compressed before being injected into the conversation context. Normal mode caps web search results to 5, truncates long URLs, and compresses old tool results. Aggressive mode uses tighter limits for small context windows. Custom overrides for max search results and max result characters are available when compression is enabled.
+
+- **Configurable tool hop limits**: Added UI controls for `max_rounds` (how many think→tool→think cycles per message) and `max_calls_per_round` (how many tools per cycle) in both the LLM Settings tools card and the Chat window tools panel. Preset buttons (1/3/5/10 for rounds, 1/2/4/8 for calls) with active highlight. i18n keys added for all 5 locales.
+
+- **Tools master toggle**: Added an `enabled` master switch to the LLM tool configuration that disables all tools at once. When turned off, no built-in tools are available to the LLM regardless of individual tool toggles. The toggle appears in both the Settings LLM tab and the Chat tool panel, with i18n support for all languages (en, de, fr, uk, he).
+
+- **Standalone TTS logger**: Added `skill_tts::log` module with pluggable callback sink (`set_log_callback`) and `tts_log!` macro. All `eprintln!("[tts] ...")` / `eprintln!("[neutts] ...")` calls in `kitten.rs`, `neutts.rs`, and `lib.rs` now route through the unified logger. On the Tauri side, `tts::init_tts_logger()` wires TTS output through `SkillLogger` so the `tts` subsystem toggle in log config controls TTS log visibility. Logging is enabled by default and can be toggled at runtime via `set_log_enabled`.
+
+- **WebSocket & HTTP chat persistence**: Chats initiated via the WebSocket `llm_chat` command and `POST /llm/chat` endpoint are now persisted to the same SQLite chat store used by the Chat window. User and assistant messages (including tool calls) are saved to `chat_history.sqlite`, making them visible in the Chat window sidebar and recoverable across restarts. A `session_id` field is returned in both the WS `session` frame and the `done`/response payload, and callers can pass `session_id` in subsequent requests to continue an existing conversation. New sessions are auto-titled from the first user message.
+
+- **Headless browser rendering in web_fetch tool**: Added `render` parameter to the `web_fetch` LLM tool. When `render=true`, pages are loaded in a headless browser (via `skill-headless`) that executes JavaScript, enabling content extraction from SPAs and dynamically rendered pages. Supports optional `wait_ms`, `selector` (CSS selector to wait for), and `eval_js` (custom JS to evaluate) parameters.
+
+- **Headless browser rendering in web_search tool**: Added `render` and `render_count` parameters to the `web_search` LLM tool. When `render=true`, the top N search result URLs are visited in a headless browser and their rendered text content is included in the results under a `rendered_text` field, giving the LLM access to full page content including JS-rendered material.
+
+### Performance
+
+- **Parallel URL fetching for web search**: When `render=true`, all search result URLs are now fetched concurrently using scoped threads instead of sequentially. Total fetch time equals the slowest single URL rather than the sum of all. This typically reduces render=true latency from 10-15s to 3-5s for 3 URLs.
+
+- **Drop full Linux portable build from CI**: Removed the `linux-portable-package` job from `ci.yml` so Linux CI only runs `cargo check` + `clippy` (matching Windows). The full release build and packaging are already covered by the dedicated `release-linux.yml` workflow. This dramatically reduces CI wall-clock time on every push and PR.
+
+- **Screenshot duplicate detection**: when a new screenshot is identical to the previous one (same resized-PNG hash), the embed thread now copies the vision embedding, OCR text, and OCR text embedding from the previous row instead of re-running the vision encoder, OCR engine, and text embedder. This eliminates redundant GPU/CPU inference when the screen content hasn't changed (e.g. idle desktop, paused video).
+
+### Bugfixes
+
+- Fixed trailing garbage bytes in `crates/skill-tools/src/types.rs` that could cause a compilation failure.
+
+- **Remove broken public SearXNG instance scraping**: public SearXNG instances universally block automated API access with 429 rate limits or anti-bot captchas. Removed the background instance list fetcher and random instance selection. SearXNG now requires a user-provided self-hosted instance URL.
+
+- **Add tests to previously untested crates**: Added 35 new unit tests across 4 crates that had zero test coverage:
+  - `skill-exg` (17 tests): cosine distance (identical, opposite, orthogonal, edge cases), fuzzy matching (exact, case-insensitive, substring, typo, empty), Levenshtein distance.
+  - `skill-commands` (13 tests): DOT escaping, SVG escaping, text truncation, turbo colormap, graph generation.
+  - `skill-eeg/band_metrics` (10 tests): spectral edge frequency, spectral centroid, Hjorth parameters, permutation entropy, sample entropy, DFA exponent, Higuchi fractal dimension.
+  - `skill-history/cache` (5 tests): timeseries downsampling (noop, exact count, endpoint preservation, min-2), sleep stage analysis.
+
+- **Web search no longer stalls after returning URLs**: Improved `web_search` tool description to instruct the LLM to use `render=true` for factual/current-data queries (weather, prices, scores, news). When `render=false`, the tool result now includes a follow-up hint telling the model to fetch page content. Added a weather example to the system prompt so the model learns the correct pattern.
+- **Context window no longer fills up during multi-step tool chains**: The orchestration loop now condenses prior-round tool results to one-line summaries after each round (e.g. `[location: Boston, MA, US (America/New_York)]`, `[web_search: 5 results for "weather Boston"]`). The model already consumed those results and chose its next action, so the full content is no longer needed. This frees ~200-500 tokens per prior round, allowing 3-4 step chains (location → search → fetch → answer) to complete even on 4 K context models. Additionally, `web_search` returns compact text instead of verbose JSON, `web_fetch` is capped to configured limits, and headless-rendered page text is reduced from 4 K to 2 K chars per URL.
+
+- **Accent color consistency**: All UI elements now honor the Appearance accent setting. Replaced hardcoded `oklch(0.58 0.24 293)` violet values in the markdown renderer CSS with `var(--color-violet-*)` tokens, converted every `purple-*` Tailwind class to the remapped `violet-*` family, and switched inline-style hex accent colors (`#8b5cf6`, `#a855f7`, `#c084fc`) to CSS custom properties across dashboard gauges, focus timer, compare page, and EEG indices.
+
+- **Rotating browser User-Agents**: replaced bot-like User-Agent strings with a pool of 10 realistic browser UAs (Chrome, Firefox, Safari, Edge on Windows/macOS/Linux) rotated on each request to reduce fingerprinting.
+- **Fix DuckDuckGo HTML search**: mimic real form submission by adding `Origin` header, correct `Referer`, and the `b=` submit-button field. Fixed HTML parser to split on `class="result results_links"` (the actual outer wrapper) instead of `class="result__body"` which is now a multi-class attribute and no longer matches.
+- **Extracted `parse_ddg_html`**: separated HTML parsing from HTTP fetching for testability. Added offline unit tests for result parsing and DDG redirect URL unwrapping.
+
+- **Fix macOS headless build**: Removed non-existent `EventLoopBuilderExtMacOS` import and `with_any_thread` call — tao 0.34 does not gate event loop thread affinity on macOS.
+- **Fix skill-screenshots build**: Added missing `GenericImageView` import, made `CapturedImage` fields `pub(crate)`, cfg-gated `Path` import, removed unused `CapturedImage` re-import in capture.rs.
+- **Fix skill-llm warnings**: Removed unused imports in engine.rs and handlers.rs (`SystemTime`, `UNIX_EPOCH`, axum types, `GenParams`, `unix_ts_ms`, `HeaderMap`, `Sse`).
+- **Fix SleepTab Svelte error**: Wrapped `{@const}` tags in `{#if true}` blocks — `{@const}` must be an immediate child of a block tag, not a raw element like `<svg>`.
+
+- **Headless browser no longer crashes the app on macOS**: On macOS, tao requires the event loop on the main thread, but Tauri already owns it. Previously, the headless browser launch panicked with "EventLoop must be created on the main thread!" on a spawned thread, aborting the process. Fix: on macOS, `Browser::launch` is disabled via `set_unavailable()` at startup and an external renderer is registered that reuses Tauri's existing webview infrastructure. A hidden `WebviewWindow` is created with `on_page_load` detection — the renderer waits for the actual page load event instead of a fixed delay, with a 30-second timeout. The user can cancel the fetch at any time via the tool cancellation button. This gives full JS-rendered page content (weather widgets, SPAs, etc.) without a second event loop. On Linux/Windows the standalone headless browser continues to work as before.
+- **Web search render=true no longer returns empty/error results**: When the external renderer times out or returns empty content for a URL, the system now automatically falls back to plain HTTP fetch + HTML tag stripping for that specific URL instead of propagating the error. This ensures the LLM always gets usable content and doesn't waste rounds retrying.
+
+- **Fix LLM crash when prompt exceeds n_batch**: Long prompts triggered a fatal `GGML_ASSERT(n_tokens_all <= cparams.n_batch)` abort in llama.cpp, killing the entire process. The prompt is now decoded in chunks of `n_batch` tokens, preventing the native assertion failure.
+
+- **Screenshot "sessions only" gate never re-engages after disconnect**: `session_start_utc` was set when scanning began but never reset to `None` in `go_disconnected`, so `is_session_active()` permanently returned `true` after the first connection attempt. Screenshots continued capturing even with no device connected. Now `session_start_utc` is always cleared on disconnect, including during auto-reconnect retries (no data is streaming, so it is not an active session).
+
+- **Fix unused import warnings in skill-router / src-tauri**: Removed ~30 unused `use` statements from `src-tauri/src/lib.rs`, gated `std::sync::Mutex` import in `state.rs` behind `#[cfg(not(feature = "llm"))]`, removed unused `CalibrationProfile` import from `helpers.rs`, and converted doc comment on macro invocation in `window_cmds.rs` to a regular comment to silence `unused_doc_comments` warning.
+
+- **Remove broken DuckDuckGo JSON API search**: the DuckDuckGo Instant Answer API (`api.duckduckgo.com`) has been deprecated and returns empty results for most queries, adding unnecessary latency. Removed it and now use HTML scraping directly as the sole search strategy.
+
+- **Fix all clippy warnings**: Resolved redundant field name, unnecessary cast, unneeded return statement, and unused imports across the workspace. Zero clippy warnings remain.
+
+- **DND focus mode now works on all devices**: OpenBCI and Hermes sessions were missing the Do Not Disturb tick logic (only Muse and MW75 had it). The shared `session_runner` now runs DND for every device that produces EEG band snapshots.
+
+- **Battery alerts use `BatteryEma` from `skill-devices`**: Replaced two inline EMA implementations (Muse, MW75) with the existing `BatteryEma` struct, ensuring consistent smoothing and alert thresholds across devices.
+
+### Refactor
+
+- **Shared calibration CRUD service**: Extracted `calibration_service.rs` with `create_profile`, `update_profile`, `delete_profile`, `list_profiles`, and `get_profile` functions. Both the Tauri IPC commands (`window_cmds`) and the WebSocket API (`ws_commands`) now delegate to this single service, eliminating duplicated state mutation logic.
+
+- **Extract LLM HTTP handlers from `engine.rs` (2,502 → 2,079 lines)**: Moved all axum HTTP handlers, auth helpers, and the router builder into a new `handlers.rs` (449 lines) in the `skill-llm` crate. `engine.rs` retains the inference actor, tool orchestration, and shared state.
+
+- **Extract web search backends from `skill-tools/exec.rs` (1,551 → 944 lines)**: Moved DuckDuckGo HTML, Brave API, SearXNG, and headless fetch code into `search.rs` (616 lines).
+
+- **Extract platform capture from `skill-screenshots/capture.rs` (1,527 → 1,145 lines)**: Moved macOS/Linux/Windows window capture and image decoding into `platform.rs` (392 lines).
+
+- **Extract EEG band metrics from `skill-eeg/eeg_bands.rs` (1,510 → 1,222 lines)**: Moved advanced metric functions (SEF, Hjorth, entropy, DFA, consciousness indices) into `band_metrics.rs` (298 lines).
+
+- **Chat page component extraction**: Split the monolithic `chat/+page.svelte` (2720 lines) into 9 focused modules — `ChatHeader`, `ChatSettingsPanel`, `ChatToolsPanel`, `ChatMessageList`, `ChatInputBar`, `ChatToolCard` components plus `chat-types.ts` and `chat-eeg.ts` utility modules. The main page is now 897 lines (67% reduction) with each extracted component under 400 lines.
+- **Compare page logic extraction**: Extracted types, constants, helpers, insight computation, UMAP analysis, and all canvas drawing functions from `compare/+page.svelte` (2582 lines) into `compare-types.ts` and `compare-canvas.ts`. The main page is now 1924 lines (25% reduction) with 663 lines of pure logic in reusable modules.
+- **History page helper extraction**: Extracted types, constants, date helpers, format utilities, label analysis, and grid constants from `history/+page.svelte` (2332 lines) into `history-helpers.ts` (201 lines). The main page is now 2224 lines.
+- **Search page logic extraction**: Extracted types, helpers, colormap functions, analysis computation, graph deduplication, and kNN visualization from `search/+page.svelte` (2192 lines) into `search-types.ts` (302 lines). The main page is now 1935 lines (12% reduction).
+- **UMAP viewer helper extraction**: Extracted pure math, color, timestamp, and geometry helpers from `UmapViewer3D.svelte` (1806 lines) into `umap-helpers.ts` (167 lines). The main component is now 1765 lines.
+- **Deduplicated shared code**: Consolidated `BandSnapshot` type (single canonical source in `BandChart.svelte`, re-exported via `chat-types.ts`), `SESSION_COLORS` (moved to `constants.ts`, re-exported from `compare-types.ts` and `history-helpers.ts`), and `fmtSize`/`fmtGB`/`fmtBytes` format helpers (added to `format.ts`, removed 3 inline duplicates).
+
+- **Deduplicate metrics JSON serialization in `DayStore`**: Extracted the ~60-field metrics-to-JSON serialization into a shared `metrics_to_json()` function, eliminating the copy-pasted logic between `insert()` and `insert_metrics_only()`. Reduces `day_store.rs` by ~65 lines.
+
+- **Replace raw `SQLITE_OPEN_READ_ONLY` flags with `open_readonly()` helper**: Replaced 11 inline `rusqlite::Connection::open_with_flags(…, READ_ONLY)` calls across 7 files with the existing `skill_data::util::open_readonly()` helper for consistency with the workspace crates.
+
+- **Deduplicate `MutexExt` trait**: Moved the poison-recovering `MutexExt` trait to `skill-constants` (zero-dependency crate). `skill-data` and `skill-jobs` now re-export from the single canonical definition instead of maintaining independent copies.
+
+- **Add `AppStateExt` helper trait**: Introduced a blanket `AppStateExt` trait on `Manager<Wry>` that replaces the verbose `app.state::<Mutex<Box<AppState>>>()` pattern (137 call sites) with `app.app_state()`. Cleaned up newly-unused `Mutex` and `AppState` imports across 13 files.
+
+- **Remove 14 re-export shim modules**: Eliminated one-line facade modules in `lib.rs` (e.g. `mod eeg_bands { pub use skill_eeg::eeg_bands::*; }`) that only proxied upstream crate items. All 59 call sites now reference the source crates directly (`skill_eeg::`, `skill_data::`) making dependencies explicit and reducing indirection.
+
+- **Unified device session via `DeviceAdapter` trait**: Replaced four copy-pasted session modules (`muse_session.rs`, `mw75_session.rs`, `openbci_session.rs`, `hermes_session.rs` — 2,070 lines) with a trait-based architecture (1,970 lines). Added `DeviceAdapter` async trait, unified event types (`DeviceEvent`, `EegFrame`, `PpgFrame`, `ImuFrame`, `BatteryFrame`), and capability flags (`DeviceCaps`) to `skill-devices::session`. Each device has a small adapter (107–223 lines) that translates vendor events into the common vocabulary. A single generic event loop in `session_runner.rs` handles DSP, CSV, DND, battery, and emit for all devices.
+
+- **Split `llm.rs` into module directory**: Refactored the 1537-line `src-tauri/src/llm.rs` into `src-tauri/src/llm/` with focused sub-modules: `mod.rs` (re-exports, logger, emitter), `cmds/catalog.rs` (catalog queries), `cmds/downloads.rs` (download lifecycle), `cmds/selection.rs` (model selection), `cmds/server.rs` (server lifecycle), `cmds/chat.rs` (chat persistence), `cmds/streaming.rs` (IPC streaming), `cmds/hardware_fit.rs` (hardware prediction). All public API paths remain unchanged.
+
+- **Split `skill-llm/engine.rs` into module directory**: Refactored the 2070-line `crates/skill-llm/src/engine.rs` into `engine/` with focused sub-modules: `mod.rs` (re-exports, macros), `logging.rs` (log buffer, file sink), `protocol.rs` (wire types), `state.rs` (server state, cell, status), `think_tracker.rs` (think-budget enforcement), `images.rs` (base64 decoding), `tool_orchestration.rs` (multi-round tool loop), `sampling.rs` (token sampling loop), `generation.rs` (text/multimodal generation), `actor.rs` (OS thread event loop), `init.rs` (public init). All public API paths remain unchanged.
+
+- **Split `eeg_embeddings.rs` (2,434 → 3 files)**: Removed 624 lines of dead code (`#[cfg(any())]` blocks). Split the remaining 1,810 lines into `mod.rs` (414 lines, public API + EegAccumulator), `day_store.rs` (372 lines, per-day HNSW + SQLite), and `worker.rs` (1,051 lines, background embed worker + hook matcher + weight helpers).
+
+- **Split `ws_commands.rs` (2,417 → 3 files)**: Extracted `hooks.rs` (315 lines, hooks_get/set/status/suggest/log handlers) and `llm_cmds.rs` (418 lines, all LLM WebSocket commands), reducing `mod.rs` to 1,714 lines. The central `dispatch()` function remains in `mod.rs`.
+
+- **Split `settings_cmds.rs` (1,789 → 3 files)**: Extracted `dnd_cmds.rs` (207 lines, Do Not Disturb automation commands) and `hook_cmds.rs` (274 lines, hook distance suggestion and audit log), reducing `mod.rs` to 1,341 lines.
+
+- **Split `skill-commands` crate `lib.rs` (1,710 → 2 files)**: Extracted `graph.rs` (803 lines, DOT and SVG generation for interactive search results), reducing `lib.rs` to 917 lines.
+
+- **Extract `chat-utils.ts` from `chat/+page.svelte` (2,945 → 2,720 lines)**: Moved pure utility functions (tool-call fence stripping, danger detection, assistant output parsing) into a standalone TypeScript module for testability and reuse.
+
+- **Split `lib.rs` into `state.rs` + `helpers.rs`**: Extracted `AppState`, `DeviceStatus`, `LlmState`, IPC packet structs, and all `impl` blocks into `state.rs` (~410 lines). Extracted time helpers, emit/toast helpers, settings persistence, device upsert, and state access shortcuts into `helpers.rs` (~250 lines). `lib.rs` dropped from 2,217 to 1,557 lines (–660).
+
+- **Renamed `MuseStatus` → `DeviceStatus`**: The status struct is used for all devices (Muse, MW75, Hermes, OpenBCI) — the old name was misleading. Updated all Rust and TypeScript/Svelte references. The Tauri event name `"muse-status"` is kept for backward compatibility with existing WS clients.
+
+- **`window_cmd!` / `window_tab_cmd!` macros for window commands**: Replaced 10 boilerplate `open_*_window` Tauri commands (each 7 lines) with 2–3 line macro invocations. New windows now require a single `window_cmd!` call instead of a full `#[tauri::command] pub async fn` definition.
+
+- **Extract `ws_commands/search.rs` (525 lines)**: Moved search_labels, search, compare, session_metrics, and interactive_search handlers out of `ws_commands/mod.rs`, reducing it from 1,687 to 1,162 lines.
+
+- **Extract `skill-history/cache.rs` (751 lines)**: Moved disk cache, metrics computation, sleep staging, and batch loading out of `skill-history/lib.rs`, reducing it from 1,384 to 654 lines.
+
+- **Deduplicate `yyyymmdd_utc()`**: Replaced the 29-line hand-rolled calendar calculation in `helpers.rs` with a one-line delegation to the canonical `skill_data::util::yyyymmdd_utc()`.
+
+- **Added 25 tests for `skill-devices::session` adapters**: Covers channel accumulation (Muse alignment of per-electrode delivery, partial/complete frames, out-of-range electrodes), event translation (EEG, PPG, IMU, battery, connected, disconnected, activation-skipped, packets-dropped-skipped), synthetic connected injection (MW75 RFCOMM, OpenBCI), capability flags, descriptor construction, and pipeline channel capping. Total: 34 tests in `skill-devices` (up from 9).
+
+- **Made adapter handle fields `Option`-based for testability**: `Mw75Adapter` and `HermesAdapter` handle fields are now `Option<Handle>` with `new_for_test()` constructors that pass `None`, avoiding unsafe `MaybeUninit` hacks. `OpenBciAdapter` gained `from_receiver()` for direct async channel injection without needing private `StreamHandle` fields.
+
+### Build
+
+- **clean:rust npm script**: Added `npm run clean:rust` to remove all Rust `target` directories (under `crates/` and `src-tauri/`).
+
+- **Added `tokio`, `async-trait`, `bitflags` deps to `skill-devices`**: Only `tokio/sync` (channel primitives) is used — no runtime. Added `tokio-util` to `src-tauri` for `CancellationToken`.
+
+### CLI
+
+- **`health` command**: New CLI command family for Apple HealthKit data. Subcommands: `health` / `health summary` (aggregate counts), `health sleep` / `health workouts` / `health hr` / `health steps` / `health metrics` (typed queries with `--start`, `--end`, `--limit`), `health metric-types` (list stored types), and `health sync` (push data from iOS companion). Human-readable formatting with color-coded output for each data type.
+
+- **`sleep-schedule` command**: New CLI command to view and update the sleep schedule. Supports `sleep-schedule` (show current) and `sleep-schedule set --bedtime HH:MM --wake HH:MM --preset <id>` (update). Available presets: default, early_bird, night_owl, short_sleeper, long_sleeper.
+
+- **LLM error diagnostics in CLI**: The `llm chat` command (both single-shot and REPL modes) now classifies known LLM error patterns (batch overflow, context window exceeded, decode failures, template errors, native panics, tokenization failures) and prints actionable hints alongside the error message.
+
+### UI
+
+- **Log viewer filtering**: The LLM server log in the settings tab now has level filter tabs (All / Info / Warn / Error) and a text search box. The line count shows filtered/total when a filter is active, and "No matching lines" is shown instead of "No log output yet" when filtering produces no results.
+
+- **Tool context compression controls**: Added compression level selector and optional max-search-results / max-result-chars overrides to both the Settings → LLM → Tools tab and the inline chat tools panel.
+
+- **Separate Tools settings tab**: Moved LLM chat tools configuration (per-tool toggles, SearXNG URL, execution mode, max rounds, max calls per round) out of the LLM tab into its own dedicated "Tools" settings tab with a wrench icon and i18n labels for all five languages.
+
+- **Web search sources panel**: When expanding a `web_search` tool call in chat, a new "Sources" section shows each fetched domain with its quality score, content size, and a "best" badge for the highest-scoring result. Each source is expandable to reveal the URL and a content preview, allowing users to inspect exactly what data the LLM received from each site.
+
+- **LLM tools section in own card**: Moved the built-in chat tools configuration out of the collapsible Advanced Inference Settings panel into its own top-level section card with a header showing the enabled count (e.g. "5/8"). The execution mode toggle is placed in a footer row within the same card. This makes tools discoverable without expanding the Advanced section.
+
+- **Hide charts when no session is active**: Band Powers and EEG Waveforms charts are now hidden on the main dashboard when the device is not connected, reducing visual clutter in the disconnected/scanning states.
+- **Show PPG/IMU only for capable devices**: PPG charts, PPG metrics, Head Pose card, and IMU chart are now gated by `deviceCaps.hasPpg` / `deviceCaps.hasImu` so they only appear for devices that actually have those sensors.
+
+- **Open Folder button next to data dir input**: Moved the "Open Folder" button from below the default path label to inline next to the data directory input field in Settings, making it more discoverable and accessible.
+
+### Server
+
+- **`sleep_schedule` / `sleep_schedule_set` WS commands**: New WebSocket API commands for reading and writing the sleep schedule configuration. Partial updates supported — only fields present in the request are changed.
+
+### i18n
+
+- Added `llm.autostart`, `llm.autostartDesc` keys to all 5 locales (en, de, fr, uk, he).
+- Added `chat.btn.aborting`, `chat.btn.regenerate`, `chat.btn.editResend`, `chat.tokSec`, `chat.ctxWarning`, `chat.noModelBtn`, `chat.logFilter.*` keys to en locale.
+
+- **Search provider strings**: added search provider selector, Brave API key, and SearXNG URL translations in en, de, fr, uk, and he.
+
+- **Context compression labels**: Added translations for context compression settings in English, German, French, Hebrew, and Ukrainian.
+
+- **Sources label**: Added "Sources" / "Quellen" / "Sources" / "מקורות" / "Джерела" translations for the web search sources UI.
+
+- **Convert all Unicode escapes to literal UTF-8**: Replaced all `\uXXXX` escape sequences in i18n locale files (en, de, fr, uk, he) with their literal UTF-8 characters. This makes the translation strings human-readable in source and avoids encoding issues across platforms.
+
+- **Add 14 missing chat translation keys**: Added `chat.btn.aborting`, `chat.btn.editResend`, `chat.btn.regenerate`, `chat.ctxCompact`, `chat.ctxWarning`, `chat.logFilter.*`, `chat.noModel*`, and `chat.tokSec` to German, French, Ukrainian, and Hebrew. All 5 languages now have identical key sets (2,646 keys each).
+
+### Docs
+
+- **SKILL.md**: Added full `health` command reference with subcommand table, CLI examples, HTTP equivalents, JSON response shapes, sync payload format, and common metric types.
+
+- **SKILL.md**: Added `sleep-schedule` command reference with examples, HTTP equivalents, JSON response shapes, and preset table.
+
+- **Updated Discord invite link**: Changed Discord link to `https://discord.gg/Rcvb8Cx4cZ` across README, constants, and help dashboard.
+
+### Dependencies
+
+- **Upgrade skill-headless wry to 0.54**: Updated `skill-headless` crate from `wry` 0.49 to 0.54.3 to match the workspace's tauri-runtime-wry dependency, resolving a `kuchikiki` version conflict. The only API change was renaming `WebViewBuilder::with_web_context()` to `WebViewBuilder::new_with_web_context()`.
+
+### CI
+
+- **Discord commit message**: All CI workflow Discord notifications now include the last commit subject line, making it easier to identify which change triggered the build.
+
 ## [0.0.40] — 2026-03-16
 
 ### Bugfixes

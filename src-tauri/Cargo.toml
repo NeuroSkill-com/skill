@@ -1,6 +1,6 @@
 [package]
 name = "skill"
-version = "0.0.40"
+version = "0.0.41"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"

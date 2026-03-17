@@ -75,13 +75,13 @@ the Free Software Foundation, version 3 only. -->
   // EEG_CH and EEG_COLOR imported from constants.ts.
 
   // ── Chart refs ─────────────────────────────────────────────────────────────
-  let chartEl: {
+  let chartEl = $state<{
     pushSamples(ch: number, samples: number[]): void;
     pushSpecColumn(col: SpectrogramColumn): void;
     pushMarker(m: EventMarker): void;
     restartRender(): void;
-  } | undefined;
-  let bandChartEl: { update(snap: BandSnapshot): void; restartRender(): void } | undefined;
+  } | undefined>();
+  let bandChartEl = $state<{ update(snap: BandSnapshot): void; restartRender(): void } | undefined>();
   let ppgChartEl = $state<{
     pushSamples(ch: number, samples: number[]): void;
     pushMarker(m: { timestamp_ms: number; label: string; color: string }): void;
