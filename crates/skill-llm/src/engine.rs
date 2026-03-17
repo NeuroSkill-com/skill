@@ -298,6 +298,9 @@ pub struct LlmServerState {
     /// Located at `skill_dir/chats/scripts/`. Subdirectories are created
     /// lazily per tool invocation timestamp.
     pub scripts_dir: std::path::PathBuf,
+    /// Discovered Agent Skills — injected into the system prompt so the LLM
+    /// can load specialised instructions via `read_file` on demand.
+    pub skills: Arc<Vec<skill_skills::Skill>>,
 
     /// Abort signal for IPC-streamed chat (`chat_completions_ipc`).
     ///
@@ -660,6 +663,23 @@ where
     }
     let n_ctx = state.n_ctx.load(Ordering::Relaxed);
     tools::inject_tools_into_system_prompt(&mut messages, &tools_from_req, n_ctx);
+
+    // Inject discovered Agent Skills into the system prompt so the LLM knows
+    // which specialised instruction files it can load via read_file.
+    let skills_block = skill_skills::format_skills_for_prompt(&state.skills);
+    if !skills_block.is_empty() {
+        // Append to the first system message (which inject_tools just created/extended).
+        let has_system = messages.first()
+            .and_then(|m| m.get("role"))
+            .and_then(|r| r.as_str()) == Some("system");
+        if has_system {
+            if let Some(content) = messages[0].get("content").and_then(|c| c.as_str()).map(|s| s.to_string()) {
+                messages[0]["content"] = serde_json::Value::String(format!("{content}{skills_block}"));
+            }
+        } else {
+            messages.insert(0, json!({ "role": "system", "content": skills_block }));
+        }
+    }
 
     // Build a lookup map for argument validation.
     let tool_defs: std::collections::HashMap<String, tools::Tool> = tools_from_req
@@ -2001,6 +2021,38 @@ pub fn init(
     let scripts_dir = skill_dir.join("chats").join("scripts");
     let _ = std::fs::create_dir_all(&scripts_dir);
 
+    // Discover Agent Skills from all configured locations.
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    // In development, `skills/` lives at the project root (git submodule).
+    // In production, it's next to the executable.
+    let bundled_skills_dir = exe_dir.as_ref()
+        .map(|d| d.join(skill_constants::SKILLS_SUBDIR))
+        .filter(|d| d.is_dir())
+        .or_else(|| {
+            // Fallback: check current working directory for a skills/ subdir
+            // (common in development when running from the project root).
+            let cwd = std::env::current_dir().ok()?;
+            let p = cwd.join(skill_constants::SKILLS_SUBDIR);
+            if p.is_dir() { Some(p) } else { None }
+        });
+    let skills_result = skill_skills::load_skills(skill_skills::LoadSkillsOptions {
+        cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+        skill_dir: skill_dir.to_path_buf(),
+        bundled_dir: bundled_skills_dir,
+        skill_paths: Vec::new(),
+        include_defaults: true,
+    });
+    let n_skills = skills_result.skills.len();
+    for diag in &skills_result.diagnostics {
+        push_log(&app, &log_buf, &diag.level, &format!("[skills] {}: {}", diag.path, diag.message));
+    }
+    if n_skills > 0 {
+        let names: Vec<&str> = skills_result.skills.iter().map(|s| s.name.as_str()).collect();
+        push_log(&app, &log_buf, "info", &format!("discovered {n_skills} skill(s): {}", names.join(", ")));
+    }
+
     Some(Arc::new(LlmServerState {
         req_tx,
         model_name,
@@ -2008,6 +2060,7 @@ pub fn init(
         allowed_tools,
         cancelled_tool_calls: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         scripts_dir,
+        skills:       Arc::new(skills_result.skills),
         ready:        ready_flag,
         n_ctx:        n_ctx_flag,
         vision_ready: vision_flag,

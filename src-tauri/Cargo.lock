@@ -4500,6 +4500,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "globset"
+version = "0.4.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52dfc19153a48bde0cbd630453615c8151bce3a5adfac7a0aebfbf0a1e1f57e3"
+dependencies = [
+ "aho-corasick",
+ "bstr",
+ "log",
+ "regex-automata",
+ "regex-syntax",
+]
+
+[[package]]
 name = "glow"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5148,6 +5161,22 @@ checksum = "c0a05c691e1fae256cf7013d99dad472dc52d5543322761f83ec8d47eab40d2b"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "ignore"
+version = "0.4.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3d782a365a015e0f5c04902246139249abf769125006fbe7649e2ee88169b4a"
+dependencies = [
+ "crossbeam-deque",
+ "globset",
+ "log",
+ "memchr",
+ "regex-automata",
+ "same-file",
+ "walkdir",
+ "winapi-util",
 ]
 
 [[package]]
@@ -9490,6 +9519,7 @@ dependencies = [
  "skill-router",
  "skill-screenshots",
  "skill-settings",
+ "skill-skills",
  "skill-tools",
  "skill-tray",
  "skill-tts",
@@ -9640,6 +9670,7 @@ dependencies = [
  "serde_json",
  "skill-constants",
  "skill-data",
+ "skill-skills",
  "skill-tools",
  "tokio",
  "ureq 2.12.1",
@@ -9698,6 +9729,17 @@ dependencies = [
  "skill-llm",
  "skill-screenshots",
  "skill-tts",
+]
+
+[[package]]
+name = "skill-skills"
+version = "0.0.1"
+dependencies = [
+ "dirs",
+ "ignore",
+ "serde",
+ "serde_json",
+ "skill-constants",
 ]
 
 [[package]]

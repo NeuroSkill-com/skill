@@ -56,6 +56,9 @@ pub mod prelude {
     // Platform-specific re-exports.
     #[cfg(not(target_os = "windows"))]
     pub use crate::SKILL_DIR;
+
+    // Agent Skills
+    pub use crate::{SKILLS_SUBDIR, SKILL_MARKER};
 }
 
 // ── Onboarding ───────────────────────────────────────────────────────────────
@@ -523,3 +526,9 @@ pub const APP_ACKNOWLEDGEMENTS: &str =
 /// The skill data directory name used on macOS and Linux (`~/.skill`).
 #[cfg(not(target_os = "windows"))]
 pub const SKILL_DIR: &str = ".skill";
+
+/// Subdirectory under `SKILL_DIR` (or project root) for Agent Skills.
+pub const SKILLS_SUBDIR: &str = "skills";
+
+/// The marker filename that identifies a directory as a skill root.
+pub const SKILL_MARKER: &str = "SKILL.md";

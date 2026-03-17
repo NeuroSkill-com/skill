@@ -1,0 +1,3 @@
+### Features
+
+- **Agent Skills discovery**: Added `skill-skills` crate that discovers `SKILL.md` files from `~/.skill/skills/` (user), `<cwd>/.skill/skills/` (project), and the bundled `skills/` git submodule. Discovered skills are injected into the LLM system prompt as an `<available_skills>` XML block so the model can load specialised instructions via `read_file` on demand. Skills require a `description` in YAML frontmatter; invalid index-style `SKILL.md` files (without description) allow recursion into subdirectories. Deduplication by name (first wins) and symlink real-path. Added `skills` git submodule from `https://github.com/NeuroSkill-com/skills.git` providing 10+ bundled EEG/protocol skills.

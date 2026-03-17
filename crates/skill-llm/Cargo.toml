@@ -26,7 +26,8 @@ log        = "0.4"
 base64     = "0.22"
 ureq       = { version = "2", features = ["native-tls", "json"] }
 hf-hub     = "0.5"
-skill-tools = { path = "../skill-tools" }
+skill-tools  = { path = "../skill-tools" }
+skill-skills = { path = "../skill-skills" }
 
 llama-cpp-4 = { version = "0.2.12", optional = true }
 
