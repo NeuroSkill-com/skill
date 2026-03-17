@@ -154,26 +154,13 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                             }
                         }
                     } else {
-                        // Headless unavailable — fall back to plain HTTP fetch.
-                        tool_log!("tool:web_search", "[render] headless unavailable, falling back to HTTP fetch");
-                        let fetch_agent = search::browser_agent();
-                        for (i, url) in urls.iter().enumerate().take(render_count) {
-                            if i >= results.len() { break; }
-                            match search::set_browser_headers(fetch_agent.get(url)).call() {
-                                Ok(resp) => {
-                                    let body = resp.into_string().unwrap_or_default();
-                                    let text = search::strip_html_tags(&body);
-                                    // Collapse whitespace for cleaner output.
-                                    let cleaned: String = text.split_whitespace()
-                                        .collect::<Vec<_>>()
-                                        .join(" ");
-                                    let truncated = truncate_text(&cleaned, 2_000);
-                                    if let Some(obj) = results[i].as_object_mut() {
-                                        obj.insert("rendered_text".to_string(), json!(truncated));
-                                    }
-                                }
-                                Err(e) => {
-                                    tool_log!("tool:web_search", "[render] HTTP fetch failed for {}: {}", url, e);
+                        // Headless unavailable — fetch in parallel via HTTP.
+                        tool_log!("tool:web_search", "[render] headless unavailable, falling back to parallel HTTP fetch");
+                        let fetched = search::fetch_urls_parallel(&urls);
+                        for (i, content) in fetched.into_iter().enumerate() {
+                            if i < results.len() {
+                                if let Some(obj) = results[i].as_object_mut() {
+                                    obj.insert("rendered_text".to_string(), json!(content));
                                 }
                             }
                         }
@@ -186,7 +173,28 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     // ── Compact text format ─────────────────────────────
                     // Instead of returning verbose JSON (which eats context),
                     // emit a concise text list the model can parse instantly.
+                    //
+                    // When rendered content is available, score each result
+                    // by text quality and only include the best 1–2 to
+                    // avoid wasting context on garbage/empty pages.
                     let max_chars = compression.effective_max_search_result_chars();
+
+                    // Score rendered results to find the best ones.
+                    let mut scored: Vec<(usize, u32)> = results.iter().enumerate()
+                        .map(|(i, r)| {
+                            let text = r.get("rendered_text").and_then(|t| t.as_str()).unwrap_or("");
+                            (i, search::score_rendered_text(text))
+                        })
+                        .collect();
+                    scored.sort_by(|a, b| b.1.cmp(&a.1));
+
+                    // Indices of the best 2 rendered results (score > 30).
+                    let best_rendered: std::collections::HashSet<usize> = scored.iter()
+                        .filter(|(_, s)| *s > 30)
+                        .take(2)
+                        .map(|(i, _)| *i)
+                        .collect();
+
                     let mut compact = format!("web_search query=\"{}\" results={}{}:\n",
                         query, results.len(), if render { " rendered=true" } else { "" });
 
@@ -196,16 +204,23 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                         let snip  = r.get("snippet").and_then(|s| s.as_str()).unwrap_or("");
 
                         let mut entry = format!("{}. {}\n   {}\n", i + 1, title, url);
-                        if !snip.is_empty() {
+                        if !snip.is_empty() && !best_rendered.contains(&i) {
                             entry.push_str(&format!("   {}\n", truncate_text(snip, 150)));
                         }
 
-                        // If rendered text is available, include a truncated portion.
-                        if let Some(rendered) = r.get("rendered_text").and_then(|t| t.as_str()) {
-                            if !rendered.is_empty() {
-                                let max_rendered = (max_chars / results.len()).min(1500);
-                                entry.push_str(&format!("   --- page content ---\n   {}\n",
-                                    truncate_text(rendered, max_rendered)));
+                        // Only include rendered text for the best results.
+                        if best_rendered.contains(&i) {
+                            if let Some(rendered) = r.get("rendered_text").and_then(|t| t.as_str()) {
+                                if !rendered.is_empty() {
+                                    // Give the best result more space.
+                                    let max_rendered = if best_rendered.len() == 1 {
+                                        (max_chars * 2 / 3).min(1500)
+                                    } else {
+                                        (max_chars / 3).min(800)
+                                    };
+                                    entry.push_str(&format!("   --- page content ---\n   {}\n",
+                                        truncate_text(rendered, max_rendered)));
+                                }
                             }
                         }
 
