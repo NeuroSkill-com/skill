@@ -193,23 +193,29 @@
   });
 
   // ── Context breakdown segments ─────────────────────────────────────────────
+  // Use the SAME overhead constants as estimatedPromptTokens so segments
+  // sum exactly to liveUsedTokens when no real server count is available.
+
   const contextSegments = $derived.by((): ContextSegment[] => {
     const segs: ContextSegment[] = [];
 
-    // 1. System prompt
-    const sysTokens = estimateTokens(systemPrompt) + 4; // +role overhead
+    // 1. System prompt — mirrors: estimateTokens(systemPrompt) + 10
+    //    Split into base system prompt vs EEG injection
+    let sysTokens = estimateTokens(systemPrompt) + 10; // +10 matches estimatedPromptTokens
+    let eegTokens = 0;
+    if (eegActive && latestBands) {
+      const eegBlock = buildEegBlock(latestBands);
+      eegTokens = estimateTokens(eegBlock);
+      // EEG is appended to the system message, so remove it from sys
+    }
     if (sysTokens > 0) {
       segs.push({ key: "system", labelKey: "chat.ctx.system", tokens: sysTokens, color: "#8b5cf6" });
     }
-
-    // 2. EEG context
-    if (eegActive && latestBands) {
-      const eegBlock = buildEegBlock(latestBands);
-      const eegTokens = estimateTokens(eegBlock);
+    if (eegTokens > 0) {
       segs.push({ key: "eeg", labelKey: "chat.ctx.eeg", tokens: eegTokens, color: "#06b6d4" });
     }
 
-    // 3. Tool definitions (injected into the prompt when tools are enabled)
+    // 2. Tool definitions — mirrors: nCtx <= 4096 ? 30 : 500
     if (supportsTools && toolConfig.enabled) {
       const enabledCount = [toolConfig.date, toolConfig.location, toolConfig.web_search,
         toolConfig.web_fetch, toolConfig.bash, toolConfig.read_file,
@@ -220,35 +226,35 @@
       }
     }
 
-    // 4. User messages
+    // 3. Messages — mirrors: estimateTokens(m.content) + 10, + thinking + 5, + leadIn
     let userTokens = 0;
     let assistantTokens = 0;
     let thinkingTokens = 0;
     let toolResultTokens = 0;
 
     for (const m of messages) {
-      const contentToks = estimateTokens(m.content) + 4; // +role overhead
-      const leadInToks = m.leadIn ? estimateTokens(m.leadIn) : 0;
-
+      const msgOverhead = 10; // same as estimatedPromptTokens
       if (m.role === "user") {
-        userTokens += contentToks;
+        userTokens += estimateTokens(m.content) + msgOverhead;
       } else if (m.role === "assistant") {
-        assistantTokens += contentToks + leadInToks;
+        assistantTokens += estimateTokens(m.content) + msgOverhead;
+        if (m.leadIn) assistantTokens += estimateTokens(m.leadIn);
         if (m.thinking) {
-          thinkingTokens += estimateTokens(m.thinking);
+          thinkingTokens += estimateTokens(m.thinking) + 5; // +5 matches estimatedPromptTokens
         }
+        // Tool call args/results are injected as messages in the conversation
         if (m.toolUses) {
           for (const tu of m.toolUses) {
-            if (tu.args) toolResultTokens += estimateTokens(JSON.stringify(tu.args));
-            if (tu.result) toolResultTokens += estimateTokens(JSON.stringify(tu.result));
+            if (tu.args) toolResultTokens += estimateTokens(JSON.stringify(tu.args)) + 4;
+            if (tu.result) toolResultTokens += estimateTokens(JSON.stringify(tu.result)) + 4;
           }
         }
       }
     }
 
-    // Current input (not yet sent)
+    // Current input (not yet sent) — mirrors: estimateTokens(input) + 10
     if (input.trim()) {
-      userTokens += estimateTokens(input) + 4;
+      userTokens += estimateTokens(input) + 10;
     }
 
     if (userTokens > 0) segs.push({ key: "user", labelKey: "chat.ctx.user", tokens: userTokens, color: "#3b82f6" });
@@ -256,9 +262,25 @@
     if (thinkingTokens > 0) segs.push({ key: "thinking", labelKey: "chat.ctx.thinking", tokens: thinkingTokens, color: "#a855f7" });
     if (toolResultTokens > 0) segs.push({ key: "toolResults", labelKey: "chat.ctx.toolResults", tokens: toolResultTokens, color: "#ef4444" });
 
-    // 5. Completion tokens (currently generating)
+    // 4. Completion tokens (currently generating)
     if (streamCompletionToks > 0) {
       segs.push({ key: "completion", labelKey: "chat.ctx.completion", tokens: streamCompletionToks, color: "#64748b" });
+    }
+
+    // 5. When the server has reported real prompt tokens, the segment estimates
+    //    won't match exactly. Scale all prompt segments proportionally so the
+    //    breakdown sums to liveUsedTokens.
+    if (realPromptTokens !== null) {
+      const promptSegKeys = new Set(["system", "eeg", "toolDefs", "user", "assistant", "thinking", "toolResults"]);
+      const estPromptSum = segs.filter(s => promptSegKeys.has(s.key)).reduce((a, s) => a + s.tokens, 0);
+      if (estPromptSum > 0) {
+        const scale = realPromptTokens / estPromptSum;
+        for (const s of segs) {
+          if (promptSegKeys.has(s.key)) {
+            s.tokens = Math.round(s.tokens * scale);
+          }
+        }
+      }
     }
 
     return segs;

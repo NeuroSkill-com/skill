@@ -24,23 +24,27 @@
   const sortedSegments = $derived(
     [...segments].filter(s => s.tokens > 0).sort((a, b) => b.tokens - a.tokens)
   );
-  const segmentSum = $derived(sortedSegments.reduce((s, seg) => s + seg.tokens, 0));
+
+  /** Sum of all segment tokens — this is the authoritative total for proportions. */
+  const segmentSum = $derived(sortedSegments.reduce((a, s) => a + s.tokens, 0));
   const freeTokens = $derived(Math.max(0, nCtx - totalUsed));
 
-  /** Bar widths as % of nCtx, with a thin minimum so tiny slices stay visible. */
+  /** Percentage of the total context window (nCtx). Used for bar widths + free row. */
+  const pctOfCtx = (n: number) => nCtx > 0 ? (n / nCtx) * 100 : 0;
+
+  /** Percentage of used tokens. Used for legend rows so proportions sum to 100%. */
+  const pctOfUsed = (n: number) => segmentSum > 0 ? (n / segmentSum) * 100 : 0;
+
+  /** Bar segment widths as % of nCtx, with a small floor so tiny slices stay visible. */
   const barWidths = $derived.by(() => {
-    if (nCtx <= 0) return { segs: [] as number[], free: 100 };
-    const raw = sortedSegments.map(s => (s.tokens / nCtx) * 100);
-    const MIN = 0.6;
-    // Give tiny segments a minimum, then scale the rest so total never exceeds 100
-    const boosted = raw.map(v => Math.max(v, MIN));
-    const usedPct = Math.min(boosted.reduce((a, b) => a + b, 0), 100);
-    const freePct = Math.max(0, 100 - usedPct);
-    return { segs: boosted, free: freePct };
+    if (nCtx <= 0) return [] as number[];
+    const MIN = 0.5;
+    const raw = sortedSegments.map(s => pctOfCtx(s.tokens));
+    return raw.map(v => Math.max(v, MIN));
   });
 
-  const fmtPct = (n: number) => nCtx > 0 ? ((n / nCtx) * 100).toFixed(1) : "0.0";
   const fmtNum = (n: number) => n.toLocaleString();
+  const fmtPct1 = (v: number) => v.toFixed(1);
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -59,42 +63,46 @@
       {/if}
     </div>
 
-    <!-- Stacked bar -->
+    <!-- Stacked bar (proportional to nCtx) -->
     <div class="flex h-2.5 rounded-full overflow-hidden bg-muted-foreground/8 mb-3"
          title="{fmtNum(totalUsed)} / {fmtNum(nCtx)}">
       {#each sortedSegments as seg, i (seg.key)}
         <div
           class="h-full transition-all duration-200"
-          style="width:{barWidths.segs[i]}%; background:{seg.color}; opacity:0.85;"
-          title="{t(seg.labelKey)}: {fmtNum(seg.tokens)} ({fmtPct(seg.tokens)}%)"
+          style="width:{barWidths[i]}%; background:{seg.color}; opacity:0.85;"
+          title="{t(seg.labelKey)}: {fmtNum(seg.tokens)}"
         ></div>
       {/each}
     </div>
 
-    <!-- Legend rows -->
+    <!-- Legend rows (percentages = share of used context) -->
     <div class="flex flex-col gap-1.5">
       {#each sortedSegments as seg (seg.key)}
+        {@const share = pctOfUsed(seg.tokens)}
         <div class="flex items-center gap-2">
           <span class="w-2.5 h-2.5 rounded-[3px] shrink-0" style="background:{seg.color};"></span>
           <span class="flex-1 text-muted-foreground truncate">{t(seg.labelKey)}</span>
           <span class="tabular-nums text-foreground font-medium">{fmtNum(seg.tokens)}</span>
-          <span class="tabular-nums text-muted-foreground/60 w-10 text-right">{fmtPct(seg.tokens)}%</span>
+          <span class="tabular-nums text-muted-foreground/60 w-10 text-right">{fmtPct1(share)}%</span>
         </div>
       {/each}
 
-      <!-- Free -->
-      <div class="flex items-center gap-2 opacity-50">
+      <!-- Free (percentage = share of nCtx) -->
+      <div class="flex items-center gap-2 pt-1 border-t border-border/40 dark:border-white/[0.04]">
         <span class="w-2.5 h-2.5 rounded-[3px] shrink-0 bg-muted-foreground/15"></span>
-        <span class="flex-1 text-muted-foreground truncate">{t("chat.ctx.free")}</span>
-        <span class="tabular-nums text-foreground font-medium">{fmtNum(freeTokens)}</span>
-        <span class="tabular-nums text-muted-foreground/60 w-10 text-right">{fmtPct(freeTokens)}%</span>
+        <span class="flex-1 text-muted-foreground/60 truncate">{t("chat.ctx.free")}</span>
+        <span class="tabular-nums text-muted-foreground/60 font-medium">{fmtNum(freeTokens)}</span>
+        <span class="tabular-nums text-muted-foreground/40 w-10 text-right">{fmtPct1(pctOfCtx(freeTokens))}%</span>
       </div>
     </div>
 
     <!-- Footer total -->
     <div class="mt-2.5 pt-2 border-t border-border dark:border-white/[0.06] flex justify-between">
       <span class="text-muted-foreground font-medium">{t("chat.ctx.total")}</span>
-      <span class="tabular-nums font-semibold text-foreground">{fmtNum(totalUsed)} / {fmtNum(nCtx)}</span>
+      <span class="tabular-nums font-semibold text-foreground">
+        {fmtNum(totalUsed)} / {fmtNum(nCtx)}
+        <span class="text-muted-foreground/50 font-normal ml-1">({fmtPct1(pctOfCtx(totalUsed))}%)</span>
+      </span>
     </div>
   </div>
 </div>
