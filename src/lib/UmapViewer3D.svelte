@@ -31,6 +31,10 @@ the Free Software Foundation, version 3 only. -->
   import { getResolved } from "$lib/theme-store.svelte";
   import { fmtTimeShort, dateToLocalKey, fromUnix } from "$lib/format";
   import type { UmapPoint, UmapResult, UmapProgress } from "$lib/types";
+  import {
+    easeOut, gauss, hslToRgb, labelHex,
+    turboRaw, fmtGradientTs, fmtUtcTime, utcToLocalDate,
+  } from "$lib/umap-helpers";
 
   type ThreeModule = typeof import("three");
   type LabelCloudGroup = THREE_NS.Group & { __updatePositions?: (pos: Float32Array) => void };
@@ -82,32 +86,7 @@ the Free Software Foundation, version 3 only. -->
   /** Min/max timestamps for the gradient legend. */
   let gradientRange = $state<{ minUtc: number; maxUtc: number } | null>(null);
 
-  /**
-   * Attempt to format a UTC epoch as a short local date string.
-   * Returns e.g. "Jan 15" or "2025-01-15 14:30" depending on range.
-   */
-  function fmtGradientTs(utc: number, span: number): string {
-    const d = new Date(utc * 1000);
-    if (span > 86400 * 2) {
-      return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-    }
-    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  }
-
-  /**
-   * Turbo colormap (Google, 2019) — perceptually uniform, vibrant rainbow.
-   * Maps t ∈ [0,1] → [r,g,b] each ∈ [0,1].
-   * On light backgrounds, slightly darkened for contrast.
-   */
-  function turboRaw(t: number): [number, number, number] {
-    const c = Math.max(0, Math.min(1, t));
-    // Polynomial approximation of the turbo sRGB LUT
-    const r = Math.max(0, Math.min(1, 0.13572138 + c * (4.61539260 + c * (-42.66032258 + c * (132.13108234 + c * (-152.54893924 + c * 59.28637943))))));
-    const g = Math.max(0, Math.min(1, 0.09140261 + c * (2.19418839 + c * (4.84296658 + c * (-14.18503333 + c * (4.27729857 + c * 2.82956604))))));
-    const b = Math.max(0, Math.min(1, 0.10667330 + c * (12.64194608 + c * (-60.58204836 + c * (110.36276771 + c * (-89.90310912 + c * 27.34824973))))));
-    return [r, g, b];
-  }
-
+  /** Jet colormap — turbo with light-theme darkening. */
   function jet(t: number): [number, number, number] {
     const [r, g, b] = turboRaw(t);
     if (isDark) return [r, g, b];
@@ -244,22 +223,6 @@ the Free Software Foundation, version 3 only. -->
   let prevDataRef: UmapResult | null = null;
 
   // ── Math helpers ─────────────────────────────────────────────────────────
-  function easeOut(t: number) { return 1 - (1 - t) ** 3; }
-  function gauss() { return Math.sqrt(-2 * Math.log(Math.random() || 1e-10)) * Math.cos(Math.PI * 2 * Math.random()); }
-  function hslToRgb(h: number, s: number, l: number): [number, number, number] {
-    const a = s * Math.min(l, 1 - l);
-    const f = (n: number) => { const k = (n + h * 12) % 12; return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); };
-    return [f(0), f(8), f(4)];
-  }
-  function labelHex(hue: number): string {
-    const [r, g, b] = hslToRgb(hue, 0.85, 0.62);
-    return `#${[r, g, b].map(v => Math.round(v * 255).toString(16).padStart(2, "0")).join("")}`;
-  }
-  function fmtUtcTime(utc: number): string {
-    if (!utc) return "—";
-    return fmtTimeShort(utc);
-  }
-
   function normalise(pts: UmapPoint[]): Float32Array {
     const n = pts.length, out = new Float32Array(n * 3);
     let mnX = Infinity, mxX = -Infinity, mnY = Infinity, mxY = -Infinity, mnZ = Infinity, mxZ = -Infinity;
@@ -716,10 +679,6 @@ the Free Software Foundation, version 3 only. -->
   }
 
   // ── Build point clouds ───────────────────────────────────────────────────
-  /** Convert UTC seconds → local "YYYY-MM-DD" string. */
-  function utcToLocalDate(utc: number): string {
-    return dateToLocalKey(fromUnix(utc));
-  }
 
   /** Build a date→color map using evenly spaced hues. */
   function buildDatePalette(pts: UmapPoint[]): Map<string, ThreeColor> {
