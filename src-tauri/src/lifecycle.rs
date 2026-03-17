@@ -5,12 +5,11 @@
 
 use std::time::Duration;
 
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 use skill_eeg::eeg_quality::SignalQuality;
 
 use crate::{
-    app_log,
     helpers::{emit_status, unix_secs, AppStateExt},
     session_connect::ConnectError,
     session_csv::new_csv_path,
