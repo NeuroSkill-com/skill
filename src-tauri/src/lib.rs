@@ -34,6 +34,7 @@ use skill_log::SkillLogger;
 /// ```
 macro_rules! app_log {
     ($app:expr, $tag:literal, $($arg:tt)*) => {{
+        use tauri::Manager as _;
         let _lg = $app.state::<std::sync::Arc<$crate::skill_log::SkillLogger>>();
         skill_log!(_lg, $tag, $($arg)*);
     }};
@@ -247,6 +248,7 @@ use settings_cmds::{
     get_autostart_enabled, set_autostart_enabled,
     get_update_check_interval, set_update_check_interval,
     get_openbci_config, set_openbci_config, list_serial_ports,
+    get_device_api_config, set_device_api_config,
     get_neutts_config, set_neutts_config, pick_ref_wav_file,
     get_tts_preload, set_tts_preload,
     get_active_window_tracking, set_active_window_tracking, get_active_window,
@@ -675,6 +677,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         s.ws_port                      = data.ws_port;
         s.update_check_interval_secs   = data.update_check_interval_secs;
         s.openbci_config               = data.openbci;
+        s.device_api_config            = data.device_api;
         s.neutts_config                = data.neutts.clone();
         s.tts_preload                  = data.tts_preload;
         s.track_active_window          = data.track_active_window;
@@ -1295,6 +1298,8 @@ pub fn run() {
             get_autostart_enabled, set_autostart_enabled,
             get_update_check_interval, set_update_check_interval,
             get_openbci_config, set_openbci_config, list_serial_ports,
+            get_device_api_config, set_device_api_config,
+            get_device_api_config, set_device_api_config,
             get_neutts_config, set_neutts_config, pick_ref_wav_file,
             get_tts_preload, set_tts_preload,
             get_active_window_tracking, set_active_window_tracking, get_active_window,

@@ -141,6 +141,18 @@ impl Default for OpenBciConfig {
     }
 }
 
+// ── Device API configuration ─────────────────────────────────────────────────
+
+/// Credentials used by specific device integrations that require remote APIs.
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct DeviceApiConfig {
+    /// Emotiv Cortex API application client id.
+    pub emotiv_client_id: String,
+    /// Emotiv Cortex API application client secret.
+    pub emotiv_client_secret: String,
+}
+
 // ── Sleep schedule ─────────────────────────────────────────────────────────────
 
 /// Named sleep-schedule preset.
@@ -542,6 +554,9 @@ pub struct UserSettings {
     /// OpenBCI board configuration.
     #[serde(default)]
     pub openbci: OpenBciConfig,
+    /// Device-specific API credentials (e.g. Emotiv Cortex).
+    #[serde(default)]
+    pub device_api: DeviceApiConfig,
     /// NeuTTS voice-cloning TTS configuration.
     #[serde(default)]
     pub neutts: NeuttsConfig,
@@ -666,6 +681,7 @@ impl Default for UserSettings {
             ws_port:                default_ws_port(),
             update_check_interval_secs: default_update_check_interval(),
             openbci:                OpenBciConfig::default(),
+            device_api:             DeviceApiConfig::default(),
             neutts:                 NeuttsConfig::default(),
             tts_preload:            default_tts_preload(),
             track_active_window:    default_track_active_window(),
