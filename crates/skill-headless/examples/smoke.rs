@@ -361,11 +361,13 @@ fn main() {
     println!("    Response: {:?}", resp);
     println!("    PASS");
 
-    // ── Screenshot (expected to fail gracefully) ─────────────────────────
-    println!("\n[27] Screenshot (expect graceful error)...");
+    // ── Screenshot ─────────────────────────────────────────────────────
+    println!("\n[27] Screenshot...");
     let resp = browser.send(Command::Screenshot).expect("Screenshot panicked");
-    println!("    Response: {:?}", resp.as_error().unwrap_or("no error?"));
-    assert!(!resp.is_ok(), "expected error from screenshot");
+    let text = resp.as_text().unwrap_or("");
+    let is_png = text.starts_with("data:image/png;base64,");
+    println!("    Got PNG data URL: {is_png} ({} chars)", text.len());
+    assert!(is_png, "expected PNG data URL from screenshot");
     println!("    PASS");
 
     // ── Unsupported commands (verify no crash) ───────────────────────────
