@@ -606,7 +606,6 @@ fn run_blocking_exit_shutdown(app: &tauri::AppHandle) {
 /// `title()` polling, and returns the content.
 #[cfg(target_os = "macos")]
 fn setup_external_renderer(app: &mut tauri::App) {
-    use tauri::Manager;
     let handle = app.handle().clone();
 
     skill_headless::Browser::set_external_renderer(move |url, wait_ms| {
