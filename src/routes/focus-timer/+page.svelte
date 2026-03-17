@@ -193,7 +193,7 @@ the Free Software Foundation, version 3 only. -->
   let ringColor = $derived(
     phase === "work"      ? "#3b82f6" :   // blue
     phase === "break"     ? "#22c55e" :   // green
-    phase === "longBreak" ? "#a855f7" :   // purple
+    phase === "longBreak" ? "var(--color-violet-500)" :
     "#64748b"                             // slate
   );
 
@@ -685,13 +685,13 @@ the Free Software Foundation, version 3 only. -->
                 <!-- Phase dot -->
                 <span class="w-2 h-2 rounded-full shrink-0
                              {isWork      ? 'bg-blue-500'
-                             : isLongBreak ? 'bg-purple-500'
+                             : isLongBreak ? 'bg-violet-500'
                              :               'bg-green-500'}">
                 </span>
                 <!-- Phase name -->
                 <span class="text-[0.65rem] font-medium flex-1
                              {isWork      ? 'text-blue-700 dark:text-blue-300'
-                             : isLongBreak ? 'text-purple-700 dark:text-purple-300'
+                             : isLongBreak ? 'text-violet-700 dark:text-violet-300'
                              :               'text-green-700 dark:text-green-300'}">
                   {isWork
                     ? t("focusTimer.log.work")

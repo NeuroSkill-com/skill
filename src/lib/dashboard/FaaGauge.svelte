@@ -12,7 +12,7 @@ the Free Software Foundation, version 3 only. -->
   let { faa }: Props = $props();
 </script>
 
-<CollapsibleSection title={t("dashboard.faa")} dotColor="text-purple-500"
+<CollapsibleSection title={t("dashboard.faa")} dotColor="text-violet-500"
                     rootAttrs={{ role: "meter", "aria-label": t("dashboard.faa"),
                                  "aria-valuenow": Math.round(faa * 1000) / 1000, "aria-valuemin": -1, "aria-valuemax": 1 }}>
     <div class="flex items-center justify-end -mt-1 mb-0.5">
@@ -28,11 +28,11 @@ the Free Software Foundation, version 3 only. -->
           {#if faa >= 0}
             <div class="absolute top-0 h-full rounded-full transition-all duration-500 ease-out"
                  style="left:50%; width:{Math.min(50, Math.abs(faa) * 50)}%;
-                        background: linear-gradient(90deg, #c084fc, #a855f7)"></div>
+                        background: linear-gradient(90deg, var(--color-violet-400), var(--color-violet-500))"></div>
           {:else}
             <div class="absolute top-0 h-full rounded-full transition-all duration-500 ease-out"
                  style="right:50%; width:{Math.min(50, Math.abs(faa) * 50)}%;
-                        background: linear-gradient(270deg, #c084fc, #a855f7)"></div>
+                        background: linear-gradient(270deg, var(--color-violet-400), var(--color-violet-500))"></div>
           {/if}
         </div>
         <div class="flex justify-between text-[0.42rem] text-muted-foreground/30">

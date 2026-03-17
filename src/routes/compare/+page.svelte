@@ -1943,15 +1943,15 @@ the Free Software Foundation, version 3 only. -->
                     <div class="absolute top-0 bottom-0 left-1/2 w-px bg-muted-foreground/20"></div>
                     <!-- Bar from centre -->
                     {#if item.val >= 0}
-                      <div class="absolute top-0 bottom-0 left-1/2 rounded-r-full bg-purple-500/70"
+                      <div class="absolute top-0 bottom-0 left-1/2 rounded-r-full bg-violet-500/70"
                            style="width:{Math.min(50, Math.abs(item.val) * 50)}%"></div>
                     {:else}
-                      <div class="absolute top-0 bottom-0 rounded-l-full bg-purple-500/70"
+                      <div class="absolute top-0 bottom-0 rounded-l-full bg-violet-500/70"
                            style="right:50%; width:{Math.min(50, Math.abs(item.val) * 50)}%"></div>
                     {/if}
                   </div>
                   <span class="text-[0.68rem] font-bold tabular-nums w-12 text-right"
-                        style="color:{Math.abs(item.val) > 0.3 ? '#a855f7' : 'inherit'}">
+                        style="color:{Math.abs(item.val) > 0.3 ? 'var(--color-violet-500)' : 'inherit'}">
                     {item.val >= 0 ? "+" : ""}{item.val.toFixed(3)}
                   </span>
                 </div>

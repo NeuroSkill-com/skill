@@ -56,7 +56,7 @@ the Free Software Foundation, version 3 only. -->
         { k: "higuchiFd", v: hfd.toFixed(3), c: '#6b7280', bar: Math.min(100,hfd/2*100), bg:'bg-orange-400' },
         { k: "dfaExponent", v: dfa.toFixed(3), c: dfa>0.5&&dfa<1.0?'#22c55e':'#f59e0b', bar: Math.min(100,dfa/1.5*100), bg:'bg-lime-500' },
         { k: "sampleEntropy", v: se.toFixed(3), c: '#6b7280' },
-        { k: "pacThetaGamma", v: pac.toFixed(3), c: pac>0.5?'#a855f7':'#6b7280', bar: pac*100, bg:'bg-purple-500' },
+        { k: "pacThetaGamma", v: pac.toFixed(3), c: pac>0.5?'var(--color-violet-500)':'#6b7280', bar: pac*100, bg:'bg-violet-500' },
         { k: "lateralityIndex", v: (lat>=0?'+':'')+lat.toFixed(3), c: '#6b7280' },
         { k: "headache", v: headache.toFixed(0), c: headache>60?'#f43f5e':headache>30?'#f59e0b':'#22c55e', bar: Math.min(100,headache), grad:'linear-gradient(90deg,#f87171,#ef4444)' },
         { k: "migraine", v: migraine.toFixed(0), c: migraine>60?'#f43f5e':migraine>30?'#f59e0b':'#22c55e', bar: Math.min(100,migraine), grad:'linear-gradient(90deg,#fb7185,#f43f5e)' },
