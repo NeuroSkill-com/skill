@@ -1,0 +1,3 @@
+### Refactor
+
+- **Split `skill-llm/engine.rs` into module directory**: Refactored the 2070-line `crates/skill-llm/src/engine.rs` into `engine/` with focused sub-modules: `mod.rs` (re-exports, macros), `logging.rs` (log buffer, file sink), `protocol.rs` (wire types), `state.rs` (server state, cell, status), `think_tracker.rs` (think-budget enforcement), `images.rs` (base64 decoding), `tool_orchestration.rs` (multi-round tool loop), `sampling.rs` (token sampling loop), `generation.rs` (text/multimodal generation), `actor.rs` (OS thread event loop), `init.rs` (public init). All public API paths remain unchanged.
