@@ -95,7 +95,7 @@ the Free Software Foundation, version 3 only. -->
   let idunTokenVisible = $state(false);
   let emotivApiExpanded = $state(false);
   let idunApiExpanded   = $state(false);
-  type SupportedCompanyId = "muse" | "openbci" | "emotiv" | "idun";
+  type SupportedCompanyId = "muse" | "neurable" | "openbci" | "emotiv" | "idun" | "reak";
   interface SupportedDeviceItem {
     name: string;
     image: string;
@@ -115,11 +115,21 @@ the Free Software Foundation, version 3 only. -->
         { name: "Muse 2", image: "/devices/muse-gen2.jpg" },
         { name: "Muse S", image: "/devices/muse-s-gen1.jpg" },
         { name: "Muse S Athena", image: "/devices/muse-s-athena.jpg" },
-        { name: "MW75 Neuro", image: "/devices/muse-mw75.jpg" },
       ],
       instructions: [
         "Power on your headset and keep it near this computer.",
         "Use scan + pair in the Devices list below, then set as default if needed.",
+      ],
+    },
+    {
+      id: "neurable",
+      name: "Neurable",
+      devices: [
+        { name: "MW75 Neuro", image: "/devices/muse-mw75.jpg" },
+      ],
+      instructions: [
+        "Power on MW75 Neuro and keep it close for Bluetooth discovery.",
+        "Scan, pair, and select it as default from the Devices list below.",
       ],
     },
     {
@@ -159,6 +169,17 @@ the Free Software Foundation, version 3 only. -->
       instructions: [
         "Open Device API and add your IDUN API token if required.",
         "Save token, then pair/connect the headset from the device list.",
+      ],
+    },
+    {
+      id: "reak",
+      name: "RE-AK",
+      devices: [
+        { name: "Hermes Nucleus", image: "/devices/re-ak-hermes-nucleus.svg" },
+      ],
+      instructions: [
+        "Power on Hermes Nucleus and keep it near this computer.",
+        "Scan and pair it in the Devices list, then connect from the preferred device flow.",
       ],
     },
   ];

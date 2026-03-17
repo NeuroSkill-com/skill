@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" role="img" aria-labelledby="title desc">
+  <title id="title">RE-AK Hermes Nucleus</title>
+  <desc id="desc">Illustrative placeholder image for RE-AK Hermes Nucleus device</desc>
+  <rect x="1" y="1" width="318" height="198" rx="18" fill="#f6f7fb" stroke="#d9deea" stroke-width="2" />
+  <rect x="52" y="58" width="216" height="84" rx="20" fill="#ffffff" stroke="#cad2e3" stroke-width="2" />
+  <rect x="68" y="92" width="184" height="16" rx="8" fill="#9aa7c2" opacity="0.55" />
+  <circle cx="96" cy="100" r="7" fill="#6c7a9a" />
+  <circle cx="224" cy="100" r="7" fill="#6c7a9a" />
+  <text x="160" y="34" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" fill="#2e3950">RE-AK</text>
+  <text x="160" y="170" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="18" fill="#4a5773">Hermes Nucleus</text>
+</svg>
