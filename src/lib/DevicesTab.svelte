@@ -99,8 +99,37 @@ the Free Software Foundation, version 3 only. -->
   let emotivApiExpanded = $state(false);
   let idunApiExpanded   = $state(false);
   let supportedCompanyExpanded = $state<SupportedCompanyId | null>(null);
+  let supportedDevicesSearchQuery = $state("");
   let serialPorts      = $state<string[]>([]);
   let portsLoading     = $state(false);
+
+  // Fuzzy search: case-insensitive substring + character subsequence matching
+  function fuzzyMatch(haystack: string, needle: string): boolean {
+    if (!needle) return true;
+    const h = haystack.toLowerCase();
+    const n = needle.toLowerCase();
+    if (h.includes(n)) return true;
+    let hIdx = 0;
+    for (let i = 0; i < n.length; i++) {
+      hIdx = h.indexOf(n[i], hIdx);
+      if (hIdx === -1) return false;
+      hIdx++;
+    }
+    return true;
+  }
+
+  const filteredCompanies = $derived((() => {
+    if (!supportedDevicesSearchQuery) return SUPPORTED_COMPANIES;
+    return SUPPORTED_COMPANIES.map(company => ({
+      ...company,
+      devices: company.devices.filter(device => {
+        const companyName = t(company.nameKey);
+        const deviceName = t(device.nameKey);
+        return fuzzyMatch(companyName, supportedDevicesSearchQuery) ||
+               fuzzyMatch(deviceName, supportedDevicesSearchQuery);
+      }),
+    })).filter(company => company.devices.length > 0);
+  })());
 
   async function loadSerialPorts() {
     portsLoading = true;
@@ -447,18 +476,26 @@ the Free Software Foundation, version 3 only. -->
       {t("settings.supportedDevices.title")}
     </span>
 
+    <div class="flex flex-col gap-2">
+      <input
+        type="text"
+        bind:value={supportedDevicesSearchQuery}
+        placeholder={t("settings.supportedDevices.search")}
+        class="text-[0.73rem] px-2.5 py-1.5 rounded-md border border-border bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-muted-foreground/50" />
+    </div>
+
     <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-      <CardContent class="flex flex-col gap-3 p-4">
-        {#each SUPPORTED_COMPANIES as company, i (company.id)}
+      <CardContent class="flex flex-col gap-2 p-3">
+        {#each filteredCompanies as company, i (company.id)}
           {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
 
-          <div class="flex flex-col gap-2.5">
+          <div class="flex flex-col gap-1.5">
             <button
               onclick={() => expandSupportedCompany(company.id)}
               class="flex items-center justify-between w-full"
               aria-expanded={supportedCompanyExpanded === company.id}
             >
-                <span class="text-[0.76rem] font-semibold text-foreground">{t(company.nameKey)}</span>
+                <span class="text-[0.7rem] font-semibold text-foreground">{t(company.nameKey)}</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                    class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
@@ -467,19 +504,19 @@ the Free Software Foundation, version 3 only. -->
               </svg>
             </button>
 
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5">
               {#each company.devices as item (item.nameKey)}
                 <button
                   onclick={() => expandSupportedCompany(company.id)}
-                  class="flex flex-col items-stretch gap-2 rounded-lg border border-border/70
-                         dark:border-white/[0.06] bg-background/60 px-2.5 py-2.5 hover:bg-muted/50
-                         min-h-[126px]"
+                  class="flex flex-col items-stretch gap-1 rounded-lg border border-border/70
+                         dark:border-white/[0.06] bg-background/60 px-2 py-2 hover:bg-muted/50
+                         min-h-[100px]"
                   aria-label={`${t(company.nameKey)} ${t(item.nameKey)}`}
                 >
-                  <div class="w-full h-16 rounded-md overflow-hidden">
+                  <div class="w-full h-14 rounded-md overflow-hidden">
                     <img src={item.image} alt={t(item.nameKey)} class="w-full h-full object-cover" />
                   </div>
-                  <span class="text-[0.62rem] text-center leading-tight text-foreground/85 min-h-[30px] flex items-center justify-center">{t(item.nameKey)}</span>
+                  <span class="text-[0.59rem] text-center leading-tight text-foreground/85 min-h-[24px] flex items-center justify-center">{t(item.nameKey)}</span>
                 </button>
               {/each}
             </div>
