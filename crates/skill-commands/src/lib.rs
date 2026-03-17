@@ -715,7 +715,7 @@ pub fn find_session_for_timestamp_in(
 // ── Interactive Cross-Modal Search ────────────────────────────────────────────
 
 /// A single node in the interactive search graph.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Clone, Default)]
 pub struct InteractiveGraphNode {
     /// Stable identifier used for edge references.
     pub id:             String,

@@ -700,3 +700,107 @@ impl Default for EpochMetrics {
         }
     }
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── cosine_distance ───────────────────────────────────────────────────
+
+    #[test]
+    fn cosine_identical_vectors() {
+        let v = vec![1.0, 2.0, 3.0];
+        assert!((cosine_distance(&v, &v) - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cosine_opposite_vectors() {
+        let a = vec![1.0, 0.0, 0.0];
+        let b = vec![-1.0, 0.0, 0.0];
+        assert!((cosine_distance(&a, &b) - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cosine_orthogonal_vectors() {
+        let a = vec![1.0, 0.0];
+        let b = vec![0.0, 1.0];
+        assert!((cosine_distance(&a, &b) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cosine_empty_returns_2() {
+        assert_eq!(cosine_distance(&[], &[]), 2.0);
+    }
+
+    #[test]
+    fn cosine_mismatched_lengths_returns_2() {
+        assert_eq!(cosine_distance(&[1.0, 2.0], &[1.0]), 2.0);
+    }
+
+    #[test]
+    fn cosine_zero_vector_returns_2() {
+        assert_eq!(cosine_distance(&[0.0, 0.0], &[1.0, 1.0]), 2.0);
+    }
+
+    // ── fuzzy_match ───────────────────────────────────────────────────────
+
+    #[test]
+    fn fuzzy_exact_match() {
+        assert!(fuzzy_match("meditation", "meditation"));
+    }
+
+    #[test]
+    fn fuzzy_case_insensitive() {
+        assert!(fuzzy_match("Meditation", "meditation"));
+    }
+
+    #[test]
+    fn fuzzy_substring_match() {
+        assert!(fuzzy_match("med", "meditation"));
+    }
+
+    #[test]
+    fn fuzzy_reverse_substring() {
+        assert!(fuzzy_match("meditation session", "meditation"));
+    }
+
+    #[test]
+    fn fuzzy_close_typo() {
+        assert!(fuzzy_match("meditatoin", "meditation")); // transposition
+    }
+
+    #[test]
+    fn fuzzy_no_match() {
+        assert!(!fuzzy_match("completely different", "meditation"));
+    }
+
+    #[test]
+    fn fuzzy_empty_keyword() {
+        assert!(!fuzzy_match("", "meditation"));
+    }
+
+    #[test]
+    fn fuzzy_empty_candidate() {
+        assert!(!fuzzy_match("meditation", ""));
+    }
+
+    // ── levenshtein (via normalize_text) ──────────────────────────────────
+
+    #[test]
+    fn levenshtein_identical() {
+        assert_eq!(levenshtein("abc", "abc"), 0);
+    }
+
+    #[test]
+    fn levenshtein_one_edit() {
+        assert_eq!(levenshtein("abc", "ab"), 1);
+    }
+
+    #[test]
+    fn levenshtein_empty() {
+        assert_eq!(levenshtein("", "abc"), 3);
+        assert_eq!(levenshtein("abc", ""), 3);
+    }
+}

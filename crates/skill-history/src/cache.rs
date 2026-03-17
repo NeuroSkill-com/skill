@@ -747,3 +747,59 @@ pub fn compute_status_history(
         "avg_session_min": r2f(avg_session_min), "today_vs_avg": today_vs_avg,
     })
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_epoch(ts: u64) -> EpochRow {
+        EpochRow {
+            t: ts as f64,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn downsample_noop_when_under_max() {
+        let mut ts = vec![make_epoch(1), make_epoch(2), make_epoch(3)];
+        downsample_timeseries(&mut ts, 10);
+        assert_eq!(ts.len(), 3);
+    }
+
+    #[test]
+    fn downsample_exact_count() {
+        let mut ts: Vec<EpochRow> = (0..100).map(|i| make_epoch(i)).collect();
+        downsample_timeseries(&mut ts, 10);
+        assert_eq!(ts.len(), 10);
+    }
+
+    #[test]
+    fn downsample_preserves_first_and_last() {
+        let mut ts: Vec<EpochRow> = (0..100).map(|i| make_epoch(i)).collect();
+        downsample_timeseries(&mut ts, 10);
+        assert_eq!(ts.first().unwrap().t, 0.0);
+        assert_eq!(ts.last().unwrap().t, 99.0);
+    }
+
+    #[test]
+    fn downsample_max_2_keeps_endpoints() {
+        let mut ts: Vec<EpochRow> = (0..50).map(|i| make_epoch(i)).collect();
+        downsample_timeseries(&mut ts, 2);
+        assert_eq!(ts.len(), 2);
+        assert_eq!(ts[0].t, 0.0);
+        assert_eq!(ts[1].t, 49.0);
+    }
+
+    #[test]
+    fn analyze_sleep_stages_empty() {
+        let stages = SleepStages {
+            epochs: vec![],
+            summary: SleepSummary::default(),
+        };
+        let result = analyze_sleep_stages(&stages);
+        // Result can be an object or null — just check it doesn't panic
+        assert!(result.is_object() || result.is_null() || result.is_string());
+    }
+}

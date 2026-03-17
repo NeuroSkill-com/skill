@@ -801,3 +801,89 @@ pub fn generate_svg(
     o
 }
 
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dot_esc_quotes() {
+        assert_eq!(dot_esc(r#"say "hello""#), r#"say \"hello\""#);
+    }
+
+    #[test]
+    fn dot_esc_backslash() {
+        assert_eq!(dot_esc(r"C:\path"), r"C:\\path");
+    }
+
+    #[test]
+    fn dot_esc_newlines_stripped() {
+        assert_eq!(dot_esc("line1\nline2\r"), "line1line2");
+    }
+
+    #[test]
+    fn dot_esc_plain_text() {
+        assert_eq!(dot_esc("hello world"), "hello world");
+    }
+
+    #[test]
+    fn svg_esc_ampersand() {
+        assert_eq!(svg_esc("A & B"), "A &amp; B");
+    }
+
+    #[test]
+    fn svg_esc_angle_brackets() {
+        assert_eq!(svg_esc("<b>bold</b>"), "&lt;b&gt;bold&lt;/b&gt;");
+    }
+
+    #[test]
+    fn trunc_short_unchanged() {
+        assert_eq!(trunc("hi", 5), "hi");
+    }
+
+    #[test]
+    fn trunc_exact_length() {
+        assert_eq!(trunc("abcde", 5), "abcde");
+    }
+
+    #[test]
+    fn trunc_clips_with_ellipsis() {
+        assert_eq!(trunc("abcdef", 5), "abcde…");
+    }
+
+    #[test]
+    fn turbo_hex_black_at_zero() {
+        let hex = turbo_hex(0.0);
+        assert_eq!(hex.len(), 7); // #rrggbb
+        assert!(hex.starts_with('#'));
+    }
+
+    #[test]
+    fn turbo_hex_clamps() {
+        let lo = turbo_hex(-1.0);
+        let hi = turbo_hex(2.0);
+        assert_eq!(lo, turbo_hex(0.0));
+        assert_eq!(hi, turbo_hex(1.0));
+    }
+
+    #[test]
+    fn generate_dot_empty() {
+        let dot = generate_dot(&[], &[]);
+        assert!(dot.contains("digraph"));
+        assert!(dot.contains('}'));
+    }
+
+    #[test]
+    fn generate_dot_single_node() {
+        let nodes = vec![InteractiveGraphNode {
+            id: "n1".into(),
+            kind: "query".into(),
+            text: Some("focus".into()),
+            ..InteractiveGraphNode::default()
+        }];
+        let dot = generate_dot(&nodes, &[]);
+        assert!(dot.contains("focus"));
+    }
+}

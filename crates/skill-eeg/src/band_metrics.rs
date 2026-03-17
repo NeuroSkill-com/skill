@@ -296,3 +296,83 @@ fn lin_reg_slope(x: &[f64], y: &[f64]) -> f64 {
     if denom.abs() < 1e-20 { 0.0 } else { (n * sxy - sx * sy) / denom }
 }
 
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spectral_edge_flat_spectrum() {
+        // Flat spectrum: SEF95 should be near 95% of the way through
+        let psd = vec![1.0; 100];
+        let sef = spectral_edge_freq(&psd, 0.5, 0.95);
+        assert!(sef > 45.0 && sef < 50.0, "SEF95={sef}");
+    }
+
+    #[test]
+    fn spectral_edge_empty() {
+        assert_eq!(spectral_edge_freq(&[], 1.0, 0.95), 0.0);
+    }
+
+    #[test]
+    fn spectral_centroid_single_bin() {
+        let psd = vec![0.0, 0.0, 1.0, 0.0];
+        let sc = spectral_centroid_fn(&psd, 1.0);
+        assert!((sc - 2.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hjorth_constant_signal() {
+        let signal: Vec<f32> = vec![5.0; 256];
+        let (activity, mobility, complexity) = hjorth_params(&signal);
+        assert!(activity < 1e-6, "constant signal should have ~0 activity");
+        assert!(mobility.is_nan() || mobility < 1e-6);
+        assert!(complexity.is_nan() || complexity < 100.0);
+    }
+
+    #[test]
+    fn hjorth_varying_signal() {
+        let signal: Vec<f32> = (0..256).map(|i| (i as f32 * 0.1).sin()).collect();
+        let (activity, mobility, _complexity) = hjorth_params(&signal);
+        assert!(activity > 0.0, "sinusoidal signal should have non-zero activity");
+        assert!(mobility > 0.0, "sinusoidal signal should have non-zero mobility");
+    }
+
+    #[test]
+    fn permutation_entropy_constant() {
+        let signal: Vec<f32> = vec![1.0; 100];
+        let pe = permutation_entropy(&signal);
+        assert!(pe >= 0.0 && pe <= 1.0, "PE={pe} should be in [0,1]");
+    }
+
+    #[test]
+    fn permutation_entropy_random_like() {
+        // Monotonically increasing should have low PE (one pattern dominates)
+        let signal: Vec<f32> = (0..256).map(|i| i as f32).collect();
+        let pe = permutation_entropy(&signal);
+        assert!(pe < 0.3, "monotonic signal should have low PE={pe}");
+    }
+
+    #[test]
+    fn sample_entropy_constant() {
+        let signal: Vec<f32> = vec![1.0; 100];
+        let se = sample_entropy_fn(&signal);
+        assert!(se >= 0.0, "SE={se} should be non-negative");
+    }
+
+    #[test]
+    fn dfa_exponent_sinusoidal() {
+        let signal: Vec<f32> = (0..512).map(|i| (i as f32 * 0.05).sin()).collect();
+        let dfa = dfa_exponent(&signal);
+        assert!(dfa.is_finite(), "DFA should be finite for valid signal, got {dfa}");
+    }
+
+    #[test]
+    fn higuchi_fd_sinusoidal() {
+        let signal: Vec<f32> = (0..512).map(|i| (i as f32 * 0.05).sin()).collect();
+        let hfd = higuchi_fd(&signal);
+        assert!(hfd > 0.0 && hfd < 3.0, "HFD={hfd} should be between 0 and 3");
+    }
+}
