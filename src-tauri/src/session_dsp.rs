@@ -32,19 +32,17 @@
 //! the stored values to the last-applied ones, and calls the appropriate
 //! setter only if something changed.
 
-use std::sync::Mutex;
-
 use tauri::{AppHandle, Manager};
 
-use crate::AppState;
 use crate::MutexExt;
-use crate::artifact_detection::ArtifactDetector;
+use skill_eeg::artifact_detection::ArtifactDetector;
 use crate::constants::EEG_CHANNELS;
-use crate::eeg_bands::BandAnalyzer;
+use skill_eeg::eeg_bands::BandAnalyzer;
 use crate::eeg_embeddings::EegAccumulator;
-use crate::eeg_filter::{EegFilter, FilterConfig};
-use crate::eeg_quality::QualityMonitor;
-use crate::head_pose::HeadPoseTracker;
+use skill_eeg::eeg_filter::{EegFilter, FilterConfig};
+use skill_eeg::eeg_quality::QualityMonitor;
+use skill_eeg::head_pose::HeadPoseTracker;
+use crate::AppStateExt;
 
 // ── SessionDsp ────────────────────────────────────────────────────────────────
 
@@ -71,7 +69,7 @@ impl SessionDsp {
     pub(crate) fn new(app: &AppHandle) -> Self {
         let (filter_cfg, overlap_secs, hooks, skill_dir, model_config,
              model_status, download_cancel, encoder_reload_requested, logger, hook_runtime) = {
-            let r = app.state::<Mutex<Box<AppState>>>();
+            let r = app.app_state();
             let g = r.lock_or_recover();
             (
                 g.status.filter_config,
@@ -137,7 +135,7 @@ impl SessionDsp {
     /// local DSP objects.  No-ops when nothing changed — cheap.
     pub(crate) fn sync_config(&mut self, app: &AppHandle) {
         let (filter_cfg, overlap_secs, hooks) = {
-            let r = app.state::<Mutex<Box<AppState>>>();
+            let r = app.app_state();
             let g = r.lock_or_recover();
             (g.status.filter_config, g.status.embedding_overlap_secs, g.hooks.clone())
         };

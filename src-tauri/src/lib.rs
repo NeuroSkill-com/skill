@@ -39,39 +39,28 @@ macro_rules! app_log {
     }};
 }
 
-/// GPU stats reading is macOS-only (IOKit + CoreFoundation frameworks).
-mod gpu_stats { #[allow(unused_imports)] pub use skill_data::gpu_stats::*; }
 
-mod eeg_model_config { #[allow(unused_imports)] pub use skill_eeg::eeg_model_config::*; }
 
 mod eeg_embeddings;
 mod global_eeg_index;
 use global_eeg_index::GlobalEegIndex;
 
 
-mod eeg_filter { #[allow(unused_imports)] pub use skill_eeg::eeg_filter::*; }
-
-mod eeg_bands { #[allow(unused_imports)] pub use skill_eeg::eeg_bands::*; }
-
-mod eeg_quality { #[allow(unused_imports)] pub use skill_eeg::eeg_quality::*; }
-use eeg_quality::SignalQuality;
+use skill_eeg::eeg_quality::SignalQuality;
 
 mod session_dsp;
 pub(crate) use session_dsp::SessionDsp;
 
 mod commands;
 mod job_queue;
-mod label_store { #[allow(unused_imports)] pub use skill_data::label_store::*; }
-mod artifact_detection { #[allow(unused_imports)] pub use skill_eeg::artifact_detection::*; }
-mod head_pose { #[allow(unused_imports)] pub use skill_eeg::head_pose::*; }
-mod ppg_analysis { #[allow(unused_imports)] pub use skill_data::ppg_analysis::*; }
+
 mod ws_commands;
 mod label_index;
 mod ws_server;
 mod api;
-pub(crate) mod hooks_log { #[allow(unused_imports)] pub use skill_data::hooks_log::*; }
+
 mod screenshot;
-mod screenshot_store { #[allow(unused_imports)] pub use skill_data::screenshot_store::*; }
+
 
 /// OpenAI-compatible LLM inference server — same port as WebSocket API.
 /// Enabled by the `llm` Cargo feature; no-op when the feature is absent.
@@ -122,7 +111,7 @@ use session_analysis::{
 mod autostart;
 
 mod tts;
-pub mod device { #[allow(unused_imports)] pub use skill_data::device::*; }
+
 use tts::{tts_init, tts_speak, tts_unload, tts_list_voices, tts_list_neutts_voices, tts_get_voice, tts_set_voice};
 pub(crate) use tts::{neutts_apply_config, init_neutts_samples_dir,
                      init_espeak_bundled_data_path, tts_shutdown};
@@ -134,7 +123,7 @@ pub(crate) use settings::{
     default_skill_dir,
 };
 
-mod dnd { #[allow(unused_imports)] pub use skill_data::dnd::*; }
+
 
 
 
@@ -199,7 +188,7 @@ use shortcut_cmds::{get_chat_shortcut, set_chat_shortcut};
 
 mod active_window;
 
-mod activity_store { #[allow(unused_imports)] pub use skill_data::activity_store::*; }
+
 
 mod about;
 use about::{get_about_info, open_about_window};
@@ -319,6 +308,7 @@ pub(crate) use helpers::{
     skill_dir, read_state, mutate_and_save,
     save_settings, save_settings_handle,
     upsert_paired, upsert_discovered,
+    AppStateExt,
 };
 
 // ── Mutex poison recovery ─────────────────────────────────────────────────────
@@ -340,14 +330,14 @@ fn retry_delay_secs(attempt: u32) -> u32 {
 
 pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: bool) {
     let (retry, attempt) = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover();
         (s.pending_reconnect && !is_bt, s.retry_attempt)
     };
     let delay = if retry { retry_delay_secs(attempt) } else { 0 };
 
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         if is_bt {
             s.pending_reconnect = false;
@@ -398,16 +388,16 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
                 attempt + 1, delay);
             for remaining in (1..=delay).rev() {
                 {
-                    let r = app.state::<Mutex<Box<AppState>>>();
+                    let r = app.app_state();
                     if !r.lock_or_recover().pending_reconnect { return; }
                 }
-                app.state::<Mutex<Box<AppState>>>().lock_or_recover()
+                app.app_state().lock_or_recover()
                     .status.retry_countdown_secs = remaining;
                 emit_status(&app);
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
             let preferred = {
-                let r = app.state::<Mutex<Box<AppState>>>();
+                let r = app.app_state();
                 let mut s = r.lock_or_recover();
                 if !s.pending_reconnect { return; }
                 s.retry_attempt += 1;
@@ -426,7 +416,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
 
 pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         if s.stream.is_some() { return; }
         s.pending_reconnect = true;
@@ -434,14 +424,14 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     let (tx, rx) = tokio::sync::oneshot::channel();
 
     let target = preferred_id.or_else(|| {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover();
         s.preferred_id.clone()
             .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
     });
 
     let target_name: Option<String> = target.as_ref().and_then(|id| {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover();
         s.status.paired_devices.iter()
             .find(|d| &d.id == id).map(|d| d.name.clone())
@@ -458,7 +448,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
         n.starts_with("hermes")
     }).unwrap_or(false);
 
-    app.state::<Mutex<Box<AppState>>>().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
+    app.app_state().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
     let csv  = new_csv_path(app);
     let app2 = app.clone();
 
@@ -472,7 +462,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
 
     // Set scanning state with the correct device_kind.
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.session_start_utc = Some(unix_secs());
         s.status.reset_for_scanning(device_kind, &csv, target.as_deref());
@@ -517,7 +507,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
 }
 
 pub(crate) fn cancel_session(app: &AppHandle) {
-    let tx = app.state::<Mutex<Box<AppState>>>().lock_or_recover().stream.take().map(|sh| sh.cancel_tx);
+    let tx = app.app_state().lock_or_recover().stream.take().map(|sh| sh.cancel_tx);
     if let Some(tx) = tx { let _ = tx.send(()); }
 }
 
@@ -525,7 +515,7 @@ pub(crate) fn cancel_session(app: &AppHandle) {
 
 fn confirm_and_quit(app: AppHandle) {
     let lang = {
-        let s = app.state::<Mutex<Box<AppState>>>();
+        let s = app.app_state();
         let g = s.lock_or_recover();
         g.language.clone()
     };
@@ -635,7 +625,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let app_name = app.package_info().name.to_lowercase();
     let ws_cfg = {
-        let dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
+        let dir = app.app_state().lock_or_recover().skill_dir.clone();
         let s   = load_settings(&dir);
         (s.ws_host, s.ws_port)
     };
@@ -644,9 +634,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "llm")]
     {
         let (llm_cfg, catalog, log_buf, cell, skill_dir) = {
-            let dir = app.state::<Mutex<Box<AppState>>>().lock_or_recover().skill_dir.clone();
+            let dir = app.app_state().lock_or_recover().skill_dir.clone();
             let llm_cfg = load_settings(&dir).llm;
-            let guard = app.state::<Mutex<Box<AppState>>>();
+            let guard = app.app_state();
             let s = guard.lock().unwrap();
             (llm_cfg, s.llm.catalog.clone(), s.llm.logs.clone(), s.llm.state_cell.clone(), s.skill_dir.clone())
         };
@@ -669,7 +659,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(feature = "llm")]
     {
-        let cell = app.state::<Mutex<Box<AppState>>>()
+        let cell = app.app_state()
             .lock().unwrap().llm.state_cell.clone();
         serve_handle.set_llm(cell.clone());
 
@@ -693,7 +683,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     app.manage(broadcaster);
 
     let logger_arc = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let g = r.lock_or_recover();
         g.logger.clone()
     };
@@ -705,13 +695,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     crate::llm::init_tool_logger(app.handle());
 
     let skill_dir = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let g = r.lock_or_recover();
         g.skill_dir.clone()
     };
     let data = load_settings(&skill_dir);
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.status.paired_devices         = data.paired.clone();
         s.preferred_id                  = data.preferred_id.clone();
@@ -758,7 +748,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         s.llm.config  = data.llm;
         s.sleep_config      = data.sleep;
         s.screenshot_config = data.screenshot;
-        if let Some(os_active) = crate::dnd::query_os_active() {
+        if let Some(os_active) = skill_data::dnd::query_os_active() {
             if !os_active { s.dnd_active = false; }
         }
         neutts_apply_config(&data.neutts);
@@ -781,7 +771,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // Auto-start the LLM server if configured and a model is available.
     let llm_autostart = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover();
         s.llm.config.enabled && s.llm.config.autostart
     };
@@ -789,7 +779,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         #[cfg(feature = "llm")]
         {
             let has_model = {
-                let r = app.state::<Mutex<Box<AppState>>>();
+                let r = app.app_state();
                 let s = r.lock_or_recover();
                 s.llm.config.model_path.as_ref().map(|p| p.exists()).unwrap_or(false)
             };
@@ -807,7 +797,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     {
         let model_code = {
-            let r = app.state::<Mutex<Box<AppState>>>();
+            let r = app.app_state();
             let g = r.lock_or_recover();
             g.text_embedding_model.clone()
         };
@@ -832,12 +822,12 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // ── Startup weights probe ─────────────────────────────────────────
     {
         let model_status = {
-            let r = app.state::<Mutex<Box<AppState>>>();
+            let r = app.app_state();
             let g = r.lock_or_recover();
             g.model_status.clone()
         };
         let hf_repo = {
-            let r = app.state::<Mutex<Box<AppState>>>();
+            let r = app.app_state();
             let g = r.lock_or_recover();
             g.model_config.hf_repo.clone()
         };
@@ -931,7 +921,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let init_status = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let g = r.lock_or_recover();
         g.status.clone()
     };
@@ -990,7 +980,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 show_and_recover_main(app);
             } else if id == "disconnect" || id == "cancel" {
                 {
-                    let r = app.state::<Mutex<Box<AppState>>>();
+                    let r = app.app_state();
                     let mut s = r.lock_or_recover();
                     s.pending_reconnect = false;
                     s.retry_attempt = 0;
@@ -1110,7 +1100,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     {
         let (act_store, kbd_ts, mouse_ts, input_flag, kbd_cnt, mouse_cnt) = {
-            let state_ref = app.state::<Mutex<Box<AppState>>>();
+            let state_ref = app.app_state();
             let s = state_ref.lock_or_recover();
             (
                 s.activity_store.clone(),
@@ -1144,15 +1134,15 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Screenshot store + capture worker ──────────────────────────────
     {
-        let ss_store = screenshot_store::ScreenshotStore::open(&skill_dir)
+        let ss_store = skill_data::screenshot_store::ScreenshotStore::open(&skill_dir)
             .map(std::sync::Arc::new);
         {
-            let r = app.state::<Mutex<Box<AppState>>>();
+            let r = app.app_state();
             r.lock_or_recover().screenshot_store = ss_store.clone();
         }
         let app_ss = app.handle().clone();
         let sd = skill_dir.clone();
-        let ss_metrics = app.state::<Mutex<Box<AppState>>>()
+        let ss_metrics = app.app_state()
             .lock_or_recover().screenshot_metrics.clone();
         std::thread::Builder::new()
             .name("screenshot-worker".into())
@@ -1235,7 +1225,7 @@ fn setup_background_tasks(app: &mut tauri::App) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(3)).await;
         loop {
-            let os_now = crate::dnd::query_os_active();
+            let os_now = skill_data::dnd::query_os_active();
 
             let (prev, app_active) = {
                 let r = app_dnd.state::<Mutex<Box<AppState>>>();

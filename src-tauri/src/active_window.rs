@@ -33,7 +33,8 @@ use std::sync::{
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::{AppState, MutexExt, activity_store::ActivityStore};
+use crate::{AppState, MutexExt};
+use skill_data::activity_store::ActivityStore;
 
 // Re-export the shared data type from skill-data so existing `crate::active_window::ActiveWindowInfo`
 // imports keep working throughout the Tauri app.

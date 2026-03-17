@@ -17,6 +17,7 @@ use crate::{
 };
 use crate::settings::tilde_path;
 use crate::ws_server::WsBroadcaster;
+use crate::AppStateExt;
 
 // ── Window helper ─────────────────────────────────────────────────────────────
 
@@ -471,7 +472,7 @@ pub(crate) async fn open_calibration_window_inner(
     autostart:  bool,
 ) -> Result<(), String> {
     {
-        let st = app.state::<Mutex<Box<AppState>>>();
+        let st = app.app_state();
         let guard = st.lock_or_recover();
         if guard.status.state != "connected" || guard.stream.is_none() {
             return Err("Calibration requires a connected BLE device that is streaming data".into());
@@ -561,7 +562,7 @@ pub fn create_calibration_profile(
 pub fn update_calibration_profile(
     profile: CalibrationProfile, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let r = app.state::<Mutex<Box<AppState>>>();
+    let r = app.app_state();
     let mut s = r.lock_or_recover();
     let entry = s.calibration_profiles.iter_mut()
         .find(|p| p.id == profile.id)
@@ -576,7 +577,7 @@ pub fn update_calibration_profile(
 pub fn delete_calibration_profile(
     id: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let r = app.state::<Mutex<Box<AppState>>>();
+    let r = app.app_state();
     let mut s = r.lock_or_recover();
     if s.calibration_profiles.len() <= 1 {
         return Err("Cannot delete the last calibration profile".into());

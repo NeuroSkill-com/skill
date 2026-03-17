@@ -23,4 +23,4 @@ src-tauri/keys/.env.keys
 **/target/
 
 rust_out
-TODO.mdTODO.md
+TODO.md

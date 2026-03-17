@@ -265,7 +265,7 @@ pub fn embed_and_store_label(
             let context_emb = if has_ctx { vecs.remove(0) } else { vec![] };
             drop(guard);
 
-            if let Some(store) = crate::label_store::LabelStore::open(&skill_dir) {
+            if let Some(store) = skill_data::label_store::LabelStore::open(&skill_dir) {
                 store.update_embeddings(label_id, &text_emb, &context_emb, &model_code);
             } else {
                 skill_log!(logger, "embedder", "could not open label store at {}", skill_dir.display());
@@ -329,7 +329,7 @@ pub async fn set_embedding_model(
         init_embedder(&embedder, &model_code, &skill_dir, &logger);
         let mut guard = embedder.0.lock_or_recover();
         let Some(te) = guard.as_mut() else { return };
-        let Some(store) = crate::label_store::LabelStore::open(&sd2) else { return };
+        let Some(store) = skill_data::label_store::LabelStore::open(&sd2) else { return };
         let rows = store.rows_needing_embed(&mc2);
         if rows.is_empty() { return; }
         const BATCH: usize = 32;
@@ -367,7 +367,7 @@ pub async fn get_stale_label_count(state: tauri::State<'_, Mutex<Box<AppState>>>
         (s.text_embedding_model.clone(), s.skill_dir.clone())
     };
     tokio::task::spawn_blocking(move || {
-        crate::label_store::LabelStore::open(&skill_dir)
+        skill_data::label_store::LabelStore::open(&skill_dir)
             .map(|store| store.rows_needing_embed(&model_code).len())
             .unwrap_or(0)
     })
@@ -437,7 +437,7 @@ pub async fn reembed_all_labels(
     let label_idx  = std::sync::Arc::clone(&label_idx);
 
     tokio::task::spawn_blocking(move || -> Result<(), String> {
-        let store = crate::label_store::LabelStore::open(&skill_dir)
+        let store = skill_data::label_store::LabelStore::open(&skill_dir)
             .ok_or("could not open label store")?;
         let rows  = store.all_rows_for_embed();
         let total = rows.len();

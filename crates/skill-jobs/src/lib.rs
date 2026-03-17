@@ -20,30 +20,12 @@
 
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{Arc, Condvar, Mutex, MutexGuard},
+    sync::{Arc, Condvar, Mutex},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use serde::{Deserialize, Serialize};
-
-// ── Poison-recovering Mutex helper ────────────────────────────────────────────
-
-trait MutexExt<T> {
-    fn lock_or_recover(&self) -> MutexGuard<'_, T>;
-}
-
-impl<T> MutexExt<T> for Mutex<T> {
-    #[inline]
-    fn lock_or_recover(&self) -> MutexGuard<'_, T> {
-        self.lock().unwrap_or_else(|poison| {
-            eprintln!(
-                "[mutex] WARNING: recovered from poisoned lock at {}:{}",
-                file!(), line!()
-            );
-            poison.into_inner()
-        })
-    }
-}
+use skill_constants::MutexExt;
 
 // ── Public types ──────────────────────────────────────────────────────────────
 

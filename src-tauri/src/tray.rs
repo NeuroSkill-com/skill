@@ -10,6 +10,7 @@
 //! in the `skill-tray` crate.  This module wires them to the Tauri runtime.
 
 use std::sync::Mutex;
+use crate::AppStateExt;
 use crate::MutexExt;
 use tauri::{
     image::Image,
@@ -17,7 +18,7 @@ use tauri::{
     AppHandle, Manager,
 };
 
-use crate::{AppState, DeviceStatus};
+use crate::DeviceStatus;
 
 // ── Re-exports from skill-tray ────────────────────────────────────────────────
 pub use skill_tray::{
@@ -73,7 +74,7 @@ fn tray_download_items(app: &AppHandle) -> Vec<TrayDownloadItem> {
     use crate::llm::catalog::DownloadState;
 
     let downloads = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let g = r.lock_or_recover();
         g.llm.downloads.clone()
     };
@@ -135,7 +136,7 @@ fn tray_download_icon_progress(_app: &AppHandle) -> Option<(usize, f32)> {
 /// Structural key — things that change the number / identity of menu items.
 /// When this changes, the entire menu must be rebuilt via `set_menu()`.
 fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
-    let r = app.state::<Mutex<Box<AppState>>>();
+    let r = app.app_state();
     let g = r.lock_or_recover();
     let ls   = g.label_shortcut.clone();
     let ss   = g.search_shortcut.clone();
@@ -233,7 +234,7 @@ fn icon_with_progress(icon_state: &str, progress: Option<f32>) -> Image<'static>
 pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Menu<tauri::Wry>> {
     let (label_shortcut, search_shortcut, settings_shortcut, calibration_shortcut,
          help_shortcut, history_shortcut, api_shortcut, focus_timer_shortcut) = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let g = r.lock_or_recover();
         (
             g.label_shortcut.clone(),
@@ -248,7 +249,7 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
     };
     #[cfg(feature = "llm")]
     let chat_shortcut = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover().chat_shortcut.clone();
         s
     };
@@ -402,7 +403,7 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
 }
 
 pub(crate) fn refresh_tray(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let s_ref = app.app_state();
     let st = { let g = s_ref.lock_or_recover(); g.status.clone() };
 
     let Some(tray) = app.tray_by_id("main") else { return };

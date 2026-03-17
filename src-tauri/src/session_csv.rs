@@ -5,11 +5,11 @@
 // The pure CSV writer (CsvState) and path utilities live in skill-data::session_csv.
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager};
 
-use crate::{AppState, MutexExt, unix_secs, yyyymmdd_utc};
+use crate::{MutexExt, unix_secs, yyyymmdd_utc};
+use crate::AppStateExt;
 
 // Re-export everything from the crate so `crate::session_csv::*` keeps working.
 pub use skill_data::session_csv::*;
@@ -35,7 +35,7 @@ pub(crate) fn new_csv_path(app: &AppHandle) -> PathBuf {
 
 /// Write (or overwrite) a JSON sidecar file next to the CSV recording.
 pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
-    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let s_ref = app.app_state();
     let s = s_ref.lock_or_recover();
 
     let session_end_utc   = unix_secs();

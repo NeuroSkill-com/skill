@@ -17,6 +17,7 @@ use tauri::{AppHandle, Manager};
 
 use skill_devices::session::*;
 
+use crate::AppStateExt;
 use crate::{
     AppState, MutexExt, StreamHandle,
     emit_status,
@@ -71,7 +72,7 @@ pub(crate) async fn connect_muse(
 
     // Pick device
     let paired_ids: Vec<String> = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover();
         s.status.paired_devices.iter().map(|d| d.id.clone()).collect()
     };
@@ -92,7 +93,7 @@ pub(crate) async fn connect_muse(
 
     // Pin real BLE ID into status.
     {
-        let sr = app.state::<Mutex<Box<AppState>>>();
+        let sr = app.app_state();
         let mut g = sr.lock_or_recover();
         g.status.device_id = Some(device.id.clone());
         g.retry_attempt    = 0;
@@ -324,7 +325,7 @@ pub(crate) async fn connect_ganglion(
 
     let preferred_mac = preferred_id.clone();
     let scan_timeout_secs = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover();
         s.openbci_config.scan_timeout_secs
     };
@@ -356,7 +357,7 @@ pub(crate) async fn connect_ganglion(
     // Derive device name/id
     let dev_name = preferred_id.as_ref()
         .and_then(|id| {
-            let r = app.state::<Mutex<Box<AppState>>>();
+            let r = app.app_state();
             let s = r.lock_or_recover();
             s.status.paired_devices.iter()
                 .find(|d| &d.id == id).map(|d| d.name.clone())
@@ -367,7 +368,7 @@ pub(crate) async fn connect_ganglion(
 
     // Build channel labels
     let ch_labels: Vec<String> = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover();
         let cfg_labels = &s.openbci_config.channel_labels;
         (0..4).map(|i| {
@@ -414,7 +415,7 @@ pub(crate) async fn connect_openbci_board(
     use skill_devices::session::openbci::OpenBciAdapter;
 
     let (board_kind, cfg) = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover();
         (s.openbci_config.board.clone(), s.openbci_config.clone())
     };
@@ -479,7 +480,7 @@ pub(crate) async fn connect_openbci_board(
 
     // Build channel labels
     let ch_labels: Vec<String> = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let s = r.lock_or_recover();
         let cfg_labels = &s.openbci_config.channel_labels;
         (0..ch_count).map(|i| {
@@ -515,7 +516,7 @@ pub(crate) async fn connect_openbci_board(
 #[tauri::command]
 pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         if r.lock_or_recover().stream.is_some() {
             return Err("Already connected or connecting.".into());
         }
@@ -523,7 +524,7 @@ pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
 
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     let csv_path = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.stream       = Some(StreamHandle { cancel_tx: tx });
         s.status.state = "scanning".into();

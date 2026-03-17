@@ -4,7 +4,7 @@
 // Background BLE scanner (runs independently of device sessions) and
 // Bluetooth availability helpers.
 
-use std::{sync::Mutex, time::Duration};
+use std::time::Duration;
 
 use btleplug::api::{
     Central, CentralEvent, CentralState, Manager as BtManager,
@@ -14,8 +14,9 @@ use btleplug::platform::{Adapter as BtPlatformAdapter, Manager as BtPlatformMana
 use futures_util::StreamExt;
 use tauri::{AppHandle, Manager};
 
+use crate::AppStateExt;
 use crate::{
-    AppState, MutexExt, ScannerHandle,
+    MutexExt, ScannerHandle,
     emit_devices, emit_status, refresh_tray, send_toast, start_session, upsert_discovered,
     ToastLevel,
 };
@@ -76,7 +77,7 @@ fn scanner_bt_off(app: &AppHandle, emitted: &mut bool) {
     send_toast(app, ToastLevel::Error, "Bluetooth Off",
         "Bluetooth is unavailable — turn it on to connect.");
     let do_emit = {
-        let s = app.state::<Mutex<Box<AppState>>>();
+        let s = app.app_state();
         let mut g = s.lock_or_recover();
         let idle = matches!(g.status.state.as_str(), "disconnected" | "scanning");
         if idle {
@@ -106,7 +107,7 @@ async fn scanner_bt_on(
         "Bluetooth is back — reconnecting…");
 
     let (do_emit, preferred_id) = {
-        let s = app.state::<Mutex<Box<AppState>>>();
+        let s = app.app_state();
         let mut g = s.lock_or_recover();
         if g.status.state == "bt_off" {
             g.status.state      = "disconnected".into();
@@ -253,7 +254,7 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
 /// Currently unused — MW75 sessions coexist with the background scanner.
 #[allow(dead_code)]
 pub(crate) fn stop_background_scanner(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let s_ref = app.app_state();
     let tx = s_ref.lock_or_recover().scanner.take().map(|sh| sh.cancel_tx);
     if let Some(tx) = tx {
         let _ = tx.send(());
@@ -264,7 +265,7 @@ pub(crate) fn stop_background_scanner(app: &AppHandle) {
 /// Start the background BLE scanner if it is not already running.
 /// Idempotent — safe to call multiple times.
 pub(crate) fn start_background_scanner(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let s_ref = app.app_state();
     let already = { let g = s_ref.lock_or_recover(); g.scanner.is_some() };
     if already { return; }
     let (tx, rx) = tokio::sync::oneshot::channel();

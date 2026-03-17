@@ -44,6 +44,7 @@ use std::{
 
 use crate::skill_log::SkillLogger;
 use crate::settings::{HookLastTrigger, HookRule};
+use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus};
 
 use crate::MutexExt;
 use crate::{
@@ -53,7 +54,6 @@ use crate::{
         GLOBAL_HNSW_SAVE_EVERY, HNSW_INDEX_FILE, MUSE_SAMPLE_RATE, SQLITE_FILE,
 
     },
-    eeg_model_config::{EegModelConfig, EegModelStatus},
     global_eeg_index,
 };
 
@@ -68,13 +68,13 @@ struct EpochMsg {
     device_name: Option<String>,
     /// Band powers snapshot at the moment this epoch was emitted (may be None
     /// if the band analyzer hasn't produced a result yet).
-    band_snapshot: Option<crate::eeg_bands::BandSnapshot>,
+    band_snapshot: Option<skill_eeg::eeg_bands::BandSnapshot>,
     /// PPG averages for the epoch window: [ambient, infrared, red].
     /// Each value is the mean of all PPG samples received during this epoch.
     /// `None` if no PPG data was received (e.g. Muse 1 which has no PPG sensor).
     ppg_averages: Option<[f64; 3]>,
     /// Derived PPG metrics (HR, HRV, SpO2, etc.).
-    ppg_metrics: Option<crate::ppg_analysis::PpgMetrics>,
+    ppg_metrics: Option<skill_data::ppg_analysis::PpgMetrics>,
 }
 
 // ── cubecl cache warm-up ──────────────────────────────────────────────────────
@@ -219,7 +219,7 @@ struct _OriginalEpochMetrics {
 
 #[cfg(any())]
 impl _OriginalEpochMetrics {
-    fn from_snapshot(snap: &crate::eeg_bands::BandSnapshot) -> Self {
+    fn from_snapshot(snap: &skill_eeg::eeg_bands::BandSnapshot) -> Self {
         let n = snap.channels.len() as f32;
         if n < 1.0 {
             return Self::default();
@@ -720,16 +720,16 @@ pub struct EegAccumulator {
     /// Latest band power snapshot from the GPU-based BandAnalyzer.
     /// Attached to each epoch message so the worker can store derived metrics
     /// without recomputing any FFT.
-    latest_bands: Option<crate::eeg_bands::BandSnapshot>,
+    latest_bands: Option<skill_eeg::eeg_bands::BandSnapshot>,
     /// PPG sample accumulators [ambient, infrared, red].
     /// Accumulated between epoch boundaries, averaged and attached to each epoch,
     /// then cleared.
     ppg_sums:   [f64; PPG_CHANNELS],
     ppg_counts: [u64; PPG_CHANNELS],
     /// PPG signal analyzer for HR/HRV/SpO2 computation.
-    ppg_analyzer: crate::ppg_analysis::PpgAnalyzer,
+    ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer,
     /// Cached latest PPG metrics (updated each epoch, read by band snapshot emitter).
-    latest_ppg: Option<crate::ppg_analysis::PpgMetrics>,
+    latest_ppg: Option<skill_data::ppg_analysis::PpgMetrics>,
     logger:     Arc<SkillLogger>,
     // ── Worker-restart plumbing ───────────────────────────────────────────────
     // All fields below are cloned each time we (re)spawn the background worker.
@@ -788,7 +788,7 @@ impl EegAccumulator {
             latest_bands: None,
             ppg_sums:   [0.0; PPG_CHANNELS],
             ppg_counts: [0; PPG_CHANNELS],
-            ppg_analyzer: crate::ppg_analysis::PpgAnalyzer::new(10.0),
+            ppg_analyzer: skill_data::ppg_analysis::PpgAnalyzer::new(10.0),
             latest_ppg: None,
             logger,
             skill_dir,
@@ -860,7 +860,7 @@ impl EegAccumulator {
 
     /// Update the latest band snapshot (called from lib.rs whenever the
     /// GPU-based BandAnalyzer produces a new result, ~4 Hz).
-    pub fn update_bands(&mut self, snap: crate::eeg_bands::BandSnapshot) {
+    pub fn update_bands(&mut self, snap: skill_eeg::eeg_bands::BandSnapshot) {
         self.latest_bands = Some(snap);
     }
 
@@ -978,7 +978,7 @@ impl EegAccumulator {
     }
 
     /// Return the most recently computed PPG metrics (if any).
-    pub fn latest_ppg(&self) -> Option<&crate::ppg_analysis::PpgMetrics> {
+    pub fn latest_ppg(&self) -> Option<&skill_data::ppg_analysis::PpgMetrics> {
         self.latest_ppg.as_ref()
     }
 
@@ -1023,7 +1023,7 @@ struct HookMatcher {
     logger: Arc<SkillLogger>,
     hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
     app: tauri::AppHandle,
-    hooks_log: Option<crate::hooks_log::HooksLog>,
+    hooks_log: Option<skill_data::hooks_log::HooksLog>,
 }
 
 impl HookMatcher {
@@ -1038,7 +1038,7 @@ impl HookMatcher {
         hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
         app: tauri::AppHandle,
     ) -> Self {
-        let hooks_log = crate::hooks_log::HooksLog::open(&skill_dir);
+        let hooks_log = skill_data::hooks_log::HooksLog::open(&skill_dir);
 
         Self {
             skill_dir,
@@ -1266,7 +1266,7 @@ impl HookMatcher {
                     "command": &entry.hook.command,
                     "text":    &entry.hook.text,
                 })).unwrap_or_default();
-                log.record(crate::hooks_log::HookFireEntry {
+                log.record(skill_data::hooks_log::HookFireEntry {
                     triggered_at_utc: ts_utc as i64,
                     hook_json:        &hook_json,
                     trigger_json:     &trigger_json,
@@ -1786,7 +1786,7 @@ fn embed_worker(
             st.embeddings_today = total;
             // Publish latest epoch metrics so the WS status command can return them.
             st.latest_metrics = metrics.as_ref().map(|m| {
-                crate::eeg_model_config::LatestEpochMetrics {
+                skill_eeg::eeg_model_config::LatestEpochMetrics {
                     rel_delta:        m.rel_delta,
                     rel_theta:        m.rel_theta,
                     rel_alpha:        m.rel_alpha,
@@ -1943,7 +1943,7 @@ fn store_metrics_only(
     // Keep status.latest_metrics fresh so the UI doesn't go stale.
     if let Some(ref m) = metrics {
         let mut st = status.lock_or_recover();
-        st.latest_metrics = Some(crate::eeg_model_config::LatestEpochMetrics {
+        st.latest_metrics = Some(skill_eeg::eeg_model_config::LatestEpochMetrics {
             rel_delta: m.rel_delta, rel_theta: m.rel_theta, rel_alpha: m.rel_alpha,
             rel_beta: m.rel_beta, rel_gamma: m.rel_gamma, rel_high_gamma: m.rel_high_gamma,
             relaxation_score: m.relaxation, engagement_score: m.engagement,

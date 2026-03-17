@@ -10,14 +10,14 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 
 use crate::constants::{EEG_CHANNELS, EMBEDDING_OVERLAP_SECS};
-use crate::eeg_bands::BandSnapshot;
-use crate::eeg_filter::FilterConfig;
-use crate::eeg_model_config::{EegModelConfig, EegModelStatus, load_model_config};
-use crate::eeg_quality::SignalQuality;
+use skill_eeg::eeg_bands::BandSnapshot;
+use skill_eeg::eeg_filter::FilterConfig;
+use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus, load_model_config};
+use skill_eeg::eeg_quality::SignalQuality;
 use crate::active_window::ActiveWindowInfo;
-use crate::activity_store::ActivityStore;
+use skill_data::activity_store::ActivityStore;
 use crate::screenshot;
-use crate::screenshot_store;
+use skill_data::screenshot_store;
 use crate::skill_log::SkillLogger;
 use crate::settings::{
     CalibrationProfile, DoNotDisturbConfig, HookLastTrigger, HookRule,
@@ -31,7 +31,8 @@ use crate::settings::{
     load_umap_config,
 };
 use crate::tts::init_tts_dirs;
-use crate::{label_store, unix_secs, yyyymmdd_utc};
+use skill_data::label_store;
+use crate::{unix_secs, yyyymmdd_utc};
 
 #[cfg(feature = "llm")]
 use crate::settings::default_chat_shortcut;

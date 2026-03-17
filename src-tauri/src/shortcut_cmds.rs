@@ -21,6 +21,7 @@ use crate::window_cmds::{
 };
 #[cfg(feature = "llm")]
 use crate::llm::cmds::open_chat_window;
+use crate::AppStateExt;
 
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
     app.global_shortcut().unregister_all().map_err(|e| e.to_string())?;
 
     let (label, search, settings, calibration, help, history, api, theme, focus_timer) = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let g = r.lock_or_recover();
         (
             g.label_shortcut.clone(),
@@ -102,7 +103,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
     #[cfg(feature = "llm")]
     {
         let chat = {
-            let r = app.state::<Mutex<Box<AppState>>>();
+            let r = app.app_state();
             let s = r.lock_or_recover().chat_shortcut.clone();
             s
         };
@@ -143,7 +144,7 @@ macro_rules! shortcut_pair {
         }
         #[tauri::command]
         pub fn $set(shortcut: String, app: AppHandle) -> Result<(), String> {
-            app.state::<Mutex<Box<AppState>>>().lock_or_recover().$field = shortcut;
+            app.app_state().lock_or_recover().$field = shortcut;
             apply_all_shortcuts(&app)?;
             save_settings(&app);
             refresh_tray(&app);

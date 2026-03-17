@@ -121,12 +121,13 @@ use axum::{
 };
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::ws_server::SharedTracker;
 use crate::MutexExt;
+use crate::AppStateExt;
 
 // ── Shared state ──────────────────────────────────────────────────────────────
 
@@ -640,7 +641,6 @@ async fn llm_chat_post(
     addr:  ConnectInfo<SocketAddr>,
     body:  Option<Json<Value>>,
 ) -> Response {
-    use tauri::Manager as _;
 
     let peer = peer_str(addr);
     let msg  = body.map(|b| b.0).unwrap_or_else(|| json!({}));
@@ -696,7 +696,7 @@ async fn llm_chat_post(
         .unwrap_or_default();
 
     // ── Get server ────────────────────────────────────────────────────────────
-    let app_state = state.app.state::<Mutex<Box<crate::AppState>>>();
+    let app_state = state.app.app_state();
     let cell = app_state.lock_or_recover().llm.state_cell.clone();
     let server = { cell.lock().unwrap().as_ref().cloned() };
 
@@ -893,8 +893,7 @@ async fn handle_llm_chat_ws(
         .unwrap_or_default();
 
     // ── Get the running server ────────────────────────────────────────────────
-    use tauri::Manager as _;
-    let app_state = state.app.state::<Mutex<Box<crate::AppState>>>();
+    let app_state = state.app.app_state();
 
     // ── Persist: resolve or create a chat session ─────────────────────────────
     // Callers may pass `"session_id": <i64>` to continue an existing session;
@@ -1244,7 +1243,7 @@ async fn screenshot_file_get(
     Path(path): Path<String>,
 ) -> Response {
     let skill_dir = {
-        let r = state.app.state::<std::sync::Mutex<Box<crate::AppState>>>();
+        let r = state.app.app_state();
         let g = r.lock_or_recover();
         g.skill_dir.clone()
     };

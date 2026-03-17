@@ -8,7 +8,6 @@
 //! only knows about [`DeviceEvent`].
 
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter, Manager};
@@ -17,12 +16,13 @@ use skill_devices::session::*;
 use skill_devices::{self, BatteryEma, BatteryAlert};
 
 use crate::{
-    AppState, EegPacket, ImuPacket, MutexExt, PpgPacket, SessionDsp, ToastLevel,
+    EegPacket, ImuPacket, MutexExt, PpgPacket, SessionDsp, ToastLevel,
     emit_status, refresh_tray, send_toast, upsert_paired, unix_secs,
 };
-use crate::eeg_bands::BandSnapshot;
+use skill_eeg::eeg_bands::BandSnapshot;
 use crate::session_csv::{CsvState, write_session_meta};
 use crate::ws_server::WsBroadcaster;
+use crate::AppStateExt;
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -97,7 +97,7 @@ pub(crate) async fn run_device_session(
                     }
                     DeviceEvent::Eeg(frame) => {
                         let temperature_raw = {
-                            let sr = app.state::<Mutex<Box<AppState>>>();
+                            let sr = app.app_state();
                             let val = sr.lock_or_recover().status.temperature_raw;
                             val
                         };
@@ -142,13 +142,13 @@ fn on_connected(
     kind:     &str,
 ) {
     let dev_id = {
-        let sr = app.state::<Mutex<Box<AppState>>>();
+        let sr = app.app_state();
         let g = sr.lock_or_recover();
         g.status.device_id.clone().unwrap_or_else(|| info.id.clone())
     };
 
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.status.state       = "connected".into();
         s.status.device_name = Some(info.name.clone());
@@ -180,7 +180,7 @@ fn on_connected(
 
 fn on_disconnected(app: &AppHandle, kind: &str) {
     let (name, device_id) = {
-        let sr = app.state::<Mutex<Box<AppState>>>();
+        let sr = app.app_state();
         let g = sr.lock_or_recover();
         (
             g.status.device_name.clone().unwrap_or_else(|| "unknown".into()),
@@ -221,7 +221,7 @@ fn process_eeg(
 
     // ── Status write-back (brief lock) ───────────────────────────────────────
     let (ipc_ch, count) = {
-        let sr = app.state::<Mutex<Box<AppState>>>();
+        let sr = app.app_state();
         let mut s = sr.lock_or_recover();
         for (ch, &uv) in frame.channels.iter().enumerate() {
             if ch < s.status.eeg.len() {
@@ -272,7 +272,7 @@ fn process_eeg(
     // ── Write quality back (brief lock) ──────────────────────────────────────
     if filter_fired {
         let qualities = dsp.quality.all_qualities();
-        let sr = app.state::<Mutex<Box<AppState>>>();
+        let sr = app.app_state();
         sr.lock_or_recover().status.channel_quality = qualities;
     }
 
@@ -303,7 +303,7 @@ fn process_eeg(
             artifacts:       Some(dsp.artifact_detector.metrics()),
             head_pose:       Some(dsp.head_pose.metrics()),
             temperature_raw,
-            gpu:             crate::gpu_stats::read(),
+            gpu:             skill_data::gpu_stats::read(),
         };
         skill_devices::enrich_band_snapshot(&mut snap, &enrich_ctx);
 
@@ -314,7 +314,7 @@ fn process_eeg(
 
         // ── Write back & emit ────────────────────────────────────────────────
         {
-            let sr = app.state::<Mutex<Box<AppState>>>();
+            let sr = app.app_state();
             sr.lock_or_recover().latest_bands = Some(snap.clone());
         }
         let _ = app.emit("eeg-bands", &snap);
@@ -336,7 +336,7 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
 
     // Brief lock: read DND config + state, run pure dnd_tick, write state back.
     let d = {
-        let sr = app.state::<Mutex<Box<AppState>>>();
+        let sr = app.app_state();
         let mut s = sr.lock_or_recover();
         let cfg = skill_devices::DndConfig {
             enabled:               s.dnd_config.enabled,
@@ -366,10 +366,10 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
 
     // Perform OS DND change outside the lock.
     if let Some((enable, mode_id)) = d.set_dnd_to {
-        let ok = crate::dnd::set_dnd(enable, &mode_id);
+        let ok = skill_data::dnd::set_dnd(enable, &mode_id);
         if ok {
             {
-                let sr = app.state::<Mutex<Box<AppState>>>();
+                let sr = app.app_state();
                 let mut s = sr.lock_or_recover();
                 s.dnd_active        = enable;
                 s.dnd_below_ticks   = 0;
@@ -425,7 +425,7 @@ fn process_ppg(
 
     // Brief lock: status write-back + IPC channel clone.
     let ipc = {
-        let sr = app.state::<Mutex<Box<AppState>>>();
+        let sr = app.app_state();
         let mut s = sr.lock_or_recover();
         if frame.channel < 3 {
             if let Some(last) = samples_f64.last() {
@@ -461,7 +461,7 @@ fn process_imu(
     let gyro = frame.gyro.unwrap_or([0.0; 3]);
 
     {
-        let sr = app.state::<Mutex<Box<AppState>>>();
+        let sr = app.app_state();
         let mut s = sr.lock_or_recover();
         s.status.accel = accel;
         if frame.gyro.is_some() {
@@ -479,7 +479,7 @@ fn process_imu(
         .as_secs_f64() * 1000.0;
 
     let ipc = {
-        let sr = app.state::<Mutex<Box<AppState>>>();
+        let sr = app.app_state();
         let ch = sr.lock_or_recover().imu_channel.clone();
         ch
     };
@@ -511,7 +511,7 @@ fn process_battery(
     let (smoothed, alert) = battery_ema.update(frame.level_pct);
 
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.status.battery = smoothed;
         if let Some(mv) = frame.voltage_mv {
@@ -557,7 +557,7 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
     let tp = obj.get("tp").and_then(|v| v.as_str()).map(str::to_owned);
 
     if sn.is_some() || ma.is_some() || fw.is_some() || hw.is_some() {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         if let Some(v) = sn { s.status.serial_number      = Some(v); }
         if let Some(v) = ma { s.status.mac_address         = Some(v); }
@@ -583,7 +583,7 @@ fn finalize_session(
     write_session_meta(app, csv_path);
 
     if !user_cancelled {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         if s.status.sample_count > 0 {
             s.pending_reconnect = true;

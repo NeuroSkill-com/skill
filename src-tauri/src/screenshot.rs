@@ -14,10 +14,11 @@ pub use skill_screenshots::context::*;
 #[allow(unused_imports)]
 pub use skill_screenshots::ScreenshotConfig;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
-use crate::{AppState, MutexExt, EmbedderState};
+use crate::{MutexExt, EmbedderState};
+use crate::AppStateExt;
 
 /// Bridges `tauri::AppHandle` + `AppState` to the `ScreenshotContext` trait.
 pub struct TauriScreenshotContext {
@@ -26,19 +27,19 @@ pub struct TauriScreenshotContext {
 
 impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
     fn config(&self) -> skill_screenshots::ScreenshotConfig {
-        let r = self.app.state::<Mutex<Box<AppState>>>();
+        let r = self.app.app_state();
         let g = r.lock_or_recover();
         g.screenshot_config.clone()
     }
 
     fn is_session_active(&self) -> bool {
-        let r = self.app.state::<Mutex<Box<AppState>>>();
+        let r = self.app.app_state();
         let g = r.lock_or_recover();
         g.session_start_utc.is_some()
     }
 
     fn active_window(&self) -> skill_screenshots::ActiveWindowInfo {
-        let r = self.app.state::<Mutex<Box<AppState>>>();
+        let r = self.app.app_state();
         let g = r.lock_or_recover();
         match &g.current_active_window {
             Some(aw) => skill_screenshots::ActiveWindowInfo {
@@ -65,7 +66,7 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
         #[cfg(feature = "llm")]
         {
             let cell = {
-                let r = self.app.state::<Mutex<Box<AppState>>>();
+                let r = self.app.app_state();
                 let g = r.lock_or_recover();
                 g.llm.state_cell.clone()
             };

@@ -15,6 +15,30 @@
 //! use skill_constants::prelude::*;
 //! ```
 
+// ── Poison-recovering Mutex helper ────────────────────────────────────────────
+
+/// Extension trait for `std::sync::Mutex` that recovers from poison.
+///
+/// Centralised here so every workspace crate can `use skill_constants::MutexExt`
+/// instead of duplicating the same 5-line impl.
+pub trait MutexExt<T> {
+    /// Acquire the lock, recovering the guard even if the mutex is poisoned.
+    fn lock_or_recover(&self) -> std::sync::MutexGuard<'_, T>;
+}
+
+impl<T> MutexExt<T> for std::sync::Mutex<T> {
+    #[inline]
+    fn lock_or_recover(&self) -> std::sync::MutexGuard<'_, T> {
+        self.lock().unwrap_or_else(|poison| {
+            eprintln!(
+                "[mutex] WARNING: recovered from poisoned lock at {}:{}",
+                file!(), line!()
+            );
+            poison.into_inner()
+        })
+    }
+}
+
 /// Convenience re-exports of the most frequently used constants.
 ///
 /// ```rust,ignore
@@ -57,6 +81,9 @@ pub mod prelude {
 
     // Agent Skills
     pub use crate::{SKILLS_SUBDIR, SKILL_MARKER};
+
+    // Mutex helper
+    pub use crate::MutexExt;
 }
 
 // ── Onboarding ───────────────────────────────────────────────────────────────

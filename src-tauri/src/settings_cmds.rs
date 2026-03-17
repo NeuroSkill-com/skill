@@ -17,15 +17,16 @@ use crate::{
     constants::{EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS, LOG_CONFIG_FILE},
 };
 use crate::tray::refresh_tray;
-use crate::eeg_filter::{FilterConfig, PowerlineFreq};
+use skill_eeg::eeg_filter::{FilterConfig, PowerlineFreq};
 use crate::settings::{OpenBciConfig, NeuttsConfig, DoNotDisturbConfig, HookRule, HookStatus};
 use crate::active_window::ActiveWindowInfo;
-use crate::activity_store::{ActiveWindowRow, InputActivityRow, InputBucketRow};
-use crate::eeg_bands::BandSnapshot;
-use crate::eeg_model_config::{EegModelConfig, EegModelStatus, save_model_config};
+use skill_data::activity_store::{ActiveWindowRow, InputActivityRow, InputBucketRow};
+use skill_eeg::eeg_bands::BandSnapshot;
+use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus, save_model_config};
 use crate::eeg_embeddings::download_hf_weights;
 use crate::settings::{UmapUserConfig, save_umap_config};
 use crate::autostart;
+use crate::AppStateExt;
 
 #[derive(serde::Serialize)]
 pub struct HookKeywordSuggestion {
@@ -203,7 +204,7 @@ pub fn get_devices(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<Discove
 #[tauri::command]
 pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.preferred_id = if id.is_empty() { None } else { Some(id.clone()) };
         let pref = s.preferred_id.clone();
@@ -211,7 +212,7 @@ pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice>
     }
     save_settings(&app);
     emit_devices(&app);
-    app.state::<Mutex<Box<AppState>>>().lock_or_recover().discovered.clone()
+    app.app_state().lock_or_recover().discovered.clone()
 }
 
 /// Explicitly pair a discovered device so it is trusted for future connections.
@@ -221,7 +222,7 @@ pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice>
 #[tauri::command]
 pub fn pair_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         // Look up the name from the discovered list.
         let name = s.discovered.iter()
@@ -249,13 +250,13 @@ pub fn pair_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
     refresh_tray(&app);
     emit_status(&app);
     emit_devices(&app);
-    app.state::<Mutex<Box<AppState>>>().lock_or_recover().discovered.clone()
+    app.app_state().lock_or_recover().discovered.clone()
 }
 
 #[tauri::command]
 pub fn forget_device(id: String, app: AppHandle) -> DeviceStatus {
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.status.paired_devices.retain(|d| d.id != id);
         for d in s.discovered.iter_mut() { if d.id == id { d.is_paired = false; } }
@@ -263,12 +264,12 @@ pub fn forget_device(id: String, app: AppHandle) -> DeviceStatus {
         save_settings(&app);
     }
     refresh_tray(&app); emit_status(&app); emit_devices(&app);
-    app.state::<Mutex<Box<AppState>>>().lock_or_recover().status.clone()
+    app.app_state().lock_or_recover().status.clone()
 }
 
 #[tauri::command]
 pub fn cancel_retry(app: AppHandle) {
-    let r = app.state::<Mutex<Box<AppState>>>();
+    let r = app.app_state();
     let mut s = r.lock_or_recover();
     s.pending_reconnect           = false;
     s.retry_attempt               = 0;
@@ -284,7 +285,7 @@ pub fn cancel_retry(app: AppHandle) {
 #[tauri::command]
 pub fn retry_connect(app: AppHandle) {
     let preferred = {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.pending_reconnect = true;
         s.retry_attempt     = 0;
@@ -309,7 +310,7 @@ pub fn set_filter_config(config: FilterConfig, app: AppHandle) {
     // the change via SessionDsp::sync_config() at the top of its next frame
     // (<250 ms latency), without ever holding the AppState lock during DSP.
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         r.lock_or_recover().status.filter_config = config;
     }
     save_settings(&app);
@@ -319,7 +320,7 @@ pub fn set_filter_config(config: FilterConfig, app: AppHandle) {
 #[tauri::command]
 pub fn set_notch_preset(preset: Option<PowerlineFreq>, app: AppHandle) {
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         r.lock_or_recover().status.filter_config.notch = preset;
     }
     save_settings(&app);
@@ -346,7 +347,7 @@ pub fn get_embedding_overlap(state: tauri::State<'_, Mutex<Box<AppState>>>) -> f
 pub fn set_embedding_overlap(overlap_secs: f32, app: AppHandle) {
     let clamped = overlap_secs.clamp(EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS);
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         r.lock_or_recover().status.embedding_overlap_secs = clamped;
         // SessionDsp::sync_config() picks up the change next frame.
     }
@@ -364,8 +365,8 @@ pub fn set_embedding_overlap(overlap_secs: f32, app: AppHandle) {
 ///
 /// Returns `None` when no GPU can be detected on the current platform.
 #[tauri::command]
-pub fn get_gpu_stats() -> Option<crate::gpu_stats::GpuStats> {
-    crate::gpu_stats::read()
+pub fn get_gpu_stats() -> Option<skill_data::gpu_stats::GpuStats> {
+    skill_data::gpu_stats::read()
 }
 
 // ── Logging config ────────────────────────────────────────────────────────────
@@ -985,8 +986,8 @@ pub fn get_input_buckets(
 /// well-known first-party list if the file is unavailable.  Returns an empty
 /// array on non-macOS platforms.
 #[tauri::command]
-pub fn list_focus_modes() -> Vec<crate::dnd::FocusModeOption> {
-    crate::dnd::list_focus_modes()
+pub fn list_focus_modes() -> Vec<skill_data::dnd::FocusModeOption> {
+    skill_data::dnd::list_focus_modes()
 }
 
 /// Force-disable the active Focus mode.
@@ -1009,7 +1010,7 @@ pub fn test_dnd(
     // Guard: only allow disabling, never enabling.
     if enabled { return false; }
 
-    let ok = crate::dnd::set_dnd(false, "");
+    let ok = skill_data::dnd::set_dnd(false, "");
     if ok {
         state.lock_or_recover().dnd_active = false;
         let _ = app.emit("dnd-state-changed", false);
@@ -1058,7 +1059,7 @@ pub fn set_dnd_config(
     // If we just disabled the feature while DND was on, clear it:
     // (1) Exit system Focus first, (2) then notify the user if configured.
     if was_active {
-        let ok = crate::dnd::set_dnd(false, "");
+        let ok = skill_data::dnd::set_dnd(false, "");
         let payload = false;
         let _ = app.emit("dnd-state-changed", payload);
         app.state::<crate::ws_server::WsBroadcaster>()
@@ -1496,10 +1497,10 @@ pub async fn get_hook_log(
     limit:  Option<i64>,
     offset: Option<i64>,
     state:  tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<crate::hooks_log::HookLogRow>, String> {
+) -> Result<Vec<skill_data::hooks_log::HookLogRow>, String> {
     let skill_dir = skill_dir(&state);
     tokio::task::spawn_blocking(move || {
-        let Some(log) = crate::hooks_log::HooksLog::open(&skill_dir) else {
+        let Some(log) = skill_data::hooks_log::HooksLog::open(&skill_dir) else {
             return vec![];
         };
         log.query(limit.unwrap_or(50).clamp(1, 500), offset.unwrap_or(0).max(0))
@@ -1515,7 +1516,7 @@ pub async fn get_hook_log(
 pub async fn get_hook_log_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<i64, String> {
     let skill_dir = skill_dir(&state);
     tokio::task::spawn_blocking(move || {
-        crate::hooks_log::HooksLog::open(&skill_dir)
+        skill_data::hooks_log::HooksLog::open(&skill_dir)
             .map(|l| l.count())
             .unwrap_or(0)
     })
@@ -1540,7 +1541,7 @@ pub fn set_screenshot_config(
     config: crate::settings::ScreenshotConfig,
     app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> crate::screenshot_store::ConfigChangeResult {
+) -> skill_data::screenshot_store::ConfigChangeResult {
     let (old_backend, old_model, skill_dir) = {
         let g = state.lock_or_recover();
         (g.screenshot_config.embed_backend.clone(),
@@ -1559,14 +1560,14 @@ pub fn set_screenshot_config(
     crate::save_settings(&app);
 
     let stale_count = if model_changed {
-        crate::screenshot_store::ScreenshotStore::open(&skill_dir)
+        skill_data::screenshot_store::ScreenshotStore::open(&skill_dir)
             .map(|s| s.count_stale(&new_backend, &new_model))
             .unwrap_or(0)
     } else {
         0
     };
 
-    crate::screenshot_store::ConfigChangeResult { model_changed, stale_count }
+    skill_data::screenshot_store::ConfigChangeResult { model_changed, stale_count }
 }
 
 /// Count screenshots needing (re-)embedding and estimate wall-clock time.
@@ -1574,13 +1575,13 @@ pub fn set_screenshot_config(
 #[tauri::command]
 pub async fn estimate_screenshot_reembed(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Option<crate::screenshot_store::ReembedEstimate>, String> {
+) -> Result<Option<skill_data::screenshot_store::ReembedEstimate>, String> {
     let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let store = store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
+        let store = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
         Some(crate::screenshot::estimate_reembed(&store, &config, &skill_dir))
     }).await.unwrap_or(None))
 }
@@ -1592,13 +1593,13 @@ pub async fn estimate_screenshot_reembed(
 pub async fn rebuild_screenshot_embeddings(
     app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Option<crate::screenshot_store::ReembedResult>, String> {
+) -> Result<Option<skill_data::screenshot_store::ReembedResult>, String> {
     let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let store = store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
+        let store = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))?;
         let ctx = crate::screenshot::TauriScreenshotContext { app };
         Some(crate::screenshot::rebuild_embeddings(&store, &config, &skill_dir, &ctx))
     }).await.unwrap_or(None))
@@ -1610,13 +1611,13 @@ pub async fn get_screenshots_around(
     timestamp: i64,
     window_secs: i32,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<crate::screenshot_store::ScreenshotResult>, String> {
+) -> Result<Vec<skill_data::screenshot_store::ScreenshotResult>, String> {
     let (skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.skill_dir.clone(), g.screenshot_store.clone())
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+        let store = match store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
             Some(s) => s,
             None => return vec![],
         };
@@ -1632,7 +1633,7 @@ pub async fn search_screenshots_by_image(
     image_bytes: Vec<u8>,
     k: usize,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<crate::screenshot_store::ScreenshotResult>, String> {
+) -> Result<Vec<skill_data::screenshot_store::ScreenshotResult>, String> {
     let (config, skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.screenshot_config.clone(), g.skill_dir.clone(), g.screenshot_store.clone())
@@ -1648,7 +1649,7 @@ pub async fn search_screenshots_by_image(
             Some(v) => v,
             None => return vec![],
         };
-        let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+        let store = match store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
             Some(s) => s,
             None => return vec![],
         };
@@ -1717,14 +1718,14 @@ pub async fn search_screenshots_by_text(
     mode: Option<String>,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
     embedder: tauri::State<'_, std::sync::Arc<crate::EmbedderState>>,
-) -> Result<Vec<crate::screenshot_store::ScreenshotResult>, String> {
+) -> Result<Vec<skill_data::screenshot_store::ScreenshotResult>, String> {
     let (skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.skill_dir.clone(), g.screenshot_store.clone())
     };
     let embedder = std::sync::Arc::clone(&embedder);
     Ok(tokio::task::spawn_blocking(move || {
-        let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+        let store = match store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
             Some(s) => s,
             None => return vec![],
         };
@@ -1768,13 +1769,13 @@ pub async fn search_screenshots_by_vector(
     vector: Vec<f32>,
     k: usize,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Result<Vec<crate::screenshot_store::ScreenshotResult>, String> {
+) -> Result<Vec<skill_data::screenshot_store::ScreenshotResult>, String> {
     let (skill_dir, store) = {
         let g = state.lock_or_recover();
         (g.skill_dir.clone(), g.screenshot_store.clone())
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let store = match store.or_else(|| crate::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
+        let store = match store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
             Some(s) => s,
             None => return vec![],
         };

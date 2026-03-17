@@ -59,7 +59,7 @@ pub(crate) fn yyyymmdd_utc() -> String {
 // ── Status / device emitters ──────────────────────────────────────────────────
 
 pub(crate) fn emit_status(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let s_ref = app.app_state();
     let st = { let g = s_ref.lock_or_recover(); g.status.clone() };
     // Event name kept as "muse-status" for backward compatibility with
     // existing WS clients and frontend listeners.
@@ -68,7 +68,7 @@ pub(crate) fn emit_status(app: &AppHandle) {
 }
 
 pub(crate) fn emit_devices(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let s_ref = app.app_state();
     let d = { let g = s_ref.lock_or_recover(); g.discovered.clone() };
     let _ = app.emit("devices-updated", &d);
 }
@@ -102,6 +102,20 @@ pub(crate) fn send_toast(app: &AppHandle, level: ToastLevel, title: &str, messag
 
 // ── State access helpers ──────────────────────────────────────────────────────
 
+/// Extension trait that reduces the verbose
+/// `app.state::<Mutex<Box<AppState>>>()` pattern (137+ call sites).
+///
+/// Implemented as a blanket impl for anything that implements `Manager<Wry>`,
+/// so it works on `AppHandle`, `&AppHandle`, `App`, `WebviewWindow`, etc.
+pub(crate) trait AppStateExt: Manager<tauri::Wry> {
+    /// Obtain a reference to the `Mutex<Box<AppState>>` managed state.
+    fn app_state(&self) -> tauri::State<'_, Mutex<Box<AppState>>> {
+        self.state::<Mutex<Box<AppState>>>()
+    }
+}
+
+impl<T: Manager<tauri::Wry>> AppStateExt for T {}
+
 /// Read `skill_dir` from `AppState` without keeping the lock.
 pub(crate) fn skill_dir(state: &Mutex<Box<AppState>>) -> std::path::PathBuf {
     state.lock_or_recover().skill_dir.clone()
@@ -132,7 +146,7 @@ pub(crate) fn mutate_and_save(
     f: impl FnOnce(&mut AppState),
 ) {
     {
-        let r = app.state::<Mutex<Box<AppState>>>();
+        let r = app.app_state();
         let mut g = r.lock_or_recover();
         f(&mut g);
     }
@@ -144,7 +158,7 @@ pub(crate) fn mutate_and_save(
 pub fn save_settings_handle(app: &AppHandle) { save_settings(app); }
 
 pub(crate) fn save_settings(app: &AppHandle) {
-    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let s_ref = app.app_state();
     let s = s_ref.lock_or_recover();
     let data = UserSettings {
         paired:                 s.status.paired_devices.clone(),
@@ -201,7 +215,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
 
 pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
     let now = unix_secs();
-    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let s_ref = app.app_state();
     let mut s = s_ref.lock_or_recover();
     if let Some(d) = s.status.paired_devices.iter_mut().find(|d| d.id == id) {
         d.last_seen = now; d.name = name.to_owned();
@@ -230,7 +244,7 @@ pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
 /// Update a discovered device entry (called from BLE scanner).
 pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16) {
     let now = unix_secs();
-    let s_ref = app.state::<Mutex<Box<AppState>>>();
+    let s_ref = app.app_state();
     let mut s = s_ref.lock_or_recover();
     let is_paired    = s.status.paired_devices.iter().any(|d| d.id == id);
     let is_preferred = s.preferred_id.as_deref() == Some(id);
