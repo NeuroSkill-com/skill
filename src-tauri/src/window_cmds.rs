@@ -11,8 +11,8 @@ use crate::MutexExt;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::{
-    AppState, CalibrationProfile, CalibrationConfig, new_profile_id,
-    save_settings, mutate_and_save, unix_secs, send_toast, ToastLevel,
+    AppState, CalibrationProfile, CalibrationConfig,
+    mutate_and_save, unix_secs, send_toast, ToastLevel,
     default_skill_dir,
 };
 use crate::settings::tilde_path;
@@ -547,29 +547,18 @@ pub fn set_active_calibration(id: String, app: AppHandle, _state: tauri::State<'
 
 #[tauri::command]
 pub fn create_calibration_profile(
-    mut profile: CalibrationProfile,
-    app:         AppHandle,
-    _state:      tauri::State<'_, Mutex<Box<AppState>>>,
+    profile: CalibrationProfile,
+    app:     AppHandle,
+    _state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> CalibrationProfile {
-    profile.id = new_profile_id();
-    profile.last_calibration_utc = None;
-    let ret = profile.clone();
-    mutate_and_save(&app, |s| s.calibration_profiles.push(profile));
-    ret
+    crate::calibration_service::create_profile(&app, profile)
 }
 
 #[tauri::command]
 pub fn update_calibration_profile(
     profile: CalibrationProfile, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let r = app.app_state();
-    let mut s = r.lock_or_recover();
-    let entry = s.calibration_profiles.iter_mut()
-        .find(|p| p.id == profile.id)
-        .ok_or_else(|| format!("profile not found: {}", profile.id))?;
-    *entry = profile;
-    drop(s);
-    save_settings(&app);
+    crate::calibration_service::update_profile(&app, profile)?;
     Ok(())
 }
 
@@ -577,19 +566,7 @@ pub fn update_calibration_profile(
 pub fn delete_calibration_profile(
     id: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let r = app.app_state();
-    let mut s = r.lock_or_recover();
-    if s.calibration_profiles.len() <= 1 {
-        return Err("Cannot delete the last calibration profile".into());
-    }
-    s.calibration_profiles.retain(|p| p.id != id);
-    if s.active_calibration_id == id {
-        s.active_calibration_id = s.calibration_profiles.first()
-            .map(|p| p.id.clone()).unwrap_or_default();
-    }
-    drop(s);
-    save_settings(&app);
-    Ok(())
+    crate::calibration_service::delete_profile(&app, &id)
 }
 
 #[tauri::command]
