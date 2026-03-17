@@ -352,7 +352,8 @@ the Free Software Foundation, version 3 only. -->
   const isGanglion  = $derived(status.device_kind === "ganglion");
   const isMw75      = $derived(status.device_kind === "mw75");
   const isHermes    = $derived(status.device_kind === "hermes");
-  const hasPpg      = $derived(isMuse);
+  const hasPpg      = $derived(deviceCaps.hasPpg);
+  const hasImuCap   = $derived(deviceCaps.hasImu);
   const hasBattery  = $derived(isMuse || isMw75);
 
   // Channel labels and colours — dynamic based on connected device.
@@ -1165,8 +1166,10 @@ the Free Software Foundation, version 3 only. -->
         <!-- Artifact Events -->
         <ArtifactEvents {blinkCount} {blinkRate} />
 
-        <!-- Head Pose -->
+        <!-- Head Pose (IMU-equipped devices only) -->
+        {#if hasImuCap}
         <HeadPoseCard pitch={headPitch} roll={headRoll} stillness={stillnessScore} {nodCount} {shakeCount} />
+        {/if}
 
         <!-- PPG Metrics -->
         {#if hasPpg && (hrScore > 0 || status.ppg_sample_count > 0)}
@@ -1206,8 +1209,9 @@ the Free Software Foundation, version 3 only. -->
           </div>
         {/if}
 
-        <!-- IMU (Accelerometer + Gyroscope) -->
-        {@const hasImu = status.accel.some(v => v !== 0) || status.gyro.some(v => v !== 0)}
+        <!-- IMU (Accelerometer + Gyroscope) — only for devices with IMU -->
+        {#if hasImuCap}
+        {@const hasImuData = status.accel.some(v => v !== 0) || status.gyro.some(v => v !== 0)}
         <div class="rounded-xl border border-border dark:border-white/[0.04]
                     bg-muted dark:bg-[#1a1a28] px-3 py-2.5 flex flex-col gap-1.5">
           <button class="flex items-center gap-1.5 w-full group"
@@ -1224,7 +1228,7 @@ the Free Software Foundation, version 3 only. -->
                          group-hover:text-foreground transition-colors">
               {t("dashboard.imu")}
             </span>
-            {#if hasImu}
+            {#if hasImuData}
               <span class="text-[0.45rem] text-sky-500 live-blink shrink-0" aria-hidden="true">●</span>
             {/if}
           </button>
@@ -1232,6 +1236,7 @@ the Free Software Foundation, version 3 only. -->
             <ImuChart bind:this={imuChartEl} />
           {/if}
         </div>
+        {/if}
 
         <!-- EEG channel grid -->
         <div class="rounded-xl border border-border dark:border-white/[0.04]
