@@ -23,15 +23,17 @@ the Free Software Foundation, version 3 only. -->
   import LlmTab           from "$lib/LlmTab.svelte";
   import ToolsTab         from "$lib/ToolsTab.svelte";
   import ScreenshotsTab   from "$lib/ScreenshotsTab.svelte";
+  import SleepTab         from "$lib/SleepTab.svelte";
   import { t }            from "$lib/i18n/index.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 
-  type Tab = "goals" | "calibration" | "embeddings" | "hooks" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions" | "llm" | "tools" | "screenshots";
+  type Tab = "goals" | "sleep" | "calibration" | "embeddings" | "hooks" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions" | "llm" | "tools" | "screenshots";
   let tab = $state<Tab>("goals");
 
-  const TAB_IDS: Tab[] = ["goals", "calibration", "tts", "llm", "tools", "model", "embeddings", "screenshots", "hooks", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
+  const TAB_IDS: Tab[] = ["goals", "sleep", "calibration", "tts", "llm", "tools", "model", "embeddings", "screenshots", "hooks", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
   const TAB_LABELS: Record<Tab, () => string> = {
     goals:       () => t("settingsTabs.goals"),
+    sleep:       () => t("settingsTabs.sleep"),
     calibration: () => t("settingsTabs.calibration"),
     tts:         () => t("settingsTabs.tts"),
     llm:         () => t("settingsTabs.llm"),
@@ -51,6 +53,7 @@ the Free Software Foundation, version 3 only. -->
   // ── Icons per tab (16×16 stroked) ────────────────────────────────────────
   const TAB_ICONS: Record<Tab, string> = {
     goals:       `<path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8zm0-14a6 6 0 1 0 6 6 6 6 0 0 0-6-6zm0 10a4 4 0 1 1 4-4 4 4 0 0 1-4 4zm0-6a2 2 0 1 0 2 2 2 2 0 0 0-2-2z"/>`,
+    sleep:       `<path d="M21 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.79 9.79z"/>`,
     calibration: `<path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/>`,
     tts:         `<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>`,
     llm:         `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>`,
@@ -246,6 +249,8 @@ the Free Software Foundation, version 3 only. -->
         <ShortcutsTab />
       {:else if tab === "goals"}
         <GoalsTab />
+      {:else if tab === "sleep"}
+        <SleepTab />
       {:else if tab === "calibration"}
         <CalibrationTab />
       {:else if tab === "embeddings"}
