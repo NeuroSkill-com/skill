@@ -28,6 +28,7 @@ export type DeviceKind =
   | "muse"       // Muse 1 / 2 / S / Monitor  — 4-ch frontal + temporal
   | "openbci"    // OpenBCI Cyton (8-ch) / Ganglion (4-ch) — configurable 10-20
   | "emotiv"     // Emotiv EPOC / Insight / Flex — 14/5/32-ch
+  | "idun"       // IDUN Guardian — single-ch bipolar in-ear EEG earbud
   | "unknown";   // unrecognised or disconnected
 
 // ── Capability flags ──────────────────────────────────────────────────────────
@@ -103,6 +104,17 @@ const EMOTIV_CAPS: DeviceCapabilities = {
   ],
 } as const;
 
+const IDUN_CAPS: DeviceCapabilities = {
+  kind:                 "idun",
+  channelCount:         1,       // single bipolar in-ear montage
+  hasPpg:               false,
+  hasImu:               true,    // 6-DOF IMU (accel + gyro)
+  hasCentralElectrodes: false,   // in-ear canal placement
+  hasFullMontage:       false,
+  sampleRateHz:         250,
+  electrodeNames:       ["EEG"],
+} as const;
+
 const UNKNOWN_CAPS: DeviceCapabilities = {
   kind:                 "unknown",
   channelCount:         0,
@@ -131,6 +143,8 @@ export function deviceCapabilities(deviceName: string | null): DeviceCapabilitie
       || n.startsWith("ganglion"))                                 return OPENBCI_CAPS;
   if (n.startsWith("emotiv") || n.startsWith("epoc")
       || n.startsWith("insight") || n.startsWith("flex"))         return EMOTIV_CAPS;
+  if (n.startsWith("idun") || n.startsWith("ige")
+      || n.startsWith("guardian"))                                 return IDUN_CAPS;
 
   return UNKNOWN_CAPS;
 }

@@ -48,6 +48,9 @@ pub mod prelude {
     pub use crate::{
         // Hardware
         EEG_CHANNELS, CHANNEL_NAMES, MUSE_SAMPLE_RATE, PPG_SAMPLE_RATE, PPG_CHANNELS,
+        EMOTIV_EPOC_EEG_CHANNELS, EMOTIV_INSIGHT_EEG_CHANNELS, EMOTIV_SAMPLE_RATE,
+        EMOTIV_EPOC_CHANNEL_NAMES, EMOTIV_INSIGHT_CHANNEL_NAMES,
+        IDUN_EEG_CHANNELS, IDUN_SAMPLE_RATE, IDUN_CHANNEL_NAMES,
         // Filter
         FILTER_WINDOW, FILTER_HOP, FILTER_OVERLAP,
         DEFAULT_LP_HZ, DEFAULT_HP_HZ, DEFAULT_NOTCH_BW_HZ,
@@ -146,6 +149,35 @@ pub const MW75_CHANNEL_NAMES: [&str; MW75_EEG_CHANNELS] = [
     "FT7", "T7", "TP7", "CP5", "P7", "C5",
     "FT8", "T8", "TP8", "CP6", "P8", "C6",
 ];
+
+/// Emotiv EPOC X / EPOC+ EEG channel count (14 channels at 128 Hz).
+pub const EMOTIV_EPOC_EEG_CHANNELS: usize = 14;
+
+/// Emotiv Insight EEG channel count (5 channels at 128 Hz).
+pub const EMOTIV_INSIGHT_EEG_CHANNELS: usize = 5;
+
+/// Emotiv hardware sample rate (Hz) — Cortex API streams at 128 Hz.
+pub const EMOTIV_SAMPLE_RATE: f64 = 128.0;
+
+/// Emotiv EPOC X / EPOC+ channel labels (14 electrodes, 10-20 extended).
+pub const EMOTIV_EPOC_CHANNEL_NAMES: [&str; EMOTIV_EPOC_EEG_CHANNELS] = [
+    "AF3", "F7", "F3", "FC5", "T7", "P7", "O1",
+    "O2", "P8", "T8", "FC6", "F4", "F8", "AF4",
+];
+
+/// Emotiv Insight channel labels (5 electrodes).
+pub const EMOTIV_INSIGHT_CHANNEL_NAMES: [&str; EMOTIV_INSIGHT_EEG_CHANNELS] = [
+    "AF3", "AF4", "T7", "T8", "Pz",
+];
+
+/// IDUN Guardian EEG channel count (single bipolar channel at 250 Hz).
+pub const IDUN_EEG_CHANNELS: usize = 1;
+
+/// IDUN Guardian hardware sample rate (Hz).
+pub const IDUN_SAMPLE_RATE: f64 = 250.0;
+
+/// IDUN Guardian channel label (bipolar in-ear montage).
+pub const IDUN_CHANNEL_NAMES: [&str; IDUN_EEG_CHANNELS] = ["EEG"];
 
 // ── Signal filter (overlap-save, GPU fft_batch) ───────────────────────────────
 
@@ -538,7 +570,7 @@ pub const AUTOSTART_PLIST_LABEL_PREFIX: &str = "com.neuroskill";
 
 pub const APP_DISPLAY_NAME: &str = "NeuroSkill™";
 pub const APP_TAGLINE: &str =
-    "Real-time EXG State of Mind system and brain-state monitoring for Muse, OpenBCI, and other BCI devices.";
+    "Real-time EXG State of Mind system and brain-state monitoring for Muse, OpenBCI, Emotiv, IDUN, and other BCI devices.";
 pub const APP_WEBSITE: &str = "https://neuroskill.com";
 pub const APP_WEBSITE_LABEL: &str = "neuroskill.com";
 pub const APP_REPO_URL: &str = "https://github.com/NeuroSkill-com/skill";

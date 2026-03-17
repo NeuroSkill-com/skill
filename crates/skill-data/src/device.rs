@@ -39,8 +39,10 @@ pub enum DeviceKind {
     Muse,
     /// OpenBCI Cyton (8-ch) / Ganglion (4-ch) — configurable 10-20 montage.
     OpenBci,
-    /// Emotiv EPOC / Insight / Flex — 14/5/32-channel.
+    /// Emotiv EPOC / Insight / Flex — 14/5/32-channel via Cortex WebSocket API.
     Emotiv,
+    /// IDUN Guardian — single-channel bipolar in-ear EEG earbud (1 ch @ 250 Hz, IMU).
+    Idun,
     /// Unrecognised or not yet connected.
     Unknown,
 }
@@ -90,6 +92,8 @@ impl DeviceKind {
             || n.starts_with("ganglion")                                { return Self::OpenBci; }
         if n.starts_with("emotiv") || n.starts_with("epoc")
             || n.starts_with("insight") || n.starts_with("flex")       { return Self::Emotiv;  }
+        if n.starts_with("idun") || n.starts_with("ige")
+            || n.starts_with("guardian")                                { return Self::Idun;    }
 
         Self::Unknown
     }
@@ -123,6 +127,15 @@ impl DeviceKind {
                 has_central_electrodes: true, // FC5/FC6 near-central
                 has_full_montage:       false,
                 sample_rate_hz:         128.0,
+            },
+            Self::Idun => DeviceCapabilities {
+                kind:                   Self::Idun,
+                channel_count:          1,   // single bipolar channel
+                has_ppg:                false,
+                has_imu:                true, // 6-DOF IMU (accel + gyro)
+                has_central_electrodes: false, // in-ear canal placement
+                has_full_montage:       false,
+                sample_rate_hz:         250.0,
             },
             Self::Unknown => DeviceCapabilities {
                 kind:                   Self::Unknown,
