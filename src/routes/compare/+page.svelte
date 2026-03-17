@@ -45,6 +45,7 @@ the Free Software Foundation, version 3 only. -->
     drawSpectrum, drawDiffChart, drawRadar,
     drawBandHeatmap, drawScoreHeatmap, drawBandDiffHeatmap,
   } from "$lib/compare-canvas";
+  import type { JobTicket, JobPollResult } from "$lib/search-types";
 
   // ── State ──────────────────────────────────────────────────────────────────
   let sessions    = $state<EmbeddingSession[]>([]);
@@ -99,10 +100,7 @@ the Free Software Foundation, version 3 only. -->
 
 
 
-  // Job queue types
-  interface JobTicket { job_id: number; estimated_ready_utc: number; queue_position: number; estimated_secs: number; }
-  interface JobPollResult { status: string; job_id: number; result?: any; elapsed_ms?: number; error?: string; queue_position?: number; estimated_secs?: number; progress?: UmapProgress; }
-
+  // Job queue types — imported from search-types.ts
   /** Start the wall-clock timer that drives elapsed / countdown display. */
   function startUmapTimer(estimatedSecs: number | null) {
     stopUmapTimer();

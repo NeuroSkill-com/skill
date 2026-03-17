@@ -70,7 +70,9 @@ export interface JobTicket {
 
 export interface JobPollResult {
   status: string; job_id: number; result?: any;
-  error?: string; queue_position?: number;
+  elapsed_ms?: number; error?: string;
+  queue_position?: number; estimated_secs?: number;
+  progress?: any;
 }
 
 export interface ImgResult {

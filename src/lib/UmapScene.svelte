@@ -26,6 +26,7 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Types ────────────────────────────────────────────────────────────────
   import type { UmapPoint, UmapResult } from "$lib/types";
+  import { gauss } from "$lib/umap-helpers";
 
   // ── Props ────────────────────────────────────────────────────────────────
   let {
@@ -106,7 +107,7 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Math helpers ─────────────────────────────────────────────────────────
   function easeOut(t: number) { return 1 - (1 - t) ** 3; }
-  function gauss() { return Math.sqrt(-2 * Math.log(Math.random() || 1e-10)) * Math.cos(Math.PI * 2 * Math.random()); }
+  // gauss() imported from umap-helpers.ts
 
   function normalise(pts: UmapPoint[]): Float32Array {
     const n = pts.length, out = new Float32Array(n * 3);

@@ -168,6 +168,7 @@ export function sdc(a: number, b: number): string {
 // ── UMAP analysis ────────────────────────────────────────────────────────────
 
 import type { UmapPoint, UmapResult } from "$lib/types";
+import { gauss } from "$lib/umap-helpers";
 
 export function analyzeUmapClusters(result: UmapResult): ClusterAnalysis | null {
   const pts = result.points;
@@ -197,15 +198,12 @@ export function analyzeUmapClusters(result: UmapResult): ClusterAnalysis | null 
 
 /** Generate a random placeholder UMAP result for loading state. */
 export function generateUmapPlaceholder(nA: number, nB: number): UmapResult {
-  function gaussRand(): number {
-    return Math.sqrt(-2 * Math.log(Math.random() || 1e-10)) * Math.cos(Math.PI * 2 * Math.random());
-  }
   const points: UmapPoint[] = [];
   for (let i = 0; i < nA; i++) {
-    points.push({ x: -3 + gaussRand()*3, y: gaussRand()*3, z: gaussRand()*3, session: 0, utc: 0 });
+    points.push({ x: -3 + gauss()*3, y: gauss()*3, z: gauss()*3, session: 0, utc: 0 });
   }
   for (let i = 0; i < nB; i++) {
-    points.push({ x: 3 + gaussRand()*3, y: gaussRand()*3, z: gaussRand()*3, session: 1, utc: 0 });
+    points.push({ x: 3 + gauss()*3, y: gauss()*3, z: gauss()*3, session: 1, utc: 0 });
   }
   return { points, n_a: nA, n_b: nB, dim: 0 };
 }
