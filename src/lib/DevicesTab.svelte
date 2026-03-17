@@ -1225,10 +1225,11 @@ the Free Software Foundation, version 3 only. -->
               {!dev.is_paired ? 'opacity-80' : ''}">
 
     <!-- Device photo -->
-    {#if deviceImage(dev.name, dev.hardware_version)}
-      <img src={deviceImage(dev.name, dev.hardware_version)!} alt={dev.name}
+    {@const imgSrc = deviceImage(dev.name, dev.hardware_version)}
+    {#if imgSrc}
+      <img src={imgSrc} alt={dev.name}
            class="w-12 h-12 object-contain rounded-lg shrink-0
-                  bg-muted/40 dark:bg-white/[0.04] p-1
+                  {imgSrc.endsWith('.png') || imgSrc.endsWith('.svg') ? 'bg-white p-1' : 'bg-muted/40 dark:bg-white/[0.04]'}
                   {!dev.is_paired ? 'grayscale opacity-60' : ''}" />
     {:else}
       <div class="w-12 h-12 rounded-lg shrink-0 bg-muted/40 dark:bg-white/[0.04]
