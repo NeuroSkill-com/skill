@@ -5,6 +5,8 @@
 //! Pure functions called by [`super::eeg_bands::BandAnalyzer`] during snapshot
 //! computation.
 
+use crate::eeg_bands::BandPowers;
+
 // ── Helper functions for new metrics ──────────────────────────────────────────
 
 /// Spectral Edge Frequency: frequency below which `pct` (0–1) of total power lies.
@@ -272,7 +274,7 @@ fn pearson(a: &[f32], b: &[f32]) -> f32 {
 /// Laterality Index: generalised L/R asymmetry.
 /// Uses total broadband power: (right − left) / (right + left).
 /// TP9 (left), AF7 (left), AF8 (right), TP10 (right).
-fn laterality_index_fn(ch: &[BandPowers]) -> f32 {
+pub(crate) fn laterality_index_fn(ch: &[BandPowers]) -> f32 {
     if ch.len() < 4 { return 0.0; }
     let left  = (ch[0].delta + ch[0].theta + ch[0].alpha + ch[0].beta + ch[0].gamma)
               + (ch[1].delta + ch[1].theta + ch[1].alpha + ch[1].beta + ch[1].gamma);
