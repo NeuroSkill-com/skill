@@ -15,6 +15,7 @@
 /// Re-export all constants from the canonical `skill-constants` crate so
 /// `crate::constants::*` keeps working throughout `skill-eeg`.
 pub mod constants { pub use skill_constants::*; }
+pub(crate) mod band_metrics;
 pub mod eeg_bands;
 pub mod eeg_filter;
 pub mod eeg_quality;

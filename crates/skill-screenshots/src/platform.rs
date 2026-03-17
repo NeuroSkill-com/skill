@@ -3,17 +3,18 @@
 //! Platform-specific window capture (macOS, Linux, Windows).
 
 use std::io::Cursor;
+#[cfg(target_os = "macos")]
 use std::path::Path;
 
-use image::ImageReader;
+use image::{GenericImageView, ImageReader};
 
 // ── Captured image ────────────────────────────────────────────────────────────
 
 #[allow(dead_code)]
 pub(crate) struct CapturedImage {
-    raw_bytes: Vec<u8>,
-    width:     u32,
-    height:    u32,
+    pub(crate) raw_bytes: Vec<u8>,
+    pub(crate) width:     u32,
+    pub(crate) height:    u32,
 }
 
 // ── Platform window capture ───────────────────────────────────────────────────
@@ -91,7 +92,7 @@ fn capture_macos() -> Option<CapturedImage> {
 
 /// Read a captured PNG from disk, decode it, clean up the temp file.
 #[cfg(target_os = "macos")]
-fn read_captured_image(path: &std::path::Path) -> Option<CapturedImage> {
+fn read_captured_image(path: &Path) -> Option<CapturedImage> {
     let raw_bytes = std::fs::read(path).ok()?;
     let _ = std::fs::remove_file(path);
     if raw_bytes.is_empty() { return None; }

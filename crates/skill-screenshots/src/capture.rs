@@ -35,7 +35,7 @@ use skill_data::screenshot_store::{
     ReembedEstimate, ReembedResult,
 };
 use crate::config::ScreenshotConfig;
-use crate::platform::{CapturedImage, capture_active_window};
+use crate::platform::capture_active_window;
 
 // ── Image resize + pad ────────────────────────────────────────────────────────
 

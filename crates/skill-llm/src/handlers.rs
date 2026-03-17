@@ -8,8 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::{
     extract::State,
-    http::{HeaderMap, StatusCode},
-    response::{sse, IntoResponse, Response, Sse},
+    http::StatusCode,
+    response::{sse, IntoResponse, Response},
     Json, Router,
     routing::{get, post},
 };
@@ -18,9 +18,9 @@ use tokio::sync::mpsc;
 
 use super::engine::{
     ChatRequest, CompletionRequest, EmbeddingsRequest,
-    GenParams, InferRequest, InferToken, ToolEvent,
+    InferRequest, InferToken, ToolEvent,
     LlmServerState, LlmStateCell,
-    cell_status, run_chat_with_builtin_tools, unix_ts_ms,
+    cell_status, run_chat_with_builtin_tools,
 };
 
 // ── Auth + cell-extraction helpers ────────────────────────────────────────────
