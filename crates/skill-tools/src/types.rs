@@ -63,6 +63,10 @@ pub struct LlmToolConfig {
     /// Maximum number of tool calls executed per round.
     #[serde(default = "default_max_tool_calls_per_round")]
     pub max_calls_per_round: usize,
+
+    /// Context compression settings for tool results.
+    #[serde(default)]
+    pub context_compression: ToolContextCompression,
 }
 
 /// Web search provider configuration.
@@ -108,6 +112,91 @@ pub enum ToolExecutionMode {
     Parallel,
 }
 
+/// How aggressively tool results are compressed to save context window space.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CompressionLevel {
+    /// No compression — tool results are kept as-is.
+    Off,
+    /// Moderate: cap web search results, truncate long URLs, compress old
+    /// results after a few rounds.  Good balance for 4 K–8 K context windows.
+    Normal,
+    /// Aggressive: fewer search results, tighter character limits, old tool
+    /// results summarised to a single line.  Best for small (≤ 4 K) contexts.
+    Aggressive,
+}
+
+/// Settings that control how tool results are compressed before they are
+/// injected back into the conversation context.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ToolContextCompression {
+    /// Compression level.
+    #[serde(default = "default_compression_level")]
+    pub level: CompressionLevel,
+
+    /// Maximum number of web search results returned (0 = use default per level).
+    #[serde(default)]
+    pub max_search_results: usize,
+
+    /// Maximum characters kept per tool result (0 = use default per level).
+    #[serde(default)]
+    pub max_result_chars: usize,
+}
+
+fn default_compression_level() -> CompressionLevel { CompressionLevel::Normal }
+
+impl Default for ToolContextCompression {
+    fn default() -> Self {
+        Self {
+            level: default_compression_level(),
+            max_search_results: 0,
+            max_result_chars: 0,
+        }
+    }
+}
+
+impl ToolContextCompression {
+    /// Effective max search results based on level and override.
+    pub fn effective_max_search_results(&self) -> usize {
+        if self.max_search_results > 0 { return self.max_search_results; }
+        match self.level {
+            CompressionLevel::Off        => 10,
+            CompressionLevel::Normal     => 5,
+            CompressionLevel::Aggressive => 3,
+        }
+    }
+
+    /// Effective max chars per tool result based on level and override.
+    pub fn effective_max_result_chars(&self) -> usize {
+        if self.max_result_chars > 0 { return self.max_result_chars; }
+        match self.level {
+            CompressionLevel::Off        => 16_000,
+            CompressionLevel::Normal     => 2_000,
+            CompressionLevel::Aggressive => 1_000,
+        }
+    }
+
+    /// Effective max chars for web search results (tighter than general).
+    pub fn effective_max_search_result_chars(&self) -> usize {
+        match self.level {
+            CompressionLevel::Off        => 16_000,
+            CompressionLevel::Normal     => 1_500,
+            CompressionLevel::Aggressive => 800,
+        }
+    }
+
+    /// Whether to truncate long URLs in search results.
+    pub fn should_truncate_urls(&self) -> bool {
+        self.level != CompressionLevel::Off
+    }
+
+    /// Whether to aggressively compress old (non-recent) tool results.
+    pub fn should_compress_old_results(&self) -> bool {
+        self.level != CompressionLevel::Off
+    }
+}
+
 fn default_true()                      -> bool { true }
 fn default_tool_execution_mode()       -> ToolExecutionMode { ToolExecutionMode::Parallel }
 fn default_max_tool_rounds()           -> usize { 3 }
@@ -131,6 +220,7 @@ impl Default for LlmToolConfig {
             execution_mode:     default_tool_execution_mode(),
             max_rounds:         10,
             max_calls_per_round: default_max_tool_calls_per_round(),
+            context_compression: ToolContextCompression::default(),
         }
     }
 }

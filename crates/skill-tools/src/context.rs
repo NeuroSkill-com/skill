@@ -3,6 +3,7 @@
 //! Context-aware history trimming for LLM tool conversations.
 
 use serde_json::Value;
+use crate::types::ToolContextCompression;
 
 /// Rough estimate of token count for a string (~4 chars per token).
 pub fn estimate_tokens(s: &str) -> usize {
@@ -23,24 +24,59 @@ pub fn estimate_messages_tokens(messages: &[Value]) -> usize {
 /// Strategy:
 /// 1. Never remove the system message (index 0 if role == "system").
 /// 2. Never remove the last user message (the current query).
-/// 3. First, truncate long "tool" role messages (tool results) to a summary.
-/// 4. Then drop oldest non-system messages in pairs until the estimated
+/// 3. First, aggressively compress old tool results (especially web_search).
+/// 4. Then truncate remaining long tool results to a hard cap.
+/// 5. Then drop oldest non-system messages until the estimated
 ///    token count fits within 75% of `n_ctx` (leaving room for response).
-pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize) {
+pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression: &ToolContextCompression) {
     if n_ctx == 0 { return; }
     let budget = n_ctx * 3 / 4; // 75% of context for prompt
 
-    // Phase 1: Truncate long tool results in history to save context space.
-    const MAX_TOOL_RESULT_CHARS: usize = skill_constants::TOOL_MAX_RESULT_CHARS;
+    if compression.should_compress_old_results() {
+        // Phase 1: Compress web_search / location tool results to a compact
+        // summary.  These tools produce verbose JSON that the LLM only needs
+        // briefly to decide the next action.
+        let max_web_search_chars = compression.effective_max_search_result_chars();
+        let msg_count = messages.len();
+        for (i, msg) in messages.iter_mut().enumerate() {
+            let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
+            if role != "tool" { continue; }
+
+            if let Some(content) = msg.get("content").and_then(|c| c.as_str()).map(|s| s.to_string()) {
+                let is_web_search = content.contains("\"tool\":\"web_search\"")
+                    || content.contains("\"tool\": \"web_search\"");
+                let is_location = content.contains("\"tool\":\"location\"")
+                    || content.contains("\"tool\": \"location\"");
+
+                // For older tool results (not the most recent pair), compress harder.
+                let is_recent = i + 4 >= msg_count;
+
+                if is_web_search {
+                    let limit = if is_recent { max_web_search_chars } else { max_web_search_chars / 2 };
+                    if content.len() > limit {
+                        let summary = compact_web_search_result(&content, limit);
+                        msg["content"] = Value::String(summary);
+                    }
+                } else if is_location && !is_recent && content.len() > 300 {
+                    let summary = format!("{}…\n[location result — already consumed]",
+                        &content[..content.len().min(200)]);
+                    msg["content"] = Value::String(summary);
+                }
+            }
+        }
+    }
+
+    // Phase 2: Truncate remaining long tool results.
+    let max_result_chars = compression.effective_max_result_chars();
     for msg in messages.iter_mut() {
         let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
         if role == "tool" {
             if let Some(content) = msg.get("content").and_then(|c| c.as_str()) {
-                if content.len() > MAX_TOOL_RESULT_CHARS {
+                if content.len() > max_result_chars {
                     let truncated = format!(
                         "{}…\n[truncated {} chars]",
-                        &content[..MAX_TOOL_RESULT_CHARS],
-                        content.len() - MAX_TOOL_RESULT_CHARS
+                        &content[..max_result_chars],
+                        content.len() - max_result_chars
                     );
                     msg["content"] = Value::String(truncated);
                 }
@@ -48,7 +84,7 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize) {
         }
     }
 
-    // Phase 2: Drop oldest non-system, non-last-user messages if still too long.
+    // Phase 3: Drop oldest non-system, non-last-user messages if still too long.
     while estimate_messages_tokens(messages) > budget && messages.len() > 2 {
         let start = if messages.first()
             .and_then(|m| m.get("role"))
@@ -58,5 +94,38 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize) {
         if start >= messages.len() - 1 { break; }
 
         messages.remove(start);
+    }
+}
+
+/// Compact a web_search JSON result to fit within `max_chars`.
+///
+/// Extracts just the query and a condensed list of titles + URLs,
+/// dropping snippets and other metadata to save context.
+fn compact_web_search_result(content: &str, max_chars: usize) -> String {
+    // Try to parse the JSON and re-serialize a compact version.
+    if let Ok(v) = serde_json::from_str::<Value>(content) {
+        let query = v.get("query").and_then(|q| q.as_str()).unwrap_or("?");
+        let hint = v.get("hint").and_then(|h| h.as_str()).unwrap_or("");
+
+        let mut compact = format!("web_search results for \"{}\":\n", query);
+        if let Some(results) = v.get("results").and_then(|r| r.as_array()) {
+            for (i, r) in results.iter().enumerate() {
+                let title = r.get("title").and_then(|t| t.as_str()).unwrap_or("?");
+                let url = r.get("url").and_then(|u| u.as_str()).unwrap_or("");
+                let line = format!("{}. {} - {}\n", i + 1, title, url);
+                if compact.len() + line.len() > max_chars - 60 {
+                    compact.push_str("…[more results truncated]\n");
+                    break;
+                }
+                compact.push_str(&line);
+            }
+        }
+        if !hint.is_empty() {
+            compact.push_str(&format!("Hint: {}\n", hint));
+        }
+        compact
+    } else {
+        // Fallback: raw truncation.
+        format!("{}…\n[truncated]", &content[..content.len().min(max_chars)])
     }
 }

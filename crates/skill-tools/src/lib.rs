@@ -38,7 +38,7 @@ pub(crate) mod search;
 pub mod context;
 
 // Re-export the most-used types at crate root for convenience.
-pub use types::{LlmToolConfig, ToolExecutionMode};
+pub use types::{LlmToolConfig, ToolExecutionMode, ToolContextCompression, CompressionLevel};
 pub use parse::{
     Tool, ToolFunction, ToolCall, ToolCallFunction,
     ChatMessage, MessageContent, ContentPart, ImageUrl,

@@ -37,7 +37,7 @@ pub fn builtin_llm_tools() -> Vec<Tool> {
             tool_type: "function".into(),
             function: ToolFunction {
                 name: "web_search".into(),
-                description: Some("Search the web for a query and return concise results. When render=true, top result pages are visited in a headless browser and their rendered text content is included.".into()),
+                description: Some("Search the web for a query. Without render=true this returns ONLY links and snippets (no page content). For factual/current-data queries (weather, prices, scores, news) you SHOULD set render=true so the top pages are fetched and their text is included — otherwise you will only get URLs and must follow up with web_fetch.".into()),
                 parameters: Some(json!({
                     "type": "object",
                     "properties": {

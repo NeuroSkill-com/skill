@@ -439,6 +439,19 @@ pub const TOOL_BASH_SUMMARY_TAIL: usize = 20;
 /// Below this many lines, bash output is returned inline without summarisation.
 pub const TOOL_BASH_INLINE_THRESHOLD: usize = 200;
 
+/// Maximum number of results returned by the `web_search` tool.
+/// Fewer results = less context consumed, leaving room for follow-up fetches.
+pub const TOOL_WEB_SEARCH_MAX_RESULTS: usize = 5;
+
+/// Maximum URL length (chars) kept in web search results. Longer URLs are
+/// truncated with a `...` suffix to save context space.
+pub const TOOL_WEB_SEARCH_MAX_URL_LEN: usize = 120;
+
+/// Maximum characters for the condensed web-search tool result injected into
+/// chat context.  Tighter than the generic `TOOL_MAX_RESULT_CHARS` because
+/// search results are follow-up pointers, not final answers.
+pub const TOOL_WEB_SEARCH_MAX_RESULT_CHARS: usize = 1500;
+
 // ── Active window tracking ────────────────────────────────────────────────────
 
 /// Seconds of inactivity before a user is considered idle.

@@ -86,6 +86,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             let render_count = args.get("render_count").and_then(|v| v.as_u64()).unwrap_or(3).min(5) as usize;
 
             let provider = allowed_tools.web_search_provider.clone();
+            let compression = allowed_tools.context_compression.clone();
             tokio::task::spawn_blocking(move || {
                 let agent = ureq::AgentBuilder::new()
                     .timeout_connect(std::time::Duration::from_secs(5))
@@ -104,6 +105,31 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     }
                     _ => search::ddg_html_search(&agent, &query),
                 };
+
+                // Cap results based on compression settings.
+                let max_results = compression.effective_max_search_results();
+                results.truncate(max_results);
+
+                // Compact each result when compression is active.
+                if compression.should_truncate_urls() {
+                    let max_url_len = skill_constants::TOOL_WEB_SEARCH_MAX_URL_LEN;
+                    for r in results.iter_mut() {
+                        if let Some(obj) = r.as_object_mut() {
+                            if let Some(url_val) = obj.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                                if url_val.len() > max_url_len {
+                                    let truncated_url = format!("{}...", &url_val[..max_url_len]);
+                                    obj.insert("url".to_string(), json!(truncated_url));
+                                }
+                            }
+                            // Remove empty/useless snippets to save tokens.
+                            if let Some(snippet) = obj.get("snippet").and_then(|v| v.as_str()) {
+                                if snippet.trim().len() < 10 {
+                                    obj.remove("snippet");
+                                }
+                            }
+                        }
+                    }
+                }
 
                 // If render=true, visit top N result pages in headless browser
                 // and append the rendered text content to each result.
@@ -127,7 +153,16 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 if results.is_empty() {
                     json!({ "ok": true, "tool": "web_search", "query": query, "results": [], "note": "no results found" })
                 } else {
-                    json!({ "ok": true, "tool": "web_search", "query": query, "rendered": render, "results": results })
+                    let mut result = json!({ "ok": true, "tool": "web_search", "query": query, "results": results });
+                    if render {
+                        result["rendered"] = json!(true);
+                    } else {
+                        // When render=false, add a hint so the LLM knows it
+                        // should follow up with web_fetch or re-search with
+                        // render=true to get actual page content.
+                        result["hint"] = json!("These are search result links only. To get actual content, use web_fetch on a URL or re-call web_search with render=true.");
+                    }
+                    result
                 }
             }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_search", "error": e.to_string() }))
         }

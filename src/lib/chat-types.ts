@@ -97,6 +97,19 @@ export const THINKING_LEVELS: { labelKey: string; key: ThinkingLevel; budget: nu
 // ── Tool configuration ──────────────────────────────────────────────────────
 
 export type ToolExecutionMode = "sequential" | "parallel";
+export type CompressionLevel = "off" | "normal" | "aggressive";
+
+export interface ToolContextCompression {
+  level: CompressionLevel;
+  max_search_results: number;
+  max_result_chars: number;
+}
+
+export const DEFAULT_TOOL_CONTEXT_COMPRESSION: ToolContextCompression = {
+  level: "normal",
+  max_search_results: 0,
+  max_result_chars: 0,
+};
 
 export interface ToolConfig {
   enabled: boolean;
@@ -105,6 +118,7 @@ export interface ToolConfig {
   execution_mode: ToolExecutionMode;
   max_rounds: number;
   max_calls_per_round: number;
+  context_compression: ToolContextCompression;
 }
 
 export const DEFAULT_TOOL_CONFIG: ToolConfig = {
@@ -112,6 +126,7 @@ export const DEFAULT_TOOL_CONFIG: ToolConfig = {
   date: true, location: true, web_search: true, web_fetch: true,
   bash: false, read_file: false, write_file: false, edit_file: false,
   execution_mode: "parallel", max_rounds: 3, max_calls_per_round: 4,
+  context_compression: { ...DEFAULT_TOOL_CONTEXT_COMPRESSION },
 };
 
 // ── Stored-message type (mirrors Rust StoredMessage) ────────────────────────

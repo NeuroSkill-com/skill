@@ -17,10 +17,16 @@
 
   type ToolExecutionMode = "sequential" | "parallel";
   type SearchBackend = "duckduckgo" | "brave" | "searxng";
+  type CompressionLevel = "off" | "normal" | "aggressive";
   interface WebSearchProvider {
     backend: SearchBackend;
     brave_api_key: string;
     searxng_url: string;
+  }
+  interface ToolContextCompression {
+    level: CompressionLevel;
+    max_search_results: number;
+    max_result_chars: number;
   }
   interface LlmToolsConfig {
     enabled: boolean;
@@ -36,6 +42,7 @@
     execution_mode: ToolExecutionMode;
     max_rounds: number;
     max_calls_per_round: number;
+    context_compression: ToolContextCompression;
   }
 
   interface LlmConfig {
@@ -53,7 +60,7 @@
   let config  = $state<LlmConfig>({
     enabled: false, autostart: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
-    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4 },
+    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4, context_compression: { level: "normal" as CompressionLevel, max_search_results: 0, max_result_chars: 0 } },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
   });
@@ -302,6 +309,73 @@
               </button>
             {/each}
           </div>
+        </div>
+
+        <!-- Context compression -->
+        <div class="flex flex-col gap-2.5 pt-1">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.72rem] font-semibold text-foreground">{t("llm.tools.contextCompression")}</span>
+            <span class="text-[0.6rem] text-muted-foreground leading-relaxed">{t("llm.tools.contextCompressionDesc")}</span>
+          </div>
+          <div class="flex rounded-lg overflow-hidden border border-border text-[0.66rem] font-medium">
+            {#each [
+              { key: "off"        as CompressionLevel, label: t("llm.tools.compressionOff") },
+              { key: "normal"     as CompressionLevel, label: t("llm.tools.compressionNormal") },
+              { key: "aggressive" as CompressionLevel, label: t("llm.tools.compressionAggressive") },
+            ] as opt}
+              <button
+                onclick={async () => {
+                  config = { ...config, tools: { ...config.tools, context_compression: { ...config.tools.context_compression, level: opt.key } } };
+                  await saveConfig();
+                }}
+                class="flex-1 py-1.5 transition-colors cursor-pointer
+                       {config.tools.context_compression.level === opt.key
+                         ? 'bg-primary text-primary-foreground'
+                         : 'bg-background text-muted-foreground hover:bg-muted'}">
+                {opt.label}
+              </button>
+            {/each}
+          </div>
+
+          <!-- Custom overrides (shown when not "off") -->
+          {#if config.tools.context_compression.level !== "off"}
+            <div class="flex gap-3">
+              <!-- Max search results -->
+              <div class="flex-1 flex flex-col gap-1">
+                <label for="comp-max-results" class="text-[0.62rem] text-muted-foreground">
+                  {t("llm.tools.maxSearchResults")}
+                </label>
+                <input id="comp-max-results" type="number" min="0" max="20" step="1"
+                  value={config.tools.context_compression.max_search_results}
+                  oninput={(e: Event) => {
+                    const val = parseInt((e.target as HTMLInputElement).value) || 0;
+                    config = { ...config, tools: { ...config.tools, context_compression: { ...config.tools.context_compression, max_search_results: Math.max(0, Math.min(20, val)) } } };
+                  }}
+                  onchange={async () => { await saveConfig(); }}
+                  class="w-full rounded-lg border border-border/60 dark:border-white/[0.08]
+                         bg-white dark:bg-[#0c0c14] px-2.5 py-1.5 text-[0.7rem] text-foreground
+                         placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-blue-500/50" />
+                <span class="text-[0.54rem] text-muted-foreground/60">{t("llm.tools.zeroAutoLabel")}</span>
+              </div>
+              <!-- Max result chars -->
+              <div class="flex-1 flex flex-col gap-1">
+                <label for="comp-max-chars" class="text-[0.62rem] text-muted-foreground">
+                  {t("llm.tools.maxResultChars")}
+                </label>
+                <input id="comp-max-chars" type="number" min="0" max="32000" step="500"
+                  value={config.tools.context_compression.max_result_chars}
+                  oninput={(e: Event) => {
+                    const val = parseInt((e.target as HTMLInputElement).value) || 0;
+                    config = { ...config, tools: { ...config.tools, context_compression: { ...config.tools.context_compression, max_result_chars: Math.max(0, Math.min(32000, val)) } } };
+                  }}
+                  onchange={async () => { await saveConfig(); }}
+                  class="w-full rounded-lg border border-border/60 dark:border-white/[0.08]
+                         bg-white dark:bg-[#0c0c14] px-2.5 py-1.5 text-[0.7rem] text-foreground
+                         placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-blue-500/50" />
+                <span class="text-[0.54rem] text-muted-foreground/60">{t("llm.tools.zeroAutoLabel")}</span>
+              </div>
+            </div>
+          {/if}
         </div>
       </div>
 

@@ -3,7 +3,7 @@
 <!-- Chat tools configuration panel — tool allow-list, execution mode, limits. -->
 <script lang="ts">
   import { t } from "$lib/i18n/index.svelte";
-  import type { ToolConfig, ToolExecutionMode } from "$lib/chat-types";
+  import type { ToolConfig, ToolExecutionMode, CompressionLevel } from "$lib/chat-types";
 
   interface Props {
     toolConfig: ToolConfig;
@@ -126,6 +126,30 @@
                      ? 'border-primary/50 bg-primary/10 text-primary'
                      : 'border-border/60 bg-background text-muted-foreground/50 hover:text-foreground'}">
             {val}
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Context compression -->
+    <div class="flex items-center justify-between gap-3 mt-0.5">
+      <div class="flex flex-col gap-0">
+        <span class="text-[0.6rem] font-semibold text-foreground">{t("llm.tools.contextCompression")}</span>
+        <span class="text-[0.5rem] text-muted-foreground/60 leading-snug">{t("llm.tools.contextCompressionDesc")}</span>
+      </div>
+      <div class="flex rounded-md overflow-hidden border border-border text-[0.56rem] font-medium shrink-0">
+        {#each [
+          { key: "off"        as CompressionLevel, label: t("llm.tools.compressionOff") },
+          { key: "normal"     as CompressionLevel, label: t("llm.tools.compressionNormal") },
+          { key: "aggressive" as CompressionLevel, label: t("llm.tools.compressionAggressive") },
+        ] as opt}
+          <button
+            onclick={() => onUpdate({ context_compression: { ...toolConfig.context_compression, level: opt.key } })}
+            class="px-2 py-1 transition-colors cursor-pointer
+                   {toolConfig.context_compression.level === opt.key
+                     ? 'bg-primary text-primary-foreground'
+                     : 'bg-background text-muted-foreground hover:bg-muted'}">
+            {opt.label}
           </button>
         {/each}
       </div>

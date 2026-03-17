@@ -255,7 +255,11 @@ User: "Read the file config.toml"
 Assistant: [TOOL_CALL]{{"name":"read_file","arguments":{{"path":"config.toml"}}}}[/TOOL_CALL]
 
 User: "Where am I located?"
-Assistant: [TOOL_CALL]{{"name":"location","arguments":{{}}}}[/TOOL_CALL]"#
+Assistant: [TOOL_CALL]{{"name":"location","arguments":{{}}}}[/TOOL_CALL]
+
+User: "What's the weather like?"
+Assistant: [TOOL_CALL]{{"name":"web_search","arguments":{{"query":"weather <city>","render":true}}}}[/TOOL_CALL]
+(Use render=true for factual queries like weather, prices, scores, or news so the actual page content is fetched and you can summarise it directly.)"#
     )
 }
 

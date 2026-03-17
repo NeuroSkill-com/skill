@@ -1,0 +1,16 @@
+### Features
+
+- **Configurable tool context compression**: Added a new "Context compression" setting (Off / Normal / Aggressive) in Settings → LLM → Tools that controls how tool results are compressed before being injected into the conversation context. Normal mode caps web search results to 5, truncates long URLs, and compresses old tool results. Aggressive mode uses tighter limits for small context windows. Custom overrides for max search results and max result characters are available when compression is enabled.
+
+### Bugfixes
+
+- **Web search no longer stalls after returning URLs**: Improved `web_search` tool description to instruct the LLM to use `render=true` for factual/current-data queries (weather, prices, scores, news). When `render=false`, the tool result now includes a follow-up hint telling the model to fetch page content. Added a weather example to the system prompt so the model learns the correct pattern.
+- **Context window no longer fills up after web search**: Web search results are now capped (default 5 instead of 10), long URLs are truncated, empty snippets are removed, and old tool results (location, earlier searches) are aggressively compressed in subsequent rounds. This leaves enough context for the LLM to continue with follow-up tool calls like `web_fetch`.
+
+### UI
+
+- **Tool context compression controls**: Added compression level selector and optional max-search-results / max-result-chars overrides to both the Settings → LLM → Tools tab and the inline chat tools panel.
+
+### i18n
+
+- **Context compression labels**: Added translations for context compression settings in English, German, French, Hebrew, and Ukrainian.
