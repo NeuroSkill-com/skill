@@ -24,6 +24,8 @@ use tao::platform::windows::EventLoopBuilderExtWindows;
 #[cfg(target_os = "macos")]
 use tao::platform::macos::EventLoopBuilderExtMacOS;
 
+use tao::platform::run_return::EventLoopExtRunReturn;
+
 #[cfg(target_os = "linux")]
 use tao::platform::unix::WindowExtUnix;
 #[cfg(target_os = "linux")]
@@ -205,16 +207,25 @@ fn run_event_loop(
     #[cfg(target_os = "macos")]
     builder.with_any_thread(true);
 
-    let event_loop = builder.build();
+    let mut event_loop = builder.build();
     let proxy = event_loop.create_proxy();
 
     // Send the proxy handle back to the launching thread.
     let _ = proxy_tx.send(Ok(proxy));
 
-    let window = WindowBuilder::new()
+    // Build the window.  When headless (`visible = false`) we still create
+    // a visible window but position it far off-screen so the webview gets
+    // real dimensions.  A truly invisible window (with_visible(false)) causes
+    // WebKitGTK to report 0x0 for innerWidth/innerHeight.
+    let mut wb = WindowBuilder::new()
         .with_title("skill-headless")
-        .with_inner_size(LogicalSize::new(config.width, config.height))
-        .with_visible(config.visible)
+        .with_inner_size(LogicalSize::new(config.width, config.height));
+
+    if !config.visible {
+        wb = wb.with_position(tao::dpi::LogicalPosition::new(-10000i32, -10000i32));
+    }
+
+    let window = wb
         .build(&event_loop)
         .map_err(|e| HeadlessError::InitFailed(e.to_string()))?;
 
@@ -303,7 +314,7 @@ fn run_event_loop(
     // Wrap in Option so we can destroy it on Close.
     let webview: Arc<Mutex<Option<WebView>>> = Arc::new(Mutex::new(Some(webview)));
 
-    event_loop.run(move |event, _target, control_flow| {
+    event_loop.run_return(move |event, _target, control_flow| {
         *control_flow = ControlFlow::Wait;
 
         // Keep web_context alive for the entire event loop lifetime.
@@ -340,6 +351,8 @@ fn run_event_loop(
             _ => {}
         }
     });
+
+    Ok(())
 }
 
 // ── Command dispatch ─────────────────────────────────────────────────────────
@@ -388,11 +401,92 @@ fn execute_command(
         }
 
         Command::Screenshot => {
-            let _ = reply.send(Response::Error(
-                "screenshot not natively supported by wry; \
-                 inject html2canvas.js first, then use EvalJs to capture a data URL"
-                    .into(),
-            ));
+            // Capture the visible viewport as a PNG using a canvas-based
+            // DOM walker.  We iterate over all visible elements and paint
+            // their computed backgrounds, borders, and text onto a 2D canvas.
+            //
+            // This is a lightweight "mini html2canvas" that handles the most
+            // common cases (solid backgrounds, text, images, borders).
+            // For pixel-perfect fidelity, inject the full html2canvas library
+            // and use EvalJs instead.
+            eval_async_ipc(wv, pending_ipc, reply, r#"
+                (async () => {
+                    const W = window.innerWidth  || document.documentElement.clientWidth  || 800;
+                    const H = window.innerHeight || document.documentElement.clientHeight || 600;
+                    const canvas = document.createElement('canvas');
+                    canvas.width  = W;
+                    canvas.height = H;
+                    const ctx = canvas.getContext('2d');
+
+                    /* Paint document background first */
+                    const docBg = getComputedStyle(document.documentElement).backgroundColor;
+                    const bodyBg = document.body ? getComputedStyle(document.body).backgroundColor : 'rgba(0,0,0,0)';
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(0, 0, W, H);
+                    if (docBg && docBg !== 'rgba(0, 0, 0, 0)') { ctx.fillStyle = docBg; ctx.fillRect(0, 0, W, H); }
+                    if (bodyBg && bodyBg !== 'rgba(0, 0, 0, 0)') { ctx.fillStyle = bodyBg; ctx.fillRect(0, 0, W, H); }
+
+                    /* Walk all elements in DOM order */
+                    const walker = document.createTreeWalker(
+                        document.body || document.documentElement,
+                        NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+                        null
+                    );
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            const style = getComputedStyle(node);
+                            if (style.display === 'none' || style.visibility === 'hidden') continue;
+                            const rect = node.getBoundingClientRect();
+                            if (rect.width === 0 || rect.height === 0) continue;
+
+                            /* Background */
+                            const bg = style.backgroundColor;
+                            if (bg && bg !== 'rgba(0, 0, 0, 0)') {
+                                ctx.fillStyle = bg;
+                                ctx.fillRect(rect.left, rect.top, rect.width, rect.height);
+                            }
+
+                            /* Border (simple solid) */
+                            const bw = parseFloat(style.borderTopWidth) || 0;
+                            if (bw > 0 && style.borderTopStyle !== 'none') {
+                                ctx.strokeStyle = style.borderTopColor || '#000';
+                                ctx.lineWidth = bw;
+                                ctx.strokeRect(rect.left, rect.top, rect.width, rect.height);
+                            }
+
+                            /* Images */
+                            if (node.tagName === 'IMG' && node.complete && node.naturalWidth > 0) {
+                                try { ctx.drawImage(node, rect.left, rect.top, rect.width, rect.height); } catch(e) {}
+                            }
+
+                            /* Canvas elements */
+                            if (node.tagName === 'CANVAS') {
+                                try { ctx.drawImage(node, rect.left, rect.top, rect.width, rect.height); } catch(e) {}
+                            }
+                        } else if (node.nodeType === Node.TEXT_NODE) {
+                            const text = node.textContent.trim();
+                            if (!text) continue;
+                            const parent = node.parentElement;
+                            if (!parent) continue;
+                            const style = getComputedStyle(parent);
+                            if (style.display === 'none' || style.visibility === 'hidden') continue;
+
+                            const range = document.createRange();
+                            range.selectNodeContents(node);
+                            const rects = range.getClientRects();
+                            ctx.fillStyle = style.color || '#000';
+                            ctx.font = style.fontStyle + ' ' + style.fontWeight + ' ' + style.fontSize + ' ' + style.fontFamily;
+                            ctx.textBaseline = 'top';
+                            for (const r of rects) {
+                                ctx.fillText(text, r.left, r.top);
+                            }
+                        }
+                    }
+
+                    return canvas.toDataURL('image/png');
+                })()
+            "#);
         }
 
         Command::PrintToPdf => {

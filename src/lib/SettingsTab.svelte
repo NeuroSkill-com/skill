@@ -1301,13 +1301,6 @@ the Free Software Foundation, version 3 only. -->
         <span class="text-[0.54rem] text-muted-foreground/60">
           {t("settings.dataDirDefault", { path: dataDirDefault })}
         </span>
-        <div>
-          <Button variant="outline" size="sm"
-                  class="h-7 text-[0.58rem] px-2.5 border-border dark:border-white/10"
-                  onclick={async () => { await invoke("open_skill_dir"); }}>
-            {t("settings.dataDirOpen")}
-          </Button>
-        </div>
       </div>
 
       <div class="flex items-center gap-2">
@@ -1318,6 +1311,11 @@ the Free Software Foundation, version 3 only. -->
                class="flex-1 h-7 rounded-md border border-border bg-background px-2 text-[0.68rem]
                       font-mono text-foreground placeholder:text-muted-foreground/40
                       focus:outline-none focus:ring-1 focus:ring-ring" />
+        <Button variant="outline" size="sm"
+                class="h-7 text-[0.58rem] px-2.5 border-border dark:border-white/10"
+                onclick={async () => { await invoke("open_skill_dir"); }}>
+          {t("settings.dataDirOpen")}
+        </Button>
         {#if dataDirInput !== dataDirDefault}
           <Button variant="ghost" size="sm"
                   class="h-7 text-[0.58rem] px-2 text-muted-foreground hover:text-foreground"

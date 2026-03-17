@@ -18,6 +18,10 @@ crossbeam-channel = "0.5"
 base64     = "0.22"
 http       = "1"
 
+[dev-dependencies]
+serde_json = "1"
+base64     = "0.22"
+
 # Platform-specific tao features
 [target.'cfg(target_os = "linux")'.dependencies]
 tao = { version = "0.34", features = ["x11"] }
