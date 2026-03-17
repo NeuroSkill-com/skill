@@ -131,19 +131,52 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     }
                 }
 
-                // If render=true, visit top N result pages in headless browser
-                // and append the rendered text content to each result.
+                // If render=true, visit top N result pages and append their
+                // rendered text content to each result.
+                //
+                // First try the headless browser; if it's unavailable (e.g.
+                // macOS inside Tauri where tao can't create a second event
+                // loop), fall back to plain HTTP fetch + HTML tag stripping.
                 if render && !results.is_empty() {
                     let urls: Vec<String> = results.iter()
                         .take(render_count)
                         .filter_map(|r| r.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()))
                         .collect();
 
-                    if let Some(rendered) = search::headless_render_urls(&urls) {
+                    let rendered = search::headless_render_urls(&urls);
+
+                    if let Some(rendered) = rendered {
                         for (i, content) in rendered.into_iter().enumerate() {
                             if i < results.len() {
                                 if let Some(obj) = results[i].as_object_mut() {
                                     obj.insert("rendered_text".to_string(), json!(content));
+                                }
+                            }
+                        }
+                    } else {
+                        // Headless unavailable — fall back to plain HTTP fetch.
+                        tool_log!("tool:web_search", "[render] headless unavailable, falling back to HTTP fetch");
+                        let fetch_agent = ureq::AgentBuilder::new()
+                            .timeout_connect(std::time::Duration::from_secs(3))
+                            .timeout_read(std::time::Duration::from_secs(8))
+                            .build();
+                        for (i, url) in urls.iter().enumerate().take(render_count) {
+                            if i >= results.len() { break; }
+                            match fetch_agent.get(url).set("User-Agent", search::random_ua()).call() {
+                                Ok(resp) => {
+                                    let body = resp.into_string().unwrap_or_default();
+                                    let text = search::strip_html_tags(&body);
+                                    // Collapse whitespace for cleaner output.
+                                    let cleaned: String = text.split_whitespace()
+                                        .collect::<Vec<_>>()
+                                        .join(" ");
+                                    let truncated = truncate_text(&cleaned, 2_000);
+                                    if let Some(obj) = results[i].as_object_mut() {
+                                        obj.insert("rendered_text".to_string(), json!(truncated));
+                                    }
+                                }
+                                Err(e) => {
+                                    tool_log!("tool:web_search", "[render] HTTP fetch failed for {}: {}", url, e);
                                 }
                             }
                         }
@@ -223,6 +256,37 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 let mut result = tokio::task::spawn_blocking(move || {
                     search::headless_fetch_url(&url_for_fetch, wait_ms, selector.as_deref(), eval_js.as_deref())
                 }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }));
+
+                // If headless browser is unavailable, fall back to plain HTTP fetch.
+                let should_fallback = result.get("fallback").and_then(|f| f.as_bool()).unwrap_or(false);
+                if should_fallback {
+                    tool_log!("tool:web_fetch", "[render] headless unavailable, falling back to HTTP fetch");
+                    let url_fallback = url.clone();
+                    result = tokio::task::spawn_blocking(move || {
+                        let agent = ureq::AgentBuilder::new()
+                            .timeout_connect(std::time::Duration::from_secs(3))
+                            .timeout_read(std::time::Duration::from_secs(8))
+                            .build();
+                        match agent.get(&url_fallback).set("User-Agent", search::random_ua()).call() {
+                            Ok(r) => {
+                                let status = r.status();
+                                let body = r.into_string().unwrap_or_default();
+                                let text = search::strip_html_tags(&body);
+                                let cleaned: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                                json!({
+                                    "ok": true,
+                                    "tool": "web_fetch",
+                                    "url": url_fallback,
+                                    "status": status,
+                                    "mode": "http_fallback",
+                                    "content": truncate_text(&cleaned, max_content),
+                                    "truncated": cleaned.len() > max_content,
+                                })
+                            }
+                            Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_fallback, "error": e.to_string() }),
+                        }
+                    }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }));
+                }
 
                 // Cap rendered content to the configured limit.
                 if let Some(content) = result.get("content").and_then(|c| c.as_str()).map(|s| s.to_string()) {
