@@ -2705,6 +2705,7 @@ const fr: Record<string, string> = {
   "settingsTabs.screenshots": "Screenshots",
   "settingsTabs.sleep":       "Sommeil",
   "settingsTabs.devices":     "Appareils",
+  "settingsTabs.exg":         "EXG",
 
   "devices.title":             "Appareils",
   "devices.subtitle":          "Gérer les appareils BCI appairés et découverts, le traitement du signal et l'intégration EEG.",
@@ -2715,6 +2716,9 @@ const fr: Record<string, string> = {
   "devices.noPairedHint":      "Allumez votre casque BCI et il apparaîtra ici une fois découvert. Appairez-le pour activer les connexions automatiques.",
   "devices.noDiscovered":      "Aucun appareil à proximité",
   "devices.noDiscoveredHint":  "Allumez votre casque BCI et placez-le à portée Bluetooth. Les appareils découverts apparaîtront ici automatiquement.",
+
+  "exg.title":    "EXG",
+  "exg.subtitle": "Configuration de la carte OpenBCI, filtres de traitement du signal et pipeline d'intégration EEG.",
 
   "sleepSettings.title":                         "Horaires de sommeil",
   "sleepSettings.subtitle":                      "Définissez vos heures de sommeil pour l'analyse du sommeil et la classification des sessions.",

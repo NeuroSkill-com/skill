@@ -2705,6 +2705,7 @@ const uk: Record<string, string> = {
   "settingsTabs.screenshots": "Screenshots",
   "settingsTabs.sleep":       "Сон",
   "settingsTabs.devices":     "Пристрої",
+  "settingsTabs.exg":         "EXG",
 
   "devices.title":             "Пристрої",
   "devices.subtitle":          "Керуйте підключеними та виявленими BCI-пристроями, обробкою сигналу та вбудовуванням ЕЕГ.",
@@ -2715,6 +2716,9 @@ const uk: Record<string, string> = {
   "devices.noPairedHint":      "Увімкніть BCI-гарнітуру, і вона з'явиться тут після виявлення. Підключіть її для автоматичних з'єднань.",
   "devices.noDiscovered":      "Немає пристроїв поблизу",
   "devices.noDiscoveredHint":  "Увімкніть BCI-гарнітуру та розмістіть її в зоні дії Bluetooth. Виявлені пристрої з'являться тут автоматично.",
+
+  "exg.title":    "EXG",
+  "exg.subtitle": "Конфігурація плати OpenBCI, фільтри обробки сигналу та конвеєр вбудовування ЕЕГ.",
 
   "sleepSettings.title":                         "Розклад сну",
   "sleepSettings.subtitle":                      "Налаштуйте години сну для аналізу сну та класифікації сеансів.",

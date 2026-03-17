@@ -2938,6 +2938,7 @@ const en: Record<string, string> = {
   "settingsTabs.screenshots":                    "Screenshots",
   "settingsTabs.sleep":                          "Sleep",
   "settingsTabs.devices":                        "Devices",
+  "settingsTabs.exg":                            "EXG",
 
   // ── Devices tab ──────────────────────────────────────────────────────────
   "devices.title":             "Devices",
@@ -2949,6 +2950,10 @@ const en: Record<string, string> = {
   "devices.noPairedHint":      "Power on your BCI headset and it will appear here once discovered. Pair it to enable automatic connections.",
   "devices.noDiscovered":      "No nearby devices",
   "devices.noDiscoveredHint":  "Power on your BCI headset and place it within Bluetooth range. Discovered devices will appear here automatically.",
+
+  // ── EXG tab ──────────────────────────────────────────────────────────────
+  "exg.title":    "EXG",
+  "exg.subtitle": "OpenBCI board configuration, signal processing filters, and EEG embedding pipeline.",
 
   "sleepSettings.title":                         "Sleep Schedule",
   "sleepSettings.subtitle":                      "Set your sleeping hours for sleep analysis and session classification.",
