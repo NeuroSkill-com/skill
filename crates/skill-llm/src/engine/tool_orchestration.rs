@@ -18,6 +18,7 @@ use skill_tools::defs::{enabled_builtin_llm_tools, filter_allowed_tool_defs, is_
 use skill_tools::exec::execute_builtin_tool_call;
 use skill_tools::context::trim_messages_to_fit;
 
+
 // ── Stream sanitizer ──────────────────────────────────────────────────────────
 
 struct ToolCallStreamSanitizer {
@@ -234,6 +235,9 @@ where
             executed_calls.insert((tc.function.name.clone(), tc.function.arguments.clone()));
         }
 
+        // Track where new tool results start (for condensation).
+        let tool_results_start = messages.len();
+
         match execution_mode {
             config::ToolExecutionMode::Sequential => {
                 execute_tool_calls_sequential(
@@ -250,9 +254,120 @@ where
                 ).await;
             }
         }
+
+        // ── Condense prior tool results ─────────────────────────────
+        // The model already read old tool results and made its decision.
+        // Replace them with one-line summaries to free context for the
+        // next round.  Only the results from THIS round (tool_results_start..)
+        // are kept full.
+        if compression.should_compress_old_results() {
+            condense_prior_tool_results(&mut messages, tool_results_start);
+        }
     }
 
     Err(format!("tool-calling round limit reached ({max_rounds} rounds). You can increase this in Settings → LLM → Tools → Max rounds."))
+}
+
+// ── Prior-round condensation ──────────────────────────────────────────────────
+
+/// Replace tool-result messages from previous rounds with one-line summaries.
+///
+/// `current_round_start` is the index where the current round's tool results
+/// begin — everything before that is a prior round and gets condensed.
+///
+/// This is the key to keeping multi-step tool chains working on small context
+/// windows: the model already consumed the old results and chose its next
+/// action, so we only need a brief reminder of what happened.
+fn condense_prior_tool_results(messages: &mut [Value], current_round_start: usize) {
+    for (i, msg) in messages.iter_mut().enumerate() {
+        if i >= current_round_start { break; }
+
+        let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
+        if role != "tool" { continue; }
+
+        let content = match msg.get("content").and_then(|c| c.as_str()) {
+            Some(c) => c.to_string(),
+            None => continue,
+        };
+
+        // Already condensed (< 200 chars) — skip.
+        if content.len() < 200 { continue; }
+
+        let summary = summarize_tool_result(&content);
+        msg["content"] = Value::String(summary);
+    }
+}
+
+/// Extract a one-line summary from a tool result JSON string.
+fn summarize_tool_result(content: &str) -> String {
+    // Try to parse as JSON for structured extraction.
+    let v: Value = match serde_json::from_str(content) {
+        Ok(v) => v,
+        Err(_) => {
+            // Already a plain-text compact result — truncate hard.
+            let first_line = content.lines().next().unwrap_or(content);
+            return if first_line.len() > 120 {
+                format!("{}…", &first_line[..120])
+            } else {
+                first_line.to_string()
+            };
+        }
+    };
+
+    let tool = v.get("tool").and_then(|t| t.as_str()).unwrap_or("unknown");
+    let ok = v.get("ok").and_then(|o| o.as_bool()).unwrap_or(false);
+
+    if !ok {
+        let err = v.get("error").and_then(|e| e.as_str()).unwrap_or("failed");
+        return format!("[{tool}: error — {err}]");
+    }
+
+    match tool {
+        "location" => {
+            let city    = v.get("city").and_then(|c| c.as_str()).unwrap_or("?");
+            let region  = v.get("region").and_then(|c| c.as_str()).unwrap_or("");
+            let country = v.get("country").and_then(|c| c.as_str()).unwrap_or("");
+            let tz      = v.get("timezone").and_then(|c| c.as_str()).unwrap_or("");
+            format!("[location: {city}, {region}, {country} ({tz})]")
+        }
+        "date" => {
+            let iso = v.get("iso_local").and_then(|c| c.as_str()).unwrap_or("?");
+            format!("[date: {iso}]")
+        }
+        "web_search" => {
+            let query = v.get("query").and_then(|q| q.as_str()).unwrap_or("?");
+            // Handle compact text format.
+            if let Some(compact) = v.get("compact").and_then(|c| c.as_str()) {
+                let n = compact.lines().filter(|l| l.starts_with(|c: char| c.is_ascii_digit())).count();
+                return format!("[web_search: {n} results for \"{query}\"]");
+            }
+            let n = v.get("results").and_then(|r| r.as_array()).map(|a| a.len()).unwrap_or(0);
+            format!("[web_search: {n} results for \"{query}\"]")
+        }
+        "web_fetch" => {
+            let url = v.get("url").and_then(|u| u.as_str()).unwrap_or("?");
+            let chars = v.get("content").and_then(|c| c.as_str()).map(|s| s.len()).unwrap_or(0);
+            let short_url = if url.len() > 60 { &url[..60] } else { url };
+            format!("[web_fetch: {short_url}… ({chars} chars)]")
+        }
+        "bash" => {
+            let cmd = v.get("command").and_then(|c| c.as_str()).unwrap_or("?");
+            let exit = v.get("exit_code").and_then(|c| c.as_i64()).unwrap_or(-1);
+            let short_cmd = if cmd.len() > 60 { &cmd[..60] } else { cmd };
+            format!("[bash: `{short_cmd}` exit={exit}]")
+        }
+        "read_file" => {
+            let lines = v.get("total_lines").and_then(|l| l.as_u64()).unwrap_or(0);
+            format!("[read_file: {lines} lines]")
+        }
+        "skill" => {
+            let cmd = v.get("command").and_then(|c| c.as_str()).unwrap_or("?");
+            format!("[skill: {cmd} — ok]")
+        }
+        _ => {
+            format!("[{tool}: ok]")
+        }
+    }
 }
 
 // ── Validation ────────────────────────────────────────────────────────────────
