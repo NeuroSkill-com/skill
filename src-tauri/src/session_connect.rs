@@ -605,6 +605,15 @@ pub(crate) async fn connect_idun(
         return Err(ConnectError::Bluetooth(msg));
     }
 
+    let idun_token = {
+        let r = app.app_state();
+        let s = r.lock_or_recover();
+        s.device_api_config.idun_api_token.clone()
+    };
+    if !idun_token.trim().is_empty() {
+        std::env::set_var("IDUN_API_TOKEN", idun_token);
+    }
+
     let config = GuardianClientConfig::default();
     let client = GuardianClient::new(config);
     app_log!(app, "bluetooth", "[idun] connecting…");

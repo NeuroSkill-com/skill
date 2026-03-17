@@ -151,6 +151,8 @@ pub struct DeviceApiConfig {
     pub emotiv_client_id: String,
     /// Emotiv Cortex API application client secret.
     pub emotiv_client_secret: String,
+    /// IDUN Cloud API token used when cloud decoding is enabled.
+    pub idun_api_token: String,
 }
 
 // ── Sleep schedule ─────────────────────────────────────────────────────────────
