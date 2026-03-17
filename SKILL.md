@@ -37,6 +37,7 @@ automation pipeline.
    - [calibrations](#calibrations)
    - [calibrate](#calibrate)
    - [timer](#timer)
+   - [health](#health)
    - [dnd](#dnd)
    - [raw](#raw)
    - [search-images](#search-images)
@@ -617,6 +618,7 @@ node cli.ts listen --seconds 60 --json | jq '[.[] | select(.event == "hook") | .
 | `--bedtime <HH:MM>` | (`sleep-schedule set`) Bedtime in 24-h format (e.g. `23:00`) |
 | `--wake <HH:MM>` | (`sleep-schedule set`) Wake-up time in 24-h format (e.g. `07:00`) |
 | `--preset <id>` | (`sleep-schedule set`) Apply a named preset: `default`, `early_bird`, `night_owl`, `short_sleeper`, `long_sleeper` |
+| `--metric-type <t>` | (`health metrics`) Metric type to query: `restingHeartRate`, `hrv`, `vo2Max`, `bodyMass`, etc. |
 
 ---
 
@@ -2283,6 +2285,186 @@ curl -s -X POST http://127.0.0.1:8375/ \
   -H "Content-Type: application/json" \
   -d '{"command":"timer"}'
 ```
+
+---
+
+### `health`
+
+Query and manage Apple HealthKit data synced from the iOS companion app.
+Data is stored in `~/.skill/health.sqlite` and covers sleep analysis, workouts,
+heart rate, step counts, mindfulness sessions, and arbitrary scalar health metrics.
+
+**Subcommands:**
+
+| Subcommand | Description |
+|---|---|
+| `health` (or `health summary`) | Aggregate counts for a time range (default: last 24h) |
+| `health sleep` | Query sleep analysis samples (InBed, Asleep, Awake, REM, Core, Deep) |
+| `health workouts` | Query workout sessions (type, duration, calories, distance, HR) |
+| `health hr` | Query heart rate samples (bpm, context) |
+| `health steps` | Query step count aggregates |
+| `health metrics --metric-type <t>` | Query scalar health metrics (restingHeartRate, hrv, vo2Max, …) |
+| `health metric-types` | List all distinct metric types stored in the database |
+| `health sync '<json>'` | Push HealthKit data from the iOS companion app |
+
+**Options (apply to query subcommands):**
+
+| Flag | Description |
+|---|---|
+| `--start <utc>` | Start of time range (unix seconds; default: now − 24h) |
+| `--end <utc>` | End of time range (unix seconds; default: now) |
+| `--limit <n>` | Max results to return (default: 100, max: 10,000) |
+| `--metric-type <t>` | Required for `health metrics` — e.g. `restingHeartRate`, `hrv`, `vo2Max`, `bodyMass` |
+
+```bash
+# Summary — aggregate counts (last 24h):
+node cli.ts health
+node cli.ts health --json
+node cli.ts health summary --start 1740000000 --end 1740086400
+
+# Sleep samples:
+node cli.ts health sleep
+node cli.ts health sleep --json | jq '.results[] | {stage: .value, start: .start_utc}'
+
+# Workouts:
+node cli.ts health workouts
+node cli.ts health workouts --json | jq '.results[] | {type: .workout_type, cal: .active_calories}'
+
+# Heart rate:
+node cli.ts health hr --limit 20
+node cli.ts health hr --json | jq '.results[] | {bpm: .bpm, ctx: .context}'
+
+# Steps:
+node cli.ts health steps
+node cli.ts health steps --json | jq '.results[].count'
+
+# Scalar metrics:
+node cli.ts health metrics --metric-type restingHeartRate
+node cli.ts health metrics --metric-type hrv --json | jq '.results[].value'
+
+# List available metric types:
+node cli.ts health metric-types
+
+# Sync data from iOS companion:
+node cli.ts health sync '{"steps":[{"start_utc":1740000000,"end_utc":1740086400,"count":9500}]}'
+```
+
+**HTTP:**
+```bash
+# Summary (GET — last 24h):
+curl -s http://127.0.0.1:8375/v1/health/summary | jq '.'
+
+# Summary (POST — custom range):
+curl -s -X POST http://127.0.0.1:8375/v1/health/summary \
+  -H "Content-Type: application/json" \
+  -d '{"start_utc":1740000000,"end_utc":1740086400}'
+
+# Query by type:
+curl -s -X POST http://127.0.0.1:8375/v1/health/query \
+  -H "Content-Type: application/json" \
+  -d '{"type":"sleep","start_utc":1740000000,"end_utc":1740086400,"limit":100}'
+
+curl -s -X POST http://127.0.0.1:8375/v1/health/query \
+  -H "Content-Type: application/json" \
+  -d '{"type":"metrics","metric_type":"restingHeartRate","start_utc":1740000000,"end_utc":1740086400}'
+
+# List metric types:
+curl -s http://127.0.0.1:8375/v1/health/metric_types | jq '.metric_types'
+
+# Sync from iOS:
+curl -s -X POST http://127.0.0.1:8375/v1/health/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sleep": [{"source_id":"watch","start_utc":1740000000,"end_utc":1740028800,"value":"REM"}],
+    "workouts": [{"workout_type":"Running","start_utc":1740030000,"end_utc":1740033600,
+                   "duration_secs":3600,"active_calories":450,"distance_meters":8000}],
+    "heart_rate": [{"timestamp":1740030000,"bpm":72.0,"context":"sedentary"}],
+    "steps": [{"start_utc":1740000000,"end_utc":1740086400,"count":9500}],
+    "mindfulness": [{"start_utc":1740040000,"end_utc":1740041200}],
+    "metrics": [{"metric_type":"restingHeartRate","timestamp":1740000000,"value":58.0,"unit":"bpm"}]
+  }'
+```
+
+**Example output (summary):**
+```
+⚡ health  last 24h
+
+  Apple Health Summary
+    sleep samples    12
+    workouts          2
+    heart rate      148 samples
+    total steps    9500
+    mindfulness       1 sessions
+    metrics          24 entries
+```
+
+**Example output (workouts):**
+```
+⚡ health workouts  last 24h  limit: 100
+
+  type: workouts  count: 2
+
+  Running  3/17/2026, 6:30:00 AM  45m  450 kcal  8.0 km  avg HR 145
+  Yoga     3/16/2026, 8:00:00 PM  30m  120 kcal
+```
+
+**JSON responses:**
+
+Summary:
+```jsonc
+{
+  "start_utc": 1740000000,
+  "end_utc": 1740086400,
+  "sleep_samples": 12,
+  "workouts": 2,
+  "heart_rate_samples": 148,
+  "total_steps": 9500,
+  "mindfulness_sessions": 1,
+  "metric_entries": 24
+}
+```
+
+Query:
+```jsonc
+{
+  "type": "sleep",
+  "count": 12,
+  "results": [
+    { "id": 1, "source_id": "watch", "start_utc": 1740000000, "end_utc": 1740028800,
+      "value": "REM", "created_at": 1740100000 }
+  ]
+}
+```
+
+Sync:
+```jsonc
+{
+  "sleep_upserted": 1,
+  "workouts_upserted": 1,
+  "heart_rate_upserted": 1,
+  "steps_upserted": 1,
+  "mindfulness_upserted": 1,
+  "metrics_upserted": 1
+}
+```
+
+**Sync payload format (all arrays optional, idempotent upsert):**
+
+```jsonc
+{
+  "sleep":       [{ "source_id": "watch", "start_utc": 0, "end_utc": 0, "value": "REM" }],
+  "workouts":    [{ "workout_type": "Running", "start_utc": 0, "end_utc": 0, "duration_secs": 3600,
+                     "active_calories": 450, "distance_meters": 8000, "avg_heart_rate": 145 }],
+  "heart_rate":  [{ "timestamp": 0, "bpm": 72.0, "context": "sedentary" }],
+  "steps":       [{ "start_utc": 0, "end_utc": 0, "count": 9500 }],
+  "mindfulness": [{ "start_utc": 0, "end_utc": 0 }],
+  "metrics":     [{ "metric_type": "restingHeartRate", "timestamp": 0, "value": 58.0, "unit": "bpm" }]
+}
+```
+
+> **Common metric types:** `restingHeartRate`, `hrv` (SDNN ms), `vo2Max`, `bodyMass`,
+> `bloodPressureSystolic`, `bloodPressureDiastolic`, `respiratoryRate`, `bodyTemperature`,
+> `oxygenSaturation`, `bloodGlucose`.
 
 ---
 

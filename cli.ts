@@ -46,6 +46,15 @@ const CLI_VERSION = "1.1.0";
  *   hooks update <name> [opts]     Update fields on an existing hook
  *   hooks suggest "kw1,kw2"        Suggest threshold from real EEG/label data
  *   hooks log [--limit N --offset M]  View paginated hook trigger audit log rows
+ *   health                          HealthKit summary (last 24h) — sleep, workouts, steps, HR, metrics
+ *   health summary [--start --end] Aggregate counts for a time range
+ *   health sleep [--start --end]   Query Apple Health sleep samples
+ *   health workouts [--start --end] Query workout sessions
+ *   health hr [--start --end]      Query heart rate samples
+ *   health steps [--start --end]   Query step counts
+ *   health metrics --metric-type <t> [--start --end] Query scalar health metrics
+ *   health metric-types            List all stored metric types
+ *   health sync <json>             Push HealthKit data (iOS companion format)
  *   dnd                            Show DND automation status (config + live eligibility + OS state)
  *   dnd on                         Force-enable DND immediately (bypass EEG threshold)
  *   dnd off                        Force-disable DND immediately
@@ -689,6 +698,10 @@ interface Args {
   hookRecent?: number;
   /** Hook name captured as second positional arg for hooks add/remove/enable/disable/update. */
   hookName?: string;
+  /** Health data type for `health` queries (sleep, workouts, heart_rate, steps, metrics). */
+  healthType?: string;
+  /** Metric type for `health metrics` queries (e.g. restingHeartRate, hrv, vo2Max). */
+  metricType?: string;
   /** Bedtime for `sleep-schedule set --bedtime HH:MM` (24-h format). */
   bedtime?: string;
   /** Wake time for `sleep-schedule set --wake HH:MM` (24-h format). */
@@ -773,6 +786,7 @@ function parseArgs(): Args {
     "--keywords", "--scenario", "--command", "--threshold", "--recent", "--hook-text",
     "--actions", "--loops", "--break", "--auto-start", "--name",
     "--bedtime", "--wake", "--preset",
+    "--metric-type",
   ]);
 
   let i = 0;
@@ -842,6 +856,7 @@ function parseArgs(): Args {
     else if (a === "--break")       { args.calBreak     = nextInt("--break"); }
     else if (a === "--auto-start")  { args.calAutoStart = true; }
     else if (a === "--name")        { args.calName      = argv[++i]; }
+    else if (a === "--metric-type") { args.metricType    = argv[++i]; }
     else if (a === "--bedtime")     { args.bedtime      = argv[++i]; }
     else if (a === "--wake")        { args.wake          = argv[++i]; }
     else if (a === "--preset")      { args.preset        = argv[++i]; }
@@ -900,6 +915,12 @@ function parseArgs(): Args {
     }
     else if (args.command === "sleep-schedule" && !args.subAction && a === "set") {
       args.subAction = "set";
+    }
+    else if (args.command === "health" && !args.subAction) {
+      args.subAction = a.toLowerCase();
+    }
+    else if (args.command === "health" && args.subAction === "sync" && !args.rawJson) {
+      args.rawJson = a; // JSON payload
     }
     else if (args.command === "calibrations"  && !args.subAction) {
       // calibrations [list|get|create|update|delete] [<id-or-name>]
@@ -979,6 +1000,15 @@ ${m("timer",                                         "open focus-timer window an
 ${m("umap [--a-start .. --a-end .. --b-start .. --b-end ..]", "3D UMAP projection (waits for result)")}
 ${m("sleep-schedule",                                   "show current sleep schedule (bedtime, wake time, duration, preset)")}
 ${m("sleep-schedule set --bedtime HH:MM --wake HH:MM",  "update sleep schedule (supports --preset <id>)")}
+${m("health",                                           "HealthKit summary — sleep, workouts, steps, heart rate, metrics (last 24h)")}
+${m("health summary [--start --end]",                   "aggregate counts for a custom time range")}
+${m("health sleep [--start --end] [--limit N]",         "query Apple Health sleep samples")}
+${m("health workouts [--start --end] [--limit N]",      "query workout sessions")}
+${m("health hr [--start --end] [--limit N]",            "query heart rate samples")}
+${m("health steps [--start --end] [--limit N]",         "query step counts")}
+${m("health metrics --metric-type <t> [--start --end]", "query scalar health metrics (restingHeartRate, hrv, vo2Max, …)")}
+${m("health metric-types",                              "list all stored metric types")}
+${m('health sync \'{"sleep":[...]}\'',                  "push HealthKit data from iOS companion (JSON payload)")}
 ${m("dnd [on|off]",                                    "show DND automation status; 'on'/'off' force-overrides immediately")}
 ${m("llm status",                                      "LLM server status (stopped/loading/running)")}
 ${m("llm start",                                     "load active model and start LLM inference server")}
@@ -1054,6 +1084,8 @@ ${BOLD}OPTIONS${RESET}
   ${YELLOW}--max-tokens <n>${RESET}  llm chat: maximum tokens to generate per turn (default 2048)
   ${YELLOW}--help${RESET}            show this help
   ${YELLOW}--version${RESET}         print CLI version and exit
+
+  ${YELLOW}--metric-type <t>${RESET} (health metrics) metric type (e.g. ${GREEN}restingHeartRate${RESET}, ${GREEN}hrv${RESET}, ${GREEN}vo2Max${RESET})
 
 ${BOLD}EXAMPLES${RESET}
   When parameters are omitted, the CLI auto-selects ranges from your session
@@ -1290,6 +1322,31 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}#       ○ night_owl         01:00 — 09:00  (8h)${RESET}
   ${DIM}#       ○ short_sleeper     00:00 — 06:00  (6h)${RESET}
   ${DIM}#       ○ long_sleeper      22:00 — 08:00  (10h)${RESET}
+
+  ${BOLD}health${RESET} — Apple HealthKit data (synced from iOS companion)
+  ${DIM}$${RESET} npx tsx cli.ts health                              ${DIM}# summary: last 24h counts${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts health --json
+  ${DIM}$${RESET} npx tsx cli.ts health summary --start 1740000000 --end 1740086400
+  ${DIM}$${RESET} npx tsx cli.ts health sleep                        ${DIM}# sleep samples${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts health sleep --json | jq '.results[] | {stage: .value, start: .start_utc}'
+  ${DIM}$${RESET} npx tsx cli.ts health workouts                     ${DIM}# workout sessions${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts health workouts --json | jq '.results[] | {type: .workout_type, cal: .active_calories}'
+  ${DIM}$${RESET} npx tsx cli.ts health hr --limit 20                ${DIM}# heart rate samples${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts health steps                        ${DIM}# step counts${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts health metrics --metric-type restingHeartRate
+  ${DIM}$${RESET} npx tsx cli.ts health metrics --metric-type hrv --json | jq '.results[].value'
+  ${DIM}$${RESET} npx tsx cli.ts health metric-types                 ${DIM}# list all metric types${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts health sync '{"steps":[{"start_utc":1740000000,"end_utc":1740086400,"count":9500}]}'
+  ${DIM}# Output (summary):${RESET}
+  ${DIM}#   ⚡ health  last 24h${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#     Apple Health Summary${RESET}
+  ${DIM}#       sleep samples    12${RESET}
+  ${DIM}#       workouts          2${RESET}
+  ${DIM}#       heart rate      148${RESET}
+  ${DIM}#       total steps    9500${RESET}
+  ${DIM}#       mindfulness       1${RESET}
+  ${DIM}#       metrics          24${RESET}
 
   ${BOLD}umap${RESET} — 3D UMAP projection with progress (auto: last 2 sessions)
   ${DIM}$${RESET} npx tsx cli.ts umap                                ${DIM}# auto: last 2 sessions${RESET}
@@ -3518,6 +3575,184 @@ function progressBar(pct: number, width: number): string {
 }
 
 /**
+ * `health [subcommand]` — Query Apple HealthKit data synced from the iOS companion app.
+ *
+ * Subcommands:
+ * - (none) / `summary` — aggregate counts for a time range (default: last 24h)
+ * - `sleep`          — query sleep analysis samples
+ * - `workouts`       — query workout sessions
+ * - `hr`             — query heart rate samples
+ * - `steps`          — query step counts
+ * - `metrics`        — query scalar health metrics (requires `--metric-type`)
+ * - `metric-types`   — list all stored metric types
+ * - `sync`           — push HealthKit data (JSON payload)
+ */
+async function cmdHealth(args: Args): Promise<void> {
+  const sub = (args.subAction ?? "summary").toLowerCase();
+  const now = Math.floor(Date.now() / 1000);
+  const startUtc = args.start ?? (now - 86400);
+  const endUtc   = args.end   ?? now;
+  const limit    = args.limit ?? 100;
+
+  // ── sync ────────────────────────────────────────────────────────────────
+  if (sub === "sync") {
+    if (!args.rawJson) printError("usage: health sync '{\"sleep\":[...], \"steps\":[...], ...}'");
+    let payload: any;
+    try { payload = JSON.parse(args.rawJson!); } catch (e: any) {
+      printError(`invalid JSON payload: ${e.message}`);
+    }
+    payload.command = "health_sync";
+    print(`${BOLD}⚡ health sync${RESET}`);
+    const r = await send(payload);
+    if (!jsonMode) {
+      print("");
+      print(`  ${GREEN}synced${RESET}`);
+      if (r.sleep_upserted)       print(`    sleep:       ${CYAN}${r.sleep_upserted}${RESET} samples`);
+      if (r.workouts_upserted)    print(`    workouts:    ${CYAN}${r.workouts_upserted}${RESET}`);
+      if (r.heart_rate_upserted)  print(`    heart rate:  ${CYAN}${r.heart_rate_upserted}${RESET} samples`);
+      if (r.steps_upserted)       print(`    steps:       ${CYAN}${r.steps_upserted}${RESET}`);
+      if (r.mindfulness_upserted) print(`    mindfulness: ${CYAN}${r.mindfulness_upserted}${RESET}`);
+      if (r.metrics_upserted)     print(`    metrics:     ${CYAN}${r.metrics_upserted}${RESET}`);
+    }
+    printResult(r);
+    return;
+  }
+
+  // ── metric-types ────────────────────────────────────────────────────────
+  if (sub === "metric-types") {
+    print(`${BOLD}⚡ health metric-types${RESET}`);
+    const r = await send({ command: "health_metric_types" });
+    if (jsonMode) { printResult(r); return; }
+
+    const types: string[] = r.metric_types ?? [];
+    print("");
+    if (types.length === 0) {
+      print(`  ${DIM}no metric types stored yet${RESET}`);
+    } else {
+      print(`  ${CYAN}${types.length}${RESET} metric type(s):`);
+      for (const t of types) print(`    ${BOLD}${t}${RESET}`);
+    }
+    print("");
+    printResult(r);
+    return;
+  }
+
+  // ── summary ─────────────────────────────────────────────────────────────
+  if (sub === "summary" || !["sleep", "workouts", "hr", "steps", "metrics"].includes(sub)) {
+    const isDefault = args.start == null && args.end == null;
+    print(`${BOLD}⚡ health${RESET}  ${DIM}${isDefault ? "last 24h" : `${startUtc}–${endUtc}`}${RESET}`);
+
+    const r = await send({ command: "health_summary", start_utc: startUtc, end_utc: endUtc });
+    if (jsonMode) { printResult(r); return; }
+
+    print("");
+    print(`  ${CYAN}Apple Health Summary${RESET}`);
+    print(`    sleep samples    ${BOLD}${r.sleep_samples ?? 0}${RESET}`);
+    print(`    workouts         ${BOLD}${r.workouts ?? 0}${RESET}`);
+    print(`    heart rate       ${BOLD}${r.heart_rate_samples ?? 0}${RESET} samples`);
+    print(`    total steps      ${BOLD}${r.total_steps ?? 0}${RESET}`);
+    print(`    mindfulness      ${BOLD}${r.mindfulness_sessions ?? 0}${RESET} sessions`);
+    print(`    metrics          ${BOLD}${r.metric_entries ?? 0}${RESET} entries`);
+    print("");
+    if ((r.sleep_samples ?? 0) === 0 && (r.workouts ?? 0) === 0 && (r.total_steps ?? 0) === 0) {
+      print(`  ${DIM}No HealthKit data found. Sync from the iOS companion app:${RESET}`);
+      print(`  ${DIM}  POST /v1/health/sync  or  health sync '{...}'${RESET}`);
+      print("");
+    }
+    printResult(r);
+    return;
+  }
+
+  // ── typed queries ───────────────────────────────────────────────────────
+  const typeMap: Record<string, string> = {
+    sleep:    "sleep",
+    workouts: "workouts",
+    hr:       "heart_rate",
+    steps:    "steps",
+    metrics:  "metrics",
+  };
+  const dataType = typeMap[sub];
+  if (!dataType) printError(`unknown health subcommand: "${sub}"`);
+
+  if (dataType === "metrics" && !args.metricType) {
+    printError("health metrics requires --metric-type <type> (e.g. restingHeartRate, hrv, vo2Max).\n  Run 'health metric-types' to see available types.");
+  }
+
+  const payload: Record<string, unknown> = {
+    command: "health_query",
+    type: dataType,
+    start_utc: startUtc,
+    end_utc: endUtc,
+    limit,
+  };
+  if (args.metricType) payload.metric_type = args.metricType;
+
+  const isDefault = args.start == null && args.end == null;
+  print(`${BOLD}⚡ health ${sub}${RESET}  ${DIM}${isDefault ? "last 24h" : `${startUtc}–${endUtc}`}  limit: ${limit}${RESET}`);
+
+  const r = await send(payload as any);
+  if (jsonMode) { printResult(r); return; }
+
+  const results: any[] = r.results ?? [];
+  print("");
+  print(`  ${DIM}type:${RESET} ${CYAN}${r.type}${RESET}${r.metric_type ? `  ${DIM}metric:${RESET} ${CYAN}${r.metric_type}${RESET}` : ""}  ${DIM}count:${RESET} ${BOLD}${r.count ?? results.length}${RESET}`);
+
+  if (results.length === 0) {
+    print(`  ${DIM}no results${RESET}`);
+    print("");
+    printResult(r);
+    return;
+  }
+
+  // ── Format results by type ────────────────────────────────────────────
+  if (dataType === "sleep") {
+    print("");
+    for (const s of results) {
+      const start = new Date(s.start_utc * 1000).toLocaleString();
+      const end   = new Date(s.end_utc   * 1000).toLocaleString();
+      const dur   = Math.round((s.end_utc - s.start_utc) / 60);
+      const color = s.value === "REM" ? RED : s.value === "Deep" ? MAGENTA : s.value === "Awake" ? GREEN : BLUE;
+      print(`  ${color}${s.value.padEnd(8)}${RESET} ${DIM}${start} → ${end}${RESET}  ${CYAN}${dur}m${RESET}`);
+    }
+  } else if (dataType === "workouts") {
+    print("");
+    for (const w of results) {
+      const start = new Date(w.start_utc * 1000).toLocaleString();
+      const dur   = Math.round(w.duration_secs / 60);
+      const cal   = w.active_calories != null ? `${Math.round(w.active_calories)} kcal` : "";
+      const dist  = w.distance_meters != null ? `${(w.distance_meters / 1000).toFixed(1)} km` : "";
+      const hr    = w.avg_heart_rate != null ? `avg HR ${Math.round(w.avg_heart_rate)}` : "";
+      const meta  = [cal, dist, hr].filter(Boolean).join("  ");
+      print(`  ${BOLD}${w.workout_type}${RESET}  ${DIM}${start}${RESET}  ${CYAN}${dur}m${RESET}  ${meta}`);
+    }
+  } else if (dataType === "heart_rate") {
+    print("");
+    for (const hr of results) {
+      const ts  = new Date(hr.timestamp * 1000).toLocaleString();
+      const ctx = hr.context ? `  ${DIM}(${hr.context})${RESET}` : "";
+      const color = hr.bpm > 100 ? RED : hr.bpm < 60 ? BLUE : GREEN;
+      print(`  ${color}${hr.bpm.toFixed(0).padStart(3)} bpm${RESET}  ${DIM}${ts}${RESET}${ctx}`);
+    }
+  } else if (dataType === "steps") {
+    print("");
+    for (const s of results) {
+      const start = new Date(s.start_utc * 1000).toLocaleString();
+      const end   = new Date(s.end_utc   * 1000).toLocaleString();
+      print(`  ${BOLD}${s.count.toLocaleString()}${RESET} steps  ${DIM}${start} → ${end}${RESET}`);
+    }
+  } else if (dataType === "metrics") {
+    print("");
+    for (const m of results) {
+      const ts = new Date(m.timestamp * 1000).toLocaleString();
+      print(`  ${BOLD}${m.value}${RESET} ${DIM}${m.unit}${RESET}  ${DIM}${ts}${RESET}`);
+    }
+  }
+
+  print("");
+  printResult(r);
+}
+
+/**
  * `sleep-schedule [set]` — Show or update the sleep schedule configuration.
  *
  * Without a subaction, prints the current schedule (bedtime, wake time,
@@ -4850,6 +5085,9 @@ async function main(): Promise<void> {
         break;
       case "sleep-schedule":
         await cmdSleepSchedule(args);
+        break;
+      case "health":
+        await cmdHealth(args);
         break;
       case "dnd":
         await cmdDnd(args);
