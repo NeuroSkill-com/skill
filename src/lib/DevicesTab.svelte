@@ -223,6 +223,21 @@ the Free Software Foundation, version 3 only. -->
     return null;
   }
 
+  function deviceImage(name: string, hw?: string | null): string | null {
+    const muse = museImage(name, hw);
+    if (muse) return muse;
+
+    const n = name.toLowerCase();
+    if (n.includes("idun") || n.includes("guardian") || n.startsWith("ige")) {
+      return "https://25500273.fs1.hubspotusercontent-eu1.net/hub/25500273/hubfs/Guardian_3_Render001_004-1.png?width=1200&length=1200&name=Guardian_3_Render001_004-1.png";
+    }
+    if (n.includes("emotiv") || n.includes("epoc") || n.includes("insight") || n.includes("flex")) {
+      return "https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Femotiv-website-uploads-live.s3.amazonaws.com%2Fuploads%2F2020%2F02%2Fheadset-extracted-compressed.png&f=1&nofb=1&ipt=ad6587dcc49092841f2c2080997f9bb1bdf46496e9e42f715d55ef677dbf8e07";
+    }
+
+    return null;
+  }
+
   const OPENBCI_IMAGES: Record<string, string> = {
     ganglion:         "/devices/ganglion.jpg",
     ganglion_wifi:    "/devices/ganglion-wifi.jpg",
@@ -945,8 +960,8 @@ the Free Software Foundation, version 3 only. -->
               {!dev.is_paired ? 'opacity-80' : ''}">
 
     <!-- Device photo -->
-    {#if museImage(dev.name, dev.hardware_version)}
-      <img src={museImage(dev.name, dev.hardware_version)!} alt={dev.name}
+    {#if deviceImage(dev.name, dev.hardware_version)}
+      <img src={deviceImage(dev.name, dev.hardware_version)!} alt={dev.name}
            class="w-12 h-12 object-contain rounded-lg shrink-0
                   bg-muted/40 dark:bg-white/[0.04] p-1
                   {!dev.is_paired ? 'grayscale opacity-60' : ''}" />
