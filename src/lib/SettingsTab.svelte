@@ -127,8 +127,10 @@ the Free Software Foundation, version 3 only. -->
   let deviceApi        = $state<DeviceApiConfig>({ emotiv_client_id: "", emotiv_client_secret: "", idun_api_token: "" });
   let emotivApiChanged = $state(false);
   let emotivApiSaved   = $state(false);
+  let emotivApiError   = $state("");
   let idunApiChanged   = $state(false);
   let idunApiSaved     = $state(false);
+  let idunApiError     = $state("");
   let emotivSecretVisible = $state(false);
   let idunTokenVisible = $state(false);
   let emotivApiExpanded = $state(false);
@@ -164,17 +166,27 @@ the Free Software Foundation, version 3 only. -->
   }
 
   async function saveEmotivApi() {
-    await invoke("set_device_api_config", { config: deviceApi });
-    emotivApiChanged = false;
-    emotivApiSaved   = true;
-    setTimeout(() => { emotivApiSaved = false; }, 2000);
+    emotivApiError = "";
+    try {
+      await invoke("set_device_api_config", { config: deviceApi });
+      emotivApiChanged = false;
+      emotivApiSaved   = true;
+      setTimeout(() => { emotivApiSaved = false; }, 2000);
+    } catch (e: unknown) {
+      emotivApiError = e instanceof Error ? e.message : String(e);
+    }
   }
 
   async function saveIdunApi() {
-    await invoke("set_device_api_config", { config: deviceApi });
-    idunApiChanged = false;
-    idunApiSaved   = true;
-    setTimeout(() => { idunApiSaved = false; }, 2000);
+    idunApiError = "";
+    try {
+      await invoke("set_device_api_config", { config: deviceApi });
+      idunApiChanged = false;
+      idunApiSaved   = true;
+      setTimeout(() => { idunApiSaved = false; }, 2000);
+    } catch (e: unknown) {
+      idunApiError = e instanceof Error ? e.message : String(e);
+    }
   }
 
   // Derived: which connection type this board uses
@@ -378,6 +390,9 @@ the Free Software Foundation, version 3 only. -->
     }
     if (n.includes("epoc") || n.includes("emotiv")) {
       return "/devices/emotiv-epoc-x.webp";
+    }
+    if (n.includes("hermes") || n.includes("nucleus") || n.includes("re-ak") || n.includes("reak")) {
+      return "/devices/re-ak-nucleus-hermes.png";
     }
 
     return null;
@@ -940,7 +955,7 @@ the Free Software Foundation, version 3 only. -->
 <section class="flex flex-col gap-2">
   <div class="flex items-center gap-2 px-0.5">
     <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-      Device API
+      {t("settings.deviceApi.title")}
     </span>
   </div>
 
@@ -951,7 +966,7 @@ the Free Software Foundation, version 3 only. -->
         class="flex items-center justify-between w-full px-0.5 group"
         aria-expanded={emotivApiExpanded}
       >
-        <span class="text-[0.78rem] font-semibold text-foreground">Emotiv Cortex</span>
+        <span class="text-[0.78rem] font-semibold text-foreground">{t("settings.deviceApi.emotivTitle")}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
              class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
@@ -962,11 +977,11 @@ the Free Software Foundation, version 3 only. -->
 
       {#if emotivApiExpanded}
         <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
-          Required for Emotiv devices only. Other devices ignore these fields.
+          {t("settings.deviceApi.emotivDesc")}
         </p>
 
         <div class="flex flex-col gap-1.5">
-          <label for="settings-emotiv-client-id" class="text-[0.68rem] font-medium text-foreground/80">Client ID</label>
+          <label for="settings-emotiv-client-id" class="text-[0.68rem] font-medium text-foreground/80">{t("settings.deviceApi.clientId")}</label>
           <input
             id="settings-emotiv-client-id"
             type="text"
@@ -977,7 +992,7 @@ the Free Software Foundation, version 3 only. -->
         </div>
 
         <div class="flex flex-col gap-1.5">
-          <label for="settings-emotiv-client-secret" class="text-[0.68rem] font-medium text-foreground/80">Client Secret</label>
+          <label for="settings-emotiv-client-secret" class="text-[0.68rem] font-medium text-foreground/80">{t("settings.deviceApi.clientSecret")}</label>
           <div class="flex items-center gap-2">
             <input
               id="settings-emotiv-client-secret"
@@ -989,7 +1004,7 @@ the Free Software Foundation, version 3 only. -->
             <Button size="sm" variant="outline"
               class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
               onclick={() => emotivSecretVisible = !emotivSecretVisible}>
-              {emotivSecretVisible ? "hide" : "show"}
+              {emotivSecretVisible ? t("settings.deviceApi.hide") : t("settings.deviceApi.show")}
             </Button>
           </div>
         </div>
@@ -1003,9 +1018,12 @@ the Free Software Foundation, version 3 only. -->
               'border-border dark:border-white/10 text-muted-foreground'}"
             onclick={saveEmotivApi}
             disabled={!emotivApiChanged && !emotivApiSaved}>
-            {emotivApiSaved ? "Saved" : "Save"}
+            {emotivApiSaved ? t("settings.deviceApi.saved") : t("settings.deviceApi.save")}
           </Button>
         </div>
+        {#if emotivApiError}
+          <p class="text-[0.62rem] text-destructive">{emotivApiError}</p>
+        {/if}
       {/if}
 
       <Separator class="bg-border dark:bg-white/[0.04]" />
@@ -1015,7 +1033,7 @@ the Free Software Foundation, version 3 only. -->
         class="flex items-center justify-between w-full px-0.5 group"
         aria-expanded={idunApiExpanded}
       >
-        <span class="text-[0.78rem] font-semibold text-foreground">IDUN Cloud</span>
+        <span class="text-[0.78rem] font-semibold text-foreground">{t("settings.deviceApi.idunTitle")}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
              class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
@@ -1026,18 +1044,18 @@ the Free Software Foundation, version 3 only. -->
 
       {#if idunApiExpanded}
         <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
-          Optional token for IDUN cloud decoding features.
+          {t("settings.deviceApi.idunDesc")}
         </p>
         <a
           href="https://idun.tech/"
           target="_blank"
           rel="noopener noreferrer"
           class="text-[0.62rem] text-primary hover:underline w-fit">
-          Get API token from IDUN dashboard
+          {t("settings.deviceApi.idunDashboard")}
         </a>
 
         <div class="flex flex-col gap-1.5">
-          <label for="settings-idun-api-token" class="text-[0.68rem] font-medium text-foreground/80">API Token</label>
+          <label for="settings-idun-api-token" class="text-[0.68rem] font-medium text-foreground/80">{t("settings.deviceApi.apiToken")}</label>
           <div class="flex items-center gap-2">
             <input
               id="settings-idun-api-token"
@@ -1049,7 +1067,7 @@ the Free Software Foundation, version 3 only. -->
             <Button size="sm" variant="outline"
               class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
               onclick={() => idunTokenVisible = !idunTokenVisible}>
-              {idunTokenVisible ? "hide" : "show"}
+              {idunTokenVisible ? t("settings.deviceApi.hide") : t("settings.deviceApi.show")}
             </Button>
           </div>
         </div>
@@ -1063,9 +1081,12 @@ the Free Software Foundation, version 3 only. -->
               'border-border dark:border-white/10 text-muted-foreground'}"
             onclick={saveIdunApi}
             disabled={!idunApiChanged && !idunApiSaved}>
-            {idunApiSaved ? "Saved" : "Save"}
+            {idunApiSaved ? t("settings.deviceApi.saved") : t("settings.deviceApi.save")}
           </Button>
         </div>
+        {#if idunApiError}
+          <p class="text-[0.62rem] text-destructive">{idunApiError}</p>
+        {/if}
       {/if}
     </CardContent>
   </Card>
