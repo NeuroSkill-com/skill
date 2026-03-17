@@ -212,10 +212,10 @@ the Free Software Foundation, version 3 only. -->
       id: "reak",
       name: "RE-AK",
       devices: [
-        { name: "Hermes Nucleus", image: "/devices/re-ak-hermes-nucleus.svg" },
+        { name: "Nucleus-Hermès", image: "/devices/re-ak-nucleus-hermes.png" },
       ],
       instructions: [
-        "Power on Hermes Nucleus and keep it near this computer.",
+        "Power on Nucleus-Hermès and keep it near this computer.",
         "Scan and pair it in the Devices list, then connect from the preferred device flow.",
       ],
     },
