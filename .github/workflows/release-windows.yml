@@ -384,9 +384,12 @@ jobs:
       # ── Compile Rust (cargo build only) ──────────────────────────────────────
       #
       # Split from packaging so CI timing shows compile vs NSIS separately.
-      # --features custom-protocol is required: without it Tauri compiles in
-      # dev mode and the binary tries to load the UI from localhost:1420
-      # instead of serving the embedded SvelteKit build output.
+      #
+      # --features custom-protocol: required — without it Tauri compiles in
+      #   dev mode and loads UI from localhost:1420 instead of the embedded
+      #   SvelteKit build output.
+      # --features llm-vulkan: enables Vulkan GPU offloading for LLM inference
+      #   (covers NVIDIA, AMD, Intel Arc without vendor-specific SDKs).
       - name: Compile (Rust)
         shell: bash
         env:
@@ -397,7 +400,7 @@ jobs:
         run: |
           set -euo pipefail
           cd src-tauri
-          cargo build --release --features custom-protocol
+          cargo build --release --features custom-protocol,llm-vulkan
 
       # ── Package NSIS installer ───────────────────────────────────────────────
       #

@@ -591,6 +591,38 @@ if (hasMold) {
   );
 }
 
+// ── Windows: fast linker (lld-link) ──────────────────────────────────────────
+//
+// lld-link is LLVM's drop-in replacement for MSVC's link.exe and is
+// significantly faster for large Rust projects.  It ships with LLVM and
+// is auto-detected here when available.
+//
+// To disable: SKILL_NO_LLD=1
+
+function detectLldLink() {
+  if (!isWin) return false;
+  if (process.env.SKILL_NO_LLD === "1") return false;
+  // Don't override if the caller already set a linker.
+  if (process.env.CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER) return false;
+  return commandExists("lld-link");
+}
+
+const hasLldLink = detectLldLink();
+
+if (hasLldLink) {
+  const target = explicitTarget || "x86_64-pc-windows-msvc";
+  const envKey = target.toUpperCase().replace(/-/g, "_");
+  if (!process.env[`CARGO_TARGET_${envKey}_LINKER`]) {
+    process.env[`CARGO_TARGET_${envKey}_LINKER`] = "lld-link";
+  }
+  console.log("→ lld-link detected — enabling fast LLVM linker for Windows");
+} else if (isWin) {
+  console.log(
+    "→ lld-link not found — using default MSVC linker" +
+    "\n  Install: winget install LLVM.LLVM  (faster linking)"
+  );
+}
+
 // ── Run Tauri ─────────────────────────────────────────────────────────────────
 // ── Tauri CLI binary selection ─────────────────────────────────────────────
 // Prefer `cargo tauri` (Rust binary compiled on this machine) over
