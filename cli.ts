@@ -25,6 +25,8 @@ const CLI_VERSION = "1.1.0";
  *   notify "title" ["body"]        Show a native OS notification
  *   label "text"                   Create a timestamped annotation on the current moment
  *   search-labels "query"          Search labels by free text (text/context/both modes)
+ *   search-images "query"          Search screenshots by OCR text (semantic/substring modes)
+ *   screenshots-around --at <utc>  Find screenshots near a timestamp (±window)
  *   interactive "keyword"          Cross-modal 4-layer graph search (labels → EEG → found labels)
  *   search                         ANN EEG-similarity search (auto: last session, k=5)
  *   compare                        Side-by-side A/B metrics (auto: last 2 sessions)
@@ -835,6 +837,7 @@ function parseArgs(): Args {
     else if (!args.command)      { args.command = a.toLowerCase(); }
     else if (args.command === "label"         && !args.text)    { args.text    = a; }
     else if (args.command === "search-labels" && !args.text)    { args.text    = a; }
+    else if (args.command === "search-images" && !args.text)    { args.text    = a; }
     else if (args.command === "interactive"   && !args.keyword) { args.keyword = a; }
     else if (args.command === "say"           && !args.text)    { args.text    = a; }
     else if (args.command === "notify"        && !args.text)    { args.text    = a; }
@@ -946,6 +949,8 @@ ${m("sessions",                                      "list all recording session
 ${m('notify "title" ["body"]',                       "show a native OS notification")}
 ${m('label "my annotation" [--context "..."] [--at <utc>]', "create a timestamped text annotation")}
 ${m('search-labels "query" [--mode text|context|both] [--k <n>] [--ef <n>]', "search labels by free text")}
+${m('search-images "query" [--mode semantic|substring] [--k <n>]', "search screenshots by OCR text")}
+${m("screenshots-around --at <utc> [--seconds <n>]", "find screenshots near a timestamp (±window)")}
 ${m('interactive "keyword" [--k-text <n>] [--k-eeg <n>] [--k-labels <n>] [--reach <n>]', "cross-modal 4-layer graph search")}
 ${m("search [--start <utc>] [--end <utc>] [--k <n>]", "ANN EEG-similarity search on embeddings")}
 ${m("compare --a-start .. --a-end .. --b-start .. --b-end ..", "side-by-side metrics + UMAP")}
@@ -1144,6 +1149,33 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}#         "created_at": 1740412810, "eeg_metrics": { "focus": 0.74, ... } },${RESET}
   ${DIM}#       ...${RESET}
   ${DIM}#     ] }${RESET}
+
+  ${BOLD}search-images${RESET} — search screenshots by OCR text (semantic or substring)
+  ${DIM}$${RESET} npx tsx cli.ts search-images "compiler error"
+  ${DIM}$${RESET} npx tsx cli.ts search-images "login page" --k 5
+  ${DIM}$${RESET} npx tsx cli.ts search-images "TODO" --mode substring
+  ${DIM}$${RESET} npx tsx cli.ts search-images "dashboard" --json | jq '.results[].filename'
+  ${DIM}# Output:${RESET}
+  ${DIM}#   ⚡ search-images "compiler error"  (mode: semantic, k: 20)${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#   mode:    semantic${RESET}
+  ${DIM}#   k:       20   results: 3${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#   20260315/20260315143025.webp${RESET}
+  ${DIM}#      time:       3/15/2026, 2:30:25 PM${RESET}
+  ${DIM}#      app:        VS Code  window: skill — cli.ts${RESET}
+  ${DIM}#      similarity: 87%${RESET}
+  ${DIM}#      ocr:        error[E0308]: mismatched types expected…${RESET}
+
+  ${BOLD}screenshots-around${RESET} — find screenshots near a timestamp
+  ${DIM}$${RESET} npx tsx cli.ts screenshots-around --at 1740412800
+  ${DIM}$${RESET} npx tsx cli.ts screenshots-around --at 1740412800 --seconds 120
+  ${DIM}$${RESET} npx tsx cli.ts screenshots-around --at 1740412800 --json | jq '.results | length'
+  ${DIM}# Output:${RESET}
+  ${DIM}#   ⚡ screenshots-around  (timestamp: 1740412800, window: ±60s)${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#   around:  2/24/2026, 8:00:00 AM${RESET}
+  ${DIM}#   window:  ±60s   results: 4${RESET}
 
   ${BOLD}interactive${RESET} — cross-modal graph search: query → text labels → EEG moments → nearby labels
   ${DIM}$${RESET} npx tsx cli.ts interactive "deep focus"
@@ -2590,6 +2622,143 @@ async function cmdSearchLabels(args: Args): Promise<void> {
             .map(k => `${k}=${CYAN}${(m[k] as number).toFixed(2)}${RESET}`)
             .join("  ");
           if (metricStr) print(`     ${DIM}eeg:${RESET}       ${metricStr}`);
+        }
+        print("");
+      }
+    }
+  }
+
+  printResult(r);
+}
+
+/**
+ * `search-images "query"` — Search screenshots by OCR text.
+ *
+ * Delegates to the server `search_screenshots` command which supports two
+ * modes:
+ * - **semantic** (default): embeds the query text and searches the OCR HNSW
+ *   index for visually/semantically similar on-screen text.
+ * - **substring**: SQL LIKE matching against raw OCR text.
+ *
+ * Each result includes: timestamp, filename, app_name, window_title,
+ * ocr_text, and similarity score (for semantic mode).
+ *
+ * Screenshot images can be viewed at:
+ *   `http://127.0.0.1:<port>/screenshots/<filename>`
+ *
+ * **HTTP / WS equivalent**:
+ * ```sh
+ * curl -s -X POST http://127.0.0.1:8375/ \
+ *   -H "Content-Type: application/json" \
+ *   -d '{"command":"search_screenshots","query":"my text","k":20,"mode":"semantic"}'
+ * ```
+ *
+ * @param args - Parsed CLI arguments. `text` is the query string (required).
+ */
+async function cmdSearchImages(args: Args): Promise<void> {
+  if (!args.text) printError('usage: cli.ts search-images "your query text"');
+  const query = args.text!;
+  const k     = args.k    ?? 20;
+  const mode  = args.mode ?? "semantic";
+
+  const validModes = ["semantic", "substring"];
+  if (!validModes.includes(mode)) {
+    printError(`invalid --mode "${mode}": must be one of ${validModes.join(", ")}`);
+  }
+
+  print(`${BOLD}⚡ search-images${RESET} ${GREEN}"${query}"${RESET}  ${DIM}(mode: ${mode}, k: ${k})${RESET}`);
+
+  const r = await send({ command: "search_screenshots", query, k, mode }, 30000);
+  if (!r.ok && r.error) printError(`server returned ok=false: ${r.error}`);
+
+  if (!jsonMode) {
+    const results = (r.results ?? []) as Array<{
+      timestamp: number; unix_ts: number; filename: string;
+      app_name: string; window_title: string; ocr_text: string;
+      similarity: number;
+    }>;
+
+    print(`\n  ${DIM}mode:${RESET}    ${CYAN}${r.mode ?? mode}${RESET}`);
+    print(`  ${DIM}k:${RESET}       ${CYAN}${r.k ?? k}${RESET}   ${DIM}results:${RESET} ${GREEN}${r.count ?? results.length}${RESET}\n`);
+
+    if (results.length === 0) {
+      print(`  ${DIM}no results — screenshots may not be captured or OCR-indexed yet${RESET}`);
+      print(`  ${DIM}(check Settings → Screenshots to enable capture)${RESET}`);
+    } else {
+      for (const hit of results) {
+        const simPct  = ((hit.similarity ?? 0) * 100).toFixed(0);
+        const ts      = fmtTs(hit.unix_ts ?? hit.timestamp);
+        const appName = hit.app_name || "unknown";
+
+        print(`  ${BOLD}${hit.filename}${RESET}`);
+        print(`     ${DIM}time:${RESET}       ${ts}`);
+        print(`     ${DIM}app:${RESET}        ${CYAN}${appName}${RESET}  ${DIM}window:${RESET} ${hit.window_title || "—"}`);
+        if (mode === "semantic") {
+          print(`     ${DIM}similarity:${RESET} ${CYAN}${simPct}%${RESET}`);
+        }
+        if (hit.ocr_text) {
+          const preview = hit.ocr_text.length > 120
+            ? hit.ocr_text.slice(0, 120).replace(/\n/g, " ") + "…"
+            : hit.ocr_text.replace(/\n/g, " ");
+          print(`     ${DIM}ocr:${RESET}        ${preview}`);
+        }
+        print("");
+      }
+    }
+  }
+
+  printResult(r);
+}
+
+/**
+ * `screenshots-around --at <utc>` — Find screenshots near a given timestamp.
+ *
+ * Delegates to the server `screenshots_around` command which returns all
+ * screenshots within ±`window_secs` of the target timestamp.
+ *
+ * **HTTP / WS equivalent**:
+ * ```sh
+ * curl -s -X POST http://127.0.0.1:8375/ \
+ *   -H "Content-Type: application/json" \
+ *   -d '{"command":"screenshots_around","timestamp":1740412800,"window_secs":60}'
+ * ```
+ *
+ * @param args - Parsed CLI arguments. `at` is the target unix timestamp (required).
+ */
+async function cmdScreenshotsAround(args: Args): Promise<void> {
+  if (args.at == null) printError('usage: cli.ts screenshots-around --at <unix_timestamp> [--seconds <window>]');
+  const timestamp  = args.at!;
+  const windowSecs = args.seconds ?? 60;
+
+  print(`${BOLD}⚡ screenshots-around${RESET}  ${DIM}(timestamp: ${timestamp}, window: ±${windowSecs}s)${RESET}`);
+
+  const r = await send({ command: "screenshots_around", timestamp, window_secs: windowSecs }, 30000);
+  if (!r.ok && r.error) printError(`server returned ok=false: ${r.error}`);
+
+  if (!jsonMode) {
+    const results = (r.results ?? []) as Array<{
+      timestamp: number; unix_ts: number; filename: string;
+      app_name: string; window_title: string; ocr_text: string;
+      similarity: number;
+    }>;
+
+    print(`\n  ${DIM}around:${RESET}  ${fmtTs(timestamp)}`);
+    print(`  ${DIM}window:${RESET}  ±${windowSecs}s   ${DIM}results:${RESET} ${GREEN}${r.count ?? results.length}${RESET}\n`);
+
+    if (results.length === 0) {
+      print(`  ${DIM}no screenshots found near that timestamp${RESET}`);
+    } else {
+      for (const hit of results) {
+        const ts      = fmtTs(hit.unix_ts ?? hit.timestamp);
+        const appName = hit.app_name || "unknown";
+
+        print(`  ${BOLD}${hit.filename}${RESET}`);
+        print(`     ${DIM}time:${RESET}  ${ts}   ${DIM}app:${RESET} ${CYAN}${appName}${RESET}  ${DIM}window:${RESET} ${hit.window_title || "—"}`);
+        if (hit.ocr_text) {
+          const preview = hit.ocr_text.length > 120
+            ? hit.ocr_text.slice(0, 120).replace(/\n/g, " ") + "…"
+            : hit.ocr_text.replace(/\n/g, " ");
+          print(`     ${DIM}ocr:${RESET}   ${preview}`);
         }
         print("");
       }
@@ -4548,6 +4717,12 @@ async function main(): Promise<void> {
         break;
       case "search-labels":
         await cmdSearchLabels(args);
+        break;
+      case "search-images":
+        await cmdSearchImages(args);
+        break;
+      case "screenshots-around":
+        await cmdScreenshotsAround(args);
         break;
       case "interactive":
         await cmdInteractive(args);
