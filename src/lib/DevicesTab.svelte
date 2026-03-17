@@ -754,6 +754,13 @@ the Free Software Foundation, version 3 only. -->
           <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
             Optional token for IDUN cloud decoding features.
           </p>
+          <a
+            href="https://idun.tech/"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-[0.62rem] text-primary hover:underline w-fit">
+            Get API token from IDUN dashboard
+          </a>
         </div>
 
         <div class="flex flex-col gap-1.5">
