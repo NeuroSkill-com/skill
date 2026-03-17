@@ -642,7 +642,7 @@
     if (generating) abort();
     messages = []; histIdx = -1; histDraft = "";
     try { sessionId = await invoke<number>("new_chat_session"); await sidebarRef?.refresh(); }
-    catch {}
+    catch (e) { console.error("[chat] new_chat_session failed:", e); }
     await tick();
     inputBarRef?.focus();
   }
@@ -661,7 +661,7 @@
       msgId = idCounter.value;
       await loadSessionParams(id);
       msgListRef?.scrollBottom(true);
-    } catch {}
+    } catch (e) { console.error("[chat] load_chat_session failed:", e); }
     await tick();
     inputBarRef?.focus();
   }
@@ -680,7 +680,7 @@
         msgListRef?.scrollBottom(true);
       }
       await sidebarRef?.refresh();
-    } catch {}
+    } catch (e) { console.error("[chat] handleSidebarDelete failed:", e); }
   }
 
   // ── Typing-label auto-labeller ───────────────────────────────────────────
@@ -780,7 +780,7 @@
 
     try {
       await invoke("submit_label", { labelStartUtc, text: rendered.join(" "), context: buildSessionContext() });
-    } catch {}
+    } catch (e) { console.warn("[chat] submit_label failed:", e); }
   }
 
   function onTypingWindowTick() {
@@ -817,7 +817,7 @@
       const s = await invoke<{ status: ServerStatus; model_name: string; n_ctx: number; supports_vision: boolean; supports_tools: boolean }>("get_llm_server_status");
       status = s.status; modelName = s.model_name; nCtx = s.n_ctx ?? 0;
       supportsVision = s.supports_vision ?? false; supportsTools = s.supports_tools ?? false;
-    } catch {}
+    } catch (e) { console.warn("[chat] get_llm_server_status failed:", e); }
 
     // Load tool config
     try {
@@ -834,7 +834,7 @@
           context_compression: cfg.tools.context_compression ?? { level: "normal", max_search_results: 0, max_result_chars: 0 },
         };
       }
-    } catch {}
+    } catch (e) { console.warn("[chat] get_llm_config failed:", e); }
 
     // Live status events
     try {
@@ -847,7 +847,7 @@
         if (status === "running") clearInterval(pollTimer!);
         if (status === "stopped") { supportsVision = false; supportsTools = false; nCtx = 0; }
       });
-    } catch {}
+    } catch (e) { console.warn("[chat] listen llm:status failed:", e); }
 
     // Poll while loading
     let ranAfterRunning = false;
@@ -858,12 +858,12 @@
         const s = await invoke<{ status: ServerStatus; model_name: string; n_ctx: number; supports_vision: boolean; supports_tools: boolean }>("get_llm_server_status");
         status = s.status; modelName = s.model_name; nCtx = s.n_ctx ?? 0;
         supportsVision = s.supports_vision ?? false; supportsTools = s.supports_tools ?? false;
-      } catch {}
+      } catch (e) { console.warn("[chat] poll status failed:", e); }
     }, 1500);
 
     // EEG bands
-    try { const b = await invoke<BandSnapshot | null>("get_latest_bands"); if (b) latestBands = b; } catch {}
-    try { unlistenBands = await listen<BandSnapshot>("eeg-bands", ev => { latestBands = ev.payload; }); } catch {}
+    try { const b = await invoke<BandSnapshot | null>("get_latest_bands"); if (b) latestBands = b; } catch (e) { console.warn("[chat] get_latest_bands failed:", e); }
+    try { unlistenBands = await listen<BandSnapshot>("eeg-bands", ev => { latestBands = ev.payload; }); } catch (e) { console.warn("[chat] listen eeg-bands failed:", e); }
 
     // Load persisted chat history
     try {
@@ -876,7 +876,7 @@
         msgListRef?.scrollBottom(true);
       }
       if (sessionId > 0) await loadSessionParams(sessionId);
-    } catch {}
+    } catch (e) { console.error("[chat] load last session failed:", e); }
 
     startTypingLabelTimer();
     await tick();

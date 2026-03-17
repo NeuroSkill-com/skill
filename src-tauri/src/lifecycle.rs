@@ -15,7 +15,7 @@ use crate::{
     session_connect::ConnectError,
     session_csv::new_csv_path,
     session_runner::run_device_session,
-    state::{DiscoveredDevice, StreamHandle},
+    state::StreamHandle,
     tray::refresh_tray,
     MutexExt,
 };
