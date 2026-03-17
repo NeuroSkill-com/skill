@@ -21,9 +21,6 @@ use wry::{WebContext, WebView, WebViewBuilder};
 use tao::platform::unix::EventLoopBuilderExtUnix;
 #[cfg(target_os = "windows")]
 use tao::platform::windows::EventLoopBuilderExtWindows;
-#[cfg(target_os = "macos")]
-use tao::platform::macos::EventLoopBuilderExtMacOS;
-
 use tao::platform::run_return::EventLoopExtRunReturn;
 
 #[cfg(target_os = "linux")]

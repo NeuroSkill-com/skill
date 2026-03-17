@@ -8,6 +8,7 @@
 
 pub mod config;
 pub mod context;
+pub(crate) mod platform;
 pub mod capture;
 
 pub use config::ScreenshotConfig;
