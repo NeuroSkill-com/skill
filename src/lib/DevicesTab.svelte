@@ -618,7 +618,7 @@ the Free Software Foundation, version 3 only. -->
                 src={OPENBCI_IMAGES[openbci.board]}
                 alt={openbci.board}
                 class="h-36 max-w-full object-cover rounded-xl
-                       bg-muted/30 dark:bg-white/[0.03] p-2
+                       bg-muted/30 dark:bg-white/[0.03]
                        border border-border dark:border-white/[0.06]
                        transition-all duration-200" />
             </div>
@@ -677,7 +677,7 @@ the Free Software Foundation, version 3 only. -->
             <div class="flex items-center gap-3">
               <img src="/devices/openbci-wifi-shield.png" alt="OpenBCI WiFi Shield"
                    class="h-16 w-16 object-cover rounded-lg shrink-0
-                          bg-muted/30 dark:bg-white/[0.03] p-1
+                          bg-muted/30 dark:bg-white/[0.03]
                           border border-border dark:border-white/[0.06]" />
               <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciWifiShieldIp")}</p>
             </div>
@@ -1229,7 +1229,7 @@ the Free Software Foundation, version 3 only. -->
     {#if imgSrc}
       <img src={imgSrc} alt={dev.name}
            class="w-12 h-12 object-cover rounded-lg shrink-0
-                  {imgSrc.endsWith('.png') || imgSrc.endsWith('.svg') ? 'bg-white p-1' : 'bg-muted/40 dark:bg-white/[0.04]'}
+                  {imgSrc.endsWith('.png') || imgSrc.endsWith('.svg') ? 'bg-white' : 'bg-muted/40 dark:bg-white/[0.04]'}
                   {!dev.is_paired ? 'grayscale opacity-60' : ''}" />
     {:else}
       <div class="w-12 h-12 rounded-lg shrink-0 bg-muted/40 dark:bg-white/[0.04]
