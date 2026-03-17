@@ -16,7 +16,7 @@ the Free Software Foundation, version 3 only. -->
 <CollapsibleSection title={t("dashboard.compositeScores")} dotColor="text-violet-500">
   <div class="grid grid-cols-3 gap-x-2 gap-y-1.5">
     {#each [
-      { k: "meditation",    v: meditation,    c: meditation>60?'#22c55e':meditation>30?'#f59e0b':'#6b7280', grad: 'linear-gradient(90deg,#a78bfa,#8b5cf6)' },
+      { k: "meditation",    v: meditation,    c: meditation>60?'#22c55e':meditation>30?'#f59e0b':'#6b7280', grad: 'linear-gradient(90deg,var(--color-violet-400),var(--color-violet-500))' },
       { k: "cognitiveLoad", v: cognitiveLoad, c: cognitiveLoad>70?'#ef4444':cognitiveLoad>40?'#f59e0b':'#22c55e', grad: 'linear-gradient(90deg,#38bdf8,#3b82f6)' },
       { k: "drowsiness",    v: drowsiness,    c: drowsiness>60?'#ef4444':drowsiness>30?'#f59e0b':'#22c55e', grad: 'linear-gradient(90deg,#fbbf24,#f59e0b,#ef4444)' },
     ] as item}

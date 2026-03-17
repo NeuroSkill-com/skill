@@ -81,6 +81,9 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 return json!({ "ok": false, "tool": "web_search", "error": "missing query" });
             }
 
+            let render = args.get("render").and_then(|v| v.as_bool()).unwrap_or(false);
+            let render_count = args.get("render_count").and_then(|v| v.as_u64()).unwrap_or(3).min(5) as usize;
+
             let provider = allowed_tools.web_search_provider.clone();
             tokio::task::spawn_blocking(move || {
                 let agent = ureq::AgentBuilder::new()
@@ -89,7 +92,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     .build();
 
                 // Try the configured backend first.
-                let results = match provider.backend.as_str() {
+                let mut results = match provider.backend.as_str() {
                     "brave" if !provider.brave_api_key.is_empty() => {
                         let r = brave_search(&agent, &provider.brave_api_key, &query);
                         if r.is_empty() { ddg_html_search(&agent, &query) } else { r }
@@ -101,10 +104,29 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     _ => ddg_html_search(&agent, &query),
                 };
 
+                // If render=true, visit top N result pages in headless browser
+                // and append the rendered text content to each result.
+                if render && !results.is_empty() {
+                    let urls: Vec<String> = results.iter()
+                        .take(render_count)
+                        .filter_map(|r| r.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                        .collect();
+
+                    if let Some(rendered) = headless_render_urls(&urls) {
+                        for (i, content) in rendered.into_iter().enumerate() {
+                            if i < results.len() {
+                                if let Some(obj) = results[i].as_object_mut() {
+                                    obj.insert("rendered_text".to_string(), json!(content));
+                                }
+                            }
+                        }
+                    }
+                }
+
                 if results.is_empty() {
                     json!({ "ok": true, "tool": "web_search", "query": query, "results": [], "note": "no results found" })
                 } else {
-                    json!({ "ok": true, "tool": "web_search", "query": query, "results": results })
+                    json!({ "ok": true, "tool": "web_search", "query": query, "rendered": render, "results": results })
                 }
             }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_search", "error": e.to_string() }))
         }
@@ -115,35 +137,50 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 return json!({ "ok": false, "tool": "web_fetch", "error": "url must start with http:// or https://" });
             }
 
-            let url_for_fetch = url.clone();
-            tokio::task::spawn_blocking(move || {
-                let agent = ureq::AgentBuilder::new()
-                    .timeout_connect(std::time::Duration::from_secs(3))
-                    .timeout_read(std::time::Duration::from_secs(8))
-                    .build();
-                let resp = agent
-                    .get(&url_for_fetch)
-                    .set("User-Agent", random_ua())
-                    .call();
+            let render = args.get("render").and_then(|v| v.as_bool()).unwrap_or(false);
 
-                match resp {
-                    Ok(r) => {
-                        let status = r.status();
-                        let content_type = r.header("Content-Type").unwrap_or("").to_string();
-                        let body = r.into_string().unwrap_or_default();
-                        json!({
-                            "ok": true,
-                            "tool": "web_fetch",
-                            "url": url_for_fetch,
-                            "status": status,
-                            "content_type": content_type,
-                            "content": truncate_text(&body, 12_000),
-                            "truncated": body.chars().count() > 12_000,
-                        })
+            if render {
+                // ── Headless browser rendering path ──────────────────
+                let wait_ms = args.get("wait_ms").and_then(|v| v.as_u64()).unwrap_or(2000);
+                let selector = args.get("selector").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let eval_js = args.get("eval_js").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let url_for_fetch = url.clone();
+
+                tokio::task::spawn_blocking(move || {
+                    headless_fetch_url(&url_for_fetch, wait_ms, selector.as_deref(), eval_js.as_deref())
+                }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }))
+            } else {
+                // ── Plain HTTP fetch path (original) ─────────────────
+                let url_for_fetch = url.clone();
+                tokio::task::spawn_blocking(move || {
+                    let agent = ureq::AgentBuilder::new()
+                        .timeout_connect(std::time::Duration::from_secs(3))
+                        .timeout_read(std::time::Duration::from_secs(8))
+                        .build();
+                    let resp = agent
+                        .get(&url_for_fetch)
+                        .set("User-Agent", random_ua())
+                        .call();
+
+                    match resp {
+                        Ok(r) => {
+                            let status = r.status();
+                            let content_type = r.header("Content-Type").unwrap_or("").to_string();
+                            let body = r.into_string().unwrap_or_default();
+                            json!({
+                                "ok": true,
+                                "tool": "web_fetch",
+                                "url": url_for_fetch,
+                                "status": status,
+                                "content_type": content_type,
+                                "content": truncate_text(&body, 12_000),
+                                "truncated": body.chars().count() > 12_000,
+                            })
+                        }
+                        Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_for_fetch, "error": e.to_string() }),
                     }
-                    Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url_for_fetch, "error": e.to_string() }),
-                }
-            }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }))
+                }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }))
+            }
         }
 
         "bash" => {
@@ -1128,6 +1165,200 @@ fn searxng_search(agent: &ureq::Agent, base_url: &str, query: &str) -> Vec<Value
         }));
     }
     results
+}
+
+// ── Headless browser helpers ──────────────────────────────────────────────────
+
+/// Fetch a single URL using the headless browser, returning a JSON result.
+///
+/// Launches a temporary browser session, navigates to the URL, waits for
+/// the page to load, and extracts the rendered text content.  Supports
+/// optional CSS-selector waiting, custom JS evaluation, and configurable
+/// wait time.
+fn headless_fetch_url(
+    url: &str,
+    wait_ms: u64,
+    selector: Option<&str>,
+    eval_js: Option<&str>,
+) -> Value {
+    use skill_headless::{Browser, BrowserConfig, Command};
+
+    let browser = match Browser::launch(BrowserConfig {
+        user_agent: Some(random_ua().to_string()),
+        timeout: std::time::Duration::from_secs(30),
+        ..Default::default()
+    }) {
+        Ok(b) => b,
+        Err(e) => return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("headless launch failed: {e}") }),
+    };
+
+    // Navigate to the URL.
+    if let Err(e) = browser.send(Command::Navigate { url: url.to_string() }) {
+        let _ = browser.send(Command::Close);
+        return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("navigate failed: {e}") });
+    }
+
+    // Wait for page to load — either a selector or a fixed delay.
+    if let Some(sel) = selector {
+        let resp = browser.send(Command::WaitForSelector {
+            selector: sel.to_string(),
+            timeout_ms: wait_ms.max(5000),
+        });
+        if let Ok(r) = &resp {
+            if let Some(text) = r.as_text() {
+                if text == "timeout" {
+                    tool_log!("tool:web_fetch", "selector '{}' not found within timeout on {}", sel, url);
+                }
+            }
+        }
+    } else {
+        std::thread::sleep(std::time::Duration::from_millis(wait_ms));
+    }
+
+    // If custom JS evaluation is requested, run it and return its result.
+    if let Some(js) = eval_js {
+        let js_result = match browser.send(Command::EvalJs { script: js.to_string() }) {
+            Ok(r) => r.as_text().unwrap_or("null").to_string(),
+            Err(e) => format!("eval error: {e}"),
+        };
+        let _ = browser.send(Command::Close);
+        return json!({
+            "ok": true,
+            "tool": "web_fetch",
+            "url": url,
+            "mode": "headless",
+            "eval_result": truncate_text(&js_result, 12_000),
+            "truncated": js_result.chars().count() > 12_000,
+        });
+    }
+
+    // Get the page title.
+    let title = browser.send(Command::GetTitle)
+        .ok()
+        .and_then(|r| r.as_text().map(|s| s.to_string()))
+        .unwrap_or_default();
+
+    // Get the current URL (may differ after redirects).
+    let final_url = browser.send(Command::GetUrl)
+        .ok()
+        .and_then(|r| r.as_text().map(|s| s.to_string()))
+        .unwrap_or_else(|| url.to_string());
+
+    // Extract visible text content via JS.
+    let text_script = r#"
+        (function() {
+            function extractText(node) {
+                if (!node) return '';
+                var tag = (node.tagName || '').toLowerCase();
+                if (tag === 'script' || tag === 'style' || tag === 'noscript' || tag === 'svg') return '';
+                var style = node.nodeType === 1 ? getComputedStyle(node) : null;
+                if (style && (style.display === 'none' || style.visibility === 'hidden')) return '';
+                if (node.nodeType === 3) return node.textContent;
+                var parts = [];
+                for (var i = 0; i < node.childNodes.length; i++) {
+                    parts.push(extractText(node.childNodes[i]));
+                }
+                var text = parts.join(' ');
+                var block = style && (style.display === 'block' || style.display === 'flex' ||
+                    style.display === 'grid' || style.display === 'table' ||
+                    tag === 'br' || tag === 'p' || tag === 'div' || tag === 'li' ||
+                    tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' ||
+                    tag === 'h5' || tag === 'h6' || tag === 'tr');
+                return block ? '\n' + text + '\n' : text;
+            }
+            var raw = extractText(document.body || document.documentElement);
+            return raw.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+        })()
+    "#;
+
+    let body = match browser.send(Command::EvalJs { script: text_script.to_string() }) {
+        Ok(r) => r.as_text().unwrap_or("").to_string(),
+        Err(e) => {
+            let _ = browser.send(Command::Close);
+            return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("content extraction failed: {e}") });
+        }
+    };
+
+    let _ = browser.send(Command::Close);
+
+    json!({
+        "ok": true,
+        "tool": "web_fetch",
+        "url": final_url,
+        "mode": "headless",
+        "title": title,
+        "content": truncate_text(&body, 12_000),
+        "truncated": body.chars().count() > 12_000,
+    })
+}
+
+/// Render multiple URLs in a single headless browser session and return the
+/// extracted visible text for each URL.  Used by `web_search` with
+/// `render=true` to visit top search result pages.
+///
+/// Returns `None` if the browser fails to launch.  Individual page errors
+/// result in an error string at that index instead of content.
+fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
+    use skill_headless::{Browser, BrowserConfig, Command};
+
+    let browser = Browser::launch(BrowserConfig {
+        user_agent: Some(random_ua().to_string()),
+        timeout: std::time::Duration::from_secs(20),
+        ..Default::default()
+    }).ok()?;
+
+    let text_script = r#"
+        (function() {
+            function extractText(node) {
+                if (!node) return '';
+                var tag = (node.tagName || '').toLowerCase();
+                if (tag === 'script' || tag === 'style' || tag === 'noscript' || tag === 'svg') return '';
+                var style = node.nodeType === 1 ? getComputedStyle(node) : null;
+                if (style && (style.display === 'none' || style.visibility === 'hidden')) return '';
+                if (node.nodeType === 3) return node.textContent;
+                var parts = [];
+                for (var i = 0; i < node.childNodes.length; i++) {
+                    parts.push(extractText(node.childNodes[i]));
+                }
+                var text = parts.join(' ');
+                var block = style && (style.display === 'block' || style.display === 'flex' ||
+                    style.display === 'grid' || style.display === 'table' ||
+                    tag === 'br' || tag === 'p' || tag === 'div' || tag === 'li' ||
+                    tag === 'h1' || tag === 'h2' || tag === 'h3' || tag === 'h4' ||
+                    tag === 'h5' || tag === 'h6' || tag === 'tr');
+                return block ? '\n' + text + '\n' : text;
+            }
+            var raw = extractText(document.body || document.documentElement);
+            return raw.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+        })()
+    "#;
+
+    let mut results = Vec::with_capacity(urls.len());
+
+    for url in urls {
+        tool_log!("tool:web_search", "[render] visiting {}", url);
+
+        if let Err(e) = browser.send(Command::Navigate { url: url.clone() }) {
+            results.push(format!("[error: navigate failed: {e}]"));
+            continue;
+        }
+
+        // Wait for the page to settle.
+        std::thread::sleep(std::time::Duration::from_millis(2500));
+
+        match browser.send(Command::EvalJs { script: text_script.to_string() }) {
+            Ok(r) => {
+                let text = r.as_text().unwrap_or("").to_string();
+                results.push(truncate_text(&text, 4_000));
+            }
+            Err(e) => {
+                results.push(format!("[error: content extraction failed: {e}]"));
+            }
+        }
+    }
+
+    let _ = browser.send(Command::Close);
+    Some(results)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

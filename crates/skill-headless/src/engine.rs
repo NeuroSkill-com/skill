@@ -279,7 +279,7 @@ fn run_event_loop(
     let intercept_store_nav = intercept_store.clone();
 
     let mut wv_builder = if let Some(ref mut ctx) = web_context {
-        WebViewBuilder::with_web_context(ctx)
+        WebViewBuilder::new_with_web_context(ctx)
     } else {
         WebViewBuilder::new()
     };

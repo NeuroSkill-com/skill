@@ -22,7 +22,7 @@ the Free Software Foundation, version 3 only. -->
       k: "lzc",
       v: lzc,
       c: lzc > 60 ? "#22c55e" : lzc > 35 ? "#f59e0b" : "#6b7280",
-      grad: "linear-gradient(90deg,#67e8f9,#818cf8,#a855f7)",
+      grad: "linear-gradient(90deg,#67e8f9,var(--color-violet-400),var(--color-violet-500))",
     },
     {
       k: "wakefulness",
@@ -39,7 +39,7 @@ the Free Software Foundation, version 3 only. -->
   ]);
 </script>
 
-<CollapsibleSection title={t("dashboard.consciousness")} dotColor="text-purple-400">
+<CollapsibleSection title={t("dashboard.consciousness")} dotColor="text-violet-400">
   <div class="grid grid-cols-3 gap-x-2 gap-y-1.5">
     {#each items as item}
       <MetricTooltip text={t(`tip.consciousness.${item.k}`)}>

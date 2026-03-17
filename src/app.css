@@ -354,14 +354,14 @@
 .mdr del    { text-decoration: line-through; opacity: 0.6; }
 
 .mdr a {
-  color: oklch(0.58 0.24 293);
+  color: var(--color-violet-600);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.mdr a:hover { color: oklch(0.49 0.24 293); }
+.mdr a:hover { color: var(--color-violet-700); }
 
 .mdr blockquote {
-  border-left: 3px solid oklch(0.58 0.24 293 / 35%);
+  border-left: 3px solid oklch(from var(--color-violet-600) l c h / 35%);
   margin: 0.55em 0;
   padding: 0.25em 0.85em;
   color: var(--muted-foreground);
@@ -397,11 +397,11 @@
 .mdr .mdr-code {
   font-family: ui-monospace, "Cascadia Code", "Fira Code", "Consolas", monospace;
   font-size: 0.83em;
-  background: oklch(0.58 0.24 293 / 9%);
-  color: oklch(0.52 0.22 293);
+  background: oklch(from var(--color-violet-600) l c h / 9%);
+  color: var(--color-violet-700);
   padding: 0.12em 0.38em;
   border-radius: 4px;
-  border: 1px solid oklch(0.58 0.24 293 / 18%);
+  border: 1px solid oklch(from var(--color-violet-600) l c h / 18%);
 }
 
 .mdr .mdr-pre {
@@ -442,7 +442,7 @@
 }
 .mdr .mdr-copy:hover {
   color: var(--foreground);
-  background: oklch(0.58 0.24 293 / 12%);
+  background: oklch(from var(--color-violet-600) l c h / 12%);
 }
 
 .mdr .mdr-pre pre {
@@ -478,14 +478,14 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: oklch(0.55 0.22 293);
+  color: var(--color-violet-600);
   margin: 1.1em 0 0.4em;
 }
 .dark .wn-body .mdr h1,
 .dark .wn-body .mdr h2,
 .dark .wn-body .mdr h3,
 .dark .wn-body .mdr h4 {
-  color: oklch(0.68 0.19 293);
+  color: var(--color-violet-400);
 }
 
 .wn-body .mdr ul,
@@ -498,7 +498,7 @@
   color: oklch(from var(--foreground) l c h / 85%);
 }
 .wn-body .mdr li::marker {
-  color: oklch(0.58 0.24 293);
+  color: var(--color-violet-600);
 }
 .wn-body .mdr li > p {
   margin: 0;

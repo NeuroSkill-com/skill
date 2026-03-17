@@ -37,11 +37,19 @@ pub fn builtin_llm_tools() -> Vec<Tool> {
             tool_type: "function".into(),
             function: ToolFunction {
                 name: "web_search".into(),
-                description: Some("Search the web for a query and return concise results.".into()),
+                description: Some("Search the web for a query and return concise results. When render=true, top result pages are visited in a headless browser and their rendered text content is included.".into()),
                 parameters: Some(json!({
                     "type": "object",
                     "properties": {
-                        "query": { "type": "string" }
+                        "query": { "type": "string" },
+                        "render": {
+                            "type": "boolean",
+                            "description": "If true, visit top result URLs in a headless browser and return their rendered text content (slower but handles JS-rendered pages). Default: false."
+                        },
+                        "render_count": {
+                            "type": "number",
+                            "description": "Number of top results to render when render=true (default: 3, max: 5)."
+                        }
                     },
                     "required": ["query"],
                     "additionalProperties": false
@@ -52,11 +60,27 @@ pub fn builtin_llm_tools() -> Vec<Tool> {
             tool_type: "function".into(),
             function: ToolFunction {
                 name: "web_fetch".into(),
-                description: Some("Fetch the raw text body of a public HTTP(S) URL.".into()),
+                description: Some("Fetch content from a public HTTP(S) URL. By default returns the raw text body. When render=true, uses a headless browser to render the page (executes JavaScript) and returns the rendered text content.".into()),
                 parameters: Some(json!({
                     "type": "object",
                     "properties": {
-                        "url": { "type": "string" }
+                        "url": { "type": "string" },
+                        "render": {
+                            "type": "boolean",
+                            "description": "If true, render the page in a headless browser (handles JS-rendered SPAs, dynamic content). Default: false."
+                        },
+                        "wait_ms": {
+                            "type": "number",
+                            "description": "Milliseconds to wait after page load before capturing content (only when render=true). Default: 2000."
+                        },
+                        "selector": {
+                            "type": "string",
+                            "description": "CSS selector to wait for before capturing content (only when render=true). Overrides wait_ms."
+                        },
+                        "eval_js": {
+                            "type": "string",
+                            "description": "JavaScript expression to evaluate after page load and return its result (only when render=true)."
+                        }
                     },
                     "required": ["url"],
                     "additionalProperties": false
