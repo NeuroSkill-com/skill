@@ -178,18 +178,22 @@ the Free Software Foundation, version 3 only. -->
             {/each}
 
             <!-- Bed icon (moon) -->
-            {@const bedRad = (bedAngle * Math.PI) / 180}
-            <circle cx={60 + 52 * Math.cos(bedRad)} cy={60 + 52 * Math.sin(bedRad)}
-                    r="5" class="fill-indigo-500" />
-            <text x={60 + 52 * Math.cos(bedRad)} y={60 + 52 * Math.sin(bedRad) + 2}
-                  text-anchor="middle" font-size="5">🌙</text>
+            {#if true}
+              {@const bedRad = (bedAngle * Math.PI) / 180}
+              <circle cx={60 + 52 * Math.cos(bedRad)} cy={60 + 52 * Math.sin(bedRad)}
+                      r="5" class="fill-indigo-500" />
+              <text x={60 + 52 * Math.cos(bedRad)} y={60 + 52 * Math.sin(bedRad) + 2}
+                    text-anchor="middle" font-size="5">🌙</text>
+            {/if}
 
             <!-- Wake icon (sun) -->
-            {@const wakeRad = (wakeAngle * Math.PI) / 180}
-            <circle cx={60 + 52 * Math.cos(wakeRad)} cy={60 + 52 * Math.sin(wakeRad)}
-                    r="5" class="fill-amber-400" />
-            <text x={60 + 52 * Math.cos(wakeRad)} y={60 + 52 * Math.sin(wakeRad) + 2}
-                  text-anchor="middle" font-size="5">☀️</text>
+            {#if true}
+              {@const wakeRad = (wakeAngle * Math.PI) / 180}
+              <circle cx={60 + 52 * Math.cos(wakeRad)} cy={60 + 52 * Math.sin(wakeRad)}
+                      r="5" class="fill-amber-400" />
+              <text x={60 + 52 * Math.cos(wakeRad)} y={60 + 52 * Math.sin(wakeRad) + 2}
+                    text-anchor="middle" font-size="5">☀️</text>
+            {/if}
 
             <!-- Center label -->
             <text x="60" y="58" text-anchor="middle" class="fill-foreground"

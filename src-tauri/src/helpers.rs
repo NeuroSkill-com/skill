@@ -25,35 +25,10 @@ pub(crate) fn unix_secs() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
 }
 
-/// Returns today's date as `YYYYMMDD` (UTC) without any external crate.
+/// Returns today's date as `YYYYMMDD` (UTC).
+/// Delegates to [`skill_data::util::yyyymmdd_utc`] — the canonical implementation.
 pub(crate) fn yyyymmdd_utc() -> String {
-    let mut days = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-        / 86_400;
-
-    let mut y = 1970u32;
-    loop {
-        let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-        let in_year = if leap { 366 } else { 365 };
-        if days < in_year { break; }
-        days -= in_year;
-        y += 1;
-    }
-    let leap = (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400);
-    let month_len: [u64; 12] = if leap {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-    let mut m = 1u32;
-    for &ml in &month_len {
-        if days < ml { break; }
-        days -= ml;
-        m += 1;
-    }
-    format!("{y:04}{m:02}{d:02}", d = days + 1)
+    skill_data::util::yyyymmdd_utc()
 }
 
 // ── Status / device emitters ──────────────────────────────────────────────────
