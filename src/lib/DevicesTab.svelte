@@ -95,6 +95,74 @@ the Free Software Foundation, version 3 only. -->
   let idunTokenVisible = $state(false);
   let emotivApiExpanded = $state(false);
   let idunApiExpanded   = $state(false);
+  type SupportedCompanyId = "muse" | "openbci" | "emotiv" | "idun";
+  interface SupportedDeviceItem {
+    name: string;
+    image: string;
+  }
+  interface SupportedCompany {
+    id: SupportedCompanyId;
+    name: string;
+    devices: SupportedDeviceItem[];
+    instructions: string[];
+  }
+  const SUPPORTED_COMPANIES: SupportedCompany[] = [
+    {
+      id: "muse",
+      name: "Muse",
+      devices: [
+        { name: "Muse 2016", image: "/devices/muse-gen1.jpg" },
+        { name: "Muse 2", image: "/devices/muse-gen2.jpg" },
+        { name: "Muse S", image: "/devices/muse-s-gen1.jpg" },
+        { name: "Muse S Athena", image: "/devices/muse-s-athena.jpg" },
+        { name: "MW75 Neuro", image: "/devices/muse-mw75.jpg" },
+      ],
+      instructions: [
+        "Power on your headset and keep it near this computer.",
+        "Use scan + pair in the Devices list below, then set as default if needed.",
+      ],
+    },
+    {
+      id: "openbci",
+      name: "OpenBCI",
+      devices: [
+        { name: "Ganglion", image: "/devices/openbci-ganglion.jpg" },
+        { name: "Cyton", image: "/devices/openbci-cyton.png" },
+        { name: "Cyton Daisy", image: "/devices/openbci-cyton-daisy.jpg" },
+        { name: "Galea", image: "/devices/openbci-galea.jpg" },
+      ],
+      instructions: [
+        "Open OpenBCI settings and choose your board model.",
+        "Set serial/WiFi parameters, save, then connect.",
+      ],
+    },
+    {
+      id: "emotiv",
+      name: "Emotiv",
+      devices: [
+        { name: "EPOC X", image: "/devices/emotiv-epoc-x.webp" },
+        { name: "Insight", image: "/devices/emotiv-insight.webp" },
+        { name: "FLEX Saline", image: "/devices/emotiv-flex-saline.webp" },
+        { name: "MN8", image: "/devices/emotiv-mn8.webp" },
+      ],
+      instructions: [
+        "Open Device API and fill Emotiv Cortex Client ID/Secret.",
+        "Save credentials, then pair/connect your Emotiv headset.",
+      ],
+    },
+    {
+      id: "idun",
+      name: "IDUN",
+      devices: [
+        { name: "Guardian", image: "/devices/idun-guardian.png" },
+      ],
+      instructions: [
+        "Open Device API and add your IDUN API token if required.",
+        "Save token, then pair/connect the headset from the device list.",
+      ],
+    },
+  ];
+  let supportedCompanyExpanded = $state<SupportedCompanyId | null>(null);
   let serialPorts      = $state<string[]>([]);
   let portsLoading     = $state(false);
 
@@ -294,6 +362,13 @@ the Free Software Foundation, version 3 only. -->
   );
   const hasNewUnpaired = $derived(newUnpairedDevices.length > 0);
 
+  function expandSupportedCompany(id: SupportedCompanyId) {
+    supportedCompanyExpanded = supportedCompanyExpanded === id ? null : id;
+    if (id === "openbci") openbciExpanded = true;
+    if (id === "emotiv") emotivApiExpanded = true;
+    if (id === "idun") idunApiExpanded = true;
+  }
+
   // ── Sorted device lists ────────────────────────────────────────────────────
   const pairedDevices     = $derived(devices.filter(d => d.is_paired));
   const discoveredDevices = $derived(devices.filter(d => !d.is_paired));
@@ -415,6 +490,62 @@ the Free Software Foundation, version 3 only. -->
         {t("devices.pairedCount", { n: String(pairedDevices.length) })}
       </span>
     </div>
+  </div>
+
+  <!-- ── Supported Devices ─────────────────────────────────────────────────── -->
+  <div class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      Supported Devices
+    </span>
+
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="flex flex-col gap-3 p-4">
+        {#each SUPPORTED_COMPANIES as company, i (company.id)}
+          {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
+
+          <div class="flex flex-col gap-2.5">
+            <button
+              onclick={() => expandSupportedCompany(company.id)}
+              class="flex items-center justify-between w-full"
+              aria-expanded={supportedCompanyExpanded === company.id}
+            >
+              <span class="text-[0.76rem] font-semibold text-foreground">{company.name}</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
+                          {supportedCompanyExpanded === company.id ? 'rotate-180' : ''}">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </button>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {#each company.devices as item (item.name)}
+                <button
+                  onclick={() => expandSupportedCompany(company.id)}
+                  class="flex flex-col items-center gap-1.5 rounded-lg border border-border/70
+                         dark:border-white/[0.06] bg-background/60 px-2 py-2 hover:bg-muted/50"
+                  aria-label={`${company.name} ${item.name}`}
+                >
+                  <img src={item.image} alt={item.name} class="w-12 h-12 object-contain rounded-md" />
+                  <span class="text-[0.62rem] text-center leading-tight text-foreground/85">{item.name}</span>
+                </button>
+              {/each}
+            </div>
+
+            {#if supportedCompanyExpanded === company.id}
+              <div class="rounded-lg border border-border/70 dark:border-white/[0.06] bg-muted/40 px-3 py-2.5">
+                <p class="text-[0.64rem] font-medium text-foreground/85 mb-1">How to connect</p>
+                <div class="flex flex-col gap-1">
+                  {#each company.instructions as line (line)}
+                    <p class="text-[0.62rem] text-muted-foreground leading-relaxed">• {line}</p>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </CardContent>
+    </Card>
   </div>
 
   <!-- ── Paired Devices ─────────────────────────────────────────────────────── -->
