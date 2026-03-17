@@ -105,10 +105,17 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: src-tauri
+          shared-key: windows-release-x86_64-msvc
 
       # ── Build cache (sccache) ─────────────────────────────────────────────────
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
+
+      - name: Configure sccache for GitHub Actions cache
+        shell: bash
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
 
       # ── Node.js ───────────────────────────────────────────────────────────────
       - name: Setup Node.js
@@ -416,10 +423,14 @@ jobs:
           VULKAN_SDK:        ${{ env.VULKAN_SDK }}
           LIBCLANG_PATH:     ${{ env.LIBCLANG_PATH }}
           RUSTC_WRAPPER:     sccache
+          SCCACHE_GHA_ENABLED: "true"
+          SCCACHE_CACHE_SIZE:  "10G"
         run: |
           set -euo pipefail
+          sccache --show-stats || true
           cd src-tauri
           cargo build --release --features custom-protocol,llm-vulkan
+          sccache --show-stats || true
 
       # ── Package NSIS installer ───────────────────────────────────────────────
       #
