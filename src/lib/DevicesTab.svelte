@@ -91,6 +91,8 @@ the Free Software Foundation, version 3 only. -->
   let deviceApiSaved   = $state(false);
   let emotivSecretVisible = $state(false);
   let idunTokenVisible = $state(false);
+  let emotivApiExpanded = $state(false);
+  let idunApiExpanded   = $state(false);
   let serialPorts      = $state<string[]>([]);
   let portsLoading     = $state(false);
 
@@ -711,46 +713,72 @@ the Free Software Foundation, version 3 only. -->
 
     <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
       <CardContent class="flex flex-col gap-3 p-4">
-        <div class="flex flex-col gap-1">
+        <button
+          onclick={() => emotivApiExpanded = !emotivApiExpanded}
+          class="flex items-center justify-between w-full px-0.5 group"
+          aria-expanded={emotivApiExpanded}
+        >
           <span class="text-[0.78rem] font-semibold text-foreground">Emotiv Cortex</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
+                      {emotivApiExpanded ? 'rotate-180' : ''}">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+
+        {#if emotivApiExpanded}
           <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
             Required for Emotiv devices only. Other devices ignore these fields.
           </p>
-        </div>
 
-        <div class="flex flex-col gap-1.5">
-          <label for="emotiv-client-id" class="text-[0.68rem] font-medium text-foreground/80">Client ID</label>
-          <input
-            id="emotiv-client-id"
-            type="text"
-            bind:value={deviceApi.emotiv_client_id}
-            oninput={() => { deviceApiChanged = true; }}
-            placeholder="Emotiv Cortex Client ID"
-            class="text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
-        </div>
-
-        <div class="flex flex-col gap-1.5">
-          <label for="emotiv-client-secret" class="text-[0.68rem] font-medium text-foreground/80">Client Secret</label>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-col gap-1.5">
+            <label for="emotiv-client-id" class="text-[0.68rem] font-medium text-foreground/80">Client ID</label>
             <input
-              id="emotiv-client-secret"
-              type={emotivSecretVisible ? "text" : "password"}
-              bind:value={deviceApi.emotiv_client_secret}
+              id="emotiv-client-id"
+              type="text"
+              bind:value={deviceApi.emotiv_client_id}
               oninput={() => { deviceApiChanged = true; }}
-              placeholder="Emotiv Cortex Client Secret"
-              class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
-            <Button size="sm" variant="outline"
-              class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
-              onclick={() => emotivSecretVisible = !emotivSecretVisible}>
-              {emotivSecretVisible ? "hide" : "show"}
-            </Button>
+              placeholder="Emotiv Cortex Client ID"
+              class="text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
           </div>
-        </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="emotiv-client-secret" class="text-[0.68rem] font-medium text-foreground/80">Client Secret</label>
+            <div class="flex items-center gap-2">
+              <input
+                id="emotiv-client-secret"
+                type={emotivSecretVisible ? "text" : "password"}
+                bind:value={deviceApi.emotiv_client_secret}
+                oninput={() => { deviceApiChanged = true; }}
+                placeholder="Emotiv Cortex Client Secret"
+                class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+              <Button size="sm" variant="outline"
+                class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
+                onclick={() => emotivSecretVisible = !emotivSecretVisible}>
+                {emotivSecretVisible ? "hide" : "show"}
+              </Button>
+            </div>
+          </div>
+        {/if}
 
         <Separator class="bg-border dark:bg-white/[0.04]" />
 
-        <div class="flex flex-col gap-1">
+        <button
+          onclick={() => idunApiExpanded = !idunApiExpanded}
+          class="flex items-center justify-between w-full px-0.5 group"
+          aria-expanded={idunApiExpanded}
+        >
           <span class="text-[0.78rem] font-semibold text-foreground">IDUN Cloud</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
+                      {idunApiExpanded ? 'rotate-180' : ''}">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+
+        {#if idunApiExpanded}
           <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
             Optional token for IDUN cloud decoding features.
           </p>
@@ -761,25 +789,25 @@ the Free Software Foundation, version 3 only. -->
             class="text-[0.62rem] text-primary hover:underline w-fit">
             Get API token from IDUN dashboard
           </a>
-        </div>
 
-        <div class="flex flex-col gap-1.5">
-          <label for="idun-api-token" class="text-[0.68rem] font-medium text-foreground/80">API Token</label>
-          <div class="flex items-center gap-2">
-            <input
-              id="idun-api-token"
-              type={idunTokenVisible ? "text" : "password"}
-              bind:value={deviceApi.idun_api_token}
-              oninput={() => { deviceApiChanged = true; }}
-              placeholder="IDUN API Token"
-              class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
-            <Button size="sm" variant="outline"
-              class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
-              onclick={() => idunTokenVisible = !idunTokenVisible}>
-              {idunTokenVisible ? "hide" : "show"}
-            </Button>
+          <div class="flex flex-col gap-1.5">
+            <label for="idun-api-token" class="text-[0.68rem] font-medium text-foreground/80">API Token</label>
+            <div class="flex items-center gap-2">
+              <input
+                id="idun-api-token"
+                type={idunTokenVisible ? "text" : "password"}
+                bind:value={deviceApi.idun_api_token}
+                oninput={() => { deviceApiChanged = true; }}
+                placeholder="IDUN API Token"
+                class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+              <Button size="sm" variant="outline"
+                class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
+                onclick={() => idunTokenVisible = !idunTokenVisible}>
+                {idunTokenVisible ? "hide" : "show"}
+              </Button>
+            </div>
           </div>
-        </div>
+        {/if}
 
         <div class="flex justify-end">
           <Button size="sm"
