@@ -834,7 +834,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         std::thread::Builder::new()
             .name("weights-probe".into())
             .spawn(move || {
-                if let Some((w, _c)) = crate::eeg_embeddings::probe_hf_weights(&hf_repo) {
+                if let Some((w, _c)) = skill_exg::probe_hf_weights(&hf_repo) {
                     let mut st = model_status.lock_or_recover();
                     st.weights_found  = true;
                     st.weights_path   = Some(w.display().to_string());
