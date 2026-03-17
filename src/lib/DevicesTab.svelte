@@ -231,8 +231,14 @@ the Free Software Foundation, version 3 only. -->
     if (n.includes("idun") || n.includes("guardian") || n.startsWith("ige")) {
       return "/devices/idun-guardian.png";
     }
-    if (n.includes("emotiv") || n.includes("epoc") || n.includes("insight") || n.includes("flex")) {
-      return "/devices/emotiv-epoc.png";
+    if (n.includes("insight")) {
+      return "/devices/emotiv-insight.webp";
+    }
+    if (n.includes("flex")) {
+      return "/devices/emotiv-flex-saline.webp";
+    }
+    if (n.includes("epoc") || n.includes("emotiv")) {
+      return "/devices/emotiv-epoc-x.webp";
     }
 
     return null;
