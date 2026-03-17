@@ -253,27 +253,48 @@ pub(crate) fn headless_fetch_url(
     use skill_headless::{Browser, BrowserConfig, Command};
 
     // If the standalone browser is unavailable, try the external renderer
-    // (Tauri's webview) before falling back to plain HTTP.
+    // (Tauri's webview) first, then fall back to plain HTTP.
     if Browser::is_unavailable() {
-        if let Some(result) = skill_headless::external_fetch_page(url, wait_ms) {
-            match result {
-                Ok(text) => {
-                    let text = truncate_text(&text, 12_000);
-                    return json!({
-                        "ok": true,
-                        "tool": "web_fetch",
-                        "url": url,
-                        "mode": "external_renderer",
-                        "content": text,
-                        "truncated": text.len() >= 12_000,
-                    });
-                }
-                Err(e) => {
-                    return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("external renderer: {e}"), "fallback": true });
-                }
+        // Try external renderer.
+        if let Some(Ok(text)) = skill_headless::external_fetch_page(url, wait_ms.max(4000)) {
+            if !text.trim().is_empty() {
+                let text = truncate_text(&text, 12_000);
+                return json!({
+                    "ok": true,
+                    "tool": "web_fetch",
+                    "url": url,
+                    "mode": "external_renderer",
+                    "content": text,
+                    "truncated": text.len() >= 12_000,
+                });
             }
         }
-        return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": "headless browser unavailable on this platform", "fallback": true });
+
+        // Fall back to plain HTTP.
+        tool_log!("tool:web_fetch", "[render] external renderer failed/empty, falling back to HTTP for {}", url);
+        let agent = ureq::AgentBuilder::new()
+            .timeout_connect(std::time::Duration::from_secs(3))
+            .timeout_read(std::time::Duration::from_secs(8))
+            .build();
+        return match agent.get(url).set("User-Agent", random_ua()).call() {
+            Ok(resp) => {
+                let status = resp.status();
+                let body = resp.into_string().unwrap_or_default();
+                let text = strip_html_tags(&body);
+                let cleaned: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                let content = truncate_text(&cleaned, 12_000);
+                json!({
+                    "ok": true,
+                    "tool": "web_fetch",
+                    "url": url,
+                    "status": status,
+                    "mode": "http_fallback",
+                    "content": content,
+                    "truncated": cleaned.len() > 12_000,
+                })
+            }
+            Err(e) => json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }),
+        };
     }
 
     let browser = match Browser::launch(BrowserConfig {
@@ -397,20 +418,52 @@ pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
     // If the standalone browser is unavailable, try the external renderer
     // (Tauri's webview) before returning None (which triggers HTTP fallback).
     if Browser::is_unavailable() {
-        if Browser::has_external_renderer() {
-            let mut results = Vec::with_capacity(urls.len());
-            for url in urls {
+        let has_ext = Browser::has_external_renderer();
+        let mut results = Vec::with_capacity(urls.len());
+
+        for url in urls {
+            let mut text: Option<String> = None;
+
+            // Try external renderer first (Tauri webview).
+            if has_ext {
                 tool_log!("tool:web_search", "[render:external] visiting {}", url);
-                match skill_headless::external_fetch_page(url, 2500) {
-                    Some(Ok(text)) => results.push(truncate_text(&text, 2_000)),
-                    Some(Err(e))   => results.push(format!("[error: {e}]")),
-                    None           => results.push("[error: external renderer not available]".into()),
+                match skill_headless::external_fetch_page(url, 4000) {
+                    Some(Ok(t)) if !t.trim().is_empty() => {
+                        text = Some(t);
+                    }
+                    Some(Ok(_)) => {
+                        tool_log!("tool:web_search", "[render:external] empty result for {}, trying HTTP", url);
+                    }
+                    Some(Err(e)) => {
+                        tool_log!("tool:web_search", "[render:external] failed for {}: {}, trying HTTP", url, e);
+                    }
+                    None => {}
                 }
             }
-            return Some(results);
+
+            // Fall back to plain HTTP fetch + HTML stripping.
+            if text.is_none() {
+                tool_log!("tool:web_search", "[render:http] fetching {}", url);
+                let agent = ureq::AgentBuilder::new()
+                    .timeout_connect(std::time::Duration::from_secs(3))
+                    .timeout_read(std::time::Duration::from_secs(8))
+                    .build();
+                if let Ok(resp) = agent.get(url).set("User-Agent", random_ua()).call() {
+                    let body = resp.into_string().unwrap_or_default();
+                    let stripped = strip_html_tags(&body);
+                    let cleaned: String = stripped.split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    if !cleaned.trim().is_empty() {
+                        text = Some(cleaned);
+                    }
+                }
+            }
+
+            results.push(truncate_text(text.as_deref().unwrap_or(""), 2_000));
         }
-        tool_log!("tool:web_search", "[render] headless unavailable, no external renderer");
-        return None;
+
+        return Some(results);
     }
 
     let browser = match Browser::launch(BrowserConfig {
