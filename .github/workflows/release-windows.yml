@@ -7,6 +7,12 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'CI test only — build but skip release upload'
+        type: boolean
+        default: true
 
 permissions:
   contents: write   # create/update GitHub Releases and upload assets
@@ -24,30 +30,42 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ── Verify tag matches tauri.conf.json version ────────────────────────────
-      - name: Verify version matches tag
+      # ── Resolve version ─────────────────────────────────────────────────────
+      # Tag push: verify tag matches tauri.conf.json.
+      # workflow_dispatch: read version from tauri.conf.json directly.
+      - name: Resolve version
         id: version_meta
         shell: bash
         run: |
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#v}"
+          DRY_RUN="${{ inputs.dry_run || 'false' }}"
           CONF_VERSION=$(
             grep '"version"' src-tauri/tauri.conf.json \
             | head -1 \
             | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
           )
-          if [ "$VERSION" != "$CONF_VERSION" ]; then
-            echo "::error::Tag version ($VERSION) does not match" \
-                 "tauri.conf.json version ($CONF_VERSION)."
-            echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
-                 "src-tauri/Cargo.toml, then re-tag."
-            exit 1
+
+          if [ "$DRY_RUN" = "true" ]; then
+            VERSION="$CONF_VERSION"
+            TAG="v$VERSION"
+            echo "[dry-run] Using version from tauri.conf.json: $VERSION"
+          else
+            TAG="${{ github.ref_name }}"
+            VERSION="${TAG#v}"
+            if [ "$VERSION" != "$CONF_VERSION" ]; then
+              echo "::error::Tag version ($VERSION) does not match" \
+                   "tauri.conf.json version ($CONF_VERSION)."
+              echo "::error::Bump the version in src-tauri/tauri.conf.json and" \
+                   "src-tauri/Cargo.toml, then re-tag."
+              exit 1
+            fi
+            echo "[ok] Version verified: $VERSION"
           fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "dry_run=$DRY_RUN" >> "$GITHUB_OUTPUT"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "TAG=$TAG"         >> "$GITHUB_ENV"
-          echo "[ok] Version verified: $VERSION"
 
       # ── MSVC developer environment ────────────────────────────────────────────
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
@@ -163,6 +181,7 @@ jobs:
       # TAURI_SIGNING_PRIVATE_KEY    — Ed25519 private key for signing Tauri
       #                                updater artifacts (same key as macOS/Linux)
       - name: Verify signing secrets are present
+        if: steps.version_meta.outputs.dry_run != 'true'
         id: signing_meta
         shell: bash
         env:
@@ -264,7 +283,7 @@ jobs:
       # trigger SmartScreen warnings on first run until the binary accumulates
       # reputation.  An EV (Extended Validation) certificate skips this entirely.
       - name: Import Windows code-signing certificate
-        if: steps.signing_meta.outputs.have_windows_cert == 'true'
+        if: steps.version_meta.outputs.dry_run != 'true' && steps.signing_meta.outputs.have_windows_cert == 'true'
         shell: powershell
         env:
           WINDOWS_CERTIFICATE:          ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -408,9 +427,6 @@ jobs:
       # optionally signs the installer and creates updater artifacts.
       - name: Package NSIS installer
         shell: powershell
-        env:
-          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           & powershell -ExecutionPolicy Bypass -File scripts/create-windows-nsis.ps1
           if ($LASTEXITCODE -ne 0) {
@@ -455,7 +471,36 @@ jobs:
             exit 1
           }
 
-          Write-Host "[ok] using bundle directory: $bundleDir"
+          Write-Host "[ok] NSIS installer built: $($installer.FullName) ($([math]::Round($installer.Length / 1MB, 1)) MB)"
+
+      # ── Sign installer + create updater artifacts ────────────────────────────
+      # Skipped in dry-run mode (no signing secrets available).
+      - name: Sign installer + create updater artifacts
+        if: steps.version_meta.outputs.dry_run != 'true'
+        shell: powershell
+        env:
+          TAURI_SIGNING_PRIVATE_KEY:          ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $bundleDirCandidates = @(
+            (Join-Path $PWD "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"),
+            (Join-Path $PWD "src-tauri/target/release/bundle/nsis")
+          )
+
+          $bundleDir = $null
+          $installer = $null
+          foreach ($candidate in $bundleDirCandidates) {
+            if (-not (Test-Path $candidate)) { continue }
+            $candidateInstaller = Get-ChildItem -Path $candidate -File -Filter "*.exe" -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -notmatch "(?i)uninstall" } |
+              Sort-Object LastWriteTime -Descending |
+              Select-Object -First 1
+            if ($candidateInstaller) {
+              $bundleDir = $candidate
+              $installer = $candidateInstaller
+              break
+            }
+          }
 
           if ($env:CERTIFICATE_THUMBPRINT) {
             Write-Host "[ok] signing installer: $($installer.FullName)"
@@ -498,6 +543,7 @@ jobs:
 
       # ── Locate build artifacts ────────────────────────────────────────────────
       - name: Collect artifact paths
+        if: steps.version_meta.outputs.dry_run != 'true'
         id: artifacts
         shell: bash
         run: |
@@ -564,6 +610,7 @@ jobs:
       #   *.nsis.zip               — Tauri updater bundle
       #   *.nsis.zip.sig           — Ed25519 signature for the updater
       - name: Prepare changelog notes for release
+        if: steps.version_meta.outputs.dry_run != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -615,6 +662,7 @@ jobs:
           rm -f "$TMP_SECTION" "$CONTRIBUTORS_FILE"
 
       - name: Create / update GitHub Release
+        if: steps.version_meta.outputs.dry_run != 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name:                ${{ steps.version_meta.outputs.tag }}
@@ -633,6 +681,7 @@ jobs:
       # platform workflow ran first), merges the windows-x86_64 entry, then
       # re-uploads.  If no latest.json exists yet, creates one from scratch.
       - name: Update latest.json
+        if: steps.version_meta.outputs.dry_run != 'true'
         shell: powershell
         env:
           GH_TOKEN:     ${{ github.token }}
@@ -697,7 +746,7 @@ jobs:
 
       # ── Remove the certificate from the runner's cert store ──────────────────
       - name: Remove signing certificate
-        if: always() && steps.signing_meta.outputs.have_windows_cert == 'true'
+        if: always() && steps.version_meta.outputs.dry_run != 'true' && steps.signing_meta.outputs.have_windows_cert == 'true'
         shell: powershell
         run: |
           if ($env:CERTIFICATE_THUMBPRINT) {
@@ -709,7 +758,7 @@ jobs:
 
       # ── Discord notification ──────────────────────────────────────────────────
       - name: Notify Discord of release
-        if: always()
+        if: always() && steps.version_meta.outputs.dry_run != 'true'
         shell: powershell
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
