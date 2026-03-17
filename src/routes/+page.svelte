@@ -401,11 +401,11 @@ the Free Software Foundation, version 3 only. -->
   const deviceImage = $derived((() => {
     if (status.state !== "connected") return null;
     if (isAthena)   return "/devices/muse-s-athena.jpg";
-    if (isMuseS)    return "/devices/muse-s.jpg";
-    if (isMuse2)    return "/devices/muse-2.jpg";
-    if (isMuse)     return "/devices/muse-1.jpg";       // Muse 1 / generic Muse
-    if (isGanglion) return "/devices/ganglion.jpg";
-    if (isMw75)    return "/devices/mw75.jpg";
+    if (isMuseS)    return "/devices/muse-s-gen1.jpg";
+    if (isMuse2)    return "/devices/muse-gen2.jpg";
+    if (isMuse)     return "/devices/muse-gen1.jpg";       // Muse 1 / generic Muse
+    if (isGanglion) return "/devices/openbci-ganglion.jpg";
+    if (isMw75)    return "/devices/muse-mw75.jpg";
     return null;
   })());
   const deviceImageAlt = $derived((() => {
