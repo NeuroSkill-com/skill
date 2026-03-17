@@ -33,6 +33,9 @@ use wry::WebViewBuilderExtUnix;
 
 use crate::command::Command;
 use crate::error::HeadlessError;
+use crate::intercept::{
+    self, InterceptStore, InterceptedRequest, InterceptedResponse, NavigationEvent,
+};
 use crate::response::Response;
 use crate::session::Cookie;
 
@@ -268,6 +271,13 @@ fn run_event_loop(
         Arc::new(Mutex::new(std::collections::HashMap::new()));
     let pending_ipc_clone = pending_ipc.clone();
 
+    // Network interception state.
+    let intercept_store = InterceptStore::new();
+    let intercept_store_ipc = intercept_store.clone();
+    let blocked_urls: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let blocked_urls_nav = blocked_urls.clone();
+    let intercept_store_nav = intercept_store.clone();
+
     let mut wv_builder = if let Some(ref mut ctx) = web_context {
         WebViewBuilder::with_web_context(ctx)
     } else {
@@ -323,8 +333,37 @@ fn run_event_loop(
     wv_builder = wv_builder
         .with_url(&effective_url)
         .with_devtools(config.devtools)
+        .with_navigation_handler({
+            move |url: String| {
+                let patterns = blocked_urls_nav.lock().unwrap();
+                let blocked = patterns.iter().any(|p| url.contains(p.as_str()));
+                let ts = js_timestamp();
+                intercept_store_nav.push_navigation(NavigationEvent {
+                    url: url.clone(),
+                    allowed: !blocked,
+                    timestamp_ms: ts,
+                });
+                !blocked // return true to allow, false to block
+            }
+        })
         .with_ipc_handler(move |msg| {
             let body = msg.body().to_string();
+
+            // ── Network interception messages ────────────────────────
+            if let Some(json) = body.strip_prefix("__net_req:") {
+                if let Ok(req) = serde_json::from_str::<InterceptedRequest>(json) {
+                    intercept_store_ipc.push_request(req);
+                }
+                return;
+            }
+            if let Some(json) = body.strip_prefix("__net_res:") {
+                if let Ok(resp) = serde_json::from_str::<InterceptedResponse>(json) {
+                    intercept_store_ipc.push_response(resp);
+                }
+                return;
+            }
+
+            // ── Async IPC replies (existing) ─────────────────────────
             // Expected format: "ipc_id:result_text"
             if let Some((id, result)) = body.split_once(':') {
                 let mut pending = pending_ipc_clone.lock().unwrap();
@@ -377,7 +416,10 @@ fn run_event_loop(
 
                 let wv_guard = webview.lock().unwrap();
                 if let Some(ref wv) = *wv_guard {
-                    execute_command(wv, &window, &command, reply.clone(), &pending_ipc, config.mode);
+                    execute_command(
+                        wv, &window, &command, reply.clone(), &pending_ipc,
+                        config.mode, &intercept_store, &blocked_urls,
+                    );
                 } else {
                     let _ = reply.send(Response::Error("webview destroyed".into()));
                 }
@@ -421,6 +463,8 @@ fn execute_command(
     reply: Sender<Response>,
     pending_ipc: &Arc<Mutex<std::collections::HashMap<String, Sender<Response>>>>,
     mode: Mode,
+    intercept_store: &InterceptStore,
+    blocked_urls: &Arc<Mutex<Vec<String>>>,
 ) {
     match command {
         // ── Page ─────────────────────────────────────────────────────────
@@ -844,6 +888,39 @@ fn execute_command(
             ));
         }
 
+        // ── Network Interception ────────────────────────────────────────
+        Command::EnableInterception => {
+            let script = intercept::interception_init_script();
+            let resp = match wv.evaluate_script(&script) {
+                Ok(_) => Response::Ok,
+                Err(e) => Response::Error(format!("enable interception: {e}")),
+            };
+            let _ = reply.send(resp);
+        }
+
+        Command::DisableInterception => {
+            // Restore original fetch/XHR by reloading the flag.
+            // A full restore would require storing originals, but clearing
+            // the flag prevents future re-injection.
+            let _ = wv.evaluate_script("window.__skillNetInterceptInstalled = false;");
+            let _ = reply.send(Response::Ok);
+        }
+
+        Command::GetInterceptedRequests { clear } => {
+            let log = intercept_store.snapshot(*clear);
+            let _ = reply.send(Response::Network(log));
+        }
+
+        Command::SetBlockedUrls { patterns } => {
+            *blocked_urls.lock().unwrap() = patterns.clone();
+            let _ = reply.send(Response::Ok);
+        }
+
+        Command::ClearBlockedUrls => {
+            blocked_urls.lock().unwrap().clear();
+            let _ = reply.send(Response::Ok);
+        }
+
         Command::Close => {
             let _ = reply.send(Response::Ok);
         }
@@ -942,4 +1019,13 @@ fn js_escape(s: &str) -> String {
         .replace('\n', "\\n")
         .replace('\r', "\\r")
         .replace('\t', "\\t")
+}
+
+/// Current time as milliseconds since the Unix epoch (like `Date.now()` in JS).
+fn js_timestamp() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64()
+        * 1000.0
 }

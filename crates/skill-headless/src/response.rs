@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::intercept::NetworkLog;
 use crate::session::{Cookie, StorageEntry};
 
 /// Response from a headless browser command.
@@ -26,6 +27,9 @@ pub enum Response {
 
     /// A storage entry (localStorage / sessionStorage).
     Storage(StorageEntry),
+
+    /// Intercepted network traffic log.
+    Network(NetworkLog),
 
     /// An error message from the webview.
     Error(String),
@@ -51,6 +55,14 @@ impl Response {
     /// Returns `true` if the response indicates success.
     pub fn is_ok(&self) -> bool {
         !matches!(self, Self::Error(_))
+    }
+
+    /// Extract the network log, if any.
+    pub fn as_network(&self) -> Option<&NetworkLog> {
+        match self {
+            Self::Network(log) => Some(log),
+            _ => None,
+        }
     }
 
     /// Extract error message, if any.

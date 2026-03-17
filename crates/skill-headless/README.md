@@ -18,6 +18,7 @@ The command set mirrors the most-used Chrome DevTools Protocol domains:
 | **Storage**  | Get/Set/Remove/Clear LocalStorage, Get/Set SessionStorage     |
 | **Emulation**| SetUserAgent (launch-time), SetViewport, SetJsEnabled         |
 | **Cache**    | ClearCache, ClearBrowsingData                                 |
+| **Intercept**| EnableInterception, DisableInterception, GetInterceptedRequests, SetBlockedUrls, ClearBlockedUrls |
 | **Session**  | WaitForSelector, WaitForNavigation, Close                     |
 
 ## Architecture

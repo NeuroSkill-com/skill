@@ -160,6 +160,32 @@ pub enum Command {
     /// Wait for navigation to complete (waits for `load` event).
     WaitForNavigation { timeout_ms: u64 },
 
+    // ── Network Interception ─────────────────────────────────────────────
+
+    /// Enable request/response interception.
+    ///
+    /// Once enabled, `fetch()` and `XMLHttpRequest` calls are monkey-patched
+    /// to record all traffic.  Navigation events are also captured.
+    /// Retrieve collected traffic with [`GetInterceptedRequests`].
+    EnableInterception,
+
+    /// Disable request/response interception.
+    DisableInterception,
+
+    /// Retrieve all intercepted network traffic.
+    /// If `clear` is true, the log is emptied after retrieval.
+    GetInterceptedRequests { clear: bool },
+
+    /// Block or allow navigations matching a URL pattern.
+    ///
+    /// When interception is enabled, navigations to URLs containing any of
+    /// the blocked patterns are denied.  Patterns are simple substring
+    /// matches.
+    SetBlockedUrls { patterns: Vec<String> },
+
+    /// Clear the list of blocked URL patterns.
+    ClearBlockedUrls,
+
     /// Close the browser session and destroy the webview.
     Close,
 }
