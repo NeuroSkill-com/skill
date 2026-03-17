@@ -38,6 +38,23 @@ use crate::session::Cookie;
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
+/// Display mode for the browser session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Mode {
+    /// **Headless** — the window is positioned off-screen so nothing is ever
+    /// presented to the end-user.  The webview still gets real pixel
+    /// dimensions (unlike `with_visible(false)` on GTK which reports 0x0).
+    ///
+    /// This is the default.
+    #[default]
+    Headless,
+
+    /// **Headful** — the window is shown on-screen at its normal position.
+    /// Useful for debugging, demos, or interactive automation where the
+    /// user needs to see what the browser is doing.
+    Headful,
+}
+
 /// Browser configuration.
 #[derive(Debug, Clone)]
 pub struct BrowserConfig {
@@ -45,6 +62,8 @@ pub struct BrowserConfig {
     pub width: u32,
     /// Initial viewport height.
     pub height: u32,
+    /// Display mode — [`Mode::Headless`] (default) or [`Mode::Headful`].
+    pub mode: Mode,
     /// Custom user-agent string. `None` = system default.
     pub user_agent: Option<String>,
     /// Data directory for persistent storage / cache. `None` = ephemeral.
@@ -55,8 +74,6 @@ pub struct BrowserConfig {
     pub devtools: bool,
     /// Initial URL to load (default about:blank).
     pub initial_url: String,
-    /// Whether the window should be visible (default false = headless).
-    pub visible: bool,
 }
 
 impl Default for BrowserConfig {
@@ -64,12 +81,12 @@ impl Default for BrowserConfig {
         Self {
             width: 1280,
             height: 720,
+            mode: Mode::Headless,
             user_agent: None,
             data_dir: None,
             timeout: Duration::from_secs(30),
             devtools: false,
             initial_url: "about:blank".into(),
-            visible: false,
         }
     }
 }
@@ -213,15 +230,20 @@ fn run_event_loop(
     // Send the proxy handle back to the launching thread.
     let _ = proxy_tx.send(Ok(proxy));
 
-    // Build the window.  When headless (`visible = false`) we still create
-    // a visible window but position it far off-screen so the webview gets
-    // real dimensions.  A truly invisible window (with_visible(false)) causes
-    // WebKitGTK to report 0x0 for innerWidth/innerHeight.
+    // Build the window.
+    //
+    // **Headless** — the window is positioned far off-screen so nothing is
+    // ever presented to the user.  We do NOT use `with_visible(false)`
+    // because WebKitGTK reports 0x0 for innerWidth/innerHeight on truly
+    // invisible windows.
+    //
+    // **Headful** — the window is placed at the default position and shown
+    // on-screen so the user can see what the browser is doing.
     let mut wb = WindowBuilder::new()
         .with_title("skill-headless")
         .with_inner_size(LogicalSize::new(config.width, config.height));
 
-    if !config.visible {
+    if config.mode == Mode::Headless {
         wb = wb.with_position(tao::dpi::LogicalPosition::new(-10000i32, -10000i32));
     }
 
@@ -326,7 +348,7 @@ fn run_event_loop(
 
                 let wv_guard = webview.lock().unwrap();
                 if let Some(ref wv) = *wv_guard {
-                    execute_command(wv, &window, &command, reply.clone(), &pending_ipc);
+                    execute_command(wv, &window, &command, reply.clone(), &pending_ipc, config.mode);
                 } else {
                     let _ = reply.send(Response::Error("webview destroyed".into()));
                 }
@@ -369,6 +391,7 @@ fn execute_command(
     command: &Command,
     reply: Sender<Response>,
     pending_ipc: &Arc<Mutex<std::collections::HashMap<String, Sender<Response>>>>,
+    mode: Mode,
 ) {
     match command {
         // ── Page ─────────────────────────────────────────────────────────
@@ -711,6 +734,11 @@ fn execute_command(
 
         Command::SetViewport { width, height } => {
             window.set_inner_size(LogicalSize::new(*width, *height));
+            // In headless mode, ensure the window stays off-screen after resize
+            // (some platforms may re-position it).
+            if mode == Mode::Headless {
+                window.set_outer_position(tao::dpi::LogicalPosition::new(-10000i32, -10000i32));
+            }
             let _ = reply.send(Response::Ok);
         }
 

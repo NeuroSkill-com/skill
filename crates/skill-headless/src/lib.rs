@@ -28,9 +28,16 @@
 //! ## Quick start
 //!
 //! ```rust,no_run
-//! use skill_headless::{Browser, BrowserConfig, Command};
+//! use skill_headless::{Browser, BrowserConfig, Command, Mode};
 //!
+//! // Headless (default) — no visible window.
 //! let browser = Browser::launch(BrowserConfig::default())?;
+//!
+//! // Headful — visible window for debugging.
+//! // let browser = Browser::launch(BrowserConfig {
+//! //     mode: Mode::Headful,
+//! //     ..Default::default()
+//! // })?;
 //!
 //! // Navigate
 //! let nav = browser.send(Command::Navigate {
@@ -66,7 +73,7 @@ mod response;
 mod session;
 
 pub use command::Command;
-pub use engine::{Browser, BrowserConfig};
+pub use engine::{Browser, BrowserConfig, Mode};
 pub use error::HeadlessError;
 pub use response::Response;
 pub use session::{Cookie, StorageEntry};

@@ -2,7 +2,7 @@
 //! Smoke test — launches a headless browser, navigates, evaluates JS, and
 //! exercises the major command categories.
 
-use skill_headless::{Browser, BrowserConfig, Command, Cookie};
+use skill_headless::{Browser, BrowserConfig, Command, Cookie, Mode};
 use std::time::Duration;
 
 fn main() {
@@ -13,7 +13,7 @@ fn main() {
     let browser = Browser::launch(BrowserConfig {
         width: 1024,
         height: 768,
-        visible: false,
+        mode: Mode::Headless,
         devtools: false,
         timeout: Duration::from_secs(15),
         ..Default::default()
@@ -293,6 +293,9 @@ fn main() {
     println!("    Response: {:?}", resp);
     println!("    PASS");
 
+    // Wait for reload to complete before continuing.
+    std::thread::sleep(Duration::from_millis(500));
+
     // ── GoBack / GoForward ───────────────────────────────────────────────
     println!("\n[21] GoBack / GoForward...");
     let r = browser.send(Command::GoBack);
@@ -313,13 +316,12 @@ fn main() {
 
     // ── CallFunction ─────────────────────────────────────────────────────
     println!("\n[23] CallFunction...");
-    // First define a function.
+    // First define a function (use EvalJs to wait for completion).
     browser
-        .send(Command::EvalJsNoReturn {
-            script: "window.myAdd = (a, b) => a + b;".into(),
+        .send(Command::EvalJs {
+            script: "window.myAdd = (a, b) => a + b; 'defined'".into(),
         })
         .expect("define function failed");
-    std::thread::sleep(Duration::from_millis(100));
     let resp = browser
         .send(Command::CallFunction {
             function: "window.myAdd".into(),
@@ -331,6 +333,13 @@ fn main() {
     println!("    PASS");
 
     // ── WaitForSelector ──────────────────────────────────────────────────
+    // Re-inject test page (reload in test [20] cleared it).
+    browser
+        .send(Command::EvalJs {
+            script: "document.body.innerHTML = '<h1 id=\"heading\">Hello</h1>'; 'ok'".into(),
+        })
+        .unwrap();
+
     println!("\n[24] WaitForSelector('#heading', 2000ms)...");
     let resp = browser
         .send(Command::WaitForSelector {

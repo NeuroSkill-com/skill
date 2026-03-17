@@ -30,10 +30,17 @@ The command set mirrors the most-used Chrome DevTools Protocol domains:
                                                       └────────────────┘
 ```
 
+## Modes
+
+| Mode | Description |
+|------|-------------|
+| `Mode::Headless` (default) | Window is positioned off-screen. Nothing is ever shown to the user. Webview still gets real pixel dimensions. |
+| `Mode::Headful` | Window is visible on-screen. Useful for debugging, demos, or interactive automation. |
+
 ## Quick Start
 
 ```rust
-use skill_headless::{Browser, BrowserConfig, Command};
+use skill_headless::{Browser, BrowserConfig, Command, Mode};
 
 let browser = Browser::launch(BrowserConfig::default())?;
 
@@ -99,15 +106,25 @@ browser.send(Command::Close)?;
 ## Configuration
 
 ```rust
+use skill_headless::Mode;
+
+// Headless (default) — no visible window
 let browser = Browser::launch(BrowserConfig {
     width: 1920,
     height: 1080,
+    mode: Mode::Headless,
     user_agent: Some("SkillBot/1.0".into()),
     data_dir: Some("/tmp/skill-browser".into()),
     timeout: std::time::Duration::from_secs(60),
-    devtools: true,
+    devtools: false,
     initial_url: "https://example.com".into(),
-    visible: false, // true = show window (debugging)
+    ..Default::default()
+})?;
+
+// Headful — visible window for debugging / demos
+let browser = Browser::launch(BrowserConfig {
+    mode: Mode::Headful,
+    devtools: true,
     ..Default::default()
 })?;
 ```

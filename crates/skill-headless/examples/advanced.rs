@@ -582,6 +582,7 @@ fn main() {
     });
 
     test!("Custom user-agent — exact match", {
+        std::thread::sleep(Duration::from_millis(500));
         let out = std::process::Command::new(&exe)
             .args(["--ua-test", "MyAgent/2.5 (NeuroSkill; rv:42)"])
             .output()
