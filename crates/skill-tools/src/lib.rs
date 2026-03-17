@@ -34,6 +34,7 @@ pub mod types;
 pub mod parse;
 pub mod defs;
 pub mod exec;
+pub(crate) mod search;
 pub mod context;
 
 // Re-export the most-used types at crate root for convenience.

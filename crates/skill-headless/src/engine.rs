@@ -234,8 +234,6 @@ fn run_event_loop(
     builder.with_any_thread(true);
     #[cfg(target_os = "windows")]
     builder.with_any_thread(true);
-    #[cfg(target_os = "macos")]
-    builder.with_any_thread(true);
 
     let mut event_loop = builder.build();
     let proxy = event_loop.create_proxy();
