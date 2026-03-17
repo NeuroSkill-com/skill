@@ -742,12 +742,10 @@ the Free Software Foundation, version 3 only. -->
 
 <main class="h-full min-h-0 overflow-y-auto p-2 flex flex-col items-center" onscroll={handleScroll}
       aria-label="Dashboard">
-  <!-- GPU utilisation chart — only visible during an active session -->
-  {#if status.state === "connected"}
+  <!-- GPU utilisation chart — always visible when GPU stats are available -->
   <div class="w-full max-w-[460px]">
     <GpuChart />
   </div>
-  {/if}
 
   <!-- ── ZUNA model download / retry progress banner ─────────────────────── -->
   {#if modelDlVisible}

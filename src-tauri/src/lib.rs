@@ -261,6 +261,7 @@ use settings_cmds::{
     get_recent_active_windows, get_recent_input_activity,
     get_input_buckets,
     get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status, test_dnd, list_focus_modes,
+    get_sleep_config, set_sleep_config,
     get_llm_config, set_llm_config, pick_gguf_file,
     get_screenshot_config, set_screenshot_config,
     estimate_screenshot_reembed, rebuild_screenshot_embeddings,
@@ -1387,6 +1388,7 @@ pub fn run() {
             get_recent_active_windows, get_recent_input_activity,
             get_input_buckets,
             get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status, test_dnd, list_focus_modes,
+            get_sleep_config, set_sleep_config,
             get_llm_config, set_llm_config, pick_gguf_file,
             // LLM catalog (compiled in regardless; no-op stubs when `llm` feature absent)
             #[cfg(feature = "llm")]

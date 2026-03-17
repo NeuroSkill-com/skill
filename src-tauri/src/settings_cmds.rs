@@ -1180,6 +1180,25 @@ pub async fn pick_ref_wav_file() -> Option<String> {
 /// The LLM endpoints (`/v1/*`) are only active when `enabled = true` **and**
 /// the binary was compiled with `--features llm`.  Changes take effect on the
 /// next app restart.
+// ── Sleep schedule ─────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_sleep_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> crate::settings::SleepConfig {
+    state.lock_or_recover().sleep_config.clone()
+}
+
+#[tauri::command]
+pub fn set_sleep_config(
+    config: crate::settings::SleepConfig,
+    app:    AppHandle,
+    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    state.lock_or_recover().sleep_config = config;
+    crate::save_settings(&app);
+}
+
+// ── LLM ───────────────────────────────────────────────────────────────────────
+
 #[tauri::command]
 pub fn get_llm_config(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
