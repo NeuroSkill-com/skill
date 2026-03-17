@@ -511,6 +511,7 @@ pub(crate) async fn connect_openbci_board(
 
 // ── Emotiv (Cortex WebSocket API) ──────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub(crate) async fn connect_emotiv(
     app:    &AppHandle,
     cancel: &tokio_util::sync::CancellationToken,
@@ -593,6 +594,7 @@ pub(crate) async fn connect_emotiv(
 
 // ── IDUN Guardian (BLE) ───────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 pub(crate) async fn connect_idun(
     app:    &AppHandle,
     cancel: &tokio_util::sync::CancellationToken,

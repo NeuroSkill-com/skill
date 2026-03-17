@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
 use skill_eeg::eeg_quality::SignalQuality;
 
