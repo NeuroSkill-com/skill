@@ -266,7 +266,7 @@ const en: Record<string, string> = {
   "settings.powerOnMuse":             "Power on your BCI device (Muse, Ganglion, or other) — the scanner picks it up within a few seconds.",
   "settings.supportedDevices.title":  "Supported Devices",
   "settings.supportedDevices.howToConnect": "How to connect",
-  "settings.supportedDevices.company.muse": "Muse",
+  "settings.supportedDevices.company.muse": "InteraXon",
   "settings.supportedDevices.company.neurable": "Neurable",
   "settings.supportedDevices.company.openbci": "OpenBCI",
   "settings.supportedDevices.company.emotiv": "Emotiv",
