@@ -168,6 +168,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         ws_port:                s.ws_port,
         update_check_interval_secs: s.update_check_interval_secs,
         openbci:                s.openbci_config.clone(),
+        device_api:             s.device_api_config.clone(),
         neutts:                 s.neutts_config.clone(),
         tts_preload:            s.tts_preload,
         track_active_window:    s.track_active_window,

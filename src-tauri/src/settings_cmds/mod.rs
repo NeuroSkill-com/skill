@@ -32,7 +32,7 @@ use crate::{
 };
 use crate::tray::refresh_tray;
 use skill_eeg::eeg_filter::{FilterConfig, PowerlineFreq};
-use crate::settings::{OpenBciConfig, NeuttsConfig, HookRule, HookStatus};
+use crate::settings::{OpenBciConfig, DeviceApiConfig, NeuttsConfig, HookRule, HookStatus};
 use crate::active_window::ActiveWindowInfo;
 use skill_data::activity_store::{ActiveWindowRow, InputActivityRow, InputBucketRow};
 use skill_eeg::eeg_bands::BandSnapshot;
@@ -811,6 +811,23 @@ pub fn set_openbci_config(
     state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().openbci_config = config;
+    crate::save_settings(&app);
+}
+
+/// Return the current device API credential configuration.
+#[tauri::command]
+pub fn get_device_api_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DeviceApiConfig {
+    state.lock_or_recover().device_api_config.clone()
+}
+
+/// Persist device API credential configuration.
+#[tauri::command]
+pub fn set_device_api_config(
+    config: DeviceApiConfig,
+    app:    AppHandle,
+    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    state.lock_or_recover().device_api_config = config;
     crate::save_settings(&app);
 }
 

@@ -520,16 +520,35 @@ pub(crate) async fn connect_emotiv(
 
     app_log!(app, "bluetooth", "[emotiv] connecting via Cortex API…");
 
+    let device_api = {
+        let r = app.app_state();
+        let s = r.lock_or_recover();
+        s.device_api_config.clone()
+    };
+
+    let client_id = if device_api.emotiv_client_id.trim().is_empty() {
+        std::env::var("EMOTIV_CLIENT_ID").unwrap_or_default()
+    } else {
+        device_api.emotiv_client_id
+    };
+
+    let client_secret = if device_api.emotiv_client_secret.trim().is_empty() {
+        std::env::var("EMOTIV_CLIENT_SECRET").unwrap_or_default()
+    } else {
+        device_api.emotiv_client_secret
+    };
+
     let config = CortexClientConfig {
-        client_id: std::env::var("EMOTIV_CLIENT_ID").unwrap_or_default(),
-        client_secret: std::env::var("EMOTIV_CLIENT_SECRET").unwrap_or_default(),
+        client_id,
+        client_secret,
         ..Default::default()
     };
 
     if config.client_id.is_empty() || config.client_secret.is_empty() {
         return Err(ConnectError::Other(
             "Emotiv credentials not configured.\n\n\
-             Set the EMOTIV_CLIENT_ID and EMOTIV_CLIENT_SECRET environment variables\n\
+             Set Emotiv credentials in Settings → Devices → Device API, or set\n\
+             EMOTIV_CLIENT_ID and EMOTIV_CLIENT_SECRET environment variables\n\
              (from https://www.emotiv.com/my-account/cortex-apps/)."
             .into(),
         ));

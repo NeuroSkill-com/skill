@@ -70,6 +70,10 @@ the Free Software Foundation, version 3 only. -->
     galea_ip:         string;
     channel_labels:   string[];
   }
+  interface DeviceApiConfig {
+    emotiv_client_id: string;
+    emotiv_client_secret: string;
+  }
   const OPENBCI_DEFAULT: OpenBciConfig = {
     board: "ganglion", scan_timeout_secs: 10,
     serial_port: "", wifi_shield_ip: "", wifi_local_port: 3000,
@@ -81,6 +85,10 @@ the Free Software Foundation, version 3 only. -->
   let openbciConnecting = $state(false);
   let openbciError     = $state("");
   let openbciExpanded  = $state(false);
+  let deviceApi        = $state<DeviceApiConfig>({ emotiv_client_id: "", emotiv_client_secret: "" });
+  let deviceApiChanged = $state(false);
+  let deviceApiSaved   = $state(false);
+  let emotivSecretVisible = $state(false);
   let serialPorts      = $state<string[]>([]);
   let portsLoading     = $state(false);
 
@@ -108,6 +116,13 @@ the Free Software Foundation, version 3 only. -->
     } finally {
       openbciConnecting = false;
     }
+  }
+
+  async function saveDeviceApi() {
+    await invoke("set_device_api_config", { config: deviceApi });
+    deviceApiChanged = false;
+    deviceApiSaved   = true;
+    setTimeout(() => { deviceApiSaved = false; }, 2000);
   }
 
   const isBle    = $derived(openbci.board === "ganglion");
@@ -332,6 +347,7 @@ the Free Software Foundation, version 3 only. -->
     gpuStats    = await invoke<GpuStats | null>("get_gpu_stats").catch(() => null);
 
     openbci = await invoke<OpenBciConfig>("get_openbci_config");
+    deviceApi = await invoke<DeviceApiConfig>("get_device_api_config");
     await loadSerialPorts();
 
     nowTimer = setInterval(() => now = Math.floor(Date.now() / 1000), 1000);
@@ -681,6 +697,68 @@ the Free Software Foundation, version 3 only. -->
       <p class="text-[0.65rem] text-red-500 px-0.5 -mt-1">{openbciError}</p>
     {/if}
     {/if}
+  </div>
+
+  <!-- ── Device API ────────────────────────────────────────────────────────── -->
+  <div class="flex flex-col gap-2">
+    <div class="flex items-center gap-2 px-0.5">
+      <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+        Device API
+      </span>
+    </div>
+
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="flex flex-col gap-3 p-4">
+        <div class="flex flex-col gap-1">
+          <span class="text-[0.78rem] font-semibold text-foreground">Emotiv Cortex</span>
+          <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+            Required for Emotiv devices only. Other devices ignore these fields.
+          </p>
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="emotiv-client-id" class="text-[0.68rem] font-medium text-foreground/80">Client ID</label>
+          <input
+            id="emotiv-client-id"
+            type="text"
+            bind:value={deviceApi.emotiv_client_id}
+            oninput={() => { deviceApiChanged = true; }}
+            placeholder="Emotiv Cortex Client ID"
+            class="text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="emotiv-client-secret" class="text-[0.68rem] font-medium text-foreground/80">Client Secret</label>
+          <div class="flex items-center gap-2">
+            <input
+              id="emotiv-client-secret"
+              type={emotivSecretVisible ? "text" : "password"}
+              bind:value={deviceApi.emotiv_client_secret}
+              oninput={() => { deviceApiChanged = true; }}
+              placeholder="Emotiv Cortex Client Secret"
+              class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+            <Button size="sm" variant="outline"
+              class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
+              onclick={() => emotivSecretVisible = !emotivSecretVisible}>
+              {emotivSecretVisible ? "hide" : "show"}
+            </Button>
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <Button size="sm"
+            variant={deviceApiSaved ? "secondary" : "outline"}
+            class="text-[0.66rem] h-7 px-3
+              {deviceApiSaved ? 'text-green-600 dark:text-green-400 border-green-500/30' :
+              deviceApiChanged ? 'border-primary/50 text-primary' :
+              'border-border dark:border-white/10 text-muted-foreground'}"
+            onclick={saveDeviceApi}
+            disabled={!deviceApiChanged && !deviceApiSaved}>
+            {deviceApiSaved ? "Saved" : "Save"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   </div>
 
   <!-- ── Signal Processing ──────────────────────────────────────────────────── -->
