@@ -38,7 +38,9 @@ automation pipeline.
    - [timer](#timer)
    - [dnd](#dnd)
    - [raw](#raw)
-8. [Screenshots (UI-only Feature)](#screenshots-ui-only-feature)
+   - [search-images](#search-images)
+   - [screenshots-around](#screenshots-around)
+8. [Screenshots](#screenshots)
 9. [Data Reference](#data-reference)
    - [EEG Band Powers](#eeg-band-powers)
    - [EEG Ratios & Indices](#eeg-ratios--indices)
@@ -581,8 +583,8 @@ node cli.ts listen --seconds 60 --json | jq '[.[] | select(.event == "hook") | .
 | `--poll <n>` | (`status` only) Re-poll every N seconds; keeps the socket open |
 | `--dot` | (`interactive` only) Graphviz DOT to stdout — pipe to `dot -Tsvg` |
 | `--trends` | (`sessions` only) Show first-half → second-half deltas |
-| `--mode <m>` | (`search-labels`) `text` \| `context` \| `both` |
-| `--k <n>` | Number of nearest neighbors (`search`, `search-labels`) |
+| `--mode <m>` | (`search-labels`) `text` \| `context` \| `both`; (`search-images`) `semantic` \| `substring` |
+| `--k <n>` | Number of nearest neighbors (`search`, `search-labels`, `search-images`) |
 | `--k-text <n>` | (`interactive`) k for text-label HNSW search (default 5) |
 | `--k-eeg <n>` | (`interactive`) k for EEG-similarity HNSW search (default 5) |
 | `--k-labels <n>` | (`interactive`) k for label-proximity step (default 3) |
@@ -2762,16 +2764,11 @@ ws.on("message", (raw) => {
 
 ---
 
-## Screenshots (UI-only Feature)
+## Screenshots
 
-NeuroSkill™ can periodically capture screenshots of the active window, embed them
-with CLIP vision (ONNX), run OCR text extraction, and index both modalities in
+NeuroSkill™ periodically captures screenshots of the active window, embeds them
+with CLIP vision (ONNX), runs OCR text extraction, and indexes both modalities in
 separate HNSW indices for similarity search.
-
-> **Note:** Screenshots are a UI/Settings feature — there are no CLI commands for
-> screenshot capture or search.  The screenshot images are served via
-> `GET /screenshots/<day>/<filename>` on the API server and appear as indicators
-> on the History day-view heatmap grid.
 
 **Capabilities:**
 - **Capture:** macOS (CoreGraphics FFI), Linux (X11/Wayland), Windows (GDI)
@@ -2780,6 +2777,198 @@ separate HNSW indices for similarity search.
 - **Search:** dual HNSW architecture — visual similarity and OCR text similarity
 - **Configuration:** interval, image size, quality, embedding backend, OCR engine,
   GPU/CPU toggle — all in Settings → Screenshots
+- **Image serving:** `GET /screenshots/<day>/<filename>` on the API server
+
+Screenshot images appear as indicators on the History day-view heatmap grid and can
+be searched from the CLI via `search-images` and `screenshots-around`.
+
+---
+
+### `search-images`
+
+Search screenshots by OCR text — either semantic (embedding similarity via HNSW)
+or substring (SQL LIKE matching).
+
+Each result includes the screenshot filename, timestamp, app name, window title,
+OCR text, and a similarity score (for semantic mode).
+
+Screenshot images can be viewed at: `http://127.0.0.1:<port>/screenshots/<filename>`
+
+**Modes:**
+- `semantic` (default) — embeds the query text and searches the OCR HNSW index
+  for semantically similar on-screen text
+- `substring` — direct SQL LIKE matching against raw OCR text
+
+```bash
+node cli.ts search-images "compiler error"
+node cli.ts search-images "login page" --k 5
+node cli.ts search-images "TODO" --mode substring
+node cli.ts search-images "dashboard" --json | jq '.results[].filename'
+node cli.ts search-images "meeting notes" --json | jq '.results[] | {file: .filename, app: .app_name, sim: .similarity}'
+node cli.ts search-images "error stack trace" --mode semantic --k 10
+```
+
+**HTTP:**
+```bash
+# Semantic search (default):
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"search_screenshots","query":"compiler error","k":20,"mode":"semantic"}'
+
+# Substring search:
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"search_screenshots","query":"TODO","k":10,"mode":"substring"}'
+```
+
+**Example output:**
+```
+⚡ search-images "compiler error"  (mode: semantic, k: 20)
+
+  mode:    semantic
+  k:       20   results: 3
+
+  20260315/20260315143025.webp
+     time:       3/15/2026, 2:30:25 PM
+     app:        VS Code  window: skill — cli.ts
+     similarity: 87%
+     ocr:        error[E0308]: mismatched types expected `Result<Vec<…
+
+  20260315/20260315144510.webp
+     time:       3/15/2026, 2:45:10 PM
+     app:        Terminal  window: cargo build
+     similarity: 82%
+     ocr:        error: aborting due to 3 previous errors…
+
+  20260314/20260314091205.webp
+     time:       3/14/2026, 9:12:05 AM
+     app:        Firefox  window: Stack Overflow
+     similarity: 74%
+     ocr:        TypeError: Cannot read properties of undefined…
+```
+
+**JSON response:**
+```jsonc
+{
+  "command": "search_screenshots",
+  "ok": true,
+  "query": "compiler error",
+  "mode": "semantic",
+  "k": 20,
+  "count": 3,
+  "results": [
+    {
+      "timestamp":    20260315143025,
+      "unix_ts":      1741963825,
+      "filename":     "20260315/20260315143025.webp",
+      "app_name":     "VS Code",
+      "window_title": "skill — cli.ts",
+      "ocr_text":     "error[E0308]: mismatched types expected `Result<Vec<…",
+      "similarity":   0.87
+    },
+    // ... more results
+  ]
+}
+```
+
+#### `--full` reveals
+
+| Hidden field | Type | Contents |
+|---|---|---|
+| `results[].ocr_text` | string | Full OCR text (the summary truncates to 120 chars) |
+| `results[].timestamp` | number | YYYYMMDDHHmmss-format timestamp (the cross-modal join key to EEG embeddings) |
+| `results[].similarity` | number | Raw cosine similarity 0–1 (summary shows as percentage) |
+
+```bash
+node cli.ts search-images "build error" --json | jq '.results[0].ocr_text'
+node cli.ts search-images "meeting" --json | jq '.results[] | {file: .filename, app: .app_name}'
+```
+
+---
+
+### `screenshots-around`
+
+Find screenshots near a given unix timestamp.  Returns all screenshots within
+±`window_secs` of the target time.  Useful for correlating screenshots with
+specific EEG moments, labels, or hook triggers.
+
+```bash
+node cli.ts screenshots-around --at 1740412800
+node cli.ts screenshots-around --at 1740412800 --seconds 120
+node cli.ts screenshots-around --at 1740412800 --json | jq '.results | length'
+node cli.ts screenshots-around --at 1740412800 --json | jq '.results[].filename'
+```
+
+**HTTP:**
+```bash
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"screenshots_around","timestamp":1740412800,"window_secs":60}'
+```
+
+**Example output:**
+```
+⚡ screenshots-around  (timestamp: 1740412800, window: ±60s)
+
+  around:  2/24/2026, 8:00:00 AM
+  window:  ±60s   results: 4
+
+  20260224/20260224075945.webp
+     time:  2/24/2026, 7:59:45 AM   app: VS Code  window: main.rs
+     ocr:   fn main() { let app = tauri::Builder::default()…
+
+  20260224/20260224080005.webp
+     time:  2/24/2026, 8:00:05 AM   app: VS Code  window: main.rs
+     ocr:   pub async fn dispatch(app: &AppHandle, command: &str…
+
+  20260224/20260224080025.webp
+     time:  2/24/2026, 8:00:25 AM   app: Terminal  window: cargo test
+     ocr:   running 12 tests… test result: ok. 12 passed…
+
+  20260224/20260224080045.webp
+     time:  2/24/2026, 8:00:45 AM   app: Firefox  window: localhost:1420
+```
+
+**JSON response:**
+```jsonc
+{
+  "command": "screenshots_around",
+  "ok": true,
+  "timestamp": 1740412800,
+  "window_secs": 60,
+  "count": 4,
+  "results": [
+    {
+      "timestamp":    20260224075945,
+      "unix_ts":      1740412785,
+      "filename":     "20260224/20260224075945.webp",
+      "app_name":     "VS Code",
+      "window_title": "main.rs",
+      "ocr_text":     "fn main() { let app = tauri::Builder::default()…",
+      "similarity":   0.0
+    },
+    // ... more results
+  ]
+}
+```
+
+**Use with other commands — correlate screenshots with EEG moments:**
+
+```bash
+# Find what was on screen when a label was created:
+LABEL_TS=$(node cli.ts search-labels "deep focus" --json | jq '.results[0].created_at')
+node cli.ts screenshots-around --at $LABEL_TS --seconds 30
+
+# See what you were looking at during a search hit:
+HIT_TS=$(node cli.ts search --json | jq '.result.results[0].neighbors[0].timestamp_unix')
+node cli.ts screenshots-around --at $HIT_TS
+
+# View the actual image in a browser:
+PORT=8375
+FILE=$(node cli.ts screenshots-around --at 1740412800 --json | jq -r '.results[0].filename')
+open "http://127.0.0.1:$PORT/screenshots/$FILE"   # macOS
+xdg-open "http://127.0.0.1:$PORT/screenshots/$FILE"  # Linux
+```
 
 ---
 
