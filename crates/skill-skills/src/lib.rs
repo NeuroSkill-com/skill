@@ -142,13 +142,18 @@ pub fn load_skills(options: LoadSkillsOptions) -> LoadSkillsResult {
     };
 
     if options.include_defaults {
-        // 1. User-global: ~/.skill/skills/
-        let user_dir = options.skill_dir.join(SKILLS_SUBDIR);
-        add(load_skills_from_dir(&user_dir, "user", true));
+        // 1. User-global: ~/.skill/skills/ AND ~/.skill/ root
+        let user_skills_dir = options.skill_dir.join(SKILLS_SUBDIR);
+        add(load_skills_from_dir(&user_skills_dir, "user", true));
+        // Also scan skill_dir root itself so users can drop SKILL.md files
+        // directly into ~/.skill/ (or a custom data dir) without the skills/ subdir.
+        add(load_skills_from_dir(&options.skill_dir, "user", true));
 
-        // 2. Project-local: <cwd>/.skill/skills/
-        let project_dir = options.cwd.join(skill_constants::SKILL_DIR).join(SKILLS_SUBDIR);
-        add(load_skills_from_dir(&project_dir, "project", true));
+        // 2. Project-local: <cwd>/.skill/skills/ AND <cwd>/.skill/ root
+        let project_base = options.cwd.join(skill_constants::SKILL_DIR);
+        let project_skills_dir = project_base.join(SKILLS_SUBDIR);
+        add(load_skills_from_dir(&project_skills_dir, "project", true));
+        add(load_skills_from_dir(&project_base, "project", true));
 
         // 3. Bundled / dev: <app_root>/skills/
         if let Some(ref bundled) = options.bundled_dir {
