@@ -224,15 +224,53 @@ fn run_event_loop(
         .as_ref()
         .map(|dir| WebContext::new(Some(dir.clone())));
 
+    // IPC handler: used by async JS operations that need to return results
+    // after Promises resolve.  The JS side calls `window.ipc.postMessage(id:result)`.
+    let pending_ipc: Arc<Mutex<std::collections::HashMap<String, Sender<Response>>>> =
+        Arc::new(Mutex::new(std::collections::HashMap::new()));
+    let pending_ipc_clone = pending_ipc.clone();
+
     let mut wv_builder = if let Some(ref mut ctx) = web_context {
         WebViewBuilder::with_web_context(ctx)
     } else {
         WebViewBuilder::new()
     };
 
+    // Register a custom protocol so we always have a valid http-like origin.
+    // On WebKitGTK, wry's IPC handler builds an http::Request using the
+    // webview URI — non-http schemes like about: or data: cause a panic.
+    // The `skill` protocol serves a blank page and gives us a valid origin
+    // for localStorage/sessionStorage/cookies.
+    wv_builder = wv_builder.with_custom_protocol("skill".into(), |_id, _req| {
+        http::Response::builder()
+            .header("Content-Type", "text/html; charset=utf-8")
+            .body(std::borrow::Cow::Borrowed(
+                b"<!DOCTYPE html><html><head><title></title></head><body></body></html>"
+                    as &[u8],
+            ))
+            .unwrap()
+    });
+
+    // Use our custom protocol as the initial URL if the user specified about:blank.
+    let effective_url = if config.initial_url == "about:blank" {
+        "skill://localhost/".to_string()
+    } else {
+        config.initial_url.clone()
+    };
+
     wv_builder = wv_builder
-        .with_url(&config.initial_url)
-        .with_devtools(config.devtools);
+        .with_url(&effective_url)
+        .with_devtools(config.devtools)
+        .with_ipc_handler(move |msg| {
+            let body = msg.body().to_string();
+            // Expected format: "ipc_id:result_text"
+            if let Some((id, result)) = body.split_once(':') {
+                let mut pending = pending_ipc_clone.lock().unwrap();
+                if let Some(reply) = pending.remove(id) {
+                    let _ = reply.send(Response::Text(result.to_string()));
+                }
+            }
+        });
 
     if let Some(ref ua) = config.user_agent {
         wv_builder = wv_builder.with_user_agent(ua);
@@ -277,7 +315,7 @@ fn run_event_loop(
 
                 let wv_guard = webview.lock().unwrap();
                 if let Some(ref wv) = *wv_guard {
-                    execute_command(wv, &window, &command, reply.clone());
+                    execute_command(wv, &window, &command, reply.clone(), &pending_ipc);
                 } else {
                     let _ = reply.send(Response::Error("webview destroyed".into()));
                 }
@@ -312,7 +350,13 @@ fn run_event_loop(
 /// `evaluate_script_with_callback` which calls back on the webview thread
 /// without blocking the event loop.  The callback sends the response
 /// through the `reply` channel.
-fn execute_command(wv: &WebView, window: &Window, command: &Command, reply: Sender<Response>) {
+fn execute_command(
+    wv: &WebView,
+    window: &Window,
+    command: &Command,
+    reply: Sender<Response>,
+    pending_ipc: &Arc<Mutex<std::collections::HashMap<String, Sender<Response>>>>,
+) {
     match command {
         // ── Page ─────────────────────────────────────────────────────────
         Command::Navigate { url } => {
@@ -584,7 +628,7 @@ fn execute_command(wv: &WebView, window: &Window, command: &Command, reply: Send
 
         // ── Cache ────────────────────────────────────────────────────────
         Command::ClearCache => {
-            let script = r#"
+            eval_async_ipc(wv, pending_ipc, reply, r#"
                 (async () => {
                     if ('caches' in window) {
                         const names = await caches.keys();
@@ -592,12 +636,11 @@ fn execute_command(wv: &WebView, window: &Window, command: &Command, reply: Send
                     }
                     return 'ok';
                 })()
-            "#;
-            eval_with_cb(wv, script, reply);
+            "#);
         }
 
         Command::ClearBrowsingData => {
-            let script = r#"
+            eval_async_ipc(wv, pending_ipc, reply, r#"
                 (async () => {
                     localStorage.clear();
                     sessionStorage.clear();
@@ -611,8 +654,7 @@ fn execute_command(wv: &WebView, window: &Window, command: &Command, reply: Send
                     }
                     return 'ok';
                 })()
-            "#;
-            eval_with_cb(wv, script, reply);
+            "#);
         }
 
         // ── Waiting ──────────────────────────────────────────────────────
@@ -621,7 +663,7 @@ fn execute_command(wv: &WebView, window: &Window, command: &Command, reply: Send
             timeout_ms,
         } => {
             let sel = js_escape(selector);
-            let script = format!(
+            eval_async_ipc(wv, pending_ipc, reply, &format!(
                 r#"
                 (async () => {{
                     const deadline = Date.now() + {timeout_ms};
@@ -632,12 +674,11 @@ fn execute_command(wv: &WebView, window: &Window, command: &Command, reply: Send
                     return 'timeout';
                 }})()
                 "#
-            );
-            eval_with_cb(wv, &script, reply);
+            ));
         }
 
         Command::WaitForNavigation { timeout_ms } => {
-            let script = format!(
+            eval_async_ipc(wv, pending_ipc, reply, &format!(
                 r#"
                 new Promise((resolve) => {{
                     const timer = setTimeout(() => resolve('timeout'), {timeout_ms});
@@ -647,8 +688,7 @@ fn execute_command(wv: &WebView, window: &Window, command: &Command, reply: Send
                     }}, {{ once: true }});
                 }})
                 "#
-            );
-            eval_with_cb(wv, &script, reply);
+            ));
         }
 
         Command::Close => {
@@ -658,6 +698,43 @@ fn execute_command(wv: &WebView, window: &Window, command: &Command, reply: Send
 }
 
 // ── JS helpers ───────────────────────────────────────────────────────────────
+
+/// Counter for generating unique IPC message IDs.
+static IPC_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Evaluate an async JS expression (returns a Promise) using the IPC channel.
+///
+/// Wraps the expression so its resolved value is sent back via
+/// `window.ipc.postMessage("id:result")`.  The reply channel is stored in
+/// `pending_ipc` and matched when the IPC handler fires.
+fn eval_async_ipc(
+    wv: &WebView,
+    pending_ipc: &Arc<Mutex<std::collections::HashMap<String, Sender<Response>>>>,
+    reply: Sender<Response>,
+    script: &str,
+) {
+    let id = IPC_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let id_str = format!("__ipc_{id}");
+
+    // Register the pending reply.
+    pending_ipc.lock().unwrap().insert(id_str.clone(), reply.clone());
+
+    let wrapped = format!(
+        r#"
+        Promise.resolve({script}).then(__r => {{
+            window.ipc.postMessage('{id_str}:' + String(__r ?? ''));
+        }}).catch(__e => {{
+            window.ipc.postMessage('{id_str}:__error__:' + __e.message);
+        }});
+        "#
+    );
+
+    if let Err(e) = wv.evaluate_script(&wrapped) {
+        // Remove pending entry and send error immediately.
+        pending_ipc.lock().unwrap().remove(&id_str);
+        let _ = reply.send(Response::Error(format!("eval failed: {e}")));
+    }
+}
 
 /// Evaluate JS and get the result via `evaluate_script_with_callback`.
 ///

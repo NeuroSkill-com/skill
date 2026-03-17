@@ -22,18 +22,24 @@ fn main() {
     println!("    OK — browser launched\n");
 
     // ── Navigate to a data URL (no network needed) ───────────────────────
-    let html_page = "data:text/html;charset=utf-8,<!DOCTYPE html><html><head><title>Test Page</title></head><body><h1 id=\"heading\">Hello Headless</h1><p class=\"info\">Paragraph 1</p><p class=\"info\">Paragraph 2</p><a href=\"%23link1\" class=\"nav\">Link A</a><a href=\"%23link2\" class=\"nav\">Link B</a><input id=\"search\" type=\"text\" value=\"\" /><div id=\"output\"></div></body></html>";
-
-    println!("[2] Navigating to data URL...");
-    let resp = browser
-        .send(Command::Navigate {
-            url: html_page.into(),
+    // First load about:blank, then inject the test page via JS.
+    // We avoid data: URLs because wry's WebKitGTK IPC handler crashes when
+    // building an http::Request from a long data: URI.
+    println!("    Loading test page via innerHTML...");
+    browser
+        .send(Command::EvalJsNoReturn {
+            script: r##"
+                document.open();
+                document.write('<!DOCTYPE html><html><head><title>Test Page</title></head><body><h1 id="heading">Hello Headless</h1><p class="info">Paragraph 1</p><p class="info">Paragraph 2</p><a href="#link1" class="nav">Link A</a><a href="#link2" class="nav">Link B</a><input id="search" type="text" value="" /><div id="output"></div></body></html>');
+                document.close();
+            "##.into(),
         })
-        .expect("navigate failed");
-    println!("    Navigate response: {:?}", resp);
+        .expect("document.write failed");
 
     // Give the webview a moment to render.
-    std::thread::sleep(Duration::from_secs(2));
+    std::thread::sleep(Duration::from_millis(500));
+
+    println!("[2] Setting up test page...");
 
     // ── Debug: check IPC ────────────────────────────────────────────────
     println!("\n[2b] Debug: EvalJs simple...");
@@ -56,7 +62,7 @@ fn main() {
     let resp = browser.send(Command::GetUrl).expect("GetUrl failed");
     let url = resp.as_text().unwrap_or("");
     println!("    URL: {}", url);
-    assert!(url.starts_with("data:"), "expected data: URL");
+    assert!(!url.is_empty(), "expected non-empty URL");
     println!("    PASS");
 
     // ── GetContent ───────────────────────────────────────────────────────
