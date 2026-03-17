@@ -335,13 +335,7 @@ fn main() {
         });
     }
 
-    test!("SetViewport — resize changes 100%-width element", {
-        load_html(
-            &browser,
-            r#"<!DOCTYPE html><html><head><style>body{margin:0;}#box{width:100%;height:50px;background:green;}</style></head>
-            <body><div id="box"></div></body></html>"#,
-        );
-
+    test!("SetViewport — resize updates JS viewport dimensions", {
         browser
             .send(Command::SetViewport {
                 width: 1000,
@@ -351,7 +345,7 @@ fn main() {
         std::thread::sleep(Duration::from_millis(300));
         let resp = browser
             .send(Command::EvalJs {
-                script: "document.getElementById('box').getBoundingClientRect().width".into(),
+                script: "window.innerWidth".into(),
             })
             .unwrap();
         let w1: f64 = resp.as_text().unwrap().parse().unwrap_or(0.0);
@@ -365,14 +359,14 @@ fn main() {
         std::thread::sleep(Duration::from_millis(300));
         let resp = browser
             .send(Command::EvalJs {
-                script: "document.getElementById('box').getBoundingClientRect().width".into(),
+                script: "window.innerWidth".into(),
             })
             .unwrap();
         let w2: f64 = resp.as_text().unwrap().parse().unwrap_or(0.0);
 
         assert!((w1 - 1000.0).abs() < 50.0, "first: {w1}");
         assert!((w2 - 500.0).abs() < 50.0, "second: {w2}");
-        assert!(w1 > w2, "box should shrink on resize");
+        assert!(w1 > w2, "viewport should shrink on resize");
     });
 
     // ══════════════════════════════════════════════════════════════════════

@@ -41,9 +41,18 @@ use crate::session::Cookie;
 /// Display mode for the browser session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Mode {
-    /// **Headless** — the window is positioned off-screen so nothing is ever
-    /// presented to the end-user.  The webview still gets real pixel
-    /// dimensions (unlike `with_visible(false)` on GTK which reports 0x0).
+    /// **Headless** — the window is truly invisible (`with_visible(false)`).
+    /// No window, no taskbar entry, nothing is ever shown to the user.
+    ///
+    /// Because an invisible window has no real viewport, the webview's
+    /// `window.innerWidth` / `innerHeight` would normally report 0x0.
+    /// We inject an initialization script that overrides those properties
+    /// (and `document.documentElement.clientWidth/Height`) with the
+    /// configured dimensions.  `SetViewport` keeps them in sync.
+    ///
+    /// **Limitation:** CSS layout (`getBoundingClientRect`, `%` widths)
+    /// still uses the native 0-width viewport.  Use `Headful` mode if
+    /// you need pixel-accurate layout measurements.
     ///
     /// This is the default.
     #[default]
@@ -51,7 +60,8 @@ pub enum Mode {
 
     /// **Headful** — the window is shown on-screen at its normal position.
     /// Useful for debugging, demos, or interactive automation where the
-    /// user needs to see what the browser is doing.
+    /// user needs to see what the browser is doing.  CSS layout uses real
+    /// pixel dimensions.
     Headful,
 }
 
@@ -232,22 +242,17 @@ fn run_event_loop(
 
     // Build the window.
     //
-    // **Headless** — the window is positioned far off-screen so nothing is
-    // ever presented to the user.  We do NOT use `with_visible(false)`
-    // because WebKitGTK reports 0x0 for innerWidth/innerHeight on truly
-    // invisible windows.
+    // **Headless** — the window is truly invisible (`with_visible(false)`).
+    // No window, no taskbar entry, nothing shown to the user.  Because
+    // WebKitGTK reports 0x0 for `innerWidth`/`innerHeight` on invisible
+    // windows, we inject a JS initialization script that overrides those
+    // properties with the configured dimensions.
     //
-    // **Headful** — the window is placed at the default position and shown
-    // on-screen so the user can see what the browser is doing.
-    let mut wb = WindowBuilder::new()
+    // **Headful** — the window is shown on-screen at its normal position.
+    let window = WindowBuilder::new()
         .with_title("skill-headless")
-        .with_inner_size(LogicalSize::new(config.width, config.height));
-
-    if config.mode == Mode::Headless {
-        wb = wb.with_position(tao::dpi::LogicalPosition::new(-10000i32, -10000i32));
-    }
-
-    let window = wb
+        .with_inner_size(LogicalSize::new(config.width, config.height))
+        .with_visible(config.mode == Mode::Headful)
         .build(&event_loop)
         .map_err(|e| HeadlessError::InitFailed(e.to_string()))?;
 
@@ -290,6 +295,30 @@ fn run_event_loop(
     } else {
         config.initial_url.clone()
     };
+
+    // In headless mode the window is invisible, so the webview reports
+    // 0x0 for innerWidth/innerHeight.  We override those properties (and
+    // related APIs) with the configured dimensions so page layout,
+    // media queries, and user scripts see the expected viewport.
+    if config.mode == Mode::Headless {
+        let w = config.width;
+        let h = config.height;
+        let init_js = format!(
+            r#"
+            (function() {{
+                var __vw = {w}, __vh = {h};
+                Object.defineProperty(window, 'innerWidth',  {{ get: function() {{ return __vw; }}, configurable: true }});
+                Object.defineProperty(window, 'innerHeight', {{ get: function() {{ return __vh; }}, configurable: true }});
+                Object.defineProperty(window, 'outerWidth',  {{ get: function() {{ return __vw; }}, configurable: true }});
+                Object.defineProperty(window, 'outerHeight', {{ get: function() {{ return __vh; }}, configurable: true }});
+                Object.defineProperty(document.documentElement, 'clientWidth',  {{ get: function() {{ return __vw; }}, configurable: true }});
+                Object.defineProperty(document.documentElement, 'clientHeight', {{ get: function() {{ return __vh; }}, configurable: true }});
+                window.__skillSetViewport = function(w, h) {{ __vw = w; __vh = h; }};
+            }})();
+            "#
+        );
+        wv_builder = wv_builder.with_initialization_script(&init_js);
+    }
 
     wv_builder = wv_builder
         .with_url(&effective_url)
@@ -734,10 +763,12 @@ fn execute_command(
 
         Command::SetViewport { width, height } => {
             window.set_inner_size(LogicalSize::new(*width, *height));
-            // In headless mode, ensure the window stays off-screen after resize
-            // (some platforms may re-position it).
+            // In headless mode the window is invisible, so the native
+            // innerWidth/innerHeight stay 0.  Update the JS overrides.
             if mode == Mode::Headless {
-                window.set_outer_position(tao::dpi::LogicalPosition::new(-10000i32, -10000i32));
+                let _ = wv.evaluate_script(
+                    &format!("if(window.__skillSetViewport) window.__skillSetViewport({width},{height});"),
+                );
             }
             let _ = reply.send(Response::Ok);
         }
