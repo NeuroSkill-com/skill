@@ -110,6 +110,7 @@ the Free Software Foundation, version 3 only. -->
   interface DeviceApiConfig {
     emotiv_client_id: string;
     emotiv_client_secret: string;
+    idun_api_token: string;
   }
   const OPENBCI_DEFAULT: OpenBciConfig = {
     board: "ganglion", scan_timeout_secs: 10,
@@ -122,10 +123,11 @@ the Free Software Foundation, version 3 only. -->
   let openbciConnecting = $state(false);
   let openbciError     = $state("");
   let openbciExpanded  = $state(false); // collapsed by default
-  let deviceApi        = $state<DeviceApiConfig>({ emotiv_client_id: "", emotiv_client_secret: "" });
+  let deviceApi        = $state<DeviceApiConfig>({ emotiv_client_id: "", emotiv_client_secret: "", idun_api_token: "" });
   let deviceApiChanged = $state(false);
   let deviceApiSaved   = $state(false);
   let emotivSecretVisible = $state(false);
+  let idunTokenVisible = $state(false);
   let serialPorts      = $state<string[]>([]);
   let portsLoading     = $state(false);
 
@@ -897,6 +899,33 @@ the Free Software Foundation, version 3 only. -->
             class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
             onclick={() => emotivSecretVisible = !emotivSecretVisible}>
             {emotivSecretVisible ? "hide" : "show"}
+          </Button>
+        </div>
+      </div>
+
+      <Separator class="bg-border dark:bg-white/[0.04]" />
+
+      <div class="flex flex-col gap-1">
+        <span class="text-[0.78rem] font-semibold text-foreground">IDUN Cloud</span>
+        <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+          Optional token for IDUN cloud decoding features.
+        </p>
+      </div>
+
+      <div class="flex flex-col gap-1.5">
+        <label for="settings-idun-api-token" class="text-[0.68rem] font-medium text-foreground/80">API Token</label>
+        <div class="flex items-center gap-2">
+          <input
+            id="settings-idun-api-token"
+            type={idunTokenVisible ? "text" : "password"}
+            bind:value={deviceApi.idun_api_token}
+            oninput={() => { deviceApiChanged = true; }}
+            placeholder="IDUN API Token"
+            class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+          <Button size="sm" variant="outline"
+            class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
+            onclick={() => idunTokenVisible = !idunTokenVisible}>
+            {idunTokenVisible ? "hide" : "show"}
           </Button>
         </div>
       </div>
