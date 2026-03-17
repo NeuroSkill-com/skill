@@ -8,18 +8,44 @@ use super::exec::truncate_text;
 
 // ── DuckDuckGo search helpers ─────────────────────────────────────────────────
 
-/// Strip HTML tags from a string (simple regex-free approach).
+/// Strip HTML to plain text.
+///
+/// Removes `<script>…</script>`, `<style>…</style>`, `<noscript>…</noscript>`,
+/// and `<svg>…</svg>` blocks entirely (including their content), then strips
+/// all remaining HTML tags and decodes common HTML entities.
 pub(crate) fn strip_html_tags(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
+    // Phase 1: Remove entire blocks that should not appear as text.
+    let mut cleaned = s.to_string();
+    for tag in &["script", "style", "noscript", "svg"] {
+        loop {
+            let open = format!("<{}", tag);
+            let close = format!("</{}>", tag);
+            let lower = cleaned.to_ascii_lowercase();
+            let Some(start) = lower.find(&open) else { break };
+            if let Some(end_rel) = lower[start..].find(&close) {
+                let end = start + end_rel + close.len();
+                cleaned.replace_range(start..end, " ");
+            } else {
+                // Unclosed tag — remove from open tag to end.
+                cleaned.truncate(start);
+                break;
+            }
+        }
+    }
+
+    // Phase 2: Strip remaining HTML tags.
+    let mut out = String::with_capacity(cleaned.len());
     let mut in_tag = false;
-    for ch in s.chars() {
+    for ch in cleaned.chars() {
         match ch {
             '<' => in_tag = true,
-            '>' => in_tag = false,
+            '>' => { in_tag = false; out.push(' '); }
             _ if !in_tag => out.push(ch),
             _ => {}
         }
     }
+
+    // Phase 3: Decode HTML entities.
     out.replace("&amp;", "&")
        .replace("&lt;", "<")
        .replace("&gt;", ">")
@@ -27,6 +53,12 @@ pub(crate) fn strip_html_tags(s: &str) -> String {
        .replace("&#x27;", "'")
        .replace("&#39;", "'")
        .replace("&nbsp;", " ")
+       .replace("&#8211;", "-")
+       .replace("&#8212;", "-")
+       .replace("&#8217;", "'")
+       .replace("&#8220;", "\"")
+       .replace("&#8221;", "\"")
+       .replace("&#176;", "\u{00B0}")
 }
 
 /// Pool of realistic browser User-Agent strings, rotated randomly to reduce
