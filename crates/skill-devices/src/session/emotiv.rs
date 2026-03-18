@@ -171,6 +171,29 @@ impl EmotivAdapter {
                 }));
             }
 
+            CortexEvent::DataLabels(labels) if labels.stream_name == "eeg" => {
+                // The Cortex API sends EEG column labels after subscribing.
+                // The first two are always COUNTER and INTERPOLATED; the rest
+                // are electrode names (e.g. ["AF3","F7",…] for EPOC, or
+                // ["AF3","AF4","T7","T8","Pz"] for Insight).
+                let eeg_labels: Vec<String> = labels.labels.iter()
+                    .filter(|l| {
+                        let u = l.to_uppercase();
+                        u != "COUNTER" && u != "INTERPOLATED"
+                            && u != "MARKER" && u != "MARKER_HARDWARE"
+                            && u != "TIMESTAMP"
+                    })
+                    .cloned()
+                    .collect();
+
+                if !eeg_labels.is_empty() && eeg_labels.len() != self.desc.eeg_channels {
+                    self.desc.eeg_channels     = eeg_labels.len();
+                    self.desc.pipeline_channels = eeg_labels.len().min(EEG_CHANNELS);
+                    self.desc.channel_names     = eeg_labels;
+                    self.auto_detected = true;
+                }
+            }
+
             // Performance metrics, band power, mental commands, facial expressions,
             // system events, records, markers, profiles — not forwarded to session runner.
             _ => {}
