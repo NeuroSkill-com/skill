@@ -20,7 +20,8 @@ use crate::{
     emit_status, refresh_tray, send_toast, upsert_paired, unix_secs,
 };
 use skill_eeg::eeg_bands::BandSnapshot;
-use crate::session_csv::{CsvState, write_session_meta};
+use crate::session_csv::write_session_meta;
+use skill_data::session_writer::{SessionWriter, StorageFormat};
 use crate::ws_server::WsBroadcaster;
 use crate::AppStateExt;
 
@@ -58,7 +59,12 @@ pub(crate) async fn run_device_session(
     // CSV is opened lazily on the first EEG frame so that adapters like Emotiv
     // can auto-detect the actual channel count (via DataLabels) before the
     // header is written.
-    let mut csv: Option<CsvState> = None;
+    let storage_format = {
+        let r = app.app_state();
+        let s = r.lock_or_recover();
+        StorageFormat::from_str(&s.settings_storage_format)
+    };
+    let mut csv: Option<SessionWriter> = None;
     write_session_meta(&app, &csv_path);
 
     // ── Set device sample rate and channel info in AppState ─────────────────
@@ -118,17 +124,17 @@ pub(crate) async fn run_device_session(
                             desc_may_change = false;
                         }
 
-                        // Lazy-open CSV on first EEG frame (after auto-detection).
+                        // Lazy-open recording file on first EEG frame (after auto-detection).
                         if csv.is_none() {
                             let fresh = adapter.descriptor();
                             let labels: Vec<&str> = fresh.channel_names.iter()
                                 .map(|s| s.as_str()).collect();
-                            match CsvState::open_with_labels(&csv_path, &labels) {
+                            match SessionWriter::open(&csv_path, &labels, storage_format) {
                                 Ok(c)  => { csv = Some(c); }
                                 Err(e) => {
                                     adapter.disconnect().await;
                                     write_session_meta(&app, &csv_path);
-                                    crate::go_disconnected(&app, Some(format!("CSV error: {e}")), false);
+                                    crate::go_disconnected(&app, Some(format!("Recording open error: {e}")), false);
                                     return;
                                 }
                             }
@@ -268,7 +274,7 @@ fn on_disconnected(app: &AppHandle, kind: &str) {
 fn process_eeg(
     app:            &AppHandle,
     dsp:            &mut SessionDsp,
-    csv:            &mut CsvState,
+    csv: &mut SessionWriter,
     csv_path:       &Path,
     frame:          &EegFrame,
     sample_rate:    f64,
@@ -480,7 +486,7 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
 fn process_ppg(
     app:      &AppHandle,
     dsp:      &mut SessionDsp,
-    csv:      &mut CsvState,
+    csv: &mut SessionWriter,
     csv_path: &Path,
     frame:    &PpgFrame,
 ) {
@@ -645,7 +651,7 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
 
 fn finalize_session(
     app:            &AppHandle,
-    csv:            &mut CsvState,
+    csv: &mut SessionWriter,
     csv_path:       &Path,
     user_cancelled: bool,
 ) {

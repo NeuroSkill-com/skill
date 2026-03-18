@@ -338,6 +338,23 @@ pub fn set_notch_preset(preset: Option<PowerlineFreq>, app: AppHandle) {
     emit_status(&app);
 }
 
+// ── Storage format ────────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_storage_format(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
+    state.lock_or_recover().settings_storage_format.clone()
+}
+
+#[tauri::command]
+pub fn set_storage_format(format: String, app: AppHandle) {
+    let fmt = if format.eq_ignore_ascii_case("parquet") { "parquet" } else { "csv" };
+    {
+        let r = app.app_state();
+        r.lock_or_recover().settings_storage_format = fmt.to_string();
+    }
+    save_settings(&app);
+}
+
 // ── Band power ─────────────────────────────────────────────────────────────────
 
 #[tauri::command]

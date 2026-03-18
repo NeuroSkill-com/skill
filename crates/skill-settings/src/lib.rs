@@ -586,7 +586,12 @@ pub struct UserSettings {
     /// Sleep schedule configuration.
     #[serde(default)]
     pub sleep: SleepConfig,
+    /// Recording storage format: `"csv"` (default) or `"parquet"`.
+    #[serde(default = "default_storage_format")]
+    pub storage_format: String,
 }
+
+pub fn default_storage_format() -> String { "csv".into() }
 
 pub fn default_tts_preload() -> bool { true }
 pub fn default_track_active_window() -> bool { true }

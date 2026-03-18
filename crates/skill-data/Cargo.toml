@@ -12,6 +12,9 @@ serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite    = { version = "0.37", features = ["bundled"] }
 csv         = "1"
+parquet     = { version = "54", default-features = false, features = ["arrow", "snap", "zstd"] }
+arrow-array = "54"
+arrow-schema = "54"
 llmfit-core = "0.6.6"
 sysinfo     = "0.38"
 libc        = "0.2"

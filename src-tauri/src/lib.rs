@@ -234,6 +234,7 @@ use settings_cmds::{
     subscribe_eeg, subscribe_ppg, subscribe_imu,
     get_status, get_devices, set_preferred_device, pair_device, forget_device, cancel_retry, retry_connect,
     get_filter_config, set_filter_config, set_notch_preset,
+    get_storage_format, set_storage_format,
     get_latest_bands, get_embedding_overlap, set_embedding_overlap,
     get_gpu_stats, get_log_config, set_log_config,
     get_eeg_model_config, set_eeg_model_config, get_eeg_model_status,
@@ -686,6 +687,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
         s.dnd_config  = data.do_not_disturb;
         s.llm.config  = data.llm;
+        s.settings_storage_format = data.storage_format;
         s.sleep_config      = data.sleep;
         s.screenshot_config = data.screenshot;
         if let Some(os_active) = skill_data::dnd::query_os_active() {
@@ -1249,6 +1251,7 @@ pub fn run() {
             check_accessibility_permission, open_accessibility_settings, open_notifications_settings,
             check_screen_recording_permission, open_screen_recording_settings,
             get_filter_config, set_filter_config, set_notch_preset,
+            get_storage_format, set_storage_format,
             get_latest_bands,
             get_embedding_overlap, set_embedding_overlap,
             get_gpu_stats,

@@ -20,6 +20,8 @@ pub mod util;
 pub mod active_window;
 pub mod activity_store;
 pub mod session_csv;
+pub mod session_parquet;
+pub mod session_writer;
 pub mod label_store;
 pub mod screenshot_store;
 pub mod hooks_log;
