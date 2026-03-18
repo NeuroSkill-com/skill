@@ -8,6 +8,171 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.43] — 2026-03-18
+
+### Features
+
+- **Auto context size recommendation**: When the user has not set an explicit context size, the LLM server now uses `llmfit`-style memory estimation to pick the largest power-of-two context (2K–128K) that fits the system's available GPU/unified memory with 15% headroom, instead of always defaulting to 4096. Each catalog entry now carries `params_b` and `max_context_length` metadata so the estimator knows the model's parameter count and trained context ceiling. User-set context values are capped at the model's maximum. The UI context-size picker dynamically hides options that exceed the active model's trained limit and now offers 64K and 128K choices for models that support them.
+
+- **Parquet data consumption across the app**: All data-reading paths now check for both `.parquet` and `.csv` files, preferring Parquet when it exists. This ensures sessions recorded in Parquet format are fully visible in history, metrics analysis, session search, and the metrics cache.
+  - `find_metrics_path` / `find_ppg_path` helpers try `.parquet` then `.csv`
+  - `load_metrics_csv` dispatches to `load_metrics_from_parquet` for `.parquet` files
+  - `read_metrics_time_range` handles both formats for timestamp patching
+  - `is_session_data` matches both `.csv` and `.parquet` EEG data files
+  - `extract_timestamp` strips `.csv`, `.parquet`, and `.json` suffixes
+  - `skill-commands` session lookup resolves `.parquet` before `.csv`
+  - Metrics disk cache validates mtime against whichever data file exists
+  - File size reporting checks for `.parquet` data files
+
+- **Parquet recording format**: EEG, PPG, and metrics data can now be stored in Apache Parquet format (Snappy compression) instead of CSV. Set `storage_format: "parquet"` in settings or use the `set_storage_format` Tauri command. Default remains CSV for backward compatibility.
+  - `exg_<ts>.parquet` — raw EEG samples (timestamp + N channel columns)
+  - `exg_<ts>_ppg.parquet` — PPG optical data with vitals
+  - `exg_<ts>_metrics.parquet` — derived band-power metrics (~4 Hz)
+  - New crate deps: `parquet`, `arrow-array`, `arrow-schema` (all v54)
+  - `SessionWriter` enum wraps both `CsvState` and `ParquetState` with identical API
+  - Tauri commands: `get_storage_format`, `set_storage_format`
+  - Setting persisted in `settings.json` as `storage_format: "csv" | "parquet"`
+
+- **Split/sharded GGUF support**: The LLM catalog and downloader now support multi-part (split) GGUF models. Added `shard_files` field to `LlmModelEntry` listing all shard filenames in order. The new `download_model()` function downloads shards sequentially with overall progress tracking, pause/resume per-shard, and cancellation between shards. Delete properly removes all shard files. The frontend shows shard count on download buttons and current shard progress during download.
+
+- **MiniMax M2.5 full catalog**: Added 11 quant variants of MiniMax M2.5 (456B MoE, 46B active) to the LLM catalog via `unsloth/MiniMax-M2.5-GGUF` — from TQ1_0 (52 GB single file) through Q8_0 (226 GB, 6 shards). The Q4_K_M quant is marked as recommended.
+
+- **Embedding pipeline resamples non-256 Hz devices**: The ZUNA model expects 1280 samples (5 s × 256 Hz). Non-256 Hz devices now accumulate 5 seconds at their native rate and linearly resample to 1280 samples before encoding. Previously, MW75 (500 Hz) fed 2.56 s of data and Emotiv (128 Hz) fed 10 s, producing wrong-duration epochs with mismatched frequency content.
+- **EEG chart dynamically sized for device sample rate**: `EegChart` now accepts a `sampleRate` prop and sizes its waveform ring buffer and spectrogram columns to always show ≈15 seconds of history regardless of device. Added `bufSizeForRate()` and `specColsForRate()` helpers. Previously the buffer was hardcoded to 3840 samples (15 s at 256 Hz only).
+
+### Bugfixes
+
+- **Fix missing `storage_format` in `UserSettings::default()`**: Added the missing field initializer in the `Default` impl for `UserSettings` in `skill-settings`.
+
+- **Fix duplicate `MUSE_SAMPLE_RATE` import**: Removed redundant import in `eeg_embeddings/mod.rs` and added missing `CHANNEL_NAMES` import.
+
+- **Fix renamed IDUN field**: Updated `use_60hz` → `mains_freq_60hz` in `session_connect.rs` to match upstream `idun` crate API change.
+
+- **MoE detection for hardware fit**: The hardware-fit analyzer now detects MoE models from the `"moe"` tag in addition to inferring from family name patterns, improving fit predictions for MiniMax M2.5 and similar models.
+
+- **CI: add missing libpipewire-0.3-dev package**: `cargo check` on Linux CI failed because the `xcap` crate transitively depends on `pipewire-sys` / `libspa-sys`, which require the PipeWire development headers. Added `libpipewire-0.3-dev` to the apt package lists in `ci.yml` and `release-linux.yml` and bumped the cache version keys to force re-caching.
+
+- **Fix clippy warnings**: Removed unused `std::io::Cursor` import in `skill-screenshots`, changed doc comment to plain comment in `session_runner.rs`, replaced `map_or(true, …)` with `is_none_or(…)` in LLM download/server commands, and used `matches!` macro in `session_connect.rs`.
+
+- **Session history only loaded `muse_` files**: All session-file lookups across `skill-history`, `skill-commands`, and `settings_cmds` now accept both `exg_` and `muse_` prefixes. Previously recordings from non-Muse devices were invisible.
+- **Orphaned CSV sessions hardcoded 256 Hz sample rate**: When a JSON sidecar was missing, `sample_rate_hz` was set to `Some(256)`. Now set to `None` (unknown) since the actual rate cannot be determined without metadata.
+- **Emotiv electrode count in ElectrodeGuide**: Updated `EMOTIV_EPOC_LABELS` from 12 to all 14 electrodes, and tab count from "12" to "14".
+- **Non-Muse electrode quality strip said "Muse signal"**: Changed label to generic "Signal".
+
+- **Device routing missed "neurable" and "ige" prefixes**: `detect_device_kind` in `lifecycle.rs` had its own copy of device-name matching that was out of sync with `DeviceKind::from_name`. A Neurable headphone would be routed to the Muse connect path, and an IGE-prefixed IDUN Guardian would also fall through to Muse. Refactored to delegate to the canonical `DeviceKind::from_name` — single source of truth.
+- **Emotiv auto-detects actual channel count**: `EmotivAdapter` now detects the real channel count from the first EEG packet. Previously it always assumed EPOC (14 channels); connecting an Insight (5-ch) or MN8 (2-ch) would produce misaligned EEG frames with wrong channel counts.
+
+- **Emotiv TS channel count/names**: Fixed `EMOTIV_CAPS` in `device.ts` — `channelCount` was 12 instead of 14, and electrode names were missing `"F8"` and `"AF4"` (EPOC X/EPOC+ have 14 channels).
+- **MW75 Rust detection missing "neurable"**: Added `n.contains("neurable")` to `DeviceKind::from_name` so devices advertising as "Neurable-XYZ" are correctly identified as MW75, matching the TypeScript detection logic.
+- **Hermes TS electrode names**: Replaced generic `["Ch1",...,"Ch8"]` with proper 10-20 names `["Fp1","Fp2","AF3","AF4","F3","F4","FC1","FC2"]` to match the Rust constants in `skill-constants`.
+- **IDUN adapter META capability**: Added `DeviceCaps::META` to `IdunAdapter` caps, since the adapter emits `DeviceEvent::Meta` for `GuardianEvent::DeviceInfo` but was not declaring the capability.
+
+- **FAA uses name-based electrode lookup**: Frontal Alpha Asymmetry in `eeg_bands.rs` now resolves left/right frontal electrodes by 10-20 name instead of hardcoded indices [1]/[2]. Previously, non-Muse devices computed FAA from wrong electrodes (e.g. Emotiv used F7/F3 — both left hemisphere).
+- **Cognitive load uses name-based electrode lookup**: `compute_cognitive_load` now finds frontal (theta) and parietal (alpha) electrodes by 10-20 name prefix instead of assuming Muse's 4-channel index layout. Falls back to index-based split for generic labels.
+- **Laterality index uses name-based hemisphere detection**: `laterality_index_fn` now determines left/right hemisphere from 10-20 naming convention (odd=left, even=right) instead of hardcoded indices [0..1] vs [2..3]. Previously, MW75 computed laterality from 4 left-hemisphere channels only.
+- **IDUN battery not shown in UI**: Added `isIdun` to the `hasBattery` derived flag in `+page.svelte` so the battery indicator renders for IDUN Guardian (which reports battery via BLE).
+- **Ganglion showed Muse electrode labels**: Added `GANGLION_CH`/`GANGLION_COLOR` constants and wired them into the dashboard channel-label selector. Previously, connecting a Ganglion displayed Muse names (TP9/AF7/AF8/TP10) instead of generic Ch1–Ch4.
+- **Hermes channel labels in constants.ts**: Updated `HERMES_CH` from generic `Ch1–Ch8` to proper 10-20 names matching Rust `HERMES_CHANNEL_NAMES`.
+- **Emotiv constants.ts channel count/names**: Updated `EMOTIV_EEG_CHANNELS` from 12 to 14, added missing `F8`/`AF4` to `EMOTIV_CH` and corresponding colours.
+- **Misleading Ganglion sample-rate comment**: Corrected doc comment on `MUSE_SAMPLE_RATE` — Ganglion uses 200 Hz, not 256 Hz.
+
+- **Non-Muse devices had no device_id in status**: `on_connected` now stores `info.id` in `status.device_id` when it hasn't been set yet. Previously only Muse's connect path set this field, leaving it `None` for MW75, Hermes, Emotiv, IDUN, and Ganglion — breaking reconnection targeting and paired device tracking.
+- **Device identity fields not populated from DeviceInfo**: `on_connected` now copies `serial_number`, `firmware_version`, `hardware_version`, `bootloader_version`, `mac_address`, and `headset_preset` from the adapter's `DeviceInfo` into `DeviceStatus`. Previously these were only populated from Muse Control JSON meta events.
+- **Meta handler only parsed Muse short keys**: `process_meta` now accepts both Muse-style short keys (`sn`, `ma`, `fw`, `hw`, `bl`, `tp`) and long-form keys (`serial_number`, `mac_address`, `firmware_version`, `hardware_version`, `bootloader_version`, `headset_preset`). IDUN Guardian's `DeviceInfo` meta event (which uses long keys) was previously ignored.
+
+- **Rust `DeviceKind` enum missing Ganglion, MW75, Hermes**: Added `Ganglion`, `Mw75`, and `Hermes` variants with correct capabilities (channel count, sample rate, IMU flags). Previously Ganglion was lumped into `OpenBci` and MW75/Hermes had no representation.
+- **`DeviceKind::from_name` missing prefixes**: Added `simblee`, `mn8`, and `guardian` prefix detection; split Ganglion from OpenBCI; added MW75 (substring) and Hermes detection.
+- **Frontend `deviceCapabilities()` incomplete**: Added `GANGLION_CAPS` (4ch/200Hz), `MW75_CAPS` (12ch/500Hz), and `HERMES_CAPS` (8ch/250Hz) with correct electrode names. Ganglion was previously detected as OpenBCI (8ch/250Hz).
+- **Frontend Ganglion detection wrong**: `"simblee"` prefix now correctly returns Ganglion caps instead of falling through to unknown.
+
+- **BandAnalyzer hardcoded 256 Hz sample rate**: Added `BandAnalyzer::new_with_rate(sample_rate)` and wired it through `SessionDsp`. Previously, PSD bin-frequency mapping and PAC computation used `MUSE_SAMPLE_RATE` (256 Hz) for all devices. On MW75 (500 Hz) this mapped bins at nearly 2x the correct frequency, placing "beta 13-30 Hz" at ~25-59 Hz. On Emotiv (128 Hz) the "beta band" actually integrated ~6.5-15 Hz (theta+alpha). All band powers, ratios (TAR, BAR, DTR), and derived scores (meditation, drowsiness, headache, consciousness indices) were wrong for non-Muse devices.
+- **ArtifactDetector hardcoded 256 Hz and Muse electrode indices**: Rewrote blink detection to accept a sample rate and resolve frontal electrodes by 10-20 name via `ArtifactDetector::with_channels(sample_rate, channel_names)`. Previously, blink refractory timing was wrong for non-256 Hz devices, and only Muse's AF7/AF8 (indices 1/2) were checked — other devices detected blinks on wrong channels or not at all.
+- **Session runner now sets device sample rate in filter config**: Before creating the DSP pipeline, the session runner writes the device's actual sample rate into `FilterConfig.sample_rate`, ensuring the `EegFilter` frequency-domain operations (low-pass, high-pass, notch) use correct bin frequencies for all devices.
+
+- **Embedding worker used Muse channel names and 256 Hz for all devices**: `load_from_named_tensor` in the ZUNA embedding worker was called with hardcoded `CHANNEL_NAMES` (TP9/AF7/AF8/TP10) and `MUSE_SAMPLE_RATE` (256 Hz) regardless of the connected device. Now receives actual channel names and sample rate via `EpochMsg`, set from the device descriptor at session start.
+- **Embedding overlap computation used 256 Hz**: `EegAccumulator::set_overlap_secs` converted seconds to samples using `MUSE_SAMPLE_RATE`. Now uses the device's actual sample rate.
+- **Scanning message showed "Looking for Muse" for MW75, Hermes, and IDUN**: Added device-specific scanning messages using the `connectingTo` i18n key for non-Muse/non-Ganglion/non-Emotiv devices.
+
+- **Emotiv dashboard showed 14 channel labels but only 12 had data**: The DSP pipeline caps at `EEG_CHANNELS` (12), so the last two EPOC electrodes (F8, AF4) were never forwarded to the frontend. Aligned `EMOTIV_CH`, `EMOTIV_COLOR`, `EMOTIV_CAPS`, ElectrodeGuide, and ElectrodePlacement to show 12 channels matching the pipeline output. Prevents undefined values in the signal quality grid and EEG expanded view.
+
+- **Emotiv adapter uses DataLabels for channel detection**: When the Cortex API sends `DataLabels` for the "eeg" stream, the adapter now updates its channel count and names to match the actual headset (EPOC 14-ch, Insight 5-ch, MN8 2-ch, Flex 32-ch). Previously only the first-packet sample-count fallback was used.
+- **IDUN Guardian notch filter now respects user setting**: `connect_idun` now reads the user's notch filter preference (50 Hz / 60 Hz) from the app settings and passes it to `GuardianClientConfig::use_60hz`. Previously the on-device notch always defaulted to 60 Hz, producing mains artifacts for users in 50 Hz countries (Europe, Asia, Africa, most of South America).
+
+- **Emotiv & IDUN devices never connected**: `detect_device_kind` in the session lifecycle had no arms for Emotiv or IDUN device names, causing them to fall through to the Muse connect path. Added prefix matching for Emotiv (`emotiv`, `epoc`, `insight`, `flex`, `mn8`) and IDUN (`idun`, `guardian`) devices, and wired the `"emotiv"` / `"idun"` kinds to their respective `connect_emotiv` / `connect_idun` factory functions.
+
+- **Emotiv & IDUN dashboard UI incomplete**: Added `isEmotiv` / `isIdun` capability flags to the dashboard, device images, alt text, battery visibility for Emotiv, and device-specific scanning message for Emotiv Cortex API connections.
+- **ElectrodeGuide missing Emotiv & IDUN tabs**: Added Emotiv EPOC (14-ch) and IDUN Guardian (1-ch) tabs with correct electrode positions to the 3D electrode guide.
+- **MN8 earbuds not detected in frontend**: `deviceCapabilities()` was missing the `mn8` prefix for Emotiv MN8 earbuds.
+
+- **Emotiv/IDUN channel labels defaulted to Muse 4-ch**: Dashboard channel labels and colors now correctly show 14 Emotiv EPOC channels or 1 IDUN Guardian channel instead of falling back to the Muse TP9/AF7/AF8/TP10 labels.
+- **ElectrodePlacement SVG missing Emotiv & IDUN**: Added 14-electrode Emotiv EPOC and single-electrode IDUN Guardian presets to the 2D electrode placement diagram with correct 10-20 positions.
+- **Device info badge only shown for Ganglion**: Non-Muse device info badges (channel count, sample rate) now also appear for Emotiv, IDUN, and Hermes connections.
+- **EEG expanded grid always 2-column**: The expanded EEG channel grid now adapts columns to the channel count (2 for ≤4ch, 3 for 5-8ch, 4 for >8ch) instead of being hardcoded to 2 columns except MW75.
+
+- **Session runner re-reads pipeline channels after Emotiv auto-detection**: When Emotiv auto-detects the actual channel count (Insight 5-ch, MN8 2-ch vs assumed EPOC 14-ch), the session runner now picks up the updated `pipeline_channels` on the first EEG frame. Previously the snapshot was taken before any events arrived, so the DSP pipeline would process 14 channels even when only 5 were active.
+
+- **MW75 reconnects to the correct device**: `connect_mw75` now uses `scan_all()` + `connect_to(device)` with `preferred_id` matching, so reconnection targets the previously-paired headphone instead of picking the first MW75 found.
+- **Hermes reconnects to the correct device**: Same fix as MW75 — `connect_hermes` now uses `scan_all()` + `connect_to(device)` with `preferred_id` matching.
+- **Emotiv CSV has correct channel header**: CSV creation is now deferred until the first EEG frame arrives, after Emotiv's channel auto-detection (DataLabels) has resolved the actual channel count. Previously the CSV was opened with 14-column EPOC headers even when an Insight (5-ch) was connected.
+
+- **Fix screenshot capture on Linux (Wayland) and Windows**: Replaced shell-command-based screenshot capture (`xdotool`, `import`, `scrot`, `grim`, `swaymsg` on Linux; PowerShell `CopyFromScreen` on Windows) with the `xcap` crate. This provides native, dependency-free screen capture on both X11 and Wayland (via PipeWire) on Linux, and native Win32/WGC capture on Windows. Includes a dark-frame detection guard that skips all-black captures.
+
+- **Downloaded LLM model auto-activates**: When the first model finishes downloading (or the current active model is missing/deleted), the newly downloaded model is automatically set as active. Previously only activated when `active_model` was empty — a stale reference to a deleted model prevented auto-selection.
+- **"Start LLM Engine" auto-selects a model**: When the user clicks Start and no model is active (or the active model file is missing), the engine now automatically picks the first available downloaded model, activates it, and proceeds with loading. Previously it would fail with a generic error asking the user to manually click "Use".
+
+- **Metrics CSV/Parquet header now uses actual channel names**: The metrics header was hardcoded to 4 Muse channels (TP9/AF7/AF8/TP10 × 12 bands = 48 columns). For MW75 (12-ch) or Emotiv (14-ch), the data row had more band-power columns than the header, corrupting CSV alignment. Added `build_metrics_header(channel_names)` that generates the correct per-channel band columns dynamically. Both CSV and Parquet metrics writers now use it.
+- **Metrics reader detects channel count from header**: `load_metrics_csv` and `load_metrics_from_parquet` now find the "faa" column position to compute the cross-channel index offset dynamically. Previously hardcoded to column 49 (4 channels × 12 bands + 1), causing all index values to read from wrong columns for non-4-channel devices.
+
+- **QualityMonitor window size now matches device sample rate**: Added `QualityMonitor::with_window(channels, window)` and wired it to use the device's EEG sample rate (≈1 second window). Previously the window was hardcoded to 256 samples — only 0.51 s at 500 Hz (MW75) or 2 s at 128 Hz (Emotiv), causing quality to be assessed over inconsistent time windows.
+- **HeadPoseTracker IMU rate now configurable**: Added `HeadPoseTracker::with_imu_rate(hz)`. Gyro integration (`dt`), stillness EMA, gesture window, and refractory period all used the hardcoded Muse IMU rate (52 Hz). At different rates, `dt = 1/52` would produce wrong pitch/roll/yaw accumulation and incorrect stillness scores.
+
+- **Fix screenshot service mock data**: Fixed GPU stats mock to use 0–1 fractions instead of raw integers (was showing 4000% instead of 30%). Fixed `get_csv_metrics` timeseries to use correct abbreviated `EpochRow` field names (`med`, `cog`, `drow`, `sc`, `mu`, `ha`, `hm`, `hc`, etc.) so session charts render properly. Fixed `get_sleep_stages` mock to return `{ epochs: [], summary: null }` instead of `null` to prevent crashes in the compare page.
+
+- **Fix dashboard light screenshot empty**: Added a warm-up step before taking the first screenshot so Vite finishes compiling, and increased wait time for the dashboard page to ensure Svelte fully bootstraps before capture. Dashboard is now also captured as full-page.
+
+- **Fix search EEG screenshot empty**: The `stream_search_embeddings` mock now properly sends streaming results through the Tauri Channel by extracting the Channel's callback ID and delivering `started`, `result`, and `done` messages with realistic neighbor data including labels and metrics.
+
+- **Fix search images broken thumbnails**: Broken `<img>` elements (pointing to non-existent local screenshot server) are now replaced with coloured placeholder SVGs that mimic app windows (VS Code, Firefox, Terminal) after search results render. Removed duplicate search-images handler that was re-triggering search and overwriting the placeholder replacement.
+
+- **Session metadata hardcoded Muse values**: `write_session_meta` wrote `"sample_rate_hz": 256`, `"channels": ["TP9","AF7","AF8","TP10"]`, and `"channel_count": 4` for all devices. Now uses actual device values from `DeviceStatus` (set at session start). Recordings from MW75, Emotiv, Hermes, IDUN, and Ganglion had incorrect metadata in the JSON sidecar file.
+- **Ganglion connected at wrong sample rate**: `connect_ganglion` passed `EEG_SAMPLE_RATE` (256 Hz) to `OpenBciAdapter::make_descriptor`, but Ganglion runs at 200 Hz. Added `GANGLION_SAMPLE_RATE` (200 Hz) constant and use it instead. This caused the entire DSP pipeline (filter, band analyzer, artifact detector) to use 256 Hz for a 200 Hz device.
+- **Missing constants in prelude**: Added `GANGLION_SAMPLE_RATE`, `GANGLION_CHANNEL_NAMES`, `HERMES_*`, and `MW75_*` constants to the `skill-constants` prelude for easier access across crates.
+
+- **⚠️ BREAKING: `muse-status` event renamed to `status`**: The Tauri IPC event and WebSocket broadcast event `muse-status` has been renamed to `status` to reflect its device-agnostic nature. All frontend listeners, the WS server, and documentation have been updated. **External WS clients that subscribe to `muse-status` must update to `status`.**
+
+### Refactor
+
+- **Unified `exg_` session file convention**: New recordings use `exg_<timestamp>.csv` and `exg_<timestamp>.json` for all devices, replacing the Muse-only `muse_` prefix. Full backward compatibility: the history loader, session analysis, embedding search, and settings commands all accept both `exg_` and legacy `muse_` files.
+
+- **`detect_device_kind` delegates to `DeviceKind::from_name`**: Eliminated duplicated device-name matching constants in `lifecycle.rs`. All device-name detection now flows through `skill-data::device::DeviceKind::from_name`.
+
+- **DeviceKind type updated**: Added missing `"ganglion"`, `"mw75"`, and `"hermes"` variants to the TypeScript `DeviceKind` union so it matches all backend device kinds.
+- **Stale JSDoc**: Updated `device_kind` field comment in `types.ts` to reference `DeviceKind` instead of listing an incomplete set.
+
+- **Device config: Rust as single source of truth**: Eliminated duplicate device definitions between Rust and Svelte. `crates/skill-data/src/device.rs` is now the canonical source for device families, capabilities (channel count, PPG, IMU, central electrodes, full montage, sample rate, electrode names), and the supported-devices catalog (companies, models, images, instruction keys). The Svelte frontend receives capability flags via `DeviceStatus` fields (`has_ppg`, `has_imu`, `has_central_electrodes`, `has_full_montage`) and fetches the supported-devices catalog via the new `get_supported_companies` Tauri command. `src/lib/device.ts` is now a thin type-only wrapper; `src/lib/supported-devices.ts` loads data from Rust at startup. The old `detect_device_kind` in `lifecycle.rs` now delegates to `DeviceKind::as_str()`.
+
+- **Split i18n into namespace files**: Replaced monolithic ~3000-line locale files (`en.ts`, `de.ts`, `fr.ts`, `he.ts`, `uk.ts`) with 15 namespace-based files per locale under `src/lib/i18n/<locale>/` (`common`, `dashboard`, `settings`, `search`, `calibration`, `history`, `hooks`, `llm`, `onboarding`, `screenshots`, `tts`, `perm`, `help`, `help-ref`, `ui`). Each locale folder has a barrel `index.ts` that merges all namespaces.
+- **Added `TranslationKey` type safety**: Generated `keys.ts` with a union type of all 2731 valid translation keys. The `t()` function now accepts `TranslationKey` for compile-time checking on static keys, with a `string` overload for dynamic/computed keys.
+- **Extracted shared `i18n-utils.ts`**: Moved duplicated `extractKeys()` logic from `sync-i18n.ts` and `audit-i18n.ts` into a shared `src/lib/i18n/i18n-utils.ts` module.
+- **Updated i18n tests**: Test suite now validates per-namespace file consistency (74 tests, all passing).
+- **Updated scripts**: `sync-i18n.ts` and `audit-i18n.ts` now operate on the new directory structure and use shared utilities.
+
+### Build
+
+- **Decouple skill-settings from skill-screenshots**: Moved `ScreenshotConfig` struct and its pure helper methods from `skill-screenshots` into `skill-settings`, breaking the transitive `skill-settings` → `skill-screenshots` → `xcap` → `pipewire` dependency chain. Crates like `skill-router`, `skill-history`, and `skill-settings` no longer require `libpipewire-0.3` to compile. The `fastembed_model_enum()` helper stays in `skill-screenshots` as a standalone function since it depends on the `fastembed` crate. `skill-screenshots` now imports `ScreenshotConfig` from `skill-settings` instead of owning it.
+
+- **Feature-gate `xcap` in skill-screenshots**: Added a `capture` feature (default on) that gates the `xcap` dependency. The top-level binary sets `default-features = false` so `cargo clippy` works without `libpipewire-0.3` on dev machines. Screen capture gracefully returns `None` when the feature is disabled. CI and release builds work unchanged since pipewire is installed there.
+
+### i18n
+
+- **Emotiv scanning message**: Added `dashboard.connectingEmotiv` key in all five languages (en, de, fr, uk, he).
+
+- **Replaced `\u` escape sequences with UTF-8 characters**: Converted 11 `\uXXXX` escapes in de, fr, he, uk i18n files to native UTF-8 per the project encoding rule.
+
+### Dependencies
+
+- **Added `xcap` 0.9 for Linux and Windows**: Cross-platform screen capture library replacing external CLI tool dependencies.
+
 ## [0.0.42] — 2026-03-18
 
 ### Features
