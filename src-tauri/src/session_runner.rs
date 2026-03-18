@@ -64,11 +64,14 @@ pub(crate) async fn run_device_session(
     };
     write_session_meta(&app, &csv_path);
 
-    // ── Set device sample rate in filter config so DSP uses correct Hz ──────
+    // ── Set device sample rate and channel info in AppState ─────────────────
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.status.filter_config.sample_rate = sample_rate as f32;
+        s.status.channel_names     = desc.channel_names.clone();
+        s.status.eeg_channel_count = desc.eeg_channels;
+        s.status.eeg_sample_rate_hz = sample_rate;
     }
 
     // ── Session-local DSP (lock-free during sample processing) ───────────────

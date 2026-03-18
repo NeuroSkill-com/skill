@@ -52,11 +52,11 @@ pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
         "session_duration_s":  duration_secs,
         "total_samples":       s.status.sample_count,
         "ppg_total_samples":   s.status.ppg_sample_count,
-        "sample_rate_hz":      EEG_SAMPLE_RATE,
+        "sample_rate_hz":      if s.status.eeg_sample_rate_hz > 0.0 { s.status.eeg_sample_rate_hz } else { EEG_SAMPLE_RATE },
         "ppg_sample_rate_hz":  PPG_SAMPLE_RATE,
-        "channels":            ["TP9", "AF7", "AF8", "TP10"],
+        "channels":            if s.status.channel_names.is_empty() { vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()] } else { s.status.channel_names.clone() },
         "ppg_channels":        ["ambient", "infrared", "red"],
-        "channel_count":       4,
+        "channel_count":       if s.status.eeg_channel_count > 0 { s.status.eeg_channel_count } else { 4 },
 
         // ── BLE Device Identity ──────────────────────────────────────────
         "device": {

@@ -48,6 +48,9 @@ pub mod prelude {
     pub use crate::{
         // Hardware
         EEG_CHANNELS, CHANNEL_NAMES, MUSE_SAMPLE_RATE, PPG_SAMPLE_RATE, PPG_CHANNELS,
+        GANGLION_SAMPLE_RATE, GANGLION_CHANNEL_NAMES,
+        HERMES_EEG_CHANNELS, HERMES_SAMPLE_RATE, HERMES_CHANNEL_NAMES,
+        MW75_EEG_CHANNELS, MW75_SAMPLE_RATE, MW75_CHANNEL_NAMES,
         EMOTIV_EPOC_EEG_CHANNELS, EMOTIV_INSIGHT_EEG_CHANNELS, EMOTIV_SAMPLE_RATE,
         EMOTIV_EPOC_CHANNEL_NAMES, EMOTIV_INSIGHT_CHANNEL_NAMES,
         IDUN_EEG_CHANNELS, IDUN_SAMPLE_RATE, IDUN_CHANNEL_NAMES,
@@ -119,6 +122,9 @@ pub const PPG_CHANNELS: usize = 3;
 
 /// IMU sample rate (Hz) — Muse fires at ~52 Hz, 3 samples per notification.
 pub const IMU_SAMPLE_RATE: f64 = 52.0;
+
+/// OpenBCI Ganglion hardware sample rate (Hz).
+pub const GANGLION_SAMPLE_RATE: f64 = 200.0;
 
 /// OpenBCI Ganglion channel labels (default 10-20 sites when unset).
 pub const GANGLION_CHANNEL_NAMES: [&str; 4] = ["Ch1", "Ch2", "Ch3", "Ch4"];

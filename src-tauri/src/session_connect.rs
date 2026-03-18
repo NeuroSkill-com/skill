@@ -386,7 +386,7 @@ pub(crate) async fn connect_ganglion(
 
     let desc = OpenBciAdapter::make_descriptor(
         "ganglion", 4,
-        crate::session_csv::EEG_SAMPLE_RATE,
+        skill_constants::GANGLION_SAMPLE_RATE,
         ch_labels,
     );
     let info = DeviceInfo {

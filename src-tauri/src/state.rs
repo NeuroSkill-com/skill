@@ -115,6 +115,13 @@ pub struct DeviceStatus {
     pub fuel_gauge_mv:       f32,
     pub temperature_raw:     u16,
     pub device_kind:         String,
+    /// Channel labels for the connected device (set at session start).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub channel_names:       Vec<String>,
+    /// Hardware EEG channel count of the connected device.
+    pub eeg_channel_count:   usize,
+    /// Hardware EEG sample rate of the connected device (Hz).
+    pub eeg_sample_rate_hz:  f64,
 }
 
 impl Default for DeviceStatus {
@@ -148,6 +155,9 @@ impl Default for DeviceStatus {
             fuel_gauge_mv:      0.0,
             temperature_raw:    0,
             device_kind:        "unknown".into(),
+            channel_names:      Vec::new(),
+            eeg_channel_count:  0,
+            eeg_sample_rate_hz: 0.0,
         }
     }
 }
@@ -177,6 +187,9 @@ impl DeviceStatus {
         self.target_name         = None;
         self.retry_attempt       = 0;
         self.retry_countdown_secs = 0;
+        self.channel_names       = Vec::new();
+        self.eeg_channel_count   = 0;
+        self.eeg_sample_rate_hz  = 0.0;
     }
 
     /// Reset transient fields for a new scanning cycle.
