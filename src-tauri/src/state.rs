@@ -242,7 +242,7 @@ impl DeviceStatus {
     /// Derive and set capability booleans from the current `device_kind` string.
     pub fn apply_capabilities_from_kind(&mut self) {
         use skill_data::device::DeviceKind;
-        let kind = DeviceKind::from_name(Some(&self.device_kind));
+        let kind = DeviceKind::from_kind_str(&self.device_kind);
         let caps = kind.capabilities();
         self.has_ppg                = caps.has_ppg;
         self.has_imu                = caps.has_imu;

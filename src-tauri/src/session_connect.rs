@@ -732,7 +732,9 @@ pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
             Ok((adapter, kind_str)) => {
                 {
                     let r = app2.state::<Mutex<Box<AppState>>>();
-                    r.lock_or_recover().status.device_kind = kind_str;
+                    let mut s = r.lock_or_recover();
+                    s.status.device_kind = kind_str;
+                    s.status.apply_capabilities_from_kind();
                 }
                 crate::session_runner::run_device_session(app2, cancel, csv_path, adapter).await;
             }

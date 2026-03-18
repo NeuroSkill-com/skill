@@ -221,6 +221,31 @@ impl DeviceKind {
             Self::Unknown  => "unknown",
         }
     }
+
+    /// Parse a kind tag string back into a [`DeviceKind`].
+    ///
+    /// Accepts the canonical tags returned by [`as_str`](Self::as_str) as well
+    /// as common runtime values produced by the session layer (e.g.
+    /// `"openbci_cyton"`).  Falls back to [`from_name`](Self::from_name) for
+    /// any unrecognised string so BLE advertising names still work.
+    pub fn from_kind_str(s: &str) -> Self {
+        match s {
+            "muse"     => Self::Muse,
+            "ganglion" => Self::Ganglion,
+            "open_bci" => Self::OpenBci,
+            "mw75"     => Self::Mw75,
+            "hermes"   => Self::Hermes,
+            "emotiv"   => Self::Emotiv,
+            "idun"     => Self::Idun,
+            "unknown"  => Self::Unknown,
+            other => {
+                // Handle runtime kind strings like "openbci_cyton", "openbci_cyton_daisy", etc.
+                if other.starts_with("openbci") { return Self::OpenBci; }
+                // Fall back to advertising-name detection for anything else.
+                Self::from_name(Some(other))
+            }
+        }
+    }
 }
 
 /// Helper: convert a `&[&str]` to `Vec<String>`.
@@ -434,6 +459,32 @@ mod tests {
     fn from_name_unknown() {
         assert_eq!(DeviceKind::from_name(None), DeviceKind::Unknown);
         assert_eq!(DeviceKind::from_name(Some("random-device")), DeviceKind::Unknown);
+    }
+
+    #[test]
+    fn from_kind_str_canonical() {
+        assert_eq!(DeviceKind::from_kind_str("muse"), DeviceKind::Muse);
+        assert_eq!(DeviceKind::from_kind_str("ganglion"), DeviceKind::Ganglion);
+        assert_eq!(DeviceKind::from_kind_str("open_bci"), DeviceKind::OpenBci);
+        assert_eq!(DeviceKind::from_kind_str("mw75"), DeviceKind::Mw75);
+        assert_eq!(DeviceKind::from_kind_str("hermes"), DeviceKind::Hermes);
+        assert_eq!(DeviceKind::from_kind_str("emotiv"), DeviceKind::Emotiv);
+        assert_eq!(DeviceKind::from_kind_str("idun"), DeviceKind::Idun);
+        assert_eq!(DeviceKind::from_kind_str("unknown"), DeviceKind::Unknown);
+    }
+
+    #[test]
+    fn from_kind_str_runtime_openbci() {
+        assert_eq!(DeviceKind::from_kind_str("openbci_cyton"), DeviceKind::OpenBci);
+        assert_eq!(DeviceKind::from_kind_str("openbci_cyton_daisy"), DeviceKind::OpenBci);
+        assert_eq!(DeviceKind::from_kind_str("openbci_galea"), DeviceKind::OpenBci);
+    }
+
+    #[test]
+    fn from_kind_str_fallback_to_from_name() {
+        // An advertising name should still work via fallback.
+        assert_eq!(DeviceKind::from_kind_str("Muse-2-ABCD"), DeviceKind::Muse);
+        assert_eq!(DeviceKind::from_kind_str("random-thing"), DeviceKind::Unknown);
     }
 
     #[test]

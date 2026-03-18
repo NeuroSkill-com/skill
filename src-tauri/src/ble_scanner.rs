@@ -213,13 +213,11 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
                                     let name_lower = props.local_name.as_deref()
                                         .map(|n| n.to_lowercase());
 
-                                    // Match by advertised name
+                                    // Match by advertised name (delegates to the
+                                    // canonical DeviceKind detection in skill-data).
                                     let name_match = name_lower.as_deref().map(|n| {
-                                        n.starts_with("muse")
-                                            || n.starts_with("ganglion")
-                                            || n.starts_with("simblee")
-                                            || n.contains("mw75")
-                                            || n.starts_with("hermes")
+                                        skill_data::device::DeviceKind::from_name(Some(n))
+                                            != skill_data::device::DeviceKind::Unknown
                                     }).unwrap_or(false);
 
                                     // Match MW75 by GATT service UUID — on macOS,
