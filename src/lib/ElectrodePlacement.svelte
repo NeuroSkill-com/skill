@@ -81,7 +81,7 @@ the Free Software Foundation, version 3 only. -->
     { id: "FC2", label: "FC2", cx: 138, cy: 148, side: "right"  },
   ];
 
-  // Emotiv EPOC X / EPOC+: 14 electrodes distributed across the scalp.
+  // Emotiv EPOC X / EPOC+: first 12 of 14 electrodes (pipeline-capped at EEG_CHANNELS).
   const EMOTIV_ELECTRODES: ElectrodePos[] = [
     { id: "AF3", label: "AF3", cx: 68,  cy: 58,  side: "left"   },
     { id: "F7",  label: "F7",  cx: 36,  cy: 80,  side: "left"   },
@@ -95,8 +95,6 @@ the Free Software Foundation, version 3 only. -->
     { id: "T8",  label: "T8",  cx: 176, cy: 130, side: "right"  },
     { id: "FC6", label: "FC6", cx: 162, cy: 108, side: "right"  },
     { id: "F4",  label: "F4",  cx: 138, cy: 86,  side: "right"  },
-    { id: "F8",  label: "F8",  cx: 164, cy: 80,  side: "right"  },
-    { id: "AF4", label: "AF4", cx: 132, cy: 58,  side: "right"  },
   ];
 
   // IDUN Guardian: single in-ear bipolar channel.

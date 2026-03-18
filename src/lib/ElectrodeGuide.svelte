@@ -76,7 +76,7 @@ the Free Software Foundation, version 3 only. -->
     { id: "mw75",     label: "MW75",     count: "12" },
     { id: "hermes",   label: "Hermes",   count: "8"  },
     { id: "ganglion", label: "Ganglion", count: "4"  },
-    { id: "emotiv",   label: "Emotiv",   count: "14" },
+    { id: "emotiv",   label: "Emotiv",   count: "12" },
     { id: "idun",     label: "IDUN",     count: "1"  },
     { id: "10-20",    label: "10-20",    count: "21" },
     { id: "10-10",    label: "10-10",    count: "64" },
@@ -96,7 +96,8 @@ the Free Software Foundation, version 3 only. -->
   const museElectrodes = allElectrodes.filter(e => e.muse);
   const MW75_LABELS = ["FT7","T7","TP7","CP5","P7","C5","FT8","T8","TP8","CP6","P8","C6"];
   const mw75Electrodes = allElectrodes.filter(e => MW75_LABELS.includes(e.name));
-  const EMOTIV_EPOC_LABELS = ["AF3","F7","F3","FC5","T7","P7","O1","O2","P8","T8","FC6","F4","F8","AF4"];
+  // First 12 of the 14 EPOC electrodes — pipeline-capped at EEG_CHANNELS (12).
+  const EMOTIV_EPOC_LABELS = ["AF3","F7","F3","FC5","T7","P7","O1","O2","P8","T8","FC6","F4"];
   const emotivElectrodes = allElectrodes.filter(e => EMOTIV_EPOC_LABELS.includes(e.name));
   const IDUN_LABELS = ["A1"]; // Single-channel in-ear reference
   const idunElectrodes = allElectrodes.filter(e => IDUN_LABELS.includes(e.name));

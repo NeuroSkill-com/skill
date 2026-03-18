@@ -131,7 +131,7 @@ const HERMES_CAPS: DeviceCapabilities = {
 
 const EMOTIV_CAPS: DeviceCapabilities = {
   kind:                 "emotiv",
-  channelCount:         14,      // EPOC; Insight = 5; Flex = 32
+  channelCount:         12,      // pipeline-capped; full EPOC = 14, Insight = 5, Flex = 32
   hasPpg:               false,
   hasImu:               true,
   hasCentralElectrodes: true,    // EPOC includes FC5/FC6 (near-central)
@@ -139,7 +139,7 @@ const EMOTIV_CAPS: DeviceCapabilities = {
   sampleRateHz:         128,
   electrodeNames:       [
     "AF3","F7","F3","FC5","T7","P7","O1",
-    "O2","P8","T8","FC6","F4","F8","AF4",
+    "O2","P8","T8","FC6","F4",
   ],
 } as const;
 
