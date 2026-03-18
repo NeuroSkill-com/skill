@@ -671,7 +671,7 @@ fn get_daily_recording_mins_sync(
         for entry in entries.filter_map(|e| e.ok()) {
             let p = entry.path();
             let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if !fname.starts_with("muse_") || !fname.ends_with(".json") { continue; }
+            if !((fname.starts_with("exg_") || fname.starts_with("muse_")) && fname.ends_with(".json")) { continue; }
             let Ok(text) = std::fs::read_to_string(&p) else { continue };
             let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
             let start = meta["session_start_utc"].as_u64().unwrap_or(0);

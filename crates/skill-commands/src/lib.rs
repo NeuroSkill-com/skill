@@ -673,7 +673,7 @@ pub fn find_session_for_timestamp_in(
     for entry in rd.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if !name.ends_with(".json") || !name.starts_with("muse_") { continue; }
+        if !name.ends_with(".json") || !(name.starts_with("exg_") || name.starts_with("muse_")) { continue; }
         if name.contains("_ppg") || name.contains("_metrics") { continue; }
 
         let json_path = entry.path();

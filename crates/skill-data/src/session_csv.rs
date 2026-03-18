@@ -21,16 +21,16 @@ pub const PPG_SAMPLE_RATE: f64 = skill_constants::PPG_SAMPLE_RATE as f64;
 // ── CSV path helpers ──────────────────────────────────────────────────────────
 
 /// Derive the PPG CSV path from an EEG CSV path.
-/// `muse_1700000000.csv` → `muse_1700000000_ppg.csv`
+/// `exg_1700000000.csv` → `exg_1700000000_ppg.csv`
 pub fn ppg_csv_path(eeg_path: &Path) -> PathBuf {
-    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("muse");
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
     eeg_path.with_file_name(format!("{stem}_ppg.csv"))
 }
 
 /// Derive the metrics CSV path from an EEG CSV path.
-/// `muse_1700000000.csv` → `muse_1700000000_metrics.csv`
+/// `exg_1700000000.csv` → `exg_1700000000_metrics.csv`
 pub fn metrics_csv_path(eeg_path: &Path) -> PathBuf {
-    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("muse");
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
     eeg_path.with_file_name(format!("{stem}_metrics.csv"))
 }
 

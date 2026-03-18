@@ -20,18 +20,21 @@ pub use skill_data::session_csv::*;
 ///
 /// Uses [`crate::settings::default_skill_dir`] so the CSV lands in the same
 /// root as every other data file.
-pub(crate) fn new_csv_path(app: &AppHandle, device_kind: &str) -> PathBuf {
+/// Canonical CSV filename prefix for all new recordings.
+///
+/// Legacy sessions used `muse_<ts>.csv`; new sessions use `exg_<ts>.csv`
+/// regardless of device.  The history loader accepts both prefixes.
+pub(crate) const CSV_PREFIX: &str = "exg";
+
+pub(crate) fn new_csv_path(app: &AppHandle) -> PathBuf {
     let skill_dir = app
         .try_state::<std::sync::Mutex<Box<crate::AppState>>>()
         .map(|s| s.lock_or_recover().skill_dir.clone())
         .unwrap_or_else(crate::settings::default_skill_dir);
 
-    // Use device kind as filename prefix (e.g. "muse_1700000000.csv",
-    // "mw75_1700000000.csv").  Falls back to "eeg_" for unknown devices.
-    let prefix = if device_kind.is_empty() || device_kind == "unknown" { "eeg" } else { device_kind };
     let base = skill_dir.join(yyyymmdd_utc());
     let _ = std::fs::create_dir_all(&base);
-    base.join(format!("{}_{}.csv", prefix, unix_secs()))
+    base.join(format!("{}_{}.csv", CSV_PREFIX, unix_secs()))
 }
 
 // ── Session metadata sidecar ──────────────────────────────────────────────────

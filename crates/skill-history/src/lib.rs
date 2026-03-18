@@ -18,6 +18,35 @@ pub mod cache;
 pub use skill_data::label_store;
 pub use cache::*;
 
+// ── Session file helpers ──────────────────────────────────────────────────────
+
+/// Canonical prefix for new session files.
+const SESSION_PREFIX: &str = "exg_";
+/// Legacy prefix kept for backward compatibility.
+const LEGACY_PREFIX: &str = "muse_";
+
+/// Returns `true` if `fname` is a session JSON sidecar (exg_*.json or muse_*.json).
+fn is_session_json(fname: &str) -> bool {
+    (fname.starts_with(SESSION_PREFIX) || fname.starts_with(LEGACY_PREFIX))
+        && fname.ends_with(".json")
+}
+
+/// Returns `true` if `fname` is a primary EEG CSV (not metrics/ppg).
+fn is_session_csv(fname: &str) -> bool {
+    (fname.starts_with(SESSION_PREFIX) || fname.starts_with(LEGACY_PREFIX))
+        && fname.ends_with(".csv")
+        && !fname.ends_with("_metrics.csv")
+        && !fname.ends_with("_ppg.csv")
+}
+
+/// Extract the Unix timestamp from a session filename like `exg_1700000000.csv`
+/// or `muse_1700000000.json`.
+fn extract_timestamp(fname: &str) -> Option<u64> {
+    fname.rsplit_once('_')
+        .and_then(|(_, ts_part)| ts_part.strip_suffix(".csv").or_else(|| ts_part.strip_suffix(".json")))
+        .and_then(|s| s.parse().ok())
+}
+
 // ── SessionEntry ──────────────────────────────────────────────────────────────
 
 /// A session entry read from a JSON sidecar file.
@@ -205,13 +234,10 @@ pub fn list_session_days(skill_dir: &Path) -> Vec<String> {
                 .any(|f| {
                     let fname = f.file_name();
                     let fname = fname.to_string_lossy();
-                    if fname.starts_with("muse_") && fname.ends_with(".json") {
+                    if is_session_json(&fname) {
                         return true;
                     }
-                    if fname.starts_with("muse_") && fname.ends_with(".csv") {
-                        if fname.ends_with("_metrics.csv") || fname.ends_with("_ppg.csv") {
-                            return false;
-                        }
+                    if is_session_csv(&fname) {
                         return !f.path().with_extension("json").exists();
                     }
                     false
@@ -240,7 +266,7 @@ pub fn list_sessions_for_day(
     for jf in &files {
         let jp = jf.path();
         let fname = jp.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if !fname.starts_with("muse_") || !fname.ends_with(".json") { continue; }
+        if !is_session_json(fname) { continue; }
 
         let json_str = match std::fs::read_to_string(&jp) { Ok(s) => s, Err(_) => continue };
         let meta: serde_json::Value = match serde_json::from_str(&json_str) { Ok(v) => v, Err(_) => continue };
@@ -282,17 +308,11 @@ pub fn list_sessions_for_day(
     for cf in &files {
         let cp = cf.path();
         let cfname = cp.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if !cfname.ends_with(".csv") { continue; }
-        if cfname.ends_with("_metrics.csv") || cfname.ends_with("_ppg.csv") { continue; }
+        if !is_session_csv(cfname) { continue; }
         if cp.with_extension("json").exists() { continue; }
-        // Match any device prefix: "muse_", "mw75_", "hermes_", "emotiv_", "idun_",
-        // "ganglion_", "openbci_", "eeg_" — pattern: <kind>_<timestamp>.csv
-        let ts_part = cfname.rsplit_once('_').map(|(_, ts)| ts);
         let meta_fs = std::fs::metadata(&cp);
         let csv_size = meta_fs.as_ref().map(|m| m.len()).unwrap_or(0);
-        let ts: Option<u64> = ts_part
-            .and_then(|s| s.strip_suffix(".csv"))
-            .and_then(|s| s.parse().ok());
+        let ts: Option<u64> = extract_timestamp(cfname);
         let end_ts: Option<u64> = meta_fs.ok()
             .and_then(|m| m.modified().ok())
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
@@ -374,7 +394,7 @@ pub fn get_history_stats(skill_dir: &Path) -> HistoryStats {
             .into_iter().flatten().flatten()
             .filter(|e| {
                 let n = e.file_name(); let s = n.to_string_lossy();
-                s.starts_with("muse_") && s.ends_with(".json")
+                is_session_json(&s)
             });
         for jf in json_files {
             let Ok(text) = std::fs::read_to_string(jf.path()) else { continue };
@@ -404,7 +424,7 @@ pub fn find_session_csv_for_timestamp(skill_dir: &Path, ts_utc: u64) -> Option<S
         for file in files.filter_map(|e| e.ok()) {
             let jp = file.path();
             let fname = jp.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if !fname.starts_with("muse_") || !fname.ends_with(".json") { continue; }
+            if !is_session_json(fname) { continue; }
             let json = match std::fs::read_to_string(&jp) { Ok(s) => s, Err(_) => continue };
             let meta: serde_json::Value = match serde_json::from_str(&json) { Ok(v) => v, Err(_) => continue };
             let start = meta["session_start_utc"].as_u64();
