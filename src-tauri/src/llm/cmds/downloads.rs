@@ -71,6 +71,8 @@ pub fn download_llm_model(
             progress:   0.0,
             cancelled:  false,
             pause_requested: false,
+            current_shard: 0,
+            total_shards:  entry.shard_count() as u16,
         }));
 
         s.llm.downloads.insert(filename.clone(), prog.clone());
