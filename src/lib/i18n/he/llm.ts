@@ -306,6 +306,12 @@ const llm: Record<string, string> = {
   "llm.tools.skillsSyncing":           "מסנכרן...",
   "llm.tools.skillsLastSync":          "סנכרון אחרון",
   "llm.tools.skillsNeverSynced":       "אף פעם",
+  "llm.tools.skillsSection":           "Agent Skills",
+  "llm.tools.skillsSectionDesc":       "Skills מספקים הנחיות מתמחות שה-LLM יכול לטעון לפי דרישה. הפעל או השבת skills בודדים.",
+  "llm.tools.skillsNone":             "לא נמצאו skills. סנכרן skills קהילתיים או הוסף קבצי SKILL.md ל-~/.skill/skills/.",
+  "llm.tools.skillsLoading":          "טוען skills...",
+  "llm.tools.skillsEnableAll":        "הפעל הכל",
+  "llm.tools.skillsDisableAll":       "השבת הכל",
 };
 
 export default llm;

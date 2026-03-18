@@ -72,6 +72,15 @@
   let skillsLastSync = $state<number | null>(null);
   let skillsSyncing = $state(false);
 
+  interface SkillInfo {
+    name: string;
+    description: string;
+    source: string;
+    enabled: boolean;
+  }
+  let skills = $state<SkillInfo[]>([]);
+  let skillsLoading = $state(false);
+
   let TOOL_ROWS = $derived<Array<{ key: LlmToolKey; label: string; desc: string; warn?: boolean }>>(
     [
       { key: "date",       label: t("llm.tools.date"),      desc: t("llm.tools.dateDesc") },
@@ -82,7 +91,6 @@
       { key: "read_file",  label: t("llm.tools.readFile"),  desc: t("llm.tools.readFileDesc") },
       { key: "write_file", label: t("llm.tools.writeFile"), desc: t("llm.tools.writeFileDesc"), warn: true },
       { key: "edit_file",  label: t("llm.tools.editFile"),  desc: t("llm.tools.editFileDesc"),  warn: true },
-      { key: "skill_api", label: t("llm.tools.skillApi"), desc: t("llm.tools.skillApiDesc") },
     ]
   );
 
@@ -120,6 +128,7 @@
     try {
       await invoke("sync_skills_now");
       await loadSkillsMeta();
+      await loadSkills();
     } catch {}
     finally { skillsSyncing = false; }
   }
@@ -129,11 +138,32 @@
     return new Date(ts * 1000).toLocaleString();
   }
 
+  async function loadSkills() {
+    skillsLoading = true;
+    try { skills = await invoke<SkillInfo[]>("list_skills"); }
+    catch { skills = []; }
+    finally { skillsLoading = false; }
+  }
+
+  async function toggleSkill(name: string, enabled: boolean) {
+    // Update local state immediately for responsiveness.
+    skills = skills.map(s => s.name === name ? { ...s, enabled } : s);
+    const disabled = skills.filter(s => !s.enabled).map(s => s.name);
+    await invoke("set_disabled_skills", { names: disabled });
+  }
+
+  async function setAllSkills(enabled: boolean) {
+    skills = skills.map(s => ({ ...s, enabled }));
+    const disabled = enabled ? [] : skills.map(s => s.name);
+    await invoke("set_disabled_skills", { names: disabled });
+  }
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   onMount(async () => {
     await loadConfig();
     await loadSkillsMeta();
+    await loadSkills();
   });
 </script>
 
@@ -413,6 +443,85 @@
             </div>
           {/if}
         </div>
+      </div>
+
+    </CardContent>
+  </Card>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- Agent Skills                                                                -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      {t("llm.tools.skillsSection")}
+    </span>
+    <span class="text-[0.52rem] text-muted-foreground/50">
+      {skills.filter(s => s.enabled).length}/{skills.length}
+    </span>
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col py-0 px-0">
+
+      <!-- Description + bulk actions -->
+      <div class="flex items-center justify-between gap-4 px-4 pt-3.5 pb-2">
+        <p class="text-[0.65rem] text-muted-foreground leading-relaxed">
+          {t("llm.tools.skillsSectionDesc")}
+        </p>
+        {#if skills.length > 0}
+          <div class="flex items-center gap-1 shrink-0">
+            <button onclick={() => setAllSkills(true)}
+              class="rounded-md border border-border px-2 py-0.5 text-[0.56rem] font-semibold
+                     text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-background">
+              {t("llm.tools.skillsEnableAll")}
+            </button>
+            <button onclick={() => setAllSkills(false)}
+              class="rounded-md border border-border px-2 py-0.5 text-[0.56rem] font-semibold
+                     text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-background">
+              {t("llm.tools.skillsDisableAll")}
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      <!-- Skills list -->
+      <div class="flex flex-col gap-2 px-4 pb-3">
+        {#if skillsLoading}
+          <p class="text-[0.62rem] text-muted-foreground py-2">{t("llm.tools.skillsLoading")}</p>
+        {:else if skills.length === 0}
+          <p class="text-[0.62rem] text-muted-foreground py-2">{t("llm.tools.skillsNone")}</p>
+        {:else}
+          {#each skills as skill}
+            <div class="flex items-start justify-between gap-3 rounded-xl border
+                        border-border/60 dark:border-white/[0.06]
+                        {skill.enabled
+                          ? 'bg-slate-50/60 dark:bg-[#111118]'
+                          : 'bg-slate-50/30 dark:bg-[#111118]/50 opacity-60'}
+                        px-3 py-2.5">
+              <div class="flex flex-col gap-0.5 min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[0.72rem] font-semibold text-foreground truncate">{skill.name}</span>
+                  <span class="text-[0.48rem] font-medium rounded-full border px-1.5 py-0
+                               border-border/50 text-muted-foreground/60 shrink-0">
+                    {skill.source}
+                  </span>
+                </div>
+                <span class="text-[0.6rem] text-muted-foreground leading-relaxed line-clamp-2">{skill.description}</span>
+              </div>
+              <button role="switch" aria-checked={skill.enabled} aria-label={skill.name}
+                onclick={() => toggleSkill(skill.name, !skill.enabled)}
+                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
+                       border-transparent transition-colors duration-200 mt-0.5
+                       {skill.enabled ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
+                <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
+                              transform transition-transform duration-200
+                              {skill.enabled ? 'translate-x-4' : 'translate-x-0'}"></span>
+              </button>
+            </div>
+          {/each}
+        {/if}
       </div>
 
     </CardContent>

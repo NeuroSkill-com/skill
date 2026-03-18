@@ -72,6 +72,11 @@ pub struct LlmToolConfig {
     /// `0` = disabled.  Default: 86 400 (24 hours).
     #[serde(default = "default_skills_refresh_interval")]
     pub skills_refresh_interval_secs: u64,
+
+    /// Skill names that are explicitly disabled (will not be injected into the
+    /// LLM system prompt).  Empty = all discovered skills are available.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_skills: Vec<String>,
 }
 
 /// Web search provider configuration.
@@ -228,6 +233,7 @@ impl Default for LlmToolConfig {
             max_calls_per_round: default_max_tool_calls_per_round(),
             context_compression: ToolContextCompression::default(),
             skills_refresh_interval_secs: default_skills_refresh_interval(),
+            disabled_skills: Vec::new(),
         }
     }
 }
