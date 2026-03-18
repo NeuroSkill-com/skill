@@ -411,11 +411,11 @@ const he: Record<string, string> = {
   "settings.logHistory":        "היסטוריה",
   "settings.logHistoryDesc":    "טעינת רשימת הפעלות וסריקת CSV",
   "settings.logHooks":          "Hooks",
-  "settings.logHooksDesc":      "\u05D4\u05EA\u05D0\u05DE\u05EA hooks, \u05D8\u05E8\u05D9\u05D2\u05E8\u05D9\u05DD \u05D5\u05D4\u05EA\u05E8\u05D0\u05D5\u05EA",
+  "settings.logHooksDesc":      "התאמת hooks, טריגרים והתראות",
   "settings.logTools":          "Tools",
-  "settings.logToolsDesc":      "\u05D1\u05D9\u05E6\u05D5\u05E2 \u05E7\u05E8\u05D9\u05D0\u05D5\u05EA \u05DB\u05DC\u05D9\u05DD (\u05D4\u05E4\u05E2\u05DC\u05D4, \u05D0\u05D1\u05D8\u05D7\u05D4, \u05EA\u05D6\u05DE\u05D5\u05DF)",
+  "settings.logToolsDesc":      "ביצוע קריאות כלים (הפעלה, אבטחה, תזמון)",
 
-  "hooks.lastTrigger":          "\u05D8\u05E8\u05D9\u05D2\u05E8 \u05D0\u05D7\u05E8\u05D5\u05DF",
+  "hooks.lastTrigger":          "טריגר אחרון",
   "hooks.openSession":          "פתח הפעלה",
   "hooks.opening":              "פותח…",
 
@@ -2527,7 +2527,7 @@ const he: Record<string, string> = {
   "llm.tools.braveApiKeyDesc": "חינם: 2,000 שאילתות/חודש. קבל מפתח ב-brave.com/search/api",
   "llm.tools.searxngUrl": "כתובת מופע SearXNG",
   "llm.tools.searxngUrlDesc": "כתובת בסיס של מופע SearXNG העצמי שלך.",
-  "llm.tools.webFetch": "\u05e9\u05dc\u05d9\u05e4\u05ea \u05d3\u05e3 \u05d0\u05d9\u05e0\u05d8\u05e8\u05e0\u05d8",
+  "llm.tools.webFetch": "שליפת דף אינטרנט",
   "llm.tools.webFetchDesc": "הרשה שליפת גוף הטקסט הגולמי של דף HTTP(S) ציבורי.",
   "llm.tools.bash":                     "Bash",
   "llm.tools.bashDesc":                 "הרשה הרצת פקודות מעטפת במחשב זה. הפלט נחתך ל-2,000 שורות / 50 ק״ב.",
