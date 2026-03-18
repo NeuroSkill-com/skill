@@ -29,8 +29,9 @@ the Free Software Foundation, version 3 only. -->
   import {
     CHART_H, TIME_H, WAVE_H, ROW_PAD as PAD,
     EEG_CH, EEG_COLOR, EEG_CHANNELS as N_CH, EEG_CHANNELS_4,
-    N_EPOCHS, EPOCH_S, SAMPLE_RATE, EPOCH_SAMP, BUF_SIZE, EEG_RANGE_UV as EEG_RANGE,
-    SPEC_N_FREQ, FILTER_HOP as HOP, SPEC_COLS,
+    N_EPOCHS, EPOCH_S, SAMPLE_RATE, EPOCH_SAMP, EEG_RANGE_UV as EEG_RANGE,
+    SPEC_N_FREQ, FILTER_HOP as HOP,
+    bufSizeForRate, specColsForRate,
     SPEC_CMAP_STOPS_DARK, SPEC_CMAP_STOPS_LIGHT,
     SPEC_LOG_INIT, SPEC_LOG_DECAY as LOG_DECAY,
     SPEC_LOG_RANGE as LOG_RANGE, SPEC_LOG_FLOOR as LOG_FLOOR,
@@ -41,14 +42,20 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Props ──────────────────────────────────────────────────────────────────
   /** Number of channels to render (defaults to 4 for Muse/Ganglion). */
-  let { numChannels = EEG_CHANNELS_4, chLabels = EEG_CH as readonly string[], chColors: propColors = EEG_COLOR as readonly string[] }: {
+  let { numChannels = EEG_CHANNELS_4, chLabels = EEG_CH as readonly string[], chColors: propColors = EEG_COLOR as readonly string[], sampleRate = SAMPLE_RATE }: {
     numChannels?: number;
     chLabels?: readonly string[];
     chColors?: readonly string[];
+    sampleRate?: number;
   } = $props();
 
   /** Visible channel count — clamped to [1, N_CH]. */
   const VIS_CH = $derived(Math.max(1, Math.min(numChannels, N_CH)));
+
+  /** Effective buffer size for the current sample rate (always ≈15 s). */
+  const EBUF  = $derived(bufSizeForRate(sampleRate));
+  /** Effective spectrogram column count for the current sample rate. */
+  const ESPEC = $derived(specColsForRate(sampleRate));
 
   /** Minimum waveform row height in CSS px. */
   const MIN_ROW_H = 30;
@@ -91,7 +98,10 @@ the Free Software Foundation, version 3 only. -->
   let CMAP_LUT = CMAP_LUT_DARK;
 
   // ── Ring buffers ────────────────────────────────────────────────────────────
-  const buffers  = Array.from({ length: N_CH }, () => new Float64Array(BUF_SIZE));
+  // Sized to always hold ≈15 s of data at the device's actual sample rate.
+  const RBUF = bufSizeForRate(sampleRate);
+  const SPEC_COLS = Math.ceil(RBUF / HOP);
+  const buffers  = Array.from({ length: N_CH }, () => new Float64Array(RBUF));
   const writePos = new Int32Array(N_CH);
 
   // Per-channel one-pole high-pass (DC blocker, τ ≈ 780 ms @ 256 Hz).
@@ -220,7 +230,7 @@ the Free Software Foundation, version 3 only. -->
     if (ch < 0 || ch >= N_CH) return;
     for (const v of samples) {
       if (isFinite(v)) dcEma[ch] += DC_BETA * (v - dcEma[ch]);
-      buffers[ch][writePos[ch] % BUF_SIZE] = isFinite(v) ? v - dcEma[ch] : 0;
+      buffers[ch][writePos[ch] % RBUF] = isFinite(v) ? v - dcEma[ch] : 0;
       writePos[ch]++;
     }
   }
@@ -229,7 +239,7 @@ the Free Software Foundation, version 3 only. -->
   //
   // For each pixel column 0..W, scan the corresponding sample range from the
   // ring buffer and accumulate min, max, and mean into the pre-allocated
-  // output arrays.  One pass over BUF_SIZE samples, O(W) path operations.
+  // output arrays.  One pass over RBUF samples, O(W) path operations.
   //
   // This is equivalent to the classic oscilloscope "peak-detect" mode:
   // visually it preserves transient peaks even at high decimation ratios and
@@ -243,16 +253,16 @@ the Free Software Foundation, version 3 only. -->
     const maxs  = decMaxs[ch];
     const means = decMeans[ch];
 
-    const scale = BUF_SIZE / W;      // samples per pixel column
+    const scale = RBUF / W;      // samples per pixel column
 
     for (let px = 0; px < W; px++) {
       const iStart = Math.floor(px * scale);
-      const iEnd   = Math.min(Math.floor((px + 1) * scale), BUF_SIZE);
+      const iEnd   = Math.min(Math.floor((px + 1) * scale), RBUF);
       let mn = Infinity, mx = -Infinity, sum = 0;
       const cnt = iEnd - iStart;
       for (let i = iStart; i < iEnd; i++) {
-        const p = end - BUF_SIZE + 1 + i;
-        const v = buf[((p % BUF_SIZE) + BUF_SIZE) % BUF_SIZE];
+        const p = end - RBUF + 1 + i;
+        const v = buf[((p % RBUF) + RBUF) % RBUF];
         if (v < mn) mn = v;
         if (v > mx) mx = v;
         sum += v;
@@ -358,7 +368,7 @@ the Free Software Foundation, version 3 only. -->
       for (let i = 1; i < N_CH; i++) if (writePos[i] < minWp) minWp = writePos[i];
       ewmaWp     += (minWp - ewmaWp) * (1 - Math.exp(-dt / WP_TAU));
       let displayPos = ewmaWp;
-      if (displayPos < minWp - BUF_SIZE) displayPos = minWp - BUF_SIZE;
+      if (displayPos < minWp - RBUF) displayPos = minWp - RBUF;
 
       // ── Dirty-skip ───────────────────────────────────────────────────────
       // If the display position has moved less than half a CSS pixel AND no
@@ -389,7 +399,7 @@ the Free Software Foundation, version 3 only. -->
       // halves to unroll the ring: oldest on the left, newest on the right.
       //
       // Alignment with the waveform:
-      //   - BUF_SIZE   = 3840 samples  = 15 s of waveform history
+      //   - RBUF   = 3840 samples  = 15 s of waveform history
       //   - SPEC_COLS  = 120 columns   = 15 s of spectrogram (1 col per HOP=32)
       //   - Both scroll at the same wall-clock rate, so they stay in sync.
       //
@@ -516,13 +526,13 @@ the Free Software Foundation, version 3 only. -->
 
         // ── Waveform — min-max decimation (O(W) path ops, no allocations) ──
         //
-        // decimate() makes one pass over BUF_SIZE ring-buffer samples and
+        // decimate() makes one pass over RBUF ring-buffer samples and
         // stores per-pixel-column {min, max, mean} into pre-allocated arrays.
         // We then build:
         //   envPath  — closed min-max band (filled at low alpha = envelope)
         //   mainPath — mean centerline (stroked = the waveform line)
         //
-        // Total lineTo calls: 2 × W ≈ 1 760 instead of BUF_SIZE = 3 840.
+        // Total lineTo calls: 2 × W ≈ 1 760 instead of RBUF = 3 840.
         decimate(ch, displayPos, W);
         const mins  = decMins[ch];
         const maxs  = decMaxs[ch];
@@ -604,16 +614,16 @@ the Free Software Foundation, version 3 only. -->
 
       // ── Event markers (vertical lines + labels) ──────────────────────────
       // Each marker has a samplePos recorded at creation time.
-      // X = ((samplePos - oldest) / BUF_SIZE) * W, where oldest = displayPos - BUF_SIZE.
+      // X = ((samplePos - oldest) / RBUF) * W, where oldest = displayPos - RBUF.
       {
-        const oldest = displayPos - BUF_SIZE;
+        const oldest = displayPos - RBUF;
         // Prune markers that have scrolled off the left edge.
         while (markers.length > 0 && markers[0].samplePos < oldest) markers.shift();
 
         const frameHits: MarkerHitBox[] = [];
 
         for (const mk of markers) {
-          const frac = (mk.samplePos - oldest) / BUF_SIZE;
+          const frac = (mk.samplePos - oldest) / RBUF;
           if (frac < 0 || frac > 1) continue;
           const mx = frac * W;
 

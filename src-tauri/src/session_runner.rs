@@ -55,17 +55,10 @@ pub(crate) async fn run_device_session(
     let mut desc_may_change = kind == "emotiv";
     let sample_rate = desc.eeg_sample_rate;
 
-    // ── Open CSV with device-specific channel labels ─────────────────────────
-    let label_refs: Vec<&str> = desc.channel_names.iter().map(|s| s.as_str()).collect();
-    let mut csv = match CsvState::open_with_labels(&csv_path, &label_refs) {
-        Ok(c)  => c,
-        Err(e) => {
-            adapter.disconnect().await;
-            write_session_meta(&app, &csv_path);
-            crate::go_disconnected(&app, Some(format!("CSV error: {e}")), false);
-            return;
-        }
-    };
+    // CSV is opened lazily on the first EEG frame so that adapters like Emotiv
+    // can auto-detect the actual channel count (via DataLabels) before the
+    // header is written.
+    let mut csv: Option<CsvState> = None;
     write_session_meta(&app, &csv_path);
 
     // ── Set device sample rate and channel info in AppState ─────────────────
@@ -114,14 +107,39 @@ pub(crate) async fn run_device_session(
                     DeviceEvent::Eeg(frame) => {
                         // Re-check pipeline_channels for adapters that
                         // auto-detect (Emotiv DataLabels / first packet).
+                        // Re-check pipeline_channels for adapters that auto-detect.
                         if desc_may_change {
-                            let fresh_ch = adapter.descriptor().pipeline_channels;
-                            if fresh_ch != pipeline_ch {
-                                pipeline_ch = fresh_ch;
+                            let fresh = adapter.descriptor();
+                            if fresh.pipeline_channels != pipeline_ch {
+                                pipeline_ch = fresh.pipeline_channels;
                                 app_log!(app, "bluetooth",
                                     "[{kind}] updated to {} pipeline channels", pipeline_ch);
                             }
-                            desc_may_change = false; // only check once
+                            desc_may_change = false;
+                        }
+
+                        // Lazy-open CSV on first EEG frame (after auto-detection).
+                        if csv.is_none() {
+                            let fresh = adapter.descriptor();
+                            let labels: Vec<&str> = fresh.channel_names.iter()
+                                .map(|s| s.as_str()).collect();
+                            match CsvState::open_with_labels(&csv_path, &labels) {
+                                Ok(c)  => { csv = Some(c); }
+                                Err(e) => {
+                                    adapter.disconnect().await;
+                                    write_session_meta(&app, &csv_path);
+                                    crate::go_disconnected(&app, Some(format!("CSV error: {e}")), false);
+                                    return;
+                                }
+                            }
+                            // Update status with final channel info.
+                            {
+                                let r = app.app_state();
+                                let mut s = r.lock_or_recover();
+                                s.status.channel_names     = fresh.channel_names.clone();
+                                s.status.eeg_channel_count = fresh.eeg_channels;
+                            }
+                            write_session_meta(&app, &csv_path);
                         }
 
                         let temperature_raw = {
@@ -129,14 +147,18 @@ pub(crate) async fn run_device_session(
                             let val = sr.lock_or_recover().status.temperature_raw;
                             val
                         };
-                        process_eeg(
-                            &app, &mut dsp, &mut csv, &csv_path,
-                            &frame, sample_rate, pipeline_ch, has_ppg,
-                            temperature_raw,
-                        );
+                        if let Some(ref mut c) = csv {
+                            process_eeg(
+                                &app, &mut dsp, c, &csv_path,
+                                &frame, sample_rate, pipeline_ch, has_ppg,
+                                temperature_raw,
+                            );
+                        }
                     }
                     DeviceEvent::Ppg(frame) if has_ppg => {
-                        process_ppg(&app, &mut dsp, &mut csv, &csv_path, &frame);
+                        if let Some(ref mut c) = csv {
+                            process_ppg(&app, &mut dsp, c, &csv_path, &frame);
+                        }
                     }
                     DeviceEvent::Imu(frame) if has_imu => {
                         process_imu(&app, &mut dsp, &frame);
@@ -157,7 +179,9 @@ pub(crate) async fn run_device_session(
     tokio::time::sleep(std::time::Duration::from_millis(250)).await;
 
     // ── Finalise ─────────────────────────────────────────────────────────────
-    finalize_session(&app, &mut csv, &csv_path, user_cancelled);
+    if let Some(ref mut c) = csv {
+        finalize_session(&app, c, &csv_path, user_cancelled);
+    }
 }
 
 // ── Event handlers ────────────────────────────────────────────────────────────

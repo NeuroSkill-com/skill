@@ -1491,7 +1491,7 @@ the Free Software Foundation, version 3 only. -->
           <p class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("dashboard.eegWaveforms")}</p>
           <span class="text-[0.5rem] text-red-500 live-blink">●</span>
         </div>
-        <EegChart bind:this={chartEl} numChannels={chLabels.length} chLabels={chLabels} chColors={chColors} />
+        <EegChart bind:this={chartEl} numChannels={chLabels.length} chLabels={chLabels} chColors={chColors} sampleRate={status.filter_config?.sample_rate ?? 256} />
       </div>
       {/if}
 

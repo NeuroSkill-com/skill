@@ -50,12 +50,31 @@ use crate::settings::{HookLastTrigger, HookRule};
 use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus};
 
 use crate::constants::{
-    EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_HOP_SAMPLES,
+    EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_EPOCH_SECS,
+    EMBEDDING_HOP_SAMPLES,
     EMBEDDING_OVERLAP_MAX_SECS, EMBEDDING_OVERLAP_MIN_SECS,
+    MUSE_SAMPLE_RATE,
 };
 
 // Re-export public items from submodules.
 pub(crate) use worker::download_hf_weights;
+
+/// Linearly resample `src` to exactly `target_len` samples.
+///
+/// Used to convert device-native epoch buffers (e.g. 2500 samples at 500 Hz)
+/// to the ZUNA model's expected input size (1280 samples at 256 Hz).
+fn resample_linear(src: &[f32], target_len: usize) -> Vec<f32> {
+    if src.is_empty() || target_len == 0 { return vec![0.0; target_len]; }
+    if src.len() == target_len { return src.to_vec(); }
+    let ratio = (src.len() - 1) as f64 / (target_len - 1).max(1) as f64;
+    (0..target_len).map(|i| {
+        let pos = i as f64 * ratio;
+        let lo = pos.floor() as usize;
+        let hi = (lo + 1).min(src.len() - 1);
+        let frac = (pos - lo as f64) as f32;
+        src[lo] * (1.0 - frac) + src[hi] * frac
+    }).collect()
+}
 
 // ── Message sent to the background worker ─────────────────────────────────────
 
@@ -145,7 +164,10 @@ const PPG_CHANNELS: usize = crate::constants::PPG_CHANNELS;
 pub struct EegAccumulator {
     bufs:        [VecDeque<f32>; EEG_CHANNELS],
     since_last:  [usize; EEG_CHANNELS],
+    /// Hop in native samples (device sample rate).
     hop_samples: usize,
+    /// Epoch size in native samples (sample_rate × EMBEDDING_EPOCH_SECS).
+    native_epoch_samples: usize,
     device_id:   Option<String>,
     device_name: Option<String>,
     /// Channel labels from the connected device, passed to the embedding worker.
@@ -218,6 +240,7 @@ impl EegAccumulator {
             bufs:        std::array::from_fn(|_| VecDeque::new()),
             since_last:  [0; EEG_CHANNELS],
             hop_samples: EMBEDDING_HOP_SAMPLES,
+            native_epoch_samples: EMBEDDING_EPOCH_SAMPLES,
             device_id:    None,
             device_name:  None,
             channel_names: CHANNEL_NAMES.iter().map(|s| s.to_string()).collect(),
@@ -315,13 +338,19 @@ impl EegAccumulator {
     pub fn set_device_channels(&mut self, names: Vec<String>, sample_rate: f32) {
         self.channel_names = names;
         self.sample_rate   = sample_rate;
+        // Recompute native epoch/hop for the new sample rate.
+        self.native_epoch_samples = (sample_rate * EMBEDDING_EPOCH_SECS).round() as usize;
+        // Preserve the current overlap in seconds.
+        let epoch_native = self.native_epoch_samples;
+        let hop_frac = self.hop_samples as f32 / EMBEDDING_EPOCH_SAMPLES as f32;
+        self.hop_samples = (epoch_native as f32 * hop_frac).round().max(1.0) as usize;
     }
 
     /// Update the overlap between consecutive epochs (seconds).
     pub fn set_overlap_secs(&mut self, secs: f32) {
         let clamped       = secs.clamp(EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS);
         let overlap_samps = (clamped * self.sample_rate).round() as usize;
-        self.hop_samples  = EMBEDDING_EPOCH_SAMPLES.saturating_sub(overlap_samps).max(1);
+        self.hop_samples  = self.native_epoch_samples.saturating_sub(overlap_samps).max(1);
         self.since_last   = [0; EEG_CHANNELS];
         skill_log!(self.logger, "embedder", "overlap set to {clamped:.2} s → hop={} samples", self.hop_samples);
     }
@@ -344,23 +373,35 @@ impl EegAccumulator {
         self.ppg_analyzer.push(channel, samples);
     }
 
-    /// Push raw µV samples for `electrode` (0–3).
+    /// Push raw µV samples for `electrode` (0–11).
     pub fn push(&mut self, electrode: usize, samples: &[f32]) {
         if electrode >= EEG_CHANNELS { return; }
 
         self.bufs[electrode].extend(samples.iter().copied());
         self.since_last[electrode] += samples.len();
 
+        let native_epoch = self.native_epoch_samples;
         let min_buf        = self.bufs.iter().map(|b| b.len()).min().unwrap_or(0);
         let min_since_last = *self.since_last.iter().min().unwrap_or(&0);
 
-        if min_buf < EMBEDDING_EPOCH_SAMPLES || min_since_last < self.hop_samples {
+        if min_buf < native_epoch || min_since_last < self.hop_samples {
             return;
         }
 
-        // Extract last EMBEDDING_EPOCH_SAMPLES from each channel.
+        // Extract the last `native_epoch` samples from each channel,
+        // then resample to EMBEDDING_EPOCH_SAMPLES (1280) for the ZUNA model.
         let epoch: Vec<Vec<f32>> = self.bufs.iter()
-            .map(|b| b.iter().skip(b.len() - EMBEDDING_EPOCH_SAMPLES).copied().collect())
+            .map(|b| {
+                let raw: Vec<f32> = b.iter()
+                    .skip(b.len() - native_epoch)
+                    .copied()
+                    .collect();
+                if native_epoch == EMBEDDING_EPOCH_SAMPLES {
+                    raw // already 256 Hz — no resampling needed
+                } else {
+                    resample_linear(&raw, EMBEDDING_EPOCH_SAMPLES)
+                }
+            })
             .collect();
 
         for b in &mut self.bufs { b.drain(..self.hop_samples); }

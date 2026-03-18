@@ -134,7 +134,7 @@ pub(crate) async fn connect_muse(
 pub(crate) async fn connect_mw75(
     app:          &AppHandle,
     cancel:       &tokio_util::sync::CancellationToken,
-    _preferred_id: Option<String>,
+    preferred_id: Option<String>,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
     use skill_devices::mw75::prelude::*;
     use skill_devices::session::mw75::Mw75Adapter;
@@ -150,12 +150,25 @@ pub(crate) async fn connect_mw75(
         ..Default::default()
     };
     let client = Mw75Client::new(config);
-    app_log!(app, "bluetooth", "[mw75] connecting…");
+    app_log!(app, "bluetooth", "[mw75] connecting (preferred={preferred_id:?})…");
 
+    // Scan, then select preferred device (or first found).
     let connect_result = tokio::select! {
         biased;
         _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
-        r = client.connect() => r.map_err(|e| format!("{e}")),
+        r = async {
+            let devices = client.scan_all().await.map_err(|e| format!("{e}"))?;
+            if devices.is_empty() {
+                return Err("No MW75 devices found during scan.".into());
+            }
+            let device = if let Some(ref pref) = preferred_id {
+                devices.into_iter().find(|d| &d.id == pref)
+                    .ok_or_else(|| format!("Preferred MW75 ({pref}) not found; try re-pairing."))?
+            } else {
+                devices.into_iter().next().unwrap()
+            };
+            client.connect_to(device).await.map_err(|e| format!("{e}"))
+        } => r,
     };
 
     let (mut rx, handle) = match connect_result {
@@ -252,7 +265,7 @@ pub(crate) async fn connect_mw75(
 pub(crate) async fn connect_hermes(
     app:          &AppHandle,
     cancel:       &tokio_util::sync::CancellationToken,
-    _preferred_id: Option<String>,
+    preferred_id: Option<String>,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
     use skill_devices::hermes_ble::prelude::*;
     use skill_devices::session::hermes::HermesAdapter;
@@ -267,12 +280,25 @@ pub(crate) async fn connect_hermes(
         ..Default::default()
     };
     let client = HermesClient::new(config);
-    app_log!(app, "bluetooth", "[hermes] connecting…");
+    app_log!(app, "bluetooth", "[hermes] connecting (preferred={preferred_id:?})…");
 
+    // Scan, then select preferred device (or first found).
     let connect_result = tokio::select! {
         biased;
         _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
-        r = client.connect() => r.map_err(|e| format!("{e}")),
+        r = async {
+            let devices = client.scan_all().await.map_err(|e| format!("{e}"))?;
+            if devices.is_empty() {
+                return Err("No Hermes devices found during scan.".into());
+            }
+            let device = if let Some(ref pref) = preferred_id {
+                devices.into_iter().find(|d| &d.id == pref)
+                    .ok_or_else(|| format!("Preferred Hermes ({pref}) not found; try re-pairing."))?
+            } else {
+                devices.into_iter().next().unwrap()
+            };
+            client.connect_to(device).await.map_err(|e| format!("{e}"))
+        } => r,
     };
 
     let (rx, handle) = match connect_result {

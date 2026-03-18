@@ -106,7 +106,7 @@ export const IDUN_CH = ["EEG"] as const;
 /** IDUN Guardian channel colour. */
 export const IDUN_COLOR = ["#22c55e"] as const;
 
-/** Muse EEG hardware sample rate (Hz).  Mirrors `MUSE_SAMPLE_RATE`. */
+/** Default EEG hardware sample rate (Hz) — used when device rate is unknown. */
 export const SAMPLE_RATE = 256;
 
 /** Display half-range (µV).  Signals are clamped to ±EEG_RANGE_UV. */
@@ -134,11 +134,19 @@ export const N_EPOCHS = 3;
 /** Duration of one epoch (seconds). */
 export const EPOCH_S = 5;
 
-/** Samples per epoch = EPOCH_S × SAMPLE_RATE. */
+/** Samples per epoch = EPOCH_S × SAMPLE_RATE (at default 256 Hz). */
 export const EPOCH_SAMP = EPOCH_S * SAMPLE_RATE; // 1 280
 
-/** Ring-buffer depth = N_EPOCHS × EPOCH_SAMP = 15 s of history. */
+/** Ring-buffer depth = N_EPOCHS × EPOCH_SAMP = 15 s of history (at default 256 Hz). */
 export const BUF_SIZE = N_EPOCHS * EPOCH_SAMP; // 3 840
+
+/**
+ * Compute the ring-buffer depth for a given sample rate.
+ * Always shows `N_EPOCHS × EPOCH_S` seconds of history regardless of device.
+ */
+export function bufSizeForRate(sampleRate: number): number {
+  return N_EPOCHS * EPOCH_S * sampleRate;
+}
 
 // ── Signal processing (must match Rust constants.rs) ─────────────────────────
 
@@ -153,6 +161,13 @@ export const SPEC_N_FREQ = 51;
 /** Spectrogram time columns in the rolling buffer = BUF_SIZE / FILTER_HOP
  *  = 120 columns = 15 s — matches the waveform window exactly. */
 export const SPEC_COLS = BUF_SIZE / FILTER_HOP; // 120
+
+/**
+ * Compute spectrogram column count for a given sample rate.
+ */
+export function specColsForRate(sampleRate: number): number {
+  return Math.ceil(bufSizeForRate(sampleRate) / FILTER_HOP);
+}
 
 // ── Spectrogram normalisation ─────────────────────────────────────────────────
 
