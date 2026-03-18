@@ -36,10 +36,9 @@ pub(crate) fn yyyymmdd_utc() -> String {
 pub(crate) fn emit_status(app: &AppHandle) {
     let s_ref = app.app_state();
     let st = { let g = s_ref.lock_or_recover(); g.status.clone() };
-    // Event name kept as "muse-status" for backward compatibility with
-    // existing WS clients and frontend listeners.
-    let _ = app.emit("muse-status", &st);
-    app.state::<WsBroadcaster>().send("muse-status", &st);
+    // Renamed from "muse-status" to "status" — device-agnostic.
+    let _ = app.emit("status", &st);
+    app.state::<WsBroadcaster>().send("status", &st);
 }
 
 pub(crate) fn emit_devices(app: &AppHandle) {
