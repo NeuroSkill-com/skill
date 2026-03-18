@@ -10223,7 +10223,9 @@ dependencies = [
 name = "skill-history"
 version = "0.0.1"
 dependencies = [
+ "arrow-array",
  "csv",
+ "parquet",
  "rusqlite",
  "serde",
  "serde_json",

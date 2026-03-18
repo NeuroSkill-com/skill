@@ -5,32 +5,33 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use skill_data::session_csv::metrics_csv_path;
+// metrics_csv_path kept for backward compat if needed; find_metrics_path handles both formats.
 use skill_data::util::{unix_to_ts, ts_to_unix};
 
 use super::{
     CsvMetricsResult, SessionMetrics, EpochRow,
     SleepStages, SleepEpoch, SleepSummary,
-    load_metrics_csv,
+    load_metrics_csv, find_metrics_path,
 };
 
 // ── Disk cache ────────────────────────────────────────────────────────────────
 
-/// Cache file path: `muse_XXX.csv` → `muse_XXX_metrics_cache.json`
+/// Cache file path: `exg_XXX.csv` → `exg_XXX_metrics_cache.json`
 fn metrics_cache_path(csv_path: &Path) -> std::path::PathBuf {
-    let stem = csv_path.file_stem().and_then(|s| s.to_str()).unwrap_or("muse");
+    let stem = csv_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
     csv_path.with_file_name(format!("{stem}_metrics_cache.json"))
 }
 
-/// Load metrics from disk cache if valid, otherwise compute from CSV and cache.
+/// Load metrics from disk cache if valid, otherwise compute from data file and cache.
 pub fn load_csv_metrics_cached(csv_path: &Path) -> Option<CsvMetricsResult> {
-    let metrics_csv = metrics_csv_path(csv_path);
-    if !metrics_csv.exists() { return None; }
+    let metrics_file = find_metrics_path(csv_path);
+    if metrics_file.is_none() { return None; }
+    let metrics_file = metrics_file.unwrap();
 
     let cache_path = metrics_cache_path(csv_path);
 
     if cache_path.exists() {
-        let csv_mtime = std::fs::metadata(&metrics_csv).ok().and_then(|m| m.modified().ok());
+        let csv_mtime = std::fs::metadata(&metrics_file).ok().and_then(|m| m.modified().ok());
         let cache_mtime = std::fs::metadata(&cache_path).ok().and_then(|m| m.modified().ok());
         if let (Some(cm), Some(ca)) = (csv_mtime, cache_mtime) {
             if ca >= cm {
