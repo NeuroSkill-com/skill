@@ -19,30 +19,16 @@
  *   npx tsx scripts/audit-i18n.ts --verbose       # show English value next to each key
  */
 
-import fs from "fs";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
+import { extractKeysFromDir } from "../src/lib/i18n/i18n-utils";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 const I18N_DIR = path.resolve(__dirname, "../src/lib/i18n");
 const LOCALES  = ["de", "fr", "he", "uk"];
-
-// ── Key extraction (shared with sync-i18n.ts) ────────────────────────────────
-
-function extractKeys(filePath: string): Map<string, string> {
-  const src = fs.readFileSync(filePath, "utf8");
-  const map = new Map<string, string>();
-  const re = /^\s+"([^"]+)":\s+(?:"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`)/gm;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src)) !== null) {
-    const key = m[1];
-    const val = m[2] !== undefined ? m[2] : m[3];
-    map.set(key, val);
-  }
-  return map;
-}
 
 // ── Exemption rules ──────────────────────────────────────────────────────────
 // Keys matching any of these rules are considered legitimately identical
@@ -160,11 +146,9 @@ function isExemptValue(key: string, value: string): boolean {
   if (/^\{[a-zA-Z_]+\}$/.test(v)) return true;
 
   // Very short technical tokens (≤ 5 chars, no spaces, all ASCII)
-  // e.g. "UMAP", "GPU", "LLM", "TTS", "FAA", "CSV", "EEG"
   if (v.length <= 5 && /^[A-Za-z0-9_./()\-–]+$/.test(v)) return true;
 
   // Strings that are only numbers, symbols, units, math
-  // e.g. "ln(AF8 α) − ln(AF7 α)", "SpO₂", "θ–γ"
   if (/^[A-Za-z0-9α-ωΑ-Ω_./()\-–+×÷=<>²³₂₀₁ °%,;:·…\s]+$/.test(v) && !/[a-z]{4,}/i.test(v)) return true;
 
   // URL-only or code-only values
@@ -192,26 +176,26 @@ function main() {
   const filterLocale = localeIdx !== -1 ? args[localeIdx + 1] : null;
   const locales   = filterLocale ? [filterLocale] : LOCALES;
 
-  const enPath = path.join(I18N_DIR, "en.ts");
-  if (!fs.existsSync(enPath)) {
-    console.error("❌  Could not find en.ts at", enPath);
+  const enDir = path.join(I18N_DIR, "en");
+  if (!fs.existsSync(enDir)) {
+    console.error("❌  Could not find en/ at", enDir);
     process.exit(1);
   }
 
-  const enKeys = extractKeys(enPath);
-  console.log(`\n📖  en.ts: ${enKeys.size} keys (source of truth)\n`);
+  const enKeys = extractKeysFromDir(enDir);
+  console.log(`\n📖  en/: ${enKeys.size} keys (source of truth)\n`);
 
   let totalUntranslated = 0;
   let totalExempt       = 0;
 
   for (const locale of locales) {
-    const locPath = path.join(I18N_DIR, `${locale}.ts`);
-    if (!fs.existsSync(locPath)) {
-      console.warn(`⚠️   ${locale}.ts not found — skipping`);
+    const locDir = path.join(I18N_DIR, locale);
+    if (!fs.existsSync(locDir)) {
+      console.warn(`⚠️   ${locale}/ not found — skipping`);
       continue;
     }
 
-    const locKeys     = extractKeys(locPath);
+    const locKeys     = extractKeysFromDir(locDir);
     const untranslated: Array<[string, string]> = [];
     let exemptCount   = 0;
 
@@ -233,7 +217,7 @@ function main() {
 
     const status = untranslated.length === 0 ? "✅" : "⚠️ ";
     console.log(
-      `${status} ${locale}.ts — ${untranslated.length} untranslated` +
+      `${status} ${locale}/ — ${untranslated.length} untranslated` +
       `  (${exemptCount} exempt)`
     );
 
