@@ -86,16 +86,16 @@ fn catalog_entry_to_llm_model(entry: &crate::llm::catalog::LlmModelEntry) -> llm
     let min_ram = (entry.size_gb as f64) + 0.5;
     let recommended_ram = min_ram * 1.3;
 
-    // Detect MoE from family name (e.g. "35B-A3B")
+    // Detect MoE from tags or from family name (e.g. "35B-A3B")
     let name_lower = entry.family_name.to_lowercase();
-    let is_moe = name_lower.contains("-a") && {
+    let is_moe = entry.tags.iter().any(|t| t == "moe") || (name_lower.contains("-a") && {
         let parts: Vec<&str> = entry.family_name.split('-').collect();
         parts.iter().any(|p| {
             let lower = p.to_lowercase();
             lower.starts_with('a') && lower.len() > 1 && lower[1..].ends_with('b')
                 && lower[1..lower.len()-1].parse::<f64>().is_ok()
         })
-    };
+    });
 
     // Infer use_case from tags
     let use_case = if entry.tags.iter().any(|t| t == "coding") {

@@ -52,17 +52,32 @@ pub enum DownloadState {
     Cancelled,
 }
 
-/// One entry in the catalog — a single GGUF file.
+/// One entry in the catalog — a single GGUF file (or a set of split shards).
 ///
 /// Fields in the first block come from `llm_catalog.json` (static knowledge).
 /// Fields in the second block are runtime-only and never present in the
 /// bundled JSON (they default to `None` / `NotDownloaded` / `0.0`).
+///
+/// ## Split / sharded GGUFs
+///
+/// When a model is too large for a single file, repos split it into numbered
+/// shards (e.g. `Model-Q4_K_M-00001-of-00004.gguf`).  llama.cpp loads them
+/// automatically when given the path to the **first** shard.
+///
+/// For split models, `filename` is the **first shard** (the one passed to
+/// llama.cpp) and `shard_files` lists **all shards in order** (including the
+/// first).  `size_gb` is the **total** across all shards.
+///
+/// Single-file models have `shard_files` empty (the default).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmModelEntry {
     // ── Static (from llm_catalog.json) ───────────────────────────────────────
     pub repo:        String,
+    /// Primary filename — for single-file models this is the only GGUF file.
+    /// For split models this is the **first shard** (passed to llama.cpp).
     pub filename:    String,
     pub quant:       String,
+    /// Total size across all shard files (GB).
     pub size_gb:     f32,
     pub description: String,
     pub family_id:   String,
@@ -83,6 +98,11 @@ pub struct LlmModelEntry {
     /// The runtime context size is capped to this value.
     #[serde(default)]
     pub max_context_length: u32,
+    /// Ordered list of **all** shard filenames for split GGUFs.
+    /// Empty for single-file models.  When non-empty, `filename` must equal
+    /// `shard_files[0]`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shard_files: Vec<String>,
 
     // ── Runtime (persisted in skill_dir/llm_catalog.json) ────────────────────
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,12 +118,64 @@ pub struct LlmModelEntry {
 }
 
 impl LlmModelEntry {
-    /// Resolve local path from the HF Hub cache — filesystem only, no network.
+    /// Whether this entry represents a split (sharded) GGUF model.
+    pub fn is_split(&self) -> bool {
+        self.shard_files.len() > 1
+    }
+
+    /// Total number of shards (1 for single-file models).
+    pub fn shard_count(&self) -> usize {
+        if self.shard_files.is_empty() { 1 } else { self.shard_files.len() }
+    }
+
+    /// Iterator over all filenames that need to be downloaded / present.
+    /// For single-file models this yields just `filename`.
+    pub fn all_filenames(&self) -> impl Iterator<Item = &str> {
+        let single = std::iter::once(self.filename.as_str());
+        let shards = self.shard_files.iter().map(String::as_str);
+        // When shard_files is non-empty use it; otherwise fall back to filename.
+        if self.shard_files.is_empty() {
+            either::Either::Left(single)
+        } else {
+            either::Either::Right(shards)
+        }
+    }
+
+    /// Resolve local path of the **first shard** from the HF Hub cache —
+    /// filesystem only, no network.
+    ///
+    /// For split models, returns `Some` only when **all** shards are present.
     pub fn resolve_cached(&self) -> Option<PathBuf> {
         use hf_hub::{Cache, Repo};
         let cache = Cache::from_env();
         let repo  = cache.repo(Repo::model(self.repo.clone()));
-        repo.get(&self.filename)
+
+        let first = repo.get(&self.filename)?;
+
+        // For split models, verify every shard is present.
+        if self.is_split() {
+            for name in self.shard_files.iter().skip(1) {
+                repo.get(name)?;
+            }
+        }
+
+        Some(first)
+    }
+
+    /// Resolve the local path of every shard that is already cached.
+    /// Returns `(cached_paths, total_shards)`.
+    pub fn resolve_cached_shards(&self) -> (Vec<PathBuf>, usize) {
+        use hf_hub::{Cache, Repo};
+        let cache = Cache::from_env();
+        let repo  = cache.repo(Repo::model(self.repo.clone()));
+        let mut paths = Vec::new();
+        let names: Vec<&str> = self.all_filenames().collect();
+        for name in &names {
+            if let Some(p) = repo.get(name) {
+                paths.push(p);
+            }
+        }
+        (paths, names.len())
     }
 }
 
@@ -448,6 +520,10 @@ pub struct DownloadProgress {
     pub progress:   f32,
     pub cancelled:  bool,
     pub pause_requested: bool,
+    /// 1-based index of the shard currently being downloaded (0 = single file).
+    pub current_shard: u16,
+    /// Total number of shards (0 or 1 = single file).
+    pub total_shards:  u16,
 }
 
 // ── Resumable model downloader ────────────────────────────────────────────────
@@ -757,6 +833,148 @@ pub fn download_file(
     }
 
     Ok(final_path)
+}
+
+// ── Multi-shard download ──────────────────────────────────────────────────────
+
+/// Download a (possibly sharded) model.
+///
+/// For single-file models (`shard_files` empty) this delegates directly to
+/// [`download_file`].  For split models it downloads each shard sequentially,
+/// mapping overall progress across the entire set.
+///
+/// Returns the path to the **first shard** — the one llama.cpp needs.
+pub fn download_model(
+    entry:    &LlmModelEntry,
+    progress: &Arc<Mutex<DownloadProgress>>,
+) -> Result<PathBuf, String> {
+    let filenames: Vec<&str> = entry.all_filenames().collect();
+    let total_shards = filenames.len();
+
+    // Single-file fast path.
+    if total_shards <= 1 {
+        let size_bytes = (entry.size_gb * 1_073_741_824.0) as u64;
+        return download_file(&entry.repo, &entry.filename, progress, size_bytes);
+    }
+
+    // Multi-shard: compute per-shard sizes (estimate evenly when we don't
+    // have per-shard sizes — the catalog only stores total `size_gb`).
+    let total_bytes = (entry.size_gb * 1_073_741_824.0) as u64;
+    let per_shard_bytes = total_bytes / total_shards as u64;
+
+    {
+        let mut p = progress.lock().unwrap();
+        p.total_shards  = total_shards as u16;
+        p.current_shard = 1;
+    }
+
+    let mut first_path: Option<PathBuf> = None;
+
+    for (i, shard_name) in filenames.iter().enumerate() {
+        // Check cancellation between shards.
+        {
+            let p = progress.lock().unwrap();
+            if p.cancelled {
+                if p.pause_requested {
+                    return Err("paused".into());
+                }
+                return Err("cancelled".into());
+            }
+        }
+
+        // Create a per-shard progress wrapper that maps shard progress into
+        // the overall [0..1] range.
+        let shard_idx = i;
+        let shard_progress = Arc::new(Mutex::new(DownloadProgress {
+            filename:       shard_name.to_string(),
+            state:          DownloadState::Downloading,
+            status_msg:     None,
+            progress:       0.0,
+            cancelled:      false,
+            pause_requested: false,
+            current_shard:  (i + 1) as u16,
+            total_shards:   total_shards as u16,
+        }));
+
+        // Spawn a monitor that maps per-shard progress → overall progress.
+        let overall = Arc::clone(progress);
+        let shard_prog_clone = Arc::clone(&shard_progress);
+        let n_shards = total_shards;
+        let monitor = std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let (shard_state, shard_pct, shard_msg, shard_cancelled) = {
+                    let sp = shard_prog_clone.lock().unwrap();
+                    (sp.state.clone(), sp.progress, sp.status_msg.clone(), sp.cancelled)
+                };
+
+                // Map shard progress into overall range.
+                let overall_pct = (shard_idx as f32 + shard_pct) / n_shards as f32;
+
+                {
+                    let mut op = overall.lock().unwrap();
+                    op.progress      = overall_pct.min(0.99);
+                    op.current_shard = (shard_idx + 1) as u16;
+                    op.total_shards  = n_shards as u16;
+                    op.status_msg    = Some(format!(
+                        "Shard {}/{}: {}",
+                        shard_idx + 1,
+                        n_shards,
+                        shard_msg.as_deref().unwrap_or("downloading...")
+                    ));
+
+                    // Forward cancellation from the overall handle to the shard.
+                    if op.cancelled && !shard_cancelled {
+                        let pause = op.pause_requested;
+                        drop(op);
+                        let mut sp = shard_prog_clone.lock().unwrap();
+                        sp.cancelled       = true;
+                        sp.pause_requested = pause;
+                    }
+                }
+
+                if shard_state != DownloadState::Downloading {
+                    break;
+                }
+            }
+        });
+
+        let path = download_file(&entry.repo, shard_name, &shard_progress, per_shard_bytes);
+
+        // Wait for the monitor thread to notice the shard completed.
+        let _ = monitor.join();
+
+        match path {
+            Ok(p) => {
+                if i == 0 { first_path = Some(p); }
+            }
+            Err(e) => {
+                // Propagate the error state to the overall progress.
+                let mut op = progress.lock().unwrap();
+                if e == "paused" {
+                    op.state = DownloadState::Paused;
+                    op.status_msg = Some(format!("Paused at shard {}/{}.", i + 1, total_shards));
+                } else if e == "cancelled" {
+                    op.state = DownloadState::Cancelled;
+                    op.status_msg = Some("Cancelled.".into());
+                } else {
+                    op.state = DownloadState::Failed;
+                    op.status_msg = Some(format!("Shard {}/{} failed: {}", i + 1, total_shards, e));
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    // All shards complete.
+    {
+        let mut p = progress.lock().unwrap();
+        p.state      = DownloadState::Downloaded;
+        p.status_msg = None;
+        p.progress   = 1.0;
+    }
+
+    first_path.ok_or_else(|| "no shard files to download".into())
 }
 
 /// Register a completed blob in the HF Hub snapshot directory structure so that

@@ -24,6 +24,8 @@ pub struct LlmDownloadItem {
     pub progress:          f32,
     pub initiated_at_unix: Option<u64>,
     pub local_path:        Option<std::path::PathBuf>,
+    pub shard_count:       u16,
+    pub current_shard:     u16,
 }
 
 // ── Catalog query ──────────────────────────────────────────────────────────────
@@ -56,18 +58,26 @@ pub fn get_llm_downloads(
                 || e.state == DownloadState::Cancelled
                 || e.state == DownloadState::Downloaded
         })
-        .map(|e| LlmDownloadItem {
-            repo: e.repo.clone(),
-            filename: e.filename.clone(),
-            quant: e.quant.clone(),
-            size_gb: e.size_gb,
-            description: e.description.clone(),
-            is_mmproj: e.is_mmproj,
-            state: e.state.clone(),
-            status_msg: e.status_msg.clone(),
-            progress: e.progress,
-            initiated_at_unix: e.initiated_at_unix,
-            local_path: e.local_path.clone(),
+        .map(|e| {
+            // Read shard progress from the in-flight download if available.
+            let (current_shard, _total_shards) = s.llm.downloads.get(&e.filename)
+                .and_then(|prog| prog.lock().ok().map(|p| (p.current_shard, p.total_shards)))
+                .unwrap_or((0, 0));
+            LlmDownloadItem {
+                repo: e.repo.clone(),
+                filename: e.filename.clone(),
+                quant: e.quant.clone(),
+                size_gb: e.size_gb,
+                description: e.description.clone(),
+                is_mmproj: e.is_mmproj,
+                state: e.state.clone(),
+                status_msg: e.status_msg.clone(),
+                progress: e.progress,
+                initiated_at_unix: e.initiated_at_unix,
+                local_path: e.local_path.clone(),
+                shard_count: e.shard_count() as u16,
+                current_shard,
+            }
         })
         .collect();
 

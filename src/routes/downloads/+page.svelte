@@ -21,6 +21,8 @@
     progress: number;
     initiated_at_unix: number | null;
     local_path: string | null;
+    shard_count: number;
+    current_shard: number;
   }
 
   let items = $state<DownloadItem[]>([]);
@@ -111,7 +113,7 @@
                 <p class="text-[0.72rem] font-semibold text-foreground truncate">{item.filename}</p>
                 <p class="text-[0.62rem] text-muted-foreground truncate">{item.description}</p>
                 <p class="text-[0.58rem] text-muted-foreground/80 mt-0.5">
-                  {item.quant} · {fmtSize(item.size_gb)} · {statusLabel(item.state)}
+                  {item.quant} · {fmtSize(item.size_gb)}{item.shard_count > 1 ? ` (${item.shard_count} parts)` : ""} · {statusLabel(item.state)}{item.shard_count > 1 && item.current_shard > 0 ? ` — part ${item.current_shard}/${item.shard_count}` : ""}
                 </p>
                 <p class="text-[0.58rem] text-muted-foreground/80">{t("downloads.initiatedAt")}: {fmtInitiated(item.initiated_at_unix)}</p>
                 {#if item.status_msg}

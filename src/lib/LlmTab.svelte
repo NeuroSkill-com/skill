@@ -39,6 +39,7 @@
     advanced:    boolean;
     params_b:    number;
     max_context_length: number;
+    shard_files: string[];
     local_path:  string | null;
     state:       DownloadState;
     status_msg:  string | null;
@@ -893,7 +894,7 @@
                       <Button size="sm"
                         class="h-6 text-[0.6rem] px-2.5 bg-violet-600 hover:bg-violet-700 text-white"
                         onclick={() => download(entry.filename)}>
-                        {failed ? "Retry" : `Download ${fmtSize(entry.size_gb)}`}
+                        {failed ? "Retry" : `Download ${fmtSize(entry.size_gb)}`}{entry.shard_files?.length > 1 ? ` (${entry.shard_files.length} parts)` : ""}
                       </Button>
                     {/if}
                   </div>

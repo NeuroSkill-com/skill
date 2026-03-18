@@ -25,6 +25,7 @@ async-stream = "0.3"
 log        = "0.4"
 base64     = "0.22"
 ureq       = { version = "2", features = ["native-tls", "json"] }
+either     = "1"
 hf-hub     = "0.5"
 skill-tools  = { path = "../skill-tools" }
 skill-skills = { path = "../skill-skills" }

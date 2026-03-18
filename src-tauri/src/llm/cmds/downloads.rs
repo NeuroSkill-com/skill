@@ -110,9 +110,17 @@ pub fn download_llm_model(
 
     let filename2 = filename.clone();
     let app2      = app.clone();
+    let entry_clone = {
+        let s = state.lock_or_recover();
+        s.llm.catalog.entries.iter().find(|e| e.filename == filename).cloned()
+    };
 
     tauri::async_runtime::spawn_blocking(move || {
-        let result = crate::llm::catalog::download_file(&repo, &filename2, &prog_arc, size_bytes);
+        let result = if let Some(ref entry) = entry_clone {
+            crate::llm::catalog::download_model(entry, &prog_arc)
+        } else {
+            crate::llm::catalog::download_file(&repo, &filename2, &prog_arc, size_bytes)
+        };
 
         // After completion / failure, refresh the catalog entry.
         if let Some(state_handle) = app2.try_state::<Mutex<Box<AppState>>>() {
@@ -281,13 +289,25 @@ pub fn delete_llm_model(
         .iter_mut()
         .find(|e| e.filename == filename)
     {
-        if let Some(path) = entry.local_path.take() {
+        // Delete all shard files (or the single file).
+        if entry.is_split() {
+            // For split models, resolve and delete every cached shard.
+            let (cached_paths, _) = entry.resolve_cached_shards();
+            for path in cached_paths {
+                if path.exists() {
+                    if let Err(e) = std::fs::remove_file(&path) {
+                        eprintln!("[llm] delete shard failed for {}: {e}", path.display());
+                    }
+                }
+            }
+        } else if let Some(ref path) = entry.local_path {
             if path.exists() {
-                if let Err(e) = std::fs::remove_file(&path) {
+                if let Err(e) = std::fs::remove_file(path) {
                     eprintln!("[llm] delete failed for {}: {e}", path.display());
                 }
             }
         }
+        entry.local_path = None;
         entry.state      = DownloadState::NotDownloaded;
         entry.status_msg = None;
         entry.progress   = 0.0;

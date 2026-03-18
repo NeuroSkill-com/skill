@@ -6895,7 +6895,185 @@
       "filename": "MiniMax-M2.5-UD-TQ1_0.gguf",
       "quant": "TQ1_0",
       "size_gb": 51.94,
-      "description": "Ultra-low 1-bit quant (single file) — needs 64 GB+ RAM/VRAM",
+      "description": "Ultra-low 1-bit (single file) — lowest quality, smallest download",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 456.0,
+      "max_context_length": 131072
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "UD-IQ1_S/MiniMax-M2.5-UD-IQ1_S-00001-of-00003.gguf",
+      "quant": "IQ1_S",
+      "size_gb": 58.86,
+      "description": "Ultra-low 1-bit imatrix — very lossy but compact",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 456.0,
+      "max_context_length": 131072,
+      "shard_files": [
+        "UD-IQ1_S/MiniMax-M2.5-UD-IQ1_S-00001-of-00003.gguf",
+        "UD-IQ1_S/MiniMax-M2.5-UD-IQ1_S-00002-of-00003.gguf",
+        "UD-IQ1_S/MiniMax-M2.5-UD-IQ1_S-00003-of-00003.gguf"
+      ]
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "UD-IQ1_M/MiniMax-M2.5-UD-IQ1_M-00001-of-00003.gguf",
+      "quant": "IQ1_M",
+      "size_gb": 63.74,
+      "description": "Ultra-low 1-bit imatrix medium — slightly better than IQ1_S",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 456.0,
+      "max_context_length": 131072,
+      "shard_files": [
+        "UD-IQ1_M/MiniMax-M2.5-UD-IQ1_M-00001-of-00003.gguf",
+        "UD-IQ1_M/MiniMax-M2.5-UD-IQ1_M-00002-of-00003.gguf",
+        "UD-IQ1_M/MiniMax-M2.5-UD-IQ1_M-00003-of-00003.gguf"
+      ]
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "UD-IQ2_XXS/MiniMax-M2.5-UD-IQ2_XXS-00001-of-00003.gguf",
+      "quant": "IQ2_XXS",
+      "size_gb": 69.03,
+      "description": "Ultra-low 2-bit imatrix — good compression/quality tradeoff",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 456.0,
+      "max_context_length": 131072,
+      "shard_files": [
+        "UD-IQ2_XXS/MiniMax-M2.5-UD-IQ2_XXS-00001-of-00003.gguf",
+        "UD-IQ2_XXS/MiniMax-M2.5-UD-IQ2_XXS-00002-of-00003.gguf",
+        "UD-IQ2_XXS/MiniMax-M2.5-UD-IQ2_XXS-00003-of-00003.gguf"
+      ]
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "Q2_K/MiniMax-M2.5-Q2_K-00001-of-00003.gguf",
+      "quant": "Q2_K",
+      "size_gb": 77.58,
+      "description": "2-bit — usable quality, needs 96 GB+ memory",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": false,
+      "params_b": 456.0,
+      "max_context_length": 131072,
+      "shard_files": [
+        "Q2_K/MiniMax-M2.5-Q2_K-00001-of-00003.gguf",
+        "Q2_K/MiniMax-M2.5-Q2_K-00002-of-00003.gguf",
+        "Q2_K/MiniMax-M2.5-Q2_K-00003-of-00003.gguf"
+      ]
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "Q3_K_S/MiniMax-M2.5-Q3_K_S-00001-of-00003.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 91.91,
+      "description": "3-bit small — good balance for 128 GB systems",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 456.0,
+      "max_context_length": 131072,
+      "shard_files": [
+        "Q3_K_S/MiniMax-M2.5-Q3_K_S-00001-of-00003.gguf",
+        "Q3_K_S/MiniMax-M2.5-Q3_K_S-00002-of-00003.gguf",
+        "Q3_K_S/MiniMax-M2.5-Q3_K_S-00003-of-00003.gguf"
+      ]
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "Q3_K_M/MiniMax-M2.5-Q3_K_M-00001-of-00004.gguf",
+      "quant": "Q3_K_M",
+      "size_gb": 101.77,
+      "description": "3-bit medium — better quality, needs 128 GB+ memory",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 456.0,
+      "max_context_length": 131072,
+      "shard_files": [
+        "Q3_K_M/MiniMax-M2.5-Q3_K_M-00001-of-00004.gguf",
+        "Q3_K_M/MiniMax-M2.5-Q3_K_M-00002-of-00004.gguf",
+        "Q3_K_M/MiniMax-M2.5-Q3_K_M-00003-of-00004.gguf",
+        "Q3_K_M/MiniMax-M2.5-Q3_K_M-00004-of-00004.gguf"
+      ]
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "Q4_K_M/MiniMax-M2.5-Q4_K_M-00001-of-00004.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 128.84,
+      "description": "Recommended — best quality/size tradeoff, needs 160 GB+ memory",
       "family_id": "minimax-m25",
       "family_name": "MiniMax M2.5",
       "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
@@ -6909,7 +7087,98 @@
       "recommended": true,
       "advanced": false,
       "params_b": 456.0,
-      "max_context_length": 131072
+      "max_context_length": 131072,
+      "shard_files": [
+        "Q4_K_M/MiniMax-M2.5-Q4_K_M-00001-of-00004.gguf",
+        "Q4_K_M/MiniMax-M2.5-Q4_K_M-00002-of-00004.gguf",
+        "Q4_K_M/MiniMax-M2.5-Q4_K_M-00003-of-00004.gguf",
+        "Q4_K_M/MiniMax-M2.5-Q4_K_M-00004-of-00004.gguf"
+      ]
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "Q5_K_M/MiniMax-M2.5-Q5_K_M-00001-of-00005.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 151.16,
+      "description": "5-bit medium — high quality, needs 192 GB+ memory",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 456.0,
+      "max_context_length": 131072,
+      "shard_files": [
+        "Q5_K_M/MiniMax-M2.5-Q5_K_M-00001-of-00005.gguf",
+        "Q5_K_M/MiniMax-M2.5-Q5_K_M-00002-of-00005.gguf",
+        "Q5_K_M/MiniMax-M2.5-Q5_K_M-00003-of-00005.gguf",
+        "Q5_K_M/MiniMax-M2.5-Q5_K_M-00004-of-00005.gguf",
+        "Q5_K_M/MiniMax-M2.5-Q5_K_M-00005-of-00005.gguf"
+      ]
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "Q6_K/MiniMax-M2.5-Q6_K-00001-of-00005.gguf",
+      "quant": "Q6_K",
+      "size_gb": 174.87,
+      "description": "6-bit — near-lossless, needs 224 GB+ memory",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 456.0,
+      "max_context_length": 131072,
+      "shard_files": [
+        "Q6_K/MiniMax-M2.5-Q6_K-00001-of-00005.gguf",
+        "Q6_K/MiniMax-M2.5-Q6_K-00002-of-00005.gguf",
+        "Q6_K/MiniMax-M2.5-Q6_K-00003-of-00005.gguf",
+        "Q6_K/MiniMax-M2.5-Q6_K-00004-of-00005.gguf",
+        "Q6_K/MiniMax-M2.5-Q6_K-00005-of-00005.gguf"
+      ]
+    },
+    {
+      "repo": "unsloth/MiniMax-M2.5-GGUF",
+      "filename": "Q8_0/MiniMax-M2.5-Q8_0-00001-of-00006.gguf",
+      "quant": "Q8_0",
+      "size_gb": 226.44,
+      "description": "8-bit — reference quality, needs 256 GB+ memory",
+      "family_id": "minimax-m25",
+      "family_name": "MiniMax M2.5",
+      "family_desc": "MiniMax's 456B Mixture-of-Experts model (46B active). Top-tier reasoning and chat quality. Requires high-end hardware (64 GB+ unified memory or VRAM).",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 456.0,
+      "max_context_length": 131072,
+      "shard_files": [
+        "Q8_0/MiniMax-M2.5-Q8_0-00001-of-00006.gguf",
+        "Q8_0/MiniMax-M2.5-Q8_0-00002-of-00006.gguf",
+        "Q8_0/MiniMax-M2.5-Q8_0-00003-of-00006.gguf",
+        "Q8_0/MiniMax-M2.5-Q8_0-00004-of-00006.gguf",
+        "Q8_0/MiniMax-M2.5-Q8_0-00005-of-00006.gguf",
+        "Q8_0/MiniMax-M2.5-Q8_0-00006-of-00006.gguf"
+      ]
     }
   ]
 }
