@@ -456,6 +456,32 @@ pub fn complete_onboarding(app: AppHandle, _state: tauri::State<'_, Mutex<Box<Ap
         let _ = win.show(); let _ = win.set_focus();
         crate::linux_fix_decorations(&win);
     }
+
+    // Kick off an immediate community-skills download so fresh installs have
+    // the latest skills available right away.
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let r = app_clone.state::<Mutex<Box<crate::state::AppState>>>();
+        let skill_dir = r.lock_or_recover().skill_dir.clone();
+        let outcome = tokio::task::spawn_blocking(move || {
+            skill_skills::sync::sync_skills(&skill_dir, 0, None)
+        }).await;
+        match outcome {
+            Ok(skill_skills::sync::SyncOutcome::Updated { elapsed_ms, .. }) => {
+                eprintln!("[onboarding] community skills downloaded in {elapsed_ms} ms");
+                let _ = app_clone.emit("skills-updated", ());
+            }
+            Ok(skill_skills::sync::SyncOutcome::Fresh { .. }) => {
+                eprintln!("[onboarding] community skills already up to date");
+            }
+            Ok(skill_skills::sync::SyncOutcome::Failed(e)) => {
+                eprintln!("[onboarding] community skills download failed: {e}");
+            }
+            Err(e) => {
+                eprintln!("[onboarding] skills sync task panic: {e}");
+            }
+        }
+    });
 }
 
 #[tauri::command]
