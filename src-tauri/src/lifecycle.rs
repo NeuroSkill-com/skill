@@ -29,13 +29,9 @@ use crate::{
 fn detect_device_kind(name_lower: Option<&str>) -> &'static str {
     use skill_data::device::DeviceKind;
     match DeviceKind::from_name(name_lower) {
-        DeviceKind::Ganglion => "ganglion",
-        DeviceKind::Mw75     => "mw75",
-        DeviceKind::Hermes   => "hermes",
-        DeviceKind::Emotiv   => "emotiv",
-        DeviceKind::Idun     => "idun",
         DeviceKind::OpenBci  => "muse", // serial/WiFi boards use connect_openbci command
-        DeviceKind::Muse | DeviceKind::Unknown => "muse",
+        DeviceKind::Unknown  => "muse",
+        other                => other.as_str(),
     }
 }
 

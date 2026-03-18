@@ -232,7 +232,8 @@ use label_cmds::{
 mod settings_cmds;
 use settings_cmds::{
     subscribe_eeg, subscribe_ppg, subscribe_imu,
-    get_status, get_devices, set_preferred_device, pair_device, forget_device, cancel_retry, retry_connect,
+    get_status, get_devices, get_supported_companies, get_device_capabilities,
+    set_preferred_device, pair_device, forget_device, cancel_retry, retry_connect,
     get_filter_config, set_filter_config, set_notch_preset,
     get_storage_format, set_storage_format,
     get_latest_bands, get_embedding_overlap, set_embedding_overlap,
@@ -1245,7 +1246,7 @@ pub fn run() {
         .setup(|app| { setup_app(app) })
         .invoke_handler(tauri::generate_handler![
             subscribe_eeg, subscribe_ppg, subscribe_imu,
-            get_status, get_devices,
+            get_status, get_devices, get_supported_companies, get_device_capabilities,
             set_preferred_device, pair_device, forget_device, retry_connect, cancel_retry,
             open_bt_settings, open_settings_window, open_updates_window, open_model_tab, open_help_window,
             check_accessibility_permission, open_accessibility_settings, open_notifications_settings,

@@ -1,91 +1,53 @@
-export type SupportedCompanyId = "muse" | "neurable" | "openbci" | "emotiv" | "idun" | "reak";
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 NeuroSkill.com
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, version 3 only.
+/**
+ * Supported-devices catalog — **fetched from Rust at startup**.
+ *
+ * The single source of truth lives in `crates/skill-data/src/device.rs`
+ * (`supported_companies()`).  This module provides types and a loader.
+ */
+
+import { invoke } from "@tauri-apps/api/core";
+
+// ── Types (mirror Rust serde output) ──────────────────────────────────────────
 
 export interface SupportedDeviceItem {
-  nameKey: string;
+  name_key: string;
   image: string;
 }
 
 export interface SupportedCompany {
-  id: SupportedCompanyId;
-  nameKey: string;
+  id: string;
+  name_key: string;
   devices: SupportedDeviceItem[];
-  instructionKeys: string[];
+  instruction_keys: string[];
 }
 
-export const SUPPORTED_COMPANIES: SupportedCompany[] = [
-  {
-    id: "muse",
-    nameKey: "settings.supportedDevices.company.muse",
-    devices: [
-      { nameKey: "settings.supportedDevices.device.muse2016", image: "/devices/muse-gen1.jpg" },
-      { nameKey: "settings.supportedDevices.device.muse2", image: "/devices/muse-gen2.jpg" },
-      { nameKey: "settings.supportedDevices.device.museS", image: "/devices/muse-s-gen1.jpg" },
-      { nameKey: "settings.supportedDevices.device.museSAthena", image: "/devices/muse-s-athena.jpg" },
-    ],
-    instructionKeys: [
-      "settings.supportedDevices.instruction.muse1",
-      "settings.supportedDevices.instruction.muse2",
-    ],
-  },
-  {
-    id: "neurable",
-    nameKey: "settings.supportedDevices.company.neurable",
-    devices: [
-      { nameKey: "settings.supportedDevices.device.mw75Neuro", image: "/devices/muse-mw75.jpg" },
-    ],
-    instructionKeys: [
-      "settings.supportedDevices.instruction.neurable1",
-      "settings.supportedDevices.instruction.neurable2",
-    ],
-  },
-  {
-    id: "openbci",
-    nameKey: "settings.supportedDevices.company.openbci",
-    devices: [
-      { nameKey: "settings.supportedDevices.device.ganglion", image: "/devices/openbci-ganglion.jpg" },
-      { nameKey: "settings.supportedDevices.device.cyton", image: "/devices/openbci-cyton.png" },
-      { nameKey: "settings.supportedDevices.device.cytonDaisy", image: "/devices/openbci-cyton-daisy.jpg" },
-      { nameKey: "settings.supportedDevices.device.galea", image: "/devices/openbci-galea.jpg" },
-    ],
-    instructionKeys: [
-      "settings.supportedDevices.instruction.openbci1",
-      "settings.supportedDevices.instruction.openbci2",
-    ],
-  },
-  {
-    id: "emotiv",
-    nameKey: "settings.supportedDevices.company.emotiv",
-    devices: [
-      { nameKey: "settings.supportedDevices.device.epocX", image: "/devices/emotiv-epoc-x.webp" },
-      { nameKey: "settings.supportedDevices.device.insight", image: "/devices/emotiv-insight.webp" },
-      { nameKey: "settings.supportedDevices.device.flexSaline", image: "/devices/emotiv-flex-saline.webp" },
-      { nameKey: "settings.supportedDevices.device.mn8", image: "/devices/emotiv-mn8.webp" },
-    ],
-    instructionKeys: [
-      "settings.supportedDevices.instruction.emotiv1",
-      "settings.supportedDevices.instruction.emotiv2",
-    ],
-  },
-  {
-    id: "idun",
-    nameKey: "settings.supportedDevices.company.idun",
-    devices: [
-      { nameKey: "settings.supportedDevices.device.guardian", image: "/devices/idun-guardian.png" },
-    ],
-    instructionKeys: [
-      "settings.supportedDevices.instruction.idun1",
-      "settings.supportedDevices.instruction.idun2",
-    ],
-  },
-  {
-    id: "reak",
-    nameKey: "settings.supportedDevices.company.reak",
-    devices: [
-      { nameKey: "settings.supportedDevices.device.nucleusHermes", image: "/devices/re-ak-nucleus-hermes.png" },
-    ],
-    instructionKeys: [
-      "settings.supportedDevices.instruction.reak1",
-      "settings.supportedDevices.instruction.reak2",
-    ],
-  },
-];
+export type SupportedCompanyId = string;
+
+// ── Loader ────────────────────────────────────────────────────────────────────
+
+/** Cached catalog (populated on first call). */
+let _cache: SupportedCompany[] | null = null;
+
+/**
+ * Load the supported-companies catalog from Rust.
+ * Returns a cached copy after the first successful call.
+ */
+export async function loadSupportedCompanies(): Promise<SupportedCompany[]> {
+  if (_cache) return _cache;
+  _cache = await invoke<SupportedCompany[]>("get_supported_companies");
+  return _cache;
+}
+
+/**
+ * Synchronous access to the cached catalog.
+ * Returns `[]` if `loadSupportedCompanies()` hasn't completed yet.
+ */
+export function getSupportedCompanies(): SupportedCompany[] {
+  return _cache ?? [];
+}

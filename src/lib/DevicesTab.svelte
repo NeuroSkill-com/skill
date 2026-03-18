@@ -18,7 +18,7 @@ the Free Software Foundation, version 3 only. -->
   import { Button }                   from "$lib/components/ui/button";
   import { Card, CardContent }        from "$lib/components/ui/card";
   import { Separator }                from "$lib/components/ui/separator";
-  import { SUPPORTED_COMPANIES, type SupportedCompanyId } from "$lib/supported-devices";
+  import { loadSupportedCompanies, getSupportedCompanies, type SupportedCompanyId } from "$lib/supported-devices";
   import { t }                        from "$lib/i18n/index.svelte";
 
   // ── Types ──────────────────────────────────────────────────────────────────
@@ -98,6 +98,7 @@ the Free Software Foundation, version 3 only. -->
   let idunTokenVisible = $state(false);
   let emotivApiExpanded = $state(false);
   let idunApiExpanded   = $state(false);
+  let supportedCompanies = $state(getSupportedCompanies());
   let supportedCompanyExpanded = $state<SupportedCompanyId | null>(null);
   let supportedDevicesSearchQuery = $state("");
   let serialPorts      = $state<string[]>([]);
@@ -119,12 +120,12 @@ the Free Software Foundation, version 3 only. -->
   }
 
   const filteredCompanies = $derived((() => {
-    if (!supportedDevicesSearchQuery) return SUPPORTED_COMPANIES;
-    return SUPPORTED_COMPANIES.map(company => ({
+    if (!supportedDevicesSearchQuery) return supportedCompanies;
+    return supportedCompanies.map(company => ({
       ...company,
       devices: company.devices.filter(device => {
-        const companyName = t(company.nameKey);
-        const deviceName = t(device.nameKey);
+        const companyName = t(company.name_key);
+        const deviceName = t(device.name_key);
         return fuzzyMatch(companyName, supportedDevicesSearchQuery) ||
                fuzzyMatch(deviceName, supportedDevicesSearchQuery);
       }),
@@ -407,6 +408,7 @@ the Free Software Foundation, version 3 only. -->
   let nowTimer: ReturnType<typeof setInterval>;
 
   onMount(async () => {
+    supportedCompanies = await loadSupportedCompanies();
     devices     = await invoke<DiscoveredDevice[]>("get_devices");
     filter      = await invoke<FilterConfig>("get_filter_config");
     overlapSecs = await invoke<number>("get_embedding_overlap");
@@ -495,7 +497,7 @@ the Free Software Foundation, version 3 only. -->
               class="flex items-center justify-between w-full"
               aria-expanded={supportedCompanyExpanded === company.id}
             >
-                <span class="text-[0.7rem] font-semibold text-foreground">{t(company.nameKey)}</span>
+                <span class="text-[0.7rem] font-semibold text-foreground">{t(company.name_key)}</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                    class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
@@ -505,18 +507,18 @@ the Free Software Foundation, version 3 only. -->
             </button>
 
             <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5">
-              {#each company.devices as item (item.nameKey)}
+              {#each company.devices as item (item.name_key)}
                 <button
                   onclick={() => expandSupportedCompany(company.id)}
                   class="flex flex-col items-stretch gap-1 rounded-lg border border-border/70
                          dark:border-white/[0.06] bg-background/60 px-2 py-2 hover:bg-muted/50
                          min-h-[100px]"
-                  aria-label={`${t(company.nameKey)} ${t(item.nameKey)}`}
+                  aria-label={`${t(company.name_key)} ${t(item.name_key)}`}
                 >
                   <div class="w-full h-14 rounded-md overflow-hidden">
-                    <img src={item.image} alt={t(item.nameKey)} class="w-full h-full object-cover" />
+                    <img src={item.image} alt={t(item.name_key)} class="w-full h-full object-cover" />
                   </div>
-                  <span class="text-[0.59rem] text-center leading-tight text-foreground/85 min-h-[24px] flex items-center justify-center">{t(item.nameKey)}</span>
+                  <span class="text-[0.59rem] text-center leading-tight text-foreground/85 min-h-[24px] flex items-center justify-center">{t(item.name_key)}</span>
                 </button>
               {/each}
             </div>
@@ -525,7 +527,7 @@ the Free Software Foundation, version 3 only. -->
               <div class="rounded-lg border border-border/70 dark:border-white/[0.06] bg-muted/40 px-3 py-2.5">
                 <p class="text-[0.64rem] font-medium text-foreground/85 mb-1">{t("settings.supportedDevices.howToConnect")}</p>
                 <div class="flex flex-col gap-1">
-                  {#each company.instructionKeys as lineKey (lineKey)}
+                  {#each company.instruction_keys as lineKey (lineKey)}
                     <p class="text-[0.62rem] text-muted-foreground leading-relaxed">• {t(lineKey)}</p>
                   {/each}
                 </div>

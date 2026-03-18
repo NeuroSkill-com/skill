@@ -62,10 +62,18 @@ export interface DeviceStatus {
   fuel_gauge_mv: number;
   /** Raw temperature ADC value (Classic only, 0 on Athena). */
   temperature_raw: number;
-  /** Which device family is connected (see `DeviceKind` in device.ts). */
+  /** Which device family is connected (see `DeviceKind` in device.rs). */
   device_kind: string;
   /** Hardware model code, e.g. "p50" = Muse S (Athena), "p21" = Muse 2. */
   hardware_version: string | null;
+  /** Device has a PPG (heart-rate) sensor. */
+  has_ppg: boolean;
+  /** Device has an IMU (accelerometer + gyroscope). */
+  has_imu: boolean;
+  /** Device has electrodes at central scalp sites (C3/C4/Cz). */
+  has_central_electrodes: boolean;
+  /** Device supports a full 10-20 montage (or superset). */
+  has_full_montage: boolean;
   /** Catch-all for future fields not yet typed. */
   [k: string]: unknown;
 }

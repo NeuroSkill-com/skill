@@ -122,6 +122,14 @@ pub struct DeviceStatus {
     pub eeg_channel_count:   usize,
     /// Hardware EEG sample rate of the connected device (Hz).
     pub eeg_sample_rate_hz:  f64,
+    /// Device has a PPG (heart-rate) sensor.
+    pub has_ppg:             bool,
+    /// Device has an IMU (accelerometer + gyroscope).
+    pub has_imu:             bool,
+    /// Device has electrodes at central scalp sites (C3/C4/Cz).
+    pub has_central_electrodes: bool,
+    /// Device supports a full 10-20 montage (or superset).
+    pub has_full_montage:    bool,
 }
 
 impl Default for DeviceStatus {
@@ -158,6 +166,10 @@ impl Default for DeviceStatus {
             channel_names:      Vec::new(),
             eeg_channel_count:  0,
             eeg_sample_rate_hz: 0.0,
+            has_ppg:            false,
+            has_imu:            false,
+            has_central_electrodes: false,
+            has_full_montage:   false,
         }
     }
 }
@@ -190,6 +202,10 @@ impl DeviceStatus {
         self.channel_names       = Vec::new();
         self.eeg_channel_count   = 0;
         self.eeg_sample_rate_hz  = 0.0;
+        self.has_ppg             = false;
+        self.has_imu             = false;
+        self.has_central_electrodes = false;
+        self.has_full_montage    = false;
     }
 
     /// Reset transient fields for a new scanning cycle.
@@ -219,6 +235,19 @@ impl DeviceStatus {
         self.target_name         = preferred_id.and_then(|id| {
             self.paired_devices.iter().find(|d| d.id == id).map(|d| d.name.clone())
         });
+        // Populate capability flags from the device kind.
+        self.apply_capabilities_from_kind();
+    }
+
+    /// Derive and set capability booleans from the current `device_kind` string.
+    pub fn apply_capabilities_from_kind(&mut self) {
+        use skill_data::device::DeviceKind;
+        let kind = DeviceKind::from_name(Some(&self.device_kind));
+        let caps = kind.capabilities();
+        self.has_ppg                = caps.has_ppg;
+        self.has_imu                = caps.has_imu;
+        self.has_central_electrodes = caps.has_central_electrodes;
+        self.has_full_montage       = caps.has_full_montage;
     }
 }
 

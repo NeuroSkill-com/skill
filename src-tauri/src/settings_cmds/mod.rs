@@ -213,6 +213,17 @@ pub fn get_devices(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<Discove
 }
 
 #[tauri::command]
+pub fn get_supported_companies() -> Vec<skill_data::device::SupportedCompany> {
+    skill_data::device::supported_companies()
+}
+
+#[tauri::command]
+pub fn get_device_capabilities(device_name: Option<String>) -> skill_data::device::DeviceCapabilities {
+    let kind = skill_data::device::DeviceKind::from_name(device_name.as_deref());
+    kind.capabilities()
+}
+
+#[tauri::command]
 pub fn set_preferred_device(id: String, app: AppHandle) -> Vec<DiscoveredDevice> {
     {
         let r = app.app_state();

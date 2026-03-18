@@ -23,7 +23,7 @@ the Free Software Foundation, version 3 only. -->
     ArtifactEvents, HeadPoseCard, PpgMetrics,
   } from "$lib/dashboard";
   import { C_NEUTRAL, colorForLevel, QUALITY_COLORS, STATE_COLORS } from "$lib/theme";
-  import { deviceCapabilities } from "$lib/device";
+  // Device capabilities are now pushed as part of DeviceStatus from Rust.
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Spinner } from "$lib/components/ui/spinner";
@@ -281,10 +281,14 @@ the Free Software Foundation, version 3 only. -->
     temperature_raw: 0,
     device_kind: "unknown",
     hardware_version: null,
+    has_ppg: false,
+    has_imu: false,
+    has_central_electrodes: false,
+    has_full_montage: false,
   });
 
   /** Capabilities of the currently connected (or last connected) device. */
-  const deviceCaps = $derived(deviceCapabilities(status.device_name));
+  // Capability flags are derived directly from status (pushed from Rust).
 
   let uptimeSec   = $state(0);
   let uptimeTimer: ReturnType<typeof setInterval> | null = null;
@@ -354,8 +358,8 @@ the Free Software Foundation, version 3 only. -->
   const isHermes    = $derived(status.device_kind === "hermes");
   const isEmotiv    = $derived(status.device_kind === "emotiv");
   const isIdun      = $derived(status.device_kind === "idun");
-  const hasPpg      = $derived(deviceCaps.hasPpg);
-  const hasImuCap   = $derived(deviceCaps.hasImu);
+  const hasPpg      = $derived(status.has_ppg);
+  const hasImuCap   = $derived(status.has_imu);
   const hasBattery  = $derived(isMuse || isMw75 || isEmotiv || isIdun);
 
   // Channel labels and colours — dynamic based on connected device.
@@ -1181,7 +1185,7 @@ the Free Software Foundation, version 3 only. -->
           tbr={tbrScore} sef95={sef95Score} sc={scScore} ha={haScore} hm={hmScore} hc={hcScore}
           pe={peScore} hfd={hfdScore} dfa={dfaScore} se={seScore} pac={pacScore} lat={latScore}
           headache={headacheScore} migraine={migraineScore}
-          showMu={deviceCaps.hasCentralElectrodes} />
+          showMu={status.has_central_electrodes} />
 
         <!-- Composite Scores -->
         <CompositeScores meditation={meditationScore} cognitiveLoad={cogLoadScore} drowsiness={drowsinessScore} />
