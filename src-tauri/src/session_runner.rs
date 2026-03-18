@@ -180,6 +180,16 @@ fn on_connected(
         let mut s = r.lock_or_recover();
         s.status.state       = "connected".into();
         s.status.device_name = Some(info.name.clone());
+        if s.status.device_id.is_none() {
+            s.status.device_id = Some(info.id.clone());
+        }
+        // Populate device identity fields from the adapter's DeviceInfo.
+        if let Some(ref v) = info.serial_number      { s.status.serial_number      = Some(v.clone()); }
+        if let Some(ref v) = info.firmware_version    { s.status.firmware_version   = Some(v.clone()); }
+        if let Some(ref v) = info.hardware_version    { s.status.hardware_version   = Some(v.clone()); }
+        if let Some(ref v) = info.bootloader_version  { s.status.bootloader_version = Some(v.clone()); }
+        if let Some(ref v) = info.mac_address         { s.status.mac_address        = Some(v.clone()); }
+        if let Some(ref v) = info.headset_preset      { s.status.headset_preset     = Some(v.clone()); }
         s.status.bt_error    = None;
         s.status.target_name = None;
         s.retry_attempt               = 0;
@@ -572,18 +582,25 @@ fn process_battery(
 // ── Meta processing ───────────────────────────────────────────────────────────
 
 fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
-    // Extract Muse-style control fields: sn, ma, fw, hw, bl, tp.
+    // Extract device identity fields from Meta events.
+    // Supports both Muse Control short keys (sn, ma, fw, hw, bl, tp) and
+    // long-form keys used by other adapters (serial_number, mac_address, …).
     let obj = match val.as_object() {
         Some(o) => o,
         None => return,
     };
 
-    let sn = obj.get("sn").and_then(|v| v.as_str()).map(str::to_owned);
-    let ma = obj.get("ma").and_then(|v| v.as_str()).map(str::to_owned);
-    let fw = obj.get("fw").and_then(|v| v.as_str()).map(str::to_owned);
-    let hw = obj.get("hw").and_then(|v| v.as_str()).map(str::to_owned);
-    let bl = obj.get("bl").and_then(|v| v.as_str()).map(str::to_owned);
-    let tp = obj.get("tp").and_then(|v| v.as_str()).map(str::to_owned);
+    let str_key = |short: &str, long: &str| -> Option<String> {
+        obj.get(short).and_then(|v| v.as_str()).map(str::to_owned)
+            .or_else(|| obj.get(long).and_then(|v| v.as_str()).map(str::to_owned))
+    };
+
+    let sn = str_key("sn", "serial_number");
+    let ma = str_key("ma", "mac_address");
+    let fw = str_key("fw", "firmware_version");
+    let hw = str_key("hw", "hardware_version");
+    let bl = str_key("bl", "bootloader_version");
+    let tp = str_key("tp", "headset_preset");
 
     if sn.is_some() || ma.is_some() || fw.is_some() || hw.is_some() {
         let r = app.app_state();
