@@ -320,7 +320,7 @@ impl EegAccumulator {
     /// Update the overlap between consecutive epochs (seconds).
     pub fn set_overlap_secs(&mut self, secs: f32) {
         let clamped       = secs.clamp(EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS);
-        let overlap_samps = (clamped * MUSE_SAMPLE_RATE).round() as usize;
+        let overlap_samps = (clamped * self.sample_rate).round() as usize;
         self.hop_samples  = EMBEDDING_EPOCH_SAMPLES.saturating_sub(overlap_samps).max(1);
         self.since_last   = [0; EEG_CHANNELS];
         skill_log!(self.logger, "embedder", "overlap set to {clamped:.2} s → hop={} samples", self.hop_samples);

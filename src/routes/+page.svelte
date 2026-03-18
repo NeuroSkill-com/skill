@@ -1056,7 +1056,7 @@ the Free Software Foundation, version 3 only. -->
             <!-- Normal scanning spinner -->
             <Spinner size="w-6 h-6" class="text-yellow-500 dark:text-yellow-400" />
             <p class="text-[0.73rem] text-muted-foreground text-center leading-relaxed">
-              {status.target_name ? t("dashboard.connectingTo", { name: status.target_name }) : isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : t("dashboard.lookingForMuse")}
+              {status.target_name ? t("dashboard.connectingTo", { name: status.target_name }) : isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : isMw75 ? t("dashboard.connectingTo", { name: "MW75 Neuro" }) : isHermes ? t("dashboard.connectingTo", { name: "Hermes" }) : isIdun ? t("dashboard.connectingTo", { name: "IDUN Guardian" }) : t("dashboard.lookingForMuse")}
             </p>
           {/if}
         </div>

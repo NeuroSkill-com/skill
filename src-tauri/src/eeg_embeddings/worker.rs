@@ -611,6 +611,14 @@ pub(super) fn embed_worker(
             continue;
         };
 
+        // ── Update device-specific params from this epoch message ─────────────
+        if !msg.channel_names.is_empty() {
+            ch_names = msg.channel_names.clone();
+        }
+        if msg.sample_rate > 0.0 {
+            epoch_sample_rate = msg.sample_rate;
+        }
+
         // ── Preprocess + encode on wgpu ───────────────────────────────────────
         let flat: Vec<f32> = msg.samples.iter().flatten().copied().collect();
         let array = match Array2::from_shape_vec((EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES), flat) {
@@ -639,8 +647,9 @@ pub(super) fn embed_worker(
         // loop continues in metrics-only mode.
         let mean_emb: Option<Vec<f32>> = if let Some(ref enc) = encoder {
             let gpu_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let ch_refs: Vec<&str> = ch_names.iter().map(|s| s.as_str()).collect();
                 let mut batches = load_from_named_tensor::<Wgpu>(
-                    array, &ch_names, MUSE_SAMPLE_RATE, config.data_norm,
+                    array, &ch_refs, epoch_sample_rate, config.data_norm,
                     &pos_overrides, &data_cfg, &device,
                 ).map_err(|e| format!("preprocess: {e:#}"))?;
 

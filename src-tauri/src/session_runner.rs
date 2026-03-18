@@ -77,6 +77,7 @@ pub(crate) async fn run_device_session(
     // ── Session-local DSP (lock-free during sample processing) ───────────────
     let ch_name_refs: Vec<&str> = desc.channel_names.iter().map(|s| s.as_str()).collect();
     let mut dsp = SessionDsp::new(&app, &ch_name_refs);
+    dsp.accumulator.set_device_channels(desc.channel_names.clone(), sample_rate as f32);
 
     // ── Battery EMA (from skill-devices — replaces inline smoothing) ─────────
     let mut battery_ema = BatteryEma::new(0.1);
