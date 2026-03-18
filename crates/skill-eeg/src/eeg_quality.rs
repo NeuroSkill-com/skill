@@ -45,6 +45,7 @@ use skill_constants::{
 // ── Thresholds (from skill-constants) ─────────────────────────────────────────
 
 const WINDOW: usize            = QUALITY_WINDOW;
+#[cfg(test)]
 const MIN_SAMPLES: usize       = WINDOW / 4;
 const THRESH_NO_SIGNAL_RMS: f64 = QUALITY_NO_SIGNAL_RMS;
 const THRESH_POOR_RMS: f64     = QUALITY_POOR_RMS;

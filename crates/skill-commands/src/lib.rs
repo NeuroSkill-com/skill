@@ -684,11 +684,16 @@ pub fn find_session_for_timestamp_in(
         let end   = meta.get("session_end_utc").and_then(|v| v.as_u64());
 
         if let (Some(s), Some(e)) = (start, end) {
+            // Resolve data file: try .parquet first, fall back to .csv.
+            let resolve_data_path = |json_name: &str| -> std::path::PathBuf {
+                let pq = day_dir.join(json_name.replace(".json", ".parquet"));
+                if pq.exists() { pq } else { day_dir.join(json_name.replace(".json", ".csv")) }
+            };
+
             if timestamp_unix >= s && timestamp_unix <= e {
-                let csv_name = name.replace(".json", ".csv");
-                let csv_path = day_dir.join(&csv_name);
+                let data_path = resolve_data_path(&name);
                 return Some(SessionRef {
-                    csv_path: csv_path.to_string_lossy().to_string(),
+                    csv_path: data_path.to_string_lossy().to_string(),
                     session_start_utc: start,
                     session_end_utc: end,
                     device_name: meta.get("device_name").and_then(|v| v.as_str()).map(|s| s.to_string()),
@@ -697,10 +702,9 @@ pub fn find_session_for_timestamp_in(
             let dist = if timestamp_unix < s { s - timestamp_unix } else { timestamp_unix - e };
             if dist < best_dist {
                 best_dist = dist;
-                let csv_name = name.replace(".json", ".csv");
-                let csv_path = day_dir.join(&csv_name);
+                let data_path = resolve_data_path(&name);
                 best = Some(SessionRef {
-                    csv_path: csv_path.to_string_lossy().to_string(),
+                    csv_path: data_path.to_string_lossy().to_string(),
                     session_start_utc: start,
                     session_end_utc: end,
                     device_name: meta.get("device_name").and_then(|v| v.as_str()).map(|s| s.to_string()),

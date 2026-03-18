@@ -31,20 +31,53 @@ fn is_session_json(fname: &str) -> bool {
         && fname.ends_with(".json")
 }
 
-/// Returns `true` if `fname` is a primary EEG CSV (not metrics/ppg).
-fn is_session_csv(fname: &str) -> bool {
-    (fname.starts_with(SESSION_PREFIX) || fname.starts_with(LEGACY_PREFIX))
-        && fname.ends_with(".csv")
+/// Returns `true` if `fname` is a primary EEG data file (CSV or Parquet, not metrics/ppg).
+fn is_session_data(fname: &str) -> bool {
+    let has_prefix = fname.starts_with(SESSION_PREFIX) || fname.starts_with(LEGACY_PREFIX);
+    if !has_prefix { return false; }
+    let is_eeg_csv = fname.ends_with(".csv")
         && !fname.ends_with("_metrics.csv")
-        && !fname.ends_with("_ppg.csv")
+        && !fname.ends_with("_ppg.csv");
+    let is_eeg_parquet = fname.ends_with(".parquet")
+        && !fname.ends_with("_metrics.parquet")
+        && !fname.ends_with("_ppg.parquet");
+    is_eeg_csv || is_eeg_parquet
 }
 
-/// Extract the Unix timestamp from a session filename like `exg_1700000000.csv`
-/// or `muse_1700000000.json`.
+/// Backward-compatible alias.
+fn is_session_csv(fname: &str) -> bool { is_session_data(fname) }
+
+/// Extract the Unix timestamp from a session filename like `exg_1700000000.csv`,
+/// `exg_1700000000.parquet`, or `muse_1700000000.json`.
 fn extract_timestamp(fname: &str) -> Option<u64> {
     fname.rsplit_once('_')
-        .and_then(|(_, ts_part)| ts_part.strip_suffix(".csv").or_else(|| ts_part.strip_suffix(".json")))
+        .and_then(|(_, ts_part)| {
+            ts_part.strip_suffix(".csv")
+                .or_else(|| ts_part.strip_suffix(".parquet"))
+                .or_else(|| ts_part.strip_suffix(".json"))
+        })
         .and_then(|s| s.parse().ok())
+}
+
+/// Given a base EEG path (`.csv` or `.parquet`), find the corresponding
+/// metrics data file, preferring `.parquet` if it exists, falling back to `.csv`.
+pub fn find_metrics_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
+    use skill_data::session_parquet::metrics_parquet_path;
+    let pq = metrics_parquet_path(eeg_path);
+    if pq.exists() { return Some(pq); }
+    let csv = metrics_csv_path(eeg_path);
+    if csv.exists() { return Some(csv); }
+    None
+}
+
+/// Given a base EEG path, find the corresponding PPG data file.
+pub fn find_ppg_path(eeg_path: &Path) -> Option<std::path::PathBuf> {
+    use skill_data::session_parquet::ppg_parquet_path;
+    let pq = ppg_parquet_path(eeg_path);
+    if pq.exists() { return Some(pq); }
+    let csv = ppg_csv_path(eeg_path);
+    if csv.exists() { return Some(csv); }
+    None
 }
 
 // ── SessionEntry ──────────────────────────────────────────────────────────────
@@ -273,7 +306,13 @@ pub fn list_sessions_for_day(
 
         let csv_file = meta["csv_file"].as_str().unwrap_or("").to_string();
         let csv_full = day_dir.join(&csv_file);
-        let csv_size = std::fs::metadata(&csv_full).map(|m| m.len()).unwrap_or(0);
+        // Check for both CSV and Parquet data files.
+        let pq_full = csv_full.with_extension("parquet");
+        let csv_size = if pq_full.exists() {
+            std::fs::metadata(&pq_full).map(|m| m.len()).unwrap_or(0)
+        } else {
+            std::fs::metadata(&csv_full).map(|m| m.len()).unwrap_or(0)
+        };
         let start = meta["session_start_utc"].as_u64();
         let end   = meta["session_end_utc"].as_u64();
         let dev   = meta.get("device");
@@ -498,6 +537,39 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
 
 // ── CSV timestamp helpers ─────────────────────────────────────────────────────
 
+/// Read the first and last timestamp from a metrics file (CSV or Parquet).
+fn read_metrics_time_range(metrics_path: &Path) -> Option<(u64, u64)> {
+    if metrics_path.extension().and_then(|e| e.to_str()) == Some("parquet") {
+        return read_metrics_parquet_time_range(metrics_path);
+    }
+    read_metrics_csv_time_range(metrics_path)
+}
+
+fn read_metrics_parquet_time_range(path: &Path) -> Option<(u64, u64)> {
+    use arrow_array::Array;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    let file = std::fs::File::open(path).ok()?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file).ok()?;
+    let reader = builder.build().ok()?;
+    let mut first: Option<u64> = None;
+    let mut last: Option<u64> = None;
+    for batch in reader {
+        let batch = match batch { Ok(b) => b, Err(_) => continue };
+        let ts_col = batch.column(0)
+            .as_any().downcast_ref::<arrow_array::Float64Array>()?;
+        for i in 0..ts_col.len() {
+            if ts_col.is_null(i) { continue; }
+            let t = ts_col.value(i);
+            if t > 1_000_000_000.0 {
+                let ts = t as u64;
+                if first.is_none() { first = Some(ts); }
+                last = Some(ts);
+            }
+        }
+    }
+    Some((first?, last?))
+}
+
 fn read_metrics_csv_time_range(metrics_path: &Path) -> Option<(u64, u64)> {
     if !metrics_path.exists() { return None; }
     let mut rdr = csv::ReaderBuilder::new()
@@ -518,8 +590,9 @@ fn read_metrics_csv_time_range(metrics_path: &Path) -> Option<(u64, u64)> {
 
 fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]) {
     for (session, start, end) in raw.iter_mut() {
-        let mp = metrics_csv_path(Path::new(&session.csv_path));
-        if let Some((first_ts, last_ts)) = read_metrics_csv_time_range(&mp) {
+        let mp = find_metrics_path(Path::new(&session.csv_path));
+        let mp = match mp { Some(p) => p, None => continue };
+        if let Some((first_ts, last_ts)) = read_metrics_time_range(&mp) {
             *start                     = Some(first_ts);
             *end                       = Some(last_ts);
             session.session_start_utc  = Some(first_ts);
@@ -538,11 +611,22 @@ fn sigmoid100(x: f32, k: f32, mid: f32) -> f32 {
     100.0 / (1.0 + (-k * (x - mid)).exp())
 }
 
-/// Read a `_metrics.csv` file and return aggregated summary + time-series.
+/// Read a `_metrics` file (CSV or Parquet) and return aggregated summary + time-series.
 pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
-    let metrics_path = metrics_csv_path(csv_path);
+    let metrics_path = match find_metrics_path(csv_path) {
+        Some(p) => p,
+        None => {
+            eprintln!("[metrics] no metrics file for: {}", csv_path.display());
+            return None;
+        }
+    };
+
+    // Parquet path: convert to CSV-style records and process identically.
+    if metrics_path.extension().and_then(|e| e.to_str()) == Some("parquet") {
+        return load_metrics_from_parquet(&metrics_path);
+    }
+
     if !metrics_path.exists() {
-        eprintln!("[csv-metrics] no metrics file: {}", metrics_path.display());
         return None;
     }
 
@@ -671,6 +755,140 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
     sum.meditation /= n; sum.cognitive_load /= n; sum.drowsiness /= n;
 
     eprintln!("[csv-metrics] loaded {} rows from {}", count, metrics_path.display());
+    Some(CsvMetricsResult { n_rows: count, summary: sum, timeseries: rows })
+}
+
+/// Read metrics from a Parquet file.  Converts each row batch into the same
+/// index-based field access used by the CSV path, then delegates to the
+/// shared aggregation logic.
+fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
+    use arrow_array::Array;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+
+    let file = std::fs::File::open(path).ok()?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file).ok()?;
+    let reader = builder.build().ok()?;
+
+    let mut rows: Vec<EpochRow> = Vec::new();
+    let mut sum = SessionMetrics::default();
+    let mut count = 0usize;
+
+    for batch in reader {
+        let batch = match batch { Ok(b) => b, Err(_) => continue };
+        let n_cols = batch.num_columns();
+        let n_rows = batch.num_rows();
+
+        // Extract all columns as f64 arrays.
+        let cols: Vec<Option<&arrow_array::Float64Array>> = (0..n_cols)
+            .map(|i| batch.column(i).as_any().downcast_ref::<arrow_array::Float64Array>())
+            .collect();
+
+        for row_idx in 0..n_rows {
+            let f = |i: usize| -> f64 {
+                if i >= cols.len() { return 0.0; }
+                cols[i].map_or(0.0, |c| if c.is_null(row_idx) { 0.0 } else { c.value(row_idx) })
+            };
+
+            if n_cols < 49 { continue; }
+            let timestamp = f(0);
+            if timestamp <= 0.0 { continue; }
+
+            let avg_rel = |band_offset: usize| -> f64 {
+                let mut s = 0.0;
+                for ch_base in &[1usize, 13, 25, 37] { s += f(ch_base + 6 + band_offset); }
+                s / 4.0
+            };
+
+            let rd = avg_rel(0); let rt = avg_rel(1); let ra = avg_rel(2);
+            let rb = avg_rel(3); let rg = avg_rel(4);
+
+            let faa_v=f(49); let tar_v=f(50); let bar_v=f(51); let dtr_v=f(52);
+            let pse_v=f(53); let apf_v=f(54); let bps_v=f(55); let snr_v=f(56);
+            let coh_v=f(57); let mu_v=f(58);  let mood_v=f(59);
+            let tbr_v=f(60); let sef_v=f(61); let sc_v=f(62);
+            let ha_v=f(63);  let hm_v=f(64);  let hc_v=f(65);
+            let pe_v=f(66);  let hfd_v=f(67); let dfa_v=f(68);
+            let se_v=f(69);  let pac_v=f(70); let lat_v=f(71);
+            let hr_v=f(72);  let rmssd_v=f(73); let sdnn_v=f(74);
+            let pnn_v=f(75); let lfhf_v=f(76); let resp_v=f(77);
+            let spo_v=f(78); let perf_v=f(79); let stress_v=f(80);
+            let blinks_v=f(81); let blink_r_v=f(82);
+            let pitch_v=f(83); let roll_v=f(84); let still_v=f(85);
+            let nods_v=f(86); let shakes_v=f(87);
+            let med_v=f(88); let cog_v=f(89); let drow_v=f(90);
+            let gpu_v=f(92); let gpu_r_v=f(93); let gpu_t_v=f(94);
+
+            let mut sr = 0.0f64; let mut se2 = 0.0f64;
+            for ch_base in &[1usize, 13, 25, 37] {
+                let a = f(ch_base + 6 + 2); let b = f(ch_base + 6 + 3); let t = f(ch_base + 6 + 1);
+                let d1 = a + t; let d2 = b + t;
+                if d1 > 1e-6 { se2 += b / d1; }
+                if d2 > 1e-6 { sr += a / d2; }
+            }
+            let relax_v  = sigmoid100((sr / 4.0) as f32, 2.5, 1.0) as f64;
+            let engage_v = sigmoid100((se2 / 4.0) as f32, 2.0, 0.8) as f64;
+
+            let row = EpochRow {
+                t: timestamp, rd, rt, ra, rb, rg,
+                relaxation: relax_v, engagement: engage_v,
+                faa: faa_v, tar: tar_v, bar: bar_v, dtr: dtr_v, tbr: tbr_v,
+                pse: pse_v, apf: apf_v, sef95: sef_v, sc: sc_v, bps: bps_v, snr: snr_v,
+                coherence: coh_v, mu: mu_v,
+                ha: ha_v, hm: hm_v, hc: hc_v,
+                pe: pe_v, hfd: hfd_v, dfa: dfa_v, se: se_v, pac: pac_v, lat: lat_v,
+                mood: mood_v,
+                hr: hr_v, rmssd: rmssd_v, sdnn: sdnn_v, pnn50: pnn_v, lf_hf: lfhf_v,
+                resp: resp_v, spo2: spo_v, perf: perf_v, stress: stress_v,
+                blinks: blinks_v, blink_r: blink_r_v,
+                pitch: pitch_v, roll: roll_v, still: still_v, nods: nods_v, shakes: shakes_v,
+                med: med_v, cog: cog_v, drow: drow_v,
+                gpu: gpu_v, gpu_render: gpu_r_v, gpu_tiler: gpu_t_v,
+            };
+
+            sum.rel_delta += rd;   sum.rel_theta += rt;   sum.rel_alpha += ra;
+            sum.rel_beta  += rb;   sum.rel_gamma += rg;
+            sum.relaxation += relax_v;  sum.engagement += engage_v;
+            sum.faa += faa_v; sum.tar += tar_v; sum.bar += bar_v; sum.dtr += dtr_v; sum.tbr += tbr_v;
+            sum.pse += pse_v; sum.apf += apf_v; sum.bps += bps_v; sum.snr += snr_v;
+            sum.coherence += coh_v; sum.mu_suppression += mu_v; sum.mood += mood_v;
+            sum.sef95 += sef_v; sum.spectral_centroid += sc_v;
+            sum.hjorth_activity += ha_v; sum.hjorth_mobility += hm_v; sum.hjorth_complexity += hc_v;
+            sum.permutation_entropy += pe_v; sum.higuchi_fd += hfd_v; sum.dfa_exponent += dfa_v;
+            sum.sample_entropy += se_v; sum.pac_theta_gamma += pac_v; sum.laterality_index += lat_v;
+            sum.hr += hr_v; sum.rmssd += rmssd_v; sum.sdnn += sdnn_v;
+            sum.pnn50 += pnn_v; sum.lf_hf_ratio += lfhf_v; sum.respiratory_rate += resp_v;
+            sum.spo2_estimate += spo_v; sum.perfusion_index += perf_v; sum.stress_index += stress_v;
+            sum.blink_count += blinks_v; sum.blink_rate += blink_r_v;
+            sum.head_pitch += pitch_v; sum.head_roll += roll_v; sum.stillness += still_v;
+            sum.nod_count += nods_v; sum.shake_count += shakes_v;
+            sum.meditation += med_v; sum.cognitive_load += cog_v; sum.drowsiness += drow_v;
+
+            rows.push(row);
+            count += 1;
+        }
+    }
+
+    if count == 0 { return None; }
+    let n = count as f64;
+    sum.n_epochs = count;
+    sum.rel_delta /= n; sum.rel_theta /= n; sum.rel_alpha /= n;
+    sum.rel_beta /= n; sum.rel_gamma /= n;
+    sum.relaxation /= n; sum.engagement /= n;
+    sum.faa /= n; sum.tar /= n; sum.bar /= n; sum.dtr /= n; sum.tbr /= n;
+    sum.pse /= n; sum.apf /= n; sum.bps /= n; sum.snr /= n;
+    sum.coherence /= n; sum.mu_suppression /= n; sum.mood /= n;
+    sum.sef95 /= n; sum.spectral_centroid /= n;
+    sum.hjorth_activity /= n; sum.hjorth_mobility /= n; sum.hjorth_complexity /= n;
+    sum.permutation_entropy /= n; sum.higuchi_fd /= n; sum.dfa_exponent /= n;
+    sum.sample_entropy /= n; sum.pac_theta_gamma /= n; sum.laterality_index /= n;
+    sum.hr /= n; sum.rmssd /= n; sum.sdnn /= n; sum.pnn50 /= n;
+    sum.lf_hf_ratio /= n; sum.respiratory_rate /= n;
+    sum.spo2_estimate /= n; sum.perfusion_index /= n; sum.stress_index /= n;
+    sum.blink_rate /= n;
+    sum.head_pitch /= n; sum.head_roll /= n; sum.stillness /= n;
+    sum.meditation /= n; sum.cognitive_load /= n; sum.drowsiness /= n;
+
+    eprintln!("[parquet-metrics] loaded {} rows from {}", count, path.display());
     Some(CsvMetricsResult { n_rows: count, summary: sum, timeseries: rows })
 }
 
