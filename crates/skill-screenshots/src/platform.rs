@@ -2,7 +2,6 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Platform-specific window capture (macOS, Linux, Windows).
 
-use std::io::Cursor;
 #[cfg(target_os = "macos")]
 use std::path::Path;
 
@@ -254,14 +253,18 @@ fn macos_frontmost_window_id() -> Option<u64> {
 
 #[cfg(target_os = "linux")]
 fn capture_linux() -> Option<CapturedImage> {
-    // Use xcap for cross-platform capture (supports X11 and Wayland).
-    // Try to capture the focused window first, then fall back to primary monitor.
-    capture_xcap()
+    #[cfg(feature = "capture")]
+    { capture_xcap() }
+    #[cfg(not(feature = "capture"))]
+    {
+        eprintln!("[screenshot] capture disabled (built without `capture` feature / xcap)");
+        None
+    }
 }
 
 /// Capture via the `xcap` crate — works on both X11 and Wayland without
 /// requiring external tools (grim, scrot, xdotool, etc.).
-#[cfg(any(target_os = "linux", target_os = "windows"))]
+#[cfg(all(any(target_os = "linux", target_os = "windows"), feature = "capture"))]
 fn capture_xcap() -> Option<CapturedImage> {
     // ── Attempt 1: capture the focused window ──
     if let Ok(windows) = xcap::Window::all() {
@@ -335,7 +338,12 @@ fn capture_xcap() -> Option<CapturedImage> {
 
 #[cfg(target_os = "windows")]
 fn capture_windows() -> Option<CapturedImage> {
-    // Use xcap for native Win32/WGC capture — no PowerShell subprocess needed.
-    capture_xcap()
+    #[cfg(feature = "capture")]
+    { capture_xcap() }
+    #[cfg(not(feature = "capture"))]
+    {
+        eprintln!("[screenshot] capture disabled (built without `capture` feature / xcap)");
+        None
+    }
 }
 

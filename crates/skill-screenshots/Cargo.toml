@@ -34,6 +34,10 @@ fastembed = { version = "5.11.0", features = ["metal"] }
 objc2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSRunningApplication"] }
 
+[features]
+default = ["capture"]
+capture = ["xcap"]
+
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 fastembed = { version = "5.11.0" }
-xcap = { version = "0.9", default-features = false }
+xcap = { version = "0.9", default-features = false, optional = true }

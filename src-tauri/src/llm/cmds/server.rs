@@ -46,7 +46,7 @@ pub fn start_llm_server(
         // Auto-select the first downloaded model if none is active or the
         // active model doesn't exist on disk (e.g. deleted).
         let needs_model = s.llm.catalog.active_model.is_empty()
-            || s.llm.catalog.active_model_path().map_or(true, |p| !p.exists());
+            || s.llm.catalog.active_model_path().is_none_or(|p| !p.exists());
         if needs_model {
             if let Some(entry) = s.llm.catalog.entries.iter()
                 .find(|e| !e.is_mmproj && e.state == DownloadState::Downloaded

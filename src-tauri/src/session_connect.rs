@@ -641,15 +641,12 @@ pub(crate) async fn connect_idun(
         let r = app.app_state();
         let s = r.lock_or_recover();
         // Match the user's notch filter setting; default to 60 Hz if unset.
-        match s.status.filter_config.notch {
-            Some(skill_eeg::eeg_filter::PowerlineFreq::Hz50) => false,
-            _ => true,
-        }
+        !matches!(s.status.filter_config.notch, Some(skill_eeg::eeg_filter::PowerlineFreq::Hz50))
     };
 
     let config = GuardianClientConfig {
         api_token: if idun_token.trim().is_empty() { None } else { Some(idun_token) },
-        use_60hz,
+        mains_freq_60hz: use_60hz,
         ..GuardianClientConfig::default()
     };
     let client = GuardianClient::new(config);
