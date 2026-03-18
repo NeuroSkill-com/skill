@@ -50,7 +50,7 @@ use crate::settings::{HookLastTrigger, HookRule};
 use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus};
 
 use crate::constants::{
-    EEG_CHANNELS, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_EPOCH_SECS,
+    EEG_CHANNELS, CHANNEL_NAMES, EMBEDDING_EPOCH_SAMPLES, EMBEDDING_EPOCH_SECS,
     EMBEDDING_HOP_SAMPLES,
     EMBEDDING_OVERLAP_MAX_SECS, EMBEDDING_OVERLAP_MIN_SECS,
     MUSE_SAMPLE_RATE,
@@ -157,7 +157,7 @@ struct EpochMsg {
 use skill_exg::GPU_DEVICE_POISONED;
 use skill_exg::yyyymmddhhmmss_utc;
 
-use crate::constants::MUSE_SAMPLE_RATE;
+// MUSE_SAMPLE_RATE already imported at the top of this file.
 
 // ── EegAccumulator ────────────────────────────────────────────────────────────
 
@@ -247,7 +247,7 @@ impl EegAccumulator {
             native_epoch_samples: EMBEDDING_EPOCH_SAMPLES,
             device_id:    None,
             device_name:  None,
-            channel_names: CHANNEL_NAMES.iter().map(|s| s.to_string()).collect(),
+            channel_names: CHANNEL_NAMES.iter().map(|s: &&str| s.to_string()).collect(),
             sample_rate: MUSE_SAMPLE_RATE,
             tx,
             latest_bands: None,

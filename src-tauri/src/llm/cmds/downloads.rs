@@ -132,7 +132,7 @@ pub fn download_llm_model(
                         if !entry.is_mmproj {
                             let should_activate = s.llm.catalog.active_model.is_empty()
                                 || s.llm.catalog.active_model_path()
-                                    .map_or(true, |p| !p.exists());
+                                    .is_none_or(|p| !p.exists());
                             if should_activate {
                                 s.llm.catalog.active_model = filename2.clone();
                             }

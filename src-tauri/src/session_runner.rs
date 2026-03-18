@@ -50,9 +50,9 @@ pub(crate) async fn run_device_session(
     let has_battery = desc.caps.contains(DeviceCaps::BATTERY);
     let kind = desc.kind;
     let mut pipeline_ch = desc.pipeline_channels;
-    /// Whether the adapter may still update its descriptor (e.g. Emotiv
-    /// auto-detecting channel count).  Cleared after the first match or
-    /// after a few EEG frames to avoid checking on every frame forever.
+    // Whether the adapter may still update its descriptor (e.g. Emotiv
+    // auto-detecting channel count).  Cleared after the first match or
+    // after a few EEG frames to avoid checking on every frame forever.
     let mut desc_may_change = kind == "emotiv";
     let sample_rate = desc.eeg_sample_rate;
 
