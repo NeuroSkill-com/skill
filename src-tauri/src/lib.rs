@@ -249,6 +249,8 @@ use settings_cmds::{
     get_ws_config, set_ws_config,
     get_autostart_enabled, set_autostart_enabled,
     get_update_check_interval, set_update_check_interval,
+    get_skills_refresh_interval, set_skills_refresh_interval,
+    get_skills_last_sync, sync_skills_now,
     get_openbci_config, set_openbci_config, list_serial_ports,
     get_device_api_config, set_device_api_config,
     get_neutts_config, set_neutts_config, pick_ref_wav_file,
@@ -1151,6 +1153,48 @@ fn setup_background_tasks(app: &mut tauri::App) {
         }
     });
 
+    // ── Background community-skills sync ─────────────────────────────
+    let app_skills = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        // Wait a bit after startup before first sync attempt.
+        tokio::time::sleep(Duration::from_secs(45)).await;
+        loop {
+            let (skill_dir, interval_secs) = {
+                let r = app_skills.state::<Mutex<Box<AppState>>>();
+                let g = r.lock_or_recover();
+                (g.skill_dir.clone(), g.llm.config.tools.skills_refresh_interval_secs)
+            };
+
+            if interval_secs > 0 {
+                eprintln!("[skills-sync] checking for community skills update");
+                let sd = skill_dir.clone();
+                let iv = interval_secs;
+                let outcome = tokio::task::spawn_blocking(move || {
+                    skill_skills::sync::sync_skills(&sd, iv, None)
+                }).await;
+
+                match outcome {
+                    Ok(skill_skills::sync::SyncOutcome::Updated { elapsed_ms, .. }) => {
+                        eprintln!("[skills-sync] updated in {elapsed_ms} ms");
+                        let _ = app_skills.emit("skills-updated", ());
+                    }
+                    Ok(skill_skills::sync::SyncOutcome::Fresh { next_sync_in_secs }) => {
+                        eprintln!("[skills-sync] fresh, next check in {next_sync_in_secs} s");
+                    }
+                    Ok(skill_skills::sync::SyncOutcome::Failed(e)) => {
+                        eprintln!("[skills-sync] failed: {e}");
+                    }
+                    Err(e) => {
+                        eprintln!("[skills-sync] task panic: {e}");
+                    }
+                }
+            }
+
+            let sleep_secs = if interval_secs == 0 { 300 } else { interval_secs.min(3600) };
+            tokio::time::sleep(Duration::from_secs(sleep_secs)).await;
+        }
+    });
+
     // ── Background OS DND poll ────────────────────────────────────────
     let app_dnd = app.handle().clone();
     tauri::async_runtime::spawn(async move {
@@ -1301,6 +1345,8 @@ pub fn run() {
             get_ws_config, set_ws_config,
             get_autostart_enabled, set_autostart_enabled,
             get_update_check_interval, set_update_check_interval,
+            get_skills_refresh_interval, set_skills_refresh_interval,
+            get_skills_last_sync, sync_skills_now,
             get_openbci_config, set_openbci_config, list_serial_ports,
             get_device_api_config, set_device_api_config,
             get_device_api_config, set_device_api_config,

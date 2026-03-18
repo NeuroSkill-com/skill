@@ -67,6 +67,11 @@ pub struct LlmToolConfig {
     /// Context compression settings for tool results.
     #[serde(default)]
     pub context_compression: ToolContextCompression,
+
+    /// Seconds between automatic community-skills refresh from GitHub.
+    /// `0` = disabled.  Default: 86 400 (24 hours).
+    #[serde(default = "default_skills_refresh_interval")]
+    pub skills_refresh_interval_secs: u64,
 }
 
 /// Web search provider configuration.
@@ -201,6 +206,7 @@ fn default_true()                      -> bool { true }
 fn default_tool_execution_mode()       -> ToolExecutionMode { ToolExecutionMode::Parallel }
 fn default_max_tool_rounds()           -> usize { 3 }
 fn default_max_tool_calls_per_round()  -> usize { 4 }
+fn default_skills_refresh_interval()   -> u64  { 86_400 }
 
 impl Default for LlmToolConfig {
     fn default() -> Self {
@@ -221,6 +227,7 @@ impl Default for LlmToolConfig {
             max_rounds:         10,
             max_calls_per_round: default_max_tool_calls_per_round(),
             context_compression: ToolContextCompression::default(),
+            skills_refresh_interval_secs: default_skills_refresh_interval(),
         }
     }
 }

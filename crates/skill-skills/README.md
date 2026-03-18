@@ -88,3 +88,31 @@ for skill in &result.skills {
 
 let prompt_block = format_skills_for_prompt(&result.skills);
 ```
+
+## Community Skills Auto-Sync (feature `sync`)
+
+When the `sync` feature is enabled, the crate can periodically download the
+latest community skills from the public GitHub repository and extract them
+into `<skill_dir>/skills/`.
+
+```rust
+use skill_skills::sync::{sync_skills, SyncOutcome, DEFAULT_SKILLS_REFRESH_SECS};
+
+// Download if last sync was >24 h ago (blocking I/O — call from a background thread):
+match sync_skills(&skill_dir, DEFAULT_SKILLS_REFRESH_SECS, None) {
+    SyncOutcome::Updated { elapsed_ms, .. } => println!("updated in {elapsed_ms} ms"),
+    SyncOutcome::Fresh { next_sync_in_secs } => println!("fresh, next in {next_sync_in_secs} s"),
+    SyncOutcome::Failed(e) => eprintln!("sync failed: {e}"),
+}
+
+// Force re-download (interval = 0):
+sync_skills(&skill_dir, 0, None);
+
+// Check last sync timestamp:
+if let Some(ts) = skill_skills::sync::last_sync_ts(&skill_dir) {
+    println!("last synced at Unix {ts}");
+}
+```
+
+A `.skills_last_sync` JSON sidecar is written next to the extracted directory
+to track the last successful sync timestamp and URL.

@@ -192,7 +192,7 @@ skill-autostart     = { path = "../crates/skill-autostart" }
 skill-constants     = { path = "../crates/skill-constants" }
 skill-label-index   = { path = "../crates/skill-label-index" }
 skill-screenshots   = { path = "../crates/skill-screenshots", default-features = false }
-skill-skills        = { path = "../crates/skill-skills" }
+skill-skills        = { path = "../crates/skill-skills", features = ["sync"] }
 chrono     = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 # PNG encoding for the About-window icon data URL

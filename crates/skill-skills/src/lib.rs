@@ -29,6 +29,9 @@
 //! - `description` — **required** (max 1024 chars); skills without one are dropped.
 //! - `disable-model-invocation` — if `true`, excluded from the system prompt.
 
+#[cfg(feature = "sync")]
+pub mod sync;
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};

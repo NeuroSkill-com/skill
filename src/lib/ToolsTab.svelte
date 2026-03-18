@@ -44,6 +44,7 @@
     max_rounds: number;
     max_calls_per_round: number;
     context_compression: ToolContextCompression;
+    skills_refresh_interval_secs: number;
   }
 
   interface LlmConfig {
@@ -61,12 +62,15 @@
   let config  = $state<LlmConfig>({
     enabled: false, autostart: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
-    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, skill_api: true, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4, context_compression: { level: "normal" as CompressionLevel, max_search_results: 0, max_result_chars: 0 } },
+    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, skill_api: true, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4, context_compression: { level: "normal" as CompressionLevel, max_search_results: 0, max_result_chars: 0 }, skills_refresh_interval_secs: 86400 },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
   });
 
   let configSaving = $state(false);
+  let skillsRefreshInterval = $state(86400);
+  let skillsLastSync = $state<number | null>(null);
+  let skillsSyncing = $state(false);
 
   let TOOL_ROWS = $derived<Array<{ key: LlmToolKey; label: string; desc: string; warn?: boolean }>>(
     [
@@ -87,6 +91,7 @@
   async function loadConfig() {
     try {
       config = await invoke<LlmConfig>("get_llm_config");
+      skillsRefreshInterval = config.tools.skills_refresh_interval_secs ?? 86400;
     } catch {}
   }
 
@@ -96,10 +101,39 @@
     finally { configSaving = false; }
   }
 
+  async function loadSkillsMeta() {
+    try {
+      skillsRefreshInterval = await invoke<number>("get_skills_refresh_interval");
+      skillsLastSync = await invoke<number | null>("get_skills_last_sync");
+    } catch {}
+  }
+
+  async function setSkillsInterval(secs: number) {
+    skillsRefreshInterval = secs;
+    config = { ...config, tools: { ...config.tools, skills_refresh_interval_secs: secs } };
+    await invoke("set_skills_refresh_interval", { secs });
+    await saveConfig();
+  }
+
+  async function syncNow() {
+    skillsSyncing = true;
+    try {
+      await invoke("sync_skills_now");
+      await loadSkillsMeta();
+    } catch {}
+    finally { skillsSyncing = false; }
+  }
+
+  function formatLastSync(ts: number | null): string {
+    if (ts == null || ts === 0) return t("llm.tools.skillsNeverSynced");
+    return new Date(ts * 1000).toLocaleString();
+  }
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   onMount(async () => {
     await loadConfig();
+    await loadSkillsMeta();
   });
 </script>
 
@@ -378,6 +412,73 @@
               </div>
             </div>
           {/if}
+        </div>
+      </div>
+
+    </CardContent>
+  </Card>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<!-- Skills auto-refresh                                                         -->
+<!-- ─────────────────────────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      {t("llm.tools.skillsRefresh")}
+    </span>
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col py-0 px-0">
+
+      <!-- Description -->
+      <div class="px-4 pt-3.5 pb-2">
+        <p class="text-[0.65rem] text-muted-foreground leading-relaxed">
+          {t("llm.tools.skillsRefreshDesc")}
+        </p>
+      </div>
+
+      <!-- Interval selector -->
+      <div class="flex flex-col gap-3 px-4 pb-3">
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.72rem] font-semibold text-foreground">{t("llm.tools.skillsRefresh")}</span>
+          </div>
+          <div class="flex items-center gap-1">
+            {#each [
+              { secs: 0,      label: t("llm.tools.skillsRefreshOff") },
+              { secs: 43200,  label: t("llm.tools.skillsRefresh12h") },
+              { secs: 86400,  label: t("llm.tools.skillsRefresh24h") },
+              { secs: 604800, label: t("llm.tools.skillsRefresh7d") },
+            ] as opt}
+              <button
+                onclick={() => setSkillsInterval(opt.secs)}
+                class="rounded-lg border px-2 py-1 text-[0.64rem] font-semibold transition-all cursor-pointer
+                       {skillsRefreshInterval === opt.secs
+                         ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                         : 'border-border bg-background text-muted-foreground hover:text-foreground'}">
+                {opt.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Last sync + manual sync button -->
+        <div class="flex items-center justify-between gap-4 pt-1">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.62rem] text-muted-foreground">
+              {t("llm.tools.skillsLastSync")}: {formatLastSync(skillsLastSync)}
+            </span>
+          </div>
+          <button
+            onclick={syncNow}
+            disabled={skillsSyncing}
+            class="rounded-lg border border-border px-3 py-1.5 text-[0.64rem] font-semibold
+                   transition-all cursor-pointer bg-background text-foreground
+                   hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed">
+            {skillsSyncing ? t("llm.tools.skillsSyncing") : t("llm.tools.skillsSyncNow")}
+          </button>
         </div>
       </div>
 

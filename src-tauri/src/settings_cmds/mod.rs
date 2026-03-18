@@ -1381,3 +1381,54 @@ pub async fn search_screenshots_by_vector(
         crate::screenshot::search_by_vector(&hnsw, &store, &vector, k)
     }).await.unwrap_or_default())
 }
+
+// ── Skills refresh ─────────────────────────────────────────────────────────────
+
+/// Return the current community-skills refresh interval in seconds (0 = disabled).
+#[tauri::command]
+pub fn get_skills_refresh_interval(state: tauri::State<'_, Mutex<Box<AppState>>>) -> u64 {
+    state.lock_or_recover().llm.config.tools.skills_refresh_interval_secs
+}
+
+/// Persist a new skills refresh interval.  `secs` = 0 disables auto-refresh.
+#[tauri::command]
+pub fn set_skills_refresh_interval(
+    secs:  u64,
+    app:   AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    state.lock_or_recover().llm.config.tools.skills_refresh_interval_secs = secs;
+    crate::save_settings(&app);
+}
+
+/// Return the Unix timestamp of the last successful skills sync, or `null`.
+#[tauri::command]
+pub fn get_skills_last_sync(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<u64> {
+    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    skill_skills::sync::last_sync_ts(&skill_dir)
+}
+
+/// Trigger a manual skills sync (ignores the interval, forces re-download).
+#[tauri::command]
+pub async fn sync_skills_now(
+    app:   AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Result<String, String> {
+    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let outcome = tokio::task::spawn_blocking(move || {
+        skill_skills::sync::sync_skills(&skill_dir, 0, None)
+    })
+    .await
+    .map_err(|e| format!("task panic: {e}"))?;
+
+    match outcome {
+        skill_skills::sync::SyncOutcome::Updated { elapsed_ms, .. } => {
+            let _ = app.emit("skills-updated", ());
+            Ok(format!("updated in {elapsed_ms} ms"))
+        }
+        skill_skills::sync::SyncOutcome::Fresh { .. } => {
+            Ok("already up to date".into())
+        }
+        skill_skills::sync::SyncOutcome::Failed(e) => Err(e),
+    }
+}
