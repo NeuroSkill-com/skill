@@ -10,7 +10,7 @@ skill-constants    = { path = "../skill-constants" }
 skill-eeg          = { path = "../skill-eeg" }
 skill-tts          = { path = "../skill-tts" }
 skill-llm          = { path = "../skill-llm" }
-skill-screenshots  = { path = "../skill-screenshots" }
+
 skill-data         = { path = "../skill-data" }
 serde              = { version = "1", features = ["derive"] }
 serde_json         = "1"

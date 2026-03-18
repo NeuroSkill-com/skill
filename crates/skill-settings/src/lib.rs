@@ -33,8 +33,10 @@ pub use skill_tts::config::default_neutts_backbone_repo;
 // Re-export LLM config types from skill-llm.
 pub use skill_llm::config::{LlmConfig, LlmToolConfig, ToolExecutionMode};
 
-// Re-export ScreenshotConfig from skill-screenshots.
-pub use skill_screenshots::ScreenshotConfig;
+// Screenshot configuration — defined locally to avoid pulling in the heavy
+// skill-screenshots crate (xcap → pipewire on Linux) for settings I/O.
+pub mod screenshot_config;
+pub use screenshot_config::ScreenshotConfig;
 
 // ── OpenBCI board configuration ───────────────────────────────────────────────
 
@@ -697,6 +699,7 @@ impl Default for UserSettings {
             last_seen_whats_new_version:   String::new(),
             llm:                           LlmConfig::default(),
             accent_color:                  default_accent_color(),
+            storage_format:                default_storage_format(),
             screenshot:                    ScreenshotConfig::default(),
             sleep:                         SleepConfig::default(),
         }

@@ -10313,6 +10313,7 @@ dependencies = [
  "serde_json",
  "skill-constants",
  "skill-data",
+ "skill-settings",
  "skill-vision",
  "ureq 2.12.1",
  "xcap",
@@ -10329,7 +10330,6 @@ dependencies = [
  "skill-data",
  "skill-eeg",
  "skill-llm",
- "skill-screenshots",
  "skill-tts",
 ]
 
