@@ -352,9 +352,11 @@ the Free Software Foundation, version 3 only. -->
   const isGanglion  = $derived(status.device_kind === "ganglion");
   const isMw75      = $derived(status.device_kind === "mw75");
   const isHermes    = $derived(status.device_kind === "hermes");
+  const isEmotiv    = $derived(status.device_kind === "emotiv");
+  const isIdun      = $derived(status.device_kind === "idun");
   const hasPpg      = $derived(deviceCaps.hasPpg);
   const hasImuCap   = $derived(deviceCaps.hasImu);
-  const hasBattery  = $derived(isMuse || isMw75);
+  const hasBattery  = $derived(isMuse || isMw75 || isEmotiv);
 
   // Channel labels and colours — dynamic based on connected device.
   const chLabels = $derived(
@@ -406,6 +408,9 @@ the Free Software Foundation, version 3 only. -->
     if (isMuse)     return "/devices/muse-gen1.jpg";       // Muse 1 / generic Muse
     if (isGanglion) return "/devices/openbci-ganglion.jpg";
     if (isMw75)    return "/devices/muse-mw75.jpg";
+    if (isHermes)  return "/devices/re-ak-nucleus-hermes.png";
+    if (isEmotiv)  return "/devices/emotiv-epoc-x.webp";
+    if (isIdun)    return "/devices/idun-guardian.png";
     return null;
   })());
   const deviceImageAlt = $derived((() => {
@@ -415,6 +420,9 @@ the Free Software Foundation, version 3 only. -->
     if (isMuse)     return "Muse";
     if (isGanglion) return "OpenBCI Ganglion";
     if (isMw75)    return "MW75 Neuro";
+    if (isHermes)  return "Nucleus Hermes";
+    if (isEmotiv)  return "Emotiv";
+    if (isIdun)    return "IDUN Guardian";
     return status.device_name ?? "";
   })());
   const csvName   = (p: string | null) => p ? (p.split(/[\\/]/).pop() ?? p) : "";
@@ -1048,7 +1056,7 @@ the Free Software Foundation, version 3 only. -->
             <!-- Normal scanning spinner -->
             <Spinner size="w-6 h-6" class="text-yellow-500 dark:text-yellow-400" />
             <p class="text-[0.73rem] text-muted-foreground text-center leading-relaxed">
-              {status.target_name ? t("dashboard.connectingTo", { name: status.target_name }) : (isGanglion ? t("dashboard.lookingForGanglion") : t("dashboard.lookingForMuse"))}
+              {status.target_name ? t("dashboard.connectingTo", { name: status.target_name }) : isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : t("dashboard.lookingForMuse")}
             </p>
           {/if}
         </div>

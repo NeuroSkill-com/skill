@@ -203,6 +203,7 @@ const en: Record<string, string> = {
   "dashboard.ppgSamples":           "samples",
   "dashboard.lookingForMuse":       "Scanning for a BCI device…",
   "dashboard.lookingForGanglion":   "Looking for any OpenBCI Ganglion…",
+  "dashboard.connectingEmotiv":     "Connecting via Emotiv Cortex API…",
   "dashboard.retryCountdown":       "Reconnecting in {secs}s…",
   "dashboard.retryAttempt":         "Attempt #{n}",
   "dashboard.retryNow":             "Retry Now",
