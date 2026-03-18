@@ -1,0 +1,5 @@
+### Bugfixes
+
+- **Non-Muse devices had no device_id in status**: `on_connected` now stores `info.id` in `status.device_id` when it hasn't been set yet. Previously only Muse's connect path set this field, leaving it `None` for MW75, Hermes, Emotiv, IDUN, and Ganglion — breaking reconnection targeting and paired device tracking.
+- **Device identity fields not populated from DeviceInfo**: `on_connected` now copies `serial_number`, `firmware_version`, `hardware_version`, `bootloader_version`, `mac_address`, and `headset_preset` from the adapter's `DeviceInfo` into `DeviceStatus`. Previously these were only populated from Muse Control JSON meta events.
+- **Meta handler only parsed Muse short keys**: `process_meta` now accepts both Muse-style short keys (`sn`, `ma`, `fw`, `hw`, `bl`, `tp`) and long-form keys (`serial_number`, `mac_address`, `firmware_version`, `hardware_version`, `bootloader_version`, `headset_preset`). IDUN Guardian's `DeviceInfo` meta event (which uses long keys) was previously ignored.
