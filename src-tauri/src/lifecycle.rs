@@ -21,22 +21,21 @@ use crate::{
 
 // ── Device kind constants ─────────────────────────────────────────────────────
 
-/// Known device-name prefixes / substrings for device-kind routing.
-const GANGLION_PREFIXES: &[&str] = &["ganglion", "simblee"];
-const MW75_SUBSTRING: &str = "mw75";
-const HERMES_PREFIX: &str = "hermes";
-const EMOTIV_PREFIXES: &[&str] = &["emotiv", "epoc", "insight", "flex", "mn8"];
-const IDUN_PREFIXES: &[&str] = &["idun", "guardian"];
-
-/// Determine device kind from the target name (lowercased).
+/// Map a lowercased device advertising name to a device-kind routing key.
+///
+/// Delegates to [`DeviceKind::from_name`] so detection logic is defined in
+/// one place.  `OpenBci` and `Unknown` both route to `"muse"` (the default
+/// BLE-scan connect path; OpenBCI serial/WiFi uses a separate command).
 fn detect_device_kind(name_lower: Option<&str>) -> &'static str {
-    match name_lower {
-        Some(n) if GANGLION_PREFIXES.iter().any(|p| n.starts_with(p)) => "ganglion",
-        Some(n) if n.contains(MW75_SUBSTRING) => "mw75",
-        Some(n) if n.starts_with(HERMES_PREFIX) => "hermes",
-        Some(n) if EMOTIV_PREFIXES.iter().any(|p| n.starts_with(p)) => "emotiv",
-        Some(n) if IDUN_PREFIXES.iter().any(|p| n.starts_with(p)) => "idun",
-        _ => "muse",
+    use skill_data::device::DeviceKind;
+    match DeviceKind::from_name(name_lower) {
+        DeviceKind::Ganglion => "ganglion",
+        DeviceKind::Mw75     => "mw75",
+        DeviceKind::Hermes   => "hermes",
+        DeviceKind::Emotiv   => "emotiv",
+        DeviceKind::Idun     => "idun",
+        DeviceKind::OpenBci  => "muse", // serial/WiFi boards use connect_openbci command
+        DeviceKind::Muse | DeviceKind::Unknown => "muse",
     }
 }
 
@@ -244,6 +243,7 @@ mod tests {
     #[test]
     fn detect_device_kind_mw75() {
         assert_eq!(detect_device_kind(Some("headphones-mw75-v2")), "mw75");
+        assert_eq!(detect_device_kind(Some("neurable-xyz")), "mw75");
     }
 
     #[test]
@@ -264,6 +264,7 @@ mod tests {
     fn detect_device_kind_idun() {
         assert_eq!(detect_device_kind(Some("idun-guardian")), "idun");
         assert_eq!(detect_device_kind(Some("guardian-001")), "idun");
+        assert_eq!(detect_device_kind(Some("ige-1234")), "idun");
     }
 
     #[test]

@@ -39,6 +39,10 @@ pub struct EmotivAdapter {
     handle:  Option<CortexHandle>,
     desc:    DeviceDescriptor,
     pending: VecDeque<DeviceEvent>,
+    /// Whether the descriptor has been auto-adjusted from the first EEG packet.
+    /// Cortex may send fewer channels than EPOC's 14 if an Insight (5-ch) or
+    /// MN8 (2-ch) is connected.
+    auto_detected: bool,
 }
 
 impl EmotivAdapter {
@@ -64,6 +68,7 @@ impl EmotivAdapter {
                 pipeline_channels: eeg_channels.min(EEG_CHANNELS),
             },
             pending: VecDeque::new(),
+            auto_detected: false,
         }
     }
 
@@ -93,6 +98,7 @@ impl EmotivAdapter {
                 pipeline_channels: eeg_channels.min(EEG_CHANNELS),
             },
             pending: VecDeque::new(),
+            auto_detected: false,
         }
     }
 
@@ -111,6 +117,23 @@ impl EmotivAdapter {
             }
 
             CortexEvent::Eeg(data) => {
+                // Auto-detect actual channel count from the first EEG packet.
+                // The Cortex API streams exactly as many channels as the
+                // connected headset has (14 for EPOC, 5 for Insight, etc.).
+                let actual_ch = data.samples.len();
+                if !self.auto_detected && actual_ch > 0 && actual_ch != self.desc.eeg_channels {
+                    self.auto_detected = true;
+                    self.desc.eeg_channels = actual_ch;
+                    self.desc.pipeline_channels = actual_ch.min(EEG_CHANNELS);
+                    // Trim or extend channel names to match.
+                    self.desc.channel_names.truncate(actual_ch);
+                    while self.desc.channel_names.len() < actual_ch {
+                        self.desc.channel_names.push(format!("Ch{}", self.desc.channel_names.len() + 1));
+                    }
+                } else if !self.auto_detected {
+                    self.auto_detected = true;
+                }
+
                 let channels: Vec<f64> = data.samples.iter()
                     .take(self.desc.eeg_channels)
                     .copied()
