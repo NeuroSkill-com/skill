@@ -10,8 +10,14 @@
 <script lang="ts">
   import { onMount }                  from "svelte";
   import { invoke }                   from "@tauri-apps/api/core";
+  import { marked }                   from "marked";
   import { Card, CardContent }        from "$lib/components/ui/card";
   import { t }                        from "$lib/i18n/index.svelte";
+
+  /** Render inline markdown (bold, italic, code, links) — no block elements. */
+  function inlineMd(src: string): string {
+    return marked.parseInline(src, { gfm: true }) as string;
+  }
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -508,7 +514,7 @@
                     {skill.source}
                   </span>
                 </div>
-                <span class="text-[0.6rem] text-muted-foreground leading-relaxed line-clamp-2">{skill.description}</span>
+                <span class="text-[0.6rem] text-muted-foreground leading-relaxed line-clamp-2 skill-desc">{@html inlineMd(skill.description)}</span>
               </div>
               <button role="switch" aria-checked={skill.enabled} aria-label={skill.name}
                 onclick={() => toggleSkill(skill.name, !skill.enabled)}
@@ -594,3 +600,20 @@
     </CardContent>
   </Card>
 </section>
+
+<style>
+  :global(.skill-desc code) {
+    font-size: 0.58rem;
+    padding: 0.05rem 0.3rem;
+    border-radius: 0.25rem;
+    background: var(--color-muted, oklch(0.96 0 0));
+  }
+  :global(.skill-desc a) {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  :global(.skill-desc strong) {
+    font-weight: 600;
+    color: var(--color-foreground);
+  }
+</style>
