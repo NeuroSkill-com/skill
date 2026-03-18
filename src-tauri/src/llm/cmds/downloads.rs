@@ -26,7 +26,7 @@ pub fn download_llm_model(
     app:      AppHandle,
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let (repo, _skill_dir, prog_arc, size_bytes) = {
+    let (entry_snapshot, prog_arc) = {
         let mut s = state.lock_or_recover();
 
         // Find the entry.
@@ -49,9 +49,6 @@ pub fn download_llm_model(
                 }
             }
         }
-
-        // Catalog size in bytes — used by the progress monitor thread.
-        let size_bytes = (entry.size_gb * 1_073_741_824.0) as u64;
 
         // Mark as downloading in the catalog immediately so the UI updates.
         if let Some(e) = s.llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
@@ -77,7 +74,7 @@ pub fn download_llm_model(
 
         s.llm.downloads.insert(filename.clone(), prog.clone());
 
-        (entry.repo.clone(), s.skill_dir.clone(), prog, size_bytes)
+        (entry, prog)
     };
 
     refresh_tray(&app);
@@ -112,17 +109,9 @@ pub fn download_llm_model(
 
     let filename2 = filename.clone();
     let app2      = app.clone();
-    let entry_clone = {
-        let s = state.lock_or_recover();
-        s.llm.catalog.entries.iter().find(|e| e.filename == filename).cloned()
-    };
 
     tauri::async_runtime::spawn_blocking(move || {
-        let result = if let Some(ref entry) = entry_clone {
-            crate::llm::catalog::download_model(entry, &prog_arc)
-        } else {
-            crate::llm::catalog::download_file(&repo, &filename2, &prog_arc, size_bytes)
-        };
+        let result = crate::llm::catalog::download_model(&entry_snapshot, &prog_arc);
 
         // After completion / failure, refresh the catalog entry.
         if let Some(state_handle) = app2.try_state::<Mutex<Box<AppState>>>() {
