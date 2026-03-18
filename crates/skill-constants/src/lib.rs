@@ -108,7 +108,7 @@ pub const EEG_CHANNELS: usize = 12;
 /// Default channel labels for 4-channel devices (Muse: TP9, AF7, AF8, TP10).
 pub const CHANNEL_NAMES: [&str; 4] = ["TP9", "AF7", "AF8", "TP10"];
 
-/// EEG hardware sample rate (Hz) — Muse and Ganglion both run at 256 Hz.
+/// EEG hardware sample rate (Hz) — Muse runs at 256 Hz (Ganglion uses 200 Hz).
 pub const MUSE_SAMPLE_RATE: f32 = 256.0;
 
 /// PPG hardware sample rate (Hz) — Muse PPG stream runs at 64 Hz.

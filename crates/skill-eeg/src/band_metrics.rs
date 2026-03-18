@@ -275,11 +275,45 @@ fn pearson(a: &[f32], b: &[f32]) -> f32 {
 /// Uses total broadband power: (right − left) / (right + left).
 /// TP9 (left), AF7 (left), AF8 (right), TP10 (right).
 pub(crate) fn laterality_index_fn(ch: &[BandPowers]) -> f32 {
-    if ch.len() < 4 { return 0.0; }
-    let left  = (ch[0].delta + ch[0].theta + ch[0].alpha + ch[0].beta + ch[0].gamma)
-              + (ch[1].delta + ch[1].theta + ch[1].alpha + ch[1].beta + ch[1].gamma);
-    let right = (ch[2].delta + ch[2].theta + ch[2].alpha + ch[2].beta + ch[2].gamma)
-              + (ch[3].delta + ch[3].theta + ch[3].alpha + ch[3].beta + ch[3].gamma);
+    if ch.len() < 2 { return 0.0; }
+
+    // In the 10-20 system:
+    //   odd-numbered electrodes → left hemisphere  (Fp1, F3, F7, T7, P7, O1, C3, …)
+    //   even-numbered electrodes → right hemisphere (Fp2, F4, F8, T8, P8, O2, C4, …)
+    //   "z" suffix → midline (ignored)
+    // This also covers named sites like TP9/TP10, CP5/CP6, FT7/FT8, etc.
+    fn hemisphere(name: &str) -> Option<bool> {
+        // Check last char: odd digit → left, even digit → right
+        let last = name.chars().last()?;
+        if last.is_ascii_digit() {
+            let d = last.to_digit(10)?;
+            return Some(d % 2 == 1); // true = left
+        }
+        // 'z' suffix → midline, skip
+        None
+    }
+
+    let broadband = |c: &BandPowers| c.delta + c.theta + c.alpha + c.beta + c.gamma;
+
+    let mut left  = 0.0f32; let mut l_n = 0u32;
+    let mut right = 0.0f32; let mut r_n = 0u32;
+
+    for c in ch {
+        match hemisphere(&c.channel) {
+            Some(true)  => { left  += broadband(c); l_n += 1; }
+            Some(false) => { right += broadband(c); r_n += 1; }
+            None        => {} // midline — skip
+        }
+    }
+
+    // Fallback for generic labels (Ch1, Ch2, …): split by index
+    if l_n == 0 || r_n == 0 {
+        if ch.len() < 2 { return 0.0; }
+        let mid = ch.len() / 2;
+        left  = ch[..mid].iter().map(broadband).sum();
+        right = ch[mid..].iter().map(broadband).sum();
+    }
+
     let total = left + right;
     if total > 1e-12 { (right - left) / total } else { 0.0 }
 }

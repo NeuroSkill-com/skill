@@ -26,14 +26,25 @@ export const EEG_CH = ["TP9", "AF7", "AF8", "TP10"] as const;
 /** Per-channel accent colours for the default 4-channel view. */
 export const EEG_COLOR = ["#22c55e", "#60a5fa", "#c084fc", "#fb923c"] as const;
 
+// ── OpenBCI Ganglion (4-channel) ──────────────────────────────────────────────
+
+/** OpenBCI Ganglion channel count. */
+export const GANGLION_EEG_CHANNELS = 4;
+
+/** OpenBCI Ganglion channel labels (generic — user-configurable montage). */
+export const GANGLION_CH = ["Ch1", "Ch2", "Ch3", "Ch4"] as const;
+
+/** Ganglion per-channel colours. */
+export const GANGLION_COLOR = ["#22c55e", "#60a5fa", "#c084fc", "#fb923c"] as const;
+
 // ── Hermes V1 (8-channel) ────────────────────────────────────────────────────
 
 /** Hermes V1 EEG channel count (8-channel ADS1299). */
 export const HERMES_EEG_CHANNELS = 8;
 
-/** Hermes V1 channel labels (generic — depends on montage). */
+/** Hermes V1 channel labels (10-20 positions — must match Rust HERMES_CHANNEL_NAMES). */
 export const HERMES_CH = [
-  "Ch1", "Ch2", "Ch3", "Ch4", "Ch5", "Ch6", "Ch7", "Ch8",
+  "Fp1", "Fp2", "AF3", "AF4", "F3", "F4", "FC1", "FC2",
 ] as const;
 
 /** Hermes V1 per-channel colours. */
@@ -63,24 +74,25 @@ export const MW75_COLOR = [
 
 // ── Emotiv EPOC (14-channel) ──────────────────────────────────────────────────
 
-/** Emotiv EPOC X / EPOC+ channel count (full device = 14, pipeline-capped to 12). */
-export const EMOTIV_EEG_CHANNELS = 12;
+/** Emotiv EPOC X / EPOC+ hardware channel count (14 channels). */
+export const EMOTIV_EEG_CHANNELS = 14;
 
 /**
- * Emotiv EPOC X / EPOC+ channel labels — first 12 of 14 electrodes.
+ * Emotiv EPOC X / EPOC+ channel labels — all 14 electrodes.
  *
- * The DSP pipeline is capped at `EEG_CHANNELS` (12), so the last two
- * hardware channels (F8, AF4) are not forwarded to the frontend.
+ * Must match Rust `EMOTIV_EPOC_CHANNEL_NAMES` in `skill-constants`.
+ * The DSP pipeline is capped at `EEG_CHANNELS` (12), so only the first
+ * 12 channels are processed; the remaining 2 are shown for reference.
  */
 export const EMOTIV_CH = [
   "AF3", "F7", "F3", "FC5", "T7", "P7", "O1",
-  "O2", "P8", "T8", "FC6", "F4",
+  "O2", "P8", "T8", "FC6", "F4", "F8", "AF4",
 ] as const;
 
-/** Emotiv per-channel colours — 6 warm (left) + 6 cool (right). */
+/** Emotiv per-channel colours — 7 warm (left) + 7 cool (right). */
 export const EMOTIV_COLOR = [
-  "#22c55e", "#16a34a", "#15803d", "#a3e635", "#84cc16", "#65a30d",
-  "#60a5fa", "#3b82f6", "#2563eb", "#c084fc", "#a855f7", "#7c3aed",
+  "#22c55e", "#16a34a", "#15803d", "#a3e635", "#84cc16", "#65a30d", "#4ade80",
+  "#60a5fa", "#3b82f6", "#2563eb", "#c084fc", "#a855f7", "#7c3aed", "#818cf8",
 ] as const;
 
 // ── IDUN Guardian (1-channel) ─────────────────────────────────────────────────

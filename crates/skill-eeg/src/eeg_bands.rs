@@ -635,12 +635,32 @@ impl BandAnalyzer {
         let safe_nch = if nch > 0.0 { nch } else { 1.0 };
 
         // ── Frontal Alpha Asymmetry (FAA) ────────────────────────────────────
-        let faa = if ch_powers.len() >= 3 {
-            let af7_alpha = ch_powers[1].alpha.max(1e-6);
-            let af8_alpha = ch_powers[2].alpha.max(1e-6);
-            af8_alpha.ln() - af7_alpha.ln()
-        } else {
-            0.0
+        // Resolve left / right frontal electrodes by name so this works across
+        // all device montages (Muse, Emotiv, Hermes, MW75, …).
+        // Left-frontal  10-20 labels: AF7, AF3, F7, F3, Fp1, FC5, FC1, FT7
+        // Right-frontal 10-20 labels: AF8, AF4, F8, F4, Fp2, FC6, FC2, FT8
+        let faa = {
+            const LEFT:  &[&str] = &["AF7","AF3","F7","F3","Fp1","FC5","FC1","FT7"];
+            const RIGHT: &[&str] = &["AF8","AF4","F8","F4","Fp2","FC6","FC2","FT8"];
+            let mut l_sum = 0.0f32; let mut l_n = 0u32;
+            let mut r_sum = 0.0f32; let mut r_n = 0u32;
+            for ch in &ch_powers {
+                let name = ch.channel.as_str();
+                if LEFT.contains(&name)  { l_sum += ch.alpha; l_n += 1; }
+                if RIGHT.contains(&name) { r_sum += ch.alpha; r_n += 1; }
+            }
+            if l_n > 0 && r_n > 0 {
+                let l_avg = (l_sum / l_n as f32).max(1e-6);
+                let r_avg = (r_sum / r_n as f32).max(1e-6);
+                r_avg.ln() - l_avg.ln()
+            } else if ch_powers.len() >= 3 {
+                // Fallback for generic labels: use indices [1] vs [2]
+                let left  = ch_powers[1].alpha.max(1e-6);
+                let right = ch_powers[2].alpha.max(1e-6);
+                right.ln() - left.ln()
+            } else {
+                0.0
+            }
         };
 
         // ── Cross-band ratios (averaged across channels) ─────────────────────
