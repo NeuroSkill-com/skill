@@ -9,6 +9,7 @@ use crate::MutexExt;
 use crate::AppState;
 use super::save_catalog;
 use crate::llm::{LlmLogEntry, LlmStatus, cell_status, push_log};
+use crate::llm::catalog::DownloadState;
 
 // ── Logs ──────────────────────────────────────────────────────────────────────
 
@@ -40,7 +41,24 @@ pub fn start_llm_server(
     use std::sync::atomic::Ordering;
 
     let (mut config, catalog, log_buf, cell, skill_dir, loading, start_error) = {
-        let s = state.lock_or_recover();
+        let mut s = state.lock_or_recover();
+
+        // Auto-select the first downloaded model if none is active or the
+        // active model doesn't exist on disk (e.g. deleted).
+        let needs_model = s.llm.catalog.active_model.is_empty()
+            || s.llm.catalog.active_model_path().map_or(true, |p| !p.exists());
+        if needs_model {
+            if let Some(entry) = s.llm.catalog.entries.iter()
+                .find(|e| !e.is_mmproj && e.state == DownloadState::Downloaded
+                          && e.local_path.as_ref().is_some_and(|p| p.exists()))
+            {
+                s.llm.catalog.active_model = entry.filename.clone();
+                s.llm.config.model_path = s.llm.catalog.active_model_path();
+                s.llm.config.enabled = true;
+                save_catalog(&app, &s);
+            }
+        }
+
         (
             s.llm.config.clone(),
             s.llm.catalog.clone(),

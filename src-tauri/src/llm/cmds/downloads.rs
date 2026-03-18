@@ -126,9 +126,16 @@ pub fn download_llm_model(
                         entry.local_path = Some(path);
                         entry.status_msg = None;
                         entry.progress   = 1.0;
-                        // Auto-select if this is the first downloaded main model.
-                        if !entry.is_mmproj && s.llm.catalog.active_model.is_empty() {
-                            s.llm.catalog.active_model = filename2.clone();
+                        // Auto-select if this is the first downloaded main model,
+                        // or if the current active model doesn't exist on disk
+                        // (stale reference from a deleted/missing model).
+                        if !entry.is_mmproj {
+                            let should_activate = s.llm.catalog.active_model.is_empty()
+                                || s.llm.catalog.active_model_path()
+                                    .map_or(true, |p| !p.exists());
+                            if should_activate {
+                                s.llm.catalog.active_model = filename2.clone();
+                            }
                         }
                     }
                     Err(ref e) if e == "cancelled" => {
