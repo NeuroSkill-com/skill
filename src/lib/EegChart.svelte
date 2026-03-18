@@ -52,10 +52,7 @@ the Free Software Foundation, version 3 only. -->
   /** Visible channel count — clamped to [1, N_CH]. */
   const VIS_CH = $derived(Math.max(1, Math.min(numChannels, N_CH)));
 
-  /** Effective buffer size for the current sample rate (always ≈15 s). */
-  const EBUF  = $derived(bufSizeForRate(sampleRate));
-  /** Effective spectrogram column count for the current sample rate. */
-  const ESPEC = $derived(specColsForRate(sampleRate));
+
 
   /** Minimum waveform row height in CSS px. */
   const MIN_ROW_H = 30;
@@ -99,8 +96,11 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Ring buffers ────────────────────────────────────────────────────────────
   // Sized to always hold ≈15 s of data at the device's actual sample rate.
-  const RBUF = bufSizeForRate(sampleRate);
-  const SPEC_COLS = Math.ceil(RBUF / HOP);
+  // Uses $derived so the value stays in sync if sampleRate changes (the
+  // component is typically remounted on device switch, but this avoids the
+  // svelte `state_referenced_locally` warning).
+  const RBUF = $derived(bufSizeForRate(sampleRate));
+  const SPEC_COLS = $derived(Math.ceil(RBUF / HOP));
   const buffers  = Array.from({ length: N_CH }, () => new Float64Array(RBUF));
   const writePos = new Int32Array(N_CH);
 
