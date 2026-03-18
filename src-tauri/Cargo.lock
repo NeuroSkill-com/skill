@@ -10338,10 +10338,13 @@ name = "skill-skills"
 version = "0.0.1"
 dependencies = [
  "dirs",
+ "flate2",
  "ignore",
  "serde",
  "serde_json",
  "skill-constants",
+ "tar",
+ "ureq 2.12.1",
 ]
 
 [[package]]

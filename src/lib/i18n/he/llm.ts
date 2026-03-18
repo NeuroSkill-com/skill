@@ -296,6 +296,16 @@ const llm: Record<string, string> = {
   "llm.tools.maxSearchResults":        "מקסימום תוצאות חיפוש",
   "llm.tools.maxResultChars":          "מקסימום תווים לתוצאה",
   "llm.tools.zeroAutoLabel":           "0 = אוטומטי (לפי רמה)",
+  "llm.tools.skillsRefresh":           "רענון אוטומטי של skills",
+  "llm.tools.skillsRefreshDesc":       "הורדה תקופתית של skills קהילתיים מ-GitHub. הגדר 0 לביטול.",
+  "llm.tools.skillsRefreshOff":        "כבוי",
+  "llm.tools.skillsRefresh12h":        "12 ש'",
+  "llm.tools.skillsRefresh24h":        "24 ש'",
+  "llm.tools.skillsRefresh7d":         "7 י'",
+  "llm.tools.skillsSyncNow":           "סנכרן עכשיו",
+  "llm.tools.skillsSyncing":           "מסנכרן...",
+  "llm.tools.skillsLastSync":          "סנכרון אחרון",
+  "llm.tools.skillsNeverSynced":       "אף פעם",
 };
 
 export default llm;
