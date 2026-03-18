@@ -146,7 +146,13 @@ where
 
     // Inject discovered Agent Skills into the system prompt so the LLM knows
     // which specialised instruction files it can load via read_file.
-    let skills_block = skill_skills::format_skills_for_prompt(&state.skills);
+    // Filter out skills the user has explicitly disabled.
+    let disabled = &allowed_tools.disabled_skills;
+    let filtered_skills: Vec<&skill_skills::Skill> = state.skills.iter()
+        .filter(|s| !disabled.iter().any(|d| d == &s.name))
+        .collect();
+    let filtered_refs: Vec<skill_skills::Skill> = filtered_skills.into_iter().cloned().collect();
+    let skills_block = skill_skills::format_skills_for_prompt(&filtered_refs);
     if !skills_block.is_empty() {
         let has_system = messages.first()
             .and_then(|m| m.get("role"))

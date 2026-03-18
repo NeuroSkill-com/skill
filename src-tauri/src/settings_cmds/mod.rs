@@ -1432,3 +1432,86 @@ pub async fn sync_skills_now(
         skill_skills::sync::SyncOutcome::Failed(e) => Err(e),
     }
 }
+
+// ── Discovered skills listing ──────────────────────────────────────────────────
+
+/// A lightweight description of a discovered skill, sent to the frontend.
+#[derive(serde::Serialize)]
+pub struct SkillInfo {
+    pub name: String,
+    pub description: String,
+    pub source: String,
+    pub enabled: bool,
+}
+
+/// List all discovered skills from the user's skill_dir (and bundled/project
+/// directories).  Each entry includes whether it is currently enabled based on
+/// the `disabled_skills` list in settings.
+#[tauri::command]
+pub fn list_skills(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<SkillInfo> {
+    let (skill_dir, disabled) = {
+        let g = state.lock_or_recover();
+        (g.skill_dir.clone(), g.llm.config.tools.disabled_skills.clone())
+    };
+
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()));
+    let bundled_dir = exe_dir.as_ref()
+        .map(|d| d.join(skill_constants::SKILLS_SUBDIR))
+        .filter(|d| d.is_dir())
+        .or_else(|| {
+            let cwd = std::env::current_dir().ok()?;
+            let p = cwd.join(skill_constants::SKILLS_SUBDIR);
+            if p.is_dir() { Some(p) } else { None }
+        });
+
+    let result = skill_skills::load_skills(skill_skills::LoadSkillsOptions {
+        cwd: std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from(".")),
+        skill_dir: skill_dir.to_path_buf(),
+        bundled_dir,
+        skill_paths: Vec::new(),
+        include_defaults: true,
+    });
+
+    result.skills.into_iter().map(|s| {
+        let enabled = !disabled.iter().any(|d| d == &s.name);
+        SkillInfo {
+            name: s.name,
+            description: s.description,
+            source: s.source,
+            enabled,
+        }
+    }).collect()
+}
+
+/// Return the list of disabled skill names.
+#[tauri::command]
+pub fn get_disabled_skills(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<String> {
+    state.lock_or_recover().llm.config.tools.disabled_skills.clone()
+}
+
+/// Persist the disabled-skills list.
+#[tauri::command]
+pub fn set_disabled_skills(
+    names: Vec<String>,
+    app:   AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    state.lock_or_recover().llm.config.tools.disabled_skills = names;
+    crate::save_settings(&app);
+
+    // Live-update the running LLM server's tool config so the change takes
+    // effect without a restart.
+    #[cfg(feature = "llm")]
+    {
+        let (cell, tools) = {
+            let g = state.lock_or_recover();
+            (g.llm.state_cell.clone(), g.llm.config.tools.clone())
+        };
+        let server = cell.lock().unwrap().as_ref().cloned();
+        if let Some(server) = server {
+            server.set_allowed_tools(tools);
+        }
+    }
+}
