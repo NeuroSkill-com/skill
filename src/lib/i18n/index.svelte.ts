@@ -15,9 +15,13 @@
  * using the canonical app name fetched from the Rust backend.
  */
 
-import en from "./en";
+import en from "./en/index";
+import type { TranslationKey } from "./keys";
 import { getAppName } from "$lib/app-name-store.svelte";
 import { invoke } from "@tauri-apps/api/core";
+
+// Re-export the key type for call-site usage.
+export type { TranslationKey };
 
 // ── Supported locales ──────────────────────────────────────────────────────
 export interface LocaleMeta {
@@ -61,10 +65,10 @@ function detectLocale(): string {
 // "dynamically imported but also statically imported" chunk-split warning.
 const loaders: Record<string, () => Promise<{ default: Record<string, string> }>> = {
   en: async () => ({ default: en }),
-  fr: () => import("./fr"),
-  de: () => import("./de"),
-  he: () => import("./he"),
-  uk: () => import("./uk"),
+  fr: () => import("./fr/index"),
+  de: () => import("./de/index"),
+  he: () => import("./he/index"),
+  uk: () => import("./uk/index"),
 };
 
 // ── Reactive state ─────────────────────────────────────────────────────────
@@ -143,7 +147,12 @@ export async function initLocaleFromSettings(): Promise<void> {
  * Translate a key, optionally interpolating `{param}` placeholders.
  *
  * Falls back to the English string, then to the raw key.
+ *
+ * Accepts both literal `TranslationKey` (for compile-time safety on static
+ * keys) and plain `string` (for dynamic/computed keys like template literals).
  */
+export function t(key: TranslationKey, params?: Record<string, string | number>): string;
+export function t(key: string, params?: Record<string, string | number>): string;
 export function t(key: string, params?: Record<string, string | number>): string {
   let str = _translations[key] ?? en[key] ?? key;
   // Always inject the canonical app name so any string can use {app}.

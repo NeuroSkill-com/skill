@@ -7,18 +7,23 @@
 /**
  * i18n consistency tests.
  *
- * Verifies that every key in en.ts (the reference locale) is present in all
- * translated locales, and that no locale has keys that don't exist in en.ts
+ * Verifies that every key in en/ (the reference locale) is present in all
+ * translated locales, and that no locale has keys that don't exist in en/
  * (which would indicate a typo or a leftover from a rename).
  *
  * These tests run fast (pure file-system reads) and act as a CI gate.
  */
-import { readFileSync } from "fs";
-import { resolve }      from "path";
-import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync } from "fs";
+import { resolve }                   from "path";
+import { describe, it, expect }      from "vitest";
 
 const LOCALES_DIR = resolve(__dirname, "../lib/i18n");
 const LOCALES     = ["de", "fr", "he", "uk"] as const;
+const NS_FILES    = [
+  "common", "dashboard", "settings", "search", "calibration",
+  "history", "hooks", "llm", "onboarding", "screenshots",
+  "tts", "perm", "help", "help-ref", "ui",
+];
 
 /** Extract quoted keys followed by `:` from a TypeScript locale file. */
 function extractKeys(filePath: string): Set<string> {
@@ -30,35 +35,67 @@ function extractKeys(filePath: string): Set<string> {
   return keys;
 }
 
-const enKeys = extractKeys(resolve(LOCALES_DIR, "en.ts"));
+/** Extract all keys from a locale directory (all namespace files). */
+function extractKeysFromDir(dir: string): Set<string> {
+  const keys = new Set<string>();
+  for (const ns of NS_FILES) {
+    const fp = resolve(dir, `${ns}.ts`);
+    for (const k of extractKeys(fp)) keys.add(k);
+  }
+  return keys;
+}
+
+const enKeys = extractKeysFromDir(resolve(LOCALES_DIR, "en"));
 
 describe("i18n locale sync", () => {
-  it("en.ts has at least 1400 keys (sanity check)", () => {
+  it("en/ has at least 1400 keys (sanity check)", () => {
     expect(enKeys.size).toBeGreaterThanOrEqual(1400);
   });
 
   for (const locale of LOCALES) {
-    const localeKeys = extractKeys(resolve(LOCALES_DIR, `${locale}.ts`));
+    const localeKeys = extractKeysFromDir(resolve(LOCALES_DIR, locale));
 
-    it(`${locale}.ts has no missing keys vs en.ts`, () => {
+    it(`${locale}/ has no missing keys vs en/`, () => {
       const missing = [...enKeys].filter(k => !localeKeys.has(k));
       expect(
         missing,
-        `${locale}.ts is missing ${missing.length} key(s): ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""}`
+        `${locale}/ is missing ${missing.length} key(s): ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? "…" : ""}`
       ).toHaveLength(0);
     });
 
-    it(`${locale}.ts has no extra keys vs en.ts`, () => {
+    it(`${locale}/ has no extra keys vs en/`, () => {
       const extra = [...localeKeys].filter(k => !enKeys.has(k));
       expect(
         extra,
-        `${locale}.ts has ${extra.length} extra key(s): ${extra.slice(0, 5).join(", ")}${extra.length > 5 ? "…" : ""}`
+        `${locale}/ has ${extra.length} extra key(s): ${extra.slice(0, 5).join(", ")}${extra.length > 5 ? "…" : ""}`
       ).toHaveLength(0);
     });
 
-    it(`${locale}.ts key count matches en.ts`, () => {
+    it(`${locale}/ key count matches en/`, () => {
       expect(localeKeys.size).toBe(enKeys.size);
     });
+  }
+});
+
+describe("i18n namespace file sync", () => {
+  for (const locale of LOCALES) {
+    for (const ns of NS_FILES) {
+      const enNsKeys   = extractKeys(resolve(LOCALES_DIR, "en", `${ns}.ts`));
+      const locNsKeys  = extractKeys(resolve(LOCALES_DIR, locale, `${ns}.ts`));
+
+      it(`${locale}/${ns}.ts has same keys as en/${ns}.ts`, () => {
+        const missing = [...enNsKeys].filter(k => !locNsKeys.has(k));
+        const extra   = [...locNsKeys].filter(k => !enNsKeys.has(k));
+        expect(
+          missing,
+          `${locale}/${ns}.ts missing: ${missing.slice(0, 3).join(", ")}`
+        ).toHaveLength(0);
+        expect(
+          extra,
+          `${locale}/${ns}.ts extra: ${extra.slice(0, 3).join(", ")}`
+        ).toHaveLength(0);
+      });
+    }
   }
 });
 
@@ -79,27 +116,33 @@ describe("i18n placeholder consistency", () => {
       .filter(p => p.length <= 20 && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(p) && p !== "app");
   }
 
-  it("all locales preserve data-interpolation placeholders from en.ts", () => {
-    const enContent  = readFileSync(resolve(LOCALES_DIR, "en.ts"), "utf8");
-    const enValueRe  = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
-    const enValues   = new Map<string, string>();
-    let m: RegExpExecArray | null;
-    while ((m = enValueRe.exec(enContent)) !== null) enValues.set(m[1], m[2]);
+  it("all locales preserve data-interpolation placeholders from en/", () => {
+    // Build en values map from all namespace files
+    const enValues = new Map<string, string>();
+    for (const ns of NS_FILES) {
+      const content  = readFileSync(resolve(LOCALES_DIR, "en", `${ns}.ts`), "utf8");
+      const valueRe  = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
+      let m: RegExpExecArray | null;
+      while ((m = valueRe.exec(content)) !== null) enValues.set(m[1], m[2]);
+    }
 
     const failures: string[] = [];
 
     for (const locale of LOCALES) {
-      const content  = readFileSync(resolve(LOCALES_DIR, `${locale}.ts`), "utf8");
-      const valueRe  = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
-      while ((m = valueRe.exec(content)) !== null) {
-        const key    = m[1];
-        const locVal = m[2];
-        const enVal  = enValues.get(key);
-        if (!enVal) continue;
-        const enPh  = new Set(dataPlaceholders(enVal));
-        const locPh = new Set(dataPlaceholders(locVal));
-        for (const p of enPh) {
-          if (!locPh.has(p)) failures.push(`${locale}.ts["${key}"]: missing {${p}}`);
+      for (const ns of NS_FILES) {
+        const content  = readFileSync(resolve(LOCALES_DIR, locale, `${ns}.ts`), "utf8");
+        const valueRe  = /"([a-zA-Z][^"]*)"\s*:\s*"([^"]*)"/g;
+        let m: RegExpExecArray | null;
+        while ((m = valueRe.exec(content)) !== null) {
+          const key    = m[1];
+          const locVal = m[2];
+          const enVal  = enValues.get(key);
+          if (!enVal) continue;
+          const enPh  = new Set(dataPlaceholders(enVal));
+          const locPh = new Set(dataPlaceholders(locVal));
+          for (const p of enPh) {
+            if (!locPh.has(p)) failures.push(`${locale}/${ns}.ts["${key}"]: missing {${p}}`);
+          }
         }
       }
     }
