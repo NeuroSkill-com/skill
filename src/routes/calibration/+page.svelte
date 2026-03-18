@@ -336,7 +336,7 @@ the Free Software Foundation, version 3 only. -->
       elecQuality   = s.channel_quality;
       museConnected = s.state === "connected";
     } catch {}
-    unlistenQualityFn = await listen<DeviceStatus>("muse-status", (ev) => {
+    unlistenQualityFn = await listen<DeviceStatus>("status", (ev) => {
       elecQuality   = ev.payload.channel_quality;
       museConnected = ev.payload.state === "connected";
     });

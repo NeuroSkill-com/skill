@@ -420,7 +420,7 @@ the Free Software Foundation, version 3 only. -->
 
     unlisteners.push(
       await listen<DiscoveredDevice[]>("devices-updated", ev => { devices = ev.payload; }),
-      await listen<ConnectedInfo>("muse-status", ev => {
+      await listen<ConnectedInfo>("status", ev => {
         connected = {
           device_id:     ev.payload.device_id     ?? null,
           serial_number: ev.payload.serial_number ?? null,

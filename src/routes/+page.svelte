@@ -617,7 +617,7 @@ the Free Software Foundation, version 3 only. -->
       dailyGoalMin = ev.payload;
     }));
 
-    unlisteners.push(await listen<DeviceStatus>("muse-status", ev => {
+    unlisteners.push(await listen<DeviceStatus>("status", ev => {
       const prev = status.state;
       status = ev.payload;
       if (prev !== "connected" && status.state === "connected") startUptime();

@@ -66,6 +66,10 @@ struct EpochMsg {
     timestamp:   i64,
     device_id:   Option<String>,
     device_name: Option<String>,
+    /// Channel labels from the connected device (e.g. ["TP9","AF7","AF8","TP10"] for Muse).
+    channel_names: Vec<String>,
+    /// Hardware sample rate (Hz) of the connected device.
+    sample_rate: f32,
     /// Band powers snapshot at the moment this epoch was emitted (may be None
     /// if the band analyzer hasn't produced a result yet).
     band_snapshot: Option<skill_eeg::eeg_bands::BandSnapshot>,
@@ -144,6 +148,10 @@ pub struct EegAccumulator {
     hop_samples: usize,
     device_id:   Option<String>,
     device_name: Option<String>,
+    /// Channel labels from the connected device, passed to the embedding worker.
+    channel_names: Vec<String>,
+    /// Hardware sample rate (Hz), passed to the embedding worker.
+    sample_rate: f32,
     tx:          mpsc::SyncSender<EpochMsg>,
     /// Latest band power snapshot from the GPU-based BandAnalyzer.
     /// Attached to each epoch message so the worker can store derived metrics
@@ -212,6 +220,8 @@ impl EegAccumulator {
             hop_samples: EMBEDDING_HOP_SAMPLES,
             device_id:    None,
             device_name:  None,
+            channel_names: CHANNEL_NAMES.iter().map(|s| s.to_string()).collect(),
+            sample_rate: MUSE_SAMPLE_RATE,
             tx,
             latest_bands: None,
             ppg_sums:   [0.0; PPG_CHANNELS],
@@ -298,6 +308,15 @@ impl EegAccumulator {
         self.device_name = name;
     }
 
+    /// Update channel names and sample rate for the connected device.
+    ///
+    /// Called by the session runner after a device connects so the embedding
+    /// worker receives the correct channel labels and sample rate.
+    pub fn set_device_channels(&mut self, names: Vec<String>, sample_rate: f32) {
+        self.channel_names = names;
+        self.sample_rate   = sample_rate;
+    }
+
     /// Update the overlap between consecutive epochs (seconds).
     pub fn set_overlap_secs(&mut self, secs: f32) {
         let clamped       = secs.clamp(EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS);
@@ -375,6 +394,8 @@ impl EegAccumulator {
             timestamp:     yyyymmddhhmmss_utc(),
             device_id:     self.device_id.clone(),
             device_name:   self.device_name.clone(),
+            channel_names: self.channel_names.clone(),
+            sample_rate:   self.sample_rate,
             band_snapshot: self.latest_bands.clone(),
             ppg_averages,
             ppg_metrics,

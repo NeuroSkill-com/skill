@@ -136,7 +136,7 @@ avahi-browse _skill._tcp</pre>
       </p>
       <pre class="text-[0.72rem] font-mono text-foreground/80 whitespace-pre-wrap"
 >{`{
-  "event":   "eeg-bands" | "muse-status" | "label-created",
+  "event":   "eeg-bands" | "status" | "label-created",
   "payload": { … }
 }`}</pre>
       <p class="text-[0.72rem] font-semibold text-muted-foreground uppercase tracking-widest mt-2">

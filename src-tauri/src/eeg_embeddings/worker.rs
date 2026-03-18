@@ -557,7 +557,9 @@ pub(super) fn embed_worker(
         }
     });
 
-    let ch_names: Vec<&str>                     = CHANNEL_NAMES.to_vec();
+    // Default channel names — overridden per-epoch from the message.
+    let mut ch_names: Vec<String>               = CHANNEL_NAMES.iter().map(|s| s.to_string()).collect();
+    let mut epoch_sample_rate: f32              = MUSE_SAMPLE_RATE;
     let data_cfg                                 = DataConfig::default();
     let pos_overrides: HashMap<String, [f32; 3]> = HashMap::new();
 

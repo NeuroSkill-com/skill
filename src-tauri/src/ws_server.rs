@@ -21,7 +21,7 @@
 //! From any event handler, broadcast with:
 //!
 //! ```ignore
-//! app.state::<WsBroadcaster>().send("muse-status", &payload);
+//! app.state::<WsBroadcaster>().send("status", &payload);
 //! ```
 //!
 //! # Broadcast events
@@ -29,7 +29,7 @@
 //! | Event            | Rate      | Description                                        |
 //! |------------------|-----------|----------------------------------------------------|
 //! | `eeg-bands`        | ~4 Hz     | Derived scores, band powers, HR, head pose (60+ fields) |
-//! | `muse-status`      | ~1 Hz     | Device heartbeat: battery, sample counts, state    |
+//! | `status`           | ~1 Hz     | Device heartbeat: battery, sample counts, state    |
 //! | `label-created`    | on-demand | Fired when any client creates a label              |
 //! | `dnd-eligibility`  | ~4 Hz     | DND pipeline state: focus_score, smoothed_score, threshold, elapsed_secs, duration_secs, dnd_active |
 //! | `dnd-state-changed`| on-demand | Fired when DND is activated or deactivated (payload: bool) |

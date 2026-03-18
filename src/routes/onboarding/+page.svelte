@@ -472,7 +472,7 @@ the Free Software Foundation, version 3 only. -->
   const unsubs: UnlistenFn[] = [];
   onMount(async () => {
     status = await invoke<DeviceStatus>("get_status");
-    unsubs.push(await listen<DeviceStatus>("muse-status", (ev) => { status = ev.payload; }));
+    unsubs.push(await listen<DeviceStatus>("status", (ev) => { status = ev.payload; }));
 
     // Load default calibration profile for inline calibration
     try {

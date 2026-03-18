@@ -27,7 +27,7 @@ the Free Software Foundation, version 3 only. -->
       connected = s.state === "connected";
     } catch {}
     unsubs.push(
-      await listen<DeviceStatus>("muse-status", (ev) => {
+      await listen<DeviceStatus>("status", (ev) => {
         quality   = ev.payload.channel_quality;
         connected = ev.payload.state === "connected";
       })
