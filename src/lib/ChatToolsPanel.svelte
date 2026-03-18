@@ -24,7 +24,7 @@
         {t("chat.tools.label")}
       </span>
       <span class="text-[0.55rem] tabular-nums text-muted-foreground/40 select-none">
-        {enabledToolCount}/8
+        {enabledToolCount}/9
       </span>
     </div>
     <div class="grid grid-cols-2 gap-1.5">
@@ -37,6 +37,7 @@
         { key: "read_file"  as const, icon: "📄" },
         { key: "write_file" as const, icon: "✏️" },
         { key: "edit_file"  as const, icon: "🔧" },
+        { key: "skill_api" as const, icon: "🧠" },
       ] as tool}
         <button
           onclick={() => onUpdate({ [tool.key]: !toolConfig[tool.key] })}

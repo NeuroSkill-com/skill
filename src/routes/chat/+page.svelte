@@ -71,7 +71,8 @@
   const enabledToolCount = $derived(
     toolConfig.enabled
       ? [toolConfig.date, toolConfig.location, toolConfig.web_search, toolConfig.web_fetch,
-         toolConfig.bash, toolConfig.read_file, toolConfig.write_file, toolConfig.edit_file]
+         toolConfig.bash, toolConfig.read_file, toolConfig.write_file, toolConfig.edit_file,
+         toolConfig.skill_api]
           .filter(Boolean).length
       : 0
   );
@@ -175,7 +176,7 @@
     if (supportsTools && toolConfig.enabled) {
       const enabledCount = [toolConfig.date, toolConfig.location, toolConfig.web_search,
         toolConfig.web_fetch, toolConfig.bash, toolConfig.read_file,
-        toolConfig.write_file, toolConfig.edit_file].filter(Boolean).length;
+        toolConfig.write_file, toolConfig.edit_file, toolConfig.skill_api].filter(Boolean).length;
       if (enabledCount > 0) total += nCtx <= 4096 ? 30 : 500;
     }
     for (const m of messages) {
@@ -219,7 +220,7 @@
     if (supportsTools && toolConfig.enabled) {
       const enabledCount = [toolConfig.date, toolConfig.location, toolConfig.web_search,
         toolConfig.web_fetch, toolConfig.bash, toolConfig.read_file,
-        toolConfig.write_file, toolConfig.edit_file].filter(Boolean).length;
+        toolConfig.write_file, toolConfig.edit_file, toolConfig.skill_api].filter(Boolean).length;
       if (enabledCount > 0) {
         const toolDefTokens = nCtx <= 4096 ? 30 : 500;
         segs.push({ key: "toolDefs", labelKey: "chat.ctx.toolDefs", tokens: toolDefTokens, color: "#f59e0b" });

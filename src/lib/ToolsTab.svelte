@@ -39,6 +39,7 @@
     read_file: boolean;
     write_file: boolean;
     edit_file: boolean;
+    skill_api: boolean;
     execution_mode: ToolExecutionMode;
     max_rounds: number;
     max_calls_per_round: number;
@@ -53,14 +54,14 @@
     autoload_mmproj: boolean; verbose: boolean;
   }
 
-  type LlmToolKey = "date" | "location" | "web_search" | "web_fetch" | "bash" | "read_file" | "write_file" | "edit_file";
+  type LlmToolKey = "date" | "location" | "web_search" | "web_fetch" | "bash" | "read_file" | "write_file" | "edit_file" | "skill_api";
 
   // ── State ──────────────────────────────────────────────────────────────────
 
   let config  = $state<LlmConfig>({
     enabled: false, autostart: false, model_path: null, n_gpu_layers: 4294967295,
     ctx_size: null, parallel: 1, api_key: null,
-    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4, context_compression: { level: "normal" as CompressionLevel, max_search_results: 0, max_result_chars: 0 } },
+    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, skill_api: true, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4, context_compression: { level: "normal" as CompressionLevel, max_search_results: 0, max_result_chars: 0 } },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
   });
@@ -77,6 +78,7 @@
       { key: "read_file",  label: t("llm.tools.readFile"),  desc: t("llm.tools.readFileDesc") },
       { key: "write_file", label: t("llm.tools.writeFile"), desc: t("llm.tools.writeFileDesc"), warn: true },
       { key: "edit_file",  label: t("llm.tools.editFile"),  desc: t("llm.tools.editFileDesc"),  warn: true },
+      { key: "skill_api", label: t("llm.tools.skillApi"), desc: t("llm.tools.skillApiDesc") },
     ]
   );
 

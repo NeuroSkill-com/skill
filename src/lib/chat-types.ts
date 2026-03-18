@@ -115,6 +115,7 @@ export interface ToolConfig {
   enabled: boolean;
   date: boolean; location: boolean; web_search: boolean; web_fetch: boolean;
   bash: boolean; read_file: boolean; write_file: boolean; edit_file: boolean;
+  skill_api: boolean;
   execution_mode: ToolExecutionMode;
   max_rounds: number;
   max_calls_per_round: number;
@@ -125,6 +126,7 @@ export const DEFAULT_TOOL_CONFIG: ToolConfig = {
   enabled: true,
   date: true, location: true, web_search: true, web_fetch: true,
   bash: false, read_file: false, write_file: false, edit_file: false,
+  skill_api: true,
   execution_mode: "parallel", max_rounds: 3, max_calls_per_round: 4,
   context_compression: { ...DEFAULT_TOOL_CONTEXT_COMPRESSION },
 };
