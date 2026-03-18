@@ -103,6 +103,7 @@
   );
 
   let hoveredTool = $state<string | null>(null);
+  let hoveredSkill = $state<string | null>(null);
 
   // ── Data loading ───────────────────────────────────────────────────────────
 
@@ -542,7 +543,7 @@
                      stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="9 18 15 12 9 6"/>
                 </svg>
-                {t("llm.tools.skillsLicense")}
+                <span class="text-primary font-bold">AI100</span> {t("llm.tools.skillsLicenseLabel")}
               </button>
             {/if}
           </div>
@@ -566,7 +567,7 @@
         {#if skillsLicenseOpen && skillsLicense}
           <div class="mt-1 rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2.5
                       max-h-48 overflow-y-auto">
-            <pre class="text-[0.54rem] leading-relaxed text-muted-foreground whitespace-pre-wrap font-sans">{skillsLicense}</pre>
+            <pre class="text-[0.54rem] leading-relaxed text-muted-foreground whitespace-pre-wrap font-sans">{@html skillsLicense.replace(/AI100/g, '<span class="text-primary font-semibold">AI100</span>')}</pre>
           </div>
         {/if}
       </div>
@@ -579,31 +580,36 @@
           <p class="text-[0.62rem] text-muted-foreground py-2">{t("llm.tools.skillsNone")}</p>
         {:else}
           {#each skills as skill}
-            <div class="flex items-start justify-between gap-3 rounded-xl border
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="relative rounded-xl border
                         border-border/60 dark:border-white/[0.06]
                         {skill.enabled
                           ? 'bg-slate-50/60 dark:bg-[#111118]'
-                          : 'bg-slate-50/30 dark:bg-[#111118]/50 opacity-60'}
-                        px-3 py-2.5">
-              <div class="flex flex-col gap-0.5 min-w-0">
-                <div class="flex items-center gap-1.5">
-                  <span class="text-[0.72rem] font-semibold text-foreground truncate">{skill.name}</span>
-                  <span class="text-[0.48rem] font-medium rounded-full border px-1.5 py-0
-                               border-border/50 text-muted-foreground/60 shrink-0">
-                    {skill.source}
-                  </span>
+                          : 'bg-slate-50/30 dark:bg-[#111118]/50 opacity-60'}"
+                 onmouseenter={() => hoveredSkill = skill.name}
+                 onmouseleave={() => hoveredSkill = null}>
+              <div class="flex items-center justify-between gap-3 px-3 py-2.5">
+                <div class="flex flex-col gap-0.5 min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-[0.72rem] font-semibold text-foreground truncate">{skill.name}</span>
+                    <span class="text-[0.48rem] font-medium rounded-full border px-1.5 py-0
+                                 border-border/50 text-muted-foreground/60 shrink-0">
+                      {skill.source}
+                    </span>
+                  </div>
+                  <span class="text-[0.6rem] text-muted-foreground leading-relaxed skill-desc
+                               {hoveredSkill === skill.name ? '' : 'line-clamp-2'}">{@html inlineMd(skill.description)}</span>
                 </div>
-                <span class="text-[0.6rem] text-muted-foreground leading-relaxed line-clamp-2 skill-desc">{@html inlineMd(skill.description)}</span>
+                <button role="switch" aria-checked={skill.enabled} aria-label={skill.name}
+                  onclick={() => toggleSkill(skill.name, !skill.enabled)}
+                  class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
+                         border-transparent transition-colors duration-200 mt-0.5
+                         {skill.enabled ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
+                  <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
+                                transform transition-transform duration-200
+                                {skill.enabled ? 'translate-x-4' : 'translate-x-0'}"></span>
+                </button>
               </div>
-              <button role="switch" aria-checked={skill.enabled} aria-label={skill.name}
-                onclick={() => toggleSkill(skill.name, !skill.enabled)}
-                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
-                       border-transparent transition-colors duration-200 mt-0.5
-                       {skill.enabled ? 'bg-blue-500' : 'bg-muted dark:bg-white/10'}">
-                <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
-                              transform transition-transform duration-200
-                              {skill.enabled ? 'translate-x-4' : 'translate-x-0'}"></span>
-              </button>
             </div>
           {/each}
         {/if}

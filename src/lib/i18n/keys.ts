@@ -1818,6 +1818,7 @@ export type TranslationKey =
   | "llm.tools.suggestSkill"
   | "llm.tools.suggestSkillDesc"
   | "llm.tools.skillsLicense"
+  | "llm.tools.skillsLicenseLabel"
   | "llm.verbose"
   | "llm.verboseDesc"
   | "model.autoRetryAttempt"

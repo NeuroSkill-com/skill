@@ -324,6 +324,7 @@ const llm: Record<string, string> = {
   "llm.tools.suggestSkill":           "למדו את NeuroSkill משהו חדש",
   "llm.tools.suggestSkillDesc":       "הציעו skill ב-Discord — מפרוטוקולים ועד אוטומציות, הכל אפשרי.",
   "llm.tools.skillsLicense":          "רישיון אתי AI100",
+  "llm.tools.skillsLicenseLabel":     "רישיון אתי",
 };
 
 export default llm;

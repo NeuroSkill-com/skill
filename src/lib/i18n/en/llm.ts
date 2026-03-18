@@ -154,6 +154,7 @@ const llm: Record<string, string> = {
   "llm.tools.suggestSkill":            "Teach NeuroSkill something new",
   "llm.tools.suggestSkillDesc":        "Suggest a skill on Discord — from protocols to automations, anything goes.",
   "llm.tools.skillsLicense":           "AI100 Ethical License",
+  "llm.tools.skillsLicenseLabel":      "Ethical License",
   "llm.mmproj.nThreads":                "Encoder threads",
   "llm.mmproj.nThreadsDesc":            "CPU threads for the vision/audio encoder.",
   "llm.mmproj.autoload":                "Auto-load vision encoder",
