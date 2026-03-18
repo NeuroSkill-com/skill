@@ -580,17 +580,21 @@ pub fn download_file(
     // ── 0. Initial state ──────────────────────────────────────────────────────
     {
         let mut p = progress.lock().unwrap();
+        // Check for pre-existing cancellation (e.g. forwarded from multi-shard
+        // monitor) before resetting state.
+        if p.cancelled {
+            if p.pause_requested {
+                p.state      = DownloadState::Paused;
+                p.status_msg = Some("Paused.".into());
+                return Err("paused".into());
+            }
+            p.state      = DownloadState::Cancelled;
+            p.status_msg = Some("Cancelled.".into());
+            return Err("cancelled".into());
+        }
         p.state      = DownloadState::Downloading;
         p.status_msg = Some(format!("Connecting to HuggingFace ({repo_id})…"));
         p.progress   = 0.0;
-        p.cancelled  = false;
-        p.pause_requested = false;
-    }
-    if progress.lock().unwrap().cancelled {
-        let mut p = progress.lock().unwrap();
-        p.state      = DownloadState::Cancelled;
-        p.status_msg = Some("Cancelled.".into());
-        return Err("cancelled".into());
     }
 
     // ── 1. Environment / config ───────────────────────────────────────────────
