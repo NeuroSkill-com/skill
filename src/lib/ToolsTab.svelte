@@ -89,18 +89,20 @@
   let skillsLicense = $state("");
   let skillsLicenseOpen = $state(false);
 
-  let TOOL_ROWS = $derived<Array<{ key: LlmToolKey; label: string; desc: string; warn?: boolean }>>(
+  let TOOL_ROWS = $derived<Array<{ key: LlmToolKey; label: string; desc: string; hint: string; warn?: boolean }>>(
     [
-      { key: "date",       label: t("llm.tools.date"),      desc: t("llm.tools.dateDesc") },
-      { key: "location",   label: t("llm.tools.location"),  desc: t("llm.tools.locationDesc") },
-      { key: "web_search", label: t("llm.tools.webSearch"), desc: t("llm.tools.webSearchDesc") },
-      { key: "web_fetch",  label: t("llm.tools.webFetch"),  desc: t("llm.tools.webFetchDesc") },
-      { key: "bash",       label: t("llm.tools.bash"),      desc: t("llm.tools.bashDesc"),      warn: true },
-      { key: "read_file",  label: t("llm.tools.readFile"),  desc: t("llm.tools.readFileDesc") },
-      { key: "write_file", label: t("llm.tools.writeFile"), desc: t("llm.tools.writeFileDesc"), warn: true },
-      { key: "edit_file",  label: t("llm.tools.editFile"),  desc: t("llm.tools.editFileDesc"),  warn: true },
+      { key: "date",       label: t("llm.tools.date"),      desc: t("llm.tools.dateDesc"),      hint: t("llm.tools.dateHint") },
+      { key: "location",   label: t("llm.tools.location"),  desc: t("llm.tools.locationDesc"),  hint: t("llm.tools.locationHint") },
+      { key: "web_search", label: t("llm.tools.webSearch"), desc: t("llm.tools.webSearchDesc"), hint: t("llm.tools.webSearchHint") },
+      { key: "web_fetch",  label: t("llm.tools.webFetch"),  desc: t("llm.tools.webFetchDesc"),  hint: t("llm.tools.webFetchHint") },
+      { key: "bash",       label: t("llm.tools.bash"),      desc: t("llm.tools.bashDesc"),      hint: t("llm.tools.bashHint"),     warn: true },
+      { key: "read_file",  label: t("llm.tools.readFile"),  desc: t("llm.tools.readFileDesc"),  hint: t("llm.tools.readFileHint") },
+      { key: "write_file", label: t("llm.tools.writeFile"), desc: t("llm.tools.writeFileDesc"), hint: t("llm.tools.writeFileHint"), warn: true },
+      { key: "edit_file",  label: t("llm.tools.editFile"),  desc: t("llm.tools.editFileDesc"),  hint: t("llm.tools.editFileHint"),  warn: true },
     ]
   );
+
+  let hoveredTool = $state<string | null>(null);
 
   // ── Data loading ───────────────────────────────────────────────────────────
 
@@ -218,37 +220,54 @@
       <!-- Tool toggles -->
       <div class="flex flex-col gap-2 px-4 pb-3 {config.tools.enabled ? '' : 'opacity-40 pointer-events-none'}">
         {#each TOOL_ROWS as tool}
-          <div class="flex items-center justify-between gap-4 rounded-xl border
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div class="relative rounded-xl border
                       {tool.warn && config.tools[tool.key]
                         ? 'border-amber-500/40 bg-amber-50/40 dark:bg-amber-950/15'
-                        : 'border-border/60 dark:border-white/[0.06] bg-slate-50/60 dark:bg-[#111118]'}
-                      px-3 py-2.5">
-            <div class="flex flex-col gap-0.5">
-              <div class="flex items-center gap-1.5">
-                <span class="text-[0.74rem] font-semibold text-foreground">{tool.label}</span>
+                        : 'border-border/60 dark:border-white/[0.06] bg-slate-50/60 dark:bg-[#111118]'}"
+               onmouseenter={() => hoveredTool = tool.key}
+               onmouseleave={() => hoveredTool = null}>
+            <div class="flex items-center justify-between gap-4 px-3 py-2.5">
+              <div class="flex flex-col gap-0.5">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[0.74rem] font-semibold text-foreground">{tool.label}</span>
+                  {#if tool.warn}
+                    <span class="text-[0.5rem] font-semibold rounded-full border px-1.5 py-0
+                                 border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                      {t("llm.tools.advanced")}
+                    </span>
+                  {/if}
+                </div>
+                <span class="text-[0.62rem] text-muted-foreground leading-relaxed">{tool.desc}</span>
+              </div>
+              <button role="switch" aria-checked={config.tools[tool.key]} aria-label={tool.label}
+                onclick={async () => {
+                  config = { ...config, tools: { ...config.tools, [tool.key]: !config.tools[tool.key] } };
+                  await saveConfig();
+                }}
+                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
+                       border-transparent transition-colors duration-200
+                       {config.tools[tool.key]
+                         ? (tool.warn ? 'bg-amber-500' : 'bg-blue-500')
+                         : 'bg-muted dark:bg-white/10'}">
+                <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
+                              transform transition-transform duration-200
+                              {config.tools[tool.key] ? 'translate-x-4' : 'translate-x-0'}"></span>
+              </button>
+            </div>
+
+            <!-- Hover overlay -->
+            {#if hoveredTool === tool.key}
+              <div class="px-3 pb-2.5 flex flex-col gap-1.5 animate-in fade-in duration-150">
+                <div class="border-t {tool.warn ? 'border-amber-500/20' : 'border-border/40 dark:border-white/[0.04]'}"></div>
+                <p class="text-[0.58rem] leading-relaxed text-muted-foreground/80">{tool.hint}</p>
                 {#if tool.warn}
-                  <span class="text-[0.5rem] font-semibold rounded-full border px-1.5 py-0
-                               border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                    {t("llm.tools.advanced")}
-                  </span>
+                  <p class="text-[0.54rem] leading-relaxed text-amber-600/80 dark:text-amber-400/70 italic">
+                    {t("llm.tools.advancedHint")}
+                  </p>
                 {/if}
               </div>
-              <span class="text-[0.62rem] text-muted-foreground leading-relaxed">{tool.desc}</span>
-            </div>
-            <button role="switch" aria-checked={config.tools[tool.key]} aria-label={tool.label}
-              onclick={async () => {
-                config = { ...config, tools: { ...config.tools, [tool.key]: !config.tools[tool.key] } };
-                await saveConfig();
-              }}
-              class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
-                     border-transparent transition-colors duration-200
-                     {config.tools[tool.key]
-                       ? (tool.warn ? 'bg-amber-500' : 'bg-blue-500')
-                       : 'bg-muted dark:bg-white/10'}">
-              <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
-                            transform transition-transform duration-200
-                            {config.tools[tool.key] ? 'translate-x-4' : 'translate-x-0'}"></span>
-            </button>
+            {/if}
           </div>
         {/each}
 
