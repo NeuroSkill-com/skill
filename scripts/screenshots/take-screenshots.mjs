@@ -414,7 +414,58 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     ],
 
     // ── Search ───────────────────────────────────────────────────────────
-    stream_search_embeddings: () => ({ results: [], total: 0 }),
+    stream_search_embeddings: (args) => {
+      // args.onProgress is the raw Channel object; Channel.id is the
+      // callback ID registered via transformCallback.
+      const ch = args?.onProgress;
+      const chId = ch && typeof ch === "object" && typeof ch.id === "number"
+        ? ch.id : null;
+      if (chId == null) return null;
+
+      const now = ${Date.now() / 1000 | 0};
+      const queryCount = 8;
+      const days = ["20260318", "20260317"];
+      const labels = [
+        { id: 1, text: "Deep focus — coding", context: "Work", eeg_start: now - 3600, eeg_end: now - 3000, created_at: now - 3600, embedding_model: "neurogpt-base" },
+        { id: 2, text: "Meditation", context: "Break", eeg_start: now - 7200, eeg_end: now - 6600, created_at: now - 7200, embedding_model: "neurogpt-base" },
+      ];
+      const send = (idx, msg) => {
+        window.__TAURI_INTERNALS__.runCallback(chId, { index: idx, message: msg });
+      };
+
+      setTimeout(() => {
+        send(0, { kind: "started", query_count: queryCount, searched_days: days });
+
+        for (let q = 0; q < queryCount; q++) {
+          const qTime = now - 7200 + q * 300;
+          const neighbors = [];
+          for (let n = 0; n < 5; n++) {
+            const nTime = now - 86400 + q * 600 + n * 120;
+            neighbors.push({
+              timestamp_unix: nTime,
+              date: n < 3 ? "20260318" : "20260317",
+              distance: 0.05 + n * 0.08 + Math.random() * 0.02,
+              device_name: "Muse 2 Demo",
+              labels: n === 0 ? [labels[q % 2]] : [],
+              metrics: {
+                relaxation: 0.55 + Math.random() * 0.2,
+                engagement: 0.50 + Math.random() * 0.2,
+                meditation: 0.60 + Math.random() * 0.15,
+                alpha: 0.25 + Math.random() * 0.1,
+                beta: 0.10 + Math.random() * 0.05,
+              },
+            });
+          }
+          send(1 + q, {
+            kind: "result",
+            done_count: q + 1,
+            entry: { timestamp_unix: qTime, neighbors },
+          });
+        }
+        send(1 + queryCount, { kind: "done", total: queryCount });
+      }, 50);
+      return null;
+    },
 
     // ── Calibration ──────────────────────────────────────────────────────
     list_calibration_profiles: () => [
@@ -949,7 +1000,60 @@ async function main() {
       await page.waitForTimeout(isFirstPage ? 3500 : 1500);
 
       // ── Post-navigation actions for specific pages ──
+      // Search EEG: click the Search button to trigger a search
+      if (name === "search-eeg") {
+        try {
+          const searchBtn = page.locator("button").filter({ hasText: /^.*Search$/i }).first();
+          if (await searchBtn.count() > 0) {
+            await searchBtn.click();
+            await page.waitForTimeout(2000);
+          }
+        } catch {}
+      }
+      // Search images: trigger search then replace broken images with placeholders
+      if (name === "search-images") {
+        try {
+          const input = page.locator("input[type=text], input[type=search]").first();
+          if (await input.count() > 0) {
+            await input.fill("code editor");
+          }
+          const searchBtn = page.locator("button").filter({ hasText: /Images/i }).first();
+          if (await searchBtn.count() > 0) {
+            await searchBtn.click();
+            await page.waitForTimeout(1200);
+          }
+          // Replace broken <img> elements with coloured placeholder SVGs
+          await page.evaluate(() => {
+            const colors = ["#6366f1","#3b82f6","#10b981","#f59e0b","#ef4444"];
+            const apps   = ["VS Code","Firefox","Terminal"];
+            document.querySelectorAll('img[alt="Screenshot"]').forEach((img, i) => {
+              const c = colors[i % colors.length];
+              const a = apps[i % apps.length];
+              const svg = [
+                '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400">',
+                '<rect width="640" height="400" fill="' + c + '22"/>',
+                '<rect x="10" y="10" width="620" height="30" rx="6" fill="' + c + '44"/>',
+                '<circle cx="28" cy="25" r="6" fill="#ef4444"/>',
+                '<circle cx="46" cy="25" r="6" fill="#f59e0b"/>',
+                '<circle cx="64" cy="25" r="6" fill="#22c55e"/>',
+                '<text x="320" y="25" text-anchor="middle" font-family="system-ui" font-size="12" fill="' + c + '">' + a + '</text>',
+                '<rect x="20" y="60" width="280" height="14" rx="3" fill="' + c + '33"/>',
+                '<rect x="20" y="84" width="200" height="14" rx="3" fill="' + c + '22"/>',
+                '<rect x="20" y="108" width="350" height="14" rx="3" fill="' + c + '28"/>',
+                '<rect x="20" y="132" width="160" height="14" rx="3" fill="' + c + '22"/>',
+                '<rect x="20" y="170" width="400" height="10" rx="3" fill="' + c + '18"/>',
+                '<rect x="20" y="190" width="320" height="10" rx="3" fill="' + c + '18"/>',
+                '<rect x="20" y="210" width="380" height="10" rx="3" fill="' + c + '18"/>',
+                '</svg>',
+              ].join("");
+              img.src = "data:image/svg+xml," + encodeURIComponent(svg);
+            });
+          });
+          await page.waitForTimeout(300);
+        } catch {}
+      }
       // Search modes: type a query and press Ctrl+Enter to trigger search
+      // search-text: handled above in post-navigation actions
       if (name === "search-text") {
         try {
           const textarea = page.locator("textarea").first();
@@ -959,16 +1063,8 @@ async function main() {
             await page.waitForTimeout(800);
           }
         } catch {}
-      } else if (name === "search-images") {
-        try {
-          const input = page.locator("input[type=text], input[type=search], textarea").first();
-          if (await input.count() > 0) {
-            await input.fill("code editor");
-            await input.press("Control+Enter");
-            await page.waitForTimeout(800);
-          }
-        } catch {}
       }
+      // search-images: handled above (new handler with placeholder images)
 
       const filename = `${name}-${theme}.png`;
       try {
