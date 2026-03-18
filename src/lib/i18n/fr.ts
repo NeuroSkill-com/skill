@@ -2063,6 +2063,7 @@ const fr: Record<string, string> = {
   "common.connect": "Connecter",
   "common.disconnect": "Déconnecter",
   "dashboard.lookingForGanglion": "À la recherche d'un ganglion OpenBCI...",
+  "dashboard.connectingEmotiv": "Connexion via l'API Emotiv Cortex…",
   "dashboard.scanForNew": "Rechercher un nouvel appareil",
   "dashboard.scanForMuse": "Rechercher un appareil",
   "dashboard.noDevicesPaired": "Aucun appareil couplé. Scannez pour trouver votre casque BCI.",

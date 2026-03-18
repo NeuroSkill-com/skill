@@ -70,19 +70,22 @@ the Free Software Foundation, version 3 only. -->
   });
 
   // ── Electrode system tabs ──────────────────────────────────────────────────
-  type ActiveTab = "muse" | "mw75" | "hermes" | "ganglion" | "10-20" | "10-10" | "10-5";
+  type ActiveTab = "muse" | "mw75" | "hermes" | "ganglion" | "emotiv" | "idun" | "10-20" | "10-10" | "10-5";
   const TABS: { id: ActiveTab; label: string; count: string }[] = [
     { id: "muse",     label: "Muse",     count: "4"  },
     { id: "mw75",     label: "MW75",     count: "12" },
     { id: "hermes",   label: "Hermes",   count: "8"  },
     { id: "ganglion", label: "Ganglion", count: "4"  },
+    { id: "emotiv",   label: "Emotiv",   count: "14" },
+    { id: "idun",     label: "IDUN",     count: "1"  },
     { id: "10-20",    label: "10-20",    count: "21" },
     { id: "10-10",    label: "10-10",    count: "64" },
     { id: "10-5",     label: "10-5",     count: "345" },
   ];
   function defaultTab(d: string): ActiveTab {
     return d === "mw75" ? "mw75" : d === "hermes" ? "hermes"
-      : d === "ganglion" ? "ganglion" : "muse";
+      : d === "ganglion" ? "ganglion" : d === "emotiv" ? "emotiv"
+      : d === "idun" ? "idun" : "muse";
   }
   let activeTab: ActiveTab = $state("muse" as ActiveTab);
 
@@ -93,17 +96,23 @@ the Free Software Foundation, version 3 only. -->
   const museElectrodes = allElectrodes.filter(e => e.muse);
   const MW75_LABELS = ["FT7","T7","TP7","CP5","P7","C5","FT8","T8","TP8","CP6","P8","C6"];
   const mw75Electrodes = allElectrodes.filter(e => MW75_LABELS.includes(e.name));
+  const EMOTIV_EPOC_LABELS = ["AF3","F7","F3","FC5","T7","P7","O1","O2","P8","T8","FC6","F4","F8","AF4"];
+  const emotivElectrodes = allElectrodes.filter(e => EMOTIV_EPOC_LABELS.includes(e.name));
+  const IDUN_LABELS = ["A1"]; // Single-channel in-ear reference
+  const idunElectrodes = allElectrodes.filter(e => IDUN_LABELS.includes(e.name));
 
   // System used for the 3D view (device tabs still need a valid system for raycasting)
+  const DEVICE_TABS: ActiveTab[] = ["muse", "mw75", "hermes", "ganglion", "emotiv", "idun"];
   let system: ElectrodeSystem = $derived(
-    (activeTab === "muse" || activeTab === "mw75" || activeTab === "hermes" || activeTab === "ganglion")
-      ? "10-10" : activeTab as ElectrodeSystem
+    DEVICE_TABS.includes(activeTab) ? "10-10" : activeTab as ElectrodeSystem
   );
 
   // Electrodes shown in the 3D view
   const electrodes3D = $derived(
     activeTab === "muse" ? museElectrodes
     : activeTab === "mw75" ? mw75Electrodes
+    : activeTab === "emotiv" ? emotivElectrodes
+    : activeTab === "idun" ? idunElectrodes
     : activeTab === "hermes" ? [] // Hermes positions depend on montage
     : activeTab === "ganglion" ? [] // Ganglion has configurable positions
     : getElectrodes(activeTab as ElectrodeSystem)
@@ -250,7 +259,7 @@ the Free Software Foundation, version 3 only. -->
     {#if Head3D}
       <Canvas {createRenderer}>
         <Head3D bind:this={head3DRef} {system}
-                electrodesOverride={activeTab === "muse" ? museElectrodes : activeTab === "mw75" ? mw75Electrodes : activeTab === "hermes" ? [] : null}
+                electrodesOverride={activeTab === "muse" ? museElectrodes : activeTab === "mw75" ? mw75Electrodes : activeTab === "emotiv" ? emotivElectrodes : activeTab === "idun" ? idunElectrodes : activeTab === "hermes" ? [] : null}
                 {onSelect} selectedName={selectedElectrode?.name} />
       </Canvas>
     {:else}

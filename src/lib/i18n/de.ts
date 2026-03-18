@@ -2071,6 +2071,7 @@ const de: Record<string, string> = {
 
   // ── Auto-synced from en.ts (2026-03-03) ──
   "dashboard.lookingForGanglion": "Auf der Suche nach einem OpenBCI-Ganglion…",
+  "dashboard.connectingEmotiv": "Verbindung über Emotiv Cortex API…",
   "settings.openbci": "OpenBCI",
   "settings.openbciDesc": "Konfigurieren Sie eine OpenBCI-Karte für die Verbindung neben oder anstelle eines Muse-Headsets.",
   "settings.openbciBoard": "Planke",

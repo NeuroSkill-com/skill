@@ -719,6 +719,7 @@ const he: Record<string, string> = {
   "common.connect": "התחבר",
   "common.disconnect": "התנתק",
   "dashboard.lookingForGanglion": "מחפש OpenBCI Ganglion זמין…",
+  "dashboard.connectingEmotiv": "מתחבר דרך Emotiv Cortex API…",
   "dashboard.scanForNew": "סרוק מכשיר חדש",
   "dashboard.scanForMuse": "סרוק מכשיר",
   "dashboard.noDevicesPaired": "אין מכשירים מצומדים. סרוק כדי למצוא את אוזניית ה-BCI שלך.",

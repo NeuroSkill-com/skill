@@ -142,7 +142,8 @@ export function deviceCapabilities(deviceName: string | null): DeviceCapabilitie
   if (n.startsWith("openbci") || n.startsWith("cyton")
       || n.startsWith("ganglion"))                                 return OPENBCI_CAPS;
   if (n.startsWith("emotiv") || n.startsWith("epoc")
-      || n.startsWith("insight") || n.startsWith("flex"))         return EMOTIV_CAPS;
+      || n.startsWith("insight") || n.startsWith("flex")
+      || n.startsWith("mn8"))                                     return EMOTIV_CAPS;
   if (n.startsWith("idun") || n.startsWith("ige")
       || n.startsWith("guardian"))                                 return IDUN_CAPS;
 

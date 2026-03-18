@@ -2062,6 +2062,7 @@ const uk: Record<string, string> = {
   "common.connect": "Підключити",
   "common.disconnect": "Відключити",
   "dashboard.lookingForGanglion": "Пошук будь-якого OpenBCI Ganglion…",
+  "dashboard.connectingEmotiv": "Підключення через Emotiv Cortex API…",
   "dashboard.scanForNew": "Сканувати новий пристрій",
   "dashboard.scanForMuse": "Сканувати пристрій",
   "dashboard.noDevicesPaired": "Немає спарених пристроїв. Проскануйте, щоб знайти свою BCI-гарнітуру.",
