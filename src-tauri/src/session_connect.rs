@@ -676,7 +676,7 @@ pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
         let mut s = r.lock_or_recover();
         s.stream       = Some(StreamHandle { cancel_tx: tx });
         s.status.state = "scanning".into();
-        new_csv_path(&app)
+        new_csv_path(&app, "openbci")
     };
     emit_status(&app);
 

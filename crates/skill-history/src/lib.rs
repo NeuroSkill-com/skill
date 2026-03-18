@@ -282,12 +282,15 @@ pub fn list_sessions_for_day(
     for cf in &files {
         let cp = cf.path();
         let cfname = cp.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if !cfname.starts_with("muse_") || !cfname.ends_with(".csv") { continue; }
+        if !cfname.ends_with(".csv") { continue; }
         if cfname.ends_with("_metrics.csv") || cfname.ends_with("_ppg.csv") { continue; }
         if cp.with_extension("json").exists() { continue; }
+        // Match any device prefix: "muse_", "mw75_", "hermes_", "emotiv_", "idun_",
+        // "ganglion_", "openbci_", "eeg_" — pattern: <kind>_<timestamp>.csv
+        let ts_part = cfname.rsplit_once('_').map(|(_, ts)| ts);
         let meta_fs = std::fs::metadata(&cp);
         let csv_size = meta_fs.as_ref().map(|m| m.len()).unwrap_or(0);
-        let ts: Option<u64> = cfname.strip_prefix("muse_")
+        let ts: Option<u64> = ts_part
             .and_then(|s| s.strip_suffix(".csv"))
             .and_then(|s| s.parse().ok());
         let end_ts: Option<u64> = meta_fs.ok()
@@ -305,7 +308,7 @@ pub fn list_sessions_for_day(
             headset_preset:     None,
             battery_pct:        None,
             total_samples:      None,
-            sample_rate_hz:     Some(256),
+            sample_rate_hz:     None, // unknown — no JSON metadata available
             labels:             vec![],
             file_size_bytes:    csv_size,
         }, ts, end_ts));

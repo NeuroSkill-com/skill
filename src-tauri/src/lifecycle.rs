@@ -154,7 +154,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     let device_kind = detect_device_kind(target_lower.as_deref());
 
     app.app_state().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
-    let csv  = new_csv_path(app);
+    let csv  = new_csv_path(app, device_kind);
     let app2 = app.clone();
 
     app_log!(app, "bluetooth",
