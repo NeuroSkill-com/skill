@@ -74,11 +74,19 @@ pub struct HeadPoseTracker {
     /// Refractory counters (samples remaining).
     nod_refractory: usize,
     shake_refractory: usize,
+    /// IMU sample rate (Hz).
+    imu_sr: f64,
 }
 
 impl HeadPoseTracker {
+    /// Create a tracker with the default Muse IMU sample rate (52 Hz).
     pub fn new() -> Self {
-        let hist_len = (GESTURE_WINDOW_S * IMU_SR) as usize + 1;
+        Self::with_imu_rate(IMU_SR)
+    }
+
+    /// Create a tracker with a custom IMU sample rate (Hz).
+    pub fn with_imu_rate(imu_sr: f64) -> Self {
+        let hist_len = (GESTURE_WINDOW_S * imu_sr) as usize + 1;
         Self {
             pitch: 0.0,
             roll: 0.0,
@@ -91,6 +99,7 @@ impl HeadPoseTracker {
             shake_count: 0,
             nod_refractory: 0,
             shake_refractory: 0,
+            imu_sr,
         }
     }
 
@@ -98,7 +107,7 @@ impl HeadPoseTracker {
     /// `accel`: [x, y, z] in g.
     /// `gyro`:  [x, y, z] in °/s.
     pub fn update(&mut self, accel: [f32; 3], gyro: [f32; 3]) {
-        let dt = 1.0 / IMU_SR;
+        let dt = 1.0 / self.imu_sr;
         let ax = accel[0] as f64;
         let ay = accel[1] as f64;
         let az = accel[2] as f64;
@@ -132,7 +141,7 @@ impl HeadPoseTracker {
         self.ang_vel_ema += ema_alpha * (ang_vel - self.ang_vel_ema);
 
         // ── Gesture detection ────────────────────────────────────────────────
-        let hist_max = (GESTURE_WINDOW_S * IMU_SR) as usize;
+        let hist_max = (GESTURE_WINDOW_S * self.imu_sr) as usize;
 
         self.pitch_history.push_back(self.pitch);
         if self.pitch_history.len() > hist_max { self.pitch_history.pop_front(); }
@@ -144,7 +153,7 @@ impl HeadPoseTracker {
         if self.nod_refractory > 0 { self.nod_refractory -= 1; }
         if self.shake_refractory > 0 { self.shake_refractory -= 1; }
 
-        let refractory_samples = (GESTURE_REFRACTORY_S * IMU_SR) as usize;
+        let refractory_samples = (GESTURE_REFRACTORY_S * self.imu_sr) as usize;
 
         // Nod: pitch oscillation (look down then up, or up then down).
         if self.nod_refractory == 0 && self.pitch_history.len() >= 3 {

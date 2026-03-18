@@ -117,11 +117,13 @@ impl SessionDsp {
         Self {
             filter:            EegFilter::new(filter_cfg),
             band_analyzer:     BandAnalyzer::new_with_rate(filter_cfg.sample_rate),
-            quality:           QualityMonitor::new(EEG_CHANNELS),
+            quality:           QualityMonitor::with_window(
+                EEG_CHANNELS, filter_cfg.sample_rate as usize,
+            ),
             artifact_detector: ArtifactDetector::with_channels(
                 filter_cfg.sample_rate as f64, channel_names,
             ),
-            head_pose:         HeadPoseTracker::new(),
+            head_pose:         HeadPoseTracker::new(), // default 52 Hz; future: pass device IMU rate
             accumulator,
             last_filter_config: filter_cfg,
             last_overlap_secs:  overlap_secs,

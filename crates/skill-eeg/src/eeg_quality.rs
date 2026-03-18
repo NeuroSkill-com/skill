@@ -71,19 +71,34 @@ pub enum SignalQuality {
 /// [`SignalQuality`] on demand.
 pub struct QualityMonitor {
     bufs: Vec<VecDeque<f64>>,
+    /// Window size in samples (≈1 second at the device sample rate).
+    window: usize,
+    /// Minimum samples before quality is reported.
+    min_samples: usize,
 }
 
 impl QualityMonitor {
+    /// Create a quality monitor with the default window (256 samples ≈ 1 s @ 256 Hz).
     pub fn new(channels: usize) -> Self {
+        Self::with_window(channels, WINDOW)
+    }
+
+    /// Create a quality monitor with a custom window size.
+    ///
+    /// Use `sample_rate as usize` for a 1-second window at any sample rate.
+    pub fn with_window(channels: usize, window: usize) -> Self {
+        let window = window.max(32); // safety floor
         Self {
             bufs: (0..channels)
-                .map(|_| VecDeque::with_capacity(WINDOW + 1))
+                .map(|_| VecDeque::with_capacity(window + 1))
                 .collect(),
+            window,
+            min_samples: window / 4,
         }
     }
 
     /// Append `samples` for `channel` to the rolling window, discarding the
-    /// oldest samples when the buffer exceeds [`WINDOW`].
+    /// oldest samples when the buffer exceeds the window size.
     pub fn push(&mut self, channel: usize, samples: &[f64]) {
         if channel >= self.bufs.len() {
             return;
@@ -92,7 +107,7 @@ impl QualityMonitor {
         for &s in samples {
             buf.push_back(s);
         }
-        while buf.len() > WINDOW {
+        while buf.len() > self.window {
             buf.pop_front();
         }
     }
@@ -116,7 +131,7 @@ impl QualityMonitor {
     fn classify(&self, channel: usize) -> SignalQuality {
         let buf = &self.bufs[channel];
 
-        if buf.len() < MIN_SAMPLES {
+        if buf.len() < self.min_samples {
             return SignalQuality::NoSignal;
         }
 
