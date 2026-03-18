@@ -34,7 +34,7 @@ const help: Record<string, string> = {
   "helpDash.faa":                "Frontal Alpha Asymmetry (FAA)",
   "helpDash.faaBody":            "A centre-anchored gauge showing the real-time Frontal Alpha Asymmetry index: ln(AF8 α) − ln(AF7 α). Positive values indicate greater right-frontal alpha power, which is associated with left-hemisphere approach motivation. Negative values indicate withdrawal tendency. The value is smoothed with an exponential moving average and typically ranges from −1 to +1. FAA is stored alongside every 5-second embedding epoch in eeg.sqlite.",
   "helpDash.eegWaveforms":       "EEG Waveforms",
-  "helpDash.eegWaveformsBody":   "A scrolling time-domain chart of the filtered EEG signal for all four channels. Below each waveform is a spectrogram tape showing the frequency content over time. The chart displays the most recent ~4 seconds of data.",
+  "helpDash.eegWaveformsBody":   "A scrolling time-domain chart of the filtered EEG signal for all channels. Below each waveform is a spectrogram tape showing the frequency content over time. The chart displays the most recent ~4 seconds of data.",
   "helpDash.gpuUtilisation":     "GPU Utilisation",
   "helpDash.gpuUtilisationBody": "A small chart at the very top of the main window showing GPU encoder and decoder utilisation. Visible only while the ZUNA embedding encoder is active. Helps verify that the wgpu pipeline is running.",
   "helpDash.trayIconStates":     "Tray Icon States",
