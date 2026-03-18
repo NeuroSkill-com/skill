@@ -122,18 +122,47 @@ pub fn compute_meditation(snap: &BandSnapshot, stillness: f64, rmssd: Option<f64
 
 /// Compute the cognitive load score (0–100) from a band snapshot.
 ///
-/// Based on the frontal theta / parietal alpha ratio:
-/// - AF7/AF8 (channels 1,2) provide frontal theta
-/// - TP9/TP10 (channels 0,3) provide parietal alpha
-/// - Mapped through a sigmoid: 100 / (1 + exp(−2.5 × (ratio − 1)))
+/// Based on the frontal theta / parietal alpha ratio, mapped through a
+/// sigmoid: `100 / (1 + exp(−2.5 × (ratio − 1)))`.
+///
+/// The function resolves frontal and parietal electrodes **by name** so it
+/// works across all supported devices, not just Muse.  When the montage
+/// lacks a clear frontal/parietal pair, it falls back to an even split of
+/// all channels by index (first half = "frontal", second half = "parietal").
 pub fn compute_cognitive_load(snap: &BandSnapshot) -> f64 {
-    if snap.channels.len() < 4 { return 50.0; }
-    let frontal_theta  = (snap.channels[1].rel_theta as f64
-                        + snap.channels[2].rel_theta as f64) / 2.0;
-    let parietal_alpha = (snap.channels[0].rel_alpha as f64
-                        + snap.channels[3].rel_alpha as f64) / 2.0;
-    let cog_ratio = if parietal_alpha > 0.01 {
-        frontal_theta / parietal_alpha
+    if snap.channels.is_empty() { return 50.0; }
+
+    // Electrode prefixes considered frontal or parietal in the 10-20 system.
+    const FRONTAL:  &[&str] = &["AF", "Fp", "F3", "F4", "F7", "F8", "Fz",
+                                 "FC", "FT"];
+    const PARIETAL: &[&str] = &["TP", "P7", "P8", "Pz", "CP", "O1", "O2"];
+
+    let mut frontal_theta = Vec::new();
+    let mut parietal_alpha = Vec::new();
+
+    for ch in &snap.channels {
+        let name = ch.channel.as_str();
+        let is_frontal  = FRONTAL.iter().any(|p| name.starts_with(p));
+        let is_parietal = PARIETAL.iter().any(|p| name.starts_with(p));
+        if is_frontal  { frontal_theta.push(ch.rel_theta as f64); }
+        if is_parietal { parietal_alpha.push(ch.rel_alpha as f64); }
+    }
+
+    // Fallback: if the montage has no recognised frontal/parietal labels
+    // (e.g. generic "Ch1"–"Ch4" on Ganglion), split channels by index.
+    if frontal_theta.is_empty() || parietal_alpha.is_empty() {
+        let n = snap.channels.len();
+        if n < 2 { return 50.0; }
+        let mid = n / 2;
+        frontal_theta  = snap.channels[..mid].iter().map(|c| c.rel_theta as f64).collect();
+        parietal_alpha = snap.channels[mid..].iter().map(|c| c.rel_alpha as f64).collect();
+    }
+
+    let avg_frontal = frontal_theta.iter().sum::<f64>() / frontal_theta.len() as f64;
+    let avg_parietal = parietal_alpha.iter().sum::<f64>() / parietal_alpha.len() as f64;
+
+    let cog_ratio = if avg_parietal > 0.01 {
+        avg_frontal / avg_parietal
     } else { 1.0 };
     (100.0 / (1.0 + (-2.5 * (cog_ratio - 1.0)).exp())).clamp(0.0, 100.0)
 }

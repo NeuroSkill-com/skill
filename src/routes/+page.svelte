@@ -15,7 +15,7 @@ the Free Software Foundation, version 3 only. -->
   import PpgChart,  { type PpgPacket }         from "$lib/PpgChart.svelte";
   import ImuChart,  { type ImuPacket }         from "$lib/ImuChart.svelte";
   import GpuChart                              from "$lib/GpuChart.svelte";
-  import { EEG_CH, EEG_COLOR, MW75_CH, MW75_COLOR, HERMES_CH, HERMES_COLOR, EMOTIV_CH, EMOTIV_COLOR, IDUN_CH, IDUN_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
+  import { EEG_CH, EEG_COLOR, GANGLION_CH, GANGLION_COLOR, MW75_CH, MW75_COLOR, HERMES_CH, HERMES_COLOR, EMOTIV_CH, EMOTIV_COLOR, IDUN_CH, IDUN_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
   import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
   import {
     BrainStateScores, FaaGauge, EegIndices, CompositeScores,
@@ -356,14 +356,14 @@ the Free Software Foundation, version 3 only. -->
   const isIdun      = $derived(status.device_kind === "idun");
   const hasPpg      = $derived(deviceCaps.hasPpg);
   const hasImuCap   = $derived(deviceCaps.hasImu);
-  const hasBattery  = $derived(isMuse || isMw75 || isEmotiv);
+  const hasBattery  = $derived(isMuse || isMw75 || isEmotiv || isIdun);
 
   // Channel labels and colours — dynamic based on connected device.
   const chLabels = $derived(
-    isMw75 ? MW75_CH : isHermes ? HERMES_CH : isEmotiv ? EMOTIV_CH : isIdun ? IDUN_CH : EEG_CH
+    isMw75 ? MW75_CH : isHermes ? HERMES_CH : isEmotiv ? EMOTIV_CH : isIdun ? IDUN_CH : isGanglion ? GANGLION_CH : EEG_CH
   );
   const chColors = $derived(
-    isMw75 ? MW75_COLOR : isHermes ? HERMES_COLOR : isEmotiv ? EMOTIV_COLOR : isIdun ? IDUN_COLOR : EEG_COLOR
+    isMw75 ? MW75_COLOR : isHermes ? HERMES_COLOR : isEmotiv ? EMOTIV_COLOR : isIdun ? IDUN_COLOR : isGanglion ? GANGLION_COLOR : EEG_COLOR
   );
   /**
    * Athena = Muse S gen 2.
