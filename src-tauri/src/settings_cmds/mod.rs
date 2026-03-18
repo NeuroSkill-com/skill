@@ -1485,6 +1485,14 @@ pub fn list_skills(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<SkillIn
     }).collect()
 }
 
+/// Read the LICENSE file from the user's skills directory, if present.
+#[tauri::command]
+pub fn get_skills_license(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<String> {
+    let skill_dir = state.lock_or_recover().skill_dir.clone();
+    let license_path = skill_dir.join(skill_constants::SKILLS_SUBDIR).join("LICENSE");
+    std::fs::read_to_string(&license_path).ok()
+}
+
 /// Return the list of disabled skill names.
 #[tauri::command]
 pub fn get_disabled_skills(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<String> {

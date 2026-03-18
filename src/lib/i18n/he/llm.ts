@@ -312,6 +312,7 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLoading":          "טוען skills...",
   "llm.tools.skillsEnableAll":        "הפעל הכל",
   "llm.tools.skillsDisableAll":       "השבת הכל",
+  "llm.tools.skillsLicense":          "רישיון אתי AI100",
 };
 
 export default llm;

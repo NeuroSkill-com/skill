@@ -142,6 +142,7 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLoading":          "Завантаження навичок...",
   "llm.tools.skillsEnableAll":        "Увімкнути всі",
   "llm.tools.skillsDisableAll":       "Вимкнути всі",
+  "llm.tools.skillsLicense":          "Етична ліцензія AI100",
   "llm.mmproj.nThreads":             "Потоки енкодера",
   "llm.mmproj.nThreadsDesc":         "Потоки CPU для візуального/аудіо-енкодера.",
   "llm.mmproj.noGpu":                "mmproj лише на CPU",

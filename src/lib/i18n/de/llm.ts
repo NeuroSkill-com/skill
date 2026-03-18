@@ -142,6 +142,7 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLoading":          "Skills werden geladen...",
   "llm.tools.skillsEnableAll":        "Alle aktivieren",
   "llm.tools.skillsDisableAll":       "Alle deaktivieren",
+  "llm.tools.skillsLicense":          "AI100 Ethische Lizenz",
   "llm.mmproj.nThreads":             "Encoder-Threads",
   "llm.mmproj.nThreadsDesc":         "CPU-Threads für den Bild-/Audio-Encoder.",
   "llm.mmproj.noGpu":                "Nur CPU-mmproj",

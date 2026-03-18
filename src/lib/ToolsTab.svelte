@@ -86,6 +86,8 @@
   }
   let skills = $state<SkillInfo[]>([]);
   let skillsLoading = $state(false);
+  let skillsLicense = $state("");
+  let skillsLicenseOpen = $state(false);
 
   let TOOL_ROWS = $derived<Array<{ key: LlmToolKey; label: string; desc: string; warn?: boolean }>>(
     [
@@ -151,6 +153,11 @@
     finally { skillsLoading = false; }
   }
 
+  async function loadSkillsLicense() {
+    try { skillsLicense = await invoke<string | null>("get_skills_license") ?? ""; }
+    catch { skillsLicense = ""; }
+  }
+
   async function toggleSkill(name: string, enabled: boolean) {
     // Update local state immediately for responsiveness.
     skills = skills.map(s => s.name === name ? { ...s, enabled } : s);
@@ -170,6 +177,7 @@
     await loadConfig();
     await loadSkillsMeta();
     await loadSkills();
+    await loadSkillsLicense();
   });
 </script>
 
@@ -471,11 +479,27 @@
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="flex flex-col py-0 px-0">
 
-      <!-- Description + bulk actions -->
-      <div class="flex items-center justify-between gap-4 px-4 pt-3.5 pb-2">
-        <p class="text-[0.65rem] text-muted-foreground leading-relaxed">
-          {t("llm.tools.skillsSectionDesc")}
-        </p>
+      <!-- Description + license toggle + bulk actions -->
+      <div class="flex flex-col gap-1 px-4 pt-3.5 pb-2">
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-1">
+            <p class="text-[0.65rem] text-muted-foreground leading-relaxed">
+              {t("llm.tools.skillsSectionDesc")}
+            </p>
+            {#if skillsLicense}
+              <button
+                onclick={() => skillsLicenseOpen = !skillsLicenseOpen}
+                class="flex items-center gap-1 text-[0.58rem] font-semibold text-primary
+                       hover:text-primary/80 transition-colors cursor-pointer self-start">
+                <svg class="w-3 h-3 transition-transform {skillsLicenseOpen ? 'rotate-90' : ''}"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                     stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+                {t("llm.tools.skillsLicense")}
+              </button>
+            {/if}
+          </div>
         {#if skills.length > 0}
           <div class="flex items-center gap-1 shrink-0">
             <button onclick={() => setAllSkills(true)}
@@ -488,6 +512,15 @@
                      text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-background">
               {t("llm.tools.skillsDisableAll")}
             </button>
+          </div>
+        {/if}
+        </div>
+
+        <!-- Collapsible license -->
+        {#if skillsLicenseOpen && skillsLicense}
+          <div class="mt-1 rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2.5
+                      max-h-48 overflow-y-auto">
+            <pre class="text-[0.54rem] leading-relaxed text-muted-foreground whitespace-pre-wrap font-sans">{skillsLicense}</pre>
           </div>
         {/if}
       </div>
