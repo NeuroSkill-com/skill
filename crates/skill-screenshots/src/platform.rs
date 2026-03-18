@@ -3,6 +3,8 @@
 //! Platform-specific window capture (macOS, Linux, Windows).
 
 #[cfg(target_os = "macos")]
+use std::io::Cursor;
+#[cfg(target_os = "macos")]
 use std::path::Path;
 
 #[cfg(target_os = "macos")]
