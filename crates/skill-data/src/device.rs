@@ -96,7 +96,7 @@ impl DeviceKind {
         if n.starts_with("muse")                                        { return Self::Muse;     }
         if n.starts_with("ganglion") || n.starts_with("simblee")       { return Self::Ganglion; }
         if n.starts_with("openbci") || n.starts_with("cyton")          { return Self::OpenBci;  }
-        if n.contains("mw75")                                           { return Self::Mw75;     }
+        if n.contains("mw75") || n.contains("neurable")                  { return Self::Mw75;     }
         if n.starts_with("hermes")                                      { return Self::Hermes;   }
         if n.starts_with("emotiv") || n.starts_with("epoc")
             || n.starts_with("insight") || n.starts_with("flex")
@@ -215,6 +215,7 @@ mod tests {
     #[test]
     fn from_name_mw75() {
         assert_eq!(DeviceKind::from_name(Some("Headphones-MW75-v2")), DeviceKind::Mw75);
+        assert_eq!(DeviceKind::from_name(Some("Neurable-XYZ")), DeviceKind::Mw75);
     }
 
     #[test]

@@ -44,7 +44,7 @@ impl IdunAdapter {
             handle: Some(handle),
             desc: DeviceDescriptor {
                 kind: "idun",
-                caps: DeviceCaps::EEG | DeviceCaps::IMU | DeviceCaps::BATTERY,
+                caps: DeviceCaps::EEG | DeviceCaps::IMU | DeviceCaps::BATTERY | DeviceCaps::META,
                 eeg_channels: IDUN_EEG_CHANNELS,
                 eeg_sample_rate: IDUN_SAMPLE_RATE,
                 channel_names,
@@ -66,7 +66,7 @@ impl IdunAdapter {
             handle: None,
             desc: DeviceDescriptor {
                 kind: "idun",
-                caps: DeviceCaps::EEG | DeviceCaps::IMU | DeviceCaps::BATTERY,
+                caps: DeviceCaps::EEG | DeviceCaps::IMU | DeviceCaps::BATTERY | DeviceCaps::META,
                 eeg_channels: IDUN_EEG_CHANNELS,
                 eeg_sample_rate: IDUN_SAMPLE_RATE,
                 channel_names,
