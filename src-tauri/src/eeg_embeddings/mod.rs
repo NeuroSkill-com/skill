@@ -61,7 +61,11 @@ pub(crate) use worker::download_hf_weights;
 
 /// Linearly resample `src` to exactly `target_len` samples.
 ///
-/// Used to convert device-native epoch buffers (e.g. 2500 samples at 500 Hz)
+/// **Only used for ZUNA model input preparation.**  All other components
+/// (CSV, DSP filter, band analyzer, quality monitor, artifact detection)
+/// operate on the original device-native sample rate.
+///
+/// Converts device-native epoch buffers (e.g. 2500 samples at 500 Hz)
 /// to the ZUNA model's expected input size (1280 samples at 256 Hz).
 fn resample_linear(src: &[f32], target_len: usize) -> Vec<f32> {
     if src.is_empty() || target_len == 0 { return vec![0.0; target_len]; }
@@ -373,7 +377,13 @@ impl EegAccumulator {
         self.ppg_analyzer.push(channel, samples);
     }
 
-    /// Push raw µV samples for `electrode` (0–11).
+    /// Push raw µV samples at the device's native sample rate.
+    ///
+    /// Samples are accumulated at native rate.  When a full epoch
+    /// (`EMBEDDING_EPOCH_SECS` seconds) is collected, the data is resampled
+    /// to `EMBEDDING_EPOCH_SAMPLES` (1280 @ 256 Hz) for the ZUNA model.
+    /// This is the **only** place resampling occurs — all other DSP
+    /// (filter, bands, quality, CSV) uses native-rate data.
     pub fn push(&mut self, electrode: usize, samples: &[f32]) {
         if electrode >= EEG_CHANNELS { return; }
 

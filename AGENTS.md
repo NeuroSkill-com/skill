@@ -76,6 +76,7 @@ The DSP pipeline (filter, band analyzer, artifact detection) must work correctly
 - **`ArtifactDetector::with_channels(sr, names)`** — always pass sample rate and channel names.
 - **`FilterConfig.sample_rate`** — set from the device descriptor before creating `SessionDsp`.
 - Constants like `EMBEDDING_EPOCH_SAMPLES` are derived from `MUSE_SAMPLE_RATE` and fixed to the ZUNA model input shape (1280 samples). These are model constraints, not runtime DSP — do not change them without retraining.
+- **Resampling is ZUNA-only.** `EegAccumulator::push()` accumulates at native rate and resamples to 1280 samples only when building epochs for the ZUNA embedding model. All other paths (CSV recording, DSP filter, band analyzer, quality monitor, artifact detection, spectrogram) must operate on original native-rate samples. Never introduce resampling outside the embedding pipeline.
 
 ## Workspace Crates
 
