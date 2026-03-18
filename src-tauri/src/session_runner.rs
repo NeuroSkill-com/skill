@@ -48,7 +48,11 @@ pub(crate) async fn run_device_session(
     let has_imu = desc.caps.contains(DeviceCaps::IMU);
     let has_battery = desc.caps.contains(DeviceCaps::BATTERY);
     let kind = desc.kind;
-    let pipeline_ch = desc.pipeline_channels;
+    let mut pipeline_ch = desc.pipeline_channels;
+    /// Whether the adapter may still update its descriptor (e.g. Emotiv
+    /// auto-detecting channel count).  Cleared after the first match or
+    /// after a few EEG frames to avoid checking on every frame forever.
+    let mut desc_may_change = kind == "emotiv";
     let sample_rate = desc.eeg_sample_rate;
 
     // ── Open CSV with device-specific channel labels ─────────────────────────
@@ -108,6 +112,18 @@ pub(crate) async fn run_device_session(
                         break;
                     }
                     DeviceEvent::Eeg(frame) => {
+                        // Re-check pipeline_channels for adapters that
+                        // auto-detect (Emotiv DataLabels / first packet).
+                        if desc_may_change {
+                            let fresh_ch = adapter.descriptor().pipeline_channels;
+                            if fresh_ch != pipeline_ch {
+                                pipeline_ch = fresh_ch;
+                                app_log!(app, "bluetooth",
+                                    "[{kind}] updated to {} pipeline channels", pipeline_ch);
+                            }
+                            desc_may_change = false; // only check once
+                        }
+
                         let temperature_raw = {
                             let sr = app.app_state();
                             let val = sr.lock_or_recover().status.temperature_raw;
