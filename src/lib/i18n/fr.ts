@@ -404,11 +404,11 @@ const fr: Record<string, string> = {
   "settings.logHistory":           "Historique",
   "settings.logHistoryDesc":       "Chargement sessions & scan CSV",
     "settings.logHooks":             "Hooks",
-    "settings.logHooksDesc":         "Matcher des hooks, d\u00E9clenchements et notifications",
+    "settings.logHooksDesc":         "Matcher des hooks, déclenchements et notifications",
     "settings.logTools":             "Tools",
-    "settings.logToolsDesc":         "Ex\u00E9cution des appels d'outils (invocation, s\u00E9curit\u00E9, timing)",
+    "settings.logToolsDesc":         "Exécution des appels d'outils (invocation, sécurité, timing)",
 
-    "hooks.lastTrigger":             "Dernier d\u00E9clenchement",
+    "hooks.lastTrigger":             "Dernier déclenchement",
     "hooks.openSession":             "Ouvrir la session",
     "hooks.opening":                 "Ouverture...",
 
