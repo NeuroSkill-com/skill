@@ -164,7 +164,7 @@ the Free Software Foundation, version 3 only. -->
   // ── Public API ──────────────────────────────────────────────────────────────
   /**
    * Receive one spectrogram column from the Rust backend and paint it into
-   * the corresponding off-screen tape canvas for all 4 channels.
+   * the corresponding off-screen tape canvas for all channels.
    *
    * This is called ~8× per second (every filter hop = 32 samples @ 256 Hz).
    * The actual canvas drawing is just `putImageData` of a 1-px-wide strip.

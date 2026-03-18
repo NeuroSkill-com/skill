@@ -93,7 +93,7 @@ the Free Software Foundation, version 3 only. -->
   // ── Relaxation / Engagement score ─────────────────────────────────────────
   //  Relax   = alpha / (beta  + theta)   — high when calm/meditative
   //  Engage  = beta  / (alpha + theta)   — high when alert/task-engaged
-  //  Both are averaged across the 4 channels, smoothed with an EMA, then
+  //  Both are averaged across all channels, smoothed with an EMA, then
   //  mapped to 0–100 via a sigmoid so the reading is intuitive.
   let focusScore      = $state(0); // kept internally for ws/API compat — not shown in UI
   let relaxScore      = $state(0);
@@ -1064,7 +1064,7 @@ the Free Software Foundation, version 3 only. -->
       <!-- ════ CONNECTED ════════════════════════════════════════════════════ -->
       {:else if status.state === "connected"}
 
-        <!-- Battery (Muse only) -->
+        <!-- Battery (devices with battery reporting) -->
         {#if hasBattery}
         <div class="flex items-center gap-2.5" role="meter" aria-label={t("dashboard.battery")}
              aria-valuenow={status.battery ?? 0} aria-valuemin={0} aria-valuemax={100}>
@@ -1207,7 +1207,7 @@ the Free Software Foundation, version 3 only. -->
             perfIdx={perfIdxScore} stressIdx={stressIdxScore} />
         {/if}
 
-        <!-- PPG Optical (single tile, 3 channels — Muse only) -->
+        <!-- PPG Optical (single tile, 3 channels — devices with PPG) -->
         {#if hasPpg && (status.ppg_sample_count > 0 || status.state === "connected")}
           <div class="rounded-xl border border-border dark:border-white/[0.04]
                       bg-muted dark:bg-[#1a1a28] px-3 py-2.5 flex flex-col gap-1.5">
