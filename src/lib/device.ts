@@ -82,15 +82,51 @@ const MUSE_CAPS: DeviceCapabilities = {
   electrodeNames:       ["TP9", "AF7", "AF8", "TP10"],
 } as const;
 
+const GANGLION_CAPS: DeviceCapabilities = {
+  kind:                 "ganglion",
+  channelCount:         4,
+  hasPpg:               false,
+  hasImu:               false,
+  hasCentralElectrodes: true,    // user-configurable 10-20
+  hasFullMontage:       false,
+  sampleRateHz:         200,
+  electrodeNames:       ["Ch1", "Ch2", "Ch3", "Ch4"],
+} as const;
+
 const OPENBCI_CAPS: DeviceCapabilities = {
   kind:                 "openbci",
-  channelCount:         8,       // Cyton; Ganglion = 4
+  channelCount:         8,       // Cyton; Cyton+Daisy = 16
   hasPpg:               false,
   hasImu:               false,
   hasCentralElectrodes: true,    // standard 10-20 includes C3, C4, Cz
   hasFullMontage:       true,
   sampleRateHz:         250,
   electrodeNames:       ["Fp1", "Fp2", "C3", "C4", "P7", "P8", "O1", "O2"],
+} as const;
+
+const MW75_CAPS: DeviceCapabilities = {
+  kind:                 "mw75",
+  channelCount:         12,      // 6 per ear cup
+  hasPpg:               false,
+  hasImu:               false,
+  hasCentralElectrodes: false,   // temporal sites only
+  hasFullMontage:       false,
+  sampleRateHz:         500,
+  electrodeNames:       [
+    "FT7","T7","TP7","CP5","P7","C5",
+    "FT8","T8","TP8","CP6","P8","C6",
+  ],
+} as const;
+
+const HERMES_CAPS: DeviceCapabilities = {
+  kind:                 "hermes",
+  channelCount:         8,
+  hasPpg:               false,
+  hasImu:               true,
+  hasCentralElectrodes: true,    // montage-dependent
+  hasFullMontage:       false,
+  sampleRateHz:         250,
+  electrodeNames:       ["Ch1","Ch2","Ch3","Ch4","Ch5","Ch6","Ch7","Ch8"],
 } as const;
 
 const EMOTIV_CAPS: DeviceCapabilities = {
@@ -142,8 +178,10 @@ export function deviceCapabilities(deviceName: string | null): DeviceCapabilitie
   const n = deviceName.toLowerCase();
 
   if (n.startsWith("muse"))                                        return MUSE_CAPS;
-  if (n.startsWith("openbci") || n.startsWith("cyton")
-      || n.startsWith("ganglion"))                                 return OPENBCI_CAPS;
+  if (n.startsWith("ganglion") || n.startsWith("simblee"))        return GANGLION_CAPS;
+  if (n.startsWith("openbci") || n.startsWith("cyton"))           return OPENBCI_CAPS;
+  if (n.includes("mw75") || n.includes("neurable"))               return MW75_CAPS;
+  if (n.startsWith("hermes"))                                      return HERMES_CAPS;
   if (n.startsWith("emotiv") || n.startsWith("epoc")
       || n.startsWith("insight") || n.startsWith("flex")
       || n.startsWith("mn8"))                                     return EMOTIV_CAPS;
