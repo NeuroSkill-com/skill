@@ -66,7 +66,7 @@ impl SessionDsp {
     ///
     /// Acquires the `AppState` lock exactly once, clones the needed values,
     /// and releases it before building any DSP object.
-    pub(crate) fn new(app: &AppHandle) -> Self {
+    pub(crate) fn new(app: &AppHandle, channel_names: &[&str]) -> Self {
         let (filter_cfg, overlap_secs, hooks, skill_dir, model_config,
              model_status, download_cancel, encoder_reload_requested, logger, hook_runtime) = {
             let r = app.app_state();
@@ -116,9 +116,11 @@ impl SessionDsp {
 
         Self {
             filter:            EegFilter::new(filter_cfg),
-            band_analyzer:     BandAnalyzer::new(),
+            band_analyzer:     BandAnalyzer::new_with_rate(filter_cfg.sample_rate),
             quality:           QualityMonitor::new(EEG_CHANNELS),
-            artifact_detector: ArtifactDetector::new(),
+            artifact_detector: ArtifactDetector::with_channels(
+                filter_cfg.sample_rate as f64, channel_names,
+            ),
             head_pose:         HeadPoseTracker::new(),
             accumulator,
             last_filter_config: filter_cfg,

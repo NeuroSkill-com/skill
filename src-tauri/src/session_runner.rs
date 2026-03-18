@@ -64,8 +64,16 @@ pub(crate) async fn run_device_session(
     };
     write_session_meta(&app, &csv_path);
 
+    // ── Set device sample rate in filter config so DSP uses correct Hz ──────
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        s.status.filter_config.sample_rate = sample_rate as f32;
+    }
+
     // ── Session-local DSP (lock-free during sample processing) ───────────────
-    let mut dsp = SessionDsp::new(&app);
+    let ch_name_refs: Vec<&str> = desc.channel_names.iter().map(|s| s.as_str()).collect();
+    let mut dsp = SessionDsp::new(&app, &ch_name_refs);
 
     // ── Battery EMA (from skill-devices — replaces inline smoothing) ─────────
     let mut battery_ema = BatteryEma::new(0.1);

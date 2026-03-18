@@ -350,11 +350,24 @@ pub struct BandAnalyzer {
     alpha_baseline: f32,
     /// Number of snapshots computed so far (for EMA warm-up).
     snapshot_count: u64,
+    /// Hardware sample rate (Hz).  Used for PSD bin-frequency and PAC computation.
+    sample_rate: f32,
 }
 
 impl BandAnalyzer {
     /// Create a new analyser with pre-computed Hann coefficients.
+    ///
+    /// Uses the default Muse sample rate (256 Hz).  For non-Muse devices
+    /// call [`new_with_rate`] instead.
     pub fn new() -> Self {
+        Self::new_with_rate(MUSE_SAMPLE_RATE)
+    }
+
+    /// Create a new analyser for a specific hardware sample rate.
+    ///
+    /// The sample rate is used for PSD bin-frequency mapping, PAC
+    /// computation, and all derived spectral metrics.
+    pub fn new_with_rate(sample_rate: f32) -> Self {
         // Hann window: wᵢ = 0.5 × (1 − cos(2π·i / (N−1)))
         // For N = 512: Σ wᵢ² ≈ 512 × 3/8 = 192
         let hann: Vec<f32> = (0..BAND_WINDOW)
@@ -373,6 +386,7 @@ impl BandAnalyzer {
             latest: None,
             alpha_baseline: 0.0,
             snapshot_count: 0,
+            sample_rate,
         }
     }
 
@@ -485,7 +499,7 @@ impl BandAnalyzer {
         // So the per-bin scale is just 1 / hann_sum_sq (independent of fs, n).
         let n_oneside   = n / 2 + 1; // 257 unique positive-frequency bins
         let nyq_bin     = n / 2;     // 256
-        let bin_hz      = MUSE_SAMPLE_RATE / n as f32; // 0.5 Hz/bin
+        let bin_hz      = self.sample_rate / n as f32;
         let abs_scale   = 1.0 / self.hann_sum_sq;      // PSD normalisation
 
         let now = SystemTime::now()
@@ -795,7 +809,7 @@ impl BandAnalyzer {
             hfd_sum += higuchi_fd(&raw);
             dfa_sum += dfa_exponent(&raw);
             se_sum += sample_entropy_fn(&raw);
-            pac_sum += pac_theta_gamma_fn(&raw, MUSE_SAMPLE_RATE);
+            pac_sum += pac_theta_gamma_fn(&raw, self.sample_rate);
         }
         let hjorth_activity   = ha_sum / safe_nch;
         let hjorth_mobility   = hm_sum / safe_nch;
