@@ -312,6 +312,8 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLoading":          "טוען skills...",
   "llm.tools.skillsEnableAll":        "הפעל הכל",
   "llm.tools.skillsDisableAll":       "השבת הכל",
+  "llm.tools.suggestSkill":           "יש לך רעיון ל-skill משלך? הצע אותו כאן!",
+  "llm.tools.suggestSkillDesc":       "הצטרפו ל-Discord שלנו כדי להציע skills חדשים, לשתף משוב ולשתף פעולה עם הקהילה.",
   "llm.tools.skillsLicense":          "רישיון אתי AI100",
 };
 

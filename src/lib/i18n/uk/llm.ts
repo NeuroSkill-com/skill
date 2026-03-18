@@ -142,6 +142,8 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLoading":          "Завантаження навичок...",
   "llm.tools.skillsEnableAll":        "Увімкнути всі",
   "llm.tools.skillsDisableAll":       "Вимкнути всі",
+  "llm.tools.suggestSkill":           "Маєте ідею для власної навички? Запропонуйте тут!",
+  "llm.tools.suggestSkillDesc":       "Приєднуйтесь до нашого Discord, щоб пропонувати нові навички, ділитися відгуками та співпрацювати зі спільнотою.",
   "llm.tools.skillsLicense":          "Етична ліцензія AI100",
   "llm.mmproj.nThreads":             "Потоки енкодера",
   "llm.mmproj.nThreadsDesc":         "Потоки CPU для візуального/аудіо-енкодера.",

@@ -142,6 +142,8 @@ const llm: Record<string, string> = {
   "llm.tools.skillsLoading":           "Loading skills...",
   "llm.tools.skillsEnableAll":         "Enable all",
   "llm.tools.skillsDisableAll":        "Disable all",
+  "llm.tools.suggestSkill":            "Have an idea for your own skill? Suggest it here!",
+  "llm.tools.suggestSkillDesc":        "Join our Discord to propose new skills, share feedback, and collaborate with the community.",
   "llm.tools.skillsLicense":           "AI100 Ethical License",
   "llm.mmproj.nThreads":                "Encoder threads",
   "llm.mmproj.nThreadsDesc":            "CPU threads for the vision/audio encoder.",

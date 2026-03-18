@@ -1806,6 +1806,8 @@ export type TranslationKey =
   | "llm.tools.skillsLoading"
   | "llm.tools.skillsEnableAll"
   | "llm.tools.skillsDisableAll"
+  | "llm.tools.suggestSkill"
+  | "llm.tools.suggestSkillDesc"
   | "llm.tools.skillsLicense"
   | "llm.verbose"
   | "llm.verboseDesc"
