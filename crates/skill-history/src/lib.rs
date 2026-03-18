@@ -634,13 +634,22 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
         .has_headers(true).flexible(true).from_path(&metrics_path)
     { Ok(r) => r, Err(e) => { eprintln!("[csv-metrics] open error: {e}"); return None; } };
 
+    // Detect channel count from header: find the "faa" column to determine
+    // where per-channel band powers end and cross-channel indices begin.
+    let header = rdr.headers().ok()?.clone();
+    let faa_idx = header.iter().position(|h| h == "faa").unwrap_or(49);
+    let n_band_cols = faa_idx - 1; // columns 1..faa_idx are per-channel bands
+    let n_ch = n_band_cols / 12;   // 12 band columns per channel
+    let ch_bases: Vec<usize> = (0..n_ch).map(|c| 1 + c * 12).collect();
+    let x = faa_idx; // cross-channel offset
+
     let mut rows: Vec<EpochRow> = Vec::new();
     let mut sum = SessionMetrics::default();
     let mut count = 0usize;
 
     for result in rdr.records() {
         let rec = match result { Ok(r) => r, Err(_) => continue };
-        if rec.len() < 49 { continue; }
+        if rec.len() < x + 23 { continue; } // need at least through laterality_index
 
         let f = |i: usize| -> f64 {
             rec.get(i).and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0)
@@ -650,9 +659,10 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
         if timestamp <= 0.0 { continue; }
 
         let avg_rel = |band_offset: usize| -> f64 {
+            if ch_bases.is_empty() { return 0.0; }
             let mut s = 0.0;
-            for ch_base in &[1usize, 13, 25, 37] { s += f(ch_base + 6 + band_offset); }
-            s / 4.0
+            for &base in &ch_bases { s += f(base + 6 + band_offset); }
+            s / ch_bases.len() as f64
         };
 
         let rd = avg_rel(0);
@@ -661,24 +671,24 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
         let rb = avg_rel(3);
         let rg = avg_rel(4);
 
-        let faa_v  = f(49);  let tar_v  = f(50);  let bar_v  = f(51);  let dtr_v  = f(52);
-        let pse_v  = f(53);  let apf_v  = f(54);  let bps_v  = f(55);  let snr_v  = f(56);
-        let coh_v  = f(57);  let mu_v   = f(58);  let mood_v = f(59);
-        let tbr_v  = f(60);  let sef_v  = f(61);  let sc_v   = f(62);
-        let ha_v   = f(63);  let hm_v   = f(64);  let hc_v   = f(65);
-        let pe_v   = f(66);  let hfd_v  = f(67);  let dfa_v  = f(68);
-        let se_v   = f(69);  let pac_v  = f(70);  let lat_v  = f(71);
-        let hr_v   = f(72);  let rmssd_v= f(73);  let sdnn_v = f(74);
-        let pnn_v  = f(75);  let lfhf_v = f(76);  let resp_v = f(77);
-        let spo_v  = f(78);  let perf_v = f(79);  let stress_v = f(80);
-        let blinks_v = f(81); let blink_r_v = f(82);
-        let pitch_v = f(83); let roll_v = f(84); let still_v = f(85);
-        let nods_v  = f(86); let shakes_v = f(87);
-        let med_v = f(88); let cog_v = f(89); let drow_v = f(90);
-        let gpu_v = f(92); let gpu_r_v = f(93); let gpu_t_v = f(94);
+        let faa_v =f(x);   let tar_v =f(x+1); let bar_v =f(x+2); let dtr_v =f(x+3);
+        let pse_v =f(x+4); let apf_v =f(x+5); let bps_v =f(x+6); let snr_v =f(x+7);
+        let coh_v =f(x+8); let mu_v  =f(x+9); let mood_v=f(x+10);
+        let tbr_v =f(x+11);let sef_v =f(x+12);let sc_v  =f(x+13);
+        let ha_v  =f(x+14);let hm_v  =f(x+15);let hc_v  =f(x+16);
+        let pe_v  =f(x+17);let hfd_v =f(x+18);let dfa_v =f(x+19);
+        let se_v  =f(x+20);let pac_v =f(x+21);let lat_v =f(x+22);
+        let hr_v  =f(x+23);let rmssd_v=f(x+24);let sdnn_v=f(x+25);
+        let pnn_v =f(x+26);let lfhf_v=f(x+27);let resp_v=f(x+28);
+        let spo_v =f(x+29);let perf_v=f(x+30);let stress_v=f(x+31);
+        let blinks_v=f(x+32);let blink_r_v=f(x+33);
+        let pitch_v=f(x+34);let roll_v=f(x+35);let still_v=f(x+36);
+        let nods_v =f(x+37);let shakes_v=f(x+38);
+        let med_v =f(x+39);let cog_v =f(x+40);let drow_v=f(x+41);
+        let gpu_v =f(x+43);let gpu_r_v=f(x+44);let gpu_t_v=f(x+45);
 
         let mut sr = 0.0f64; let mut se2 = 0.0f64;
-        for ch_base in &[1usize, 13, 25, 37] {
+        for &ch_base in &ch_bases {
             let a = f(ch_base + 6 + 2);
             let b = f(ch_base + 6 + 3);
             let t = f(ch_base + 6 + 1);
@@ -767,7 +777,14 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
 
     let file = std::fs::File::open(path).ok()?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).ok()?;
+    let schema = builder.schema().clone();
     let reader = builder.build().ok()?;
+
+    // Detect cross-channel offset from schema (find "faa" column).
+    let x = schema.fields().iter().position(|f| f.name() == "faa").unwrap_or(49);
+    let n_band_cols = x - 1;
+    let n_ch = n_band_cols / 12;
+    let ch_bases: Vec<usize> = (0..n_ch).map(|c| 1 + c * 12).collect();
 
     let mut rows: Vec<EpochRow> = Vec::new();
     let mut sum = SessionMetrics::default();
@@ -778,7 +795,6 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
         let n_cols = batch.num_columns();
         let n_rows = batch.num_rows();
 
-        // Extract all columns as f64 arrays.
         let cols: Vec<Option<&arrow_array::Float64Array>> = (0..n_cols)
             .map(|i| batch.column(i).as_any().downcast_ref::<arrow_array::Float64Array>())
             .collect();
@@ -789,37 +805,38 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
                 cols[i].map_or(0.0, |c| if c.is_null(row_idx) { 0.0 } else { c.value(row_idx) })
             };
 
-            if n_cols < 49 { continue; }
+            if n_cols < x + 23 { continue; }
             let timestamp = f(0);
             if timestamp <= 0.0 { continue; }
 
             let avg_rel = |band_offset: usize| -> f64 {
+                if ch_bases.is_empty() { return 0.0; }
                 let mut s = 0.0;
-                for ch_base in &[1usize, 13, 25, 37] { s += f(ch_base + 6 + band_offset); }
-                s / 4.0
+                for &base in &ch_bases { s += f(base + 6 + band_offset); }
+                s / ch_bases.len() as f64
             };
 
             let rd = avg_rel(0); let rt = avg_rel(1); let ra = avg_rel(2);
             let rb = avg_rel(3); let rg = avg_rel(4);
 
-            let faa_v=f(49); let tar_v=f(50); let bar_v=f(51); let dtr_v=f(52);
-            let pse_v=f(53); let apf_v=f(54); let bps_v=f(55); let snr_v=f(56);
-            let coh_v=f(57); let mu_v=f(58);  let mood_v=f(59);
-            let tbr_v=f(60); let sef_v=f(61); let sc_v=f(62);
-            let ha_v=f(63);  let hm_v=f(64);  let hc_v=f(65);
-            let pe_v=f(66);  let hfd_v=f(67); let dfa_v=f(68);
-            let se_v=f(69);  let pac_v=f(70); let lat_v=f(71);
-            let hr_v=f(72);  let rmssd_v=f(73); let sdnn_v=f(74);
-            let pnn_v=f(75); let lfhf_v=f(76); let resp_v=f(77);
-            let spo_v=f(78); let perf_v=f(79); let stress_v=f(80);
-            let blinks_v=f(81); let blink_r_v=f(82);
-            let pitch_v=f(83); let roll_v=f(84); let still_v=f(85);
-            let nods_v=f(86); let shakes_v=f(87);
-            let med_v=f(88); let cog_v=f(89); let drow_v=f(90);
-            let gpu_v=f(92); let gpu_r_v=f(93); let gpu_t_v=f(94);
+            let faa_v=f(x);   let tar_v=f(x+1); let bar_v=f(x+2); let dtr_v=f(x+3);
+            let pse_v=f(x+4); let apf_v=f(x+5); let bps_v=f(x+6); let snr_v=f(x+7);
+            let coh_v=f(x+8); let mu_v=f(x+9);  let mood_v=f(x+10);
+            let tbr_v=f(x+11);let sef_v=f(x+12);let sc_v=f(x+13);
+            let ha_v=f(x+14); let hm_v=f(x+15); let hc_v=f(x+16);
+            let pe_v=f(x+17); let hfd_v=f(x+18);let dfa_v=f(x+19);
+            let se_v=f(x+20); let pac_v=f(x+21);let lat_v=f(x+22);
+            let hr_v=f(x+23); let rmssd_v=f(x+24);let sdnn_v=f(x+25);
+            let pnn_v=f(x+26);let lfhf_v=f(x+27);let resp_v=f(x+28);
+            let spo_v=f(x+29);let perf_v=f(x+30);let stress_v=f(x+31);
+            let blinks_v=f(x+32);let blink_r_v=f(x+33);
+            let pitch_v=f(x+34);let roll_v=f(x+35);let still_v=f(x+36);
+            let nods_v=f(x+37);let shakes_v=f(x+38);
+            let med_v=f(x+39);let cog_v=f(x+40);let drow_v=f(x+41);
+            let gpu_v=f(x+43);let gpu_r_v=f(x+44);let gpu_t_v=f(x+45);
 
             let mut sr = 0.0f64; let mut se2 = 0.0f64;
-            for ch_base in &[1usize, 13, 25, 37] {
+            for &ch_base in &ch_bases {
                 let a = f(ch_base + 6 + 2); let b = f(ch_base + 6 + 3); let t = f(ch_base + 6 + 1);
                 let d1 = a + t; let d2 = b + t;
                 if d1 > 1e-6 { se2 += b / d1; }

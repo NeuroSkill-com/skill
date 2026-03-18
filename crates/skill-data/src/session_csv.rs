@@ -48,17 +48,8 @@ pub fn metrics_csv_path(eeg_path: &Path) -> PathBuf {
 /// - 3 composite scores
 /// - 1 temperature
 /// - 3 GPU utilisation
-pub const METRICS_CSV_HEADER: [&str; 95] = [
-    "timestamp_s",
-    // ── Per-channel band powers (TP9, AF7, AF8, TP10) ──
-    "TP9_delta",  "TP9_theta",  "TP9_alpha",  "TP9_beta",  "TP9_gamma",  "TP9_high_gamma",
-    "TP9_rel_delta",  "TP9_rel_theta",  "TP9_rel_alpha",  "TP9_rel_beta",  "TP9_rel_gamma",  "TP9_rel_high_gamma",
-    "AF7_delta",  "AF7_theta",  "AF7_alpha",  "AF7_beta",  "AF7_gamma",  "AF7_high_gamma",
-    "AF7_rel_delta",  "AF7_rel_theta",  "AF7_rel_alpha",  "AF7_rel_beta",  "AF7_rel_gamma",  "AF7_rel_high_gamma",
-    "AF8_delta",  "AF8_theta",  "AF8_alpha",  "AF8_beta",  "AF8_gamma",  "AF8_high_gamma",
-    "AF8_rel_delta",  "AF8_rel_theta",  "AF8_rel_alpha",  "AF8_rel_beta",  "AF8_rel_gamma",  "AF8_rel_high_gamma",
-    "TP10_delta", "TP10_theta", "TP10_alpha", "TP10_beta", "TP10_gamma", "TP10_high_gamma",
-    "TP10_rel_delta", "TP10_rel_theta", "TP10_rel_alpha", "TP10_rel_beta", "TP10_rel_gamma", "TP10_rel_high_gamma",
+/// Cross-channel metric column names (after the per-channel band powers).
+pub const METRICS_CROSS_CHANNEL_HEADER: [&str; 46] = [
     // ── Cross-channel EEG indices ──
     "faa", "tar", "bar", "dtr", "pse", "apf", "bps", "snr",
     "coherence", "mu_suppression", "mood", "tbr", "sef95", "spectral_centroid",
@@ -80,6 +71,55 @@ pub const METRICS_CSV_HEADER: [&str; 95] = [
     "gpu_overall_pct", "gpu_render_pct", "gpu_tiler_pct",
 ];
 
+/// Band-power suffixes for each channel (6 absolute + 6 relative = 12 per channel).
+const BAND_SUFFIXES: [&str; 12] = [
+    "_delta", "_theta", "_alpha", "_beta", "_gamma", "_high_gamma",
+    "_rel_delta", "_rel_theta", "_rel_alpha", "_rel_beta", "_rel_gamma", "_rel_high_gamma",
+];
+
+/// Build the full metrics CSV header dynamically from channel names.
+///
+/// Layout: `timestamp_s`, then `<ch>_<band>` × N channels × 12 bands,
+/// then the 46 cross-channel columns.
+pub fn build_metrics_header(channel_names: &[&str]) -> Vec<String> {
+    let mut header = Vec::with_capacity(1 + channel_names.len() * 12 + METRICS_CROSS_CHANNEL_HEADER.len());
+    header.push("timestamp_s".to_string());
+    for ch in channel_names {
+        for suffix in &BAND_SUFFIXES {
+            header.push(format!("{ch}{suffix}"));
+        }
+    }
+    for &col in &METRICS_CROSS_CHANNEL_HEADER {
+        header.push(col.to_string());
+    }
+    header
+}
+
+/// Legacy fixed header for 4-channel Muse (kept for backward-compat reading).
+pub const METRICS_CSV_HEADER: [&str; 95] = [
+    "timestamp_s",
+    "TP9_delta",  "TP9_theta",  "TP9_alpha",  "TP9_beta",  "TP9_gamma",  "TP9_high_gamma",
+    "TP9_rel_delta",  "TP9_rel_theta",  "TP9_rel_alpha",  "TP9_rel_beta",  "TP9_rel_gamma",  "TP9_rel_high_gamma",
+    "AF7_delta",  "AF7_theta",  "AF7_alpha",  "AF7_beta",  "AF7_gamma",  "AF7_high_gamma",
+    "AF7_rel_delta",  "AF7_rel_theta",  "AF7_rel_alpha",  "AF7_rel_beta",  "AF7_rel_gamma",  "AF7_rel_high_gamma",
+    "AF8_delta",  "AF8_theta",  "AF8_alpha",  "AF8_beta",  "AF8_gamma",  "AF8_high_gamma",
+    "AF8_rel_delta",  "AF8_rel_theta",  "AF8_rel_alpha",  "AF8_rel_beta",  "AF8_rel_gamma",  "AF8_rel_high_gamma",
+    "TP10_delta", "TP10_theta", "TP10_alpha", "TP10_beta", "TP10_gamma", "TP10_high_gamma",
+    "TP10_rel_delta", "TP10_rel_theta", "TP10_rel_alpha", "TP10_rel_beta", "TP10_rel_gamma", "TP10_rel_high_gamma",
+    "faa", "tar", "bar", "dtr", "pse", "apf", "bps", "snr",
+    "coherence", "mu_suppression", "mood", "tbr", "sef95", "spectral_centroid",
+    "hjorth_activity", "hjorth_mobility", "hjorth_complexity",
+    "permutation_entropy", "higuchi_fd", "dfa_exponent",
+    "sample_entropy", "pac_theta_gamma", "laterality_index",
+    "hr_bpm", "rmssd_ms", "sdnn_ms", "pnn50_pct", "lf_hf_ratio",
+    "respiratory_rate_bpm", "spo2_pct", "perfusion_index_pct", "stress_index",
+    "blink_count", "blink_rate_per_min",
+    "head_pitch_deg", "head_roll_deg", "stillness", "nod_count", "shake_count",
+    "meditation", "cognitive_load", "drowsiness",
+    "temperature_raw",
+    "gpu_overall_pct", "gpu_render_pct", "gpu_tiler_pct",
+];
+
 // ── CSV writer ────────────────────────────────────────────────────────────────
 
 /// Multiplexed CSV writer for a recording session.
@@ -92,6 +132,8 @@ pub struct CsvState {
     wtr:     csv::Writer<std::fs::File>,
     /// Number of EEG channels in this CSV (4 for Muse/Ganglion, 8/16/24 for Cyton/Galea).
     n_eeg:   usize,
+    /// Channel labels (used for dynamic metrics header generation).
+    channel_labels: Vec<String>,
     /// Queued µV values per EEG channel.
     bufs:    Vec<VecDeque<f64>>,
     /// Per-sample Unix timestamps (seconds) matching each value in `bufs`.
@@ -126,6 +168,7 @@ impl CsvState {
         Ok(Self {
             wtr,
             n_eeg:   n,
+            channel_labels: labels.iter().map(|s| s.to_string()).collect(),
             bufs:    (0..n).map(|_| VecDeque::new()).collect(),
             ts_bufs: (0..n).map(|_| VecDeque::new()).collect(),
             written: 0,
@@ -241,7 +284,10 @@ impl CsvState {
             let path = metrics_csv_path(eeg_csv_path);
             match csv::Writer::from_path(&path) {
                 Ok(mut w) => {
-                    let _ = w.write_record(METRICS_CSV_HEADER);
+                    let label_refs: Vec<&str> = self.channel_labels.iter().map(|s| s.as_str()).collect();
+                    let header = build_metrics_header(&label_refs);
+                    let header_refs: Vec<&str> = header.iter().map(|s| s.as_str()).collect();
+                    let _ = w.write_record(&header_refs);
                     eprintln!("[csv] Metrics file opened: {}", path.display());
                     self.metrics_wtr = Some(w);
                 }

@@ -22,7 +22,7 @@ use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
 
 use crate::ppg_analysis::PpgMetrics;
-use crate::session_csv::{ppg_csv_path, metrics_csv_path, PPG_SAMPLE_RATE, METRICS_CSV_HEADER};
+use crate::session_csv::{ppg_csv_path, metrics_csv_path, PPG_SAMPLE_RATE, build_metrics_header};
 use skill_eeg::eeg_bands::BandSnapshot;
 
 // ── Row-group flush threshold ─────────────────────────────────────────────────
@@ -88,6 +88,7 @@ pub struct ParquetState {
     // ── Metrics (lazy) ───────────────────────────────────────────────────────
     metrics_wtr:    Option<ArrowWriter<std::fs::File>>,
     metrics_schema: Arc<Schema>,
+    metrics_n_cols: usize,
     metrics_rows:   usize,
     metrics_path:   PathBuf,
 
@@ -131,10 +132,12 @@ impl ParquetState {
         ];
         let ppg_schema = Arc::new(Schema::new(ppg_fields));
 
-        // Metrics schema: all columns from METRICS_CSV_HEADER as Float64
-        let metrics_fields: Vec<Field> = METRICS_CSV_HEADER.iter()
-            .map(|&name| Field::new(name, DataType::Float64, true))
+        // Metrics schema: dynamic columns from channel labels + cross-channel indices
+        let metrics_header = build_metrics_header(labels);
+        let metrics_fields: Vec<Field> = metrics_header.iter()
+            .map(|name| Field::new(name, DataType::Float64, true))
             .collect();
+        let n_metrics_cols = metrics_fields.len();
         let metrics_schema = Arc::new(Schema::new(metrics_fields));
 
         Ok(Self {
@@ -154,6 +157,7 @@ impl ParquetState {
 
             metrics_wtr: None,
             metrics_schema,
+            metrics_n_cols: n_metrics_cols,
             metrics_rows: 0,
             metrics_path: metrics_parquet_path(csv_path),
             metrics_pending: Vec::new(),
@@ -339,7 +343,7 @@ impl ParquetState {
         if self.metrics_pending.is_empty() { return; }
         let Some(ref mut wtr) = self.metrics_wtr else { return; };
 
-        let n_cols = METRICS_CSV_HEADER.len();
+        let n_cols = self.metrics_n_cols;
         let n_rows = self.metrics_pending.len();
         let mut col_data: Vec<Vec<f64>> = vec![Vec::with_capacity(n_rows); n_cols];
 
