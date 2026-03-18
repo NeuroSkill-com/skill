@@ -12,7 +12,7 @@ the Free Software Foundation, version 3 only. -->
   Props:
     quality  – string[] of quality labels in electrode order
     compact  – if true, shrinks for embedding inside onboarding cards
-    device   – "muse" | "ganglion" | "mw75" | "unknown"
+    device   – "muse" | "ganglion" | "mw75" | "hermes" | "emotiv" | "idun" | "unknown"
 -->
 <script lang="ts">
   import { t } from "$lib/i18n/index.svelte";
@@ -81,9 +81,34 @@ the Free Software Foundation, version 3 only. -->
     { id: "FC2", label: "FC2", cx: 138, cy: 148, side: "right"  },
   ];
 
+  // Emotiv EPOC X / EPOC+: 14 electrodes distributed across the scalp.
+  const EMOTIV_ELECTRODES: ElectrodePos[] = [
+    { id: "AF3", label: "AF3", cx: 68,  cy: 58,  side: "left"   },
+    { id: "F7",  label: "F7",  cx: 36,  cy: 80,  side: "left"   },
+    { id: "F3",  label: "F3",  cx: 62,  cy: 86,  side: "left"   },
+    { id: "FC5", label: "FC5", cx: 38,  cy: 108, side: "left"   },
+    { id: "T7",  label: "T7",  cx: 24,  cy: 130, side: "left"   },
+    { id: "P7",  label: "P7",  cx: 44,  cy: 162, side: "left"   },
+    { id: "O1",  label: "O1",  cx: 76,  cy: 190, side: "left"   },
+    { id: "O2",  label: "O2",  cx: 124, cy: 190, side: "right"  },
+    { id: "P8",  label: "P8",  cx: 156, cy: 162, side: "right"  },
+    { id: "T8",  label: "T8",  cx: 176, cy: 130, side: "right"  },
+    { id: "FC6", label: "FC6", cx: 162, cy: 108, side: "right"  },
+    { id: "F4",  label: "F4",  cx: 138, cy: 86,  side: "right"  },
+    { id: "F8",  label: "F8",  cx: 164, cy: 80,  side: "right"  },
+    { id: "AF4", label: "AF4", cx: 132, cy: 58,  side: "right"  },
+  ];
+
+  // IDUN Guardian: single in-ear bipolar channel.
+  const IDUN_ELECTRODES: ElectrodePos[] = [
+    { id: "EEG", label: "EEG", cx: 100, cy: 130, side: "center" },
+  ];
+
   const ELECTRODES = $derived(
     device === "mw75" ? MW75_ELECTRODES
     : device === "hermes" ? HERMES_ELECTRODES
+    : device === "emotiv" ? EMOTIV_ELECTRODES
+    : device === "idun" ? IDUN_ELECTRODES
     : device === "ganglion" ? GANGLION_ELECTRODES
     : MUSE_ELECTRODES
   );
@@ -117,6 +142,7 @@ the Free Software Foundation, version 3 only. -->
 
   const deviceLabel = $derived(
     device === "mw75" ? "MW75 Neuro" : device === "hermes" ? "Hermes V1"
+    : device === "emotiv" ? "Emotiv EPOC" : device === "idun" ? "IDUN Guardian"
     : device === "ganglion" ? "Ganglion" : "Muse"
   );
 </script>

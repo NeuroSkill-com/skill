@@ -15,7 +15,7 @@ the Free Software Foundation, version 3 only. -->
   import PpgChart,  { type PpgPacket }         from "$lib/PpgChart.svelte";
   import ImuChart,  { type ImuPacket }         from "$lib/ImuChart.svelte";
   import GpuChart                              from "$lib/GpuChart.svelte";
-  import { EEG_CH, EEG_COLOR, MW75_CH, MW75_COLOR, HERMES_CH, HERMES_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
+  import { EEG_CH, EEG_COLOR, MW75_CH, MW75_COLOR, HERMES_CH, HERMES_COLOR, EMOTIV_CH, EMOTIV_COLOR, IDUN_CH, IDUN_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
   import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
   import {
     BrainStateScores, FaaGauge, EegIndices, CompositeScores,
@@ -360,10 +360,10 @@ the Free Software Foundation, version 3 only. -->
 
   // Channel labels and colours — dynamic based on connected device.
   const chLabels = $derived(
-    isMw75 ? MW75_CH : isHermes ? HERMES_CH : EEG_CH
+    isMw75 ? MW75_CH : isHermes ? HERMES_CH : isEmotiv ? EMOTIV_CH : isIdun ? IDUN_CH : EEG_CH
   );
   const chColors = $derived(
-    isMw75 ? MW75_COLOR : isHermes ? HERMES_COLOR : EEG_COLOR
+    isMw75 ? MW75_COLOR : isHermes ? HERMES_COLOR : isEmotiv ? EMOTIV_COLOR : isIdun ? IDUN_COLOR : EEG_COLOR
   );
   /**
    * Athena = Muse S gen 2.
@@ -1084,12 +1084,33 @@ the Free Software Foundation, version 3 only. -->
         </div>
         {/if}
 
-        <!-- Ganglion device badge -->
+        <!-- Device info badge (non-Muse devices) -->
         {#if isGanglion}
           <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
                       bg-emerald-500/10 border border-emerald-500/20 w-fit">
             <span class="text-[0.55rem] font-semibold text-emerald-600 dark:text-emerald-400 tracking-wide">
               OpenBCI Ganglion · 4ch · 200 Hz
+            </span>
+          </div>
+        {:else if isEmotiv}
+          <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
+                      bg-violet-500/10 border border-violet-500/20 w-fit">
+            <span class="text-[0.55rem] font-semibold text-violet-600 dark:text-violet-400 tracking-wide">
+              {status.device_name ?? "Emotiv"} · {chLabels.length}ch · 128 Hz
+            </span>
+          </div>
+        {:else if isIdun}
+          <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
+                      bg-cyan-500/10 border border-cyan-500/20 w-fit">
+            <span class="text-[0.55rem] font-semibold text-cyan-600 dark:text-cyan-400 tracking-wide">
+              IDUN Guardian · 1ch · 250 Hz
+            </span>
+          </div>
+        {:else if isHermes}
+          <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
+                      bg-amber-500/10 border border-amber-500/20 w-fit">
+            <span class="text-[0.55rem] font-semibold text-amber-600 dark:text-amber-400 tracking-wide">
+              Nucleus Hermes · 8ch · 250 Hz
             </span>
           </div>
         {/if}
@@ -1266,7 +1287,7 @@ the Free Software Foundation, version 3 only. -->
             <span class="text-[0.45rem] text-emerald-500 live-blink shrink-0" aria-hidden="true">●</span>
           </button>
           {#if eegChExpanded}
-            <div class="grid gap-1.5" class:grid-cols-2={!isMw75} class:grid-cols-3={isMw75}>
+            <div class="grid gap-1.5" class:grid-cols-2={chLabels.length <= 4} class:grid-cols-3={chLabels.length > 4 && chLabels.length <= 8} class:grid-cols-4={chLabels.length > 8}>
               {#each chLabels as ch, i}
                 <div class="min-w-0 rounded-lg border border-border dark:border-white/[0.04]
                             bg-muted dark:bg-[#1a1a28] px-2 py-1.5 flex flex-col gap-0.5"

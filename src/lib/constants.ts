@@ -61,6 +61,34 @@ export const MW75_COLOR = [
   "#60a5fa", "#3b82f6", "#2563eb", "#c084fc", "#a855f7", "#7c3aed",
 ] as const;
 
+// ── Emotiv EPOC (14-channel) ──────────────────────────────────────────────────
+
+/** Emotiv EPOC X / EPOC+ channel count. */
+export const EMOTIV_EEG_CHANNELS = 14;
+
+/** Emotiv EPOC X / EPOC+ channel labels (10-20 extended). */
+export const EMOTIV_CH = [
+  "AF3", "F7", "F3", "FC5", "T7", "P7", "O1",
+  "O2", "P8", "T8", "FC6", "F4", "F8", "AF4",
+] as const;
+
+/** Emotiv per-channel colours — 7 warm (left) + 7 cool (right). */
+export const EMOTIV_COLOR = [
+  "#22c55e", "#16a34a", "#15803d", "#a3e635", "#84cc16", "#65a30d", "#4ade80",
+  "#60a5fa", "#3b82f6", "#2563eb", "#c084fc", "#a855f7", "#7c3aed", "#818cf8",
+] as const;
+
+// ── IDUN Guardian (1-channel) ─────────────────────────────────────────────────
+
+/** IDUN Guardian channel count (single bipolar). */
+export const IDUN_EEG_CHANNELS = 1;
+
+/** IDUN Guardian channel label. */
+export const IDUN_CH = ["EEG"] as const;
+
+/** IDUN Guardian channel colour. */
+export const IDUN_COLOR = ["#22c55e"] as const;
+
 /** Muse EEG hardware sample rate (Hz).  Mirrors `MUSE_SAMPLE_RATE`. */
 export const SAMPLE_RATE = 256;
 

@@ -62,7 +62,7 @@ export interface DeviceStatus {
   fuel_gauge_mv: number;
   /** Raw temperature ADC value (Classic only, 0 on Athena). */
   temperature_raw: number;
-  /** Which device family is connected: "muse" | "ganglion" | "unknown". */
+  /** Which device family is connected (see `DeviceKind` in device.ts). */
   device_kind: string;
   /** Hardware model code, e.g. "p50" = Muse S (Athena), "p21" = Muse 2. */
   hardware_version: string | null;

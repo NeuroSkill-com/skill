@@ -26,7 +26,10 @@
  */
 export type DeviceKind =
   | "muse"       // Muse 1 / 2 / S / Monitor  — 4-ch frontal + temporal
-  | "openbci"    // OpenBCI Cyton (8-ch) / Ganglion (4-ch) — configurable 10-20
+  | "ganglion"   // OpenBCI Ganglion — 4-ch BLE
+  | "openbci"    // OpenBCI Cyton (8-ch) / Cyton+Daisy (16-ch) — serial/WiFi
+  | "mw75"       // Neurable MW75 Neuro — 12-ch over-ear headphones
+  | "hermes"     // RE-AK Nucleus Hermes — 8-ch
   | "emotiv"     // Emotiv EPOC / Insight / Flex — 14/5/32-ch
   | "idun"       // IDUN Guardian — single-ch bipolar in-ear EEG earbud
   | "unknown";   // unrecognised or disconnected
