@@ -6,6 +6,7 @@ use std::io::Cursor;
 #[cfg(target_os = "macos")]
 use std::path::Path;
 
+#[cfg(target_os = "macos")]
 use image::{GenericImageView, ImageReader};
 
 // ── Captured image ────────────────────────────────────────────────────────────
@@ -253,141 +254,88 @@ fn macos_frontmost_window_id() -> Option<u64> {
 
 #[cfg(target_os = "linux")]
 fn capture_linux() -> Option<CapturedImage> {
-    use std::process::Command;
+    // Use xcap for cross-platform capture (supports X11 and Wayland).
+    // Try to capture the focused window first, then fall back to primary monitor.
+    capture_xcap()
+}
 
-    let tmp = std::env::temp_dir().join("skill_screenshot.png");
+/// Capture via the `xcap` crate — works on both X11 and Wayland without
+/// requiring external tools (grim, scrot, xdotool, etc.).
+#[cfg(any(target_os = "linux", target_os = "windows"))]
+fn capture_xcap() -> Option<CapturedImage> {
+    // ── Attempt 1: capture the focused window ──
+    if let Ok(windows) = xcap::Window::all() {
+        // Find the currently-focused (frontmost) window.
+        // xcap returns is_minimized(); we want the first non-minimized window
+        // that reports as the current/focused window.
+        for win in &windows {
+            let dominated = win.is_minimized().unwrap_or(true);
+            if dominated { continue; }
+            // xcap on Linux/Wayland: `current_monitor` + first non-minimized
+            // window with a title is a reasonable heuristic.  The list is
+            // ordered front-to-back on most compositors.
+            let title = win.title().unwrap_or_default();
+            if title.is_empty() { continue; }
 
-    // Try xdotool + import (ImageMagick) for X11 — captures active window
-    let win_id = Command::new("xdotool")
-        .arg("getactivewindow")
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
+            match win.capture_image() {
+                Ok(rgba) => {
+                    let w = rgba.width();
+                    let h = rgba.height();
+                    if w == 0 || h == 0 { continue; }
 
-    let mut captured = false;
+                    // Check for dark/empty screenshot (all zeros or near-zero)
+                    let sample = rgba.as_raw();
+                    let non_zero = sample.iter().take(4096).any(|&b| b > 5);
+                    if !non_zero { continue; }
 
-    if let Some(ref wid) = win_id {
-        // X11 path 1: import -window <wid> (writes PNG to stdout)
-        if let Some(output) = Command::new("import")
-            .args(["-window", wid.as_str(), "png:-"])
-            .output()
-            .ok()
-            .filter(|o| o.status.success() && !o.stdout.is_empty())
-        {
-            if std::fs::write(&tmp, &output.stdout).is_ok() {
-                captured = true;
+                    // Encode as PNG bytes
+                    let mut png_bytes = Vec::new();
+                    let dyn_img = image::DynamicImage::ImageRgba8(rgba);
+                    dyn_img.write_to(
+                        &mut Cursor::new(&mut png_bytes),
+                        image::ImageFormat::Png,
+                    ).ok()?;
+                    return Some(CapturedImage { raw_bytes: png_bytes, width: w, height: h });
+                }
+                Err(e) => {
+                    eprintln!("[screenshot] xcap window capture failed ({}): {e}", title);
+                    continue;
+                }
             }
         }
     }
 
-    if !captured {
-        if let Some(ref _wid) = win_id {
-            // X11 path 2: scrot -u (focused window)
-            captured = Command::new("scrot")
-                .args(["-u", "-o", &tmp.to_string_lossy()])
-                .status()
-                .ok()
-                .map(|s| s.success())
-                .unwrap_or(false);
+    // ── Attempt 2: full-screen capture of the primary monitor ──
+    if let Ok(monitors) = xcap::Monitor::all() {
+        // Prefer the primary monitor, fall back to the first one.
+        let monitor = monitors.iter().find(|m| m.is_primary().unwrap_or(false)).or_else(|| monitors.first());
+        if let Some(mon) = monitor {
+            match mon.capture_image() {
+                Ok(rgba) => {
+                    let w = rgba.width();
+                    let h = rgba.height();
+                    if w == 0 || h == 0 { return None; }
+                    let mut png_bytes = Vec::new();
+                    let dyn_img = image::DynamicImage::ImageRgba8(rgba);
+                    dyn_img.write_to(
+                        &mut Cursor::new(&mut png_bytes),
+                        image::ImageFormat::Png,
+                    ).ok()?;
+                    return Some(CapturedImage { raw_bytes: png_bytes, width: w, height: h });
+                }
+                Err(e) => {
+                    eprintln!("[screenshot] xcap monitor capture failed: {e}");
+                }
+            }
         }
     }
 
-    if !captured {
-        // Wayland: try swaymsg + grim with geometry for focused window
-        let geo = Command::new("sh")
-            .args(["-c", r#"swaymsg -t get_tree | jq -r '.. | select(.focused?) | .rect | "\(.x),\(.y) \(.width)x\(.height)"'"#])
-            .output()
-            .ok()
-            .filter(|o| o.status.success() && !o.stdout.is_empty())
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string());
-
-        if let Some(geo) = geo {
-            captured = Command::new("grim")
-                .args(["-g", &geo])
-                .arg(&tmp)
-                .status()
-                .ok()
-                .map(|s| s.success())
-                .unwrap_or(false);
-        }
-    }
-
-    if !captured {
-        // Last resort: grim full screen
-        captured = Command::new("grim")
-            .arg(&tmp)
-            .status()
-            .ok()
-            .map(|s| s.success())
-            .unwrap_or(false);
-    }
-
-    if !captured { return None; }
-
-    let raw_bytes = std::fs::read(&tmp).ok()?;
-    let _ = std::fs::remove_file(&tmp);
-
-    let img = ImageReader::new(Cursor::new(&raw_bytes))
-        .with_guessed_format().ok()?
-        .decode().ok()?;
-    let (w, h) = img.dimensions();
-
-    Some(CapturedImage { raw_bytes, width: w, height: h })
+    None
 }
 
 #[cfg(target_os = "windows")]
 fn capture_windows() -> Option<CapturedImage> {
-    use std::process::Command;
-
-    // Capture the foreground window (not full screen) via PowerShell + Win32.
-    // Uses GetForegroundWindow → GetWindowRect → CopyFromScreen with the
-    // window's bounding rectangle, matching the plan's specification.
-    let tmp = std::env::temp_dir().join("skill_screenshot.png");
-    let ps_script = format!(
-        r#"
-        Add-Type -AssemblyName System.Drawing
-        Add-Type @"
-            using System;
-            using System.Runtime.InteropServices;
-            public class Win32 {{
-                [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-                [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
-            }}
-            public struct RECT {{
-                public int Left, Top, Right, Bottom;
-            }}
-"@
-        $hwnd = [Win32]::GetForegroundWindow()
-        $rect = New-Object RECT
-        [Win32]::GetWindowRect($hwnd, [ref]$rect) | Out-Null
-        $w = $rect.Right - $rect.Left
-        $h = $rect.Bottom - $rect.Top
-        if ($w -le 0 -or $h -le 0) {{ exit 1 }}
-        $bmp = New-Object System.Drawing.Bitmap($w, $h)
-        $g = [System.Drawing.Graphics]::FromImage($bmp)
-        $g.CopyFromScreen($rect.Left, $rect.Top, 0, 0, (New-Object System.Drawing.Size($w, $h)))
-        $bmp.Save("{}")
-        $g.Dispose()
-        $bmp.Dispose()
-        "#,
-        tmp.to_string_lossy().replace('\\', "\\\\")
-    );
-
-    let status = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &ps_script])
-        .status()
-        .ok()?;
-    if !status.success() { return None; }
-
-    let raw_bytes = std::fs::read(&tmp).ok()?;
-    let _ = std::fs::remove_file(&tmp);
-
-    let img = ImageReader::new(Cursor::new(&raw_bytes))
-        .with_guessed_format().ok()?
-        .decode().ok()?;
-    let (w, h) = img.dimensions();
-
-    Some(CapturedImage { raw_bytes, width: w, height: h })
+    // Use xcap for native Win32/WGC capture — no PowerShell subprocess needed.
+    capture_xcap()
 }
 
