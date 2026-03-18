@@ -37,6 +37,8 @@
     is_mmproj:   boolean;
     recommended: boolean;
     advanced:    boolean;
+    params_b:    number;
+    max_context_length: number;
     local_path:  string | null;
     state:       DownloadState;
     status_msg:  string | null;
@@ -1085,6 +1087,11 @@
       </div>
 
       <!-- Context size -->
+      {@const maxCtx = activeEntry?.max_context_length || 0}
+      {@const ctxOptions = ([[null,"auto"]] as [number|null, string][]).concat(
+        ([[2048,"2K"],[4096,"4K"],[8192,"8K"],[16384,"16K"],[32768,"32K"],[65536,"64K"],[131072,"128K"]] as [number, string][])
+          .filter(([val]) => maxCtx === 0 || (val as number) <= maxCtx)
+      )}
       <div class="flex flex-col gap-2 px-4 py-3.5">
         <div class="flex items-baseline justify-between">
           <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.ctxSize")}</span>
@@ -1094,7 +1101,7 @@
         </div>
         <p class="text-[0.65rem] text-muted-foreground -mt-1">{t("llm.inference.ctxSizeDesc")}</p>
         <div class="flex items-center gap-1.5 flex-wrap">
-          {#each [[null,"auto"],[2048,"2K"],[4096,"4K"],[8192,"8K"],[16384,"16K"],[32768,"32K"]] as [val, label]}
+          {#each ctxOptions as [val, label]}
             <button
               onclick={async () => { ctxSizeInput = val !== null ? String(val) : ""; config = { ...config, ctx_size: val as number|null }; await saveConfig(); }}
               class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold transition-all cursor-pointer

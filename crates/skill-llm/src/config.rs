@@ -28,8 +28,12 @@ pub struct LlmConfig {
     #[serde(default)]
     pub n_gpu_layers: u32,
 
-    /// KV-cache / context size in tokens.  `None` → use the model's trained
-    /// context length (capped at 4096 tokens to avoid OOM).
+    /// KV-cache / context size in tokens.
+    ///
+    /// `None` → auto-recommend based on the model's parameter count, quant,
+    /// and the system's available GPU/unified memory (via `recommend_ctx_size`).
+    /// When set explicitly, the value is capped at the model's trained maximum
+    /// context length.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ctx_size: Option<u32>,
 

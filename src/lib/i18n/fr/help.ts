@@ -481,7 +481,7 @@ const help: Record<string, string> = {
   "helpLlm.gpuLayersTitle": "Couches GPU",
   "helpLlm.gpuLayersBody": "Nombre de couches transformer déchargées vers le GPU. 'Toutes' pour vitesse maximale, 0 pour CPU uniquement. Les valeurs intermédiaires répartissent le modèle entre GPU et CPU - utile quand le modèle dépasse légèrement la VRAM.",
   "helpLlm.ctxSizeTitle": "Taille du contexte",
-  "helpLlm.ctxSizeBody": "Taille du cache KV en tokens. 'Auto' utilise la valeur par défaut. Des contextes plus grands mémorisent plus d'historique mais consomment plus de mémoire. En cas d'erreurs mémoire, réduisez à 4K ou 2K.",
+  "helpLlm.ctxSizeBody": "Taille du cache KV en tokens. 'Auto' choisit le plus grand contexte qui tient dans votre GPU/RAM en fonction de la taille et de la quantification du modèle. Des contextes plus grands mémorisent plus d'historique mais consomment plus de mémoire. Les options sont limitées au maximum entraîné du modèle. En cas d'erreurs mémoire, réduisez la taille du contexte.",
   "helpLlm.parallelTitle": "Requêtes parallèles",
   "helpLlm.parallelBody": "Nombre maximal de boucles de décodage simultanées. Plus de clients peuvent partager le serveur mais la mémoire en pic augmente. 1 suffit pour un utilisateur unique.",
   "helpLlm.apiKeyTitle": "Clé API",

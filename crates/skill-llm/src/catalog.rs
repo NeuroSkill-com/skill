@@ -74,6 +74,15 @@ pub struct LlmModelEntry {
     pub recommended: bool,
     /// Hidden in simple view; shown under "Show all quants".
     pub advanced:    bool,
+    /// Model parameter count in billions (e.g. 7.0 for a 7B model).
+    /// Used together with `max_context_length` to estimate memory needs and
+    /// recommend a context size that fits the user's hardware.
+    #[serde(default)]
+    pub params_b:    f64,
+    /// Maximum context length the model was trained on (in tokens).
+    /// The runtime context size is capped to this value.
+    #[serde(default)]
+    pub max_context_length: u32,
 
     // ── Runtime (persisted in skill_dir/llm_catalog.json) ────────────────────
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -338,6 +347,88 @@ impl LlmCatalog {
             None
         }
     }
+}
+
+// ── Context-size recommendation ───────────────────────────────────────────────
+
+/// Estimate the KV-cache + model memory for a given context length.
+///
+/// Uses the same formula as `llmfit_core::models::LlmModel::estimate_memory_gb`:
+///   model_weights + KV_cache + runtime_overhead
+///
+/// * `params_b` — parameter count in billions
+/// * `quant`    — quantization tag (e.g. `"Q4_K_M"`)
+/// * `ctx`      — context length in tokens
+fn estimate_memory_gb(params_b: f64, quant: &str, ctx: u32) -> f64 {
+    let bpp: f64 = match quant {
+        "F32"                 => 4.0,
+        "F16" | "BF16"        => 2.0,
+        "Q8_0"                => 1.05,
+        "Q6_K" | "Q6_K_L"     => 0.80,
+        "Q5_K_M" | "Q5_K_S" | "Q5_K_L" => 0.68,
+        "Q4_K_M" | "Q4_K_S" | "Q4_K_L" | "Q4_0" | "Q4_1" => 0.58,
+        "Q3_K_M" | "Q3_K_S" | "Q3_K_L" | "Q3_K_XL" => 0.48,
+        "Q2_K" | "Q2_K_L"    => 0.37,
+        "IQ4_XS" | "IQ4_NL"  => 0.55,
+        "IQ3_M" | "IQ3_XS" | "IQ3_XXS" => 0.43,
+        "IQ2_M" | "IQ2_S" | "IQ2_XS" | "IQ2_XXS" => 0.30,
+        _                     => 0.58, // default ≈ Q4_K_M
+    };
+    let model_mem = params_b * bpp;
+    // KV cache: ~0.000008 GB per billion params per context token
+    let kv_cache  = 0.000008 * params_b * ctx as f64;
+    // Runtime overhead (CUDA/Metal context, buffers)
+    let overhead  = 0.5;
+    model_mem + kv_cache + overhead
+}
+
+/// Recommend a context size for `entry` given the system's available memory.
+///
+/// The recommendation picks the **largest power-of-two context** (from the
+/// standard set 2K, 4K, 8K, 16K, 32K, 64K, 128K) that:
+///
+/// 1. Does not exceed the model's `max_context_length`.
+/// 2. Fits within the available GPU / unified memory with at least 15%
+///    headroom (so the OS and other apps still have breathing room).
+///
+/// Falls back to **2048** if nothing larger fits, or to **4096** if the
+/// model entry has no `params_b` / `max_context_length` metadata.
+pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
+    // Need model metadata to make an intelligent recommendation.
+    if entry.params_b <= 0.0 || entry.max_context_length == 0 {
+        return 4096; // legacy fallback — same as the old hardcoded default
+    }
+
+    let gpu = skill_data::gpu_stats::read();
+    let available_gb: f64 = gpu
+        .as_ref()
+        .and_then(|g| {
+            if g.is_unified_memory {
+                g.free_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+            } else {
+                // Discrete GPU: prefer total VRAM (free VRAM may be None).
+                g.total_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+            }
+        })
+        .unwrap_or(8.0); // conservative fallback when GPU info is unavailable
+
+    // Budget = available memory × 0.85 (keep 15% headroom for OS + apps).
+    let budget = available_gb * 0.85;
+
+    // Standard context sizes to try, largest first.
+    const CANDIDATES: &[u32] = &[131072, 65536, 32768, 16384, 8192, 4096, 2048];
+
+    for &ctx in CANDIDATES {
+        if ctx > entry.max_context_length {
+            continue;
+        }
+        let mem = estimate_memory_gb(entry.params_b, &entry.quant, ctx);
+        if mem <= budget {
+            return ctx;
+        }
+    }
+
+    2048 // absolute minimum
 }
 
 // ── Path extension helper (avoids a temporary binding) ───────────────────────

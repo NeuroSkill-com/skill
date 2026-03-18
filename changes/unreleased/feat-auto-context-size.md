@@ -1,0 +1,3 @@
+### Features
+
+- **Auto context size recommendation**: When the user has not set an explicit context size, the LLM server now uses `llmfit`-style memory estimation to pick the largest power-of-two context (2K–128K) that fits the system's available GPU/unified memory with 15% headroom, instead of always defaulting to 4096. Each catalog entry now carries `params_b` and `max_context_length` metadata so the estimator knows the model's parameter count and trained context ceiling. User-set context values are capped at the model's maximum. The UI context-size picker dynamically hides options that exceed the active model's trained limit and now offers 64K and 128K choices for models that support them.

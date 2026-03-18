@@ -10,7 +10,7 @@
       "description": "Ultra-small; lowest quality",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -18,7 +18,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -28,7 +30,7 @@
       "description": "Legacy 4-bit quant with good speed",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -36,17 +38,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
       "filename": "Qwen_Qwen3.5-4B-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 2.87,
-      "description": "Recommended \u2014 best quality/size tradeoff",
+      "description": "Recommended — best quality/size tradeoff",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -54,7 +58,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -64,7 +70,7 @@
       "description": "Near-lossless quality",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -72,7 +78,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -82,7 +90,7 @@
       "description": "Effectively lossless 8-bit",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -90,7 +98,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -100,7 +110,7 @@
       "description": "IQ2_M quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -108,7 +118,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -118,7 +130,7 @@
       "description": "Q2_K_L quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -126,7 +138,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -136,7 +150,7 @@
       "description": "IQ3_XXS quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -144,7 +158,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -154,7 +170,7 @@
       "description": "IQ3_XS quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -162,7 +178,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -172,7 +190,7 @@
       "description": "Q3_K_S quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -180,7 +198,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -190,7 +210,7 @@
       "description": "IQ3_M quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -198,7 +218,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -208,7 +230,7 @@
       "description": "Q3_K_M quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -216,7 +238,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -226,7 +250,7 @@
       "description": "Q3_K_L quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -234,7 +258,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -244,7 +270,7 @@
       "description": "Q3_K_XL quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -252,7 +278,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -262,7 +290,7 @@
       "description": "IQ4_XS quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -270,7 +298,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -280,7 +310,7 @@
       "description": "IQ4_NL quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -288,7 +318,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -298,7 +330,7 @@
       "description": "Q4_1 quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -306,7 +338,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -316,7 +350,7 @@
       "description": "Q4_K_S quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -324,7 +358,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -334,7 +370,7 @@
       "description": "Q4_K_L quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -342,7 +378,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -352,7 +390,7 @@
       "description": "Q5_K_S quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -360,7 +398,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -370,7 +410,7 @@
       "description": "Q5_K_M quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -378,7 +418,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -388,7 +430,7 @@
       "description": "Q5_K_L quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -396,7 +438,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -406,7 +450,7 @@
       "description": "Q6_K_L quant",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -414,7 +458,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
@@ -424,7 +470,7 @@
       "description": "Full precision weights",
       "family_id": "qwen35-4b",
       "family_name": "Qwen3.5 4B",
-      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM \u2014 ideal for laptops.",
+      "family_desc": "Alibaba's fast 4-billion-parameter chat model. Fits in 4 GB VRAM — ideal for laptops.",
       "tags": [
         "chat",
         "reasoning",
@@ -432,14 +478,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
       "filename": "mmproj-Qwen_Qwen3.5-4B-bf16.gguf",
       "quant": "BF16",
       "size_gb": 2.02,
-      "description": "Vision projector \u2014 BF16 (recommended)",
+      "description": "Vision projector — BF16 (recommended)",
       "family_id": "qwen35-4b",
       "family_name": "",
       "family_desc": "",
@@ -449,14 +497,16 @@
       ],
       "is_mmproj": true,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-4B-GGUF",
       "filename": "mmproj-Qwen_Qwen3.5-4B-f16.gguf",
       "quant": "F16",
       "size_gb": 2.02,
-      "description": "Vision projector \u2014 FP16",
+      "description": "Vision projector — FP16",
       "family_id": "qwen35-4b",
       "family_name": "",
       "family_desc": "",
@@ -466,7 +516,9 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -476,7 +528,7 @@
       "description": "Ultra-compressed; 8 GB VRAM minimum",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -484,7 +536,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -494,7 +548,7 @@
       "description": "Legacy 4-bit quant; good speed",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -502,17 +556,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
       "filename": "Qwen_Qwen3.5-9B-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 5.89,
-      "description": "Recommended \u2014 solid quality, 8 GB VRAM",
+      "description": "Recommended — solid quality, 8 GB VRAM",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -520,7 +576,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -530,7 +588,7 @@
       "description": "Near-lossless; 12 GB VRAM",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -538,7 +596,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -548,7 +608,7 @@
       "description": "Effectively lossless; needs 12 GB VRAM",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -556,7 +616,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -566,7 +628,7 @@
       "description": "IQ2_S quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -574,7 +636,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -584,7 +648,7 @@
       "description": "IQ2_M quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -592,7 +656,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -602,7 +668,7 @@
       "description": "Q2_K_L quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -610,7 +676,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -620,7 +688,7 @@
       "description": "IQ3_XXS quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -628,7 +696,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -638,7 +708,7 @@
       "description": "IQ3_XS quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -646,7 +716,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -656,7 +728,7 @@
       "description": "Q3_K_S quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -664,7 +736,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -674,7 +748,7 @@
       "description": "IQ3_M quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -682,7 +756,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -692,7 +768,7 @@
       "description": "Q3_K_M quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -700,7 +776,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -710,7 +788,7 @@
       "description": "Q3_K_L quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -718,7 +796,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -728,7 +808,7 @@
       "description": "Q3_K_XL quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -736,7 +816,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -746,7 +828,7 @@
       "description": "IQ4_XS quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -754,7 +836,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -764,7 +848,7 @@
       "description": "IQ4_NL quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -772,7 +856,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -782,7 +868,7 @@
       "description": "Q4_1 quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -790,7 +876,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -800,7 +888,7 @@
       "description": "Q4_K_S quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -808,7 +896,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -818,7 +908,7 @@
       "description": "Q4_K_L quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -826,7 +916,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -836,7 +928,7 @@
       "description": "Q5_K_S quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -844,7 +936,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -854,7 +948,7 @@
       "description": "Q5_K_M quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -862,7 +956,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -872,7 +968,7 @@
       "description": "Q5_K_L quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -880,7 +976,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -890,7 +988,7 @@
       "description": "Q6_K_L quant",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -898,7 +996,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
@@ -908,7 +1008,7 @@
       "description": "Full precision weights",
       "family_id": "qwen35-9b",
       "family_name": "Qwen3.5 9B",
-      "family_desc": "The sweet-spot 9B model \u2014 much smarter than 4B with only ~2\u00d7 more memory.",
+      "family_desc": "The sweet-spot 9B model — much smarter than 4B with only ~2× more memory.",
       "tags": [
         "chat",
         "reasoning",
@@ -916,14 +1016,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
       "filename": "mmproj-Qwen_Qwen3.5-9B-bf16.gguf",
       "quant": "BF16",
       "size_gb": 4,
-      "description": "Vision projector \u2014 BF16 (recommended)",
+      "description": "Vision projector — BF16 (recommended)",
       "family_id": "qwen35-9b",
       "family_name": "",
       "family_desc": "",
@@ -933,14 +1035,16 @@
       ],
       "is_mmproj": true,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-9B-GGUF",
       "filename": "mmproj-Qwen_Qwen3.5-9B-f16.gguf",
       "quant": "F16",
       "size_gb": 4,
-      "description": "Vision projector \u2014 FP16",
+      "description": "Vision projector — FP16",
       "family_id": "qwen35-9b",
       "family_name": "",
       "family_desc": "",
@@ -950,7 +1054,9 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -968,7 +1074,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -986,14 +1094,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
       "filename": "Qwen2.5.1-Coder-7B-Instruct-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 4.68,
-      "description": "Recommended \u2014 default size for most coding tasks",
+      "description": "Recommended — default size for most coding tasks",
       "family_id": "qwen251-coder-7b-instruct",
       "family_name": "Qwen2.5.1 Coder 7B Instruct",
       "family_desc": "Coding-specialized Qwen2.5.1 model tuned for instruction-following and software tasks.",
@@ -1004,7 +1114,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1022,7 +1134,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1040,7 +1154,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1058,7 +1174,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1076,7 +1194,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1094,7 +1214,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1112,7 +1234,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1130,7 +1254,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1148,7 +1274,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1166,7 +1294,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1184,7 +1314,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1202,7 +1334,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1220,7 +1354,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1238,7 +1374,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1256,7 +1394,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1274,7 +1414,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1292,7 +1434,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1310,7 +1454,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1328,7 +1474,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1346,7 +1494,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1364,7 +1514,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen2.5.1-Coder-7B-Instruct-GGUF",
@@ -1382,7 +1534,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 7.6,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1392,7 +1546,7 @@
       "description": "Fits 12 GB VRAM; lowest quality",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1400,7 +1554,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1410,7 +1566,7 @@
       "description": "16 GB VRAM / 32 GB RAM",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1418,7 +1574,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1428,7 +1586,7 @@
       "description": "Legacy 4-bit quant; broad compatibility",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1436,17 +1594,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
       "filename": "Qwen_Qwen3.5-27B-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 17.1,
-      "description": "Recommended \u2014 best quality/size tradeoff",
+      "description": "Recommended — best quality/size tradeoff",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1454,17 +1614,19 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
       "filename": "Qwen_Qwen3.5-27B-Q6_K.gguf",
       "quant": "Q6_K",
       "size_gb": 23.1,
-      "description": "Near-lossless; \u2265 24 GB VRAM",
+      "description": "Near-lossless; ≥ 24 GB VRAM",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1472,7 +1634,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1482,7 +1646,7 @@
       "description": "Effectively lossless; very large",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1490,14 +1654,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
       "filename": "mmproj-Qwen_Qwen3.5-27B-bf16.gguf",
       "quant": "BF16",
       "size_gb": 0.9,
-      "description": "Qwen3.5-27B vision projector \u2014 BF16 (recommended)",
+      "description": "Qwen3.5-27B vision projector — BF16 (recommended)",
       "family_id": "qwen35-27b",
       "family_name": "",
       "family_desc": "",
@@ -1507,14 +1673,16 @@
       ],
       "is_mmproj": true,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
       "filename": "mmproj-Qwen_Qwen3.5-27B-f16.gguf",
       "quant": "F16",
       "size_gb": 0.9,
-      "description": "Qwen3.5-27B vision projector \u2014 FP16",
+      "description": "Qwen3.5-27B vision projector — FP16",
       "family_id": "qwen35-27b",
       "family_name": "",
       "family_desc": "",
@@ -1524,7 +1692,9 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1534,7 +1704,7 @@
       "description": "IQ2_XXS quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1542,7 +1712,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1552,7 +1724,7 @@
       "description": "IQ2_XS quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1560,7 +1732,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1570,7 +1744,7 @@
       "description": "IQ2_S quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1578,7 +1752,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1588,7 +1764,7 @@
       "description": "IQ2_M quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1596,7 +1772,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1606,7 +1784,7 @@
       "description": "Q2_K_L quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1614,7 +1792,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1624,7 +1804,7 @@
       "description": "IQ3_XXS quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1632,7 +1812,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1642,7 +1824,7 @@
       "description": "IQ3_XS quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1650,7 +1832,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1660,7 +1844,7 @@
       "description": "Q3_K_S quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1668,7 +1852,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1678,7 +1864,7 @@
       "description": "IQ3_M quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1686,7 +1872,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1696,7 +1884,7 @@
       "description": "Q3_K_L quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1704,7 +1892,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1714,7 +1904,7 @@
       "description": "Q3_K_XL quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1722,7 +1912,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1732,7 +1924,7 @@
       "description": "IQ4_XS quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1740,7 +1932,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1750,7 +1944,7 @@
       "description": "IQ4_NL quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1758,7 +1952,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1768,7 +1964,7 @@
       "description": "Q4_1 quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1776,7 +1972,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1786,7 +1984,7 @@
       "description": "Q4_K_S quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1794,7 +1992,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1804,7 +2004,7 @@
       "description": "Q4_K_L quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1812,7 +2012,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1822,7 +2024,7 @@
       "description": "Q5_K_S quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1830,7 +2032,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1840,7 +2044,7 @@
       "description": "Q5_K_M quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1848,7 +2052,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1858,7 +2064,7 @@
       "description": "Q5_K_L quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1866,7 +2072,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "bartowski/Qwen_Qwen3.5-27B-GGUF",
@@ -1876,7 +2084,7 @@
       "description": "Q6_K_L quant",
       "family_id": "qwen35-27b",
       "family_name": "Qwen3.5 27B",
-      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Flagship 27B chat + reasoning model. Best Qwen quality; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1884,7 +2092,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -1894,7 +2104,7 @@
       "description": "Ultra-small; lowest quality",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1902,7 +2112,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -1912,7 +2124,7 @@
       "description": "Small 3-bit quant",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1920,7 +2132,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -1930,7 +2144,7 @@
       "description": "16 GB VRAM / 32 GB RAM",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1938,7 +2152,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -1948,7 +2164,7 @@
       "description": "Larger 3-bit quant",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1956,7 +2172,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -1966,7 +2184,7 @@
       "description": "Importance-weighted 3-bit",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1974,7 +2192,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -1984,7 +2204,7 @@
       "description": "Importance-weighted 4-bit extra-small",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -1992,7 +2212,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -2002,7 +2224,7 @@
       "description": "Importance-weighted 4-bit non-linear",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2010,7 +2232,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -2020,7 +2244,7 @@
       "description": "Legacy 4-bit quant; broad compatibility",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2028,7 +2252,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -2038,7 +2264,7 @@
       "description": "4-bit k-quant small",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2046,17 +2272,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
       "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 15.41,
-      "description": "Recommended \u2014 best quality/size tradeoff",
+      "description": "Recommended — best quality/size tradeoff",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2064,7 +2292,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -2074,7 +2304,7 @@
       "description": "4-bit with improved accuracy",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2082,7 +2312,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -2092,7 +2324,7 @@
       "description": "5-bit k-quant small",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2100,17 +2332,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
       "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Q5_K_M.gguf",
       "quant": "Q5_K_M",
       "size_gb": 17.91,
-      "description": "High quality; \u2265 20 GB VRAM",
+      "description": "High quality; ≥ 20 GB VRAM",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2118,17 +2352,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
       "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-Q6_K.gguf",
       "quant": "Q6_K",
       "size_gb": 20.57,
-      "description": "Near-lossless; \u2265 24 GB VRAM",
+      "description": "Near-lossless; ≥ 24 GB VRAM",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2136,7 +2372,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
@@ -2146,7 +2384,7 @@
       "description": "Effectively lossless; very large",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2154,17 +2392,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
       "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-BF16.gguf",
       "quant": "BF16",
       "size_gb": 50.11,
-      "description": "Full BF16 precision; \u2265 64 GB VRAM",
+      "description": "Full BF16 precision; ≥ 64 GB VRAM",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2172,17 +2412,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "eugenehp/Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-GGUF",
       "filename": "Qwen3.5-27B-Claude-4.6-Opus-Reasoning-Distilled-F16.gguf",
       "quant": "F16",
       "size_gb": 50.11,
-      "description": "Full FP16 precision; \u2265 64 GB VRAM",
+      "description": "Full FP16 precision; ≥ 64 GB VRAM",
       "family_id": "qwen35-27b-claude-opus-distilled",
       "family_name": "Qwen3.5 27B Claude Opus Distilled",
-      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs \u2265 16 GB VRAM for Q4.",
+      "family_desc": "Qwen3.5-27B fine-tuned with Claude 4.6 Opus reasoning distillation. Enhanced reasoning capabilities; needs ≥ 16 GB VRAM for Q4.",
       "tags": [
         "chat",
         "reasoning",
@@ -2190,7 +2432,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2208,14 +2452,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
       "filename": "gpt-oss-20b-Q4_0.gguf",
       "quant": "Q4_0",
       "size_gb": 11,
-      "description": "Recommended \u2014 16 GB VRAM",
+      "description": "Recommended — 16 GB VRAM",
       "family_id": "gpt-oss-20b",
       "family_name": "GPT-OSS 20B",
       "family_desc": "Meta's 20B open-source model. Strong multilingual reasoning; needs 16 GB VRAM for Q4.",
@@ -2226,7 +2472,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2244,14 +2492,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
       "filename": "gpt-oss-20b-Q6_K.gguf",
       "quant": "Q6_K",
       "size_gb": 15.2,
-      "description": "Near-lossless; \u2265 24 GB VRAM",
+      "description": "Near-lossless; ≥ 24 GB VRAM",
       "family_id": "gpt-oss-20b",
       "family_name": "GPT-OSS 20B",
       "family_desc": "Meta's 20B open-source model. Strong multilingual reasoning; needs 16 GB VRAM for Q4.",
@@ -2262,7 +2512,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2280,7 +2532,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2298,7 +2552,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2316,7 +2572,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2334,7 +2592,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2352,7 +2612,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2370,7 +2632,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2388,7 +2652,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2406,7 +2672,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2424,7 +2692,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2442,7 +2712,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2460,7 +2732,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/gpt-oss-20b-GGUF",
@@ -2478,7 +2752,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 20.0,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2496,14 +2772,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
       "filename": "Qwen3-Coder-Next-Q4_0.gguf",
       "quant": "Q4_0",
       "size_gb": 16.5,
-      "description": "Recommended \u2014 24 GB VRAM",
+      "description": "Recommended — 24 GB VRAM",
       "family_id": "qwen3-coder-next",
       "family_name": "Qwen3 Coder Next",
       "family_desc": "Alibaba's next-generation coding model. Trained on trillions of code tokens; excels at multi-file projects.",
@@ -2514,7 +2792,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2532,7 +2812,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2550,7 +2832,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2568,7 +2852,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2586,7 +2872,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2604,7 +2892,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2622,7 +2912,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2640,7 +2932,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2658,7 +2952,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2676,7 +2972,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2694,7 +2992,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2712,7 +3012,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2730,7 +3032,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2748,7 +3052,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2766,7 +3072,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2784,7 +3092,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2802,7 +3112,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2820,7 +3132,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2838,14 +3152,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
       "filename": "Qwen3-Coder-Next-UD-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 10.5,
-      "description": "Recommended \u2014 best quality/size tradeoff",
+      "description": "Recommended — best quality/size tradeoff",
       "family_id": "qwen3-coder-next",
       "family_name": "Qwen3 Coder Next",
       "family_desc": "Alibaba's next-generation coding model. Trained on trillions of code tokens; excels at multi-file projects.",
@@ -2856,7 +3172,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2874,7 +3192,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2892,7 +3212,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2910,7 +3232,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2928,7 +3252,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-Coder-Next-GGUF",
@@ -2946,7 +3272,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 65536
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -2956,7 +3284,7 @@
       "description": "Fits 16 GB VRAM; lower quality",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -2965,17 +3293,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
       "filename": "Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 19.5,
-      "description": "Recommended \u2014 24 GB VRAM for full GPU",
+      "description": "Recommended — 24 GB VRAM for full GPU",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -2984,17 +3314,19 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
       "filename": "Qwen3-VL-30B-A3B-Instruct-Q8_0.gguf",
       "quant": "Q8_0",
       "size_gb": 30,
-      "description": "Effectively lossless; needs \u2265 40 GB RAM",
+      "description": "Effectively lossless; needs ≥ 40 GB RAM",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3003,7 +3335,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3013,7 +3347,7 @@
       "description": "IQ1_S quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3022,7 +3356,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3032,7 +3368,7 @@
       "description": "IQ1_M quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3041,7 +3377,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3051,7 +3389,7 @@
       "description": "IQ2_XXS quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3060,7 +3398,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3070,7 +3410,7 @@
       "description": "IQ2_M quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3079,7 +3419,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3089,7 +3431,7 @@
       "description": "Q2_K_L quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3098,7 +3440,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3108,7 +3452,7 @@
       "description": "IQ3_XXS quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3117,7 +3461,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3127,7 +3473,7 @@
       "description": "Q3_K_S quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3136,7 +3482,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3146,7 +3494,7 @@
       "description": "Q3_K_M quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3155,7 +3503,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3165,7 +3515,7 @@
       "description": "Q3_K_XL quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3174,7 +3524,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3184,7 +3536,7 @@
       "description": "IQ4_XS quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3193,7 +3545,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3203,7 +3557,7 @@
       "description": "IQ4_NL quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3212,7 +3566,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3222,7 +3578,7 @@
       "description": "Legacy 4-bit quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3231,7 +3587,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3241,7 +3599,7 @@
       "description": "Q4_1 quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3250,7 +3608,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3260,7 +3620,7 @@
       "description": "Q4_K_S quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3269,7 +3629,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3279,7 +3641,7 @@
       "description": "Q5_K_S quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3288,7 +3650,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3298,7 +3662,7 @@
       "description": "Q5_K_M quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3307,7 +3671,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3317,7 +3683,7 @@
       "description": "Near-lossless quality",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3326,7 +3692,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3336,7 +3704,7 @@
       "description": "Q2_K_XL quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3345,7 +3713,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3355,7 +3725,7 @@
       "description": "Q4_K_XL quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3364,7 +3734,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3374,7 +3746,7 @@
       "description": "Q5_K_XL quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3383,7 +3755,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3393,7 +3767,7 @@
       "description": "Q6_K_XL quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3402,7 +3776,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3412,7 +3788,7 @@
       "description": "Q8_K_XL quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3421,7 +3797,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
@@ -3431,7 +3809,7 @@
       "description": "UNKNOWN quant",
       "family_id": "qwen3-vl-30b",
       "family_name": "Qwen3 VL 30B",
-      "family_desc": "Vision-Language MoE model \u2014 30B total / 3B active parameters. Understands images, charts, and documents.",
+      "family_desc": "Vision-Language MoE model — 30B total / 3B active parameters. Understands images, charts, and documents.",
       "tags": [
         "vision",
         "multimodal",
@@ -3440,14 +3818,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
       "filename": "mmproj-BF16.gguf",
       "quant": "BF16",
       "size_gb": 12,
-      "description": "Vision projector \u2014 BF16 (recommended)",
+      "description": "Vision projector — BF16 (recommended)",
       "family_id": "qwen3-vl-30b",
       "family_name": "",
       "family_desc": "",
@@ -3457,14 +3837,16 @@
       ],
       "is_mmproj": true,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
       "filename": "mmproj-F16.gguf",
       "quant": "F16",
       "size_gb": 12,
-      "description": "Vision projector \u2014 FP16",
+      "description": "Vision projector — FP16",
       "family_id": "qwen3-vl-30b",
       "family_name": "",
       "family_desc": "",
@@ -3474,14 +3856,16 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF",
       "filename": "mmproj-F32.gguf",
       "quant": "F32",
       "size_gb": 12,
-      "description": "Vision projector \u2014 FP32",
+      "description": "Vision projector — FP32",
       "family_id": "qwen3-vl-30b",
       "family_name": "",
       "family_desc": "",
@@ -3491,7 +3875,9 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 32.8,
+      "max_context_length": 131072
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3508,14 +3894,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
       "filename": "Ministral-3-14B-Instruct-2512-Q4_0.gguf",
       "quant": "Q4_0",
       "size_gb": 7.7,
-      "description": "Recommended \u2014 12 GB VRAM",
+      "description": "Recommended — 12 GB VRAM",
       "family_id": "ministral-14b-instruct",
       "family_name": "Ministral 3 14B Instruct",
       "family_desc": "Mistral's efficient 14B instruction model trained to January 2025. Fast inference with long 128K context.",
@@ -3525,7 +3913,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3542,7 +3932,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3559,7 +3951,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3576,7 +3970,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3593,7 +3989,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3610,7 +4008,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3627,7 +4027,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3644,7 +4046,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3661,7 +4065,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3678,7 +4084,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3695,7 +4103,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3712,7 +4122,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3729,7 +4141,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3746,7 +4160,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3763,7 +4179,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3780,7 +4198,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3797,7 +4217,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3814,7 +4236,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3831,7 +4255,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3848,7 +4274,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3865,7 +4293,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3882,7 +4312,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3899,7 +4331,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3916,7 +4350,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
@@ -3933,14 +4369,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
       "filename": "mmproj-BF16.gguf",
       "quant": "BF16",
       "size_gb": 4.9,
-      "description": "Vision projector \u2014 BF16 (recommended)",
+      "description": "Vision projector — BF16 (recommended)",
       "family_id": "ministral-14b-instruct",
       "family_name": "",
       "family_desc": "",
@@ -3950,14 +4388,16 @@
       ],
       "is_mmproj": true,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
       "filename": "mmproj-F16.gguf",
       "quant": "F16",
       "size_gb": 4.9,
-      "description": "Vision projector \u2014 FP16",
+      "description": "Vision projector — FP16",
       "family_id": "ministral-14b-instruct",
       "family_name": "",
       "family_desc": "",
@@ -3967,14 +4407,16 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Instruct-2512-GGUF",
       "filename": "mmproj-F32.gguf",
       "quant": "F32",
       "size_gb": 4.9,
-      "description": "Vision projector \u2014 FP32",
+      "description": "Vision projector — FP32",
       "family_id": "ministral-14b-instruct",
       "family_name": "",
       "family_desc": "",
@@ -3984,7 +4426,9 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4001,14 +4445,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
       "filename": "Ministral-3-14B-Reasoning-2512-Q4_0.gguf",
       "quant": "Q4_0",
       "size_gb": 7.7,
-      "description": "Recommended \u2014 12 GB VRAM",
+      "description": "Recommended — 12 GB VRAM",
       "family_id": "ministral-14b-reasoning",
       "family_name": "Ministral 3 14B Reasoning",
       "family_desc": "Reasoning-tuned variant of Ministral 14B. Better at math, logic, and structured thinking.",
@@ -4018,7 +4464,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4035,7 +4483,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4052,7 +4502,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4069,7 +4521,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4086,7 +4540,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4103,7 +4559,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4120,7 +4578,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4137,7 +4597,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4154,7 +4616,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4171,7 +4635,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4188,7 +4654,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4205,7 +4673,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4222,7 +4692,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4239,7 +4711,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4256,7 +4730,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4273,7 +4749,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4290,7 +4768,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4307,7 +4787,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4324,7 +4806,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4341,7 +4825,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4358,7 +4844,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4375,7 +4863,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4392,7 +4882,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4409,7 +4901,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
@@ -4426,14 +4920,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
       "filename": "mmproj-BF16.gguf",
       "quant": "BF16",
       "size_gb": 4.9,
-      "description": "Vision projector \u2014 BF16 (recommended)",
+      "description": "Vision projector — BF16 (recommended)",
       "family_id": "ministral-14b-reasoning",
       "family_name": "",
       "family_desc": "",
@@ -4443,14 +4939,16 @@
       ],
       "is_mmproj": true,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
       "filename": "mmproj-F16.gguf",
       "quant": "F16",
       "size_gb": 4.9,
-      "description": "Vision projector \u2014 FP16",
+      "description": "Vision projector — FP16",
       "family_id": "ministral-14b-reasoning",
       "family_name": "",
       "family_desc": "",
@@ -4460,14 +4958,16 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/Ministral-3-14B-Reasoning-2512-GGUF",
       "filename": "mmproj-F32.gguf",
       "quant": "F32",
       "size_gb": 4.9,
-      "description": "Vision projector \u2014 FP32",
+      "description": "Vision projector — FP32",
       "family_id": "ministral-14b-reasoning",
       "family_name": "",
       "family_desc": "",
@@ -4477,24 +4977,28 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.0,
+      "max_context_length": 128000
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
       "filename": "gemma-3-270m-it-Q4_0.gguf",
       "quant": "Q4_0",
       "size_gb": 0.2,
-      "description": "Recommended \u2014 tiny, runs on CPU",
+      "description": "Recommended — tiny, runs on CPU",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4504,14 +5008,16 @@
       "description": "Slightly better than Q4_0",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4521,14 +5027,16 @@
       "description": "Near-lossless; still tiny",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4538,14 +5046,16 @@
       "description": "Full precision",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4555,14 +5065,16 @@
       "description": "IQ2_XXS quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4572,14 +5084,16 @@
       "description": "IQ2_M quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4589,14 +5103,16 @@
       "description": "Ultra-compressed; lowest quality",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4606,14 +5122,16 @@
       "description": "Q2_K_L quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4623,14 +5141,16 @@
       "description": "IQ3_XXS quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4640,14 +5160,16 @@
       "description": "Q3_K_S quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4657,14 +5179,16 @@
       "description": "Q3_K_M quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4674,14 +5198,16 @@
       "description": "Q3_K_XL quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4691,14 +5217,16 @@
       "description": "IQ4_XS quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4708,14 +5236,16 @@
       "description": "IQ4_NL quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4725,14 +5255,16 @@
       "description": "Q4_1 quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4742,14 +5274,16 @@
       "description": "Q4_K_S quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4759,14 +5293,16 @@
       "description": "Q5_K_S quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4776,14 +5312,16 @@
       "description": "Q5_K_M quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4793,14 +5331,16 @@
       "description": "Near-lossless quality",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4810,14 +5350,16 @@
       "description": "Q2_K_XL quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4827,14 +5369,16 @@
       "description": "Q4_K_XL quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4844,14 +5388,16 @@
       "description": "Q5_K_XL quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4861,14 +5407,16 @@
       "description": "Q6_K_XL quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/gemma-3-270m-it-GGUF",
@@ -4878,14 +5426,16 @@
       "description": "Q8_K_XL quant",
       "family_id": "gemma3-270m",
       "family_name": "Gemma 3 270M",
-      "family_desc": "Google's tiny 270M instruction model. Runs anywhere \u2014 CPU, Raspberry Pi, mobile. Great for simple tasks.",
+      "family_desc": "Google's tiny 270M instruction model. Runs anywhere — CPU, Raspberry Pi, mobile. Great for simple tasks.",
       "tags": [
         "chat",
         "tiny"
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 0.27,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -4902,14 +5452,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
       "filename": "Phi-4-reasoning-plus-Q4_0.gguf",
       "quant": "Q4_0",
       "size_gb": 7.8,
-      "description": "Recommended \u2014 12 GB VRAM",
+      "description": "Recommended — 12 GB VRAM",
       "family_id": "phi4-reasoning-plus",
       "family_name": "Phi-4 Reasoning Plus",
       "family_desc": "Microsoft's Phi-4 fine-tuned for reasoning. Punches above its weight at math and science.",
@@ -4919,7 +5471,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -4936,7 +5490,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -4953,7 +5509,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -4970,7 +5528,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -4987,7 +5547,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5004,7 +5566,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5021,7 +5585,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5038,7 +5604,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5055,7 +5623,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5072,7 +5642,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5089,7 +5661,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5106,7 +5680,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5123,7 +5699,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5140,7 +5718,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5157,7 +5737,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5174,7 +5756,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5191,7 +5775,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5208,7 +5794,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5225,7 +5813,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5242,7 +5832,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5259,7 +5851,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5276,7 +5870,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "unsloth/Phi-4-reasoning-plus-GGUF",
@@ -5293,7 +5889,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 14.7,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
@@ -5311,7 +5909,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
@@ -5329,7 +5929,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
@@ -5347,7 +5949,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
@@ -5365,7 +5969,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
@@ -5383,7 +5989,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
@@ -5401,14 +6009,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
       "filename": "omnicoder-9b-q4_k_m.gguf",
       "quant": "Q4_K_M",
       "size_gb": 5.34,
-      "description": "Recommended \u2014 best quality/size tradeoff",
+      "description": "Recommended — best quality/size tradeoff",
       "family_id": "omnicoder-9b",
       "family_name": "OmniCoder 9B",
       "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
@@ -5419,7 +6029,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
@@ -5437,7 +6049,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
@@ -5455,14 +6069,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
       "filename": "omnicoder-9b-q5_k_m.gguf",
       "quant": "Q5_K_M",
       "size_gb": 6.08,
-      "description": "High quality; \u2265 8 GB VRAM",
+      "description": "High quality; ≥ 8 GB VRAM",
       "family_id": "omnicoder-9b",
       "family_name": "OmniCoder 9B",
       "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
@@ -5473,14 +6089,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
       "filename": "omnicoder-9b-q6_k.gguf",
       "quant": "Q6_K",
       "size_gb": 6.85,
-      "description": "Near-lossless; \u2265 8 GB VRAM",
+      "description": "Near-lossless; ≥ 8 GB VRAM",
       "family_id": "omnicoder-9b",
       "family_name": "OmniCoder 9B",
       "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
@@ -5491,14 +6109,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
       "filename": "omnicoder-9b-q8_0.gguf",
       "quant": "Q8_0",
       "size_gb": 8.87,
-      "description": "Effectively lossless; \u2265 12 GB VRAM",
+      "description": "Effectively lossless; ≥ 12 GB VRAM",
       "family_id": "omnicoder-9b",
       "family_name": "OmniCoder 9B",
       "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
@@ -5509,14 +6129,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "Tesslate/OmniCoder-9B-GGUF",
       "filename": "omnicoder-9b-bf16.gguf",
       "quant": "BF16",
       "size_gb": 16.69,
-      "description": "Full BF16 precision; \u2265 20 GB VRAM",
+      "description": "Full BF16 precision; ≥ 20 GB VRAM",
       "family_id": "omnicoder-9b",
       "family_name": "OmniCoder 9B",
       "family_desc": "Tesslate's 9-billion-parameter coding-focused model. Strong code generation and understanding; fits in 8 GB VRAM at Q4.",
@@ -5527,17 +6149,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 32768
     },
     {
       "repo": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 2.5,
-      "description": "Recommended \u2014 fast GPU inference",
+      "description": "Recommended — fast GPU inference",
       "family_id": "qwen35-4b-hauhau-aggressive",
       "family_name": "Qwen3.5 4B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 4B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 4B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5545,7 +6169,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
@@ -5555,7 +6181,7 @@
       "description": "Near-lossless quality",
       "family_id": "qwen35-4b-hauhau-aggressive",
       "family_name": "Qwen3.5 4B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 4B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 4B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5563,7 +6189,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
@@ -5573,7 +6201,7 @@
       "description": "Effectively lossless 8-bit",
       "family_id": "qwen35-4b-hauhau-aggressive",
       "family_name": "Qwen3.5 4B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 4B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 4B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5581,7 +6209,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
@@ -5591,7 +6221,7 @@
       "description": "Full precision weights",
       "family_id": "qwen35-4b-hauhau-aggressive",
       "family_name": "Qwen3.5 4B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 4B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 4B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5599,14 +6229,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive",
       "filename": "mmproj-Qwen3.5-4B-Uncensored-HauhauCS-Aggressive-BF16.gguf",
       "quant": "BF16",
       "size_gb": 2.5,
-      "description": "Vision projector \u2014 BF16 (recommended)",
+      "description": "Vision projector — BF16 (recommended)",
       "family_id": "qwen35-4b-hauhau-aggressive",
       "family_name": "",
       "family_desc": "",
@@ -5616,17 +6248,19 @@
       ],
       "is_mmproj": true,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 4.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 5.2,
-      "description": "Recommended \u2014 solid quality, 8 GB VRAM",
+      "description": "Recommended — solid quality, 8 GB VRAM",
       "family_id": "qwen35-9b-hauhau-aggressive",
       "family_name": "Qwen3.5 9B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 9B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 9B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5634,7 +6268,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
@@ -5644,7 +6280,7 @@
       "description": "Near-lossless; 12 GB VRAM",
       "family_id": "qwen35-9b-hauhau-aggressive",
       "family_name": "Qwen3.5 9B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 9B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 9B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5652,7 +6288,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
@@ -5662,7 +6300,7 @@
       "description": "Effectively lossless; needs 12 GB VRAM",
       "family_id": "qwen35-9b-hauhau-aggressive",
       "family_name": "Qwen3.5 9B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 9B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 9B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5670,7 +6308,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
@@ -5680,7 +6320,7 @@
       "description": "Full precision weights",
       "family_id": "qwen35-9b-hauhau-aggressive",
       "family_name": "Qwen3.5 9B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 9B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 9B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5688,14 +6328,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-9B-Uncensored-HauhauCS-Aggressive",
       "filename": "mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf",
       "quant": "BF16",
       "size_gb": 5.2,
-      "description": "Vision projector \u2014 BF16 (recommended)",
+      "description": "Vision projector — BF16 (recommended)",
       "family_id": "qwen35-9b-hauhau-aggressive",
       "family_name": "",
       "family_desc": "",
@@ -5705,7 +6347,9 @@
       ],
       "is_mmproj": true,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 9.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
@@ -5715,7 +6359,7 @@
       "description": "Fits 12 GB VRAM; lowest quality",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "Qwen3.5 27B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5723,7 +6367,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
@@ -5733,7 +6379,7 @@
       "description": "Better quality; 16 GB VRAM",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "Qwen3.5 27B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5741,7 +6387,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
@@ -5751,7 +6399,7 @@
       "description": "Near Q4_K_M quality; smaller footprint",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "Qwen3.5 27B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5759,7 +6407,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
@@ -5769,7 +6419,7 @@
       "description": "16 GB VRAM / 32 GB RAM",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "Qwen3.5 27B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5777,17 +6427,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-27B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 15.4,
-      "description": "Recommended \u2014 16 GB VRAM",
+      "description": "Recommended — 16 GB VRAM",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "Qwen3.5 27B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5795,17 +6447,19 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-27B-Uncensored-HauhauCS-Aggressive-Q5_K_M.gguf",
       "quant": "Q5_K_M",
       "size_gb": 18.1,
-      "description": "Higher quality; \u2265 20 GB VRAM",
+      "description": "Higher quality; ≥ 20 GB VRAM",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "Qwen3.5 27B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5813,17 +6467,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-27B-Uncensored-HauhauCS-Aggressive-Q6_K.gguf",
       "quant": "Q6_K",
       "size_gb": 20.6,
-      "description": "Near-lossless; \u2265 24 GB VRAM",
+      "description": "Near-lossless; ≥ 24 GB VRAM",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "Qwen3.5 27B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5831,7 +6487,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
@@ -5841,7 +6499,7 @@
       "description": "Effectively lossless; very large",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "Qwen3.5 27B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5849,7 +6507,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
@@ -5859,7 +6519,7 @@
       "description": "Full precision weights",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "Qwen3.5 27B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 27B by HauhauCS. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5867,14 +6527,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-27B-Uncensored-HauhauCS-Aggressive",
       "filename": "mmproj-Qwen3.5-27B-Uncensored-HauhauCS-Aggressive-f16.gguf",
       "quant": "F16",
       "size_gb": 8.7,
-      "description": "Vision projector \u2014 FP16",
+      "description": "Vision projector — FP16",
       "family_id": "qwen35-27b-hauhau-aggressive",
       "family_name": "",
       "family_desc": "",
@@ -5884,7 +6546,9 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 27.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
@@ -5894,7 +6558,7 @@
       "description": "Fits 16 GB VRAM; lowest quality",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "Qwen3.5 35B-A3B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params \u2014 fast inference despite large size. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params — fast inference despite large size. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5902,7 +6566,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
@@ -5912,7 +6578,7 @@
       "description": "Better quality; 20 GB VRAM",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "Qwen3.5 35B-A3B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params \u2014 fast inference despite large size. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params — fast inference despite large size. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5920,7 +6586,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
@@ -5930,7 +6598,7 @@
       "description": "Near Q4_K_M quality; smaller footprint",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "Qwen3.5 35B-A3B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params \u2014 fast inference despite large size. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params — fast inference despite large size. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5938,7 +6606,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
@@ -5948,7 +6618,7 @@
       "description": "Good quality; 20 GB VRAM",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "Qwen3.5 35B-A3B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params \u2014 fast inference despite large size. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params — fast inference despite large size. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5956,17 +6626,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
       "quant": "Q4_K_M",
       "size_gb": 19.7,
-      "description": "Recommended \u2014 24 GB VRAM",
+      "description": "Recommended — 24 GB VRAM",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "Qwen3.5 35B-A3B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params \u2014 fast inference despite large size. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params — fast inference despite large size. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5974,17 +6646,19 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q5_K_M.gguf",
       "quant": "Q5_K_M",
       "size_gb": 23.1,
-      "description": "Higher quality; \u2265 28 GB VRAM",
+      "description": "Higher quality; ≥ 28 GB VRAM",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "Qwen3.5 35B-A3B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params \u2014 fast inference despite large size. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params — fast inference despite large size. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -5992,17 +6666,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q6_K.gguf",
       "quant": "Q6_K",
       "size_gb": 26.6,
-      "description": "Near-lossless; \u2265 32 GB VRAM",
+      "description": "Near-lossless; ≥ 32 GB VRAM",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "Qwen3.5 35B-A3B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params \u2014 fast inference despite large size. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params — fast inference despite large size. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -6010,17 +6686,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
       "filename": "Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf",
       "quant": "Q8_0",
       "size_gb": 34.4,
-      "description": "Effectively lossless; needs \u2265 48 GB RAM",
+      "description": "Effectively lossless; needs ≥ 48 GB RAM",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "Qwen3.5 35B-A3B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params \u2014 fast inference despite large size. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params — fast inference despite large size. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -6028,7 +6706,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
@@ -6038,7 +6718,7 @@
       "description": "Full precision weights",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "Qwen3.5 35B-A3B Uncensored (HauhauCS Aggressive)",
-      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params \u2014 fast inference despite large size. No content filters \u2014 use responsibly.",
+      "family_desc": "Uncensored aggressive fine-tune of Qwen3.5 35B-A3B (MoE) by HauhauCS. 35B total / 3B active params — fast inference despite large size. No content filters — use responsibly.",
       "tags": [
         "chat",
         "uncensored",
@@ -6046,14 +6726,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "HauhauCS/Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive",
       "filename": "mmproj-Qwen3.5-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf",
       "quant": "F16",
       "size_gb": 10.7,
-      "description": "Vision projector \u2014 FP16",
+      "description": "Vision projector — FP16",
       "family_id": "qwen35-35b-a3b-hauhau-aggressive",
       "family_name": "",
       "family_desc": "",
@@ -6063,17 +6745,19 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 35.0,
+      "max_context_length": 131072
     },
     {
       "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
       "filename": "LFM2.5-VL-1.6B-Q4_0.gguf",
       "quant": "Q4_0",
       "size_gb": 0.65,
-      "description": "Smallest quant \u2014 fastest, fits anywhere",
+      "description": "Smallest quant — fastest, fits anywhere",
       "family_id": "lfm25-vl-1.6b",
       "family_name": "LFM2.5-VL 1.6B",
-      "family_desc": "Liquid Foundation Model 2.5 Vision-Language \u2014 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
+      "family_desc": "Liquid Foundation Model 2.5 Vision-Language — 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
       "tags": [
         "chat",
         "vision",
@@ -6082,17 +6766,19 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 1.6,
+      "max_context_length": 131072
     },
     {
       "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
       "filename": "LFM2.5-VL-1.6B-Q8_0.gguf",
       "quant": "Q8_0",
       "size_gb": 1.16,
-      "description": "Recommended \u2014 best quality/size tradeoff",
+      "description": "Recommended — best quality/size tradeoff",
       "family_id": "lfm25-vl-1.6b",
       "family_name": "LFM2.5-VL 1.6B",
-      "family_desc": "Liquid Foundation Model 2.5 Vision-Language \u2014 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
+      "family_desc": "Liquid Foundation Model 2.5 Vision-Language — 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
       "tags": [
         "chat",
         "vision",
@@ -6101,7 +6787,9 @@
       ],
       "is_mmproj": false,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 1.6,
+      "max_context_length": 131072
     },
     {
       "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
@@ -6111,7 +6799,7 @@
       "description": "Full FP16 precision",
       "family_id": "lfm25-vl-1.6b",
       "family_name": "LFM2.5-VL 1.6B",
-      "family_desc": "Liquid Foundation Model 2.5 Vision-Language \u2014 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
+      "family_desc": "Liquid Foundation Model 2.5 Vision-Language — 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
       "tags": [
         "chat",
         "vision",
@@ -6120,7 +6808,9 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 1.6,
+      "max_context_length": 131072
     },
     {
       "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
@@ -6130,7 +6820,7 @@
       "description": "Full BF16 precision",
       "family_id": "lfm25-vl-1.6b",
       "family_name": "LFM2.5-VL 1.6B",
-      "family_desc": "Liquid Foundation Model 2.5 Vision-Language \u2014 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
+      "family_desc": "Liquid Foundation Model 2.5 Vision-Language — 1.6B-parameter multimodal model from LiquidAI. Ultra-compact vision+language model with image understanding. Fits in <2 GB VRAM.",
       "tags": [
         "chat",
         "vision",
@@ -6139,14 +6829,16 @@
       ],
       "is_mmproj": false,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 1.6,
+      "max_context_length": 131072
     },
     {
       "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
       "filename": "mmproj-LFM2.5-VL-1.6b-Q8_0.gguf",
       "quant": "Q8_0",
       "size_gb": 0.54,
-      "description": "Vision projector \u2014 Q8_0 (recommended, smallest)",
+      "description": "Vision projector — Q8_0 (recommended, smallest)",
       "family_id": "lfm25-vl-1.6b",
       "family_name": "",
       "family_desc": "",
@@ -6156,14 +6848,16 @@
       ],
       "is_mmproj": true,
       "recommended": true,
-      "advanced": false
+      "advanced": false,
+      "params_b": 1.6,
+      "max_context_length": 131072
     },
     {
       "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
       "filename": "mmproj-LFM2.5-VL-1.6b-F16.gguf",
       "quant": "F16",
-      "size_gb": 0.80,
-      "description": "Vision projector \u2014 FP16",
+      "size_gb": 0.8,
+      "description": "Vision projector — FP16",
       "family_id": "lfm25-vl-1.6b",
       "family_name": "",
       "family_desc": "",
@@ -6173,14 +6867,16 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": false
+      "advanced": false,
+      "params_b": 1.6,
+      "max_context_length": 131072
     },
     {
       "repo": "LiquidAI/LFM2.5-VL-1.6B-GGUF",
       "filename": "mmproj-LFM2.5-VL-1.6b-BF16.gguf",
       "quant": "BF16",
-      "size_gb": 0.80,
-      "description": "Vision projector \u2014 BF16",
+      "size_gb": 0.8,
+      "description": "Vision projector — BF16",
       "family_id": "lfm25-vl-1.6b",
       "family_name": "",
       "family_desc": "",
@@ -6190,7 +6886,9 @@
       ],
       "is_mmproj": true,
       "recommended": false,
-      "advanced": true
+      "advanced": true,
+      "params_b": 1.6,
+      "max_context_length": 131072
     }
   ]
 }

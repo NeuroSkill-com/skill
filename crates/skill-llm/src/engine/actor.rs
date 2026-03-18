@@ -100,6 +100,9 @@ pub(super) fn run_actor(
     };
 
     // ── create generation context ──
+    // ctx_size is always resolved by init.rs (auto-recommended or user-set).
+    // The 4096 fallback here is only reached if the actor is called directly
+    // without going through init (e.g. tests).
     let ctx_size = NonZeroU32::new(config.ctx_size.unwrap_or(4096));
     llm_info!(&app, &log_buf, log_file,
         "creating context (n_ctx={}, n_gpu_layers={}, flash_attn={}, offload_kqv={})",

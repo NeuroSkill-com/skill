@@ -92,6 +92,32 @@ pub fn init(
         .unwrap_or("llama.cpp-model")
         .to_owned();
 
+    // ── Resolve effective context size ─────────────────────────────────────────
+    // When the user hasn't explicitly set a context size (`ctx_size == None`),
+    // use llmfit-based recommendation derived from the model's parameter count
+    // and the system's available GPU/unified memory.  When the user *has* set
+    // a value, cap it at the model's trained maximum context length.
+    let mut config = config.clone();
+    if let Some(entry) = catalog.active_model_entry() {
+        if config.ctx_size.is_none() {
+            let recommended = crate::catalog::recommend_ctx_size(entry);
+            push_log(&app, &log_buf, "info",
+                &format!("auto context size: {recommended} tokens \
+                          (params={:.1}B, max_ctx={}, quant={})",
+                    entry.params_b, entry.max_context_length, entry.quant));
+            config.ctx_size = Some(recommended);
+        } else if entry.max_context_length > 0 {
+            // Cap user-set context at the model's trained maximum.
+            let user_ctx = config.ctx_size.unwrap();
+            if user_ctx > entry.max_context_length {
+                push_log(&app, &log_buf, "warn",
+                    &format!("user ctx_size {} exceeds model max {} — capping",
+                        user_ctx, entry.max_context_length));
+                config.ctx_size = Some(entry.max_context_length);
+            }
+        }
+    }
+
     push_log(&app, &log_buf, "info", &format!("starting LLM server — model: {model_name}"));
 
     // ── Per-session log file ──────────────────────────────────────────────────

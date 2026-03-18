@@ -478,7 +478,7 @@ const help: Record<string, string> = {
   "helpLlm.gpuLayersTitle":             "GPU Layers",
   "helpLlm.gpuLayersBody":              "Controls how many transformer layers are offloaded to GPU. Set to 'All' for maximum speed if the model fits in VRAM. Set to 0 for CPU-only inference. Intermediate values split the model across GPU and CPU — useful when the model barely exceeds VRAM capacity.",
   "helpLlm.ctxSizeTitle":               "Context Size",
-  "helpLlm.ctxSizeBody":                "The KV-cache size in tokens. 'Auto' uses the model's default. Larger contexts let the model remember more conversation history but consume more memory. If you run into out-of-memory errors, try reducing context size to 4K or 2K.",
+  "helpLlm.ctxSizeBody":                "The KV-cache size in tokens. 'Auto' picks the largest context that fits your GPU/RAM based on the model's size and quantization. Larger contexts let the model remember more conversation history but consume more memory. Options are limited to the model's trained maximum. If you run into out-of-memory errors, try reducing context size.",
   "helpLlm.parallelTitle":              "Parallel Requests",
   "helpLlm.parallelBody":               "Maximum number of concurrent decode loops. Higher values let multiple clients share the server but increase peak memory usage. For most single-user setups, 1 is fine.",
   "helpLlm.apiKeyTitle":                "API Key",

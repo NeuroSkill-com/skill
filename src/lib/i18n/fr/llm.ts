@@ -77,7 +77,7 @@ const llm: Record<string, string> = {
   "llm.inference.gpuLayers":         "Couches GPU",
   "llm.inference.gpuLayersDesc":     "Couches à décharger sur le GPU (0 = CPU uniquement). Nécessite llm-metal / llm-cuda.",
   "llm.inference.ctxSize":           "Taille du contexte",
-  "llm.inference.ctxSizeDesc":       "Taille du cache KV en jetons (vide = modèle par défaut).",
+  "llm.inference.ctxSizeDesc":       "Taille du cache KV en jetons. Auto choisit le plus grand contexte qui tient dans votre GPU/RAM.",
   "llm.inference.parallel":          "Nombre maximal de requêtes simultanées",
   "llm.inference.parallelDesc":      "Sérialise les boucles de décodage tout en gardant les connexions HTTP réactives.",
   "llm.inference.apiKey":            "Clé API (facultatif)",

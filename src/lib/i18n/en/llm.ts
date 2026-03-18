@@ -77,7 +77,7 @@ const llm: Record<string, string> = {
   "llm.inference.gpuLayers":            "GPU layers",
   "llm.inference.gpuLayersDesc":        "Layers to offload to GPU (0 = CPU only, high = GPU). Requires llm-metal / llm-cuda feature.",
   "llm.inference.ctxSize":              "Context size",
-  "llm.inference.ctxSizeDesc":          "KV-cache size in tokens (empty = model default, capped at 4096).",
+  "llm.inference.ctxSizeDesc":          "KV-cache size in tokens. Auto picks the largest context that fits your GPU/RAM.",
   "llm.inference.parallel":             "Max concurrent requests",
   "llm.inference.parallelDesc":         "Serialises decode loops while keeping HTTP connections responsive.",
   "llm.inference.apiKey":               "API key (optional)",
