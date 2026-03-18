@@ -830,6 +830,7 @@
           web_search: cfg.tools.web_search ?? true, web_fetch: cfg.tools.web_fetch ?? true,
           bash: cfg.tools.bash ?? false, read_file: cfg.tools.read_file ?? false,
           write_file: cfg.tools.write_file ?? false, edit_file: cfg.tools.edit_file ?? false,
+          skill_api: cfg.tools.skill_api ?? true,
           execution_mode: cfg.tools.execution_mode ?? "parallel",
           max_rounds: cfg.tools.max_rounds ?? 3, max_calls_per_round: cfg.tools.max_calls_per_round ?? 4,
           context_compression: cfg.tools.context_compression ?? { level: "normal", max_search_results: 0, max_result_chars: 0 },
