@@ -405,11 +405,6 @@ fn process_eeg(
     }
 
     // ── Emit filtered EEG packets via IPC ────────────────────────────────────
-    // Log first few drains to verify data is flowing.
-    if !drained.is_empty() && count < 512 && count % 128 == 0 {
-        let total: usize = drained.iter().map(|(_, s)| s.len()).sum();
-        eprintln!("[eeg-ipc] drain #{count}: {total} samples across {} ch", drained.len());
-    }
     if !drained.is_empty() {
         for (ch, samples) in drained {
             let pkt = EegPacket { electrode: ch, samples, timestamp: ts_ms };
