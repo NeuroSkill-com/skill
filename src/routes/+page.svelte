@@ -1035,6 +1035,22 @@ the Free Software Foundation, version 3 only. -->
               <Button size="sm" variant="outline" onclick={openBtSettings}>{t("dashboard.openSettings")}</Button>
             </div>
           </div>
+        {:else if status.bt_error.includes("EEG stream not available") || status.bt_error.includes("-32230")}
+          <div class="rounded-xl border border-violet-400/30 bg-violet-50 dark:bg-violet-950/20 p-3.5 flex flex-col gap-3">
+            <p class="text-[0.8rem] font-semibold text-violet-800 dark:text-violet-300">
+              EEG Access Not Available
+            </p>
+            <p class="text-[0.7rem] text-muted-foreground leading-relaxed">
+              Your Emotiv Cortex App does not have raw EEG data access enabled for this headset.
+              To stream EEG, enable the <strong>Raw EEG</strong> data stream in your Cortex App settings.
+            </p>
+            <div class="flex gap-2 flex-wrap">
+              <Button size="sm" onclick={() => { import("@tauri-apps/plugin-opener").then(m => m.openUrl("https://www.emotiv.com/my-account/cortex-apps/")); }}>
+                Manage Emotiv Account
+              </Button>
+              <Button size="sm" variant="outline" onclick={retryConnect}>{t("common.retry")}</Button>
+            </div>
+          </div>
         {:else}
           <div class="rounded-xl border border-red-400/30 bg-red-50 dark:bg-[#1a0a0a] p-3.5 flex flex-col gap-3">
             <pre class="font-mono text-[0.67rem] text-red-600 dark:text-red-400 leading-relaxed whitespace-pre-wrap">{status.bt_error}</pre>

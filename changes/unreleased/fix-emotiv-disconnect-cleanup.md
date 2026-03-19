@@ -5,6 +5,10 @@
 - **Emotiv headset disconnect/failure warnings**: the adapter now handles Cortex warning codes 102 (HEADSET_DISCONNECTED) and 103 (HEADSET_CONNECTION_FAILED) in addition to codes 0 and 1. This triggers an immediate disconnect instead of waiting for the 15-second data watchdog timeout.
 - **Emotiv EEG subscribe error no longer causes infinite reconnect loop**: subscribe failures (e.g. Cortex error -32230 "stream not supported") are no longer treated as disconnects. The connect flow now fails with a clear user-facing error explaining the license requirement, and auto-reconnect is disabled for non-recoverable configuration errors.
 
+### UI
+
+- **Emotiv EEG license error page**: when the Cortex API rejects the EEG stream subscription (-32230), the dashboard shows a dedicated violet card explaining the issue with a "Manage Emotiv Account" button that opens the Cortex Apps settings page directly.
+
 ### Dependencies
 
 - **emotiv**: bumped to 0.0.9 — adds `HEADSET_DISCONNECTED` (102) and `HEADSET_CONNECTION_FAILED` (103) warning constants; emits `CortexEvent::Disconnected` immediately when either is received; logs failed stream subscriptions.
