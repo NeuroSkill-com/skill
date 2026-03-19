@@ -833,6 +833,7 @@
           skill_api: cfg.tools.skill_api ?? true,
           execution_mode: cfg.tools.execution_mode ?? "parallel",
           max_rounds: cfg.tools.max_rounds ?? 3, max_calls_per_round: cfg.tools.max_calls_per_round ?? 4,
+          thinking_budget: cfg.tools.thinking_budget ?? null,
           context_compression: cfg.tools.context_compression ?? { level: "normal", max_search_results: 0, max_result_chars: 0 },
         };
       }

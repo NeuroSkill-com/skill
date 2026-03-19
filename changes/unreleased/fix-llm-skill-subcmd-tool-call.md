@@ -1,8 +1,13 @@
+### Features
+
+- **Tool thinking budget**: Added a configurable thinking budget override for tool-calling rounds in the Tools settings panel. Options: Chat (use chat-level setting), None (0), 256, 1K, 4K tokens. Lower values make the model respond faster after tool results. Stored in `LlmToolConfig.thinking_budget`.
+
 ### Bugfixes
 
 - **LLM skill sub-command auto-redirect**: When the LLM calls a Skill API sub-command (e.g. `status`, `say`) or a `neuroskill` alias (e.g. `neuroskill`, `neuroskill-status`, `neuroskill-hooks`) as a top-level tool, the call is silently rewritten to `skill` with the correct `{"command": "..."}` at three layers: extraction (parse.rs), validation (tool_orchestration.rs), and execution (exec.rs).
 - **LLM dedup loop fix**: When the model re-emits the same tool call on round 2 (all calls deduped), instead of returning empty text, the orchestrator now injects a nudge message telling the model to summarize the existing results, then continues to a new inference round.
 - **Tool result not misdetected as tool call**: JSON objects with `"ok"` or `"command"` keys (tool results) are no longer falsely extracted as tool calls when the model quotes them in its response.
+- **Model not responding after tool call**: Improved tool result message prefix to prevent the model from interpreting tool results as new user questions. Assistant messages now include tool call details.
 
 ### LLM
 

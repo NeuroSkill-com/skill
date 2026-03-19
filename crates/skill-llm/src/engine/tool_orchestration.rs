@@ -134,6 +134,7 @@ where
     let max_calls_per_round = allowed_tools.max_calls_per_round;
     let execution_mode     = allowed_tools.execution_mode.clone();
     let compression        = allowed_tools.context_compression.clone();
+    let tool_thinking_budget = allowed_tools.thinking_budget;
 
     let mut messages = base_messages;
     if tools_from_req.is_empty() {
@@ -180,12 +181,17 @@ where
         trim_messages_to_fit(&mut messages, n_ctx, &compression);
 
         let images = extract_images_from_messages(&messages);
+        // Apply tool-specific thinking budget override if configured.
+        let mut round_params = params.clone();
+        if let Some(budget) = tool_thinking_budget {
+            round_params.thinking_budget = Some(budget);
+        }
         let (tok_tx, tok_rx) = mpsc::unbounded_channel();
         state.req_tx
             .send(InferRequest::Generate {
                 messages: messages.clone(),
                 images,
-                params: params.clone(),
+                params: round_params,
                 token_tx: tok_tx,
             })
             .map_err(|_| "LLM actor has exited".to_string())?;

@@ -64,6 +64,19 @@ pub struct LlmToolConfig {
     #[serde(default = "default_max_tool_calls_per_round")]
     pub max_calls_per_round: usize,
 
+    /// Thinking budget override for tool-calling rounds.
+    ///
+    /// Controls how many tokens the model may spend inside `<think>…</think>`
+    /// blocks during tool-calling inference rounds.
+    ///
+    /// - `None` = use the chat-level thinking budget (no override).
+    /// - `Some(0)` = skip thinking entirely during tool rounds.
+    /// - `Some(n)` = cap thinking to `n` tokens during tool rounds.
+    ///
+    /// Lower values make the model respond faster after tool results.
+    #[serde(default)]
+    pub thinking_budget: Option<u32>,
+
     /// Context compression settings for tool results.
     #[serde(default)]
     pub context_compression: ToolContextCompression,
@@ -231,6 +244,7 @@ impl Default for LlmToolConfig {
             execution_mode:     default_tool_execution_mode(),
             max_rounds:         10,
             max_calls_per_round: default_max_tool_calls_per_round(),
+            thinking_budget:    None,
             context_compression: ToolContextCompression::default(),
             skills_refresh_interval_secs: default_skills_refresh_interval(),
             disabled_skills: Vec::new(),

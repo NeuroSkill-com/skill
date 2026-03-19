@@ -4,6 +4,7 @@
 <script lang="ts">
   import { t } from "$lib/i18n/index.svelte";
   import type { ToolConfig, ToolExecutionMode, CompressionLevel } from "$lib/chat-types";
+  import { TOOL_THINKING_LEVELS, type ToolThinkingLevel } from "$lib/chat-types";
 
   interface Props {
     toolConfig: ToolConfig;
@@ -151,6 +152,27 @@
                      ? 'bg-primary text-primary-foreground'
                      : 'bg-background text-muted-foreground hover:bg-muted'}">
             {opt.label}
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Tool thinking budget -->
+    <div class="flex items-center justify-between gap-3 mt-0.5">
+      <div class="flex flex-col gap-0">
+        <span class="text-[0.6rem] font-semibold text-foreground">{t("chat.tools.thinkingBudget")}</span>
+        <span class="text-[0.5rem] text-muted-foreground/60 leading-snug">{t("chat.tools.thinkingBudgetDesc")}</span>
+      </div>
+      <div class="flex rounded-md overflow-hidden border border-border text-[0.56rem] font-medium shrink-0">
+        {#each TOOL_THINKING_LEVELS as lvl}
+          {@const isActive = toolConfig.thinking_budget === lvl.budget}
+          <button
+            onclick={() => onUpdate({ thinking_budget: lvl.budget })}
+            class="px-2 py-1 transition-colors cursor-pointer
+                   {isActive
+                     ? 'bg-primary text-primary-foreground'
+                     : 'bg-background text-muted-foreground hover:bg-muted'}">
+            {t(lvl.labelKey)}
           </button>
         {/each}
       </div>

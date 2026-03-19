@@ -119,8 +119,19 @@ export interface ToolConfig {
   execution_mode: ToolExecutionMode;
   max_rounds: number;
   max_calls_per_round: number;
+  thinking_budget: number | null;
   context_compression: ToolContextCompression;
 }
+
+export type ToolThinkingLevel = "chat" | "none" | "minimal" | "normal" | "extended";
+
+export const TOOL_THINKING_LEVELS: { labelKey: string; key: ToolThinkingLevel; budget: number | null }[] = [
+  { labelKey: "chat.tools.thinkChat",     key: "chat",     budget: null },
+  { labelKey: "chat.tools.thinkNone",     key: "none",     budget: 0    },
+  { labelKey: "chat.tools.thinkMinimal",  key: "minimal",  budget: 256  },
+  { labelKey: "chat.tools.thinkNormal",   key: "normal",   budget: 1024 },
+  { labelKey: "chat.tools.thinkExtended", key: "extended",  budget: 4096 },
+];
 
 export const DEFAULT_TOOL_CONFIG: ToolConfig = {
   enabled: true,
@@ -128,6 +139,7 @@ export const DEFAULT_TOOL_CONFIG: ToolConfig = {
   bash: false, read_file: false, write_file: false, edit_file: false,
   skill_api: true,
   execution_mode: "parallel", max_rounds: 3, max_calls_per_round: 4,
+  thinking_budget: null,
   context_compression: { ...DEFAULT_TOOL_CONTEXT_COMPRESSION },
 };
 
