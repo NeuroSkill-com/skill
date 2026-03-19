@@ -244,7 +244,8 @@ pub fn skill_api_tool() -> Tool {
             name: "skill".into(),
             description: Some(
                 "Query the NeuroSkill EEG/BCI application via its API. \
-                 Send a JSON command and receive the full response.\n\n\
+                 Always call this tool with {\"command\": \"<name>\"} — \
+                 do NOT call the command names as separate tools.\n\n\
                  Available commands:\n\
                  - status: Full device/session/embeddings/scores snapshot. No args.\n\
                  - sessions: List all recording sessions. No args.\n\
@@ -304,6 +305,25 @@ pub fn is_known_builtin_tool(name: &str) -> bool {
         "date" | "location" | "web_search" | "web_fetch" |
         "bash" | "read_file" | "write_file" | "edit_file" |
         "search_output" | "skill"
+    )
+}
+
+/// Known Skill API sub-command names.
+///
+/// When the LLM mistakenly calls one of these as a top-level tool we can
+/// return a targeted hint instead of the generic "unsupported tool" error,
+/// dramatically reducing wasted round-trips.
+pub fn is_skill_api_command(name: &str) -> bool {
+    matches!(name,
+        "status" | "sessions" | "session_metrics" | "say" | "notify" |
+        "label" | "search_labels" | "interactive_search" | "search" |
+        "compare" | "sleep" | "calibrate" | "timer" |
+        "run_calibration" | "list_calibrations" | "get_calibration" |
+        "create_calibration" | "update_calibration" | "delete_calibration" |
+        "dnd" | "dnd_set" |
+        "hooks_status" | "hooks_get" | "hooks_set" | "hooks_suggest" | "hooks_log" |
+        "umap" | "umap_poll" |
+        "llm_status" | "llm_catalog" | "llm_downloads" | "llm_hardware_fit"
     )
 }
 
