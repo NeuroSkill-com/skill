@@ -101,6 +101,8 @@ All Rust crates live under `crates/` with zero Tauri dependencies. Each has its 
 | `skill-tray` | Tray icon helpers — progress-ring overlay, shortcut formatting, dedup (pure `std`) |
 | `skill-autostart` | Platform-specific launch-at-login (macOS Login Items, Linux XDG, Windows Registry) |
 | `skill-history` | Session history, metrics, time-series, sleep staging, analysis — listing, CSV/SQLite metrics, disk cache, batch loading |
+| `skill-headless` | Headless browser engine — CDP-like API over wry/tao for navigation, JS execution, screenshots, caching |
+| `skill-skills` | Skill markdown discovery, parsing, prompt injection, and community skills auto-sync from GitHub |
 | `skill-vision` | Apple Vision framework OCR via compiled Objective-C FFI (macOS only) |
 
 Vendored crates under `src-tauri/vendor/`:
