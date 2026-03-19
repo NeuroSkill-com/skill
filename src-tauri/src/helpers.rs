@@ -241,8 +241,15 @@ pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16
     let transport = transport_from_id(id);
     let s_ref = app.app_state();
     let mut s = s_ref.lock_or_recover();
-    let is_paired    = s.status.paired_devices.iter().any(|d| d.id == id);
-    let is_preferred = s.preferred_id.as_deref() == Some(id);
+    // Exact match first; for Cortex devices also accept a legacy
+    // "cortex:emotiv" paired entry as a match for any "cortex:<headset>"
+    // discovered device (the legacy entry was created before individual
+    // headset IDs were tracked).
+    let is_paired = s.status.paired_devices.iter().any(|d| d.id == id)
+        || (id.starts_with("cortex:") && id != "cortex:emotiv"
+            && s.status.paired_devices.iter().any(|d| d.id == "cortex:emotiv"));
+    let is_preferred = s.preferred_id.as_deref() == Some(id)
+        || (id.starts_with("cortex:") && s.preferred_id.as_deref() == Some("cortex:emotiv"));
     if let Some(d) = s.discovered.iter_mut().find(|d| d.id == id) {
         d.last_seen = now; d.last_rssi = rssi;
         d.is_paired = is_paired; d.is_preferred = is_preferred;
