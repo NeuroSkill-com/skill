@@ -26,7 +26,12 @@ use crate::{
 /// Delegates to [`DeviceKind::from_name`] so detection logic is defined in
 /// one place.  `OpenBci` and `Unknown` both route to `"muse"` (the default
 /// BLE-scan connect path; OpenBCI serial/WiFi uses a separate command).
-fn detect_device_kind(name_lower: Option<&str>) -> &'static str {
+fn detect_device_kind(id: Option<&str>, name_lower: Option<&str>) -> &'static str {
+    // Check ID prefix first — Cortex and USB scanner prefix device IDs.
+    if let Some(id) = id {
+        if id.starts_with("cortex:") { return "emotiv"; }
+        if id.starts_with("usb:")    { return "ganglion"; } // OpenBCI serial
+    }
     use skill_data::device::DeviceKind;
     match DeviceKind::from_name(name_lower) {
         DeviceKind::OpenBci  => "muse", // serial/WiFi boards use connect_openbci command
@@ -165,7 +170,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
             .or_else(|| s.discovered.iter().find(|d| &d.id == id).map(|d| d.name.clone()))
     });
     let target_lower = target_name.as_deref().map(|n| n.to_lowercase());
-    let device_kind = detect_device_kind(target_lower.as_deref());
+    let device_kind = detect_device_kind(target.as_deref(), target_lower.as_deref());
 
     app.app_state().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
     let csv  = new_csv_path(app);
@@ -251,42 +256,51 @@ mod tests {
 
     #[test]
     fn detect_device_kind_ganglion() {
-        assert_eq!(detect_device_kind(Some("ganglion-1234")), "ganglion");
-        assert_eq!(detect_device_kind(Some("simblee-001")), "ganglion");
+        assert_eq!(detect_device_kind(None, Some("ganglion-1234")), "ganglion");
+        assert_eq!(detect_device_kind(None, Some("simblee-001")), "ganglion");
     }
 
     #[test]
     fn detect_device_kind_mw75() {
-        assert_eq!(detect_device_kind(Some("headphones-mw75-v2")), "mw75");
-        assert_eq!(detect_device_kind(Some("neurable-xyz")), "mw75");
+        assert_eq!(detect_device_kind(None, Some("headphones-mw75-v2")), "mw75");
+        assert_eq!(detect_device_kind(None, Some("neurable-xyz")), "mw75");
     }
 
     #[test]
     fn detect_device_kind_hermes() {
-        assert_eq!(detect_device_kind(Some("hermes-abc")), "hermes");
+        assert_eq!(detect_device_kind(None, Some("hermes-abc")), "hermes");
     }
 
     #[test]
     fn detect_device_kind_emotiv() {
-        assert_eq!(detect_device_kind(Some("emotiv-epoc-x")), "emotiv");
-        assert_eq!(detect_device_kind(Some("epoc-x-1234")), "emotiv");
-        assert_eq!(detect_device_kind(Some("insight-5ch")), "emotiv");
-        assert_eq!(detect_device_kind(Some("flex-saline")), "emotiv");
-        assert_eq!(detect_device_kind(Some("mn8-earbuds")), "emotiv");
+        assert_eq!(detect_device_kind(None, Some("emotiv-epoc-x")), "emotiv");
+        assert_eq!(detect_device_kind(None, Some("epoc-x-1234")), "emotiv");
+        assert_eq!(detect_device_kind(None, Some("insight-5ch")), "emotiv");
+        assert_eq!(detect_device_kind(None, Some("flex-saline")), "emotiv");
+        assert_eq!(detect_device_kind(None, Some("mn8-earbuds")), "emotiv");
     }
 
     #[test]
     fn detect_device_kind_idun() {
-        assert_eq!(detect_device_kind(Some("idun-guardian")), "idun");
-        assert_eq!(detect_device_kind(Some("guardian-001")), "idun");
-        assert_eq!(detect_device_kind(Some("ige-1234")), "idun");
+        assert_eq!(detect_device_kind(None, Some("idun-guardian")), "idun");
+        assert_eq!(detect_device_kind(None, Some("guardian-001")), "idun");
+        assert_eq!(detect_device_kind(None, Some("ige-1234")), "idun");
     }
 
     #[test]
     fn detect_device_kind_muse_fallback() {
-        assert_eq!(detect_device_kind(Some("muse-2")), "muse");
-        assert_eq!(detect_device_kind(None), "muse");
-        assert_eq!(detect_device_kind(Some("unknown-device")), "muse");
+        assert_eq!(detect_device_kind(None, Some("muse-2")), "muse");
+        assert_eq!(detect_device_kind(None, None), "muse");
+        assert_eq!(detect_device_kind(None, Some("unknown-device")), "muse");
+    }
+
+    #[test]
+    fn detect_device_kind_by_id_prefix() {
+        // Cortex prefix → emotiv regardless of name.
+        assert_eq!(detect_device_kind(Some("cortex:EPOCX-1234"), None), "emotiv");
+        assert_eq!(detect_device_kind(Some("cortex:EPOCX-1234"), Some("unknown")), "emotiv");
+        // USB prefix → ganglion (OpenBCI serial).
+        assert_eq!(detect_device_kind(Some("usb:/dev/ttyUSB0"), None), "ganglion");
     }
 
     #[test]

@@ -158,12 +158,16 @@ pub(crate) async fn bluetooth_ok() -> Result<(), (String, bool)> {
 ///
 /// Conditions:
 /// * App is idle (`disconnected`, no active stream, no pending reconnect).
-/// * The device is in the paired list.
+/// * The device is paired, **OR** it was discovered via a trusted transport
+///   (Cortex WebSocket, USB serial) where the device identity is reliable.
 ///
 /// `start_session()` immediately sets `stream + pending_reconnect`, so
 /// `is_idle` becomes false and this guard cannot fire again while a
 /// connection attempt is in flight.
 fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
+    // Cortex and USB devices are discovered via trusted transports —
+    // auto-connect even if not explicitly paired.
+    let trusted_transport = id.starts_with("cortex:") || id.starts_with("usb:");
     let should_auto = {
         let r = app.app_state();
         let g = r.lock_or_recover();
@@ -171,7 +175,7 @@ fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
             && !g.pending_reconnect
             && matches!(g.status.state.as_str(), "disconnected");
         let is_paired = g.status.paired_devices.iter().any(|d| d.id == id);
-        is_idle && is_paired
+        is_idle && (is_paired || trusted_transport)
     };
     if should_auto {
         let msg = format!("Auto-connecting to paired device {display_name}");
@@ -498,7 +502,7 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                 let config = CortexClientConfig {
                     client_id,
                     client_secret,
-                    auto_create_session: false, // Just query, don't create a session.
+                    auto_create_session: true, // Triggers queryHeadsets after auth.
                     ..Default::default()
                 };
                 let client = CortexClient::new(config);
@@ -523,7 +527,9 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                     if status != "discovered" && status != "connected" {
                         continue;
                     }
-                    let display_name = format!("Emotiv {}", hs.id);
+                    // Derive a human-readable name from the headset ID.
+                    // Emotiv IDs look like "EPOCX-ABCDEF12" or "INSIGHT-1234".
+                    let display_name = hs.id.clone();
                     if known_ids.insert(id.clone()) {
                         let msg = format!("{display_name} status={status}");
                         app_log!(app, "scanner", "[cortex] {msg}");
@@ -547,65 +553,73 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
     }
 }
 
-/// Helper: connect to Cortex, authenticate, and query the headset list.
+/// Helper: connect to Cortex, authorize, wait for the internal queryHeadsets
+/// flow to resolve, then read the headset ID from the handle's state.
+///
+/// The `CortexClient` processes the `queryHeadsets` response internally and
+/// stores the target headset ID in its shared state.  We wait for the
+/// `SessionCreated` event (which means a headset was found and a session
+/// was opened) or simply poll `handle.headset_id()` after a short delay.
+///
+/// With `auto_create_session: true`, the client authorizes, queries
+/// headsets, and attempts to create a session.  We only care about the
+/// headset discovery — the session is dropped when rx/handle go out of scope.
 async fn cortex_query_headsets(
     client: &skill_devices::emotiv::client::CortexClient,
 ) -> Result<Vec<skill_devices::emotiv::types::HeadsetInfo>, String> {
     let (mut rx, handle) = client.connect().await.map_err(|e| e.to_string())?;
 
-    use skill_devices::emotiv::{types::CortexEvent, protocol};
+    use skill_devices::emotiv::types::CortexEvent;
 
-    // Wait for Authorized + then request headset list.
-    // The client automatically starts the auth flow on connect.
-    let mut authorized = false;
+    // Wait for the auth + queryHeadsets flow to complete.  The client
+    // automatically chains: hasAccessRight → authorize → queryHeadsets.
+    // We wait until either `Authorized` arrives (meaning the service is
+    // reachable) or we time out.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(6);
+    let mut authorized = false;
 
     while tokio::time::Instant::now() < deadline {
         let ev = tokio::time::timeout_at(deadline, rx.recv()).await;
         match ev {
             Ok(Some(CortexEvent::Authorized)) => {
                 authorized = true;
-                // Now query headsets.
-                let _ = handle.send_raw(protocol::query_headsets()).await;
+                // The client auto-sends refresh + queryHeadsets after authorize.
+                // Give it a moment to process the response.
             }
-            Ok(Some(CortexEvent::Error(e))) => {
-                return Err(e);
+            Ok(Some(CortexEvent::SessionCreated(_))) => {
+                // A session was created — headset_id is definitely available.
+                break;
             }
+            Ok(Some(CortexEvent::Error(e))) => return Err(e),
             Ok(None) => break,
-            Err(_) => break, // Timeout.
-            _ => {
-                // Wait for other events like Connected, Warning, etc.
-                // If we just got authorized, try to catch the query result.
-                if authorized {
-                    // Check if this is a headset query result delivered via Warning
-                    // (HEADSET_SCANNING_FINISHED) — the actual result comes as
-                    // a separate event.  For simplicity, break and retry next cycle.
-                }
-            }
+            Err(_) => break,
+            _ => {}
+        }
+        // Once authorized, wait a short moment for the headset query to resolve.
+        if authorized {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            break;
         }
     }
 
-    // The query_headsets result is handled internally by the client's WS loop
-    // and emitted as a log — but the `CortexEvent` enum doesn't expose a
-    // `HeadsetsQueried` variant.  We work around this by making a second
-    // quick connect with `auto_create_session: false`.  If the client got as
-    // far as `Authorized`, the service is up and headsets are reachable; we
-    // parse the headset list from the JSON-RPC result.
-    //
-    // For a robust implementation we'd need the crate to expose query results.
-    // As a practical fallback, if we got Authorized, report a single
-    // "Emotiv Headset" so the auto-connect path can trigger `connect_emotiv`.
-    if authorized {
-        // Return a synthetic entry — connect_emotiv will do the real query.
-        Ok(vec![skill_devices::emotiv::types::HeadsetInfo {
-            id: "emotiv-headset".into(),
-            status: "discovered".into(),
-            connected_by: String::new(),
-            extra: Default::default(),
-        }])
-    } else {
-        Err("Not authorized".into())
+    if !authorized {
+        return Err("Not authorized".into());
     }
+
+    // Read the headset ID that the client stored after processing queryHeadsets.
+    let headset_id = handle.headset_id().await;
+
+    if headset_id.is_empty() {
+        // Authorized but no headset found — service is up, no headset connected.
+        return Ok(Vec::new());
+    }
+
+    Ok(vec![skill_devices::emotiv::types::HeadsetInfo {
+        id: headset_id,
+        status: "discovered".into(),
+        connected_by: String::new(),
+        extra: Default::default(),
+    }])
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
