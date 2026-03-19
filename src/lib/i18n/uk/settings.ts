@@ -332,6 +332,23 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.idun2": "Save token, then pair/connect the headset from the device list.",
   "settings.supportedDevices.instruction.reak1": "Power on Nucleus-Hermès and keep it near this computer.",
   "settings.supportedDevices.instruction.reak2": "Scan and pair it in the Devices list, then connect from the preferred device flow.",
+  "settings.scanner.title":             "Бекенди сканера",
+  "settings.scanner.desc":              "Оберіть, які транспорти виявлення працюють у фоновому режимі. Зміни набудуть чинності після перезапуску додатку.",
+  "settings.scanner.ble":               "Bluetooth LE",
+  "settings.scanner.bleDesc":           "Muse, MW75, Hermes, Ganglion, IDUN",
+  "settings.scanner.usbSerial":         "USB послідовний",
+  "settings.scanner.usbSerialDesc":     "Донгл OpenBCI Cyton / CytonDaisy",
+  "settings.scanner.cortex":            "Emotiv Cortex",
+  "settings.scanner.cortexDesc":        "EPOC, Insight, Flex, MN8 через локальний Launcher",
+  "settings.scanner.cortexConnected":   "Підключено до Cortex",
+  "settings.scanner.cortexDisconnected": "Не підключено",
+  "settings.scanner.saved":             "Збережено",
+  "settings.scanner.save":              "Зберегти",
+  "settings.deviceLog.title":           "Журнал пристрою",
+  "settings.deviceLog.empty":           "Подій пристрою ще немає.",
+  "settings.deviceLog.clear":           "Очистити",
+  "settings.logScanner":                "Сканер",
+  "settings.logScannerDesc":            "Мультитранспортне виявлення пристроїв (BLE, USB, Cortex)",
   "settings.deviceApi.title": "Device API",
   "settings.deviceApi.emotivTitle": "Emotiv Cortex",
   "settings.deviceApi.emotivDesc": "Required for Emotiv devices only. Other devices ignore these fields.",
@@ -345,6 +362,14 @@ const settings: Record<string, string> = {
   "settings.deviceApi.hide": "hide",
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
+
+  // ── Формат запису ─────────────────────────────────────────────────────────
+  "settings.storageFormat":                      "Формат запису",
+  "settings.storageFormatDesc":                  "Оберіть формат файлу для записів EEG, PPG, IMU та метрик. CSV зручний для читання; Parquet компактний і швидко завантажується. «Обидва» записує обидва формати одночасно.",
+  "settings.storageFormatBoth":                  "Обидва",
+  "settings.storageFormatCsvDesc":               "Зручний для читання, універсальний",
+  "settings.storageFormatParquetDesc":           "Стовпцевий, стиснутий",
+  "settings.storageFormatBothDesc":              "CSV + Parquet одночасно",
 };
 
 export default settings;
