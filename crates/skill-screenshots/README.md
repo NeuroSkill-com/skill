@@ -34,11 +34,11 @@ When motion is detected between consecutive captures (scrolling, animation), the
 
 ## GIF capture
 
-When `gif_enabled` is true (default), the capture loop compares each new frame with the previous one using pixel-difference motion scoring. If the fraction of changed pixels exceeds `gif_motion_threshold` (default 5%), a rapid burst of frames is captured and encoded as an animated GIF.
+When `gif_enabled` is true (disabled by default — intended for scripts, not normal app operation), the capture loop compares each new frame with the previous one using pixel-difference motion scoring. If the fraction of changed pixels exceeds `gif_motion_threshold` (default 5%), a rapid burst of frames is captured and encoded as an animated GIF.
 
 | Setting | Default | Description |
 |---|---|---|
-| `gif_enabled` | `true` | Enable/disable GIF capture |
+| `gif_enabled` | `false` | Enable/disable GIF capture (intended for scripts only) |
 | `gif_frame_count` | `15` | Number of frames per GIF burst |
 | `gif_frame_delay_ms` | `100` | Delay between frames (ms) — 10 fps |
 | `gif_motion_threshold` | `0.05` | Pixel-change fraction to trigger burst (0.0–1.0) |

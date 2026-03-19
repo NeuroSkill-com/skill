@@ -22,7 +22,7 @@ pub fn default_screenshot_ocr_engine()      -> String {
     { "ocrs".into() }
 }
 pub fn default_screenshot_use_gpu()         -> bool   { true }
-pub fn default_screenshot_gif_enabled()     -> bool   { true }
+pub fn default_screenshot_gif_enabled()     -> bool   { false }
 pub fn default_screenshot_gif_frame_count() -> u32    { 15 }
 pub fn default_screenshot_gif_frame_delay() -> u32    { 100 }
 pub fn default_screenshot_gif_motion_thr()  -> f32    { 0.05 }
