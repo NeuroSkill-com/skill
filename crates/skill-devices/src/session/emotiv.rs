@@ -35,17 +35,32 @@ use super::{
 
 // ── EmotivAdapter ─────────────────────────────────────────────────────────────
 
+/// Non-electrode column names in the Cortex EEG stream that must be
+/// filtered out when mapping DataLabels to electrode names.
+const EEG_NON_ELECTRODE: &[&str] = &[
+    "COUNTER", "INTERPOLATED", "MARKER", "MARKER_HARDWARE", "MARKERS",
+    "TIMESTAMP", "RAW_CQ", "BATTERY",
+];
+
+/// Returns `true` if a Cortex EEG column label is an actual electrode.
+fn is_electrode(label: &str) -> bool {
+    let u = label.to_uppercase();
+    !EEG_NON_ELECTRODE.iter().any(|&non| u == non)
+}
+
 pub struct EmotivAdapter {
     rx:      mpsc::Receiver<CortexEvent>,
     handle:  Option<CortexHandle>,
     desc:    DeviceDescriptor,
     pending: VecDeque<DeviceEvent>,
-    /// Whether the descriptor has been auto-adjusted from the first EEG packet.
-    /// Cortex may send fewer channels than EPOC's 14 if an Insight (5-ch) or
-    /// MN8 (2-ch) is connected.
+    /// Whether the descriptor has been auto-adjusted from DataLabels.
     auto_detected: bool,
     /// Headset ID (e.g. "INSIGHT-5AF2C39E") for display purposes.
     headset_id: String,
+    /// Indices into the raw EEG sample array that correspond to actual
+    /// electrodes (set from DataLabels).  Empty until DataLabels arrives,
+    /// in which case all samples are forwarded.
+    electrode_indices: Vec<usize>,
 }
 
 impl EmotivAdapter {
@@ -74,6 +89,7 @@ impl EmotivAdapter {
             pending: VecDeque::new(),
             auto_detected: false,
             headset_id,
+            electrode_indices: Vec::new(),
         }
     }
 
@@ -119,6 +135,7 @@ impl EmotivAdapter {
             pending: VecDeque::new(),
             auto_detected: false,
             headset_id: "TEST-HEADSET".into(),
+            electrode_indices: Vec::new(),
         }
     }
 
@@ -144,31 +161,26 @@ impl EmotivAdapter {
             }
 
             CortexEvent::Eeg(data) => {
-                // Auto-detect actual channel count from the first EEG packet.
-                // The Cortex API streams exactly as many channels as the
-                // connected headset has (14 for EPOC, 5 for Insight, etc.).
-                let actual_ch = data.samples.len();
-                if !self.auto_detected && actual_ch > 0 && actual_ch != self.desc.eeg_channels {
-                    self.auto_detected = true;
-                    self.desc.eeg_channels = actual_ch;
-                    self.desc.pipeline_channels = actual_ch.min(EEG_CHANNELS);
-                    // Trim or extend channel names to match.
-                    self.desc.channel_names.truncate(actual_ch);
-                    while self.desc.channel_names.len() < actual_ch {
-                        self.desc.channel_names.push(format!("Ch{}", self.desc.channel_names.len() + 1));
-                    }
-                } else if !self.auto_detected {
-                    self.auto_detected = true;
-                }
+                // Extract only electrode values from the raw Cortex EEG array.
+                // The array contains non-electrode columns (COUNTER, INTERPOLATED,
+                // RAW_CQ, MARKERS, etc.) that must be skipped.
+                let channels: Vec<f64> = if !self.electrode_indices.is_empty() {
+                    // DataLabels already told us which indices are electrodes.
+                    self.electrode_indices.iter()
+                        .filter_map(|&i| data.samples.get(i).copied())
+                        .collect()
+                } else {
+                    // DataLabels hasn't arrived yet — forward all samples.
+                    // This will be corrected once DataLabels arrives.
+                    data.samples.clone()
+                };
 
-                let channels: Vec<f64> = data.samples.iter()
-                    .take(self.desc.eeg_channels)
-                    .copied()
-                    .collect();
-                self.pending.push_back(DeviceEvent::Eeg(EegFrame {
-                    channels,
-                    timestamp_s: data.time,
-                }));
+                if !channels.is_empty() {
+                    self.pending.push_back(DeviceEvent::Eeg(EegFrame {
+                        channels,
+                        timestamp_s: data.time,
+                    }));
+                }
             }
 
             CortexEvent::Motion(data) => {
@@ -199,24 +211,25 @@ impl EmotivAdapter {
             }
 
             CortexEvent::DataLabels(labels) if labels.stream_name == "eeg" => {
-                // The Cortex API sends EEG column labels after subscribing.
-                // The first two are always COUNTER and INTERPOLATED; the rest
-                // are electrode names (e.g. ["AF3","F7",…] for EPOC, or
-                // ["AF3","AF4","T7","T8","Pz"] for Insight).
-                let eeg_labels: Vec<String> = labels.labels.iter()
-                    .filter(|l| {
-                        let u = l.to_uppercase();
-                        u != "COUNTER" && u != "INTERPOLATED"
-                            && u != "MARKER" && u != "MARKER_HARDWARE"
-                            && u != "TIMESTAMP"
-                    })
-                    .cloned()
-                    .collect();
+                // The Cortex API sends column labels after subscribing, e.g.:
+                //   ["COUNTER","INTERPOLATED","AF3","T7","Pz","T8","AF4",
+                //    "RAW_CQ","MARKER_HARDWARE","MARKERS"]
+                // We need to know which indices are actual electrodes so we
+                // can extract only those from the raw EEG sample array.
+                let mut indices = Vec::new();
+                let mut names = Vec::new();
+                for (i, label) in labels.labels.iter().enumerate() {
+                    if is_electrode(label) {
+                        indices.push(i);
+                        names.push(label.clone());
+                    }
+                }
 
-                if !eeg_labels.is_empty() && eeg_labels.len() != self.desc.eeg_channels {
-                    self.desc.eeg_channels     = eeg_labels.len();
-                    self.desc.pipeline_channels = eeg_labels.len().min(EEG_CHANNELS);
-                    self.desc.channel_names     = eeg_labels;
+                if !names.is_empty() {
+                    self.electrode_indices      = indices;
+                    self.desc.eeg_channels      = names.len();
+                    self.desc.pipeline_channels  = names.len().min(EEG_CHANNELS);
+                    self.desc.channel_names      = names;
                     self.auto_detected = true;
                 }
             }
