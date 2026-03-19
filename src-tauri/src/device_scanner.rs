@@ -476,6 +476,18 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                 return;
             }
             _ = poll_tick.tick() => {
+                // Skip polling while a session is already active — creating
+                // a second Cortex WS connection would interfere with the
+                // running session (the Cortex service stops streams on the
+                // first session when a second is created).
+                {
+                    let r = app.app_state();
+                    let g = r.lock_or_recover();
+                    if g.stream.is_some() || g.pending_reconnect {
+                        continue;
+                    }
+                }
+
                 // Only poll if Emotiv credentials are configured.
                 let (client_id, client_secret) = {
                     let r = app.app_state();
@@ -499,10 +511,15 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
 
                 // Try a quick connect + queryHeadsets.  If the Launcher is not
                 // running the WebSocket will fail immediately.
+                //
+                // auto_create_session MUST be false — setting it true would
+                // create a Cortex session that interferes with (and kills) any
+                // active session started by connect_emotiv.  We manually send
+                // queryHeadsets after authorization instead.
                 let config = CortexClientConfig {
                     client_id,
                     client_secret,
-                    auto_create_session: true, // Triggers queryHeadsets after auth.
+                    auto_create_session: false,
                     ..Default::default()
                 };
                 let client = CortexClient::new(config);
@@ -553,28 +570,19 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
     }
 }
 
-/// Helper: connect to Cortex, authorize, wait for the internal queryHeadsets
-/// flow to resolve, then read the headset ID from the handle's state.
+/// Helper: connect to Cortex, authorize, manually send `queryHeadsets`,
+/// and read the headset ID from the handle's internal state.
 ///
-/// The `CortexClient` processes the `queryHeadsets` response internally and
-/// stores the target headset ID in its shared state.  We wait for the
-/// `SessionCreated` event (which means a headset was found and a session
-/// was opened) or simply poll `handle.headset_id()` after a short delay.
-///
-/// With `auto_create_session: true`, the client authorizes, queries
-/// headsets, and attempts to create a session.  We only care about the
-/// headset discovery — the session is dropped when rx/handle go out of scope.
+/// Uses `auto_create_session: false` so this connection **never** creates
+/// a session — it only discovers what headsets are available.  The real
+/// session is created later by `connect_emotiv`.
 async fn cortex_query_headsets(
     client: &skill_devices::emotiv::client::CortexClient,
 ) -> Result<Vec<skill_devices::emotiv::types::HeadsetInfo>, String> {
     let (mut rx, handle) = client.connect().await.map_err(|e| e.to_string())?;
 
-    use skill_devices::emotiv::types::CortexEvent;
+    use skill_devices::emotiv::{types::CortexEvent, protocol};
 
-    // Wait for the auth + queryHeadsets flow to complete.  The client
-    // automatically chains: hasAccessRight → authorize → queryHeadsets.
-    // We wait until either `Authorized` arrives (meaning the service is
-    // reachable) or we time out.
     let deadline = tokio::time::Instant::now() + Duration::from_secs(6);
     let mut authorized = false;
 
@@ -583,22 +591,19 @@ async fn cortex_query_headsets(
         match ev {
             Ok(Some(CortexEvent::Authorized)) => {
                 authorized = true;
-                // The client auto-sends refresh + queryHeadsets after authorize.
-                // Give it a moment to process the response.
-            }
-            Ok(Some(CortexEvent::SessionCreated(_))) => {
-                // A session was created — headset_id is definitely available.
+                // auto_create_session is false, so the client did NOT send
+                // queryHeadsets.  Send it manually — the client's WS loop
+                // will process the response and store headset_id internally.
+                let _ = handle.send_raw(protocol::refresh_headset_list()).await;
+                let _ = handle.send_raw(protocol::query_headsets()).await;
+                // Give the WS loop time to receive and process the response.
+                tokio::time::sleep(Duration::from_millis(800)).await;
                 break;
             }
             Ok(Some(CortexEvent::Error(e))) => return Err(e),
             Ok(None) => break,
             Err(_) => break,
             _ => {}
-        }
-        // Once authorized, wait a short moment for the headset query to resolve.
-        if authorized {
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            break;
         }
     }
 
