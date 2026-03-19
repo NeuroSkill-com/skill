@@ -325,6 +325,22 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
       context_size: 8192,
       port: 8080,
       auto_start: true,
+      enabled: true,
+      autostart: true,
+      verbose: false,
+      api_key: "",
+      autoload_mmproj: false,
+      no_mmproj_gpu: false,
+      tools: {
+        enabled: true, date: true, location: true,
+        web_search: true, web_fetch: true,
+        web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" },
+        bash: false, read_file: true, write_file: false, edit_file: false,
+        skill_api: true, execution_mode: "parallel",
+        max_rounds: 10, max_calls_per_round: 4,
+        context_compression: { level: "normal", max_search_results: 5, max_result_chars: 4000 },
+        skills_refresh_interval_secs: 86400,
+      },
     }),
     get_llm_catalog: () => ({
       entries: [
@@ -484,7 +500,9 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
 
     // ── Screenshots ──────────────────────────────────────────────────────
     get_screenshot_config: () => ({
-      enabled: true, interval_secs: 300, ocr_enabled: true, max_storage_mb: 5000,
+      enabled: true, interval_secs: 5, ocr_enabled: true, max_storage_mb: 5000,
+      session_only: false, use_gpu: true, image_size: 768, quality: 80,
+      embed_backend: "onnx", fastembed_model: "clip-vit-base", ocr_engine: "ocrs",
     }),
     get_screenshot_metrics: () => ({
       total_screenshots: 1284,
@@ -516,7 +534,9 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     }),
 
     // ── DND ──────────────────────────────────────────────────────────────
-    get_dnd_config: () => ({ enabled: false, schedule: [] }),
+    get_dnd_config: () => ({ enabled: true, focus_threshold: 60, duration_secs: 60, exit_duration_secs: 300, focus_lookback_secs: 60, focus_mode_identifier: "com.apple.donotdisturb.mode.default", exit_notification: true, snr_exit_db: 5 }),
+    get_dnd_active: () => false,
+    get_dnd_status: () => ({ dnd_active: false, os_active: false, avg_score: 42, sample_count: 12, window_size: 60, threshold: 60 }),
 
     // ── Permissions ──────────────────────────────────────────────────────
     get_active_window_tracking: () => true,
@@ -567,6 +587,19 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     check_screen_recording_permission: () => true,
     check_ocr_models_ready: () => true,
     download_ocr_models: () => true,
+
+    // ── Skills (Tools tab) ────────────────────────────────────────────────
+    list_skills: () => [
+      { name: "web-research",  version: "1.0.0", description: "Deep web research with multi-step search and summarization", enabled: true },
+      { name: "code-review",   version: "0.9.2", description: "Automated code review with security analysis", enabled: true },
+      { name: "data-analysis", version: "1.1.0", description: "Statistical analysis and visualization of datasets", enabled: false },
+    ],
+    get_skills_license: () => "MIT License\\n\\nCopyright (c) 2026 NeuroSkill Contributors",
+    get_skills_refresh_interval: () => 86400,
+    get_skills_last_sync: () => ${Math.floor(Date.now() / 1000) - 3600},
+    set_skills_refresh_interval: () => null,
+    sync_skills_now: () => null,
+    set_disabled_skills: () => null,
 
     // ── Catch-all open_* window commands (no-op in screenshot mode) ──────
     open_settings_window: () => null,

@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //
-// GIF automation — records animated GIFs of app interactions:
-//   scrolling long views, switching tabs, clicking elements.
+// GIF automation — records animated GIFs of every app interaction:
+//   scrolling, tab switching, toggle reveals, expanding panels, editing forms.
 //
-// Usage:  node scripts/screenshots/take-gifs.mjs [--filter <name>] [--theme light|dark]
+// Usage:
+//   node scripts/screenshots/take-gifs.mjs                         # all GIFs, light+dark
+//   node scripts/screenshots/take-gifs.mjs --filter settings-goals  # only matching GIFs
+//   node scripts/screenshots/take-gifs.mjs --theme light            # light only
+//   node scripts/screenshots/take-gifs.mjs --list                   # list available GIFs
 //
 // Prerequisites:
 //   npx playwright install chromium
@@ -15,7 +19,7 @@
 
 import { chromium }         from "playwright";
 import { spawn }            from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath }    from "node:url";
 import GIFEncoder           from "gif-encoder-2";
@@ -25,298 +29,831 @@ import { buildTauriMock }   from "./tauri-mock.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT      = resolve(__dirname, "../..");
 const OUT_DIR   = resolve(ROOT, "docs/screenshots/gifs");
-const FRAME_DIR = resolve(OUT_DIR, ".frames");
 const DEV_PORT  = 1420;
 const BASE_URL  = `http://localhost:${DEV_PORT}`;
 
-// ── CLI args ────────────────────────────────────────────────────────────────
-const args = process.argv.slice(2);
-const filterIdx = args.indexOf("--filter");
-const FILTER    = filterIdx >= 0 ? args[filterIdx + 1] : null;
-const themeIdx  = args.indexOf("--theme");
-const THEMES    = themeIdx >= 0 ? [args[themeIdx + 1]] : ["light", "dark"];
+// ── CLI ─────────────────────────────────────────────────────────────────────
+const cliArgs   = process.argv.slice(2);
+const filterIdx = cliArgs.indexOf("--filter");
+const FILTER    = filterIdx >= 0 ? cliArgs[filterIdx + 1] : null;
+const themeIdx  = cliArgs.indexOf("--theme");
+const THEMES    = themeIdx >= 0 ? [cliArgs[themeIdx + 1]] : ["light", "dark"];
+const LIST_MODE = cliArgs.includes("--list");
 
-// ── GIF Config ──────────────────────────────────────────────────────────────
-const GIF_WIDTH      = 800;   // output GIF width (height scales proportionally)
-const FRAME_DELAY_MS = 120;   // default delay between frames in the GIF
-const PAUSE_DELAY_MS = 800;   // delay for "pause" frames (hold on final state)
+// ── Timing constants ────────────────────────────────────────────────────────
+const F   = 120;     // default frame delay (ms) in GIF playback
+const H   = 1400;    // hold/pause frame delay
+const PG  = 3000;    // wait for page to fully render after navigation
+const TAB = 1000;    // wait after clicking a tab or toggle for content to render
+const SCR = 60;      // delay between scroll sub-frames
 
-// ── Interaction Definitions ─────────────────────────────────────────────────
-//
-// Each entry describes a GIF to record:
-//   name:     slug for the output filename
-//   route:    the app route to navigate to
-//   viewport: { width, height }
-//   steps:    array of interaction steps (executed in order)
-//
-// Step types:
-//   { action: "wait", ms }                         — wait N ms
-//   { action: "screenshot" }                       — capture a frame
-//   { action: "scroll", selector, by, frames }     — scroll element, capturing `frames` frames
-//   { action: "click", selector }                  — click an element
-//   { action: "tabs", selector, labels, pauseMs }  — click each tab in sequence, capture each
-//   { action: "hover", selector }                  — hover over an element
-//   { action: "type", selector, text }             — type text into an input
-//   { action: "pause" }                            — add a longer-delay frame (hold)
+// Content area selector used inside settings tabs.
+// The settings page has sidebar + main content; we scroll the right panel.
+const SC = "main";
 
-const INTERACTIONS = [
-  // ── Dashboard: scroll through all sections ────────────────────────────
+// ── Step DSL ────────────────────────────────────────────────────────────────
+const w  = (ms)              => ({ a: "wait", ms });
+const s  = (d)               => ({ a: "shot", d: d || F });
+const h  = (d)               => ({ a: "hold", d: d || H });
+const sh = ()                => [s(), h()];  // shot + hold combo
+const scroll = (px, n)       => ({ a: "scroll", sel: SC, px, n: n || Math.ceil(px / 80) });
+const ct = (text, ms)        => ({ a: "ct", text, ms: ms || TAB });
+const ck = (sel, ms)         => ({ a: "ck", sel, ms: ms || TAB });
+const type_ = (sel, text)    => ({ a: "type", sel, text });
+const tabs = (labels)        => ({ a: "tabs", labels });
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  ALL INTERACTIONS
+// ═══════════════════════════════════════════════════════════════════════════
+const ALL = [
+
+  // ─────────────────── DASHBOARD ──────────────────────────────────────────
   {
-    name: "dashboard-scroll",
-    route: "/",
-    viewport: { width: 1280, height: 900 },
+    name: "dashboard-full-scroll",
+    desc: "Dashboard: full scroll from top (GPU, device hero, signal, electrode guide, brain state, indices, composites, consciousness, PPG, IMU, EEG chart, recording bar)",
+    route: "/", vp: [1280, 900],
     steps: [
-      { action: "wait", ms: 2000 },
-      { action: "screenshot" },
-      { action: "scroll", selector: "main", by: 2400, frames: 16 },
-      { action: "pause" },
+      w(PG), ...sh(),
+      scroll(350, 4), ...sh(),
+      scroll(350, 4), ...sh(),
+      scroll(350, 4), ...sh(),
+      scroll(350, 4), ...sh(),
+      scroll(350, 4), ...sh(),
+      scroll(350, 4), ...sh(),
+      scroll(350, 4), ...sh(),
+      scroll(350, 4), ...sh(),
+    ],
+  },
+  {
+    name: "dashboard-electrode-guide",
+    desc: "Dashboard: expand Electrode Placement Guide, scroll through it, collapse",
+    route: "/", vp: [1280, 900],
+    steps: [
+      w(PG),
+      scroll(300, 3),
+      ct("Electrode Placement Guide"), s(), h(),
+      scroll(400, 4), ...sh(),
+      scroll(300, 3), ...sh(),
+      ct("Electrode Placement Guide"), s(), // collapse
+    ],
+  },
+  {
+    name: "dashboard-collapse-sections",
+    desc: "Dashboard: toggle collapse/expand on Brain State, EEG Indices, Composite Scores, Consciousness sections",
+    route: "/", vp: [1280, 900],
+    steps: [
+      w(PG), scroll(700, 6),
+      ...sh(),
+      ct("Brain State", 600), s(),   ct("Brain State", 600), ...sh(),
+      scroll(300, 3),
+      ct("EEG Indices", 600), s(),   ct("EEG Indices", 600), ...sh(),
+      scroll(300, 3),
+      ct("Composite Scores", 600), s(), ct("Composite Scores", 600), ...sh(),
+      scroll(400, 3),
+      ct("Consciousness", 600), s(), ct("Consciousness", 600), ...sh(),
     ],
   },
 
-  // ── Settings: cycle through sub-tabs ──────────────────────────────────
+  // ─────────────────── SETTINGS > GOALS ──────────────────────────────────
+  // DND is enabled by default in mock → shows all sub-settings
   {
-    name: "settings-tabs",
-    route: "/settings",
-    viewport: { width: 1100, height: 780 },
+    name: "settings-goals-slider-and-chart",
+    desc: "Settings > Goals: hero, daily recording goal slider, quick presets, 30-day chart, how-it-works",
+    route: "/settings", vp: [1100, 780],
     steps: [
-      { action: "wait", ms: 1500 },
-      { action: "tabs", containerSelector: "nav, [role='tablist']", labels: [
-        "Goals", "Devices", "EXG", "Sleep", "Calibration", "Voice",
+      w(PG), ct("Goals"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-goals-dnd-full",
+    desc: "Settings > Goals: DND automation — toggle ON (already on), threshold slider, sustained duration presets, exit delay presets, focus lookback presets, focus mode picker, exit notification toggle, SNR exit threshold, activation progress bar",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Goals"),
+      // scroll past the goal section to DND
+      scroll(750, 6), ...sh(),
+      scroll(400, 4), ...sh(),   // threshold + duration
+      scroll(400, 4), ...sh(),   // exit delay + lookback
+      scroll(400, 4), ...sh(),   // focus mode picker + exit notification
+      scroll(400, 4), ...sh(),   // SNR exit + activation progress
+      scroll(300, 3), ...sh(),   // status indicator
+    ],
+  },
+
+  // ─────────────────── SETTINGS > DEVICES ────────────────────────────────
+  {
+    name: "settings-devices-list",
+    desc: "Settings > Devices: supported device companies accordion, paired devices, BLE discovered list",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Devices"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-devices-openbci",
+    desc: "Settings > Devices: expand OpenBCI section — board type radio buttons, connection config (BLE/Serial/WiFi/Galea)",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Devices"),
+      scroll(600, 5),
+      ct("OpenBCI"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > SLEEP ──────────────────────────────────
+  {
+    name: "settings-sleep",
+    desc: "Settings > Sleep: clock visualization, bedtime/wake time inputs, schedule presets",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Sleep"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(300, 3), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > CALIBRATION ────────────────────────────
+  {
+    name: "settings-calibration-profiles",
+    desc: "Settings > Calibration: profile list with action summaries, last calibration timestamps",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Calibration"), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-calibration-editor",
+    desc: "Settings > Calibration: click New Profile to open editor — name, actions list, duration pickers, break/loop config, auto-start toggle",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Calibration"),
+      ct("New Profile", 1200), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      ct("Cancel", 600), s(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > VOICE (TTS) ───────────────────────────
+  {
+    name: "settings-voice",
+    desc: "Settings > Voice: backend toggle (KittenTTS / NeuTTS), voice picker grid, preset voices, custom reference wav, test/speak controls",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Voice"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > LLM ────────────────────────────────────
+  {
+    name: "settings-llm-server",
+    desc: "Settings > LLM: server enable/autostart toggles, start/stop server, active model indicator, OpenAI-compatible endpoint list",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("LLM"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-llm-models",
+    desc: "Settings > LLM: model family dropdown, quant picker cards with Use/Download buttons, recommended badges, hardware fit indicators",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("LLM"),
+      scroll(700, 6), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-llm-advanced",
+    desc: "Settings > LLM: expand Advanced/Inference section — GPU layers presets, context size, temperature, verbose toggle, API key, mmproj toggles",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("LLM"),
+      scroll(1200, 8),
+      // Click "Inference" to expand advanced
+      ct("Inference", 800), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > TOOLS ──────────────────────────────────
+  {
+    name: "settings-tools-toggles",
+    desc: "Settings > Tools: master enable toggle, per-tool toggles (date, location, web search, web fetch, bash, read/write/edit file, skill API) with descriptions and warning badges",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Tools"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-tools-web-search",
+    desc: "Settings > Tools: web search provider picker (DuckDuckGo/Brave/SearXNG), Brave API key input, SearXNG URL input",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Tools"),
+      scroll(500, 5), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-tools-execution",
+    desc: "Settings > Tools: execution mode (sequential/parallel), max rounds presets, max calls per round, context compression level, max search results/chars inputs",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Tools"),
+      scroll(900, 7), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-tools-skills",
+    desc: "Settings > Tools: installed skills list with enable/disable toggles, skills license, sync controls",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Tools"),
+      scroll(1400, 10), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > EEG MODEL ──────────────────────────────
+  {
+    name: "settings-eeg-model",
+    desc: "Settings > EEG Model: download/encoder status, weights path, HNSW M and ef_construction presets",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("EEG Model"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > EMBEDDINGS ─────────────────────────────
+  {
+    name: "settings-embeddings",
+    desc: "Settings > Embeddings: model family selector dropdown, active model indicator, re-embed controls, stale label count, progress bar",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Embeddings"), ...sh(),
+      scroll(300, 3), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > SCREENSHOTS ────────────────────────────
+  {
+    name: "settings-screenshots-config",
+    desc: "Settings > Screenshots: enable toggle, session-only toggle, interval slider, image size slider, quality slider, embed backend picker, OCR toggle",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Screenshots"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-screenshots-ocr-and-metrics",
+    desc: "Settings > Screenshots: OCR engine picker, OCR model download, re-embed controls, pipeline metrics dashboard with capture/OCR/resize/save breakdown",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Screenshots"),
+      scroll(900, 7), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > PROACTIVE HOOKS ────────────────────────
+  {
+    name: "settings-hooks",
+    desc: "Settings > Proactive Hooks: hook list with name/enabled/keywords/threshold, scenario examples, add/remove hooks, keyword suggestions, distance suggestions",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Proactive Hooks"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > APPEARANCE ─────────────────────────────
+  {
+    name: "settings-appearance",
+    desc: "Settings > Appearance: font size presets, theme picker (light/dark/system), high contrast toggle, accent color palette, chart color scheme picker",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Appearance"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(300, 3), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > SETTINGS (GENERAL) ─────────────────────
+  {
+    name: "settings-general-devices",
+    desc: "Settings > Settings: data directory, paired devices with pair/forget/prefer controls, serial number and MAC reveal toggles",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Settings"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "settings-general-openbci",
+    desc: "Settings > Settings: OpenBCI expandable section — board type, BLE scan timeout, serial port picker, WiFi shield IP, Galea IP",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Settings"),
+      scroll(800, 6),
+      ct("OpenBCI"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > SHORTCUTS ──────────────────────────────
+  {
+    name: "settings-shortcuts",
+    desc: "Settings > Shortcuts: global keyboard shortcut recorder for each window (settings, help, history, label, search, calibration, focus timer, API)",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Shortcuts"), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > UMAP ───────────────────────────────────
+  {
+    name: "settings-umap",
+    desc: "Settings > UMAP: repulsion strength slider/presets, negative sample rate presets, neighbor presets, epoch presets, timeout presets, random seed, reset defaults button",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("UMAP"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > UPDATES ────────────────────────────────
+  {
+    name: "settings-updates",
+    desc: "Settings > Updates: check-for-updates button, update status, auto-install countdown, update interval presets, auto-start toggle",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Updates"), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS > PERMISSIONS ────────────────────────────
+  {
+    name: "settings-permissions",
+    desc: "Settings > Permissions: accessibility permission status, screen recording permission, Bluetooth permission, notification permission — with open-settings buttons",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG), ct("Permissions"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SETTINGS: ALL TABS RAPID CYCLE ────────────────────
+  {
+    name: "settings-all-tabs-cycle",
+    desc: "Settings: rapid cycle through all 18 sub-tabs showing sidebar navigation",
+    route: "/settings", vp: [1100, 780],
+    steps: [
+      w(PG),
+      tabs([
+        "Goals", "Devices", "Sleep", "Calibration", "Voice",
         "LLM", "Tools", "EEG Model", "Embeddings", "Screenshots",
         "Proactive Hooks", "Appearance", "Settings", "Shortcuts", "UMAP",
         "Updates", "Permissions",
-      ], pauseMs: 400 },
+      ]),
+      h(),
     ],
   },
 
-  // ── Help: cycle through help sections ─────────────────────────────────
+  // ─────────────────── CHAT ──────────────────────────────────────────────
   {
-    name: "help-tabs",
-    route: "/help",
-    viewport: { width: 1100, height: 780 },
+    name: "chat-conversation",
+    desc: "Chat: sidebar with session list, message thread with user/assistant messages, markdown rendering, input bar",
+    route: "/chat", vp: [1100, 780],
     steps: [
-      { action: "wait", ms: 1500 },
-      { action: "tabs", containerSelector: "nav, [role='tablist']", labels: [
+      w(PG), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "chat-settings-panel",
+    desc: "Chat: toggle open the settings panel overlay (model config, system prompt, temperature)",
+    route: "/chat", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      ck("[aria-label='Settings'], [title='Settings']"), ...sh(),
+      scroll(300, 3), ...sh(),
+      ck("[aria-label='Settings'], [title='Settings']"), s(),
+    ],
+  },
+  {
+    name: "chat-tools-panel",
+    desc: "Chat: toggle open the tools panel overlay (active tools list, enable/disable each)",
+    route: "/chat", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      ck("[aria-label='Tools'], [title='Tools']"), ...sh(),
+      scroll(300, 3), ...sh(),
+      ck("[aria-label='Tools'], [title='Tools']"), s(),
+    ],
+  },
+
+  // ─────────────────── SEARCH ────────────────────────────────────────────
+  {
+    name: "search-eeg-mode",
+    desc: "Search > EEG: time range picker, K/EF params, preset buttons, trigger search, streaming results with neighbor cards and distance scores",
+    route: "/search?mode=eeg", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      ct("Search", 2500), ...sh(),
+      scroll(500, 5), ...sh(),
+      scroll(500, 5), ...sh(),
+    ],
+  },
+  {
+    name: "search-text-mode",
+    desc: "Search > Text: semantic text query input, label results with similarity scores and timestamps",
+    route: "/search?mode=text", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      type_("textarea, input[type=text]", "deep focus coding session"), w(500), ...sh(),
+    ],
+  },
+  {
+    name: "search-images-mode",
+    desc: "Search > Images: screenshot search by text, OCR text matches, similarity ranked thumbnails",
+    route: "/search?mode=images", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      type_("textarea, input[type=text]", "code editor"), w(500), ...sh(),
+    ],
+  },
+  {
+    name: "search-mode-switching",
+    desc: "Search: switch between EEG, Text, and Images modes",
+    route: "/search", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      ct("Text"), ...sh(),
+      ct("EEG"), ...sh(),
+      ct("Images"), ...sh(),
+    ],
+  },
+
+  // ─────────────────── HISTORY ───────────────────────────────────────────
+  {
+    name: "history-overview",
+    desc: "History: streak counter, stats badges, day navigation, session cards with labels and duration",
+    route: "/history", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "history-session-expand",
+    desc: "History: expand a session card to show SessionDetail — band power metrics, time-series charts, label timeline",
+    route: "/history", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      ck("[data-session-row], .cursor-pointer", 1500), ...sh(),
+      scroll(500, 5), ...sh(),
+      scroll(500, 5), ...sh(),
+      scroll(500, 5), ...sh(),
+    ],
+  },
+
+  // ─────────────────── SESSION DETAIL ────────────────────────────────────
+  {
+    name: "session-detail-full",
+    desc: "Session detail: metadata header, band power summary, time-series charts (alpha/beta/theta/delta/gamma, focus, relaxation, meditation), sleep staging, label annotations",
+    route: "/session?csv_path=/data/session_20260318_120000.csv", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── COMPARE ───────────────────────────────────────────
+  {
+    name: "compare-overview",
+    desc: "Compare: dual side-by-side timeline pickers, day navigation arrows, session bar visualization, datetime range selectors",
+    route: "/compare", vp: [1100, 780],
+    steps: [
+      w(PG), ...sh(),
+      scroll(500, 5), ...sh(),
+      scroll(500, 5), ...sh(),
+    ],
+  },
+
+  // ─────────────────── HELP ──────────────────────────────────────────────
+  {
+    name: "help-all-tabs-cycle",
+    desc: "Help: cycle through all 11 tabs — Dashboard, Electrodes, Settings, Windows, API, TTS, LLM, Hooks, Privacy, References, FAQ",
+    route: "/help", vp: [1100, 780],
+    steps: [
+      w(PG),
+      tabs([
         "Dashboard", "Electrodes", "Settings", "Windows", "API",
         "TTS", "LLM", "Hooks", "Privacy", "References", "FAQ",
-      ], pauseMs: 400 },
+      ]),
+      h(),
     ],
   },
-
-  // ── History: expand session cards ─────────────────────────────────────
   {
-    name: "history-expand",
-    route: "/history",
-    viewport: { width: 1100, height: 780 },
+    name: "help-dashboard-scroll",
+    desc: "Help > Dashboard: status hero, battery, signal quality, EEG channels, band powers, FAA, waveforms, GPU, tray icons — full scroll",
+    route: "/help", vp: [1100, 780],
     steps: [
-      { action: "wait", ms: 2000 },
-      { action: "screenshot" },
-      // Click the first session card to expand it
-      { action: "click", selector: "[data-testid='session-card']:first-child, .session-card:first-child, button:has-text('session')" },
-      { action: "wait", ms: 600 },
-      { action: "screenshot" },
-      { action: "scroll", selector: "main", by: 600, frames: 6 },
-      { action: "pause" },
+      w(PG), ct("Dashboard"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
     ],
   },
-
-  // ── Chat: scroll through messages ─────────────────────────────────────
   {
-    name: "chat-scroll",
-    route: "/chat",
-    viewport: { width: 1100, height: 780 },
+    name: "help-settings-scroll",
+    desc: "Help > Settings: paired devices, signal processing, embedding, calibration, shortcuts, debug logging, updates — full scroll",
+    route: "/help", vp: [1100, 780],
     steps: [
-      { action: "wait", ms: 2000 },
-      { action: "screenshot" },
-      { action: "scroll", selector: "[data-testid='chat-messages'], .chat-messages, main", by: 800, frames: 8 },
-      { action: "pause" },
+      w(PG), ct("Settings"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
     ],
   },
-
-  // ── Search: switch between search modes ───────────────────────────────
   {
-    name: "search-modes",
-    route: "/search",
-    viewport: { width: 1100, height: 780 },
+    name: "help-privacy-scroll",
+    desc: "Help > Privacy: data storage, network, third-party, telemetry, permissions — full scroll",
+    route: "/help", vp: [1100, 780],
     steps: [
-      { action: "wait", ms: 1500 },
-      { action: "screenshot" },
-      // Click Text tab
-      { action: "click", selector: "button:has-text('Text'), a:has-text('Text')" },
-      { action: "wait", ms: 600 },
-      { action: "screenshot" },
-      // Click EEG tab
-      { action: "click", selector: "button:has-text('EEG'), a:has-text('EEG')" },
-      { action: "wait", ms: 600 },
-      { action: "screenshot" },
-      // Click Images tab
-      { action: "click", selector: "button:has-text('Images'), a:has-text('Images')" },
-      { action: "wait", ms: 600 },
-      { action: "screenshot" },
-      { action: "pause" },
+      w(PG), ct("Privacy"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
     ],
   },
-
-  // ── Session: scroll through metrics ───────────────────────────────────
   {
-    name: "session-scroll",
-    route: "/session?csv_path=/data/session_20260318_120000.csv",
-    viewport: { width: 1100, height: 780 },
+    name: "help-references-scroll",
+    desc: "Help > References: academic papers and citations list — full scroll",
+    route: "/help", vp: [1100, 780],
     steps: [
-      { action: "wait", ms: 2000 },
-      { action: "screenshot" },
-      { action: "scroll", selector: "main", by: 1800, frames: 12 },
-      { action: "pause" },
+      w(PG), ct("References"), ...sh(),
+      scroll(500, 5), ...sh(),
+      scroll(500, 5), ...sh(),
+      scroll(500, 5), ...sh(),
     ],
   },
-
-  // ── Downloads: show download progress ─────────────────────────────────
   {
-    name: "downloads-scroll",
-    route: "/downloads",
-    viewport: { width: 900, height: 700 },
+    name: "help-faq-scroll",
+    desc: "Help > FAQ: frequently asked questions — full scroll",
+    route: "/help", vp: [1100, 780],
     steps: [
-      { action: "wait", ms: 1500 },
-      { action: "screenshot" },
-      { action: "scroll", selector: "main", by: 600, frames: 6 },
-      { action: "pause" },
+      w(PG), ct("FAQ"), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
     ],
   },
 
-  // ── About: scroll the about page ──────────────────────────────────────
+  // ─────────────────── CALIBRATION ───────────────────────────────────────
+  {
+    name: "calibration-electrode-tabs",
+    desc: "Calibration: electrode quality indicators, switch between Muse and 10-20 electrode tabs, action timeline",
+    route: "/calibration", vp: [800, 640],
+    steps: [
+      w(PG), ...sh(),
+      ct("10-20", TAB), ...sh(),
+      ct("Muse", TAB), ...sh(),
+      scroll(300, 3), ...sh(),
+      scroll(300, 3), ...sh(),
+    ],
+  },
+
+  // ─────────────────── ONBOARDING ────────────────────────────────────────
+  {
+    name: "onboarding-wizard",
+    desc: "Onboarding: multi-step wizard — welcome, bluetooth pairing, electrode fit, calibration, model downloads",
+    route: "/onboarding", vp: [800, 640],
+    steps: [
+      w(PG), ...sh(),
+      ct("bluetooth", TAB), ...sh(),
+      ct("fit", TAB), ...sh(),
+      ct("calibration", TAB), ...sh(),
+      scroll(300, 3), ...sh(),
+      ct("models", TAB), ...sh(),
+    ],
+  },
+
+  // ─────────────────── LABELS ────────────────────────────────────────────
+  {
+    name: "labels-search-modes",
+    desc: "Labels: label list, search bar, toggle between exact and semantic search modes, pagination",
+    route: "/labels", vp: [900, 700],
+    steps: [
+      w(PG), ...sh(),
+      ct("semantic", 600), ...sh(),
+      ct("exact", 600), s(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+
+  // ─────────────────── LABEL DIALOG ──────────────────────────────────────
+  {
+    name: "label-quick-entry",
+    desc: "Label: quick label input dialog with textarea, recent labels chips, character count, submit/cancel",
+    route: "/label", vp: [700, 520],
+    steps: [
+      w(PG), ...sh(),
+      type_("textarea", "Deep focus — writing documentation for the EEG pipeline"),
+      w(500), ...sh(),
+    ],
+  },
+
+  // ─────────────────── FOCUS TIMER ───────────────────────────────────────
+  {
+    name: "focus-timer-config",
+    desc: "Focus Timer: timer display, work/break/long-break config inputs, preset picker (Pomodoro/Deep Work/Short Focus), auto-label toggle, TTS toggle, session log",
+    route: "/focus-timer", vp: [700, 620],
+    steps: [
+      w(PG), ...sh(),
+      scroll(300, 3), ...sh(),
+      scroll(300, 3), ...sh(),
+      scroll(300, 3), ...sh(),
+    ],
+  },
+
+  // ─────────────────── DOWNLOADS ─────────────────────────────────────────
+  {
+    name: "downloads-manager",
+    desc: "Downloads: model download list with progress bars, pause/resume/cancel controls, file sizes",
+    route: "/downloads", vp: [900, 700],
+    steps: [
+      w(PG), ...sh(),
+      scroll(300, 3), ...sh(),
+    ],
+  },
+
+  // ─────────────────── API ───────────────────────────────────────────────
+  {
+    name: "api-status-and-clients",
+    desc: "API: WebSocket URL, mDNS discovery command, connected clients table, request log with timestamps",
+    route: "/api", vp: [900, 700],
+    steps: [
+      w(PG), ...sh(),
+      scroll(400, 4), ...sh(),
+      scroll(400, 4), ...sh(),
+    ],
+  },
+  {
+    name: "api-code-examples",
+    desc: "API: code example tabs — Overview, neuroskill CLI, WebSocket, Python, Node.js — with copy button",
+    route: "/api", vp: [900, 700],
+    steps: [
+      w(PG),
+      scroll(400, 4),
+      ct("Overview", TAB), ...sh(),
+      ct("neuroskill", TAB), ...sh(),
+      ct("WebSocket", TAB), ...sh(),
+      ct("Python", TAB), ...sh(),
+      ct("Node.js", TAB), ...sh(),
+    ],
+  },
+
+  // ─────────────────── ABOUT ─────────────────────────────────────────────
   {
     name: "about-scroll",
-    route: "/about",
-    viewport: { width: 520, height: 620 },
+    desc: "About: app icon, version, tagline, website/repo/discord links, authors, license, acknowledgements",
+    route: "/about", vp: [520, 620],
     steps: [
-      { action: "wait", ms: 1500 },
-      { action: "screenshot" },
-      { action: "scroll", selector: "main", by: 600, frames: 8 },
-      { action: "pause" },
+      w(PG), ...sh(),
+      scroll(400, 5), ...sh(),
     ],
   },
 
-  // ── Labels: scroll through labels list ────────────────────────────────
+  // ─────────────────── WHAT'S NEW ────────────────────────────────────────
   {
-    name: "labels-scroll",
-    route: "/labels",
-    viewport: { width: 900, height: 700 },
+    name: "whats-new",
+    desc: "What's New: version selector dropdown, changelog markdown content, dismiss button",
+    route: "/whats-new", vp: [700, 620],
     steps: [
-      { action: "wait", ms: 1500 },
-      { action: "screenshot" },
-      { action: "scroll", selector: "main", by: 600, frames: 6 },
-      { action: "pause" },
-    ],
-  },
-
-  // ── Calibration: scroll ───────────────────────────────────────────────
-  {
-    name: "calibration-scroll",
-    route: "/calibration",
-    viewport: { width: 800, height: 640 },
-    steps: [
-      { action: "wait", ms: 1500 },
-      { action: "screenshot" },
-      { action: "scroll", selector: "main", by: 500, frames: 6 },
-      { action: "pause" },
+      w(PG), ...sh(),
+      scroll(400, 4), ...sh(),
     ],
   },
 ];
 
+// ── List mode ───────────────────────────────────────────────────────────────
+if (LIST_MODE) {
+  console.log(`Available GIF interactions (${ALL.length}):\n`);
+  for (const i of ALL) {
+    console.log(`  ${i.name.padEnd(42)} ${i.desc}`);
+  }
+  process.exit(0);
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-async function waitForServer(url, timeoutMs = 30000) {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const resp = await fetch(url);
-      if (resp.ok) return true;
-    } catch { /* not ready */ }
+function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+
+async function waitForServer(url, ms = 60000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    try { const r = await fetch(url); if (r.ok) return; } catch {}
     await new Promise(r => setTimeout(r, 500));
   }
-  throw new Error(`Dev server not ready after ${timeoutMs}ms`);
+  throw new Error("Dev server timeout");
 }
 
-/**
- * Resize a PNG buffer to fit GIF_WIDTH while keeping aspect ratio.
- * Returns raw RGBA pixel data + dimensions.
- */
-async function resizeFrame(pngBuffer, targetWidth) {
-  const metadata = await sharp(pngBuffer).metadata();
-  const scale = targetWidth / metadata.width;
-  const targetHeight = Math.round(metadata.height * scale);
-
-  const raw = await sharp(pngBuffer)
-    .resize(targetWidth, targetHeight, { fit: "fill" })
-    .ensureAlpha()
-    .raw()
-    .toBuffer();
-
-  return { data: raw, width: targetWidth, height: targetHeight };
+async function resizeFrame(buf, w) {
+  const m = await sharp(buf).metadata();
+  const h = Math.round(m.height * (w / m.width));
+  return { data: await sharp(buf).resize(w, h, { fit: "fill" }).ensureAlpha().raw().toBuffer(), w, h };
 }
 
-/**
- * Encode an array of PNG buffers into a GIF file.
- */
-async function encodeGif(frames, outputPath, { delays = [], defaultDelay = FRAME_DELAY_MS } = {}) {
-  if (frames.length === 0) {
-    console.warn("    No frames to encode, skipping.");
-    return;
+async function encodeGif(frames, delays, path) {
+  if (!frames.length) return;
+  const rs = []; let gw, gh;
+  for (const f of frames) { const r = await resizeFrame(f, 800); if (!gw) { gw = r.w; gh = r.h; } rs.push(r); }
+  const enc = new GIFEncoder(gw, gh, "neuquant", true);
+  enc.setTransparent(0x00000000); enc.setRepeat(0); enc.setQuality(10); enc.start();
+  for (let i = 0; i < rs.length; i++) { enc.setDelay(delays[i] ?? F); enc.addFrame(rs[i].data); }
+  enc.finish();
+  const buf = enc.out.getData();
+  writeFileSync(path, buf);
+  console.log(`    -> ${path} (${frames.length} frames, ${(buf.length/1048576).toFixed(2)} MB)`);
+}
+
+async function findByText(page, text) {
+  let l = page.locator("button, [role='tab'], a, summary, label, [role='switch']")
+    .filter({ hasText: new RegExp(escapeRegex(text), "i") }).first();
+  if (await l.count() > 0) return l;
+  l = page.getByText(text, { exact: false }).first();
+  return (await l.count() > 0) ? l : null;
+}
+
+async function findScrollable(page, sel) {
+  for (const s of sel.split(",").map(x => x.trim())) {
+    try { if (await page.locator(s).count() > 0) return s; } catch {}
   }
-
-  // Resize all frames to the same dimensions
-  const resized = [];
-  let gifWidth, gifHeight;
-  for (const frame of frames) {
-    const r = await resizeFrame(frame, GIF_WIDTH);
-    if (!gifWidth) { gifWidth = r.width; gifHeight = r.height; }
-    resized.push(r);
-  }
-
-  const encoder = new GIFEncoder(gifWidth, gifHeight, "neuquant", true);
-  encoder.setTransparent(0x00000000);
-  encoder.setRepeat(0);   // loop forever
-  encoder.setQuality(10); // 1=best, 20=fastest
-  encoder.start();
-
-  for (let i = 0; i < resized.length; i++) {
-    const delay = delays[i] ?? defaultDelay;
-    encoder.setDelay(delay);
-    encoder.addFrame(resized[i].data);
-  }
-
-  encoder.finish();
-  const buffer = encoder.out.getData();
-
-  const { writeFileSync } = await import("node:fs");
-  writeFileSync(outputPath, buffer);
-
-  const sizeMb = (buffer.length / 1024 / 1024).toFixed(2);
-  console.log(`    -> ${outputPath} (${frames.length} frames, ${sizeMb} MB)`);
+  return "body";
 }
 
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
-  mkdirSync(FRAME_DIR, { recursive: true });
 
-  // Filter interactions if --filter provided
-  let interactions = INTERACTIONS;
+  let interactions = ALL;
   if (FILTER) {
     interactions = interactions.filter(i => i.name.includes(FILTER));
-    if (interactions.length === 0) {
-      console.error(`No interactions matching filter: ${FILTER}`);
-      console.log("Available:", INTERACTIONS.map(i => i.name).join(", "));
+    if (!interactions.length) {
+      console.error(`No match for: ${FILTER}\nAvailable: ${ALL.map(i=>i.name).join(", ")}`);
       process.exit(1);
     }
   }
 
-  // Start Vite dev server
+  const total = interactions.length * THEMES.length;
+  console.log(`Recording ${interactions.length} GIF(s) × ${THEMES.length} theme(s) = ${total} total\n`);
+
   console.log("Starting Vite dev server...");
   const vite = spawn("npx", ["vite", "dev", "--port", String(DEV_PORT)], {
-    cwd: ROOT,
-    stdio: ["ignore", "pipe", "pipe"],
+    cwd: ROOT, stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, BROWSER: "none" },
   });
   const cleanup = () => { try { vite.kill("SIGTERM"); } catch {} };
@@ -325,221 +862,121 @@ async function main() {
   process.on("SIGTERM", () => { cleanup(); process.exit(1); });
 
   try {
-    await waitForServer(BASE_URL, 60000);
+    await waitForServer(BASE_URL);
     console.log("Dev server ready.\n");
 
     const browser = await chromium.launch({ headless: true });
-
-    // Create contexts per theme
     const contexts = {};
     for (const theme of THEMES) {
-      contexts[theme] = await browser.newContext({
-        deviceScaleFactor: 2,
-        colorScheme: theme,
-      });
+      contexts[theme] = await browser.newContext({ deviceScaleFactor: 2, colorScheme: theme });
       await contexts[theme].addInitScript(buildTauriMock(theme));
       await contexts[theme].addInitScript(`
-        localStorage.setItem("skill-theme", "${theme}");
+        localStorage.setItem("skill-theme","${theme}");
         localStorage.removeItem("skill-high-contrast");
       `);
     }
 
     // Warm up
-    console.log("Warming up...");
+    console.log("Warming up (compiling frontend)...");
     for (const theme of THEMES) {
-      const page = await contexts[theme].newPage();
-      await page.setViewportSize({ width: 1280, height: 900 });
-      try {
-        await page.goto(BASE_URL, { waitUntil: "networkidle", timeout: 45000 });
-        await page.waitForTimeout(3000);
-      } catch {}
-      await page.close();
+      const p = await contexts[theme].newPage();
+      await p.setViewportSize({ width: 1280, height: 900 });
+      try { await p.goto(BASE_URL, { waitUntil: "networkidle", timeout: 45000 }); await p.waitForTimeout(3000); } catch {}
+      await p.close();
     }
     console.log("Warm-up complete.\n");
 
-    // ── Record each interaction ───────────────────────────────────────────
-    for (const interaction of interactions) {
+    let done = 0;
+    for (const ix of interactions) {
       for (const theme of THEMES) {
-        console.log(`Recording: ${interaction.name} (${theme})`);
-        const ctx = contexts[theme];
-        const page = await ctx.newPage();
-        await page.setViewportSize(interaction.viewport || { width: 1280, height: 900 });
+        done++;
+        console.log(`[${done}/${total}] ${ix.name} (${theme})`);
+        const page = await contexts[theme].newPage();
+        await page.setViewportSize({ width: ix.vp[0], height: ix.vp[1] });
 
-        // Navigate
         try {
-          await page.goto(`${BASE_URL}${interaction.route}`, {
-            waitUntil: "domcontentloaded",
-            timeout: 30000,
-          });
-        } catch (e) {
-          console.warn(`    !! Navigation timeout, skipping.`);
-          await page.close();
-          continue;
-        }
+          await page.goto(`${BASE_URL}${ix.route}`, { waitUntil: "domcontentloaded", timeout: 30000 });
+        } catch { console.warn("    !! nav timeout"); await page.close(); continue; }
 
-        // Apply theme + disable animations
         await page.evaluate((t) => {
           document.documentElement.classList.toggle("dark", t === "dark");
           const s = document.createElement("style");
-          s.textContent = `
-            *, *::before, *::after {
-              animation-duration: 0s !important;
-              animation-delay: 0s !important;
-              transition-duration: 0s !important;
-              transition-delay: 0s !important;
-            }
-          `;
+          s.textContent = "*, *::before, *::after { animation-duration:0s!important; animation-delay:0s!important; transition-duration:0s!important; transition-delay:0s!important; }";
           document.head.appendChild(s);
         }, theme);
 
-        // Execute steps and collect frames
-        const frames = [];
-        const delays = [];
+        const frames = [], delays = [];
+        const cap = async (d) => {
+          const b = await page.screenshot({ type: "png", timeout: 10000 });
+          frames.push(b); delays.push(d || F);
+        };
 
-        async function captureFrame(delay = FRAME_DELAY_MS) {
-          const buf = await page.screenshot({ type: "png", timeout: 10000 });
-          frames.push(buf);
-          delays.push(delay);
-        }
+        // Flatten steps (sh() returns arrays)
+        const flat = ix.steps.flat(Infinity);
 
-        for (const step of interaction.steps) {
+        for (const step of flat) {
           try {
-            switch (step.action) {
-              case "wait":
-                await page.waitForTimeout(step.ms);
-                break;
-
-              case "screenshot":
-                await captureFrame(step.delay || FRAME_DELAY_MS);
-                break;
-
-              case "pause":
-                // Capture current state with a longer delay (hold frame)
-                await captureFrame(step.ms || PAUSE_DELAY_MS);
-                break;
+            switch (step.a) {
+              case "wait": await page.waitForTimeout(step.ms); break;
+              case "shot": await cap(step.d); break;
+              case "hold": await cap(step.d); break;
 
               case "scroll": {
-                const sel = step.selector || "main";
-                const totalScroll = step.by || 1000;
-                const numFrames = step.frames || 10;
-                const scrollPerFrame = totalScroll / numFrames;
-
-                for (let i = 0; i < numFrames; i++) {
-                  await page.evaluate(({ sel, amount }) => {
-                    const el = document.querySelector(sel) || document.scrollingElement || document.body;
-                    el.scrollBy({ top: amount, behavior: "instant" });
-                  }, { sel, amount: scrollPerFrame });
-                  await page.waitForTimeout(50); // let render settle
-                  await captureFrame(step.frameDelay || FRAME_DELAY_MS);
+                const sel = await findScrollable(page, step.sel);
+                const per = step.px / step.n;
+                for (let i = 0; i < step.n; i++) {
+                  await page.evaluate(({s,a})=>{
+                    (document.querySelector(s)||document.scrollingElement||document.body).scrollBy({top:a,behavior:"instant"});
+                  }, {s:sel,a:per});
+                  await page.waitForTimeout(SCR);
+                  await cap(F);
                 }
                 break;
               }
 
-              case "click": {
-                const loc = page.locator(step.selector).first();
-                if (await loc.count() > 0) {
-                  await loc.click();
-                  await page.waitForTimeout(step.waitAfter || 300);
-                  if (step.capture !== false) {
-                    await captureFrame(step.delay || FRAME_DELAY_MS);
-                  }
-                } else {
-                  console.warn(`    !! Click target not found: ${step.selector}`);
-                }
+              case "ck": {
+                const l = page.locator(step.sel).first();
+                if (await l.count()>0) { await l.click(); await page.waitForTimeout(step.ms); }
+                else console.warn(`    !! ck not found: ${step.sel}`);
                 break;
               }
 
-              case "tabs": {
-                const labels = step.labels || [];
-                const pauseMs = step.pauseMs || 400;
-                for (const label of labels) {
-                  // Try multiple strategies to find the tab button
-                  let tabBtn = page.locator("button, [role='tab'], a")
-                    .filter({ hasText: new RegExp(escapeRegex(label), "i") })
-                    .first();
-                  if (await tabBtn.count() === 0) {
-                    // Try with getByText (more lenient)
-                    tabBtn = page.getByText(label, { exact: false }).first();
-                  }
-                  if (await tabBtn.count() > 0) {
-                    await tabBtn.click();
-                    await page.waitForTimeout(pauseMs);
-                    await captureFrame(step.frameDelay || FRAME_DELAY_MS * 2);
-                  } else {
-                    console.warn(`    !! Tab not found: "${label}"`);
-                  }
-                }
+              case "ct": {
+                const el = await findByText(page, step.text);
+                if (el) { await el.click(); await page.waitForTimeout(step.ms); }
+                else console.warn(`    !! ct not found: "${step.text}"`);
                 break;
               }
 
-              case "hover": {
-                const loc = page.locator(step.selector).first();
-                if (await loc.count() > 0) {
-                  await loc.hover();
-                  await page.waitForTimeout(step.waitAfter || 200);
-                  await captureFrame(step.delay || FRAME_DELAY_MS);
+              case "tabs":
+                for (const label of step.labels) {
+                  const el = await findByText(page, label);
+                  if (el) { await el.click(); await page.waitForTimeout(TAB); await cap(F*2); }
+                  else console.warn(`    !! tab: "${label}"`);
                 }
                 break;
-              }
 
               case "type": {
-                const input = page.locator(step.selector).first();
-                if (await input.count() > 0) {
-                  await input.fill(step.text);
-                  await page.waitForTimeout(step.waitAfter || 300);
-                  if (step.capture !== false) {
-                    await captureFrame(step.delay || FRAME_DELAY_MS);
-                  }
+                for (const sel of step.sel.split(",").map(x=>x.trim())) {
+                  const l = page.locator(sel).first();
+                  if (await l.count()>0) { await l.fill(step.text); await page.waitForTimeout(300); break; }
                 }
                 break;
               }
-
-              default:
-                console.warn(`    !! Unknown action: ${step.action}`);
             }
-          } catch (e) {
-            console.warn(`    !! Step failed (${step.action}): ${e.message}`);
-          }
+          } catch (e) { console.warn(`    !! ${step.a}: ${e.message}`); }
         }
 
-        // Encode GIF
-        if (frames.length > 0) {
-          const outputPath = resolve(OUT_DIR, `${interaction.name}-${theme}.gif`);
-          await encodeGif(frames, outputPath, { delays });
-        } else {
-          console.warn(`    !! No frames captured for ${interaction.name} (${theme})`);
-        }
-
+        if (frames.length) await encodeGif(frames, delays, resolve(OUT_DIR, `${ix.name}-${theme}.gif`));
+        else console.warn(`    !! no frames`);
         await page.close();
       }
     }
 
-    // Cleanup
-    for (const theme of THEMES) {
-      await contexts[theme].close();
-    }
+    for (const t of THEMES) await contexts[t].close();
     await browser.close();
-
-    // Remove temp frame dir
-    try {
-      const { rmSync } = await import("node:fs");
-      rmSync(FRAME_DIR, { recursive: true, force: true });
-    } catch {}
-
-    console.log(`\nDone! GIFs saved to: ${OUT_DIR}`);
-    const total = interactions.length * THEMES.length;
-    console.log(`Total: ${total} GIFs`);
-
-  } finally {
-    cleanup();
-  }
+    console.log(`\nDone! ${done} GIFs saved to: ${OUT_DIR}`);
+  } finally { cleanup(); }
 }
 
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-main().catch(err => {
-  console.error("GIF script failed:", err);
-  process.exit(1);
-});
+main().catch(e => { console.error("GIF failed:", e); process.exit(1); });
