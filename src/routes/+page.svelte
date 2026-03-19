@@ -281,6 +281,9 @@ the Free Software Foundation, version 3 only. -->
     temperature_raw: 0,
     device_kind: "unknown",
     hardware_version: null,
+    channel_names: [],
+    eeg_channel_count: 0,
+    eeg_sample_rate_hz: 0,
     has_ppg: false,
     has_imu: false,
     has_central_electrodes: false,
@@ -363,12 +366,31 @@ the Free Software Foundation, version 3 only. -->
   const hasBattery  = $derived(isMuse || isMw75 || isEmotiv || isIdun);
 
   // Channel labels and colours — dynamic based on connected device.
-  const chLabels = $derived(
-    isMw75 ? MW75_CH : isHermes ? HERMES_CH : isEmotiv ? EMOTIV_CH : isIdun ? IDUN_CH : isGanglion ? GANGLION_CH : EEG_CH
-  );
-  const chColors = $derived(
-    isMw75 ? MW75_COLOR : isHermes ? HERMES_COLOR : isEmotiv ? EMOTIV_COLOR : isIdun ? IDUN_COLOR : isGanglion ? GANGLION_COLOR : EEG_COLOR
-  );
+  // Use dynamic channel names from the device when available (handles
+  // Emotiv Insight 5ch, EPOC 14ch, Flex 32ch, etc.), fall back to static
+  // constants for known device kinds.
+  const chLabels = $derived((() => {
+    const dynamic = status.channel_names;
+    if (dynamic && dynamic.length > 0) return dynamic;
+    if (isMw75) return [...MW75_CH];
+    if (isHermes) return [...HERMES_CH];
+    if (isEmotiv) return [...EMOTIV_CH];
+    if (isIdun) return [...IDUN_CH];
+    if (isGanglion) return [...GANGLION_CH];
+    return [...EEG_CH];
+  })());
+  const chColors = $derived((() => {
+    const n = chLabels.length;
+    // Pick the static palette closest to the channel count, then slice/extend.
+    const palette =
+      isMw75 ? MW75_COLOR : isHermes ? HERMES_COLOR : isEmotiv ? EMOTIV_COLOR
+      : isIdun ? IDUN_COLOR : isGanglion ? GANGLION_COLOR : EEG_COLOR;
+    if (n <= palette.length) return [...palette].slice(0, n);
+    // Extend by cycling for devices with more channels than the palette.
+    const out = [...palette];
+    while (out.length < n) out.push(palette[out.length % palette.length]);
+    return out;
+  })());
   /**
    * Athena = Muse S gen 2.
    * Detected by hardware_version "p50" (arrives a few seconds after connect)

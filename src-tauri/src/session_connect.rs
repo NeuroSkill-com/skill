@@ -649,10 +649,12 @@ pub(crate) async fn connect_emotiv(
         }
     }
 
-    app_log!(app, "bluetooth", "[emotiv] connected — streaming EEG at {} Hz",
+    // Read the headset ID for display (e.g. "INSIGHT-5AF2C39E").
+    let headset_id = handle.headset_id().await;
+    app_log!(app, "bluetooth", "[emotiv] connected — {headset_id} streaming EEG at {} Hz",
         skill_constants::EMOTIV_SAMPLE_RATE);
 
-    Ok(Box::new(EmotivAdapter::new_epoc(rx, handle)))
+    Ok(Box::new(EmotivAdapter::new_epoc(rx, handle, headset_id)))
 }
 
 // ── IDUN Guardian (BLE) ───────────────────────────────────────────────────────

@@ -44,6 +44,8 @@ pub struct EmotivAdapter {
     /// Cortex may send fewer channels than EPOC's 14 if an Insight (5-ch) or
     /// MN8 (2-ch) is connected.
     auto_detected: bool,
+    /// Headset ID (e.g. "INSIGHT-5AF2C39E") for display purposes.
+    headset_id: String,
 }
 
 impl EmotivAdapter {
@@ -56,6 +58,7 @@ impl EmotivAdapter {
         handle: CortexHandle,
         eeg_channels: usize,
         channel_names: Vec<String>,
+        headset_id: String,
     ) -> Self {
         Self {
             rx,
@@ -70,14 +73,15 @@ impl EmotivAdapter {
             },
             pending: VecDeque::new(),
             auto_detected: false,
+            headset_id,
         }
     }
 
     /// Convenience constructor for the common EPOC X / EPOC+ (14-channel) case.
-    pub fn new_epoc(rx: mpsc::Receiver<CortexEvent>, handle: CortexHandle) -> Self {
+    pub fn new_epoc(rx: mpsc::Receiver<CortexEvent>, handle: CortexHandle, headset_id: String) -> Self {
         let channel_names: Vec<String> =
             EMOTIV_EPOC_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
-        Self::new(rx, handle, EMOTIV_EPOC_EEG_CHANNELS, channel_names)
+        Self::new(rx, handle, EMOTIV_EPOC_EEG_CHANNELS, channel_names, headset_id)
     }
 
     /// Test-only constructor without a real Cortex handle.
@@ -100,14 +104,22 @@ impl EmotivAdapter {
             },
             pending: VecDeque::new(),
             auto_detected: false,
+            headset_id: "TEST-HEADSET".into(),
         }
     }
 
     fn translate(&mut self, ev: CortexEvent) {
         match ev {
             CortexEvent::SessionCreated(session_id) => {
+                // Use headset ID as the display name (e.g. "INSIGHT-5AF2C39E")
+                // so the UI shows the actual device model.
+                let name = if self.headset_id.is_empty() {
+                    "Emotiv".to_owned()
+                } else {
+                    self.headset_id.clone()
+                };
                 self.pending.push_back(DeviceEvent::Connected(DeviceInfo {
-                    name: "Emotiv".into(),
+                    name,
                     id: session_id,
                     ..Default::default()
                 }));

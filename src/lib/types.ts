@@ -74,6 +74,12 @@ export interface DeviceStatus {
   has_central_electrodes: boolean;
   /** Device supports a full 10-20 montage (or superset). */
   has_full_montage: boolean;
+  /** Channel labels from the connected device (e.g. ["AF3","T7","Pz","T8","AF4"] for Insight). */
+  channel_names?: string[];
+  /** Hardware EEG channel count (e.g. 5 for Insight, 14 for EPOC X). */
+  eeg_channel_count?: number;
+  /** Hardware EEG sample rate in Hz (e.g. 128 for Emotiv). */
+  eeg_sample_rate_hz?: number;
   /** Catch-all for future fields not yet typed. */
   [k: string]: unknown;
 }
