@@ -175,6 +175,10 @@ where
 
     // Cross-round dedup: track (tool_name, arguments) pairs already executed.
     let mut executed_calls = std::collections::HashSet::<(String, String)>::new();
+    // Track last successful tool result so we can surface it if the model
+    // never produces a text response.
+    let mut last_tool_result: Option<String> = None;
+    let mut dedup_nudge_count = 0u32;
 
     for _ in 0..=max_rounds {
         // ── Context-aware history trimming ──────────────────────────────
@@ -202,6 +206,15 @@ where
         let tool_calls = tools::extract_tool_calls(&assistant_text);
         if tool_calls.is_empty() {
             let cleaned = tools::strip_tool_call_blocks(&assistant_text);
+            // If the model returned empty text after we already have tool
+            // results, surface the raw result as a fallback.
+            if cleaned.trim().is_empty() {
+                if let Some(ref result) = last_tool_result {
+                    log::warn!("[tool-orchestration] model returned empty after tool call — returning raw result");
+                    let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
+                    return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+                }
+            }
             return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
         }
 
@@ -235,10 +248,19 @@ where
                 return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
             }
             // All tool calls were duplicates and no visible text was produced.
-            // The model is stuck re-emitting the same call.  Inject a nudge
-            // telling it the results are already available, then let the loop
-            // run one more inference round to produce a text answer.
-            log::info!("[tool-orchestration] all {} tool calls deduped, injecting nudge", n_raw_calls);
+            // The model is stuck re-emitting the same call.
+            dedup_nudge_count += 1;
+            if dedup_nudge_count > 2 {
+                // Model is hopelessly stuck — return the raw tool result.
+                log::warn!("[tool-orchestration] model stuck after {} dedup nudges — returning raw tool result", dedup_nudge_count);
+                if let Some(ref result) = last_tool_result {
+                    let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
+                    return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+                }
+            }
+            // Inject a nudge telling it the results are already available,
+            // then let the loop run one more inference round.
+            log::info!("[tool-orchestration] all {} tool calls deduped (nudge #{}), injecting nudge", n_raw_calls, dedup_nudge_count);
             messages.push(json!({
                 "role": "user",
                 "content": "The tool has already been called and the results are above. Do NOT call any tools. Answer my original question using the tool results you already have."
@@ -320,6 +342,16 @@ where
             }
         }
 
+        // Capture the last successful tool result for the fallback.
+        for msg in messages[tool_results_start..].iter().rev() {
+            if msg.get("role").and_then(|r| r.as_str()) == Some("tool") {
+                if let Some(content) = msg.get("content").and_then(|c| c.as_str()) {
+                    last_tool_result = Some(content.to_string());
+                    break;
+                }
+            }
+        }
+
         // ── Condense prior tool results ─────────────────────────────
         // The model already read old tool results and made its decision.
         // Replace them with one-line summaries to free context for the
@@ -328,6 +360,14 @@ where
         if compression.should_compress_old_results() {
             condense_prior_tool_results(&mut messages, tool_results_start);
         }
+    }
+
+    // If we exhausted all rounds but have a tool result, return it as a
+    // fallback so the user at least sees the raw data.
+    if let Some(result) = last_tool_result {
+        log::warn!("[tool-orchestration] round limit reached but have tool result — returning raw");
+        let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
+        return Ok((fallback, "stop".into(), 0, 0, n_ctx));
     }
 
     Err(format!("tool-calling round limit reached ({max_rounds} rounds). You can increase this in Settings → LLM → Tools → Max rounds."))
