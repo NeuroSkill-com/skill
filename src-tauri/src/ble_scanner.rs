@@ -234,6 +234,39 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
                                         app_log!(app, "bluetooth",
                                             "[scanner] {display_name} id={id} rssi={rssi} dBm"
                                         );
+
+                                        // ── Auto-connect: if a paired device
+                                        // is discovered while idle, start a
+                                        // session automatically. ──────────────
+                                        //
+                                        // A 30-second cooldown after the last
+                                        // disconnect prevents tight reconnect
+                                        // loops when a device is in BLE range
+                                        // but not responding to connections.
+                                        const AUTO_CONNECT_COOLDOWN: Duration = Duration::from_secs(30);
+                                        let should_auto = {
+                                            let r = app.app_state();
+                                            let g = r.lock_or_recover();
+                                            let is_idle = g.stream.is_none()
+                                                && !g.pending_reconnect
+                                                && matches!(
+                                                    g.status.state.as_str(),
+                                                    "disconnected"
+                                                );
+                                            let is_paired = g.status.paired_devices
+                                                .iter()
+                                                .any(|d| d.id == id);
+                                            let cooldown_ok = g.last_disconnect_at
+                                                .map(|t| t.elapsed() >= AUTO_CONNECT_COOLDOWN)
+                                                .unwrap_or(true);
+                                            is_idle && is_paired && cooldown_ok
+                                        };
+                                        if should_auto {
+                                            app_log!(app, "bluetooth",
+                                                "[scanner] paired device {display_name} \
+                                                 discovered while idle — auto-connecting");
+                                            start_session(&app, Some(id.clone()));
+                                        }
                                     }
                                 }
                             }
