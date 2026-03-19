@@ -255,8 +255,18 @@ impl EmotivAdapter {
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
 
-            CortexEvent::Error(_) => {
-                self.pending.push_back(DeviceEvent::Disconnected);
+            CortexEvent::Error(ref msg) => {
+                // Only treat connection-level errors as disconnects.
+                // Subscribe failures (e.g. "Subscribe 'eeg' failed") are
+                // NOT disconnects — the WebSocket is still open and other
+                // streams (mot, dev) may still be working.  Treating them
+                // as disconnects causes an infinite reconnect loop.
+                let is_subscribe_error = msg.contains("Subscribe '") && msg.contains("failed");
+                if !is_subscribe_error {
+                    self.pending.push_back(DeviceEvent::Disconnected);
+                }
+                // Subscribe errors are logged by the connect flow and
+                // surfaced as a toast — no action needed here.
             }
 
             // Performance metrics, band power, mental commands, facial expressions,

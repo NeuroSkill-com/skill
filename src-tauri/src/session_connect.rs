@@ -701,7 +701,21 @@ pub(crate) async fn connect_emotiv(
         if !eeg_confirmed && !sub_errors.is_empty() {
             let msg = sub_errors.join("; ");
             app_log!(app, "bluetooth", "[emotiv] EEG subscription failed: {msg}");
-            crate::send_toast(&*app, crate::ToastLevel::Error, "EEG Subscribe Failed", &msg);
+            // Close the session before returning — don't leave it dangling.
+            let _ = handle.close_session().await;
+            // Disable auto-reconnect — this is a configuration/license issue,
+            // not a transient connection error.  Retrying won't help.
+            {
+                let r = app.app_state();
+                r.lock_or_recover().pending_reconnect = false;
+            }
+            return Err(ConnectError::Other(format!(
+                "EEG stream not available for this headset.\n\n\
+                 {msg}\n\n\
+                 This usually means your Emotiv license does not include raw EEG \
+                 access for this headset model. Check your Cortex App settings at \
+                 https://www.emotiv.com/my-account/cortex-apps/"
+            )));
         } else if !eeg_confirmed {
             app_log!(app, "bluetooth",
                 "[emotiv] WARNING: EEG DataLabels not received within 3s — \
