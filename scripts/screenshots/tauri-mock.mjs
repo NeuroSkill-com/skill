@@ -37,9 +37,27 @@ window.__TAURI_INTERNALS__.convertFileSrc = (path) => path;
 // Event plugin — mock listen/unlisten so pages using listen() don't crash
 window.__TAURI_EVENT_PLUGIN_INTERNALS__.unregisterListener = () => {};
 
+// Event listener registry: event name → Set of callback IDs
+const _eventListeners = new Map();
+window.__SKILL_EMIT_EVENT__ = (eventName, payload) => {
+  const ids = _eventListeners.get(eventName);
+  if (!ids) return;
+  for (const id of ids) {
+    window.__TAURI_INTERNALS__.runCallback(id, { event: eventName, payload, id: 0 });
+  }
+};
+
 window.__TAURI_INTERNALS__.invoke = async (cmd, args) => {
   // Handle event plugin commands (listen, emit, unlisten)
-  if (cmd === "plugin:event|listen")   return args?.handler ?? 0;
+  if (cmd === "plugin:event|listen") {
+    const handlerId = args?.handler ?? 0;
+    const eventName = args?.event;
+    if (eventName && handlerId) {
+      if (!_eventListeners.has(eventName)) _eventListeners.set(eventName, new Set());
+      _eventListeners.get(eventName).add(handlerId);
+    }
+    return handlerId;
+  }
   if (cmd === "plugin:event|unlisten") return null;
   if (cmd === "plugin:event|emit")     return null;
   // Handle notification plugin
@@ -88,6 +106,10 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
       temperature_raw: 2048,
       device_kind: "muse",
       hardware_version: "p21",
+      has_ppg: true,
+      has_imu: true,
+      has_central_electrodes: false,
+      has_full_montage: false,
     }),
 
     get_devices: () => [
@@ -97,11 +119,27 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
 
     // ── Band powers ──────────────────────────────────────────────────────
     get_latest_bands: () => ({
-      delta: [0.35, 0.32, 0.33, 0.34],
-      theta: [0.22, 0.25, 0.24, 0.23],
-      alpha: [0.28, 0.30, 0.29, 0.27],
-      beta:  [0.10, 0.09, 0.11, 0.10],
-      gamma: [0.05, 0.04, 0.03, 0.06],
+      timestamp: Date.now(),
+      channels: [
+        { channel: "TP9", delta: 18.5, theta: 8.2, alpha: 12.4, beta: 5.1, gamma: 2.3, high_gamma: 0.8, rel_delta: 0.35, rel_theta: 0.22, rel_alpha: 0.28, rel_beta: 0.10, rel_gamma: 0.05 },
+        { channel: "AF7", delta: 17.2, theta: 9.1, alpha: 13.8, beta: 4.8, gamma: 1.9, high_gamma: 0.7, rel_delta: 0.32, rel_theta: 0.25, rel_alpha: 0.30, rel_beta: 0.09, rel_gamma: 0.04 },
+        { channel: "AF8", delta: 17.8, theta: 8.6, alpha: 13.1, beta: 5.5, gamma: 1.5, high_gamma: 0.6, rel_delta: 0.33, rel_theta: 0.24, rel_alpha: 0.29, rel_beta: 0.11, rel_gamma: 0.03 },
+        { channel: "TP10", delta: 18.1, theta: 8.4, alpha: 12.0, beta: 5.3, gamma: 2.8, high_gamma: 0.9, rel_delta: 0.34, rel_theta: 0.23, rel_alpha: 0.27, rel_beta: 0.10, rel_gamma: 0.06 },
+      ],
+      faa: 0.12,
+      tar: 1.22, bar: 0.39, dtr: 1.43, tbr: 2.09,
+      pse: 0.85, apf: 10.2, sef95: 28.5, spectral_centroid: 14.3, bps: 0.72, snr: 12.5,
+      coherence: 0.65, mu_suppression: 0.42, mood: 58,
+      hjorth_activity: 150, hjorth_mobility: 0.35, hjorth_complexity: 1.8,
+      permutation_entropy: 0.82, higuchi_fd: 1.52, dfa_exponent: 0.68,
+      sample_entropy: 1.45, pac_theta_gamma: 0.28, laterality_index: 0.08,
+      hr: 68, rmssd: 42, sdnn: 55, pnn50: 32, lf_hf_ratio: 1.2,
+      respiratory_rate: 14, spo2_estimate: 98, perfusion_index: 0.8, stress_index: 35,
+      meditation: 62, cognitive_load: 45, drowsiness: 15,
+      blink_count: 180, blink_rate: 15,
+      head_pitch: 5, head_roll: 2, stillness: 85, nod_count: 12, shake_count: 3,
+      headache_index: 12, migraine_index: 8,
+      consciousness_lzc: 72, consciousness_wakefulness: 85, consciousness_integration: 68,
     }),
 
     // ── EEG model ────────────────────────────────────────────────────────
@@ -145,7 +183,7 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     }),
 
     // ── History ──────────────────────────────────────────────────────────
-    list_session_days: () => ["20260318", "20260317", "20260316", "20260315", "20260314"],
+    list_session_days: () => ["20260318", "20260317", "20260316", "20260315", "20260314", "20260313", "20260312", "20260311"],
     list_sessions_for_day: (args) => {
       const day = args?.day || "20260318";
       const dayBase = new Date(
@@ -183,6 +221,22 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
           file_size_bytes: 192000000,
           labels: [
             { id: 4, text: "Morning meditation", context: "Routine", eeg_start: dayBase, eeg_end: dayBase + 1200, created_at: dayBase, embedding_model: "neurogpt-base" },
+          ],
+        },
+        {
+          csv_file: "session_" + day + "_180000.csv",
+          csv_path: "/data/session_" + day + "_180000.csv",
+          session_start_utc: dayBase + 36000,
+          session_end_utc:   dayBase + 39600,
+          device_name: "Muse S Gen 2",
+          serial_number: "ATHENA-5678-EFGH",
+          battery_pct: 92,
+          total_samples: 460800,
+          sample_rate_hz: 256,
+          file_size_bytes: 96000000,
+          labels: [
+            { id: 5, text: "Evening relaxation", context: "Wind-down", eeg_start: dayBase + 36000, eeg_end: dayBase + 37200, created_at: dayBase + 36000, embedding_model: "neurogpt-base" },
+            { id: 6, text: "Music listening — ambient", context: "Leisure", eeg_start: dayBase + 37800, eeg_end: dayBase + 38400, created_at: dayBase + 37800, embedding_model: "neurogpt-base" },
           ],
         },
       ];
@@ -265,10 +319,10 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
       return rows;
     },
     get_history_stats: () => ({
-      total_sessions: 42,
-      total_secs: 151200,
-      this_week_secs: 21600,
-      last_week_secs: 18000,
+      total_sessions: 127,
+      total_secs: 457200,
+      this_week_secs: 32400,
+      last_week_secs: 28800,
     }),
     query_annotations: () => {
       const labels = [];
@@ -344,10 +398,11 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     }),
     get_llm_catalog: () => ({
       entries: [
-        { filename: "qwen3.5-4b-q4_k_m.gguf", name: "Qwen 3.5 4B Q4", size_bytes: 2800000000, state: "downloaded", progress: 1.0, family: "qwen35-4b", family_id: "qwen35-4b", family_name: "Qwen 3.5 4B", quant: "Q4_K_M", params: "4B", context_length: 8192, is_mmproj: false, mmproj: null },
-        { filename: "llama-3.2-3b-q4.gguf", name: "Llama 3.2 3B Q4", size_bytes: 2048000000, state: "downloaded", progress: 1.0, family: "llama", family_id: "llama-3.2-3b", family_name: "Llama 3.2 3B", quant: "Q4_K_M", params: "3B", context_length: 8192, is_mmproj: false, mmproj: null },
-        { filename: "phi-3-mini-q4.gguf",   name: "Phi-3 Mini Q4",   size_bytes: 2300000000, state: "downloaded", progress: 1.0, family: "phi", family_id: "phi-3-mini", family_name: "Phi-3 Mini", quant: "Q4_K_M", params: "3.8B", context_length: 4096, is_mmproj: false, mmproj: null },
-        { filename: "gemma-2b-q4.gguf",     name: "Gemma 2B Q4",     size_bytes: 1500000000, state: "not_downloaded", progress: 0, family: "gemma", family_id: "gemma-2b", family_name: "Gemma 2B", quant: "Q4_K_M", params: "2B", context_length: 8192, is_mmproj: false, mmproj: null },
+        { repo: "Qwen/Qwen3.5-4B-GGUF", filename: "qwen3.5-4b-q4_k_m.gguf", quant: "Q4_K_M", size_gb: 2.8, description: "Qwen 3.5 4B — fast multilingual model", family_id: "qwen35-4b", family_name: "Qwen 3.5 4B", family_desc: "Alibaba's multilingual model with strong reasoning", tags: ["small", "multilingual"], is_mmproj: false, recommended: true, advanced: false, params_b: 4, max_context_length: 32768, shard_files: [], local_path: "/models/qwen3.5-4b-q4_k_m.gguf", state: "downloaded", status_msg: null, progress: 1.0 },
+        { repo: "Qwen/Qwen3.5-4B-GGUF", filename: "qwen3.5-4b-q8_0.gguf", quant: "Q8_0", size_gb: 4.5, description: "Qwen 3.5 4B — higher quality", family_id: "qwen35-4b", family_name: "Qwen 3.5 4B", family_desc: "Alibaba's multilingual model with strong reasoning", tags: ["small", "multilingual"], is_mmproj: false, recommended: false, advanced: false, params_b: 4, max_context_length: 32768, shard_files: [], local_path: null, state: "not_downloaded", status_msg: null, progress: 0 },
+        { repo: "meta-llama/Llama-3.2-3B-GGUF", filename: "llama-3.2-3b-q4.gguf", quant: "Q4_K_M", size_gb: 2.0, description: "Llama 3.2 3B — Meta's compact model", family_id: "llama-3.2-3b", family_name: "Llama 3.2 3B", family_desc: "Meta's efficient 3B parameter model", tags: ["small"], is_mmproj: false, recommended: true, advanced: false, params_b: 3, max_context_length: 8192, shard_files: [], local_path: "/models/llama-3.2-3b-q4.gguf", state: "downloaded", status_msg: null, progress: 1.0 },
+        { repo: "microsoft/Phi-3-mini-GGUF", filename: "phi-3-mini-q4.gguf", quant: "Q4_K_M", size_gb: 2.3, description: "Phi-3 Mini — Microsoft's reasoning model", family_id: "phi-3-mini", family_name: "Phi-3 Mini", family_desc: "Microsoft's compact reasoning model", tags: ["small"], is_mmproj: false, recommended: true, advanced: false, params_b: 3.8, max_context_length: 4096, shard_files: [], local_path: "/models/phi-3-mini-q4.gguf", state: "downloaded", status_msg: null, progress: 1.0 },
+        { repo: "google/Gemma-2B-GGUF", filename: "gemma-2b-q4.gguf", quant: "Q4_K_M", size_gb: 1.5, description: "Gemma 2B — Google's lightweight model", family_id: "gemma-2b", family_name: "Gemma 2B", family_desc: "Google's lightweight open model", tags: ["tiny"], is_mmproj: false, recommended: true, advanced: false, params_b: 2, max_context_length: 8192, shard_files: [], local_path: null, state: "not_downloaded", status_msg: null, progress: 0 },
       ],
       active_model: "qwen3.5-4b-q4_k_m.gguf",
       active_mmproj: "",
@@ -530,7 +585,8 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
 
     // ── UMAP ─────────────────────────────────────────────────────────────
     get_umap_config: () => ({
-      n_neighbors: 15, min_dist: 0.1, n_components: 3, metric: "cosine",
+      repulsion_strength: 3.0, neg_sample_rate: 15, timeout_secs: 120,
+      n_epochs: 500, n_neighbors: 15, cooldown_ms: 5000,
     }),
 
     // ── DND ──────────────────────────────────────────────────────────────
@@ -561,13 +617,26 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     get_autostart_enabled: () => false,
 
     // ── Goals ────────────────────────────────────────────────────────────
-    get_daily_goal: () => ({ target_mins: 60, notified_today: false }),
+    get_daily_goal: () => 60,
 
     // ── LLM logs ─────────────────────────────────────────────────────────
-    get_llm_logs: () => [],
+    get_llm_logs: () => [
+      { ts: ${Math.floor(Date.now()/1000) - 30}, level: "info", message: "llama_model_load: loaded model qwen3.5-4b-q4_k_m.gguf" },
+      { ts: ${Math.floor(Date.now()/1000) - 28}, level: "info", message: "llama_model_load: n_vocab = 151936, n_ctx_train = 32768, n_embd = 3584" },
+      { ts: ${Math.floor(Date.now()/1000) - 25}, level: "info", message: "llama_new_context_with_model: n_ctx = 8192, n_batch = 2048, n_ubatch = 512" },
+      { ts: ${Math.floor(Date.now()/1000) - 22}, level: "info", message: "llama_kv_cache_init: VRAM KV self size = 448.00 MiB" },
+      { ts: ${Math.floor(Date.now()/1000) - 20}, level: "info", message: "server: HTTP server listening on http://127.0.0.1:8375" },
+      { ts: ${Math.floor(Date.now()/1000) - 10}, level: "info", message: "request: POST /v1/chat/completions 200 1.23s tokens=142" },
+      { ts: ${Math.floor(Date.now()/1000) - 5}, level: "info", message: "request: POST /v1/chat/completions 200 0.87s tokens=96" },
+    ],
 
     // ── Model hardware fit ───────────────────────────────────────────────
-    get_model_hardware_fit: () => [],
+    get_model_hardware_fit: () => [
+      { family_id: "qwen35-4b", fits_vram: true, vram_mb: 3200, ram_mb: 0, offload_layers: 99 },
+      { family_id: "llama-3.2-3b", fits_vram: true, vram_mb: 2400, ram_mb: 0, offload_layers: 99 },
+      { family_id: "phi-3-mini", fits_vram: true, vram_mb: 2800, ram_mb: 0, offload_layers: 99 },
+      { family_id: "gemma-2b", fits_vram: true, vram_mb: 1800, ram_mb: 0, offload_layers: 99 },
+    ],
 
     // ── Session params ───────────────────────────────────────────────────
     get_session_params: () => ({ auto_record: true }),
@@ -587,6 +656,31 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     check_screen_recording_permission: () => true,
     check_ocr_models_ready: () => true,
     download_ocr_models: () => true,
+
+    // ── Supported devices (Devices tab) ──────────────────────────────────
+    get_supported_companies: () => [
+      { id: "interaxon", name_key: "devices.company.interaxon", devices: [
+        { name_key: "devices.muse2", image: "/devices/muse-gen2.jpg" },
+        { name_key: "devices.museS", image: "/devices/muse-s-gen1.jpg" },
+        { name_key: "devices.museSAthena", image: "/devices/muse-s-athena.jpg" },
+      ], instruction_keys: ["devices.instructions.interaxon1", "devices.instructions.interaxon2", "devices.instructions.interaxon3"] },
+      { id: "openbci", name_key: "devices.company.openbci", devices: [
+        { name_key: "devices.ganglion", image: "/devices/openbci-ganglion.jpg" },
+        { name_key: "devices.cyton", image: "/devices/openbci-cyton.jpg" },
+      ], instruction_keys: ["devices.instructions.openbci1", "devices.instructions.openbci2"] },
+      { id: "emotiv", name_key: "devices.company.emotiv", devices: [
+        { name_key: "devices.epocX", image: "/devices/emotiv-epoc-x.webp" },
+      ], instruction_keys: ["devices.instructions.emotiv1"] },
+      { id: "neurosity", name_key: "devices.company.neurosity", devices: [
+        { name_key: "devices.crown", image: "/devices/neurosity-crown.jpg" },
+      ], instruction_keys: ["devices.instructions.neurosity1"] },
+      { id: "idun", name_key: "devices.company.idun", devices: [
+        { name_key: "devices.guardian", image: "/devices/idun-guardian.png" },
+      ], instruction_keys: ["devices.instructions.idun1"] },
+      { id: "brainbit", name_key: "devices.company.brainbit", devices: [
+        { name_key: "devices.brainbitFlex", image: "" },
+      ], instruction_keys: ["devices.instructions.brainbit1"] },
+    ],
 
     // ── Skills (Tools tab) ────────────────────────────────────────────────
     list_skills: () => [
@@ -788,7 +882,22 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
 
     // Goals
     get_goal_notified_date: () => null,
-    get_daily_recording_mins: () => 42,
+    get_daily_recording_mins: () => {
+      const days = [];
+      const now = new Date();
+      for (let i = 29; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const iso = d.toISOString().slice(0, 10);
+        // Realistic varied minutes: weekdays higher, weekends lower, some zero
+        const dow = d.getDay();
+        const base = dow === 0 || dow === 6 ? 20 : 55;
+        const jitter = Math.round(Math.sin(i * 1.7) * 25 + Math.cos(i * 0.9) * 15);
+        const mins = Math.max(0, base + jitter);
+        days.push([iso, mins]);
+      }
+      return days;
+    },
 
     // Labels
     get_recent_labels: () => [
@@ -812,8 +921,8 @@ window.__SKILL_MOCK_INVOKE__ = (cmd, args) => {
     get_embedding_model: () => "neurogpt-base",
     get_embedding_overlap: () => 0.5,
     get_tts_preload: () => false,
-    tts_list_voices: () => [],
-    tts_get_voice: () => null,
+    tts_list_voices: () => ["en_us-amy-medium", "en_us-danny-low", "en_gb-alba-medium", "en_gb-jenny-medium", "de_de-thorsten-medium", "fr_fr-siwis-medium", "es_es-mls-medium", "ja_jp-tsukuyomi-medium"],
+    tts_get_voice: () => "en_us-amy-medium",
     get_active_window: () => ({ app: "VS Code", title: "main.rs" }),
     get_last_input_activity: () => ${Date.now() / 1000 | 0},
     get_dnd_active: () => false,

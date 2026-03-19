@@ -443,17 +443,27 @@ const ALL = [
   // ─────────────────── SETTINGS: ALL TABS RAPID CYCLE ────────────────────
   {
     name: "settings-all-tabs-cycle",
-    desc: "Settings: rapid cycle through all 18 sub-tabs showing sidebar navigation",
+    desc: "Settings: cycle through all 18 sub-tabs showing sidebar navigation",
     route: "/settings", vp: [1100, 780],
     steps: [
       w(PG),
-      tabs([
-        "Goals", "Devices", "Sleep", "Calibration", "Voice",
-        "LLM", "Tools", "EEG Model", "Embeddings", "Screenshots",
-        "Proactive Hooks", "Appearance", "Settings", "Shortcuts", "UMAP",
-        "Updates", "Permissions",
-      ]),
-      h(),
+      ct("Goals"), ...sh(),
+      ct("Devices"), ...sh(),
+      ct("Sleep"), ...sh(),
+      ct("Calibration"), ...sh(),
+      ct("Voice"), ...sh(),
+      ct("LLM"), ...sh(),
+      ct("Tools"), ...sh(),
+      ct("EEG Model"), ...sh(),
+      ct("Embeddings"), ...sh(),
+      ct("Screenshots"), ...sh(),
+      ct("Proactive Hooks"), ...sh(),
+      ct("Appearance"), ...sh(),
+      ct("Settings"), ...sh(),
+      ct("Shortcuts"), ...sh(),
+      ct("UMAP"), ...sh(),
+      ct("Updates"), ...sh(),
+      ct("Permissions"), ...sh(),
     ],
   },
 
@@ -508,7 +518,11 @@ const ALL = [
     route: "/search?mode=text", vp: [1100, 780],
     steps: [
       w(PG), ...sh(),
-      type_("textarea, input[type=text]", "deep focus coding session"), w(500), ...sh(),
+      type_("textarea, input[type=text]", "deep focus coding session"), w(300),
+      // Trigger search via Ctrl+Enter
+      { a: "key", sel: "textarea, input[type=text]", key: "Control+Enter" },
+      w(1500), ...sh(),
+      scroll(400, 4), ...sh(),
     ],
   },
   {
@@ -517,7 +531,10 @@ const ALL = [
     route: "/search?mode=images", vp: [1100, 780],
     steps: [
       w(PG), ...sh(),
-      type_("textarea, input[type=text]", "code editor"), w(500), ...sh(),
+      type_("textarea, input[type=text]", "code editor"), w(300),
+      { a: "key", sel: "textarea, input[type=text]", key: "Control+Enter" },
+      w(1500), ...sh(),
+      scroll(400, 4), ...sh(),
     ],
   },
   {
@@ -590,11 +607,17 @@ const ALL = [
     route: "/help", vp: [1100, 780],
     steps: [
       w(PG),
-      tabs([
-        "Dashboard", "Electrodes", "Settings", "Windows", "API",
-        "TTS", "LLM", "Hooks", "Privacy", "References", "FAQ",
-      ]),
-      h(),
+      ct("Dashboard"), ...sh(),
+      ct("Electrodes"), ...sh(),
+      ct("Settings"), ...sh(),
+      ct("Windows"), ...sh(),
+      ct("API"), ...sh(),
+      ct("TTS"), ...sh(),
+      ct("LLM"), ...sh(),
+      ct("Hooks"), ...sh(),
+      ct("Privacy"), ...sh(),
+      ct("References"), ...sh(),
+      ct("FAQ"), ...sh(),
     ],
   },
   {
@@ -905,6 +928,33 @@ async function main() {
           document.head.appendChild(s);
         }, theme);
 
+        // For settings pages with Voice tab, emit TTS ready event
+        if (ix.route === "/settings" && ix.name.includes("voice")) {
+          await page.waitForTimeout(2000);
+          await page.evaluate(() => {
+            if (window.__SKILL_EMIT_EVENT__) {
+              window.__SKILL_EMIT_EVENT__("tts-progress", { phase: "ready", step: 1, total: 1, label: "" });
+            }
+          });
+          await page.waitForTimeout(300);
+        }
+
+        // For the dashboard, simulate continuous EEG data flow so EMA-smoothed
+        // scores converge to realistic values instead of staying near 0.
+        if (ix.route === "/" || ix.route.startsWith("/?")) {
+          await page.waitForTimeout(2000);
+          await page.evaluate(async () => {
+            const bands = await window.__TAURI_INTERNALS__.invoke("get_latest_bands");
+            if (!bands || !window.__SKILL_EMIT_EVENT__) return;
+            // Pump 80 band updates to converge EMA (0.15 tau, ~80 iterations → >99.9% converged)
+            for (let i = 0; i < 80; i++) {
+              window.__SKILL_EMIT_EVENT__("eeg-bands", bands);
+              await new Promise(r => setTimeout(r, 5));
+            }
+          });
+          await page.waitForTimeout(500);
+        }
+
         const frames = [], delays = [];
         const cap = async (d) => {
           const b = await page.screenshot({ type: "png", timeout: 10000 });
@@ -960,6 +1010,14 @@ async function main() {
                 for (const sel of step.sel.split(",").map(x=>x.trim())) {
                   const l = page.locator(sel).first();
                   if (await l.count()>0) { await l.fill(step.text); await page.waitForTimeout(300); break; }
+                }
+                break;
+              }
+
+              case "key": {
+                for (const sel of step.sel.split(",").map(x=>x.trim())) {
+                  const l = page.locator(sel).first();
+                  if (await l.count()>0) { await l.press(step.key); break; }
                 }
                 break;
               }
