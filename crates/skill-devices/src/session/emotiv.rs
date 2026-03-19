@@ -114,7 +114,6 @@ impl EmotivAdapter {
             }
 
             CortexEvent::Disconnected => {
-                eprintln!("[emotiv-adapter] CortexEvent::Disconnected received");
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
 
@@ -196,28 +195,20 @@ impl EmotivAdapter {
                 }
             }
 
-            CortexEvent::Warning { code, ref message }
+            CortexEvent::Warning { code, .. }
                 if code == CORTEX_STOP_ALL_STREAMS || code == CORTEX_CLOSE_SESSION =>
             {
-                eprintln!("[emotiv-adapter] disconnect warning code={code} message={message}");
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
 
-            CortexEvent::Warning { code, ref message } => {
-                eprintln!("[emotiv-adapter] warning code={code} message={message}");
-                // Other warnings are informational — not forwarded.
-            }
-
-            CortexEvent::Error(ref e) => {
-                eprintln!("[emotiv-adapter] error: {e}");
+            CortexEvent::Error(_) => {
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
 
             // Performance metrics, band power, mental commands, facial expressions,
-            // system events, records, markers, profiles — not forwarded.
-            other => {
-                eprintln!("[emotiv-adapter] ignored event: {other:?}");
-            }
+            // system events, records, markers, profiles, other warnings — not
+            // forwarded to session runner.
+            _ => {}
         }
     }
 }
@@ -233,13 +224,8 @@ impl DeviceAdapter for EmotivAdapter {
             if let Some(ev) = self.pending.pop_front() {
                 return Some(ev);
             }
-            match self.rx.recv().await {
-                Some(vendor_ev) => self.translate(vendor_ev),
-                None => {
-                    eprintln!("[emotiv-adapter] event channel closed (rx returned None)");
-                    return None;
-                }
-            }
+            let vendor_ev = self.rx.recv().await?;
+            self.translate(vendor_ev);
         }
     }
 
