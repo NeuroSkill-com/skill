@@ -144,15 +144,39 @@ pub(crate) async fn run_device_session(
                     DeviceEvent::Eeg(frame) => {
                         // Re-check pipeline_channels for adapters that
                         // auto-detect (Emotiv DataLabels / first packet).
-                        // Re-check pipeline_channels for adapters that auto-detect.
                         if desc_may_change {
                             let fresh = adapter.descriptor();
                             if fresh.pipeline_channels != pipeline_ch {
                                 pipeline_ch = fresh.pipeline_channels;
                                 app_log!(app, "bluetooth",
                                     "[{kind}] updated to {} pipeline channels", pipeline_ch);
+                                // Reset quality & DSP for the new channel count —
+                                // old samples from the pre-DataLabels phase had
+                                // garbage (COUNTER, INTERPOLATED, etc.) that
+                                // corrupted the quality window.
+                                let ch_refs: Vec<&str> = fresh.channel_names
+                                    .iter().map(|s| s.as_str()).collect();
+                                dsp = SessionDsp::new(&app, &ch_refs);
+                                dsp.accumulator.set_device_channels(
+                                    fresh.channel_names.clone(),
+                                    fresh.eeg_sample_rate as f32,
+                                );
+                                // Update status with correct channel info.
+                                {
+                                    let r = app.app_state();
+                                    let mut s = r.lock_or_recover();
+                                    s.status.channel_names     = fresh.channel_names.clone();
+                                    s.status.eeg_channel_count = fresh.eeg_channels;
+                                    s.status.filter_config.sample_rate = fresh.eeg_sample_rate as f32;
+                                }
                             }
-                            desc_may_change = false;
+                            // For Emotiv, keep checking until DataLabels has
+                            // been processed (pipeline_channels matches the
+                            // frame channel count — meaning electrode_indices
+                            // are set).
+                            if kind != "emotiv" || pipeline_ch == frame.channels.len() {
+                                desc_may_change = false;
+                            }
                         }
 
                         // Lazy-open recording file on first EEG frame (after auto-detection).
