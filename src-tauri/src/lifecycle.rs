@@ -185,6 +185,11 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
         let mut s = r.lock_or_recover();
         s.session_start_utc = Some(unix_secs());
         s.status.reset_for_scanning(device_kind, &csv, target.as_deref());
+        // Pin the scanner-level device ID so on_connected can use it
+        // for pairing (instead of the adapter's internal session ID).
+        if let Some(ref id) = target {
+            s.status.device_id = Some(id.clone());
+        }
     }
     refresh_tray(app);
     emit_status(app);

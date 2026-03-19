@@ -509,13 +509,11 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                     continue; // No credentials — skip this poll.
                 }
 
-                // Try a quick connect + queryHeadsets.  If the Launcher is not
-                // running the WebSocket will fail immediately.
-                //
-                // auto_create_session MUST be false — setting it true would
-                // create a Cortex session that interferes with (and kills) any
-                // active session started by connect_emotiv.  We manually send
-                // queryHeadsets after authorization instead.
+                // Probe the Cortex service — authorize + getCortexInfo only.
+                // We NEVER send queryHeadsets from the scanner because the
+                // emotiv crate's response handler for that call automatically
+                // triggers connect_headset / create_session, which would
+                // interfere with any active session.
                 let config = CortexClientConfig {
                     client_id,
                     client_secret,
@@ -524,82 +522,57 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                 };
                 let client = CortexClient::new(config);
 
-                // Give the connect + auth + query sequence a generous timeout.
                 let result = tokio::time::timeout(
                     Duration::from_secs(8),
-                    cortex_query_headsets(&client),
+                    cortex_probe(&client),
                 ).await;
 
-                let headsets = match result {
-                    Ok(Ok(hs)) => hs,
-                    _ => continue, // Launcher not running or timed out — silently retry.
-                };
-
-                let mut changed = false;
-                for hs in &headsets {
-                    let id = format!("cortex:{}", hs.id);
-                    let status = &hs.status;
-                    // Only show headsets that are discovered or connected
-                    // (not "connecting" or stale entries).
-                    if status != "discovered" && status != "connected" {
-                        continue;
-                    }
-                    // Derive a human-readable name from the headset ID.
-                    // Emotiv IDs look like "EPOCX-ABCDEF12" or "INSIGHT-1234".
-                    let display_name = hs.id.clone();
-                    if known_ids.insert(id.clone()) {
-                        let msg = format!("{display_name} status={status}");
-                        app_log!(app, "scanner", "[cortex] {msg}");
-                        device_log("cortex", &msg);
-                        changed = true;
-                    }
-                    upsert_discovered(&app, &id, &display_name, 0);
-                    try_auto_connect(&app, &id, &display_name);
+                match result {
+                    Ok(Ok(true)) => {} // Authorized — Launcher is running.
+                    _ => continue,      // Launcher not running or auth failed.
                 }
 
-                // Remove stale headsets.
-                let current_ids: std::collections::HashSet<String> = headsets.iter()
-                    .filter(|h| h.status == "discovered" || h.status == "connected")
-                    .map(|h| format!("cortex:{}", h.id))
-                    .collect();
-                known_ids.retain(|id| current_ids.contains(id));
+                // The Cortex service is up and we're authorized.
+                // Use a stable ID so the discovered entry persists across polls.
+                let id = "cortex:emotiv".to_owned();
+                let display_name = "Emotiv (Cortex)";
 
-                if changed { emit_devices(&app); }
+                if known_ids.insert(id.clone()) {
+                    let msg = "Emotiv Cortex service reachable";
+                    app_log!(app, "scanner", "[cortex] {msg}");
+                    device_log("cortex", msg);
+                    emit_devices(&app);
+                }
+                upsert_discovered(&app, &id, display_name, 0);
+                try_auto_connect(&app, &id, display_name);
             }
         }
     }
 }
 
-/// Helper: connect to Cortex, authorize, manually send `queryHeadsets`,
-/// and read the headset ID from the handle's internal state.
+/// Probe whether the Cortex service is reachable and we can authorize.
 ///
-/// Uses `auto_create_session: false` so this connection **never** creates
-/// a session — it only discovers what headsets are available.  The real
-/// session is created later by `connect_emotiv`.
-async fn cortex_query_headsets(
+/// We intentionally do NOT send `queryHeadsets` or `getCortexInfo` — the
+/// emotiv crate's internal handler for `queryHeadsets` automatically calls
+/// `connect_headset` / `create_session`, which would interfere with any
+/// active session.
+///
+/// A successful authorization proves the EMOTIV Launcher is running and
+/// credentials are valid.  `connect_emotiv` will do the real headset
+/// discovery and session creation when a connection is actually initiated.
+async fn cortex_probe(
     client: &skill_devices::emotiv::client::CortexClient,
-) -> Result<Vec<skill_devices::emotiv::types::HeadsetInfo>, String> {
-    let (mut rx, handle) = client.connect().await.map_err(|e| e.to_string())?;
+) -> Result<bool, String> {
+    let (mut rx, _handle) = client.connect().await.map_err(|e| e.to_string())?;
 
-    use skill_devices::emotiv::{types::CortexEvent, protocol};
+    use skill_devices::emotiv::types::CortexEvent;
 
     let deadline = tokio::time::Instant::now() + Duration::from_secs(6);
-    let mut authorized = false;
 
     while tokio::time::Instant::now() < deadline {
         let ev = tokio::time::timeout_at(deadline, rx.recv()).await;
         match ev {
-            Ok(Some(CortexEvent::Authorized)) => {
-                authorized = true;
-                // auto_create_session is false, so the client did NOT send
-                // queryHeadsets.  Send it manually — the client's WS loop
-                // will process the response and store headset_id internally.
-                let _ = handle.send_raw(protocol::refresh_headset_list()).await;
-                let _ = handle.send_raw(protocol::query_headsets()).await;
-                // Give the WS loop time to receive and process the response.
-                tokio::time::sleep(Duration::from_millis(800)).await;
-                break;
-            }
+            Ok(Some(CortexEvent::Authorized)) => return Ok(true),
             Ok(Some(CortexEvent::Error(e))) => return Err(e),
             Ok(None) => break,
             Err(_) => break,
@@ -607,24 +580,7 @@ async fn cortex_query_headsets(
         }
     }
 
-    if !authorized {
-        return Err("Not authorized".into());
-    }
-
-    // Read the headset ID that the client stored after processing queryHeadsets.
-    let headset_id = handle.headset_id().await;
-
-    if headset_id.is_empty() {
-        // Authorized but no headset found — service is up, no headset connected.
-        return Ok(Vec::new());
-    }
-
-    Ok(vec![skill_devices::emotiv::types::HeadsetInfo {
-        id: headset_id,
-        status: "discovered".into(),
-        connected_by: String::new(),
-        extra: Default::default(),
-    }])
+    Err("Not authorized".into())
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
