@@ -234,12 +234,14 @@ the Free Software Foundation, version 3 only. -->
   </div>
   {:else}
   <!-- Compact quality strip for non-Muse tabs (shows live quality from connected device) -->
+  {@const stripNames = channelNames.length > 0 ? channelNames : visible.map(e => e.name)}
+  {@const stripCount = stripNames.length}
   <div class="flex flex-wrap items-center gap-x-2 gap-y-1 w-full max-w-[480px] rounded-lg border border-border dark:border-white/[0.07]
               bg-muted/20 px-3 py-1.5">
     <span class="text-[0.52rem] font-semibold text-muted-foreground/60 uppercase tracking-wider shrink-0">Signal</span>
-    {#each (qualityLabels ?? []) as label, idx}
+    {#each stripNames as chName, idx}
+      {@const label = (qualityLabels ?? [])[idx] ?? "no_signal"}
       {@const q = labelToNum(label)}
-      {@const chName = visible[idx]?.name ?? `Ch${idx + 1}`}
       <div class="flex items-center gap-1">
         <span class="w-2 h-2 rounded-full shrink-0" style="background:{qualityColor(q)}"></span>
         <span class="text-[0.55rem] font-mono font-bold" style="color:{qualityColor(q)}">{chName}</span>
