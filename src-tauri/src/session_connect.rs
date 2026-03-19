@@ -567,6 +567,7 @@ pub(crate) async fn connect_emotiv(
     let config = CortexClientConfig {
         client_id,
         client_secret,
+        debug_mode: true, // TEMPORARY — diagnose token invalidation
         ..Default::default()
     };
 
