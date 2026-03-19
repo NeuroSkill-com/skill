@@ -196,7 +196,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
 /// * `usb:<port>`   → USB serial
 /// * `cortex:<id>`  → Emotiv Cortex WebSocket
 /// * anything else  → BLE (the default / legacy format)
-fn transport_from_id(id: &str) -> crate::device_scanner::Transport {
+pub(crate) fn transport_from_id(id: &str) -> crate::device_scanner::Transport {
     use crate::device_scanner::Transport;
     if id.starts_with("usb:")    { Transport::UsbSerial }
     else if id.starts_with("cortex:") { Transport::Cortex }

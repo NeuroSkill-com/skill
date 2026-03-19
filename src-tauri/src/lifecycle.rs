@@ -172,6 +172,13 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     let target_lower = target_name.as_deref().map(|n| n.to_lowercase());
     let device_kind = detect_device_kind(target.as_deref(), target_lower.as_deref());
 
+    // For Cortex devices without a resolved name, set a user-visible name
+    // so the UI shows something meaningful during the scanning/connecting phase.
+    let target_name = target_name.or_else(|| {
+        if device_kind == "emotiv" { Some("Emotiv Headset".into()) }
+        else { None }
+    });
+
     app.app_state().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
     let csv  = new_csv_path(app);
     let app2 = app.clone();
@@ -189,6 +196,11 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
         // for pairing (instead of the adapter's internal session ID).
         if let Some(ref id) = target {
             s.status.device_id = Some(id.clone());
+        }
+        // Override target_name if we resolved one (handles Cortex devices
+        // whose paired ID may not match the current scanner ID).
+        if let Some(ref name) = target_name {
+            s.status.target_name = Some(name.clone());
         }
     }
     refresh_tray(app);

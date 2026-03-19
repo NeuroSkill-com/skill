@@ -701,14 +701,24 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         }
         neutts_apply_config(&data.neutts);
         for pd in &data.paired {
+            let transport = crate::helpers::transport_from_id(&pd.id);
             s.discovered.push(DiscoveredDevice {
                 id: pd.id.clone(), name: pd.name.clone(),
                 last_seen: pd.last_seen, last_rssi: 0,
                 is_paired: true,
                 is_preferred: data.preferred_id.as_deref() == Some(&pd.id),
-                transport: crate::device_scanner::Transport::Ble,
+                transport,
             });
         }
+        // Clean up stale cortex paired entries from older scanner ID formats
+        // (e.g. "cortex:INSIGHT-5AF2C39E" or "cortex:emotiv-headset").
+        // Only keep "cortex:emotiv" which is the current stable ID.
+        s.status.paired_devices.retain(|d| {
+            !(d.id.starts_with("cortex:") && d.id != "cortex:emotiv")
+        });
+        s.discovered.retain(|d| {
+            !(d.id.starts_with("cortex:") && d.id != "cortex:emotiv")
+        });
     }
 
     if data.tts_preload {
