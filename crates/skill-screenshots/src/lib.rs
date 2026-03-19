@@ -10,6 +10,7 @@
 pub mod config;
 pub mod context;
 pub(crate) mod platform;
+pub(crate) mod gif_encode;
 pub mod capture;
 
 // Re-export so existing `skill_screenshots::ScreenshotConfig` paths keep working.

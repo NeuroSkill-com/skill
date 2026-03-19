@@ -66,6 +66,7 @@ const MIGRATE_OCR_TEXT: &str       = "ALTER TABLE screenshots ADD COLUMN ocr_tex
 const MIGRATE_OCR_EMBEDDING: &str  = "ALTER TABLE screenshots ADD COLUMN ocr_embedding BLOB";
 const MIGRATE_OCR_DIM: &str        = "ALTER TABLE screenshots ADD COLUMN ocr_embedding_dim INTEGER NOT NULL DEFAULT 0";
 const MIGRATE_OCR_HNSW: &str       = "ALTER TABLE screenshots ADD COLUMN ocr_hnsw_id INTEGER";
+const MIGRATE_GIF_FILENAME: &str   = "ALTER TABLE screenshots ADD COLUMN gif_filename TEXT NOT NULL DEFAULT ''";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -102,6 +103,9 @@ pub struct ScreenshotResult {
     pub window_title: String,
     pub ocr_text:     String,
     pub similarity:   f32,
+    /// Relative path to the animated GIF (empty if no motion was detected).
+    #[serde(default)]
+    pub gif_filename: String,
 }
 
 /// Estimate for re-embedding work.
@@ -170,7 +174,7 @@ impl ScreenshotStore {
         }
         // Run OCR migrations (silently ignore "duplicate column" errors
         // on databases that already have these columns).
-        for sql in [MIGRATE_OCR_TEXT, MIGRATE_OCR_EMBEDDING, MIGRATE_OCR_DIM, MIGRATE_OCR_HNSW] {
+        for sql in [MIGRATE_OCR_TEXT, MIGRATE_OCR_EMBEDDING, MIGRATE_OCR_DIM, MIGRATE_OCR_HNSW, MIGRATE_GIF_FILENAME] {
             let _ = conn.execute(sql, []);
         }
         Some(Self { conn: Mutex::new(conn) })
@@ -314,7 +318,7 @@ impl ScreenshotStore {
     pub fn find_by_timestamp(&self, ts: i64) -> Option<ScreenshotResult> {
         let conn = self.conn.lock_or_recover();
         conn.query_row(
-            "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text
+            "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text, gif_filename
              FROM screenshots WHERE timestamp = ?1",
             params![ts],
             |r| Ok(ScreenshotResult {
@@ -325,6 +329,7 @@ impl ScreenshotStore {
                 window_title: r.get(4)?,
                 ocr_text:     r.get::<_, String>(5).unwrap_or_default(),
                 similarity:   0.0,
+                gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             }),
         ).ok()
     }
@@ -335,7 +340,7 @@ impl ScreenshotStore {
         let lo = ts - window_secs as i64;
         let hi = ts + window_secs as i64;
         let mut stmt = conn.prepare(
-            "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text
+            "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text, gif_filename
              FROM screenshots
              WHERE unix_ts BETWEEN ?1 AND ?2
              ORDER BY unix_ts"
@@ -349,6 +354,7 @@ impl ScreenshotStore {
                 window_title: r.get(4)?,
                 ocr_text:     r.get::<_, String>(5).unwrap_or_default(),
                 similarity:   0.0,
+                gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
         }).unwrap().filter_map(|r| r.ok()).collect()
     }
@@ -401,7 +407,7 @@ impl ScreenshotStore {
         let conn = self.conn.lock_or_recover();
         let pattern = format!("%{query}%");
         let mut stmt = conn.prepare(
-            "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text
+            "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text, gif_filename
              FROM screenshots
              WHERE ocr_text LIKE ?1
              ORDER BY unix_ts DESC
@@ -416,6 +422,7 @@ impl ScreenshotStore {
                 window_title: r.get(4)?,
                 ocr_text:     r.get::<_, String>(5).unwrap_or_default(),
                 similarity:   0.0,
+                gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
         }).unwrap().filter_map(|r| r.ok()).collect()
     }
@@ -505,5 +512,14 @@ impl ScreenshotStore {
         let conn = self.conn.lock_or_recover();
         conn.query_row("SELECT COUNT(*) FROM screenshots", [], |r| r.get::<_, i64>(0))
             .unwrap_or(0) as usize
+    }
+
+    /// Set the animated GIF filename for a screenshot row.
+    pub fn update_gif_filename(&self, id: i64, gif_filename: &str) {
+        let conn = self.conn.lock_or_recover();
+        let _ = conn.execute(
+            "UPDATE screenshots SET gif_filename = ?1 WHERE id = ?2",
+            params![gif_filename, id],
+        );
     }
 }
