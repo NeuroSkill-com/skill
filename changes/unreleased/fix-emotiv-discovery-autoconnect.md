@@ -1,6 +1,8 @@
 ### Bugfixes
 
-- **Emotiv session stability**: Upgraded to emotiv crate v0.0.3 which prevents `ACCESS_RIGHT_GRANTED`, `HEADSET_CONNECTED`, and `HEADSET_SCANNING_FINISHED` warning handlers from re-authorizing or re-querying headsets when a session is already active. Previously these warnings would invalidate the cortex token mid-stream, causing immediate disconnect.
+- **Emotiv subscribe race condition**: `connect_emotiv` now waits for the `SessionCreated` event before calling `subscribe`. Previously it called `subscribe` immediately after `client.connect()`, but `connect()` only opens the WebSocket — the auth flow (hasAccessRight → authorize → queryHeadsets → createSession) runs asynchronously. The subscribe was sent with an empty cortexToken and session ID, causing an immediate `-32014 Cortex token is invalid` error.
+
+- **Emotiv session stability**: Upgraded to emotiv crate v0.0.4 which prevents `ACCESS_RIGHT_GRANTED`, `HEADSET_CONNECTED`, and `HEADSET_SCANNING_FINISHED` warning handlers from re-authorizing or re-querying headsets when a session is already active.
 
 - **Emotiv scanner is now side-effect-free**: The Cortex scanner probe only authorizes — it does NOT send `queryHeadsets` or `getCortexInfo`. The scanner also skips polling entirely when a session is active or a reconnect is pending, and waits 5 seconds at startup to avoid racing with the auto-connect flow.
 
