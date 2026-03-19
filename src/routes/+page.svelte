@@ -1181,7 +1181,7 @@ the Free Software Foundation, version 3 only. -->
 
         {#if showElectrodes}
           <div id="electrode-guide" class="-mt-0.5">
-            <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} />
+            <ElectrodeGuide qualityLabels={status.channel_quality} device={status.device_kind} channelNames={chLabels} />
           </div>
         {/if}
 
