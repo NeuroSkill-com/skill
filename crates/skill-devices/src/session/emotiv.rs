@@ -21,7 +21,10 @@ use std::collections::VecDeque;
 use tokio::sync::mpsc;
 
 use emotiv::prelude::*;
-use emotiv::protocol::{CORTEX_STOP_ALL_STREAMS, CORTEX_CLOSE_SESSION};
+use emotiv::protocol::{
+    CORTEX_STOP_ALL_STREAMS, CORTEX_CLOSE_SESSION,
+    HEADSET_DISCONNECTED, HEADSET_CONNECTION_FAILED,
+};
 use skill_constants::{
     EEG_CHANNELS,
     EMOTIV_EPOC_EEG_CHANNELS, EMOTIV_EPOC_CHANNEL_NAMES,
@@ -244,7 +247,10 @@ impl EmotivAdapter {
             }
 
             CortexEvent::Warning { code, .. }
-                if code == CORTEX_STOP_ALL_STREAMS || code == CORTEX_CLOSE_SESSION =>
+                if code == CORTEX_STOP_ALL_STREAMS
+                || code == CORTEX_CLOSE_SESSION
+                || code == HEADSET_DISCONNECTED
+                || code == HEADSET_CONNECTION_FAILED =>
             {
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
