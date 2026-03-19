@@ -1,6 +1,8 @@
 ### Bugfixes
 
-- **Emotiv scanner is now side-effect-free**: The Cortex scanner probe only authorizes — it does NOT send `queryHeadsets` or `getCortexInfo`. The emotiv crate's internal `queryHeadsets` handler automatically calls `connect_headset`/`create_session`, which was killing the active session on every 10-second poll. The scanner also skips polling entirely when a session is active or a reconnect is pending.
+- **Emotiv session stability**: Upgraded to emotiv crate v0.0.3 which prevents `ACCESS_RIGHT_GRANTED`, `HEADSET_CONNECTED`, and `HEADSET_SCANNING_FINISHED` warning handlers from re-authorizing or re-querying headsets when a session is already active. Previously these warnings would invalidate the cortex token mid-stream, causing immediate disconnect.
+
+- **Emotiv scanner is now side-effect-free**: The Cortex scanner probe only authorizes — it does NOT send `queryHeadsets` or `getCortexInfo`. The scanner also skips polling entirely when a session is active or a reconnect is pending, and waits 5 seconds at startup to avoid racing with the auto-connect flow.
 
 - **Emotiv auto-connect without pairing**: Cortex-discovered and USB-discovered devices are now treated as trusted transports and auto-connect when the app is idle, without requiring manual pairing first. BLE devices still require pairing as before (since BLE advertisements can come from any nearby device).
 
