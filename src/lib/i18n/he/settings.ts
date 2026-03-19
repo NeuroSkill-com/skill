@@ -364,7 +364,7 @@ const settings: Record<string, string> = {
 
   // ── פורמט הקלטה ──────────────────────────────────────────────────────────
   "settings.storageFormat":                      "פורמט הקלטה",
-  "settings.storageFormatDesc":                  "בחרו את פורמט הקובץ להקלטות EEG, PPG, IMU ומטריקות. CSV קריא לאדם; Parquet קומפקטי ומהיר לטעינה. „שניהם" כותב את שני הפורמטים בו-זמנית.",
+  "settings.storageFormatDesc":                  "בחרו את פורמט הקובץ להקלטות EEG, PPG, IMU ומטריקות. CSV קריא לאדם; Parquet קומפקטי ומהיר לטעינה. `שניהם` כותב את שני הפורמטים בו-זמנית.",
   "settings.storageFormatBoth":                  "שניהם",
   "settings.storageFormatCsvDesc":               "קריא לאדם, אוניברסלי",
   "settings.storageFormatParquetDesc":           "עמודי, דחוס",

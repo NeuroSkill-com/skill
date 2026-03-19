@@ -365,7 +365,7 @@ const settings: Record<string, string> = {
 
   // ── Aufnahmeformat ───────────────────────────────────────────────────────
   "settings.storageFormat":                      "Aufnahmeformat",
-  "settings.storageFormatDesc":                  "Wählen Sie das Dateiformat für EEG-, PPG-, IMU- und Metrik-Aufnahmen. CSV ist menschenlesbar; Parquet ist kompakt und schnell ladbar. „Beides" schreibt beide Formate gleichzeitig.",
+  "settings.storageFormatDesc":                  "Wählen Sie das Dateiformat für EEG-, PPG-, IMU- und Metrik-Aufnahmen. CSV ist menschenlesbar; Parquet ist kompakt und schnell ladbar. `Beides` schreibt beide Formate gleichzeitig.",
   "settings.storageFormatBoth":                  "Beides",
   "settings.storageFormatCsvDesc":               "Menschenlesbar, universell",
   "settings.storageFormatParquetDesc":           "Spaltenorientiert, komprimiert",
