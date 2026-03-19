@@ -122,14 +122,14 @@ pub(crate) async fn run_device_session(
                     elapsed.as_secs_f64());
                 app_log!(app, "bluetooth", "{watchdog_msg}");
                 crate::device_scanner::device_log("session", &watchdog_msg);
-                send_toast(&app, ToastLevel::Warning, "Connection Lost",
-                    "No data received — reconnecting…");
+                on_disconnected(&app, kind);
                 adapter.disconnect().await;
                 break;
             }
             ev = adapter.next_event() => {
                 let Some(ev) = ev else {
                     app_log!(app, "bluetooth", "[{kind}] event channel closed");
+                    on_disconnected(&app, kind);
                     adapter.disconnect().await;
                     break;
                 };
@@ -258,6 +258,18 @@ pub(crate) async fn run_device_session(
     // ── Finalise ─────────────────────────────────────────────────────────────
     if let Some(ref mut c) = csv {
         finalize_session(&app, c, &csv_path, user_cancelled);
+    } else {
+        // CSV was never opened (disconnect before first EEG frame, or
+        // adapter never emitted Eeg events).  Still need to clean up
+        // the session state so the UI transitions to disconnected and
+        // reconnect logic can fire.
+        app_log!(app, "bluetooth",
+            "[{kind}] session ended before any EEG data was recorded");
+        crate::device_scanner::device_log("session",
+            &format!("[{kind}] Session ended (no data recorded)"));
+        let error_msg = if user_cancelled { None }
+                        else { Some("DEVICE_DISCONNECTED".into()) };
+        crate::go_disconnected(&app, error_msg, false);
     }
 }
 
