@@ -19,7 +19,9 @@ use crate::{
     EegPacket, ImuPacket, MutexExt, PpgPacket, SessionDsp, ToastLevel,
     emit_status, refresh_tray, send_toast, upsert_paired, unix_secs,
 };
-use skill_eeg::eeg_bands::BandSnapshot;
+use skill_eeg::artifact_detection::ArtifactDetector;
+use skill_eeg::eeg_bands::{BandAnalyzer, BandSnapshot};
+use skill_eeg::eeg_quality::QualityMonitor;
 use crate::session_csv::write_session_meta;
 use skill_data::session_writer::{SessionWriter, StorageFormat};
 use crate::ws_server::WsBroadcaster;
@@ -150,13 +152,27 @@ pub(crate) async fn run_device_session(
                                 pipeline_ch = fresh.pipeline_channels;
                                 app_log!(app, "bluetooth",
                                     "[{kind}] updated to {} pipeline channels", pipeline_ch);
-                                // Reset quality & DSP for the new channel count —
-                                // old samples from the pre-DataLabels phase had
-                                // garbage (COUNTER, INTERPOLATED, etc.) that
-                                // corrupted the quality window.
+                                // Reset quality, bands, and artifact detector for
+                                // the new channel count — old samples from the
+                                // pre-DataLabels phase had garbage (COUNTER,
+                                // INTERPOLATED, etc.) that corrupted the quality
+                                // window.  We do NOT rebuild the EegFilter because
+                                // it initialises the cubecl GPU runtime (a global
+                                // singleton that panics on second init).  Instead
+                                // we just reset the filter's internal buffers.
                                 let ch_refs: Vec<&str> = fresh.channel_names
                                     .iter().map(|s| s.as_str()).collect();
-                                dsp = SessionDsp::new(&app, &ch_refs);
+                                dsp.filter.reset();
+                                dsp.quality = QualityMonitor::with_window(
+                                    crate::constants::EEG_CHANNELS,
+                                    fresh.eeg_sample_rate as usize,
+                                );
+                                dsp.band_analyzer = BandAnalyzer::new_with_rate(
+                                    fresh.eeg_sample_rate as f32,
+                                );
+                                dsp.artifact_detector = ArtifactDetector::with_channels(
+                                    fresh.eeg_sample_rate, &ch_refs,
+                                );
                                 dsp.accumulator.set_device_channels(
                                     fresh.channel_names.clone(),
                                     fresh.eeg_sample_rate as f32,
