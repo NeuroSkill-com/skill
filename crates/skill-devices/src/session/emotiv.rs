@@ -61,8 +61,7 @@ pub struct EmotivAdapter {
     /// electrodes (set from DataLabels).  Empty until DataLabels arrives,
     /// in which case all samples are forwarded.
     electrode_indices: Vec<usize>,
-    /// Whether we've logged the first extracted frame (debug aid).
-    first_frame_logged: bool,
+
 }
 
 impl EmotivAdapter {
@@ -92,7 +91,6 @@ impl EmotivAdapter {
             auto_detected: false,
             headset_id,
             electrode_indices: Vec::new(),
-            first_frame_logged: false,
         }
     }
 
@@ -139,7 +137,6 @@ impl EmotivAdapter {
             auto_detected: false,
             headset_id: "TEST-HEADSET".into(),
             electrode_indices: Vec::new(),
-            first_frame_logged: false,
         }
     }
 
@@ -177,12 +174,6 @@ impl EmotivAdapter {
                     data.samples.clone()
                 };
 
-                // Log the first frame after DataLabels to verify electrode extraction.
-                if self.auto_detected && !self.first_frame_logged {
-                    self.first_frame_logged = true;
-                    eprintln!("[emotiv-adapter] raw={} vals, indices={:?}, extracted={:?}",
-                        data.samples.len(), self.electrode_indices, channels);
-                }
 
                 if !channels.is_empty() {
                     self.pending.push_back(DeviceEvent::Eeg(EegFrame {
@@ -234,15 +225,12 @@ impl EmotivAdapter {
                     }
                 }
 
-                eprintln!("[emotiv-adapter] EEG DataLabels: {:?}", labels.labels);
-                eprintln!("[emotiv-adapter] electrode indices={indices:?} names={names:?}");
                 if !names.is_empty() {
                     self.electrode_indices      = indices;
                     self.desc.eeg_channels      = names.len();
                     self.desc.pipeline_channels  = names.len().min(EEG_CHANNELS);
                     self.desc.channel_names      = names;
                     self.auto_detected = true;
-                    self.first_frame_logged = false; // re-log after labels update
                 }
             }
 

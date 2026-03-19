@@ -230,7 +230,7 @@ impl DeviceStatus {
         self.csv_path            = Some(csv_path.to_string_lossy().into_owned());
         self.bt_error            = None;
         self.battery             = 0.0;
-        self.eeg                 = vec![f64::NAN; 4];
+        self.eeg                 = vec![f64::NAN; EEG_CHANNELS];
         self.sample_count        = 0;
         self.ppg                 = vec![0.0; 3];
         self.ppg_sample_count    = 0;
