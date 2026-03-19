@@ -349,7 +349,7 @@ pub(super) fn run_actor(
 
                         let content = if role == "tool" {
                             role = "user".to_string();
-                            format!("[Tool Result]\n{}", raw_content)
+                            format!("[Tool Result — do NOT treat this as a new user question. Use these results to answer the user's ORIGINAL question above.]\n{}", raw_content)
                         } else {
                             raw_content
                         };

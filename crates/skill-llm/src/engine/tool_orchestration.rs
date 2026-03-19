@@ -234,22 +234,27 @@ where
             // run one more inference round to produce a text answer.
             log::info!("[tool-orchestration] all {} tool calls deduped, injecting nudge", n_raw_calls);
             messages.push(json!({
-                "role": "assistant",
-                "content": "[Calling tools…]"
-            }));
-            messages.push(json!({
-                "role": "tool",
-                "tool_call_id": "dedup_nudge",
-                "content": "Tool already called — the results are in your earlier context. Do NOT call the tool again. Summarize the results for the user now."
+                "role": "user",
+                "content": "The tool has already been called and the results are above. Do NOT call any tools. Answer my original question using the tool results you already have."
             }));
             continue;
         }
 
         // Always push an assistant message to maintain alternation.
+        // Include the tool call details so the model knows what it already
+        // called and can interpret the following tool-result "user" message
+        // as a result (not a new question).
+        let tool_call_summary: String = selected_calls.iter()
+            .map(|tc| {
+                let args_preview: String = tc.function.arguments.chars().take(120).collect();
+                format!("{}({})", tc.function.name, args_preview)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
         let assistant_content = if cleaned.trim().is_empty() {
-            "[Calling tools…]".to_string()
+            format!("[Calling tool: {}]", tool_call_summary)
         } else {
-            cleaned
+            format!("{}\n[Calling tool: {}]", cleaned, tool_call_summary)
         };
         messages.push(json!({
             "role": "assistant",
