@@ -71,6 +71,10 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Electrode system tabs ──────────────────────────────────────────────────
   type ActiveTab = "muse" | "mw75" | "hermes" | "ganglion" | "emotiv" | "idun" | "10-20" | "10-10" | "10-5";
+  // Tab count for Emotiv is dynamic (Insight=5, EPOC=14, Flex=32)
+  const emotivCount = $derived(
+    qualityLabels && device === "emotiv" ? String(qualityLabels.length) : "14"
+  );
   const TABS: { id: ActiveTab; label: string; count: string }[] = [
     { id: "muse",     label: "Muse",     count: "4"  },
     { id: "mw75",     label: "MW75",     count: "12" },
@@ -176,25 +180,20 @@ the Free Software Foundation, version 3 only. -->
 <div class="flex flex-col items-center gap-3">
 
   <!-- ── System tabs ─────────────────────────────────────────────────────── -->
-  <div class="flex items-center gap-1 self-start w-full max-w-[480px]">
+  <div class="flex flex-wrap items-center gap-1 self-start w-full max-w-[480px]">
     {#each TABS as tab}
       <button
         onclick={() => { activeTab = tab.id; selectedElectrode = null; }}
-        class="flex items-center gap-1 rounded-md px-2.5 py-1 text-[0.62rem] font-semibold
-               transition-all border
+        class="flex items-center gap-1 rounded-md px-2 py-1 text-[0.56rem] font-semibold
+               transition-all border whitespace-nowrap
                {activeTab === tab.id
                  ? 'bg-foreground text-background border-transparent'
                  : 'text-muted-foreground border-border dark:border-white/[0.07] hover:text-foreground hover:border-foreground/30'}"
       >
         {tab.label}
-        <span class="text-[0.5rem] opacity-60 tabular-nums">{tab.count}</span>
+        <span class="text-[0.46rem] opacity-60 tabular-nums">{tab.count}</span>
       </button>
     {/each}
-    {#if activeTab !== "muse"}
-      <span class="ml-auto text-[0.52rem] text-muted-foreground/50">
-        {getElectrodes(activeTab as ElectrodeSystem).length} electrodes
-      </span>
-    {/if}
   </div>
 
   <!-- Signal quality cards — shown only for Muse tab -->
@@ -231,15 +230,15 @@ the Free Software Foundation, version 3 only. -->
   </div>
   {:else}
   <!-- Compact quality strip for non-Muse tabs (shows live quality from connected device) -->
-  <div class="flex items-center gap-2 w-full max-w-[480px] rounded-lg border border-border dark:border-white/[0.07]
+  <div class="flex flex-wrap items-center gap-x-2 gap-y-1 w-full max-w-[480px] rounded-lg border border-border dark:border-white/[0.07]
               bg-muted/20 px-3 py-1.5">
     <span class="text-[0.52rem] font-semibold text-muted-foreground/60 uppercase tracking-wider shrink-0">Signal</span>
-    {#each museChannels as name, idx}
-      {@const q = effectiveQuality ? effectiveQuality[idx] : 0}
-      {@const label = effectiveLabels[idx]}
+    {#each (qualityLabels ?? []) as label, idx}
+      {@const q = labelToNum(label)}
+      {@const chName = visible[idx]?.name ?? `Ch${idx + 1}`}
       <div class="flex items-center gap-1">
         <span class="w-2 h-2 rounded-full shrink-0" style="background:{qualityColor(q)}"></span>
-        <span class="text-[0.55rem] font-mono font-bold" style="color:{qualityColor(q)}">{name}</span>
+        <span class="text-[0.55rem] font-mono font-bold" style="color:{qualityColor(q)}">{chName}</span>
       </div>
     {/each}
   </div>
