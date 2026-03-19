@@ -243,53 +243,39 @@ pub fn skill_api_tool() -> Tool {
         function: ToolFunction {
             name: "skill".into(),
             description: Some(
-                "Query the NeuroSkill EEG/BCI application via its API. \
-                 Always call this tool with {\"command\": \"<name>\"} — \
-                 do NOT call the command names as separate tools.\n\n\
-                 Available commands:\n\
-                 - status: Full device/session/embeddings/scores snapshot. No args.\n\
-                 - sessions: List all recording sessions. No args.\n\
-                 - session_metrics: Metrics for a session. Args: start_utc (number), end_utc (number).\n\
-                 - say: Speak text via TTS. Args: text (string, required), voice (string, optional).\n\
-                 - notify: Show OS notification. Args: title (string, required), body (string, optional).\n\
-                 - label: Create timestamped annotation. Args: text (string, required), context (string, optional), label_start_utc (number, optional).\n\
-                 - search_labels: Semantic label search. Args: query (string, required), k (number, default 10), mode (\"text\"|\"context\"|\"both\", default \"text\"), ef (number, optional).\n\
-                 - interactive_search: Cross-modal graph search. Args: query (string, required), k_text (number, default 5), k_eeg (number, default 5), k_labels (number, default 3), reach_minutes (number, default 10).\n\
-                 - search: ANN EEG-similarity search. Args: start_utc (number), end_utc (number), k (number, default 5).\n\
-                 - compare: A/B session comparison. Args: a_start_utc, a_end_utc, b_start_utc, b_end_utc (numbers).\n\
-                 - sleep: Sleep staging. Args: start_utc (number), end_utc (number).\n\
-                 - calibrate: Open calibration window. No args (or id for specific profile).\n\
-                 - timer: Open focus-timer. No args.\n\
-                 - run_calibration: Start calibration. Args: id (string, optional profile UUID).\n\
-                 - list_calibrations: List calibration profiles. No args.\n\
-                 - get_calibration: Get one profile. Args: id (number).\n\
-                 - create_calibration: Create profile. Args: name (string), actions (array of {label, duration_secs}), loop_count (number), break_duration_secs (number), auto_start (bool).\n\
-                 - update_calibration: Update profile. Args: id (string), plus optional name/actions/loop_count/break_duration_secs/auto_start.\n\
-                 - delete_calibration: Delete profile. Args: id (string).\n\
-                 - dnd: DND automation status. No args.\n\
-                 - dnd_set: Force DND on/off. Args: enabled (bool).\n\
-                 - hooks_status: List hooks with last-trigger metadata. No args.\n\
-                 - hooks_get: List raw hook rules. No args.\n\
-                 - hooks_set: Replace all hooks. Args: hooks (array of hook rule objects).\n\
-                 - hooks_suggest: Suggest threshold. Args: keywords (array of strings).\n\
-                 - hooks_log: Hook trigger history. Args: limit (number, default 20), offset (number, default 0).\n\
-                 - umap: Enqueue 3D UMAP projection. Args: a_start_utc, a_end_utc, b_start_utc, b_end_utc (numbers).\n\
-                 - umap_poll: Poll UMAP job. Args: job_id (number).\n\
-                 - llm_status: LLM server status. No args.\n\
-                 - llm_catalog: Model catalog. No args.\n\
-                 - llm_downloads: List downloads. No args.\n\
-                 - llm_hardware_fit: Check model fit. No args.".into()
+                "Query the NeuroSkill EEG/BCI application. \
+                 IMPORTANT: always call THIS tool (\"skill\") and pass a command name via the \"command\" argument. \
+                 Example: {\"command\":\"status\"} — never call \"status\" directly as a tool.\n\n\
+                 Commands (pass as \"command\" value):\n\
+                 STATUS: status | sessions | session_metrics(start_utc,end_utc) | sleep(start_utc,end_utc)\n\
+                 ACTIONS: say(text) | notify(title,body?) | label(text,context?) | calibrate | timer\n\
+                 SEARCH: search_labels(query,k?,mode?) | interactive_search(query) | search(start_utc,end_utc,k?) | compare(a_start_utc,a_end_utc,b_start_utc,b_end_utc)\n\
+                 CALIBRATION: list_calibrations | get_calibration(id) | create_calibration(name,actions,loop_count) | update_calibration(id,...) | delete_calibration(id) | run_calibration(id?)\n\
+                 HOOKS: hooks_status | hooks_get | hooks_set(hooks) | hooks_suggest(keywords) | hooks_log(limit?,offset?)\n\
+                 DND: dnd | dnd_set(enabled)\n\
+                 ADVANCED: umap(a_start_utc,a_end_utc,b_start_utc,b_end_utc) | umap_poll(job_id) | llm_status | llm_catalog".into()
             ),
             parameters: Some(json!({
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "The API command name (e.g. \"status\", \"sessions\", \"label\", \"search\", etc.)"
+                        "description": "The command name to execute (e.g. \"status\", \"sessions\", \"say\"). This is NOT a separate tool — pass it here.",
+                        "enum": [
+                            "status", "sessions", "session_metrics", "say", "notify",
+                            "label", "search_labels", "interactive_search", "search",
+                            "compare", "sleep", "calibrate", "timer",
+                            "run_calibration", "list_calibrations", "get_calibration",
+                            "create_calibration", "update_calibration", "delete_calibration",
+                            "dnd", "dnd_set",
+                            "hooks_status", "hooks_get", "hooks_set", "hooks_suggest", "hooks_log",
+                            "umap", "umap_poll",
+                            "llm_status", "llm_catalog", "llm_downloads", "llm_hardware_fit"
+                        ]
                     },
                     "args": {
                         "type": "object",
-                        "description": "Command-specific arguments as key-value pairs (omit or {} for commands with no args)"
+                        "description": "Command-specific arguments as key-value pairs (omit for commands with no args)"
                     }
                 },
                 "required": ["command"],

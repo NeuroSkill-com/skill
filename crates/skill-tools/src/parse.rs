@@ -185,6 +185,8 @@ Format: [TOOL_CALL]{{"name":"<tool>","arguments":{{...}}}}[/TOOL_CALL]
 Examples:
 [TOOL_CALL]{{"name":"date","arguments":{{}}}}[/TOOL_CALL]
 [TOOL_CALL]{{"name":"bash","arguments":{{"command":"ls ~/Desktop/"}}}}[/TOOL_CALL]
+[TOOL_CALL]{{"name":"skill","arguments":{{"command":"status"}}}}[/TOOL_CALL]
+For the "skill" tool, pass the command name inside arguments. Do NOT call command names like "status" directly — always use {{"name":"skill","arguments":{{"command":"..."}}}}.
 Wait for results. Do NOT fabricate results."#,
         names.join(", ")
     )
@@ -259,7 +261,11 @@ Assistant: [TOOL_CALL]{{"name":"location","arguments":{{}}}}[/TOOL_CALL]
 
 User: "What's the weather like?"
 Assistant: [TOOL_CALL]{{"name":"web_search","arguments":{{"query":"weather <city>","render":true}}}}[/TOOL_CALL]
-(Use render=true for factual queries like weather, prices, scores, or news so the actual page content is fetched and you can summarise it directly.)"#
+(Use render=true for factual queries like weather, prices, scores, or news so the actual page content is fetched and you can summarise it directly.)
+
+User: "How do I feel?" / "What's my brain state?"
+Assistant: [TOOL_CALL]{{"name":"skill","arguments":{{"command":"status"}}}}[/TOOL_CALL]
+(Use the "skill" tool for ALL EEG/brain/device queries. Pass the command name inside "arguments", e.g. {{"command":"status"}}. Do NOT call "status" or any other command name directly as a tool — always wrap it with the "skill" tool.)"#
     )
 }
 
@@ -401,6 +407,27 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
                 &mut calls, &mut dedup, "bash".into(),
                 format!(r#"{{"command":{}}}"#, serde_json::to_string(&cmd).unwrap_or_else(|_| format!("\"{}\"", cmd))),
             );
+        }
+    }
+
+    // Post-process: redirect Skill API sub-commands called as top-level tools.
+    // Small models frequently emit {"name":"status"} instead of
+    // {"name":"skill","arguments":{"command":"status"}}.  Fix it here so all
+    // downstream code (orchestrator, exec) sees the correct tool name.
+    for tc in &mut calls {
+        if !KNOWN_TOOL_NAMES.contains(&tc.function.name.as_str())
+            && crate::defs::is_skill_api_command(&tc.function.name)
+        {
+            let orig_args: Value = serde_json::from_str(&tc.function.arguments)
+                .unwrap_or_else(|_| serde_json::json!({}));
+            let mut redirected = serde_json::json!({ "command": tc.function.name });
+            if let Some(obj) = orig_args.as_object() {
+                if !obj.is_empty() {
+                    redirected["args"] = orig_args;
+                }
+            }
+            tc.function.name = "skill".to_string();
+            tc.function.arguments = redirected.to_string();
         }
     }
 
@@ -1352,6 +1379,52 @@ df -h
             }
         }
         assert_eq!(all_visible, full);
+    }
+
+    #[test]
+    fn redirect_skill_subcmd_as_tool() {
+        // LLM emits {"name":"status"} — should be redirected to skill(command:status)
+        let msg = r#"[TOOL_CALL]{"name":"status","arguments":{}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "skill");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "status");
+    }
+
+    #[test]
+    fn redirect_skill_subcmd_with_args() {
+        // LLM emits {"name":"say","arguments":{"text":"hello"}}
+        let msg = r#"[TOOL_CALL]{"name":"say","arguments":{"text":"hello"}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "skill");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "say");
+        assert_eq!(args["args"]["text"].as_str().unwrap(), "hello");
+    }
+
+    #[test]
+    fn no_redirect_for_real_tools() {
+        // Real tool names must NOT be redirected
+        let msg = r#"[TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "date");
+    }
+
+    #[test]
+    fn redirect_multiple_subcmds_in_one_turn() {
+        let msg = r#"[TOOL_CALL]{"name":"status","arguments":{}}[/TOOL_CALL]
+[TOOL_CALL]{"name":"sessions","arguments":{}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].function.name, "skill");
+        assert_eq!(calls[1].function.name, "skill");
+        let a0: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        let a1: Value = serde_json::from_str(&calls[1].function.arguments).unwrap();
+        assert_eq!(a0["command"].as_str().unwrap(), "status");
+        assert_eq!(a1["command"].as_str().unwrap(), "sessions");
     }
 
     #[test]
