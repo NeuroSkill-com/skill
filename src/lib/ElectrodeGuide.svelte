@@ -31,9 +31,11 @@ the Free Software Foundation, version 3 only. -->
     qualityLabels?: string[] | null;
     /** Connected device kind for selecting the default tab. */
     device?: string;
+    /** Actual channel names from the connected device (e.g. ["AF3","T7","Pz","T8","AF4"] for Insight). */
+    channelNames?: string[];
   }
 
-  let { quality = null, qualityLabels = null, device = "muse" }: Props = $props();
+  let { quality = null, qualityLabels = null, device = "muse", channelNames = [] }: Props = $props();
 
   /** Convert string quality labels to numeric values. */
   function labelToNum(label: string): number {
@@ -71,20 +73,16 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Electrode system tabs ──────────────────────────────────────────────────
   type ActiveTab = "muse" | "mw75" | "hermes" | "ganglion" | "emotiv" | "idun" | "10-20" | "10-10" | "10-5";
-  // Tab count for Emotiv is dynamic (Insight=5, EPOC=14, Flex=32)
-  const emotivCount = $derived(
-    qualityLabels && device === "emotiv" ? String(qualityLabels.length) : "14"
-  );
-  const TABS: { id: ActiveTab; label: string; count: string }[] = [
-    { id: "muse",     label: "Muse",     count: "4"  },
-    { id: "mw75",     label: "MW75",     count: "12" },
-    { id: "hermes",   label: "Hermes",   count: "8"  },
-    { id: "ganglion", label: "Ganglion", count: "4"  },
-    { id: "emotiv",   label: "Emotiv",   count: "14" },
-    { id: "idun",     label: "IDUN",     count: "1"  },
-    { id: "10-20",    label: "10-20",    count: "21" },
-    { id: "10-10",    label: "10-10",    count: "64" },
-    { id: "10-5",     label: "10-5",     count: "345" },
+  const TABS: { id: ActiveTab; label: string; count: () => string }[] = [
+    { id: "muse",     label: "Muse",     count: () => "4"  },
+    { id: "mw75",     label: "MW75",     count: () => "12" },
+    { id: "hermes",   label: "Hermes",   count: () => "8"  },
+    { id: "ganglion", label: "Ganglion", count: () => "4"  },
+    { id: "emotiv",   label: "Emotiv",   count: () => String(emotivActiveLabels.length) },
+    { id: "idun",     label: "IDUN",     count: () => "1"  },
+    { id: "10-20",    label: "10-20",    count: () => "21" },
+    { id: "10-10",    label: "10-10",    count: () => "64" },
+    { id: "10-5",     label: "10-5",     count: () => "345" },
   ];
   function defaultTab(d: string): ActiveTab {
     return d === "mw75" ? "mw75" : d === "hermes" ? "hermes"
@@ -100,9 +98,15 @@ the Free Software Foundation, version 3 only. -->
   const museElectrodes = allElectrodes.filter(e => e.muse);
   const MW75_LABELS = ["FT7","T7","TP7","CP5","P7","C5","FT8","T8","TP8","CP6","P8","C6"];
   const mw75Electrodes = allElectrodes.filter(e => MW75_LABELS.includes(e.name));
-  // All 14 EPOC X / EPOC+ electrodes.
+  // Emotiv electrodes — use actual device channels when available,
+  // fall back to the full EPOC 14-channel set for the reference view.
   const EMOTIV_EPOC_LABELS = ["AF3","F7","F3","FC5","T7","P7","O1","O2","P8","T8","FC6","F4","F8","AF4"];
-  const emotivElectrodes = allElectrodes.filter(e => EMOTIV_EPOC_LABELS.includes(e.name));
+  const emotivActiveLabels = $derived(
+    device === "emotiv" && channelNames.length > 0 ? channelNames : EMOTIV_EPOC_LABELS
+  );
+  const emotivElectrodes = $derived(
+    allElectrodes.filter(e => emotivActiveLabels.includes(e.name))
+  );
   const IDUN_LABELS = ["A1"]; // Single-channel in-ear reference
   const idunElectrodes = allElectrodes.filter(e => IDUN_LABELS.includes(e.name));
 
@@ -191,7 +195,7 @@ the Free Software Foundation, version 3 only. -->
                  : 'text-muted-foreground border-border dark:border-white/[0.07] hover:text-foreground hover:border-foreground/30'}"
       >
         {tab.label}
-        <span class="text-[0.46rem] opacity-60 tabular-nums">{tab.count}</span>
+        <span class="text-[0.46rem] opacity-60 tabular-nums">{tab.count()}</span>
       </button>
     {/each}
   </div>
