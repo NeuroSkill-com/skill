@@ -508,6 +508,70 @@ the Free Software Foundation, version 3 only. -->
     </div>
   </div>
 
+  <!-- ── Paired Devices ─────────────────────────────────────────────────────── -->
+  <div class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      {t("devices.pairedDevices")}
+    </span>
+
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      {#if pairedDevices.length === 0}
+        <CardContent class="flex flex-col items-center gap-2 py-8 text-center">
+          <span class="text-3xl">📡</span>
+          <p class="text-[0.78rem] text-foreground/70">{t("devices.noPaired")}</p>
+          <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[260px]">
+            {t("devices.noPairedHint")}
+          </p>
+        </CardContent>
+      {:else}
+        {#each pairedDevices as dev, i (dev.id)}
+          {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
+          {@render deviceRow(dev)}
+        {/each}
+      {/if}
+    </Card>
+  </div>
+
+  <!-- ── Discovered Devices ──────────────────────────────────────────────────── -->
+  <div class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      {t("devices.discoveredDevices")}
+    </span>
+
+    {#if hasNewUnpaired}
+      <div class="flex items-start gap-2.5 rounded-xl
+                  border border-amber-400/40 bg-amber-50/80 dark:bg-amber-950/25
+                  px-3 py-2.5">
+        <span class="text-[1rem] shrink-0 mt-0.5">📡</span>
+        <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+          <span class="text-[0.72rem] font-semibold text-amber-800 dark:text-amber-300 leading-tight">
+            {t("settings.newDeviceNotice")}
+          </span>
+          <span class="text-[0.64rem] text-amber-700/70 dark:text-amber-400/70 leading-relaxed">
+            {t("settings.newDeviceNoticeHint")}
+          </span>
+        </div>
+      </div>
+    {/if}
+
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      {#if discoveredDevices.length === 0}
+        <CardContent class="flex flex-col items-center gap-2 py-6 text-center">
+          <span class="text-2xl">🔍</span>
+          <p class="text-[0.72rem] text-muted-foreground/70">{t("devices.noDiscovered")}</p>
+          <p class="text-[0.62rem] text-muted-foreground/50 leading-relaxed max-w-[260px]">
+            {t("devices.noDiscoveredHint")}
+          </p>
+        </CardContent>
+      {:else}
+        {#each discoveredDevices as dev, i (dev.id)}
+          {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
+          {@render deviceRow(dev)}
+        {/each}
+      {/if}
+    </Card>
+  </div>
+
   <!-- ── Supported Devices ─────────────────────────────────────────────────── -->
   <div class="flex flex-col gap-2">
     <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
@@ -572,70 +636,6 @@ the Free Software Foundation, version 3 only. -->
           </div>
         {/each}
       </CardContent>
-    </Card>
-  </div>
-
-  <!-- ── Paired Devices ─────────────────────────────────────────────────────── -->
-  <div class="flex flex-col gap-2">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-      {t("devices.pairedDevices")}
-    </span>
-
-    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-      {#if pairedDevices.length === 0}
-        <CardContent class="flex flex-col items-center gap-2 py-8 text-center">
-          <span class="text-3xl">📡</span>
-          <p class="text-[0.78rem] text-foreground/70">{t("devices.noPaired")}</p>
-          <p class="text-[0.68rem] text-muted-foreground leading-relaxed max-w-[260px]">
-            {t("devices.noPairedHint")}
-          </p>
-        </CardContent>
-      {:else}
-        {#each pairedDevices as dev, i (dev.id)}
-          {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
-          {@render deviceRow(dev)}
-        {/each}
-      {/if}
-    </Card>
-  </div>
-
-  <!-- ── Discovered Devices ──────────────────────────────────────────────────── -->
-  <div class="flex flex-col gap-2">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-      {t("devices.discoveredDevices")}
-    </span>
-
-    {#if hasNewUnpaired}
-      <div class="flex items-start gap-2.5 rounded-xl
-                  border border-amber-400/40 bg-amber-50/80 dark:bg-amber-950/25
-                  px-3 py-2.5">
-        <span class="text-[1rem] shrink-0 mt-0.5">📡</span>
-        <div class="flex flex-col gap-0.5 flex-1 min-w-0">
-          <span class="text-[0.72rem] font-semibold text-amber-800 dark:text-amber-300 leading-tight">
-            {t("settings.newDeviceNotice")}
-          </span>
-          <span class="text-[0.64rem] text-amber-700/70 dark:text-amber-400/70 leading-relaxed">
-            {t("settings.newDeviceNoticeHint")}
-          </span>
-        </div>
-      </div>
-    {/if}
-
-    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-      {#if discoveredDevices.length === 0}
-        <CardContent class="flex flex-col items-center gap-2 py-6 text-center">
-          <span class="text-2xl">🔍</span>
-          <p class="text-[0.72rem] text-muted-foreground/70">{t("devices.noDiscovered")}</p>
-          <p class="text-[0.62rem] text-muted-foreground/50 leading-relaxed max-w-[260px]">
-            {t("devices.noDiscoveredHint")}
-          </p>
-        </CardContent>
-      {:else}
-        {#each discoveredDevices as dev, i (dev.id)}
-          {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
-          {@render deviceRow(dev)}
-        {/each}
-      {/if}
     </Card>
   </div>
 
