@@ -53,6 +53,7 @@ pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
         "csv_file":            csv_path.file_name().and_then(|n| n.to_str()).unwrap_or(""),
         "ppg_csv_file":        ppg_csv_path(csv_path).file_name().and_then(|n| n.to_str()).unwrap_or(""),
         "metrics_csv_file":    metrics_csv_path(csv_path).file_name().and_then(|n| n.to_str()).unwrap_or(""),
+        "imu_csv_file":        imu_csv_path(csv_path).file_name().and_then(|n| n.to_str()).unwrap_or(""),
         "session_start_utc":   session_start_utc,
         "session_end_utc":     session_end_utc,
         "session_duration_s":  duration_secs,

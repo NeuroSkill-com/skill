@@ -4,9 +4,9 @@
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
-<!-- EXG tab — signal processing filters, EEG embedding config, GPU/memory stats. -->
+<!-- EXG tab — signal processing filters, EEG embedding config. -->
 <script lang="ts">
-  import { onMount, onDestroy }       from "svelte";
+  import { onMount }                   from "svelte";
   import { invoke }                   from "@tauri-apps/api/core";
   import { DEFAULT_FILTER_CONFIG,
            EMBEDDING_EPOCH_SECS,
@@ -59,22 +59,10 @@ the Free Software Foundation, version 3 only. -->
     finally { overlapSaving = false; }
   }
 
-  // ── GPU / memory stats ────────────────────────────────────────────────────
-  interface GpuStats {
-    render:            number;
-    tiler:             number;
-    overall:           number;
-    isUnifiedMemory:   boolean;
-    totalMemoryBytes:  number | null;
-    freeMemoryBytes:   number | null;
-  }
-  let gpuStats = $state<GpuStats | null>(null);
-
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   onMount(async () => {
     filter      = await invoke<FilterConfig>("get_filter_config");
     overlapSecs = await invoke<number>("get_embedding_overlap");
-    gpuStats    = await invoke<GpuStats | null>("get_gpu_stats").catch(() => null);
   });
 </script>
 
@@ -265,98 +253,5 @@ the Free Software Foundation, version 3 only. -->
     </Card>
   </div>
 
-  <!-- ── GPU / Memory ───────────────────────────────────────────────────────── -->
-  {#if gpuStats}
-    {@const fmtBytes = (b: number | null) => {
-      if (b === null || b <= 0) return null;
-      const gb = b / (1024 ** 3);
-      return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(b / (1024 ** 2)).toFixed(0)} MB`;
-    }}
-    {@const usedBytes  = (gpuStats.totalMemoryBytes !== null && gpuStats.freeMemoryBytes !== null)
-      ? gpuStats.totalMemoryBytes - gpuStats.freeMemoryBytes : null}
-    {@const usedPct    = (usedBytes !== null && gpuStats.totalMemoryBytes)
-      ? Math.round(usedBytes / gpuStats.totalMemoryBytes * 100) : null}
-    {@const memLabel   = gpuStats.isUnifiedMemory ? "Unified Memory (RAM)" : "VRAM"}
-
-    <div class="flex flex-col gap-2">
-      <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
-        GPU · {memLabel}
-      </span>
-
-      <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-        <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
-
-          {#if gpuStats.totalMemoryBytes}
-            <div class="flex flex-col gap-2 px-4 py-3.5">
-              <div class="flex items-baseline justify-between">
-                <span class="text-[0.72rem] font-semibold text-foreground">{memLabel}</span>
-                {#if fmtBytes(gpuStats.totalMemoryBytes)}
-                  <span class="text-[0.68rem] text-muted-foreground tabular-nums">
-                    {fmtBytes(gpuStats.totalMemoryBytes)}
-                    {#if gpuStats.isUnifiedMemory}<span class="text-[0.56rem] ml-0.5 text-muted-foreground/60">total</span>{/if}
-                  </span>
-                {/if}
-              </div>
-
-              {#if usedPct !== null && gpuStats.freeMemoryBytes !== null}
-                <div class="h-2 w-full rounded-full bg-muted dark:bg-white/[0.07] overflow-hidden">
-                  <div
-                    class="h-full rounded-full transition-all duration-500
-                           {usedPct > 85 ? 'bg-red-500' : usedPct > 65 ? 'bg-amber-500' : 'bg-violet-500'}"
-                    style="width: {usedPct}%">
-                  </div>
-                </div>
-                <div class="flex items-center justify-between text-[0.6rem] text-muted-foreground tabular-nums">
-                  <span>
-                    {fmtBytes(usedBytes)} used
-                    <span class="text-muted-foreground/50">·</span>
-                    {fmtBytes(gpuStats.freeMemoryBytes)} free
-                  </span>
-                  <span class="{usedPct > 85 ? 'text-red-500' : usedPct > 65 ? 'text-amber-500' : ''}">
-                    {usedPct}%
-                  </span>
-                </div>
-              {:else if gpuStats.freeMemoryBytes}
-                <p class="text-[0.64rem] text-muted-foreground">
-                  {fmtBytes(gpuStats.freeMemoryBytes)} free
-                </p>
-              {/if}
-
-              {#if gpuStats.isUnifiedMemory}
-                <p class="text-[0.58rem] text-muted-foreground/60 leading-relaxed -mt-0.5">
-                  Apple Silicon uses a single unified memory pool shared by CPU and GPU.
-                  "Free" includes inactive pages that can be reclaimed immediately.
-                </p>
-              {/if}
-            </div>
-          {/if}
-
-          {#if gpuStats.overall > 0 || gpuStats.render > 0 || gpuStats.tiler > 0}
-            <div class="flex items-center gap-4 px-4 py-3 bg-slate-50 dark:bg-[#111118]">
-              <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground shrink-0">
-                GPU Usage
-              </span>
-              {#each ([
-                ["Render",  gpuStats.render],
-                ["Tiler",   gpuStats.tiler],
-                ["Overall", gpuStats.overall],
-              ] as [string, number][]).filter(([, v]) => v > 0) as [label, val]}
-                <div class="flex items-center gap-1.5">
-                  <div class="h-1.5 w-16 rounded-full bg-muted dark:bg-white/[0.07] overflow-hidden">
-                    <div class="h-full rounded-full bg-violet-500/70 transition-all"
-                         style="width:{Math.round(val * 100)}%"></div>
-                  </div>
-                  <span class="text-[0.58rem] text-muted-foreground tabular-nums">
-                    {label} {Math.round(val * 100)}%
-                  </span>
-                </div>
-              {/each}
-            </div>
-          {/if}
-
-        </CardContent>
-      </Card>
-    </div>
-  {/if}
 
 </section>

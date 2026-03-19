@@ -358,7 +358,11 @@ pub fn get_storage_format(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Stri
 
 #[tauri::command]
 pub fn set_storage_format(format: String, app: AppHandle) {
-    let fmt = if format.eq_ignore_ascii_case("parquet") { "parquet" } else { "csv" };
+    let fmt = match format.to_ascii_lowercase().as_str() {
+        "parquet" => "parquet",
+        "both"    => "both",
+        _         => "csv",
+    };
     {
         let r = app.app_state();
         r.lock_or_recover().settings_storage_format = fmt.to_string();

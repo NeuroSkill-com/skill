@@ -359,6 +359,14 @@ const settings: Record<string, string> = {
   "sleepSettings.info1":                         "Your sleep window is used to classify EEG sessions as sleep vs. waking automatically.",
   "sleepSettings.info2":                         "Sleep staging (N1/N2/N3/REM) uses delta, theta, alpha, and beta power ratios within this window.",
   "sleepSettings.info3":                         "Adjusting the schedule helps the app distinguish intentional naps from overnight sleep.",
+
+  // ── Storage format ───────────────────────────────────────────────────────
+  "settings.storageFormat":                      "Recording Format",
+  "settings.storageFormatDesc":                  "Choose the file format for EEG, PPG, IMU, and metrics recordings. CSV is human-readable; Parquet is compact and fast to load. \"Both\" writes both formats simultaneously.",
+  "settings.storageFormatBoth":                  "Both",
+  "settings.storageFormatCsvDesc":               "Human-readable, universal",
+  "settings.storageFormatParquetDesc":           "Columnar, compressed",
+  "settings.storageFormatBothDesc":              "CSV + Parquet simultaneously",
 };
 
 export default settings;
