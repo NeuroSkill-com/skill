@@ -39,6 +39,8 @@ pub struct LogConfig {
     pub embedder:  bool,
     /// Bluetooth scanner and Muse session events.
     pub bluetooth: bool,
+    /// Multi-transport device scanner (BLE, USB, Cortex, WiFi).
+    pub scanner: bool,
     /// WebSocket server connections and message dispatches.
     pub websocket: bool,
     /// CSV file open / flush / close events.
@@ -67,6 +69,7 @@ impl Default for LogConfig {
         Self {
             embedder:  true,
             bluetooth: true,
+            scanner:   true,
             websocket: false,
             csv:       false,
             filter:    false,
@@ -100,6 +103,7 @@ impl SkillLogger {
         match tag {
             "embedder"  => cfg.embedder,
             "bluetooth" => cfg.bluetooth,
+            "scanner"   => cfg.scanner,
             "websocket" => cfg.websocket,
             "csv"       => cfg.csv,
             "filter"    => cfg.filter,

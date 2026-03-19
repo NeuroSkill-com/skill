@@ -32,6 +32,62 @@ use crate::{
     ToastLevel,
 };
 
+// ── Device log ring buffer ────────────────────────────────────────────────────
+
+use std::sync::Mutex;
+
+/// Thread-safe ring buffer holding the most recent device/scanner log lines
+/// for the frontend log viewer.
+pub(crate) static DEVICE_LOG: std::sync::LazyLock<Mutex<DeviceLogRing>> =
+    std::sync::LazyLock::new(|| Mutex::new(DeviceLogRing::new(200)));
+
+pub(crate) struct DeviceLogRing {
+    entries: std::collections::VecDeque<DeviceLogEntry>,
+    capacity: usize,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub(crate) struct DeviceLogEntry {
+    /// UTC timestamp in milliseconds.
+    pub ts: u64,
+    /// Short tag: "ble", "usb", "cortex", "session", …
+    pub tag: String,
+    /// Human-readable message.
+    pub msg: String,
+}
+
+impl DeviceLogRing {
+    fn new(capacity: usize) -> Self {
+        Self { entries: std::collections::VecDeque::with_capacity(capacity), capacity }
+    }
+
+    pub fn push(&mut self, tag: &str, msg: &str) {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        if self.entries.len() >= self.capacity {
+            self.entries.pop_front();
+        }
+        self.entries.push_back(DeviceLogEntry {
+            ts,
+            tag: tag.to_owned(),
+            msg: msg.to_owned(),
+        });
+    }
+
+    pub fn entries(&self) -> Vec<DeviceLogEntry> {
+        self.entries.iter().cloned().collect()
+    }
+}
+
+/// Push a device log entry (called from scanner backends and session runner).
+pub(crate) fn device_log(tag: &str, msg: &str) {
+    if let Ok(mut ring) = DEVICE_LOG.lock() {
+        ring.push(tag, msg);
+    }
+}
+
 /// MW75 GATT service UUID — used to discover paired MW75 devices on macOS
 /// where `local_name` is often `None` for already-paired Classic BT devices.
 use skill_devices::mw75::protocol::MW75_SERVICE_UUID;
@@ -118,8 +174,9 @@ fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
         is_idle && is_paired
     };
     if should_auto {
-        app_log!(app, "scanner",
-            "paired device {display_name} discovered while idle — auto-connecting");
+        let msg = format!("Auto-connecting to paired device {display_name}");
+        app_log!(app, "scanner", "{msg}");
+        device_log("session", &msg);
         start_session(app, Some(id.to_owned()));
     }
 }
@@ -133,6 +190,7 @@ fn scanner_bt_off(app: &AppHandle, emitted: &mut bool) {
     if *emitted { return; }
     *emitted = true;
     app_log!(app, "scanner", "[ble] bluetooth off");
+    device_log("ble", "Bluetooth off");
     send_toast(app, ToastLevel::Error, "Bluetooth Off",
         "Bluetooth is unavailable — turn it on to connect.");
     let do_emit = {
@@ -161,6 +219,7 @@ async fn scanner_bt_on(
     if !*emitted { return; }
     *emitted = false;
     app_log!(app, "scanner", "[ble] bluetooth on");
+    device_log("ble", "Bluetooth restored");
     send_toast(app, ToastLevel::Info, "Bluetooth Restored",
         "Bluetooth is back — reconnecting…");
 
@@ -284,8 +343,9 @@ async fn run_ble_scanner(app: AppHandle, cancel: CancellationToken) {
                                         let display_name = props.local_name.as_deref()
                                             .unwrap_or(if uuid_match { "MW75 Neuro" } else { "Unknown" });
                                         upsert_discovered(&app, &id, display_name, rssi);
-                                        app_log!(app, "scanner",
-                                            "[ble] {display_name} id={id} rssi={rssi} dBm");
+                                        let msg = format!("{display_name} id={id} rssi={rssi} dBm");
+                                        app_log!(app, "scanner", "[ble] {msg}");
+                                        device_log("ble", &msg);
                                         try_auto_connect(&app, &id, display_name);
                                     }
                                 }
@@ -366,8 +426,9 @@ async fn run_usb_scanner(app: AppHandle, cancel: CancellationToken) {
                     // Use "usb:<port>" as a stable device ID.
                     let id = format!("usb:{port_name}");
                     if known_ports.insert(id.clone()) {
-                        app_log!(app, "scanner",
-                            "[usb] {display_name} port={port_name}");
+                        let msg = format!("{display_name} port={port_name}");
+                        app_log!(app, "scanner", "[usb] {msg}");
+                        device_log("usb", &msg);
                         changed = true;
                     }
                     upsert_discovered(&app, &id, display_name, 0);
@@ -464,8 +525,9 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                     }
                     let display_name = format!("Emotiv {}", hs.id);
                     if known_ids.insert(id.clone()) {
-                        app_log!(app, "scanner",
-                            "[cortex] {display_name} status={status}");
+                        let msg = format!("{display_name} status={status}");
+                        app_log!(app, "scanner", "[cortex] {msg}");
+                        device_log("cortex", &msg);
                         changed = true;
                     }
                     upsert_discovered(&app, &id, &display_name, 0);
@@ -551,6 +613,9 @@ async fn cortex_query_headsets(
 // ══════════════════════════════════════════════════════════════════════════════
 
 /// Run all scanner backends until cancellation.
+///
+/// Each backend is started only if the corresponding toggle is enabled in
+/// the user's `ScannerConfig`.
 async fn run_device_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::Receiver<()>) {
     let cancel = CancellationToken::new();
 
@@ -561,13 +626,35 @@ async fn run_device_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::Recei
         cancel2.cancel();
     });
 
-    // Spawn all backends in parallel.
-    let ble_task = tokio::spawn(run_ble_scanner(app.clone(), cancel.clone()));
-    let usb_task = tokio::spawn(run_usb_scanner(app.clone(), cancel.clone()));
-    let cortex_task = tokio::spawn(run_cortex_scanner(app.clone(), cancel.clone()));
+    // Read scanner config once at startup.
+    let cfg = {
+        let r = app.app_state();
+        let g = r.lock_or_recover();
+        g.scanner_config.clone()
+    };
 
-    // Wait for all to finish (they run until cancelled).
-    let _ = tokio::join!(ble_task, usb_task, cortex_task);
+    let mut tasks: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+
+    if cfg.ble {
+        device_log("scanner", "BLE backend enabled");
+        tasks.push(tokio::spawn(run_ble_scanner(app.clone(), cancel.clone())));
+    } else {
+        device_log("scanner", "BLE backend disabled by settings");
+    }
+    if cfg.usb_serial {
+        device_log("scanner", "USB serial backend enabled");
+        tasks.push(tokio::spawn(run_usb_scanner(app.clone(), cancel.clone())));
+    } else {
+        device_log("scanner", "USB serial backend disabled by settings");
+    }
+    if cfg.cortex {
+        device_log("scanner", "Cortex backend enabled");
+        tasks.push(tokio::spawn(run_cortex_scanner(app.clone(), cancel.clone())));
+    } else {
+        device_log("scanner", "Cortex backend disabled by settings");
+    }
+
+    futures_util::future::join_all(tasks).await;
 }
 
 /// Stop the background device scanner if it is running.

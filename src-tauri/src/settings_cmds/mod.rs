@@ -859,6 +859,32 @@ pub fn set_device_api_config(
     crate::save_settings(&app);
 }
 
+/// Return the current scanner backend configuration.
+#[tauri::command]
+pub fn get_scanner_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> skill_settings::ScannerConfig {
+    state.lock_or_recover().scanner_config.clone()
+}
+
+/// Return recent device/scanner log entries for the frontend log viewer.
+#[tauri::command]
+pub fn get_device_log() -> Vec<crate::device_scanner::DeviceLogEntry> {
+    crate::device_scanner::DEVICE_LOG
+        .lock()
+        .map(|r| r.entries())
+        .unwrap_or_default()
+}
+
+/// Persist scanner backend configuration.
+#[tauri::command]
+pub fn set_scanner_config(
+    config: skill_settings::ScannerConfig,
+    app:    AppHandle,
+    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    state.lock_or_recover().scanner_config = config;
+    crate::save_settings(&app);
+}
+
 /// List available serial ports on the host (for Cyton board selection).
 ///
 /// Runs on a blocking thread — serial port enumeration can take hundreds of

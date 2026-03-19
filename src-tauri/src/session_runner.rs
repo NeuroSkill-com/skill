@@ -115,9 +115,11 @@ pub(crate) async fn run_device_session(
                 // link stays up but GATT notifications stop (radio
                 // interference, device sleep, firmware hang).
                 let elapsed = last_event_at.elapsed();
-                app_log!(app, "bluetooth",
-                    "[{kind}] data watchdog: no events for {:.1}s — treating as disconnected",
+                let watchdog_msg = format!(
+                    "[{kind}] Data watchdog: no events for {:.1}s — treating as disconnected",
                     elapsed.as_secs_f64());
+                app_log!(app, "bluetooth", "{watchdog_msg}");
+                crate::device_scanner::device_log("session", &watchdog_msg);
                 send_toast(&app, ToastLevel::Warning, "Connection Lost",
                     "No data received — reconnecting…");
                 adapter.disconnect().await;
@@ -258,6 +260,8 @@ fn on_connected(
 
     dsp.accumulator.update_device(Some(dev_id.clone()), Some(info.name.clone()));
     app_log!(app, "bluetooth", "[{kind}] connected: {} (id={dev_id})", info.name);
+    crate::device_scanner::device_log("session",
+        &format!("[{kind}] Connected: {} (id={dev_id})", info.name));
     upsert_paired(app, &dev_id, &info.name);
     refresh_tray(app);
     emit_status(app);
@@ -285,6 +289,8 @@ fn on_disconnected(app: &AppHandle, kind: &str) {
         )
     };
     app_log!(app, "bluetooth", "[{kind}] disconnected: {name}");
+    crate::device_scanner::device_log("session",
+        &format!("[{kind}] Disconnected: {name}"));
     let payload = serde_json::json!({
         "device_name": name,
         "device_id":   device_id,

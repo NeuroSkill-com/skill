@@ -30,6 +30,7 @@ the Free Software Foundation, version 3 only. -->
     is_paired:        boolean;
     is_preferred:     boolean;
     hardware_version?: string | null;
+    transport?:       "ble" | "usb_serial" | "wifi" | "cortex";
   }
   type PowerlineFreq = "Hz60" | "Hz50";
   interface FilterConfig {
@@ -104,6 +105,26 @@ the Free Software Foundation, version 3 only. -->
   let serialPorts      = $state<string[]>([]);
   let portsLoading     = $state(false);
 
+  // ── Scanner config ──────────────────────────────────────────────────────────
+  interface ScannerConfig {
+    ble: boolean;
+    usb_serial: boolean;
+    cortex: boolean;
+  }
+  let scannerConfig    = $state<ScannerConfig>({ ble: true, usb_serial: true, cortex: true });
+  let scannerChanged   = $state(false);
+  let scannerSaved     = $state(false);
+
+  // ── Device log ──────────────────────────────────────────────────────────────
+  interface DeviceLogEntry {
+    ts:  number;
+    tag: string;
+    msg: string;
+  }
+  let deviceLog        = $state<DeviceLogEntry[]>([]);
+  let deviceLogExpanded = $state(false);
+  let deviceLogInterval: ReturnType<typeof setInterval> | null = null;
+
   // Fuzzy search: case-insensitive substring + character subsequence matching
   function fuzzyMatch(haystack: string, needle: string): boolean {
     if (!needle) return true;
@@ -131,6 +152,17 @@ the Free Software Foundation, version 3 only. -->
       }),
     })).filter(company => company.devices.length > 0);
   })());
+
+  async function saveScannerConfig() {
+    await invoke("set_scanner_config", { config: scannerConfig });
+    scannerChanged = false;
+    scannerSaved   = true;
+    setTimeout(() => { scannerSaved = false; }, 2000);
+  }
+
+  async function refreshDeviceLog() {
+    try { deviceLog = await invoke<DeviceLogEntry[]>("get_device_log"); } catch { /* noop */ }
+  }
 
   async function loadSerialPorts() {
     portsLoading = true;
@@ -416,7 +448,10 @@ the Free Software Foundation, version 3 only. -->
 
     openbci = await invoke<OpenBciConfig>("get_openbci_config");
     deviceApi = await invoke<DeviceApiConfig>("get_device_api_config");
+    scannerConfig = await invoke<ScannerConfig>("get_scanner_config");
     await loadSerialPorts();
+    await refreshDeviceLog();
+    deviceLogInterval = setInterval(refreshDeviceLog, 3000);
 
     nowTimer = setInterval(() => now = Math.floor(Date.now() / 1000), 1000);
 
@@ -434,6 +469,7 @@ the Free Software Foundation, version 3 only. -->
   onDestroy(() => {
     unlisteners.forEach(u => u());
     clearInterval(nowTimer);
+    if (deviceLogInterval) clearInterval(deviceLogInterval);
   });
 </script>
 
@@ -975,6 +1011,149 @@ the Free Software Foundation, version 3 only. -->
     </Card>
   </div>
 
+  <!-- ── Scanner Backends ──────────────────────────────────────────────────── -->
+  <div class="flex flex-col gap-2">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+      {t("settings.scanner.title")}
+    </span>
+    <p class="text-[0.62rem] text-muted-foreground/70 px-0.5 leading-relaxed">
+      {t("settings.scanner.desc")}
+    </p>
+
+    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+      <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+
+        <!-- BLE -->
+        <label class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30">
+          <input type="checkbox" bind:checked={scannerConfig.ble}
+            onchange={() => { scannerChanged = true; }}
+            class="accent-violet-500 shrink-0" />
+          <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+            <span class="text-[0.73rem] font-semibold text-foreground">{t("settings.scanner.ble")}</span>
+            <span class="text-[0.6rem] text-muted-foreground">{t("settings.scanner.bleDesc")}</span>
+          </div>
+          <Badge variant="outline"
+            class="text-[0.5rem] py-0 px-1.5 shrink-0
+                   bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20">
+            BLE
+          </Badge>
+        </label>
+
+        <!-- USB Serial -->
+        <label class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30">
+          <input type="checkbox" bind:checked={scannerConfig.usb_serial}
+            onchange={() => { scannerChanged = true; }}
+            class="accent-violet-500 shrink-0" />
+          <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+            <span class="text-[0.73rem] font-semibold text-foreground">{t("settings.scanner.usbSerial")}</span>
+            <span class="text-[0.6rem] text-muted-foreground">{t("settings.scanner.usbSerialDesc")}</span>
+          </div>
+          <Badge variant="outline"
+            class="text-[0.5rem] py-0 px-1.5 shrink-0
+                   bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+            USB
+          </Badge>
+        </label>
+
+        <!-- Cortex -->
+        <label class="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30">
+          <input type="checkbox" bind:checked={scannerConfig.cortex}
+            onchange={() => { scannerChanged = true; }}
+            class="accent-violet-500 shrink-0" />
+          <div class="flex flex-col gap-0.5 flex-1 min-w-0">
+            <span class="text-[0.73rem] font-semibold text-foreground">{t("settings.scanner.cortex")}</span>
+            <span class="text-[0.6rem] text-muted-foreground">{t("settings.scanner.cortexDesc")}</span>
+          </div>
+          {#if scannerConfig.cortex && deviceApi.emotiv_client_id && deviceApi.emotiv_client_secret}
+            {#if devices.some(d => d.transport === "cortex")}
+              <Badge variant="outline"
+                class="text-[0.5rem] py-0 px-1.5 shrink-0
+                       bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">
+                {t("settings.scanner.cortexConnected")}
+              </Badge>
+            {:else}
+              <Badge variant="outline"
+                class="text-[0.5rem] py-0 px-1.5 shrink-0
+                       bg-slate-500/10 text-muted-foreground border-slate-500/20">
+                {t("settings.scanner.cortexDisconnected")}
+              </Badge>
+            {/if}
+          {:else}
+            <Badge variant="outline"
+              class="text-[0.5rem] py-0 px-1.5 shrink-0
+                     bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20">
+              WS
+            </Badge>
+          {/if}
+        </label>
+      </CardContent>
+    </Card>
+
+    <div class="flex justify-end px-0.5">
+      <Button size="sm"
+        variant={scannerSaved ? "secondary" : "outline"}
+        class="text-[0.66rem] h-7 px-3
+               {scannerSaved ? 'text-green-600 dark:text-green-400 border-green-500/30' :
+                scannerChanged ? 'border-primary/50 text-primary' :
+                'border-border dark:border-white/10 text-muted-foreground'}"
+        onclick={saveScannerConfig}
+        disabled={!scannerChanged && !scannerSaved}>
+        {scannerSaved ? t("settings.scanner.saved") : t("settings.scanner.save")}
+      </Button>
+    </div>
+  </div>
+
+  <!-- ── Device Log ──────────────────────────────────────────────────────────── -->
+  <div class="flex flex-col gap-2">
+    <button
+      onclick={() => { deviceLogExpanded = !deviceLogExpanded; if (deviceLogExpanded) refreshDeviceLog(); }}
+      class="flex items-center justify-between w-full px-0.5 group"
+      aria-expanded={deviceLogExpanded}
+    >
+      <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+        {t("settings.deviceLog.title")}
+      </span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
+                  {deviceLogExpanded ? 'rotate-180' : ''}">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </button>
+
+    {#if deviceLogExpanded}
+      <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+        <CardContent class="p-0">
+          {#if deviceLog.length === 0}
+            <p class="text-[0.64rem] text-muted-foreground/50 text-center py-6">
+              {t("settings.deviceLog.empty")}
+            </p>
+          {:else}
+            <div class="max-h-[260px] overflow-y-auto font-mono text-[0.58rem] leading-relaxed">
+              {#each deviceLog.toReversed() as entry (entry.ts + entry.tag + entry.msg)}
+                <div class="flex gap-2 px-3 py-1 border-b border-border/30 dark:border-white/[0.03]
+                            hover:bg-muted/20 transition-colors">
+                  <span class="text-muted-foreground/50 tabular-nums shrink-0 w-[52px]">
+                    {new Date(entry.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  </span>
+                  <span class="shrink-0 w-[52px] font-semibold
+                    {entry.tag === 'ble'     ? 'text-blue-500' :
+                     entry.tag === 'usb'     ? 'text-amber-500' :
+                     entry.tag === 'cortex'  ? 'text-violet-500' :
+                     entry.tag === 'session' ? 'text-green-500' :
+                     'text-muted-foreground'}">
+                    {entry.tag}
+                  </span>
+                  <span class="text-foreground/80 break-all min-w-0">{entry.msg}</span>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </CardContent>
+      </Card>
+    {/if}
+  </div>
+
   <!-- ── Signal Processing ──────────────────────────────────────────────────── -->
   <div class="flex flex-col gap-2">
     <div class="flex items-center gap-2 px-0.5">
@@ -1294,6 +1473,18 @@ the Free Software Foundation, version 3 only. -->
             class="text-[0.54rem] tracking-wide uppercase py-0 px-1 shrink-0
                    bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
             {t("settings.new")}
+          </Badge>
+        {/if}
+        {#if dev.transport && dev.transport !== "ble"}
+          <Badge variant="outline"
+            class="text-[0.46rem] tracking-wide uppercase py-0 px-1 shrink-0
+                   {dev.transport === 'usb_serial' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20' :
+                    dev.transport === 'cortex'     ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20' :
+                    dev.transport === 'wifi'        ? 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20' :
+                    'bg-slate-500/10 text-muted-foreground border-slate-500/20'}">
+            {dev.transport === "usb_serial" ? "USB" :
+             dev.transport === "cortex"     ? "Cortex" :
+             dev.transport === "wifi"        ? "WiFi" : dev.transport}
           </Badge>
         {/if}
       </div>

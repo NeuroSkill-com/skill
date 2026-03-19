@@ -177,6 +177,7 @@ pub(crate) fn save_settings(app: &AppHandle) {
         screenshot:             s.screenshot_config.clone(),
         sleep:                  s.sleep_config.clone(),
         storage_format:         s.settings_storage_format.clone(),
+        scanner:                s.scanner_config.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);

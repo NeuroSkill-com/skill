@@ -254,6 +254,7 @@ use settings_cmds::{
     list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
     get_openbci_config, set_openbci_config, list_serial_ports,
     get_device_api_config, set_device_api_config,
+    get_scanner_config, set_scanner_config, get_device_log,
     get_neutts_config, set_neutts_config, pick_ref_wav_file,
     get_tts_preload, set_tts_preload,
     get_active_window_tracking, set_active_window_tracking, get_active_window,
@@ -683,6 +684,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         s.update_check_interval_secs   = data.update_check_interval_secs;
         s.openbci_config               = data.openbci;
         s.device_api_config            = data.device_api;
+        s.scanner_config               = data.scanner;
         s.neutts_config                = data.neutts.clone();
         s.tts_preload                  = data.tts_preload;
         s.track_active_window          = data.track_active_window;
@@ -1360,7 +1362,7 @@ pub fn run() {
             list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
             get_openbci_config, set_openbci_config, list_serial_ports,
             get_device_api_config, set_device_api_config,
-            get_device_api_config, set_device_api_config,
+            get_scanner_config, set_scanner_config, get_device_log,
             get_neutts_config, set_neutts_config, pick_ref_wav_file,
             get_tts_preload, set_tts_preload,
             get_active_window_tracking, set_active_window_tracking, get_active_window,

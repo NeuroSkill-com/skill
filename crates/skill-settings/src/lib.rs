@@ -143,6 +143,28 @@ impl Default for OpenBciConfig {
     }
 }
 
+// ── Scanner configuration ─────────────────────────────────────────────────────
+
+/// Toggles for each background scanner backend.
+///
+/// Persisted in `settings.json`.  All backends are on by default.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScannerConfig {
+    /// Bluetooth Low Energy scanner (Muse, MW75, Hermes, Ganglion, IDUN).
+    pub ble: bool,
+    /// USB serial port scanner (OpenBCI Cyton / CytonDaisy dongle).
+    pub usb_serial: bool,
+    /// Emotiv Cortex WebSocket scanner (EPOC, Insight, Flex, MN8).
+    pub cortex: bool,
+}
+
+impl Default for ScannerConfig {
+    fn default() -> Self {
+        Self { ble: true, usb_serial: true, cortex: true }
+    }
+}
+
 // ── Device API configuration ─────────────────────────────────────────────────
 
 /// Credentials used by specific device integrations that require remote APIs.
@@ -591,6 +613,9 @@ pub struct UserSettings {
     /// Recording storage format: `"csv"` (default) or `"parquet"`.
     #[serde(default = "default_storage_format")]
     pub storage_format: String,
+    /// Background scanner backend toggles.
+    #[serde(default)]
+    pub scanner: ScannerConfig,
 }
 
 pub fn default_storage_format() -> String { "csv".into() }
@@ -702,6 +727,7 @@ impl Default for UserSettings {
             storage_format:                default_storage_format(),
             screenshot:                    ScreenshotConfig::default(),
             sleep:                         SleepConfig::default(),
+            scanner:                       ScannerConfig::default(),
         }
     }
 }
