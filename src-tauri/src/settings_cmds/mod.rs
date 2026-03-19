@@ -209,10 +209,7 @@ pub fn get_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DeviceStatus
 
 #[tauri::command]
 pub fn get_devices(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<DiscoveredDevice> {
-    let devs = state.lock_or_recover().discovered.clone();
-    eprintln!("[get_devices] returning {} devices: {:?}",
-        devs.len(), devs.iter().map(|d| (&d.id, &d.name, d.is_paired)).collect::<Vec<_>>());
-    devs
+    state.lock_or_recover().discovered.clone()
 }
 
 #[tauri::command]

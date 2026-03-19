@@ -651,10 +651,20 @@ pub(crate) async fn connect_emotiv(
 
     // Read the headset ID for display (e.g. "INSIGHT-5AF2C39E").
     let headset_id = handle.headset_id().await;
+    let session_id = handle.session_id().await;
     app_log!(app, "bluetooth", "[emotiv] connected — {headset_id} streaming EEG at {} Hz",
         skill_constants::EMOTIV_SAMPLE_RATE);
 
-    Ok(Box::new(EmotivAdapter::new_epoc(rx, handle, headset_id)))
+    // Inject a synthetic Connected event — we consumed SessionCreated in the
+    // wait loop above, so the adapter's channel won't see it.  Without this
+    // the session runner never calls on_connected and status stays "scanning".
+    let info = DeviceInfo {
+        name: if headset_id.is_empty() { "Emotiv".into() } else { headset_id.clone() },
+        id: session_id,
+        ..Default::default()
+    };
+
+    Ok(Box::new(EmotivAdapter::new_epoc(rx, handle, headset_id, Some(info))))
 }
 
 // ── IDUN Guardian (BLE) ───────────────────────────────────────────────────────

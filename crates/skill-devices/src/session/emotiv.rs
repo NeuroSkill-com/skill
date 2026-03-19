@@ -78,10 +78,24 @@ impl EmotivAdapter {
     }
 
     /// Convenience constructor for the common EPOC X / EPOC+ (14-channel) case.
-    pub fn new_epoc(rx: mpsc::Receiver<CortexEvent>, handle: CortexHandle, headset_id: String) -> Self {
+    ///
+    /// If `initial_info` is provided, a synthetic `Connected` event is queued
+    /// so the session runner sees it immediately.  Use this when the connect
+    /// factory has already consumed `SessionCreated` from the channel (to wait
+    /// for the auth flow to complete before subscribing).
+    pub fn new_epoc(
+        rx: mpsc::Receiver<CortexEvent>,
+        handle: CortexHandle,
+        headset_id: String,
+        initial_info: Option<DeviceInfo>,
+    ) -> Self {
         let channel_names: Vec<String> =
             EMOTIV_EPOC_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
-        Self::new(rx, handle, EMOTIV_EPOC_EEG_CHANNELS, channel_names, headset_id)
+        let mut adapter = Self::new(rx, handle, EMOTIV_EPOC_EEG_CHANNELS, channel_names, headset_id);
+        if let Some(info) = initial_info {
+            adapter.pending.push_back(DeviceEvent::Connected(info));
+        }
+        adapter
     }
 
     /// Test-only constructor without a real Cortex handle.
