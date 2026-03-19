@@ -4,49 +4,20 @@
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
-<!-- Settings tab — Devices · Signal Processing · EEG Embedding -->
+<!-- Settings tab — Storage format, GPU/memory, activity tracking, logging, data dir, WS server -->
 <script lang="ts">
   import { onMount, onDestroy }       from "svelte";
   import { invoke }                   from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { DEFAULT_FILTER_CONFIG,
-           EMBEDDING_EPOCH_SECS,
-           EMBEDDING_OVERLAP_SECS }   from "$lib/constants";
   import { relaunch }                 from "@tauri-apps/plugin-process";
 
-  import { colorForRssi }             from "$lib/theme";
-  import { Badge }                    from "$lib/components/ui/badge";
   import { Button }                   from "$lib/components/ui/button";
   import { Card, CardContent }        from "$lib/components/ui/card";
   import { Separator }                from "$lib/components/ui/separator";
-  import { loadSupportedCompanies, getSupportedCompanies, type SupportedCompanyId } from "$lib/supported-devices";
   import { t } from "$lib/i18n/index.svelte";
 
 
   // ── Types ──────────────────────────────────────────────────────────────────
-  interface DiscoveredDevice {
-    id:               string;
-    name:             string;
-    last_seen:        number;
-    last_rssi:        number;
-    is_paired:        boolean;
-    is_preferred:     boolean;
-    hardware_version?: string | null;
-  }
-  type PowerlineFreq = "Hz60" | "Hz50";
-  interface FilterConfig {
-    sample_rate:        number;
-    low_pass_hz:        number | null;
-    high_pass_hz:       number | null;
-    notch:              PowerlineFreq | null;
-    notch_bandwidth_hz: number;
-  }
-  interface ConnectedInfo {
-    device_id:     string | null;
-    serial_number: string | null;
-    mac_address:   string | null;
-  }
-
   interface LogConfig {
     embedder:   boolean;
     bluetooth:  boolean;
@@ -62,15 +33,6 @@ the Free Software Foundation, version 3 only. -->
     tools:      boolean;
   }
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let devices      = $state<DiscoveredDevice[]>([]);
-  let connected    = $state<ConnectedInfo>({ device_id: null, serial_number: null, mac_address: null });
-  let filter       = $state<FilterConfig>({ ...DEFAULT_FILTER_CONFIG });
-  let filterSaving = $state(false);
-  let overlapSecs  = $state(EMBEDDING_OVERLAP_SECS);
-  let overlapSaving = $state(false);
-
-  // ── GPU / memory stats ────────────────────────────────────────────────────
   interface GpuStats {
     render:            number;
     tiler:             number;
@@ -88,223 +50,7 @@ the Free Software Foundation, version 3 only. -->
   let dataDirInput   = $state("");
   let dataDirSaving  = $state(false);
   let dataDirChanged = $state(false);
-  let revealSN       = $state(false);
-  let revealMAC    = $state(false);
   let now          = $state(Math.floor(Date.now() / 1000));
-
-  let appVersion     = $state("…");
-
-  // ── OpenBCI config ──────────────────────────────────────────────────────────
-  type OpenBciBoard =
-    | "ganglion" | "ganglion_wifi"
-    | "cyton"    | "cyton_wifi"
-    | "cyton_daisy" | "cyton_daisy_wifi"
-    | "galea";
-  interface OpenBciConfig {
-    board:            OpenBciBoard;
-    scan_timeout_secs: number;
-    serial_port:      string;
-    wifi_shield_ip:   string;
-    wifi_local_port:  number;
-    galea_ip:         string;
-    channel_labels:   string[];
-  }
-  interface DeviceApiConfig {
-    emotiv_client_id: string;
-    emotiv_client_secret: string;
-    idun_api_token: string;
-  }
-  const OPENBCI_DEFAULT: OpenBciConfig = {
-    board: "ganglion", scan_timeout_secs: 10,
-    serial_port: "", wifi_shield_ip: "", wifi_local_port: 3000,
-    galea_ip: "", channel_labels: [],
-  };
-  let openbci          = $state<OpenBciConfig>({ ...OPENBCI_DEFAULT });
-  let openbciSaved     = $state(false);
-  let openbciChanged   = $state(false);
-  let openbciConnecting = $state(false);
-  let openbciError     = $state("");
-  let openbciExpanded  = $state(false); // collapsed by default
-  let deviceApi        = $state<DeviceApiConfig>({ emotiv_client_id: "", emotiv_client_secret: "", idun_api_token: "" });
-  let emotivApiChanged = $state(false);
-  let emotivApiSaved   = $state(false);
-  let emotivApiError   = $state("");
-  let idunApiChanged   = $state(false);
-  let idunApiSaved     = $state(false);
-  let idunApiError     = $state("");
-  let emotivSecretVisible = $state(false);
-  let idunTokenVisible = $state(false);
-  let emotivApiExpanded = $state(false);
-  let idunApiExpanded   = $state(false);
-  let supportedCompanies = $state(getSupportedCompanies());
-  let supportedCompanyExpanded = $state<SupportedCompanyId | null>(null);
-  let supportedDevicesSearchQuery = $state("");
-  let serialPorts      = $state<string[]>([]);
-  let portsLoading     = $state(false);
-
-  // Fuzzy search: case-insensitive substring + character subsequence matching
-  function fuzzyMatch(haystack: string, needle: string): boolean {
-    if (!needle) return true;
-    const h = haystack.toLowerCase();
-    const n = needle.toLowerCase();
-    if (h.includes(n)) return true;
-    let hIdx = 0;
-    for (let i = 0; i < n.length; i++) {
-      hIdx = h.indexOf(n[i], hIdx);
-      if (hIdx === -1) return false;
-      hIdx++;
-    }
-    return true;
-  }
-
-  const filteredCompanies = $derived((() => {
-    if (!supportedDevicesSearchQuery) return supportedCompanies;
-    return supportedCompanies.map(company => ({
-      ...company,
-      devices: company.devices.filter(device => {
-        const companyName = t(company.name_key);
-        const deviceName = t(device.name_key);
-        return fuzzyMatch(companyName, supportedDevicesSearchQuery) ||
-               fuzzyMatch(deviceName, supportedDevicesSearchQuery);
-      }),
-    })).filter(company => company.devices.length > 0);
-  })());
-
-  async function loadSerialPorts() {
-    portsLoading = true;
-    try { serialPorts = await invoke<string[]>("list_serial_ports"); } catch { serialPorts = []; }
-    portsLoading = false;
-  }
-
-  async function saveOpenbci() {
-    await invoke("set_openbci_config", { config: openbci });
-    openbciChanged = false;
-    openbciSaved   = true;
-    setTimeout(() => { openbciSaved = false; }, 2000);
-  }
-
-  async function connectOpenbci() {
-    if (openbciChanged) await saveOpenbci();
-    openbciConnecting = true;
-    openbciError = "";
-    try {
-      await invoke("connect_openbci");
-    } catch (e: unknown) {
-      openbciError = e instanceof Error ? e.message : String(e);
-    } finally {
-      openbciConnecting = false;
-    }
-  }
-
-  async function saveEmotivApi() {
-    emotivApiError = "";
-    try {
-      await invoke("set_device_api_config", { config: deviceApi });
-      emotivApiChanged = false;
-      emotivApiSaved   = true;
-      setTimeout(() => { emotivApiSaved = false; }, 2000);
-    } catch (e: unknown) {
-      emotivApiError = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  async function saveIdunApi() {
-    idunApiError = "";
-    try {
-      await invoke("set_device_api_config", { config: deviceApi });
-      idunApiChanged = false;
-      idunApiSaved   = true;
-      setTimeout(() => { idunApiSaved = false; }, 2000);
-    } catch (e: unknown) {
-      idunApiError = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  // Derived: which connection type this board uses
-  const isBle    = $derived(openbci.board === "ganglion");
-  const isSerial = $derived(openbci.board === "cyton" || openbci.board === "cyton_daisy");
-  const isWifi   = $derived(["ganglion_wifi","cyton_wifi","cyton_daisy_wifi"].includes(openbci.board));
-  const isGalea  = $derived(openbci.board === "galea");
-
-  function openbciChannelLabel(i: number): string {
-    return openbci.channel_labels[i] ?? "";
-  }
-  function setChannelLabel(i: number, val: string) {
-    const arr = [...openbci.channel_labels];
-    while (arr.length <= i) arr.push("");
-    arr[i] = val;
-    openbci = { ...openbci, channel_labels: arr };
-    openbciChanged = true;
-  }
-
-  const channelCount = $derived(
-    (openbci.board === "cyton_daisy" || openbci.board === "cyton_daisy_wifi") ? 16 :
-    (openbci.board === "cyton"       || openbci.board === "cyton_wifi")       ? 8  :
-     openbci.board === "galea"                                                ? 24 : 4
-  );
-  // ── Channel label presets ─────────────────────────────────────────────────
-  type PresetMap = Record<string, { label: string; names: string[] }>;
-
-  const PRESETS_4CH: PresetMap = {
-    default:   { label: "OpenBCI defaults (Ch1–4)",    names: ["Ch1","Ch2","Ch3","Ch4"] },
-    frontal:   { label: "Frontal (Fp1, Fp2, F7, F8)",  names: ["Fp1","Fp2","F7","F8"] },
-    motor:     { label: "Motor (C3, Cz, C4, Fz)",      names: ["C3","Cz","C4","Fz"] },
-    occipital: { label: "Occipital (O1, Oz, O2, Pz)",  names: ["O1","Oz","O2","Pz"] },
-  };
-  const PRESETS_8CH: PresetMap = {
-    default:   { label: "OpenBCI defaults (Fp1–O2)",              names: ["Fp1","Fp2","C3","C4","P3","P4","O1","O2"] },
-    frontal:   { label: "Frontal (8ch)",                          names: ["Fp1","Fp2","F3","F4","F7","F8","Fz","AFz"] },
-    motor:     { label: "Motor strip (FC5–FC6 montage)",          names: ["FC5","FC3","FC1","FC2","FC4","FC6","C3","C4"] },
-    temporal:  { label: "Temporal (T7/T8 montage)",               names: ["F7","T7","P7","O1","F8","T8","P8","O2"] },
-  };
-  const PRESETS_16CH: PresetMap = {
-    default:   { label: "Full 10-20 (16ch)",                      names: ["Fp1","Fp2","F3","F4","C3","C4","P3","P4","O1","O2","F7","F8","T7","T8","Fz","Pz"] },
-    frontal:   { label: "Bilateral frontal (16ch)",               names: ["Fp1","Fp2","AF3","AF4","F3","F4","F7","F8","FC1","FC2","FC5","FC6","Fz","AFz","FT7","FT8"] },
-    motor:     { label: "Full motor (16ch)",                      names: ["FC5","FC3","FC1","FC2","FC4","FC6","C5","C3","C1","C2","C4","C6","CP5","CP3","CP4","CP6"] },
-  };
-  const PRESETS_24CH: PresetMap = {
-    default:   { label: "Galea defaults (EMG 0-7, EEG 8-17, AUX 18-21)", names: ["EMG1","EMG2","EMG3","EMG4","EMG5","EMG6","EMG7","EMG8","Fp1","Fp2","F3","F4","C3","C4","P3","P4","O1","O2","AUX1","AUX2","AUX3","AUX4","Rsv1","Rsv2"] },
-    eeg_only:  { label: "EEG channels only (label all as 10-20)",         names: ["F7","F3","Fz","F4","F8","C3","Cz","C4","T7","T8","P7","P3","Pz","P4","P8","O1","Oz","O2","TP9","TP10","FT9","FT10","PO9","PO10"] },
-  };
-
-  const LABEL_PRESETS: Record<OpenBciBoard, PresetMap> = {
-    ganglion:        PRESETS_4CH,
-    ganglion_wifi:   PRESETS_4CH,
-    cyton:           PRESETS_8CH,
-    cyton_wifi:      PRESETS_8CH,
-    cyton_daisy:     PRESETS_16CH,
-    cyton_daisy_wifi: PRESETS_16CH,
-    galea:           PRESETS_24CH,
-  };
-
-  const defaultChannelNames = $derived(
-    Object.values(LABEL_PRESETS[openbci.board])[0]?.names ?? []
-  );
-
-  // Compute which preset (if any) the current labels match
-  const activePreset = $derived((() => {
-    const presets = LABEL_PRESETS[openbci.board];
-    for (const [id, p] of Object.entries(presets)) {
-      const matches = p.names.length === channelCount &&
-        p.names.every((n, i) => (openbci.channel_labels[i] ?? "") === n);
-      if (matches) return id;
-    }
-    // also check "all blank = default"
-    const allBlank = openbci.channel_labels.slice(0, channelCount).every(l => !l);
-    return allBlank ? "default" : "__custom__";
-  })());
-
-  function applyPreset(id: string) {
-    if (id === "__custom__") return;
-    const presets = LABEL_PRESETS[openbci.board];
-    const p = presets[id];
-    if (!p) { // "clear" — set all blank
-      openbci = { ...openbci, channel_labels: Array(channelCount).fill("") };
-    } else {
-      openbci = { ...openbci, channel_labels: [...p.names] };
-    }
-    openbciChanged = true;
-  }
 
   // ── Activity tracking ────────────────────────────────────────────────────────
   interface ActiveWindowInfo {
@@ -338,13 +84,6 @@ the Free Software Foundation, version 3 only. -->
   ];
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-  const fmtRssi = (r: number) => r === 0 ? "—" : `${r} dBm`;
-
-  function redact(v: string) {
-    const parts = v.split('-');
-    return [...parts.slice(0, -1).map(p => '*'.repeat(p.length)), parts.at(-1)].join('-');
-  }
-
   function fmtLastSeen(ts: number) {
     if (ts === 0) return "never";
     const d = now - ts;
@@ -354,26 +93,6 @@ the Free Software Foundation, version 3 only. -->
     return `${Math.floor(d / 3600)}h ago`;
   }
 
-  // ── Filter ─────────────────────────────────────────────────────────────────
-  async function applyFilter(patch: Partial<FilterConfig>) {
-    filter = { ...filter, ...patch };
-    filterSaving = true;
-    try { await invoke("set_filter_config", { config: filter }); }
-    finally { filterSaving = false; }
-  }
-
-  const setNotch    = (v: PowerlineFreq | null) => applyFilter({ notch: v });
-  const setHighPass = (hz: number | null)        => applyFilter({ high_pass_hz: hz });
-  const setLowPass  = (hz: number | null)        => applyFilter({ low_pass_hz: hz });
-
-  // ── Overlap ────────────────────────────────────────────────────────────────
-  async function setOverlap(secs: number) {
-    overlapSecs   = secs;
-    overlapSaving = true;
-    try { await invoke("set_embedding_overlap", { overlapSecs: secs }); }
-    finally { overlapSaving = false; }
-  }
-
   // ── Log config ────────────────────────────────────────────────────────────
   async function toggleLog(key: keyof LogConfig) {
     const next = { ...logConfig, [key]: !logConfig[key] };
@@ -381,111 +100,14 @@ the Free Software Foundation, version 3 only. -->
     await invoke("set_log_config", { config: next });
   }
 
-  // ── Device images ──────────────────────────────────────────────────────────
-  /**
-   * Return the static image path for a Muse device given its BLE name and
-   * optional hardware_version string.
-   * Athena (Muse S gen 2): hardware_version "p50" OR name "MuseS-XXXX" (no space).
-   * Classic Muse S (gen 1): name "Muse S-XXXX" (with space).
-   */
-  function museImage(name: string, hw?: string | null): string | null {
-    const n = name.toLowerCase();
-    const isAthena = hw === "p50" || n.includes("muses");
-    if (isAthena)                                                              return "/devices/muse-s-athena.jpg";
-    if (n.includes("muse-s") || n.includes("muse s"))                         return "/devices/muse-s-gen1.jpg";
-    if (n.includes("muse-2") || n.includes("muse2") || n.includes("muse 2")) return "/devices/muse-gen2.jpg";
-    if (n.includes("muse"))                                                    return "/devices/muse-gen1.jpg";
-    if (n.includes("mw75") || n.includes("neurable"))                         return "/devices/muse-mw75.jpg";
-    return null;
-  }
-
-  function deviceImage(name: string, hw?: string | null): string | null {
-    const muse = museImage(name, hw);
-    if (muse) return muse;
-
-    const n = name.toLowerCase();
-    if (n.includes("idun") || n.includes("guardian") || n.startsWith("ige")) {
-      return "/devices/idun-guardian.png";
-    }
-    if (n.includes("insight")) {
-      return "/devices/emotiv-insight.webp";
-    }
-    if (n.includes("flex")) {
-      return "/devices/emotiv-flex-saline.webp";
-    }
-    if (n.includes("mn8")) {
-      return "/devices/emotiv-mn8.webp";
-    }
-    if (n.includes("x-trodes") || n.includes("xtrodes") || n.includes("x trodes")) {
-      return "/devices/emotiv-x-trodes.webp";
-    }
-    if (n.includes("epoc") || n.includes("emotiv")) {
-      return "/devices/emotiv-epoc-x.webp";
-    }
-    if (n.includes("hermes") || n.includes("nucleus") || n.includes("re-ak") || n.includes("reak")) {
-      return "/devices/re-ak-nucleus-hermes.png";
-    }
-
-    return null;
-  }
-
-  /** Map an OpenBCI board key to its static image path. */
-  const OPENBCI_IMAGES: Record<string, string> = {
-    ganglion:         "/devices/openbci-ganglion.jpg",
-    ganglion_wifi:    "/devices/openbci-ganglion-wifi.jpg",
-    cyton:            "/devices/openbci-cyton.png",
-    cyton_wifi:       "/devices/openbci-cyton-wifi.jpg",
-    cyton_daisy:      "/devices/openbci-cyton-daisy.jpg",
-    cyton_daisy_wifi: "/devices/openbci-cyton-daisy-wifi.jpg",
-    galea:            "/devices/openbci-galea.jpg",
-  };
-
-  // ── Devices ────────────────────────────────────────────────────────────────
-  // IDs of unpaired devices we have already notified the user about (so the
-  // banner only appears once per session, not on every devices-updated tick).
-  let notifiedUnpairedIds = $state<Set<string>>(new Set());
-
-  /** Unpaired devices that are currently visible in the scanner and haven't
-   *  been notified yet. Drives the "new device found" banner. */
-  const newUnpairedDevices = $derived(
-    devices.filter(d => !d.is_paired && d.last_rssi !== 0)
-  );
-
-  const hasNewUnpaired = $derived(newUnpairedDevices.length > 0);
-
-  function expandSupportedCompany(id: SupportedCompanyId) {
-    supportedCompanyExpanded = supportedCompanyExpanded === id ? null : id;
-    if (id === "openbci") openbciExpanded = true;
-    if (id === "emotiv") emotivApiExpanded = true;
-    if (id === "idun") idunApiExpanded = true;
-  }
-
-  async function setPreferred(id: string) {
-    const cur = devices.find(d => d.id === id);
-    devices = await invoke<DiscoveredDevice[]>("set_preferred_device", { id: cur?.is_preferred ? "" : id });
-  }
-  async function forget(id: string) {
-    await invoke("forget_device", { id });
-    devices = devices.map(d => d.id === id ? { ...d, is_paired: false } : d);
-  }
-  async function pairDevice(id: string) {
-    devices = await invoke<DiscoveredDevice[]>("pair_device", { id });
-  }
-
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   let unlisteners: UnlistenFn[] = [];
   let nowTimer: ReturnType<typeof setInterval>;
 
   onMount(async () => {
-    supportedCompanies = await loadSupportedCompanies();
-    devices     = await invoke<DiscoveredDevice[]>("get_devices");
-    filter      = await invoke<FilterConfig>("get_filter_config");
-    overlapSecs = await invoke<number>("get_embedding_overlap");
     gpuStats    = await invoke<GpuStats | null>("get_gpu_stats").catch(() => null);
     storageFormat = (await invoke<string>("get_storage_format").catch(() => "csv")) as "csv" | "parquet" | "both";
     logConfig   = await invoke<LogConfig>("get_log_config");
-
-    appVersion           = await invoke<string>("get_app_version");
     {
       const [cur, def] = await invoke<[string, string]>("get_data_dir");
       dataDirCurrent = cur;
@@ -498,11 +120,6 @@ the Free Software Foundation, version 3 only. -->
       wsPort = p;
       wsPortInput = String(p);
     }
-    {
-      openbci = await invoke<OpenBciConfig>("get_openbci_config");
-      deviceApi = await invoke<DeviceApiConfig>("get_device_api_config");
-      await loadSerialPorts();
-    }
     trackActiveWindow   = await invoke<boolean>("get_active_window_tracking");
     currentActiveWindow = await invoke<ActiveWindowInfo | null>("get_active_window");
     trackInputActivity  = await invoke<boolean>("get_input_activity_tracking");
@@ -510,14 +127,6 @@ the Free Software Foundation, version 3 only. -->
     nowTimer    = setInterval(() => now = Math.floor(Date.now() / 1000), 1000);
 
     unlisteners.push(
-      await listen<DiscoveredDevice[]>("devices-updated", ev => { devices = ev.payload; }),
-      await listen<ConnectedInfo>("status", ev => {
-        connected = {
-          device_id:     ev.payload.device_id     ?? null,
-          serial_number: ev.payload.serial_number ?? null,
-          mac_address:   ev.payload.mac_address   ?? null,
-        };
-      }),
       await listen<ActiveWindowInfo | null>("active-window-changed", ev => {
         currentActiveWindow = ev.payload;
       }),

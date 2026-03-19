@@ -610,7 +610,7 @@ pub struct UserSettings {
     /// Sleep schedule configuration.
     #[serde(default)]
     pub sleep: SleepConfig,
-    /// Recording storage format: `"csv"` (default) or `"parquet"`.
+    /// Recording storage format: `"csv"` (default), `"parquet"`, or `"both"`.
     #[serde(default = "default_storage_format")]
     pub storage_format: String,
     /// Background scanner backend toggles.

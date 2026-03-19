@@ -37,10 +37,12 @@ fn is_session_data(fname: &str) -> bool {
     if !has_prefix { return false; }
     let is_eeg_csv = fname.ends_with(".csv")
         && !fname.ends_with("_metrics.csv")
-        && !fname.ends_with("_ppg.csv");
+        && !fname.ends_with("_ppg.csv")
+        && !fname.ends_with("_imu.csv");
     let is_eeg_parquet = fname.ends_with(".parquet")
         && !fname.ends_with("_metrics.parquet")
-        && !fname.ends_with("_ppg.parquet");
+        && !fname.ends_with("_ppg.parquet")
+        && !fname.ends_with("_imu.parquet");
     is_eeg_csv || is_eeg_parquet
 }
 
