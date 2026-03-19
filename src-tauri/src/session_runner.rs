@@ -324,6 +324,33 @@ fn on_connected(
     crate::device_scanner::device_log("session",
         &format!("[{kind}] Connected: {} (id={dev_id})", info.name));
     upsert_paired(app, &dev_id, &info.name);
+
+    // Migrate legacy "cortex:emotiv" → "cortex:<headset_id>" so paired and
+    // discovered lists match by exact ID.  This is a one-time migration for
+    // users who paired before individual headset IDs were tracked.
+    if kind == "emotiv" && dev_id == "cortex:emotiv" && !info.name.is_empty() {
+        let real_id = format!("cortex:{}", info.name);
+        if real_id != dev_id {
+            app_log!(app, "bluetooth",
+                "[{kind}] migrating paired ID: {dev_id} → {real_id}");
+            // Add the real ID as paired, remove the legacy one.
+            upsert_paired(app, &real_id, &info.name);
+            {
+                let r = app.app_state();
+                let mut s = r.lock_or_recover();
+                s.status.paired_devices.retain(|d| d.id != "cortex:emotiv");
+                s.discovered.retain(|d| d.id != "cortex:emotiv");
+                // Update preferred ID if it was the legacy one.
+                if s.preferred_id.as_deref() == Some("cortex:emotiv") {
+                    s.preferred_id = Some(real_id.clone());
+                }
+                // Pin the real ID as the current device.
+                s.status.device_id = Some(real_id);
+            }
+            crate::helpers::save_settings(app);
+        }
+    }
+
     refresh_tray(app);
     emit_status(app);
     crate::emit_devices(app);
