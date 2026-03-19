@@ -83,6 +83,14 @@ dirs = "6"
 regex = "1"
 stacker = "0.1"
 
+# rustls is pulled transitively by reqwest (tauri-plugin-updater), emotiv
+# (tokio-tungstenite), hf-hub (fastembed) etc.  Because *both* the `ring`
+# and `aws-lc-rs` crypto back-ends end up enabled via different dep paths,
+# rustls cannot auto-detect a CryptoProvider at runtime.  We add it as a
+# direct dep so we can call `ring::default_provider().install_default()`
+# once at startup and avoid the panic.
+rustls = { version = "0.23", default-features = false, features = ["ring", "logging", "std", "tls12"] }
+
 # Cross-platform GPU detection (VRAM, unified memory, backend).
 # Used by gpu_stats.rs on Linux and Windows where IOKit is unavailable.
 # llmfit-core covers NVIDIA (nvidia-smi + sysfs), AMD (rocm-smi + sysfs),

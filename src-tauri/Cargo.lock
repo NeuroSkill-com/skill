@@ -10088,6 +10088,7 @@ dependencies = [
  "rodio",
  "rten",
  "rusqlite",
+ "rustls",
  "serde",
  "serde_json",
  "serialport",

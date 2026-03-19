@@ -1246,6 +1246,14 @@ fn setup_background_tasks(app: &mut tauri::App) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // ── rustls CryptoProvider ─────────────────────────────────────────────
+    // Multiple transitive deps activate both the `ring` and `aws-lc-rs`
+    // features of rustls 0.23, so it cannot auto-select a provider.
+    // Install `ring` explicitly before any TLS connection is attempted.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls CryptoProvider");
+
     // ── Linux: suppress noisy libEGL / DRI2 warnings ──────────────────────
     // WebKitGTK probes for DRI2/DMABuf GPU rendering at startup.  On systems
     // without full DRI2 support (VMs, Wayland-only, missing Mesa drivers)
