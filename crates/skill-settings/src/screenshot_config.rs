@@ -22,6 +22,11 @@ pub fn default_screenshot_ocr_engine()      -> String {
     { "ocrs".into() }
 }
 pub fn default_screenshot_use_gpu()         -> bool   { true }
+pub fn default_screenshot_gif_enabled()     -> bool   { true }
+pub fn default_screenshot_gif_frame_count() -> u32    { 15 }
+pub fn default_screenshot_gif_frame_delay() -> u32    { 100 }
+pub fn default_screenshot_gif_motion_thr()  -> f32    { 0.05 }
+pub fn default_screenshot_gif_max_size_kb() -> u64    { 2048 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -54,6 +59,26 @@ pub struct ScreenshotConfig {
 
     #[serde(default = "default_screenshot_use_gpu")]
     pub use_gpu: bool,
+
+    /// Enable animated GIF capture when window motion is detected.
+    #[serde(default = "default_screenshot_gif_enabled")]
+    pub gif_enabled: bool,
+
+    /// Number of frames to capture in a GIF burst.
+    #[serde(default = "default_screenshot_gif_frame_count")]
+    pub gif_frame_count: u32,
+
+    /// Delay between GIF frames in milliseconds.
+    #[serde(default = "default_screenshot_gif_frame_delay")]
+    pub gif_frame_delay_ms: u32,
+
+    /// Pixel-change fraction (0.0-1.0) to trigger GIF capture.
+    #[serde(default = "default_screenshot_gif_motion_thr")]
+    pub gif_motion_threshold: f32,
+
+    /// Maximum GIF file size in KB; discard if exceeded.
+    #[serde(default = "default_screenshot_gif_max_size_kb")]
+    pub gif_max_size_kb: u64,
 }
 
 impl Default for ScreenshotConfig {
@@ -69,6 +94,11 @@ impl Default for ScreenshotConfig {
             ocr_enabled:     default_screenshot_ocr_enabled(),
             ocr_engine:      default_screenshot_ocr_engine(),
             use_gpu:         default_screenshot_use_gpu(),
+            gif_enabled:          default_screenshot_gif_enabled(),
+            gif_frame_count:      default_screenshot_gif_frame_count(),
+            gif_frame_delay_ms:   default_screenshot_gif_frame_delay(),
+            gif_motion_threshold: default_screenshot_gif_motion_thr(),
+            gif_max_size_kb:      default_screenshot_gif_max_size_kb(),
         }
     }
 }

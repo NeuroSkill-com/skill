@@ -10,6 +10,8 @@ use std::path::Path;
 #[cfg(target_os = "macos")]
 use image::{GenericImageView, ImageReader};
 
+use std::time::Duration;
+
 // ── Captured image ────────────────────────────────────────────────────────────
 
 #[allow(dead_code)]
@@ -17,6 +19,64 @@ pub(crate) struct CapturedImage {
     pub(crate) raw_bytes: Vec<u8>,
     pub(crate) width:     u32,
     pub(crate) height:    u32,
+}
+
+// ── Motion detection ──────────────────────────────────────────────────────────
+
+/// Compare two images (PNG/WebP bytes) and return the fraction of pixels that
+/// differ beyond a per-channel tolerance.  Used to detect animation/scrolling.
+///
+/// Both images should be the same dimensions (e.g. already resized to the
+/// target capture size).  Returns `1.0` if dimensions differ, `0.0` on error.
+pub(crate) fn motion_score(prev: &[u8], curr: &[u8]) -> f32 {
+    let prev_img = match image::load_from_memory(prev) {
+        Ok(img) => img.to_rgba8(),
+        Err(_) => return 0.0,
+    };
+    let curr_img = match image::load_from_memory(curr) {
+        Ok(img) => img.to_rgba8(),
+        Err(_) => return 0.0,
+    };
+
+    if prev_img.dimensions() != curr_img.dimensions() {
+        return 1.0;
+    }
+
+    let total_pixels = prev_img.width() as usize * prev_img.height() as usize;
+    if total_pixels == 0 {
+        return 0.0;
+    }
+
+    // Per-channel noise tolerance — ignores compression artefacts and
+    // minor rendering differences (cursor blink, subpixel AA changes).
+    const TOLERANCE: u8 = 12;
+
+    let changed = prev_img
+        .pixels()
+        .zip(curr_img.pixels())
+        .filter(|(p, c)| {
+            p[0].abs_diff(c[0]) > TOLERANCE
+                || p[1].abs_diff(c[1]) > TOLERANCE
+                || p[2].abs_diff(c[2]) > TOLERANCE
+        })
+        .count();
+
+    changed as f32 / total_pixels as f32
+}
+
+// ── Burst capture ─────────────────────────────────────────────────────────────
+
+/// Capture `count` frames in rapid succession with `delay` between each.
+/// Skips frames where the platform capture fails.
+pub(crate) fn capture_burst(count: u32, delay: Duration) -> Vec<CapturedImage> {
+    let mut frames = Vec::with_capacity(count as usize);
+    for _ in 0..count {
+        if let Some(img) = capture_active_window() {
+            frames.push(img);
+        }
+        std::thread::sleep(delay);
+    }
+    frames
 }
 
 // ── Platform window capture ───────────────────────────────────────────────────
