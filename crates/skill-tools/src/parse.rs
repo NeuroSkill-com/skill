@@ -542,6 +542,14 @@ fn extract_calls_from_value(v: &Value, calls: &mut Vec<ToolCall>, dedup: &mut Ha
     // {"tool":"date","parameters":{}}
     // {"name":"date","arguments":"{}"}
     // {"function":{"name":"date","arguments":{}}}
+    //
+    // Skip tool *results* that the model may quote in its response.
+    // Results have "ok" and/or "command" keys alongside "tool" — real tool
+    // calls never have those.
+    if v.get("ok").is_some() || v.get("command").is_some() {
+        return;
+    }
+
     let single = if let Some(f) = v.get("function") { f } else { v };
     let name = tool_name_from_value(single);
     if !name.is_empty() {
@@ -551,6 +559,10 @@ fn extract_calls_from_value(v: &Value, calls: &mut Vec<ToolCall>, dedup: &mut Ha
 }
 
 fn is_tool_call_value(v: &Value) -> bool {
+    // Tool *results* contain "ok" / "command" — never treat as tool calls.
+    if v.get("ok").is_some() || v.get("command").is_some() {
+        return false;
+    }
     // Top-level array of tool-call objects
     if let Some(arr) = v.as_array() {
         return arr.iter().any(is_tool_call_value);
@@ -1470,6 +1482,27 @@ df -h
         let a1: Value = serde_json::from_str(&calls[1].function.arguments).unwrap();
         assert_eq!(a0["command"].as_str().unwrap(), "status");
         assert_eq!(a1["command"].as_str().unwrap(), "sessions");
+    }
+
+    #[test]
+    fn no_extract_from_tool_result_quoted_in_response() {
+        // When the model quotes a tool result in its response, the JSON
+        // contains "tool":"skill" and "ok":true — this must NOT be extracted
+        // as a tool call.
+        let msg = r#"Based on your data:
+{"ok":true,"tool":"skill","command":"status","device":{"connected":true,"battery":89}}
+Your device is connected with 89% battery."#;
+        let calls = extract_tool_calls(msg);
+        assert!(calls.is_empty(), "tool result JSON should not be extracted as a tool call, got: {:?}",
+            calls.iter().map(|c| &c.function.name).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn no_strip_tool_result_from_response() {
+        // Tool results in the model's text should not be stripped either.
+        let msg = r#"The result was {"ok":true,"tool":"skill","command":"status"}. Done."#;
+        let stripped = strip_tool_call_blocks(msg);
+        assert!(stripped.contains("ok"), "tool result should survive stripping: {}", stripped);
     }
 
     #[test]

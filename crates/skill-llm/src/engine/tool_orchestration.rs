@@ -202,6 +202,7 @@ where
         let cleaned = tools::strip_tool_call_blocks(&assistant_text);
 
         // Filter out empty bash calls and cross-round duplicates.
+        let n_raw_calls = tool_calls.len();
         let selected_calls: Vec<tools::ToolCall> = tool_calls
             .into_iter()
             .filter(|tc| {
@@ -222,7 +223,26 @@ where
             .collect();
 
         if selected_calls.is_empty() {
-            return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+            // If there's meaningful text alongside the (deduped) tool calls,
+            // return it — the model wrote something useful.
+            if !cleaned.trim().is_empty() {
+                return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+            }
+            // All tool calls were duplicates and no visible text was produced.
+            // The model is stuck re-emitting the same call.  Inject a nudge
+            // telling it the results are already available, then let the loop
+            // run one more inference round to produce a text answer.
+            log::info!("[tool-orchestration] all {} tool calls deduped, injecting nudge", n_raw_calls);
+            messages.push(json!({
+                "role": "assistant",
+                "content": "[Calling tools…]"
+            }));
+            messages.push(json!({
+                "role": "tool",
+                "tool_call_id": "dedup_nudge",
+                "content": "Tool already called — the results are in your earlier context. Do NOT call the tool again. Summarize the results for the user now."
+            }));
+            continue;
         }
 
         // Always push an assistant message to maintain alternation.
