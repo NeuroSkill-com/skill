@@ -114,6 +114,7 @@ impl EmotivAdapter {
             }
 
             CortexEvent::Disconnected => {
+                eprintln!("[emotiv-adapter] CortexEvent::Disconnected received");
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
 
@@ -195,26 +196,28 @@ impl EmotivAdapter {
                 }
             }
 
-            CortexEvent::Warning { code, .. }
+            CortexEvent::Warning { code, ref message }
                 if code == CORTEX_STOP_ALL_STREAMS || code == CORTEX_CLOSE_SESSION =>
             {
-                // The Cortex service signals that the headset has
-                // disconnected (or all streams were stopped).  Treat this as
-                // a device-level disconnect so the session runner exits
-                // immediately rather than waiting for the data watchdog.
+                eprintln!("[emotiv-adapter] disconnect warning code={code} message={message}");
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
 
-            CortexEvent::Error(_) => {
-                // A Cortex API / transport error.  Surface it as a
-                // disconnect so the session runner can trigger reconnect.
+            CortexEvent::Warning { code, ref message } => {
+                eprintln!("[emotiv-adapter] warning code={code} message={message}");
+                // Other warnings are informational — not forwarded.
+            }
+
+            CortexEvent::Error(ref e) => {
+                eprintln!("[emotiv-adapter] error: {e}");
                 self.pending.push_back(DeviceEvent::Disconnected);
             }
 
             // Performance metrics, band power, mental commands, facial expressions,
-            // system events, records, markers, profiles, other warnings — not
-            // forwarded to session runner.
-            _ => {}
+            // system events, records, markers, profiles — not forwarded.
+            other => {
+                eprintln!("[emotiv-adapter] ignored event: {other:?}");
+            }
         }
     }
 }
@@ -230,8 +233,13 @@ impl DeviceAdapter for EmotivAdapter {
             if let Some(ev) = self.pending.pop_front() {
                 return Some(ev);
             }
-            let vendor_ev = self.rx.recv().await?;
-            self.translate(vendor_ev);
+            match self.rx.recv().await {
+                Some(vendor_ev) => self.translate(vendor_ev),
+                None => {
+                    eprintln!("[emotiv-adapter] event channel closed (rx returned None)");
+                    return None;
+                }
+            }
         }
     }
 
