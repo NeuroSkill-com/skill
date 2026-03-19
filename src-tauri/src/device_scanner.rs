@@ -473,11 +473,12 @@ async fn run_usb_scanner(app: AppHandle, cancel: CancellationToken) {
 async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
     use skill_devices::emotiv::prelude::*;
 
-    // Wait before the first probe so the startup auto-connect has time to
-    // set `stream` (fires at +900 ms).  Without this delay the first
-    // interval tick fires immediately, races with connect_emotiv, and the
-    // duplicate `authorize` call invalidates the real session's cortex token.
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Short delay before the first probe so the startup auto-connect has
+    // time to set `stream` (fires at +900 ms).  The probe uses a separate
+    // WebSocket and cortex token, so it does not interfere with the active
+    // session — this delay just avoids redundant auto-connect attempts
+    // from the scanner.
+    tokio::time::sleep(Duration::from_secs(2)).await;
 
     let mut poll_tick = tokio::time::interval(Duration::from_secs(10));
     // Track which headset IDs we've already logged to avoid spam.
@@ -491,19 +492,19 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                 return;
             }
             _ = poll_tick.tick() => {
-                // Skip polling while a session is active, connecting, or
-                // retrying — a second Cortex authorize call invalidates the
-                // cortex token of the running session.
-                {
+                // The probe creates a separate short-lived WebSocket
+                // connection with its own cortex token, so it does NOT
+                // interfere with the active session's connection.  We can
+                // safely discover headsets while a session is running.
+                //
+                // However, skip auto-connect below if a session is active.
+                let session_active = {
                     let r = app.app_state();
                     let g = r.lock_or_recover();
-                    if g.stream.is_some()
+                    g.stream.is_some()
                         || g.pending_reconnect
                         || !matches!(g.status.state.as_str(), "disconnected" | "bt_off")
-                    {
-                        continue;
-                    }
-                }
+                };
 
                 // Only poll if Emotiv credentials are configured.
                 let (client_id, client_secret) = {
@@ -580,10 +581,13 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                 // upsert_discovered updates last_seen timestamps.
                 emit_devices(&app);
 
-                // Phase 2: attempt auto-connect for any paired headset.
-                for hs in &headsets {
-                    let id = format!("cortex:{}", hs.id);
-                    try_auto_connect(&app, &id, &hs.id);
+                // Phase 2: attempt auto-connect for any paired headset
+                // (only when no session is active or reconnecting).
+                if !session_active {
+                    for hs in &headsets {
+                        let id = format!("cortex:{}", hs.id);
+                        try_auto_connect(&app, &id, &hs.id);
+                    }
                 }
             }
         }
