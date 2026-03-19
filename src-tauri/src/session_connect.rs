@@ -22,7 +22,7 @@ use crate::{
     AppState, MutexExt, StreamHandle,
     emit_status,
 };
-use crate::ble_scanner::{bluetooth_ok, classify_bt_error};
+use crate::device_scanner::{bluetooth_ok, classify_bt_error};
 use crate::session_csv::new_csv_path;
 
 // ── Error type ────────────────────────────────────────────────────────────────

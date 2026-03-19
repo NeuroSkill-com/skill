@@ -187,10 +187,26 @@ pub(crate) fn save_settings(app: &AppHandle) {
     }
 }
 
+// ── Transport inference ───────────────────────────────────────────────────────
+
+/// Infer the transport type from a device ID.
+///
+/// Device IDs are prefixed by the scanner backend that discovered them:
+/// * `usb:<port>`   → USB serial
+/// * `cortex:<id>`  → Emotiv Cortex WebSocket
+/// * anything else  → BLE (the default / legacy format)
+fn transport_from_id(id: &str) -> crate::device_scanner::Transport {
+    use crate::device_scanner::Transport;
+    if id.starts_with("usb:")    { Transport::UsbSerial }
+    else if id.starts_with("cortex:") { Transport::Cortex }
+    else                               { Transport::Ble }
+}
+
 // ── Paired device upsert ──────────────────────────────────────────────────────
 
 pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
     let now = unix_secs();
+    let transport = transport_from_id(id);
     let s_ref = app.app_state();
     let mut s = s_ref.lock_or_recover();
     if let Some(d) = s.status.paired_devices.iter_mut().find(|d| d.id == id) {
@@ -210,6 +226,7 @@ pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
             id: id.to_owned(), name: name.to_owned(),
             last_seen: now, last_rssi: 0, is_paired: true,
             is_preferred: pref.as_deref() == Some(id),
+            transport,
         });
         s.discovered.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));
     }
@@ -217,9 +234,10 @@ pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
     save_settings(app);
 }
 
-/// Update a discovered device entry (called from BLE scanner).
+/// Update a discovered device entry (called from device scanner backends).
 pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16) {
     let now = unix_secs();
+    let transport = transport_from_id(id);
     let s_ref = app.app_state();
     let mut s = s_ref.lock_or_recover();
     let is_paired    = s.status.paired_devices.iter().any(|d| d.id == id);
@@ -228,10 +246,12 @@ pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16
         d.last_seen = now; d.last_rssi = rssi;
         d.is_paired = is_paired; d.is_preferred = is_preferred;
         d.name = name.to_owned();
+        d.transport = transport;
     } else {
         s.discovered.push(DiscoveredDevice {
             id: id.to_owned(), name: name.to_owned(),
             last_seen: now, last_rssi: rssi, is_paired, is_preferred,
+            transport,
         });
     }
     s.discovered.sort_by(|a, b| b.last_seen.cmp(&a.last_seen));

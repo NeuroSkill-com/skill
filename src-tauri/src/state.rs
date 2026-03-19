@@ -50,6 +50,8 @@ pub struct DiscoveredDevice {
     pub last_rssi:    i16,
     pub is_paired:    bool,
     pub is_preferred: bool,
+    /// How this device was discovered (ble, usb_serial, wifi, cortex).
+    pub transport:    crate::device_scanner::Transport,
 }
 
 // ── EEG / PPG / IMU IPC packets ───────────────────────────────────────────────

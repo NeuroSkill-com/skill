@@ -79,9 +79,9 @@ use ws_server::WsBroadcaster;
 /// CSV recording (CsvState, path helpers, session-metadata sidecar).
 mod session_csv;
 
-/// Background BLE scanner and Bluetooth availability helpers.
-mod ble_scanner;
-pub(crate) use ble_scanner::start_background_scanner;
+/// Background device scanner — BLE, USB serial, Emotiv Cortex, WiFi.
+mod device_scanner;
+pub(crate) use device_scanner::start_background_scanner;
 
 /// Generic device session runner (replaces per-device session modules).
 mod session_runner;
@@ -704,6 +704,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 last_seen: pd.last_seen, last_rssi: 0,
                 is_paired: true,
                 is_preferred: data.preferred_id.as_deref() == Some(&pd.id),
+                transport: crate::device_scanner::Transport::Ble,
             });
         }
     }
