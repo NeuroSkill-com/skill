@@ -37,6 +37,15 @@ fn detect_device_kind(name_lower: Option<&str>) -> &'static str {
 
 // ── Reconnect backoff ─────────────────────────────────────────────────────────
 
+/// Maximum number of automatic reconnect attempts before giving up and
+/// staying in the "disconnected" state.  After this many consecutive
+/// failures the user must manually re-connect.
+///
+/// 12 attempts ≈ 1 + 2 + 3 + 5×9 = 51 seconds of total backoff, which is
+/// enough to survive brief radio interference while not burning battery on
+/// a headset that was intentionally turned off.
+pub(crate) const MAX_RETRY_ATTEMPTS: u32 = 12;
+
 /// Reconnect backoff: 1 s → 2 s → 3 s → 5 s, then stays at 5 s indefinitely.
 pub(crate) fn retry_delay_secs(attempt: u32) -> u32 {
     match attempt { 0 => 1, 1 => 2, 2 => 3, _ => 5 }
@@ -45,11 +54,21 @@ pub(crate) fn retry_delay_secs(attempt: u32) -> u32 {
 // ── Disconnect / retry ────────────────────────────────────────────────────────
 
 pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: bool) {
-    let (retry, attempt) = {
+    let (mut retry, attempt) = {
         let r = app.app_state();
         let s = r.lock_or_recover();
         (s.pending_reconnect && !is_bt, s.retry_attempt)
     };
+
+    // Give up after MAX_RETRY_ATTEMPTS consecutive failures.
+    if retry && attempt >= MAX_RETRY_ATTEMPTS {
+        app_log!(app, "bluetooth",
+            "[reconnect] giving up after {attempt} consecutive attempts");
+        crate::send_toast(app, crate::ToastLevel::Error, "Reconnect Failed",
+            "Could not reconnect after multiple attempts. Please reconnect manually.");
+        retry = false;
+    }
+
     let delay = if retry { retry_delay_secs(attempt) } else { 0 };
 
     {
@@ -268,5 +287,14 @@ mod tests {
         assert_eq!(detect_device_kind(Some("muse-2")), "muse");
         assert_eq!(detect_device_kind(None), "muse");
         assert_eq!(detect_device_kind(Some("unknown-device")), "muse");
+    }
+
+    #[test]
+    fn max_retry_attempts_is_reasonable() {
+        // Total backoff time for MAX_RETRY_ATTEMPTS should be < 2 minutes
+        // so the user doesn't wait too long, but > 30 s to survive glitches.
+        let total: u32 = (0..MAX_RETRY_ATTEMPTS).map(retry_delay_secs).sum();
+        assert!(total >= 30, "total backoff {total}s should be >= 30s");
+        assert!(total <= 120, "total backoff {total}s should be <= 120s");
     }
 }

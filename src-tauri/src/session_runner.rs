@@ -8,7 +8,7 @@
 //! only knows about [`DeviceEvent`].
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -24,6 +24,19 @@ use crate::session_csv::write_session_meta;
 use skill_data::session_writer::{SessionWriter, StorageFormat};
 use crate::ws_server::WsBroadcaster;
 use crate::AppStateExt;
+
+// ── Data watchdog ─────────────────────────────────────────────────────────────
+
+/// If no [`DeviceEvent`] arrives for this duration, treat the connection as
+/// silently lost and break out of the event loop.  BLE devices can sometimes
+/// maintain the L2CAP link while GATT notifications stop flowing (radio
+/// interference, firmware hang, headset entered sleep mode, …).  Without a
+/// watchdog the session runner would block on `next_event()` forever.
+///
+/// 15 seconds is generous enough to tolerate short radio glitches (BLE
+/// supervision timeouts are typically 2–6 s) while still recovering promptly
+/// when data truly stops.
+const DATA_WATCHDOG_TIMEOUT: Duration = Duration::from_secs(15);
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -87,6 +100,7 @@ pub(crate) async fn run_device_session(
 
     // ── Event loop ───────────────────────────────────────────────────────────
     let mut user_cancelled = false;
+    let mut last_event_at = Instant::now();
     loop {
         tokio::select! {
             biased;
@@ -95,12 +109,27 @@ pub(crate) async fn run_device_session(
                 user_cancelled = true;
                 break;
             }
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(last_event_at + DATA_WATCHDOG_TIMEOUT)) => {
+                // No event received for DATA_WATCHDOG_TIMEOUT — treat as
+                // silent disconnect.  This catches scenarios where the BLE
+                // link stays up but GATT notifications stop (radio
+                // interference, device sleep, firmware hang).
+                let elapsed = last_event_at.elapsed();
+                app_log!(app, "bluetooth",
+                    "[{kind}] data watchdog: no events for {:.1}s — treating as disconnected",
+                    elapsed.as_secs_f64());
+                send_toast(&app, ToastLevel::Warning, "Connection Lost",
+                    "No data received — reconnecting…");
+                adapter.disconnect().await;
+                break;
+            }
             ev = adapter.next_event() => {
                 let Some(ev) = ev else {
                     app_log!(app, "bluetooth", "[{kind}] event channel closed");
                     adapter.disconnect().await;
                     break;
                 };
+                last_event_at = Instant::now();
                 match ev {
                     DeviceEvent::Connected(info) => {
                         on_connected(&app, &mut dsp, &csv_path, &info, kind);
