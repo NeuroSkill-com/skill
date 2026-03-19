@@ -567,7 +567,6 @@ pub(crate) async fn connect_emotiv(
     let config = CortexClientConfig {
         client_id,
         client_secret,
-        debug_mode: true, // TEMPORARY — diagnose token invalidation
         ..Default::default()
     };
 
@@ -589,7 +588,7 @@ pub(crate) async fn connect_emotiv(
         r = client.connect() => r.map_err(|e| format!("{e}")),
     };
 
-    let (rx, handle) = match connect_result {
+    let (mut rx, handle) = match connect_result {
         Ok(v) => v,
         Err(msg) => {
             app_log!(app, "bluetooth", "[emotiv] connect failed: {msg}");
@@ -600,7 +599,45 @@ pub(crate) async fn connect_emotiv(
         }
     };
 
-    // Subscribe to EEG, motion, and device (battery) streams.
+    // Wait for the async auth flow to complete (hasAccessRight → authorize →
+    // queryHeadsets → createSession).  client.connect() only establishes the
+    // WebSocket — the token and session ID are populated asynchronously.
+    // We MUST wait for SessionCreated before calling subscribe, otherwise
+    // subscribe sends an empty cortexToken and fails with -32014.
+    app_log!(app, "bluetooth", "[emotiv] waiting for Cortex session…");
+    let session_ok = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
+        result = async {
+            let deadline = tokio::time::Instant::now()
+                + std::time::Duration::from_secs(30);
+            while tokio::time::Instant::now() < deadline {
+                match tokio::time::timeout_at(deadline, rx.recv()).await {
+                    Ok(Some(CortexEvent::SessionCreated(sid))) => {
+                        app_log!(app, "bluetooth",
+                            "[emotiv] session created: {sid}");
+                        return Ok(());
+                    }
+                    Ok(Some(CortexEvent::Error(e))) => {
+                        return Err(format!("Cortex error during auth: {e}"));
+                    }
+                    Ok(Some(_)) => continue, // Skip Connected, Authorized, etc.
+                    Ok(None) => return Err("Cortex channel closed".into()),
+                    Err(_) => return Err("Timed out waiting for session".into()),
+                }
+            }
+            Err("Timed out waiting for Cortex session".into())
+        } => result,
+    };
+    if let Err(e) = session_ok {
+        app_log!(app, "bluetooth", "[emotiv] session wait failed: {e}");
+        return Err(ConnectError::Other(format!(
+            "Emotiv session creation failed: {e}\n\n\
+             Make sure a headset is connected in the EMOTIV Launcher."
+        )));
+    }
+
+    // Now the token and session ID are populated — subscribe is safe.
     tokio::select! {
         biased;
         _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
