@@ -239,11 +239,12 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
                                         // is discovered while idle, start a
                                         // session automatically. ──────────────
                                         //
-                                        // A 30-second cooldown after the last
-                                        // disconnect prevents tight reconnect
-                                        // loops when a device is in BLE range
-                                        // but not responding to connections.
-                                        const AUTO_CONNECT_COOLDOWN: Duration = Duration::from_secs(30);
+                                        // No cooldown needed: start_session()
+                                        // immediately sets stream + pending_reconnect,
+                                        // so is_idle becomes false and this guard
+                                        // won't fire again while a connection
+                                        // attempt is in flight.  If that attempt
+                                        // fails, the normal retry backoff handles it.
                                         let should_auto = {
                                             let r = app.app_state();
                                             let g = r.lock_or_recover();
@@ -256,10 +257,7 @@ async fn run_background_scanner(app: AppHandle, stop_rx: tokio::sync::oneshot::R
                                             let is_paired = g.status.paired_devices
                                                 .iter()
                                                 .any(|d| d.id == id);
-                                            let cooldown_ok = g.last_disconnect_at
-                                                .map(|t| t.elapsed() >= AUTO_CONNECT_COOLDOWN)
-                                                .unwrap_or(true);
-                                            is_idle && is_paired && cooldown_ok
+                                            is_idle && is_paired
                                         };
                                         if should_auto {
                                             app_log!(app, "bluetooth",

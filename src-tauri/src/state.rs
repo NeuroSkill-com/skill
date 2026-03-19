@@ -266,10 +266,6 @@ pub struct AppState {
     pub latest_bands: Option<BandSnapshot>,
     pub pending_reconnect: bool,
     pub retry_attempt: u32,
-    /// Instant of the last transition to `disconnected` (after retries
-    /// exhausted).  Used by the BLE scanner to avoid immediately
-    /// auto-connecting to a device that just failed all reconnect attempts.
-    pub last_disconnect_at: Option<std::time::Instant>,
     pub skill_dir:        std::path::PathBuf,
     pub model_config:     EegModelConfig,
     pub model_status:     std::sync::Arc<std::sync::Mutex<EegModelStatus>>,
@@ -392,7 +388,6 @@ impl Default for AppState {
             latest_bands:      None,
             pending_reconnect: false,
             retry_attempt:     0,
-            last_disconnect_at: None,
             label_store: label_store::LabelStore::open(&skill_dir),
             label_shortcut:       default_label_shortcut(),
             search_shortcut:      default_search_shortcut(),

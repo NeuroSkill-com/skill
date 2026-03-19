@@ -3,7 +3,7 @@
 //
 //! Session lifecycle — start, cancel, disconnect, reconnect backoff.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use tauri::AppHandle;
 
@@ -100,12 +100,6 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
         // Even during auto-reconnect the device is not streaming data,
         // so this is not an active session.
         s.session_start_utc = None;
-        // Record the disconnect time so the BLE scanner can apply a cooldown
-        // before auto-connecting again (avoids tight reconnect loops when a
-        // device is in range but not responding).
-        if !retry {
-            s.last_disconnect_at = Some(Instant::now());
-        }
         // DSP objects live in SessionDsp (session-local, lock-free).
         // They are dropped when the session task exits; the next session
         // creates a fresh set.  No reset needed here.

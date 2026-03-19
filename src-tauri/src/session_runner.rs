@@ -254,7 +254,6 @@ fn on_connected(
         s.retry_attempt               = 0;
         s.status.retry_attempt        = 0;
         s.status.retry_countdown_secs = 0;
-        s.last_disconnect_at          = None;
     }
 
     dsp.accumulator.update_device(Some(dev_id.clone()), Some(info.name.clone()));
