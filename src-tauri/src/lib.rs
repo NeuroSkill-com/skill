@@ -710,15 +710,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 transport,
             });
         }
-        // Clean up stale cortex paired entries from older scanner ID formats
-        // (e.g. "cortex:INSIGHT-5AF2C39E" or "cortex:emotiv-headset").
-        // Only keep "cortex:emotiv" which is the current stable ID.
-        s.status.paired_devices.retain(|d| {
-            !(d.id.starts_with("cortex:") && d.id != "cortex:emotiv")
-        });
-        s.discovered.retain(|d| {
-            !(d.id.starts_with("cortex:") && d.id != "cortex:emotiv")
-        });
+        // Migrate legacy "cortex:emotiv" paired entries — these were created
+        // before the scanner listed individual headsets as "cortex:<headset_id>".
+        // They are kept for backward compatibility (auto-connect will still
+        // work with the generic ID) but no longer need special filtering.
     }
 
     if data.tts_preload {

@@ -31,7 +31,7 @@ mw75 = { version = "0.0.6", default-features = false }
 hermes-ble = { version = "0.0.1", default-features = false }
 
 # Emotiv EPOC / Insight / Flex (Cortex WebSocket API)
-emotiv = { version = "0.0.5", default-features = false }
+emotiv = { version = "0.0.6", default-features = false }
 
 # IDUN Guardian in-ear EEG earbud (BLE)
 idun = { version = "0.0.3", default-features = false }

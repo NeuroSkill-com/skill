@@ -222,7 +222,7 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
             "ganglion" => crate::session_connect::connect_ganglion(&app2, &cancel, target).await,
             "mw75"     => crate::session_connect::connect_mw75(&app2, &cancel, target).await,
             "hermes"   => crate::session_connect::connect_hermes(&app2, &cancel, target).await,
-            "emotiv"   => crate::session_connect::connect_emotiv(&app2, &cancel).await,
+            "emotiv"   => crate::session_connect::connect_emotiv(&app2, &cancel, target).await,
             "idun"     => crate::session_connect::connect_idun(&app2, &cancel).await,
             _          => crate::session_connect::connect_muse(&app2, &cancel, target).await,
         };

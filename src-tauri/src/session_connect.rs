@@ -538,13 +538,25 @@ pub(crate) async fn connect_openbci_board(
 // ── Emotiv (Cortex WebSocket API) ──────────────────────────────────────────────
 
 pub(crate) async fn connect_emotiv(
-    app:    &AppHandle,
-    cancel: &tokio_util::sync::CancellationToken,
+    app:          &AppHandle,
+    cancel:       &tokio_util::sync::CancellationToken,
+    preferred_id: Option<String>,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
     use skill_devices::emotiv::prelude::*;
     use skill_devices::session::emotiv::EmotivAdapter;
 
-    app_log!(app, "bluetooth", "[emotiv] connecting via Cortex API…");
+    // Extract the Emotiv headset ID from the scanner device ID.
+    // Scanner IDs are "cortex:<headset_id>" (e.g. "cortex:EPOCX-A1B2C3D4")
+    // or the legacy "cortex:emotiv" (no specific headset).
+    let headset_id = preferred_id.as_deref()
+        .and_then(|id| id.strip_prefix("cortex:"))
+        .filter(|stripped| *stripped != "emotiv") // legacy generic ID
+        .unwrap_or("")
+        .to_owned();
+
+    app_log!(app, "bluetooth",
+        "[emotiv] connecting via Cortex API (headset={})…",
+        if headset_id.is_empty() { "auto" } else { &headset_id });
 
     let device_api = {
         let r = app.app_state();
@@ -567,6 +579,7 @@ pub(crate) async fn connect_emotiv(
     let config = CortexClientConfig {
         client_id,
         client_secret,
+        headset_id,
         ..Default::default()
     };
 
