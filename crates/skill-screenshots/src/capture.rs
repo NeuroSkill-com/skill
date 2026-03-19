@@ -548,7 +548,8 @@ pub fn run_screenshot_worker(
     let mut prev_row_id: Option<i64> = None;
 
     // Previous resized PNG — kept for motion detection between captures.
-    let mut prev_resized_png: Option<Vec<u8>> = None;
+    // prev_resized_png was used for GIF motion detection — removed since
+    // GIF capture is now script-only.  Kept as a comment for context.
 
     loop {
         // Re-read config + session state
@@ -601,89 +602,11 @@ pub fn run_screenshot_worker(
             None
         };
 
-        // ── Motion detection → GIF burst capture ──
-        // When GIF capture is enabled and the current frame differs
-        // significantly from the previous one (scrolling, animation),
-        // capture a rapid burst of frames and encode an animated GIF.
-        let mut resized_png = resized_png; // make mutable for representative-frame override
-        let mut gif_name: Option<String> = None;
+        // GIF burst capture is intentionally disabled in the periodic capture
+        // loop — only scripts may produce animated GIFs.  The gif_encode module
+        // and config fields are preserved for the script-level API.
 
-        if config.gif_enabled && copy_from.is_none() {
-            if let Some(ref prev_png) = prev_resized_png {
-                let score = crate::platform::motion_score(prev_png, &resized_png);
-                if score >= config.gif_motion_threshold {
-                    eprintln!(
-                        "[screenshot] motion detected ({:.1}%) — capturing GIF burst ({} frames)",
-                        score * 100.0,
-                        config.gif_frame_count
-                    );
 
-                    let delay = Duration::from_millis(config.gif_frame_delay_ms as u64);
-                    let burst = crate::platform::capture_burst(
-                        config.gif_frame_count.saturating_sub(1), // frame 0 = current
-                        delay,
-                    );
-
-                    // Collect all frame raw bytes (frame 0 is the trigger capture).
-                    // We re-read the current capture's raw_bytes from the resized
-                    // PNG since the full-res was already dropped — but we also
-                    // kept it via the resize call above.  For GIF encoding we use
-                    // the raw capture bytes for full fidelity.
-                    let mut all_frames: Vec<Vec<u8>> = Vec::with_capacity(config.gif_frame_count as usize);
-                    all_frames.push(resized_png.clone()); // frame 0 (already resized)
-                    for cap in &burst {
-                        // Resize each burst frame to match
-                        if let Some((rpng, _, _)) = resize_fit_pad(&cap.raw_bytes, config.image_size) {
-                            all_frames.push(rpng);
-                        }
-                    }
-
-                    if all_frames.len() >= 2 {
-                        let (ts_str_gif, _) = yyyymmddhhmmss_utc();
-                        let date_str_gif = &ts_str_gif[..8];
-                        let gname = format!("{date_str_gif}/{ts_str_gif}.gif");
-                        let gif_path = screenshots_dir.join(&gname);
-                        let frame_delay_cs = (config.gif_frame_delay_ms / 10).max(1) as u16;
-
-                        if let Some(gif_size) = crate::gif_encode::encode_gif(
-                            &all_frames,
-                            config.image_size,
-                            frame_delay_cs,
-                            &gif_path,
-                        ) {
-                            if gif_size / 1024 > config.gif_max_size_kb {
-                                eprintln!(
-                                    "[screenshot] GIF too large ({} KB > {} KB limit) — discarding",
-                                    gif_size / 1024,
-                                    config.gif_max_size_kb
-                                );
-                                let _ = std::fs::remove_file(&gif_path);
-                            } else {
-                                eprintln!(
-                                    "[screenshot] GIF saved: {} ({} KB, {} frames)",
-                                    gname,
-                                    gif_size / 1024,
-                                    all_frames.len()
-                                );
-                                gif_name = Some(gname);
-                            }
-                        }
-
-                        // Use the middle frame for CLIP embedding — more
-                        // representative of the animated content than frame 0.
-                        if let Some(rep) = crate::gif_encode::representative_frame_png(
-                            &all_frames,
-                            config.image_size,
-                        ) {
-                            resized_png = rep;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Remember the current resized PNG for next iteration's motion detection.
-        prev_resized_png = Some(resized_png.clone());
 
         // ── Save to disk as WebP + SQLite + context ──
         let t0 = Instant::now();
@@ -724,11 +647,6 @@ pub fn run_screenshot_worker(
             ocr_embedding_dim: 0,
             ocr_hnsw_id: None,
         });
-
-        // ── Backfill GIF filename if burst capture produced one ──
-        if let (Some(rid), Some(ref gname)) = (row_id, &gif_name) {
-            store.update_gif_filename(rid, gname);
-        }
 
         metrics.save_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 

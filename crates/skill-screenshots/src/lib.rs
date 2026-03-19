@@ -10,6 +10,7 @@
 pub mod config;
 pub mod context;
 pub(crate) mod platform;
+#[allow(dead_code)]
 pub(crate) mod gif_encode;
 pub mod capture;
 

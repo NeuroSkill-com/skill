@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //! Animated GIF encoding from a sequence of captured frames.
+//!
+//! These functions are not used in the periodic capture loop (GIF capture is
+//! script-only) but are kept available for the script/tool API.
+
 
 use std::io::Cursor;
 use std::path::Path;
