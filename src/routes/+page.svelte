@@ -1112,31 +1112,35 @@ the Free Software Foundation, version 3 only. -->
 
         <!-- Device info badge (non-Muse devices) -->
         {#if isGanglion}
+          {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : 200}
           <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
                       bg-emerald-500/10 border border-emerald-500/20 w-fit">
             <span class="text-[0.55rem] font-semibold text-emerald-600 dark:text-emerald-400 tracking-wide">
-              OpenBCI Ganglion · 4ch · 200 Hz
+              OpenBCI Ganglion · {chLabels.length}ch · {sr} Hz
             </span>
           </div>
         {:else if isEmotiv}
+          {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : null}
           <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
                       bg-violet-500/10 border border-violet-500/20 w-fit">
             <span class="text-[0.55rem] font-semibold text-violet-600 dark:text-violet-400 tracking-wide">
-              {status.device_name ?? "Emotiv"} · {chLabels.length}ch · 128 Hz
+              {status.device_name ?? "Emotiv"} · {chLabels.length}ch{#if sr} · {sr} Hz{/if}
             </span>
           </div>
         {:else if isIdun}
+          {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : 250}
           <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
                       bg-cyan-500/10 border border-cyan-500/20 w-fit">
             <span class="text-[0.55rem] font-semibold text-cyan-600 dark:text-cyan-400 tracking-wide">
-              IDUN Guardian · 1ch · 250 Hz
+              IDUN Guardian · {chLabels.length}ch · {sr} Hz
             </span>
           </div>
         {:else if isHermes}
+          {@const sr = (status.eeg_sample_rate_hz ?? 0) > 0 ? Math.round(status.eeg_sample_rate_hz ?? 0) : 250}
           <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg
                       bg-amber-500/10 border border-amber-500/20 w-fit">
             <span class="text-[0.55rem] font-semibold text-amber-600 dark:text-amber-400 tracking-wide">
-              Nucleus Hermes · 8ch · 250 Hz
+              Nucleus Hermes · {chLabels.length}ch · {sr} Hz
             </span>
           </div>
         {/if}
