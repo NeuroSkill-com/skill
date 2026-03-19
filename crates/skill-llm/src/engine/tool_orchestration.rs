@@ -240,7 +240,7 @@ where
         // top-level tool (e.g. tool="status" instead of tool="skill" +
         // command="status"), silently rewrite the call so it goes through
         // the skill tool with the correct payload.
-        let selected_calls: Vec<tools::ToolCall> = selected_calls
+        let mut selected_calls: Vec<tools::ToolCall> = selected_calls
             .into_iter()
             .map(|mut tc| {
                 if !skill_tools::defs::is_known_builtin_tool(&tc.function.name)
@@ -275,14 +275,14 @@ where
         match execution_mode {
             config::ToolExecutionMode::Sequential => {
                 execute_tool_calls_sequential(
-                    &selected_calls, &tool_defs, &allowed_tools,
+                    &mut selected_calls, &tool_defs, &allowed_tools,
                     &mut messages, &mut on_tool_event,
                     &cancelled_set, &state.scripts_dir,
                 ).await;
             }
             config::ToolExecutionMode::Parallel => {
                 execute_tool_calls_parallel(
-                    &selected_calls, &tool_defs, &allowed_tools,
+                    &mut selected_calls, &tool_defs, &allowed_tools,
                     &mut messages, &mut on_tool_event,
                     &cancelled_set, &state.scripts_dir,
                 ).await;
@@ -408,11 +408,32 @@ fn summarize_tool_result(content: &str) -> String {
 
 /// Validate arguments for a tool call.  Returns the parsed args `Value` or an
 /// error result to inject directly.
+///
+/// If the LLM called a Skill API sub-command (e.g. `status`) as a top-level
+/// tool, the call is silently rewritten to `skill` with `{"command":"status"}`
+/// so it goes through the normal execution path.
 fn validate_and_prepare(
-    tc: &tools::ToolCall,
+    tc: &mut tools::ToolCall,
     tool_defs: &std::collections::HashMap<String, tools::Tool>,
     allowed_tools: &config::LlmToolConfig,
 ) -> Result<Value, Value> {
+    // Auto-redirect: Skill API sub-command used as top-level tool.
+    if !skill_tools::defs::is_known_builtin_tool(&tc.function.name)
+        && skill_tools::defs::is_skill_api_command(&tc.function.name)
+    {
+        let orig_args: Value = serde_json::from_str(&tc.function.arguments)
+            .unwrap_or_else(|_| json!({}));
+        let mut redirected = json!({ "command": tc.function.name });
+        if let Some(obj) = orig_args.as_object() {
+            if !obj.is_empty() {
+                redirected["args"] = orig_args;
+            }
+        }
+        log::info!("[tool-redirect] {} → skill({})", tc.function.name, tc.function.name);
+        tc.function.name = "skill".to_string();
+        tc.function.arguments = redirected.to_string();
+    }
+
     if !skill_tools::defs::is_known_builtin_tool(&tc.function.name) {
         return Err(json!({ "ok": false, "tool": tc.function.name, "error": format!("unsupported tool \"{}\". Use one of the available tools listed in the system prompt.", tc.function.name) }));
     }
@@ -436,7 +457,7 @@ fn validate_and_prepare(
 // ── Sequential execution ──────────────────────────────────────────────────────
 
 async fn execute_tool_calls_sequential<G>(
-    calls: &[tools::ToolCall],
+    calls: &mut [tools::ToolCall],
     tool_defs: &std::collections::HashMap<String, tools::Tool>,
     allowed_tools: &config::LlmToolConfig,
     messages: &mut Vec<Value>,
@@ -447,7 +468,7 @@ async fn execute_tool_calls_sequential<G>(
 where
     G: FnMut(ToolEvent),
 {
-    for tc in calls {
+    for tc in calls.iter_mut() {
         // Check if cancelled before execution.
         if cancelled_set.lock().unwrap().contains(&tc.id) {
             let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
@@ -530,7 +551,7 @@ where
 // ── Parallel execution ────────────────────────────────────────────────────────
 
 async fn execute_tool_calls_parallel<G>(
-    calls: &[tools::ToolCall],
+    calls: &mut [tools::ToolCall],
     tool_defs: &std::collections::HashMap<String, tools::Tool>,
     allowed_tools: &config::LlmToolConfig,
     messages: &mut Vec<Value>,
@@ -548,7 +569,7 @@ where
     }
 
     let mut prepared = Vec::with_capacity(calls.len());
-    for tc in calls {
+    for tc in calls.iter_mut() {
         if cancelled_set.lock().unwrap().contains(&tc.id) {
             let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
             on_tool_event(ToolEvent::Status {
