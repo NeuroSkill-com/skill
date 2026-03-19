@@ -464,6 +464,12 @@ async fn run_usb_scanner(app: AppHandle, cancel: CancellationToken) {
 async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
     use skill_devices::emotiv::prelude::*;
 
+    // Wait before the first probe so the startup auto-connect has time to
+    // set `stream` (fires at +900 ms).  Without this delay the first
+    // interval tick fires immediately, races with connect_emotiv, and the
+    // duplicate `authorize` call invalidates the real session's cortex token.
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
     let mut poll_tick = tokio::time::interval(Duration::from_secs(10));
     // Track which headset IDs we've already logged to avoid spam.
     let mut known_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -476,14 +482,16 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                 return;
             }
             _ = poll_tick.tick() => {
-                // Skip polling while a session is already active — creating
-                // a second Cortex WS connection would interfere with the
-                // running session (the Cortex service stops streams on the
-                // first session when a second is created).
+                // Skip polling while a session is active, connecting, or
+                // retrying — a second Cortex authorize call invalidates the
+                // cortex token of the running session.
                 {
                     let r = app.app_state();
                     let g = r.lock_or_recover();
-                    if g.stream.is_some() || g.pending_reconnect {
+                    if g.stream.is_some()
+                        || g.pending_reconnect
+                        || !matches!(g.status.state.as_str(), "disconnected" | "bt_off")
+                    {
                         continue;
                     }
                 }
