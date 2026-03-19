@@ -28,6 +28,7 @@ pub(crate) struct CapturedImage {
 ///
 /// Both images should be the same dimensions (e.g. already resized to the
 /// target capture size).  Returns `1.0` if dimensions differ, `0.0` on error.
+#[allow(dead_code)]
 pub(crate) fn motion_score(prev: &[u8], curr: &[u8]) -> f32 {
     let prev_img = match image::load_from_memory(prev) {
         Ok(img) => img.to_rgba8(),
@@ -68,6 +69,8 @@ pub(crate) fn motion_score(prev: &[u8], curr: &[u8]) -> f32 {
 
 /// Capture `count` frames in rapid succession with `delay` between each.
 /// Skips frames where the platform capture fails.
+/// Currently only used by the script-level GIF API, not the periodic capture loop.
+#[allow(dead_code)]
 pub(crate) fn capture_burst(count: u32, delay: Duration) -> Vec<CapturedImage> {
     let mut frames = Vec::with_capacity(count as usize);
     for _ in 0..count {
