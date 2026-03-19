@@ -247,7 +247,11 @@ pub(crate) async fn run_device_session(
                         }
                     }
                     DeviceEvent::Imu(frame) if has_imu => {
-                        process_imu(&app, &mut dsp, &frame);
+                        if let Some(ref mut c) = csv {
+                            process_imu(&app, &mut dsp, c, &csv_path, &frame);
+                        } else {
+                            process_imu_no_csv(&app, &mut dsp, &frame);
+                        }
                     }
                     DeviceEvent::Battery(frame) if has_battery => {
                         process_battery(&app, &mut battery_ema, &csv_path, &frame);
@@ -668,9 +672,11 @@ fn process_ppg(
 // ── IMU processing ────────────────────────────────────────────────────────────
 
 fn process_imu(
-    app:   &AppHandle,
-    dsp:   &mut SessionDsp,
-    frame: &ImuFrame,
+    app:      &AppHandle,
+    dsp:      &mut SessionDsp,
+    csv:      &mut SessionWriter,
+    csv_path: &Path,
+    frame:    &ImuFrame,
 ) {
     let accel = frame.accel;
     let gyro = frame.gyro.unwrap_or([0.0; 3]);
@@ -687,7 +693,57 @@ fn process_imu(
     // Head-pose tracker (session-local, lock-free).
     dsp.head_pose.update(accel, gyro);
 
+    // Record IMU data.
+    let now_s = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs_f64();
+    csv.push_imu(csv_path, now_s, accel, frame.gyro, frame.mag);
+
     // Emit IMU IPC events.
+    let now_ms = now_s * 1000.0;
+
+    let ipc = {
+        let sr = app.app_state();
+        let ch = sr.lock_or_recover().imu_channel.clone();
+        ch
+    };
+    if let Some(ch) = ipc {
+        let _ = ch.send(ImuPacket {
+            sensor:    "accel".into(),
+            samples:   [accel, accel, accel],
+            timestamp: now_ms,
+        });
+        if frame.gyro.is_some() {
+            let _ = ch.send(ImuPacket {
+                sensor:    "gyro".into(),
+                samples:   [gyro, gyro, gyro],
+                timestamp: now_ms,
+            });
+        }
+    }
+}
+
+/// Process IMU when CSV writer is not yet available (before first EEG frame).
+fn process_imu_no_csv(
+    app:   &AppHandle,
+    dsp:   &mut SessionDsp,
+    frame: &ImuFrame,
+) {
+    let accel = frame.accel;
+    let gyro = frame.gyro.unwrap_or([0.0; 3]);
+
+    {
+        let sr = app.app_state();
+        let mut s = sr.lock_or_recover();
+        s.status.accel = accel;
+        if frame.gyro.is_some() {
+            s.status.gyro = gyro;
+        }
+    }
+
+    dsp.head_pose.update(accel, gyro);
+
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

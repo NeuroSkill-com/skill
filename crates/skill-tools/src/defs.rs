@@ -298,6 +298,15 @@ pub fn skill_api_tool() -> Tool {
     }
 }
 
+/// Check whether a tool name is a known built-in tool (regardless of enabled state).
+pub fn is_known_builtin_tool(name: &str) -> bool {
+    matches!(name,
+        "date" | "location" | "web_search" | "web_fetch" |
+        "bash" | "read_file" | "write_file" | "edit_file" |
+        "search_output" | "skill"
+    )
+}
+
 /// Check whether a builtin tool is enabled in the current config.
 /// Returns `false` for every tool when the master `enabled` flag is off.
 pub fn is_builtin_tool_enabled(config: &LlmToolConfig, name: &str) -> bool {

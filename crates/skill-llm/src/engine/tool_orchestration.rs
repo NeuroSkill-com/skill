@@ -385,6 +385,9 @@ fn validate_and_prepare(
     tool_defs: &std::collections::HashMap<String, tools::Tool>,
     allowed_tools: &config::LlmToolConfig,
 ) -> Result<Value, Value> {
+    if !skill_tools::defs::is_known_builtin_tool(&tc.function.name) {
+        return Err(json!({ "ok": false, "tool": tc.function.name, "error": format!("unsupported tool \"{}\". Use one of the available tools listed in the system prompt.", tc.function.name) }));
+    }
     if !is_builtin_tool_enabled(allowed_tools, &tc.function.name) {
         return Err(json!({ "ok": false, "tool": tc.function.name, "error": "tool disabled in settings" }));
     }

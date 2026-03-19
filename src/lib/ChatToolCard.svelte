@@ -28,6 +28,11 @@
   };
 
   const icon       = $derived(icons[tu.tool] ?? "🔧");
+  const toolLabel  = $derived.by(() => {
+    const key = `chat.tools.${tu.tool}`;
+    const translated = t(key);
+    return translated !== key ? translated : tu.tool;
+  });
   const bashCmd    = $derived(tu.tool === "bash" ? (tu.args?.command || tu.result?.command || "") : "");
   const hasNonEmptyArgs = $derived(tu.args && Object.keys(tu.args).length > 0);
   const hasDetails = $derived(!!(hasNonEmptyArgs || tu.result || tu.detail || bashCmd));
@@ -74,7 +79,7 @@
         </svg>
       {/if}
       <span class="text-sm">{icon}</span>
-      <span class="font-medium">{t(`chat.tools.${tu.tool}`)}</span>
+      <span class="font-medium">{toolLabel}</span>
 
       <!-- Danger badge -->
       {#if isDangerous && (tu.status === 'calling' || tu.status === 'cancelled')}

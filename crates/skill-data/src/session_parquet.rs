@@ -54,6 +54,11 @@ pub fn metrics_parquet_path(csv_path: &Path) -> PathBuf {
     to_parquet_ext(&metrics_csv_path(csv_path))
 }
 
+/// Parquet IMU path from EEG CSV path.
+pub fn imu_parquet_path(csv_path: &Path) -> PathBuf {
+    to_parquet_ext(&crate::session_csv::imu_csv_path(csv_path))
+}
+
 // ── Writer properties ─────────────────────────────────────────────────────────
 
 fn writer_props() -> WriterProperties {
@@ -94,6 +99,13 @@ pub struct ParquetState {
 
     /// Accumulated metrics rows before flush.
     metrics_pending: Vec<Vec<f64>>,
+
+    // ── IMU (lazy) ───────────────────────────────────────────────────────────
+    imu_wtr:    Option<ArrowWriter<std::fs::File>>,
+    imu_schema: Arc<Schema>,
+    imu_rows:   usize,
+    imu_path:   PathBuf,
+    imu_pending: Vec<[f64; 10]>,
 }
 
 impl ParquetState {
@@ -140,6 +152,21 @@ impl ParquetState {
         let n_metrics_cols = metrics_fields.len();
         let metrics_schema = Arc::new(Schema::new(metrics_fields));
 
+        // IMU schema
+        let imu_fields = vec![
+            Field::new("timestamp_s", DataType::Float64, false),
+            Field::new("accel_x", DataType::Float64, true),
+            Field::new("accel_y", DataType::Float64, true),
+            Field::new("accel_z", DataType::Float64, true),
+            Field::new("gyro_x", DataType::Float64, true),
+            Field::new("gyro_y", DataType::Float64, true),
+            Field::new("gyro_z", DataType::Float64, true),
+            Field::new("mag_x", DataType::Float64, true),
+            Field::new("mag_y", DataType::Float64, true),
+            Field::new("mag_z", DataType::Float64, true),
+        ];
+        let imu_schema = Arc::new(Schema::new(imu_fields));
+
         Ok(Self {
             eeg_wtr,
             eeg_schema,
@@ -161,6 +188,12 @@ impl ParquetState {
             metrics_rows: 0,
             metrics_path: metrics_parquet_path(csv_path),
             metrics_pending: Vec::new(),
+
+            imu_wtr: None,
+            imu_schema,
+            imu_rows: 0,
+            imu_path: imu_parquet_path(csv_path),
+            imu_pending: Vec::new(),
         })
     }
 
@@ -365,19 +398,83 @@ impl ParquetState {
         self.metrics_rows = 0;
     }
 
+    // ── IMU ───────────────────────────────────────────────────────────────────
+
+    pub fn push_imu(
+        &mut self,
+        _eeg_csv_path: &Path,
+        timestamp_s:   f64,
+        accel:         [f32; 3],
+        gyro:          Option<[f32; 3]>,
+        mag:           Option<[f32; 3]>,
+    ) {
+        // Lazy-open IMU writer.
+        if self.imu_wtr.is_none() {
+            match std::fs::File::create(&self.imu_path) {
+                Ok(f) => match ArrowWriter::try_new(f, self.imu_schema.clone(), Some(writer_props())) {
+                    Ok(w) => { self.imu_wtr = Some(w); }
+                    Err(e) => { eprintln!("[parquet] IMU writer error: {e}"); return; }
+                },
+                Err(e) => { eprintln!("[parquet] IMU create error: {e}"); return; }
+            }
+        }
+
+        let g = gyro.unwrap_or([0.0; 3]);
+        let m = mag.unwrap_or([0.0; 3]);
+        self.imu_pending.push([
+            timestamp_s,
+            accel[0] as f64, accel[1] as f64, accel[2] as f64,
+            g[0] as f64, g[1] as f64, g[2] as f64,
+            m[0] as f64, m[1] as f64, m[2] as f64,
+        ]);
+        self.imu_rows += 1;
+
+        if self.imu_rows >= 256 {
+            self.flush_imu();
+        }
+    }
+
+    fn flush_imu(&mut self) {
+        if self.imu_pending.is_empty() { return; }
+        let Some(ref mut wtr) = self.imu_wtr else { return; };
+
+        let n_rows = self.imu_pending.len();
+        let mut col_data: Vec<Vec<f64>> = vec![Vec::with_capacity(n_rows); 10];
+
+        for row in &self.imu_pending {
+            for (ci, col) in col_data.iter_mut().enumerate() {
+                col.push(row[ci]);
+            }
+        }
+
+        let columns: Vec<Arc<dyn arrow_array::Array>> = col_data.into_iter()
+            .map(|c| Arc::new(Float64Array::from(c)) as Arc<dyn arrow_array::Array>)
+            .collect();
+
+        if let Ok(batch) = RecordBatch::try_new(self.imu_schema.clone(), columns) {
+            let _ = wtr.write(&batch);
+        }
+        let _ = wtr.flush();
+        self.imu_pending.clear();
+        self.imu_rows = 0;
+    }
+
     // ── Flush / close ────────────────────────────────────────────────────────
 
     pub fn flush(&mut self) {
         let _ = self.eeg_wtr.flush();
         if let Some(ref mut w) = self.ppg_wtr { let _ = w.flush(); }
         self.flush_metrics();
+        self.flush_imu();
     }
 
     /// Close all writers, finalising the Parquet files.
     pub fn close(mut self) {
         self.flush_metrics();
+        self.flush_imu();
         let _ = self.eeg_wtr.close();
         if let Some(w) = self.ppg_wtr { let _ = w.close(); }
         if let Some(w) = self.metrics_wtr { let _ = w.close(); }
+        if let Some(w) = self.imu_wtr { let _ = w.close(); }
     }
 }

@@ -18,6 +18,11 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
     let args: Value = serde_json::from_str(&call.function.arguments).unwrap_or_else(|_| json!({}));
     let tool_name = &call.function.name;
 
+    // Distinguish "unknown tool" from "known but disabled".
+    if !crate::defs::is_known_builtin_tool(tool_name) {
+        tool_log!("tool", "[blocked] tool={} reason=unsupported tool", tool_name);
+        return json!({ "ok": false, "tool": call.function.name, "error": format!("unsupported tool \"{}\". Use one of the available tools listed in the system prompt.", tool_name) });
+    }
     if !is_builtin_tool_enabled(allowed_tools, tool_name) {
         tool_log!("tool", "[blocked] tool={} reason=disabled in settings", tool_name);
         return json!({ "ok": false, "tool": call.function.name, "error": "tool disabled in settings" });

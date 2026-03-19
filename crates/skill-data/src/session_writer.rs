@@ -15,18 +15,32 @@ use skill_eeg::eeg_bands::BandSnapshot;
 pub enum StorageFormat {
     Csv,
     Parquet,
+    Both,
 }
 
 impl StorageFormat {
     pub fn from_str(s: &str) -> Self {
-        if s.eq_ignore_ascii_case("parquet") { Self::Parquet } else { Self::Csv }
+        match s.to_ascii_lowercase().as_str() {
+            "parquet" => Self::Parquet,
+            "both"    => Self::Both,
+            _         => Self::Csv,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Csv     => "csv",
+            Self::Parquet => "parquet",
+            Self::Both    => "both",
+        }
     }
 }
 
-/// Unified writer that delegates to either CSV or Parquet.
+/// Unified writer that delegates to either CSV or Parquet (or both).
 pub enum SessionWriter {
     Csv(CsvState),
     Parquet(ParquetState),
+    Both(CsvState, ParquetState),
 }
 
 impl SessionWriter {
@@ -42,13 +56,23 @@ impl SessionWriter {
                 ParquetState::open_with_labels(csv_path, labels)
                     .map(SessionWriter::Parquet)
             }
+            StorageFormat::Both => {
+                let csv = CsvState::open_with_labels(csv_path, labels)
+                    .map_err(|e| format!("CSV open error: {e}"))?;
+                let pq = ParquetState::open_with_labels(csv_path, labels)?;
+                Ok(SessionWriter::Both(csv, pq))
+            }
         }
     }
 
     pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
         match self {
-            Self::Csv(c)     => c.push_eeg(electrode, samples, packet_ts, sample_rate),
-            Self::Parquet(p) => p.push_eeg(electrode, samples, packet_ts, sample_rate),
+            Self::Csv(c)            => c.push_eeg(electrode, samples, packet_ts, sample_rate),
+            Self::Parquet(p)        => p.push_eeg(electrode, samples, packet_ts, sample_rate),
+            Self::Both(c, p) => {
+                c.push_eeg(electrode, samples, packet_ts, sample_rate);
+                p.push_eeg(electrode, samples, packet_ts, sample_rate);
+            }
         }
     }
 
@@ -63,6 +87,10 @@ impl SessionWriter {
         match self {
             Self::Csv(c)     => c.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals),
             Self::Parquet(p) => p.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals),
+            Self::Both(c, p) => {
+                c.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals);
+                p.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals);
+            }
         }
     }
 
@@ -70,6 +98,28 @@ impl SessionWriter {
         match self {
             Self::Csv(c)     => c.push_metrics(eeg_csv_path, snap),
             Self::Parquet(p) => p.push_metrics(eeg_csv_path, snap),
+            Self::Both(c, p) => {
+                c.push_metrics(eeg_csv_path, snap);
+                p.push_metrics(eeg_csv_path, snap);
+            }
+        }
+    }
+
+    pub fn push_imu(
+        &mut self,
+        eeg_csv_path: &Path,
+        timestamp_s:  f64,
+        accel:        [f32; 3],
+        gyro:         Option<[f32; 3]>,
+        mag:          Option<[f32; 3]>,
+    ) {
+        match self {
+            Self::Csv(c)     => c.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag),
+            Self::Parquet(p) => p.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag),
+            Self::Both(c, p) => {
+                c.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag);
+                p.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag);
+            }
         }
     }
 
@@ -77,6 +127,7 @@ impl SessionWriter {
         match self {
             Self::Csv(c)     => c.flush(),
             Self::Parquet(p) => p.flush(),
+            Self::Both(c, p) => { c.flush(); p.flush(); }
         }
     }
 }

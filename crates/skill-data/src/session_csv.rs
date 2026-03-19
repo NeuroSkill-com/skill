@@ -34,6 +34,13 @@ pub fn metrics_csv_path(eeg_path: &Path) -> PathBuf {
     eeg_path.with_file_name(format!("{stem}_metrics.csv"))
 }
 
+/// Derive the IMU CSV path from an EEG CSV path.
+/// `exg_1700000000.csv` → `exg_1700000000_imu.csv`
+pub fn imu_csv_path(eeg_path: &Path) -> PathBuf {
+    let stem = eeg_path.file_stem().and_then(|s| s.to_str()).unwrap_or("exg");
+    eeg_path.with_file_name(format!("{stem}_imu.csv"))
+}
+
 // ── Metrics CSV column header ─────────────────────────────────────────────────
 
 /// Column headers for the `_metrics.csv` file.
@@ -152,6 +159,10 @@ pub struct CsvState {
     metrics_wtr:     Option<csv::Writer<std::fs::File>>,
     /// Metrics rows written.
     metrics_written: u64,
+    /// Separate CSV writer for IMU data (created lazily on first IMU sample).
+    imu_wtr:     Option<csv::Writer<std::fs::File>>,
+    /// IMU rows written.
+    imu_written: u64,
 }
 
 impl CsvState {
@@ -178,6 +189,8 @@ impl CsvState {
             ppg_written: 0,
             metrics_wtr:     None,
             metrics_written: 0,
+            imu_wtr:     None,
+            imu_written: 0,
         })
     }
 
@@ -272,6 +285,54 @@ impl CsvState {
                 self.ppg_written += 1;
             }
             if self.ppg_written > 0 && self.ppg_written.is_multiple_of(64) {
+                let _ = wtr.flush();
+            }
+        }
+    }
+
+    /// Write an IMU sample to the `_imu.csv` file.
+    /// The file is created lazily on the first call.
+    pub fn push_imu(
+        &mut self,
+        eeg_csv_path: &Path,
+        timestamp_s:  f64,
+        accel:        [f32; 3],
+        gyro:         Option<[f32; 3]>,
+        mag:          Option<[f32; 3]>,
+    ) {
+        if self.imu_wtr.is_none() {
+            let imu_path = imu_csv_path(eeg_csv_path);
+            match csv::Writer::from_path(&imu_path) {
+                Ok(mut w) => {
+                    let _ = w.write_record([
+                        "timestamp_s",
+                        "accel_x", "accel_y", "accel_z",
+                        "gyro_x", "gyro_y", "gyro_z",
+                        "mag_x", "mag_y", "mag_z",
+                    ]);
+                    eprintln!("[csv] IMU file opened: {}", imu_path.display());
+                    self.imu_wtr = Some(w);
+                }
+                Err(e) => {
+                    eprintln!("[csv] failed to create IMU file {}: {e}", imu_path.display());
+                    return;
+                }
+            }
+        }
+
+        if let Some(ref mut wtr) = self.imu_wtr {
+            let g = gyro.unwrap_or([0.0; 3]);
+            let m = mag.unwrap_or([0.0; 3]);
+            let row = [
+                format!("{:.6}", timestamp_s),
+                format!("{:.6}", accel[0]), format!("{:.6}", accel[1]), format!("{:.6}", accel[2]),
+                format!("{:.6}", g[0]), format!("{:.6}", g[1]), format!("{:.6}", g[2]),
+                format!("{:.6}", m[0]), format!("{:.6}", m[1]), format!("{:.6}", m[2]),
+            ];
+            let refs: Vec<&str> = row.iter().map(String::as_str).collect();
+            let _ = wtr.write_record(&refs);
+            self.imu_written += 1;
+            if self.imu_written > 0 && self.imu_written.is_multiple_of(64) {
                 let _ = wtr.flush();
             }
         }
@@ -396,5 +457,6 @@ impl CsvState {
         let _ = self.wtr.flush();
         if let Some(ref mut w) = self.ppg_wtr     { let _ = w.flush(); }
         if let Some(ref mut w) = self.metrics_wtr { let _ = w.flush(); }
+        if let Some(ref mut w) = self.imu_wtr     { let _ = w.flush(); }
     }
 }
