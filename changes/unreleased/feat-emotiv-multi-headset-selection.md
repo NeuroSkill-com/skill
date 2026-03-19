@@ -5,7 +5,7 @@
 ### Bugfixes
 
 - **Emotiv auto-connect no longer hijacks first headset**: Cortex devices are no longer blindly auto-connected as "trusted transport". Only explicitly paired headsets trigger auto-connect, preventing the first headset from being grabbed when multiple are available. Legacy `cortex:emotiv` paired entries are still honored for backward compatibility.
-- **Emotiv scanner discovers headsets while connected**: the Cortex scanner now probes for available headsets even while a session is active, using a separate short-lived WebSocket connection that does not interfere with the running session. Previously the scanner was completely blocked while connected, so only the auto-connected headset appeared in the device list.
+- **Emotiv scanner discovers headsets on first tick**: the Cortex scanner runs its first probe immediately at startup (before the 900 ms auto-connect fires) so all headsets are discovered and visible in the device list. Subsequent probes are skipped while a session is active to avoid invalidating the session's cortex token.
 
 ### Dependencies
 
