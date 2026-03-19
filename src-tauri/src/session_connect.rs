@@ -662,6 +662,53 @@ pub(crate) async fn connect_emotiv(
         }
     }
 
+    // Wait briefly for subscribe result — the Cortex service responds with
+    // DataLabels on success or Error on failure.  Log subscription status
+    // so failures (e.g. missing EEG license) are visible in the device log
+    // instead of silently producing an IMU-only stream.
+    //
+    // Events consumed here are replayed into the adapter's pending queue
+    // so it still receives DataLabels for electrode_indices setup.
+    let mut replay_events: Vec<CortexEvent> = Vec::new();
+    {
+        let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+        let mut eeg_confirmed = false;
+        let mut sub_errors: Vec<String> = Vec::new();
+        while tokio::time::Instant::now() < deadline {
+            match tokio::time::timeout_at(deadline, rx.recv()).await {
+                Ok(Some(ev)) => {
+                    match &ev {
+                        CortexEvent::DataLabels(labels) => {
+                            app_log!(app, "bluetooth",
+                                "[emotiv] DataLabels: stream={}, cols={:?}",
+                                labels.stream_name, labels.labels);
+                            if labels.stream_name == "eeg" {
+                                eeg_confirmed = true;
+                            }
+                        }
+                        CortexEvent::Error(e) => {
+                            app_log!(app, "bluetooth", "[emotiv] subscribe error: {e}");
+                            sub_errors.push(e.clone());
+                        }
+                        _ => {}
+                    }
+                    replay_events.push(ev);
+                    if eeg_confirmed { break; }
+                }
+                _ => break,
+            }
+        }
+        if !eeg_confirmed && !sub_errors.is_empty() {
+            let msg = sub_errors.join("; ");
+            app_log!(app, "bluetooth", "[emotiv] EEG subscription failed: {msg}");
+            crate::send_toast(&*app, crate::ToastLevel::Error, "EEG Subscribe Failed", &msg);
+        } else if !eeg_confirmed {
+            app_log!(app, "bluetooth",
+                "[emotiv] WARNING: EEG DataLabels not received within 3s — \
+                 EEG data may not stream. Check Emotiv license.");
+        }
+    }
+
     // Read the headset ID for display (e.g. "INSIGHT-5AF2C39E").
     let headset_id = handle.headset_id().await;
     let session_id = handle.session_id().await;
@@ -677,7 +724,12 @@ pub(crate) async fn connect_emotiv(
         ..Default::default()
     };
 
-    Ok(Box::new(EmotivAdapter::new_epoc(rx, handle, headset_id, Some(info))))
+    let mut adapter = EmotivAdapter::new_epoc(rx, handle, headset_id, Some(info));
+    // Replay events consumed during the subscribe-confirmation wait so the
+    // adapter still receives DataLabels (for electrode_indices) and any
+    // early EEG/IMU/dev frames.
+    adapter.replay(replay_events);
+    Ok(Box::new(adapter))
 }
 
 // ── IDUN Guardian (BLE) ───────────────────────────────────────────────────────

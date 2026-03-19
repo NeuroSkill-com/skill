@@ -3455,9 +3455,9 @@ dependencies = [
 
 [[package]]
 name = "emotiv"
-version = "0.0.7"
+version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fa8e2867be99ba0f460bebb277a53bc31745cf59f5a7bf8a976d019adba5d74"
+checksum = "86da80b150b9761bf6ec4d06d9d03dc24015dcc076fe455e89310d5b941419eb"
 dependencies = [
  "anyhow",
  "chrono",

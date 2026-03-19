@@ -141,6 +141,15 @@ impl EmotivAdapter {
         }
     }
 
+    /// Replay events that were consumed during the connect phase (e.g.
+    /// DataLabels from subscribe confirmation).  Translates each event
+    /// through the normal handler and queues the resulting DeviceEvents.
+    pub fn replay(&mut self, events: Vec<CortexEvent>) {
+        for ev in events {
+            self.translate(ev);
+        }
+    }
+
     fn translate(&mut self, ev: CortexEvent) {
         match ev {
             CortexEvent::SessionCreated(session_id) => {
@@ -174,7 +183,6 @@ impl EmotivAdapter {
                     // DataLabels hasn't arrived yet — forward all samples.
                     data.samples.clone()
                 };
-
 
                 if !channels.is_empty() {
                     self.pending.push_back(DeviceEvent::Eeg(EegFrame {

@@ -144,6 +144,15 @@ pub(crate) async fn run_device_session(
                         break;
                     }
                     DeviceEvent::Eeg(frame) => {
+                        // Log the first few EEG frames for debugging.
+                        if csv.is_none() {
+                            let n = frame.channels.len();
+                            let preview: Vec<String> = frame.channels.iter()
+                                .take(4).map(|v| format!("{v:.1}")).collect();
+                            app_log!(app, "bluetooth",
+                                "[{kind}] first EEG frame: {n} channels, preview={preview:?}, \
+                                 pipeline_ch={pipeline_ch}");
+                        }
                         // Re-check pipeline_channels for adapters that
                         // auto-detect (Emotiv DataLabels / first packet).
                         if desc_may_change {
