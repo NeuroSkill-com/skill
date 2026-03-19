@@ -1009,7 +1009,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             if pref.is_some() { s.pending_reconnect = true; }
             pref
         };
-        start_session(&app_auto, preferred);
+        // Only auto-connect if there's a paired device.  On first launch
+        // (no paired devices) the user must discover and pair manually —
+        // except that the first successful connection auto-pairs as a
+        // convenience (handled in on_connected).
+        if preferred.is_some() {
+            start_session(&app_auto, preferred);
+        }
     });
 
     let app_cal = app.handle().clone();

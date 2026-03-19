@@ -165,12 +165,9 @@ pub(crate) async fn bluetooth_ok() -> Result<(), (String, bool)> {
 /// `is_idle` becomes false and this guard cannot fire again while a
 /// connection attempt is in flight.
 fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
-    // USB serial devices are discovered via a trusted transport where the
-    // identity is reliable — auto-connect even if not explicitly paired.
-    // Cortex devices are NOT auto-connected unless explicitly paired,
-    // because the Launcher may expose multiple headsets and the user
-    // should choose which one to use.
-    let trusted_transport = id.starts_with("usb:");
+    // Only auto-connect devices the user has explicitly paired.
+    // Exception: legacy "cortex:emotiv" paired entries match any cortex
+    // headset (migration compat from before individual IDs were tracked).
     let should_auto = {
         let r = app.app_state();
         let g = r.lock_or_recover();
@@ -178,12 +175,9 @@ fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
             && !g.pending_reconnect
             && matches!(g.status.state.as_str(), "disconnected");
         let is_paired = g.status.paired_devices.iter().any(|d| d.id == id);
-        // Legacy compat: if user has "cortex:emotiv" paired from before the
-        // multi-headset update, treat any cortex headset as paired so they
-        // don't lose auto-connect after the upgrade.
         let legacy_cortex_paired = id.starts_with("cortex:")
             && g.status.paired_devices.iter().any(|d| d.id == "cortex:emotiv");
-        is_idle && (is_paired || legacy_cortex_paired || trusted_transport)
+        is_idle && (is_paired || legacy_cortex_paired)
     };
     if should_auto {
         let msg = format!("Auto-connecting to paired device {display_name}");

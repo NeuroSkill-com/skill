@@ -323,7 +323,33 @@ fn on_connected(
     app_log!(app, "bluetooth", "[{kind}] connected: {} (id={dev_id})", info.name);
     crate::device_scanner::device_log("session",
         &format!("[{kind}] Connected: {} (id={dev_id})", info.name));
-    upsert_paired(app, &dev_id, &info.name);
+    // Auto-pair ONLY on first launch (no paired devices at all) so the user
+    // can test immediately.  Otherwise, only update existing paired entries
+    // (e.g. refresh last_seen timestamp, name).  The user must explicitly
+    // click "Pair" for new devices.
+    {
+        let is_already_paired = {
+            let r = app.app_state();
+            let g = r.lock_or_recover();
+            g.status.paired_devices.iter().any(|d| d.id == dev_id)
+        };
+        let first_time = {
+            let r = app.app_state();
+            let g = r.lock_or_recover();
+            g.status.paired_devices.is_empty()
+        };
+
+        if is_already_paired {
+            // Just refresh the existing entry (last_seen, name).
+            upsert_paired(app, &dev_id, &info.name);
+        } else if first_time {
+            // First-time onboarding: auto-pair the first device.
+            app_log!(app, "bluetooth",
+                "[{kind}] first-time auto-pair: {dev_id}");
+            upsert_paired(app, &dev_id, &info.name);
+        }
+        // else: device not paired and not first-time → don't auto-pair.
+    }
 
     // Migrate legacy "cortex:emotiv" → "cortex:<headset_id>" so paired and
     // discovered lists match by exact ID.  This is a one-time migration for
@@ -333,18 +359,15 @@ fn on_connected(
         if real_id != dev_id {
             app_log!(app, "bluetooth",
                 "[{kind}] migrating paired ID: {dev_id} → {real_id}");
-            // Add the real ID as paired, remove the legacy one.
             upsert_paired(app, &real_id, &info.name);
             {
                 let r = app.app_state();
                 let mut s = r.lock_or_recover();
                 s.status.paired_devices.retain(|d| d.id != "cortex:emotiv");
                 s.discovered.retain(|d| d.id != "cortex:emotiv");
-                // Update preferred ID if it was the legacy one.
                 if s.preferred_id.as_deref() == Some("cortex:emotiv") {
                     s.preferred_id = Some(real_id.clone());
                 }
-                // Pin the real ID as the current device.
                 s.status.device_id = Some(real_id);
             }
             crate::helpers::save_settings(app);
