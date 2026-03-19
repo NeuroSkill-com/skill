@@ -434,6 +434,129 @@ mod hermes_tests {
     }
 }
 
+// ── Emotiv adapter ────────────────────────────────────────────────────────────
+
+mod emotiv_tests {
+    use super::*;
+    use crate::session::emotiv::EmotivAdapter;
+    use emotiv::prelude::*;
+    use tokio::sync::mpsc;
+
+    #[tokio::test]
+    async fn emotiv_translates_eeg_event() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::SessionCreated("ses-1".into())).await.unwrap();
+        tx.send(CortexEvent::Eeg(EegData {
+            samples: vec![1.0, 2.0, 3.0, 4.0, 5.0],
+            time: 1700000000.0,
+        })).await.unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        // First: Connected from SessionCreated
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Connected(_)));
+
+        // Second: EEG
+        let ev = adapter.next_event().await.unwrap();
+        match ev {
+            DeviceEvent::Eeg(frame) => {
+                assert_eq!(frame.channels.len(), 5);
+                assert!((frame.timestamp_s - 1700000000.0).abs() < f64::EPSILON);
+            }
+            other => panic!("expected Eeg, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn emotiv_stop_all_streams_triggers_disconnect() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::Warning {
+            code: emotiv::protocol::CORTEX_STOP_ALL_STREAMS,
+            message: serde_json::Value::Null,
+        }).await.unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    #[tokio::test]
+    async fn emotiv_close_session_triggers_disconnect() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::Warning {
+            code: emotiv::protocol::CORTEX_CLOSE_SESSION,
+            message: serde_json::Value::Null,
+        }).await.unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    #[tokio::test]
+    async fn emotiv_error_triggers_disconnect() {
+        let (tx, rx) = mpsc::channel(16);
+
+        tx.send(CortexEvent::Error("connection lost".into())).await.unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    #[tokio::test]
+    async fn emotiv_other_warnings_ignored() {
+        let (tx, rx) = mpsc::channel(16);
+
+        // HEADSET_CONNECTED = 104 — informational, not a disconnect
+        tx.send(CortexEvent::Warning {
+            code: emotiv::protocol::HEADSET_CONNECTED,
+            message: serde_json::Value::Null,
+        }).await.unwrap();
+        // Follow with a real disconnect to terminate
+        tx.send(CortexEvent::Disconnected).await.unwrap();
+        drop(tx);
+
+        let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
+        let mut adapter = EmotivAdapter::new_for_test(rx, 5, names);
+
+        // The warning should be skipped; first real event should be Disconnected
+        let ev = adapter.next_event().await.unwrap();
+        assert!(matches!(ev, DeviceEvent::Disconnected));
+    }
+
+    #[test]
+    fn emotiv_descriptor_correct() {
+        let (_, rx) = mpsc::channel(16);
+        let names: Vec<String> = (0..14).map(|i| format!("Ch{i}")).collect();
+        let adapter = EmotivAdapter::new_for_test(rx, 14, names);
+
+        let desc = adapter.descriptor();
+        assert_eq!(desc.kind, "emotiv");
+        assert_eq!(desc.eeg_channels, 14);
+        assert!((desc.eeg_sample_rate - 128.0).abs() < f64::EPSILON);
+        assert!(desc.caps.contains(DeviceCaps::EEG));
+        assert!(desc.caps.contains(DeviceCaps::IMU));
+        assert!(desc.caps.contains(DeviceCaps::BATTERY));
+        assert!(!desc.caps.contains(DeviceCaps::PPG));
+    }
+}
+
 // ── OpenBCI adapter ───────────────────────────────────────────────────────────
 
 mod openbci_tests {

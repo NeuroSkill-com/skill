@@ -21,6 +21,7 @@ use std::collections::VecDeque;
 use tokio::sync::mpsc;
 
 use emotiv::prelude::*;
+use emotiv::protocol::{CORTEX_STOP_ALL_STREAMS, CORTEX_CLOSE_SESSION};
 use skill_constants::{
     EEG_CHANNELS,
     EMOTIV_EPOC_EEG_CHANNELS, EMOTIV_EPOC_CHANNEL_NAMES,
@@ -194,8 +195,25 @@ impl EmotivAdapter {
                 }
             }
 
+            CortexEvent::Warning { code, .. }
+                if code == CORTEX_STOP_ALL_STREAMS || code == CORTEX_CLOSE_SESSION =>
+            {
+                // The Cortex service signals that the headset has
+                // disconnected (or all streams were stopped).  Treat this as
+                // a device-level disconnect so the session runner exits
+                // immediately rather than waiting for the data watchdog.
+                self.pending.push_back(DeviceEvent::Disconnected);
+            }
+
+            CortexEvent::Error(_) => {
+                // A Cortex API / transport error.  Surface it as a
+                // disconnect so the session runner can trigger reconnect.
+                self.pending.push_back(DeviceEvent::Disconnected);
+            }
+
             // Performance metrics, band power, mental commands, facial expressions,
-            // system events, records, markers, profiles — not forwarded to session runner.
+            // system events, records, markers, profiles, other warnings — not
+            // forwarded to session runner.
             _ => {}
         }
     }
