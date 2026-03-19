@@ -138,14 +138,20 @@ impl QualityMonitor {
 
         let n = buf.len() as f64;
 
-        // ── RMS ────────────────────────────────────────────────────────────
-        let rms = (buf.iter().map(|&x| x * x).sum::<f64>() / n).sqrt();
+        // ── AC-coupled RMS ─────────────────────────────────────────────────
+        // Subtract the mean (DC offset) before computing RMS.  Emotiv and
+        // other DC-coupled devices report EEG with a large baseline offset
+        // (e.g. ~4200 µV).  Without DC removal, the RMS is dominated by the
+        // offset and every channel reads as "Poor".  For Muse (AC-coupled,
+        // mean ≈ 0) this is a no-op.
+        let mean = buf.iter().sum::<f64>() / n;
+        let rms = (buf.iter().map(|&x| { let ac = x - mean; ac * ac }).sum::<f64>() / n).sqrt();
 
         if rms < THRESH_NO_SIGNAL_RMS {
             return SignalQuality::NoSignal;
         }
 
-        // ── Clip count ─────────────────────────────────────────────────────
+        // ── Clip count (uses absolute values — DC offset doesn't matter) ──
         let clips = buf.iter().filter(|&&x| x.abs() > THRESH_CLIP_UV).count();
 
         if clips >= THRESH_POOR_CLIPS || rms > THRESH_POOR_RMS {
@@ -185,8 +191,21 @@ mod tests {
     #[test]
     fn flat_low_amplitude_is_no_signal() {
         let mut m = monitor();
-        fill(&mut m, &vec![2.0; WINDOW]);   // 2 µV < THRESH_NO_SIGNAL_RMS=5
+        // Constant 2 µV — AC RMS = 0 after DC removal → NoSignal
+        fill(&mut m, &vec![2.0; WINDOW]);
         assert_eq!(q(&m), SignalQuality::NoSignal);
+    }
+
+    #[test]
+    fn dc_offset_with_small_ac_is_good() {
+        let mut m = monitor();
+        // 4200 µV DC offset + 30 µV sine — simulates Emotiv Insight.
+        // AC RMS ≈ 21 µV → Good (DC offset is removed).
+        let samples: Vec<f64> = (0..WINDOW)
+            .map(|i| 4200.0 + 30.0 * (2.0 * std::f64::consts::PI * 10.0 * i as f64 / 256.0).sin())
+            .collect();
+        fill(&mut m, &samples);
+        assert_eq!(q(&m), SignalQuality::Good);
     }
 
     #[test]
@@ -220,16 +239,22 @@ mod tests {
     #[test]
     fn elevated_rms_is_fair() {
         let mut m = monitor();
-        // 120 µV constant — above THRESH_FAIR_RMS=100, below THRESH_POOR_RMS=400
-        fill(&mut m, &vec![120.0; WINDOW]);
+        // 170 µV sine → AC RMS ≈ 120 µV — above THRESH_FAIR_RMS=100, below THRESH_POOR_RMS=400
+        let samples: Vec<f64> = (0..WINDOW)
+            .map(|i| 170.0 * (2.0 * std::f64::consts::PI * 10.0 * i as f64 / 256.0).sin())
+            .collect();
+        fill(&mut m, &samples);
         assert_eq!(q(&m), SignalQuality::Fair);
     }
 
     #[test]
     fn high_rms_is_poor() {
         let mut m = monitor();
-        // 450 µV constant — above THRESH_POOR_RMS=400
-        fill(&mut m, &vec![450.0; WINDOW]);
+        // 640 µV sine → AC RMS ≈ 450 µV — above THRESH_POOR_RMS=400
+        let samples: Vec<f64> = (0..WINDOW)
+            .map(|i| 640.0 * (2.0 * std::f64::consts::PI * 10.0 * i as f64 / 256.0).sin())
+            .collect();
+        fill(&mut m, &samples);
         assert_eq!(q(&m), SignalQuality::Poor);
     }
 
