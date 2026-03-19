@@ -165,9 +165,12 @@ pub(crate) async fn bluetooth_ok() -> Result<(), (String, bool)> {
 /// `is_idle` becomes false and this guard cannot fire again while a
 /// connection attempt is in flight.
 fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
-    // Cortex and USB devices are discovered via trusted transports —
-    // auto-connect even if not explicitly paired.
-    let trusted_transport = id.starts_with("cortex:") || id.starts_with("usb:");
+    // USB serial devices are discovered via a trusted transport where the
+    // identity is reliable — auto-connect even if not explicitly paired.
+    // Cortex devices are NOT auto-connected unless explicitly paired,
+    // because the Launcher may expose multiple headsets and the user
+    // should choose which one to use.
+    let trusted_transport = id.starts_with("usb:");
     let should_auto = {
         let r = app.app_state();
         let g = r.lock_or_recover();
@@ -175,7 +178,12 @@ fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
             && !g.pending_reconnect
             && matches!(g.status.state.as_str(), "disconnected");
         let is_paired = g.status.paired_devices.iter().any(|d| d.id == id);
-        is_idle && (is_paired || trusted_transport)
+        // Legacy compat: if user has "cortex:emotiv" paired from before the
+        // multi-headset update, treat any cortex headset as paired so they
+        // don't lose auto-connect after the upgrade.
+        let legacy_cortex_paired = id.starts_with("cortex:")
+            && g.status.paired_devices.iter().any(|d| d.id == "cortex:emotiv");
+        is_idle && (is_paired || legacy_cortex_paired || trusted_transport)
     };
     if should_auto {
         let msg = format!("Auto-connecting to paired device {display_name}");
@@ -555,8 +563,8 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                     continue;
                 }
 
-                // Register each headset as a separate discovered device.
-                let mut changed = false;
+                // Phase 1: register ALL headsets as discovered devices so the
+                // UI shows the complete list before any auto-connect fires.
                 for hs in &headsets {
                     let id = format!("cortex:{}", hs.id);
                     let display_name = &hs.id; // e.g. "EPOCX-A1B2C3D4"
@@ -564,12 +572,19 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                         let msg = format!("{} status={}", hs.id, hs.status);
                         app_log!(app, "scanner", "[cortex] {msg}");
                         device_log("cortex", &msg);
-                        changed = true;
                     }
                     upsert_discovered(&app, &id, display_name, 0);
-                    try_auto_connect(&app, &id, display_name);
                 }
-                if changed { emit_devices(&app); }
+                // Emit the device list so the frontend sees all headsets.
+                // We emit on every poll (not just first discovery) because
+                // upsert_discovered updates last_seen timestamps.
+                emit_devices(&app);
+
+                // Phase 2: attempt auto-connect for any paired headset.
+                for hs in &headsets {
+                    let id = format!("cortex:{}", hs.id);
+                    try_auto_connect(&app, &id, &hs.id);
+                }
             }
         }
     }
