@@ -264,6 +264,8 @@ const ui: Record<string, string> = {
   "devices.noPairedHint":      "Power on your BCI headset and it will appear here once discovered. Pair it to enable automatic connections.",
   "devices.noDiscovered":      "No nearby devices",
   "devices.noDiscoveredHint":  "Power on your BCI headset and place it within Bluetooth range. Discovered devices will appear here automatically.",
+  "devices.deviceSingular":    "device",
+  "devices.devicePlural":      "devices",
 };
 
 export default ui;

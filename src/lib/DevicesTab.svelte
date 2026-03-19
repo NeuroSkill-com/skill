@@ -587,17 +587,26 @@ the Free Software Foundation, version 3 only. -->
     </div>
 
     <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-      <CardContent class="flex flex-col gap-2 p-3">
-        {#each filteredCompanies as company, i (company.id)}
-          {#if i > 0}<Separator class="bg-border dark:bg-white/[0.04]" />{/if}
-
-          <div class="flex flex-col gap-1.5">
+      <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+        {#each filteredCompanies as company (company.id)}
+          <div class="flex flex-col">
             <button
               onclick={() => expandSupportedCompany(company.id)}
-              class="flex items-center justify-between w-full"
+              class="flex items-center gap-3 w-full px-3.5 py-2.5 hover:bg-muted/30 transition-colors"
               aria-expanded={supportedCompanyExpanded === company.id}
             >
+              <!-- Tiny preview: first device image -->
+              {#if company.devices.length > 0}
+                <div class="w-8 h-8 rounded-md overflow-hidden shrink-0 bg-muted/40 dark:bg-white/[0.04]">
+                  <img src={company.devices[0].image} alt="" class="w-full h-full object-cover" />
+                </div>
+              {/if}
+              <div class="flex flex-col items-start gap-0 flex-1 min-w-0">
                 <span class="text-[0.7rem] font-semibold text-foreground">{t(company.name_key)}</span>
+                <span class="text-[0.56rem] text-muted-foreground/60">
+                  {company.devices.length} {company.devices.length === 1 ? t("devices.deviceSingular") : t("devices.devicePlural")}
+                </span>
+              </div>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                    class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
@@ -606,30 +615,29 @@ the Free Software Foundation, version 3 only. -->
               </svg>
             </button>
 
-            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5">
-              {#each company.devices as item (item.name_key)}
-                <button
-                  onclick={() => expandSupportedCompany(company.id)}
-                  class="flex flex-col items-stretch gap-1 rounded-lg border border-border/70
-                         dark:border-white/[0.06] bg-background/60 px-2 py-2 hover:bg-muted/50
-                         min-h-[100px]"
-                  aria-label={`${t(company.name_key)} ${t(item.name_key)}`}
-                >
-                  <div class="w-full h-14 rounded-md overflow-hidden">
-                    <img src={item.image} alt={t(item.name_key)} class="w-full h-full object-cover" />
-                  </div>
-                  <span class="text-[0.59rem] text-center leading-tight text-foreground/85 min-h-[24px] flex items-center justify-center">{t(item.name_key)}</span>
-                </button>
-              {/each}
-            </div>
-
             {#if supportedCompanyExpanded === company.id}
-              <div class="rounded-lg border border-border/70 dark:border-white/[0.06] bg-muted/40 px-3 py-2.5">
-                <p class="text-[0.64rem] font-medium text-foreground/85 mb-1">{t("settings.supportedDevices.howToConnect")}</p>
-                <div class="flex flex-col gap-1">
-                  {#each company.instruction_keys as lineKey (lineKey)}
-                    <p class="text-[0.62rem] text-muted-foreground leading-relaxed">• {t(lineKey)}</p>
+              <div class="px-3.5 pb-3 flex flex-col gap-2">
+                <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5">
+                  {#each company.devices as item (item.name_key)}
+                    <div
+                      class="flex flex-col items-stretch gap-0.5 rounded-md border border-border/50
+                             dark:border-white/[0.05] bg-background/60 px-1.5 py-1.5"
+                    >
+                      <div class="w-full h-10 rounded overflow-hidden">
+                        <img src={item.image} alt={t(item.name_key)} class="w-full h-full object-cover" />
+                      </div>
+                      <span class="text-[0.52rem] text-center leading-tight text-foreground/75 truncate">{t(item.name_key)}</span>
+                    </div>
                   {/each}
+                </div>
+
+                <div class="rounded-md border border-border/50 dark:border-white/[0.05] bg-muted/30 px-2.5 py-2">
+                  <p class="text-[0.6rem] font-medium text-foreground/80 mb-0.5">{t("settings.supportedDevices.howToConnect")}</p>
+                  <div class="flex flex-col gap-0.5">
+                    {#each company.instruction_keys as lineKey (lineKey)}
+                      <p class="text-[0.56rem] text-muted-foreground leading-relaxed">• {t(lineKey)}</p>
+                    {/each}
+                  </div>
                 </div>
               </div>
             {/if}

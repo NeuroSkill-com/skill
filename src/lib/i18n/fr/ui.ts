@@ -265,6 +265,8 @@ const ui: Record<string, string> = {
   "devices.noPairedHint":      "Allumez votre casque BCI et il apparaîtra ici une fois découvert. Appairez-le pour activer les connexions automatiques.",
   "devices.noDiscovered":      "Aucun appareil à proximité",
   "devices.noDiscoveredHint":  "Allumez votre casque BCI et placez-le à portée Bluetooth. Les appareils découverts apparaîtront ici automatiquement.",
+  "devices.deviceSingular":    "appareil",
+  "devices.devicePlural":      "appareils",
 };
 
 export default ui;

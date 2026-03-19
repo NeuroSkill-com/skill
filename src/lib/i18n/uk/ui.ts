@@ -265,6 +265,8 @@ const ui: Record<string, string> = {
   "devices.noPairedHint":      "Увімкніть BCI-гарнітуру, і вона з'явиться тут після виявлення. Підключіть її для автоматичних з'єднань.",
   "devices.noDiscovered":      "Немає пристроїв поблизу",
   "devices.noDiscoveredHint":  "Увімкніть BCI-гарнітуру та розмістіть її в зоні дії Bluetooth. Виявлені пристрої з'являться тут автоматично.",
+  "devices.deviceSingular":    "пристрій",
+  "devices.devicePlural":      "пристроїв",
 };
 
 export default ui;

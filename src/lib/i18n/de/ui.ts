@@ -265,6 +265,8 @@ const ui: Record<string, string> = {
   "devices.noPairedHint":      "Schalten Sie Ihr BCI-Headset ein. Es erscheint hier, sobald es erkannt wird. Koppeln Sie es für automatische Verbindungen.",
   "devices.noDiscovered":      "Keine Geräte in der Nähe",
   "devices.noDiscoveredHint":  "Schalten Sie Ihr BCI-Headset ein und platzieren Sie es in Bluetooth-Reichweite. Erkannte Geräte erscheinen hier automatisch.",
+  "devices.deviceSingular":    "Gerät",
+  "devices.devicePlural":      "Geräte",
 };
 
 export default ui;

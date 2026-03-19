@@ -265,6 +265,8 @@ const ui: Record<string, string> = {
   "devices.noPairedHint":      "הפעל את אוזניות ה-BCI שלך והיא תופיע כאן לאחר זיהוי. שייך אותה לחיבורים אוטומטיים.",
   "devices.noDiscovered":      "אין מכשירים בקרבת מקום",
   "devices.noDiscoveredHint":  "הפעל את אוזניות ה-BCI שלך ומקם אותה בטווח Bluetooth. מכשירים שזוהו יופיעו כאן באופן אוטומטי.",
+  "devices.deviceSingular":    "מכשיר",
+  "devices.devicePlural":      "מכשירים",
 };
 
 export default ui;

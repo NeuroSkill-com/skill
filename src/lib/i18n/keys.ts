@@ -570,6 +570,8 @@ export type TranslationKey =
   | "devices.discoveredDevices"
   | "devices.noDiscovered"
   | "devices.noDiscoveredHint"
+  | "devices.deviceSingular"
+  | "devices.devicePlural"
   | "devices.noPaired"
   | "devices.noPairedHint"
   | "devices.pairedCount"
