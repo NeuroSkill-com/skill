@@ -43,8 +43,8 @@ const LIST_MODE = cliArgs.includes("--list");
 // ── Timing constants ────────────────────────────────────────────────────────
 const F   = 120;     // default frame delay (ms) in GIF playback
 const H   = 1400;    // hold/pause frame delay
-const PG  = 3000;    // wait for page to fully render after navigation
-const TAB = 1000;    // wait after clicking a tab or toggle for content to render
+const PG  = 4000;    // wait for page to fully render after navigation
+const TAB = 1500;    // wait after clicking a tab or toggle for content to render
 const SCR = 60;      // delay between scroll sub-frames
 
 // Content area selector used inside settings tabs.
@@ -972,12 +972,22 @@ async function main() {
               case "hold": await cap(step.d); break;
 
               case "scroll": {
-                const sel = await findScrollable(page, step.sel);
                 const per = step.px / step.n;
                 for (let i = 0; i < step.n; i++) {
-                  await page.evaluate(({s,a})=>{
-                    (document.querySelector(s)||document.scrollingElement||document.body).scrollBy({top:a,behavior:"instant"});
-                  }, {s:sel,a:per});
+                  await page.evaluate((amt) => {
+                    // Find the actual scrollable container: check main, then
+                    // any overflow-y-auto/scroll element, then body/html.
+                    const candidates = [
+                      document.querySelector('main'),
+                      ...Array.from(document.querySelectorAll('.overflow-y-auto, .overflow-y-scroll, [style*="overflow-y: auto"], [style*="overflow-y: scroll"]')),
+                    ].filter(Boolean);
+                    let target = null;
+                    for (const el of candidates) {
+                      if (el.scrollHeight > el.clientHeight + 5) { target = el; break; }
+                    }
+                    if (!target) target = document.scrollingElement || document.body;
+                    target.scrollTop += amt;
+                  }, per);
                   await page.waitForTimeout(SCR);
                   await cap(F);
                 }
