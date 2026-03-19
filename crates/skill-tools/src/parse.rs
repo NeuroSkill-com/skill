@@ -410,17 +410,19 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
         }
     }
 
-    // Post-process: redirect Skill API sub-commands called as top-level tools.
-    // Small models frequently emit {"name":"status"} instead of
+    // Post-process: redirect Skill API sub-commands and neuroskill aliases
+    // called as top-level tools.  Small models frequently emit
+    // {"name":"status"} or {"name":"neuroskill-status"} instead of
     // {"name":"skill","arguments":{"command":"status"}}.  Fix it here so all
     // downstream code (orchestrator, exec) sees the correct tool name.
     for tc in &mut calls {
-        if !KNOWN_TOOL_NAMES.contains(&tc.function.name.as_str())
-            && crate::defs::is_skill_api_command(&tc.function.name)
-        {
+        if KNOWN_TOOL_NAMES.contains(&tc.function.name.as_str()) {
+            continue;
+        }
+        if let Some(cmd) = crate::defs::resolve_skill_alias(&tc.function.name) {
             let orig_args: Value = serde_json::from_str(&tc.function.arguments)
                 .unwrap_or_else(|_| serde_json::json!({}));
-            let mut redirected = serde_json::json!({ "command": tc.function.name });
+            let mut redirected = serde_json::json!({ "command": cmd });
             if let Some(obj) = orig_args.as_object() {
                 if !obj.is_empty() {
                     redirected["args"] = orig_args;
@@ -1411,6 +1413,49 @@ df -h
         let calls = extract_tool_calls(msg);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].function.name, "date");
+    }
+
+    #[test]
+    fn redirect_neuroskill_alias() {
+        // "neuroskill" alone → skill(command: "status")
+        let msg = r#"[TOOL_CALL]{"name":"neuroskill","arguments":{}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "skill");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "status");
+    }
+
+    #[test]
+    fn redirect_neuroskill_hyphenated() {
+        // "neuroskill-status" → skill(command: "status")
+        let msg = r#"[TOOL_CALL]{"name":"neuroskill-status","arguments":{}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "skill");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "status");
+    }
+
+    #[test]
+    fn redirect_neuroskill_sessions() {
+        let msg = r#"[TOOL_CALL]{"name":"neuroskill-sessions","arguments":{}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "skill");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "sessions");
+    }
+
+    #[test]
+    fn redirect_neuroskill_hooks() {
+        // "neuroskill-hooks" → skill(command: "hooks_status")
+        let msg = r#"[TOOL_CALL]{"name":"neuroskill-hooks","arguments":{}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "skill");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "hooks_status");
     }
 
     #[test]

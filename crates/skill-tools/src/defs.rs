@@ -313,6 +313,61 @@ pub fn is_skill_api_command(name: &str) -> bool {
     )
 }
 
+/// Try to resolve a tool name to a `("skill", "<command>")` redirect.
+///
+/// Handles:
+/// - Bare sub-commands: `"status"` → `Some("status")`
+/// - `neuroskill` alias: `"neuroskill"` → `Some("status")` (default command)
+/// - Hyphenated form: `"neuroskill-status"` → `Some("status")`
+/// - Underscore form:  `"neuroskill_sessions"` → `Some("sessions")`
+///
+/// Returns `None` if the name is not a skill-related alias.
+pub fn resolve_skill_alias(name: &str) -> Option<String> {
+    // Exact sub-command match.
+    if is_skill_api_command(name) {
+        return Some(name.to_string());
+    }
+
+    // "neuroskill" alone → default to "status".
+    if name == "neuroskill" {
+        return Some("status".to_string());
+    }
+
+    // "neuroskill-<cmd>" or "neuroskill_<cmd>" patterns.
+    let suffix = name
+        .strip_prefix("neuroskill-")
+        .or_else(|| name.strip_prefix("neuroskill_"));
+
+    if let Some(cmd) = suffix {
+        // Map known skill names to their API command.
+        // Some skill folder names differ from command names (e.g.
+        // "neuroskill-hooks" → "hooks_status" as a default, but we
+        // use the base name if it's a valid command, otherwise try
+        // common suffixes).
+        let normalised = cmd.replace('-', "_");
+        if is_skill_api_command(&normalised) {
+            return Some(normalised);
+        }
+        // Skill folder names map to a primary command:
+        match cmd {
+            "hooks"        => return Some("hooks_status".to_string()),
+            "labels"       => return Some("search_labels".to_string()),
+            "search"       => return Some("interactive_search".to_string()),
+            "dnd"          => return Some("dnd".to_string()),
+            "llm"          => return Some("llm_status".to_string()),
+            "protocols"    => return Some("list_calibrations".to_string()),
+            "screenshots"  => return Some("status".to_string()),
+            "streaming"    => return Some("status".to_string()),
+            "transport"    => return Some("status".to_string()),
+            "recipes"      => return Some("status".to_string()),
+            "data-reference" | "data_reference" => return Some("status".to_string()),
+            _ => {}
+        }
+    }
+
+    None
+}
+
 /// Check whether a builtin tool is enabled in the current config.
 /// Returns `false` for every tool when the master `enabled` flag is off.
 pub fn is_builtin_tool_enabled(config: &LlmToolConfig, name: &str) -> bool {

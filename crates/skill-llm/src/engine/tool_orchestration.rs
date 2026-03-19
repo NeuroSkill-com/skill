@@ -417,21 +417,21 @@ fn validate_and_prepare(
     tool_defs: &std::collections::HashMap<String, tools::Tool>,
     allowed_tools: &config::LlmToolConfig,
 ) -> Result<Value, Value> {
-    // Auto-redirect: Skill API sub-command used as top-level tool.
-    if !skill_tools::defs::is_known_builtin_tool(&tc.function.name)
-        && skill_tools::defs::is_skill_api_command(&tc.function.name)
-    {
-        let orig_args: Value = serde_json::from_str(&tc.function.arguments)
-            .unwrap_or_else(|_| json!({}));
-        let mut redirected = json!({ "command": tc.function.name });
-        if let Some(obj) = orig_args.as_object() {
-            if !obj.is_empty() {
-                redirected["args"] = orig_args;
+    // Auto-redirect: Skill API sub-command or neuroskill alias used as tool.
+    if !skill_tools::defs::is_known_builtin_tool(&tc.function.name) {
+        if let Some(cmd) = skill_tools::defs::resolve_skill_alias(&tc.function.name) {
+            let orig_args: Value = serde_json::from_str(&tc.function.arguments)
+                .unwrap_or_else(|_| json!({}));
+            let mut redirected = json!({ "command": cmd });
+            if let Some(obj) = orig_args.as_object() {
+                if !obj.is_empty() {
+                    redirected["args"] = orig_args;
+                }
             }
+            log::info!("[tool-redirect] {} → skill({})", tc.function.name, cmd);
+            tc.function.name = "skill".to_string();
+            tc.function.arguments = redirected.to_string();
         }
-        log::info!("[tool-redirect] {} → skill({})", tc.function.name, tc.function.name);
-        tc.function.name = "skill".to_string();
-        tc.function.arguments = redirected.to_string();
     }
 
     if !skill_tools::defs::is_known_builtin_tool(&tc.function.name) {

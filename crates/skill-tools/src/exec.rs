@@ -19,18 +19,18 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
     let tool_name = &call.function.name;
 
     // Distinguish "unknown tool" from "known but disabled".
-    // When the name matches a Skill API sub-command, give a precise hint so
-    // the model self-corrects in one step instead of groping.
+    // When the name matches a Skill API sub-command or neuroskill alias,
+    // give a precise hint so the model self-corrects in one step.
     if !crate::defs::is_known_builtin_tool(tool_name) {
-        if crate::defs::is_skill_api_command(tool_name) {
-            tool_log!("tool", "[blocked] tool={} reason=skill sub-command used as tool", tool_name);
+        if let Some(cmd) = crate::defs::resolve_skill_alias(tool_name) {
+            tool_log!("tool", "[blocked] tool={} reason=skill alias, should be skill({})", tool_name, cmd);
             return json!({
                 "ok": false,
                 "tool": call.function.name,
                 "error": format!(
-                    "\"{}\" is not a top-level tool — it is a Skill API command. \
+                    "\"{}\" is not a top-level tool — it maps to the \"skill\" tool. \
                      Call the \"skill\" tool with {{\"command\": \"{}\"}} instead.",
-                    tool_name, tool_name
+                    tool_name, cmd
                 )
             });
         }
