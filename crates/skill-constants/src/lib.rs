@@ -51,7 +51,8 @@ pub mod prelude {
         GANGLION_SAMPLE_RATE, GANGLION_CHANNEL_NAMES,
         HERMES_EEG_CHANNELS, HERMES_SAMPLE_RATE, HERMES_CHANNEL_NAMES,
         MW75_EEG_CHANNELS, MW75_SAMPLE_RATE, MW75_CHANNEL_NAMES,
-        EMOTIV_EPOC_EEG_CHANNELS, EMOTIV_INSIGHT_EEG_CHANNELS, EMOTIV_SAMPLE_RATE,
+        EMOTIV_EPOC_EEG_CHANNELS, EMOTIV_INSIGHT_EEG_CHANNELS,
+        EMOTIV_SAMPLE_RATE, EMOTIV_SAMPLE_RATE_256, emotiv_sample_rate_from_id,
         EMOTIV_EPOC_CHANNEL_NAMES, EMOTIV_INSIGHT_CHANNEL_NAMES,
         IDUN_EEG_CHANNELS, IDUN_SAMPLE_RATE, IDUN_CHANNEL_NAMES,
         // Filter
@@ -156,14 +157,42 @@ pub const MW75_CHANNEL_NAMES: [&str; MW75_EEG_CHANNELS] = [
     "FT8", "T8", "TP8", "CP6", "P8", "C6",
 ];
 
-/// Emotiv EPOC X / EPOC+ EEG channel count (14 channels at 128 Hz).
+/// Emotiv EPOC X / EPOC+ EEG channel count (14 channels).
 pub const EMOTIV_EPOC_EEG_CHANNELS: usize = 14;
 
-/// Emotiv Insight EEG channel count (5 channels at 128 Hz).
+/// Emotiv Insight EEG channel count (5 channels).
 pub const EMOTIV_INSIGHT_EEG_CHANNELS: usize = 5;
 
-/// Emotiv hardware sample rate (Hz) — Cortex API streams at 128 Hz.
+/// Emotiv default sample rate (Hz) — used as fallback when the model is
+/// unknown.  EPOC X, EPOC+, EPOC Flex, Insight 2, and MN8 stream at 256 Hz;
+/// older EPOC (standard) and Insight 1 stream at 128 Hz.
 pub const EMOTIV_SAMPLE_RATE: f64 = 128.0;
+
+/// Emotiv EPOC X / EPOC+ / EPOC Flex / Insight 2 / MN8 sample rate (Hz).
+pub const EMOTIV_SAMPLE_RATE_256: f64 = 256.0;
+
+/// Derive the Emotiv EEG sample rate from the headset ID prefix.
+///
+/// Headset IDs follow the pattern `MODEL-SERIAL` (e.g. `EPOCPLUS-06F2DDBC`,
+/// `INSIGHT-5AF2C39E`, `EPOCX-A1B2C3D4`, `EPOCFLEX-12345678`).
+///
+/// Returns 256 Hz for EPOC X, EPOC+, EPOC Flex, Insight 2, MN8, X-Trodes;
+/// 128 Hz for Insight (v1) and unknown models.
+pub fn emotiv_sample_rate_from_id(headset_id: &str) -> f64 {
+    let upper = headset_id.to_uppercase();
+    if upper.starts_with("EPOCX")
+        || upper.starts_with("EPOCPLUS")
+        || upper.starts_with("EPOCFLEX")
+        || upper.starts_with("INSIGHT2")
+        || upper.starts_with("MN8")
+        || upper.starts_with("XTRODES")
+    {
+        EMOTIV_SAMPLE_RATE_256
+    } else {
+        // Insight v1, legacy EPOC, unknown
+        EMOTIV_SAMPLE_RATE
+    }
+}
 
 /// Emotiv EPOC X / EPOC+ channel labels (14 electrodes, 10-20 extended).
 pub const EMOTIV_EPOC_CHANNEL_NAMES: [&str; EMOTIV_EPOC_EEG_CHANNELS] = [

@@ -25,7 +25,7 @@ use emotiv::protocol::{CORTEX_STOP_ALL_STREAMS, CORTEX_CLOSE_SESSION};
 use skill_constants::{
     EEG_CHANNELS,
     EMOTIV_EPOC_EEG_CHANNELS, EMOTIV_EPOC_CHANNEL_NAMES,
-    EMOTIV_SAMPLE_RATE,
+    emotiv_sample_rate_from_id,
 };
 
 use super::{
@@ -76,6 +76,7 @@ impl EmotivAdapter {
         channel_names: Vec<String>,
         headset_id: String,
     ) -> Self {
+        let sample_rate = emotiv_sample_rate_from_id(&headset_id);
         Self {
             rx,
             handle: Some(handle),
@@ -83,7 +84,7 @@ impl EmotivAdapter {
                 kind: "emotiv",
                 caps: DeviceCaps::EEG | DeviceCaps::IMU | DeviceCaps::BATTERY,
                 eeg_channels,
-                eeg_sample_rate: EMOTIV_SAMPLE_RATE,
+                eeg_sample_rate: sample_rate,
                 channel_names,
                 pipeline_channels: eeg_channels.min(EEG_CHANNELS),
             },
@@ -129,7 +130,7 @@ impl EmotivAdapter {
                 kind: "emotiv",
                 caps: DeviceCaps::EEG | DeviceCaps::IMU | DeviceCaps::BATTERY,
                 eeg_channels,
-                eeg_sample_rate: EMOTIV_SAMPLE_RATE,
+                eeg_sample_rate: emotiv_sample_rate_from_id("TEST-HEADSET"),
                 channel_names,
                 pipeline_channels: eeg_channels.min(EEG_CHANNELS),
             },
