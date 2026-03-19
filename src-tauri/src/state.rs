@@ -154,7 +154,7 @@ impl Default for DeviceStatus {
             device_error:           None,
             target_name:        None,
             filter_config:      FilterConfig::default(),
-            channel_quality:    vec![SignalQuality::default(); EEG_CHANNELS],
+            channel_quality:    Vec::new(),
             embedding_overlap_secs: EMBEDDING_OVERLAP_SECS,
             retry_attempt:      0,
             retry_countdown_secs: 0,
@@ -201,6 +201,7 @@ impl DeviceStatus {
         self.target_name         = None;
         self.retry_attempt       = 0;
         self.retry_countdown_secs = 0;
+        self.channel_quality     = Vec::new();
         self.channel_names       = Vec::new();
         self.eeg_channel_count   = 0;
         self.eeg_sample_rate_hz  = 0.0;

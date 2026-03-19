@@ -7,8 +7,6 @@ use std::time::Duration;
 
 use tauri::AppHandle;
 
-use skill_eeg::eeg_quality::SignalQuality;
-
 use crate::{
     helpers::{emit_status, unix_secs, AppStateExt},
     session_connect::ConnectError,
@@ -96,7 +94,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
         if !retry { s.status.device_error = error; }
         s.status.retry_attempt        = if retry { attempt + 1 } else { 0 };
         s.status.retry_countdown_secs = delay;
-        s.status.channel_quality = vec![SignalQuality::default(); crate::constants::EEG_CHANNELS];
+        s.status.channel_quality = Vec::new();
 
         s.stream       = None;
         s.battery_ema  = None;

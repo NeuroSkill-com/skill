@@ -138,7 +138,9 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
     };
 
     // ── Signal quality ───────────────────────────────────────────────────────
-    let channel_quality = status.channel_quality.clone();
+    // Only return entries for electrodes that actually exist on the device.
+    let n_ch = status.eeg_channel_count;
+    let channel_quality: Vec<_> = status.channel_quality.iter().take(n_ch).cloned().collect();
 
     // Snapshot scalars before dropping the lock.
     let state_str   = status.state.clone();
