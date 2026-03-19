@@ -103,7 +103,7 @@ pub struct DeviceStatus {
     pub battery:             f32,
     pub eeg:                 Vec<f64>,
     pub paired_devices:      Vec<PairedDevice>,
-    pub bt_error:            Option<String>,
+    pub device_error:            Option<String>,
     pub target_name:         Option<String>,
     pub filter_config:       FilterConfig,
     pub channel_quality:     Vec<SignalQuality>,
@@ -151,7 +151,7 @@ impl Default for DeviceStatus {
             battery:            0.0,
             eeg:                vec![f64::NAN; EEG_CHANNELS],
             paired_devices:     Vec::new(),
-            bt_error:           None,
+            device_error:           None,
             target_name:        None,
             filter_config:      FilterConfig::default(),
             channel_quality:    vec![SignalQuality::default(); EEG_CHANNELS],
@@ -197,7 +197,7 @@ impl DeviceStatus {
         self.eeg                 = vec![f64::NAN; EEG_CHANNELS];
         self.ppg                 = vec![0.0; 3];
         self.ppg_sample_count    = 0;
-        self.bt_error            = None;
+        self.device_error            = None;
         self.target_name         = None;
         self.retry_attempt       = 0;
         self.retry_countdown_secs = 0;
@@ -228,7 +228,7 @@ impl DeviceStatus {
         self.bootloader_version  = None;
         self.headset_preset      = None;
         self.csv_path            = Some(csv_path.to_string_lossy().into_owned());
-        self.bt_error            = None;
+        self.device_error            = None;
         self.battery             = 0.0;
         self.eeg                 = vec![f64::NAN; EEG_CHANNELS];
         self.sample_count        = 0;

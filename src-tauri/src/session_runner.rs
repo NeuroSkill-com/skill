@@ -312,7 +312,7 @@ fn on_connected(
         if let Some(ref v) = info.bootloader_version  { s.status.bootloader_version = Some(v.clone()); }
         if let Some(ref v) = info.mac_address         { s.status.mac_address        = Some(v.clone()); }
         if let Some(ref v) = info.headset_preset      { s.status.headset_preset     = Some(v.clone()); }
-        s.status.bt_error    = None;
+        s.status.device_error    = None;
         s.status.target_name = None;
         s.retry_attempt               = 0;
         s.status.retry_attempt        = 0;

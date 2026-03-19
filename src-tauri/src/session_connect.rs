@@ -22,7 +22,7 @@ use crate::{
     AppState, MutexExt, StreamHandle,
     emit_status,
 };
-use crate::device_scanner::{bluetooth_ok, classify_bt_error};
+use crate::device_scanner::{bluetooth_ok, classify_device_error};
 use crate::session_csv::new_csv_path;
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -63,7 +63,7 @@ pub(crate) async fn connect_muse(
         _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
         r = client.scan_all() => match r {
             Err(e) => {
-                let (m, _) = classify_bt_error(&e.to_string());
+                let (m, _) = classify_device_error(&e.to_string());
                 return Err(ConnectError::Bluetooth(m));
             }
             Ok(d) => d,
@@ -105,7 +105,7 @@ pub(crate) async fn connect_muse(
         _ = cancel.cancelled() => return Err(ConnectError::Cancelled),
         r = client.connect_to(device) => match r {
             Err(e) => {
-                let (m, _) = classify_bt_error(&e.to_string());
+                let (m, _) = classify_device_error(&e.to_string());
                 return Err(ConnectError::Bluetooth(m));
             }
             Ok(v) => v,
@@ -175,7 +175,7 @@ pub(crate) async fn connect_mw75(
         Ok(v) => v,
         Err(msg) => {
             app_log!(app, "bluetooth", "[mw75] connect failed: {msg}");
-            let (m, _) = classify_bt_error(&msg);
+            let (m, _) = classify_device_error(&msg);
             return Err(ConnectError::Bluetooth(format!(
                 "{m}\n\nTo pair MW75: hold the power button for 4+ seconds,\n\
                  then pair in System Bluetooth Settings."
@@ -305,7 +305,7 @@ pub(crate) async fn connect_hermes(
         Ok(v) => v,
         Err(msg) => {
             app_log!(app, "bluetooth", "[hermes] connect failed: {msg}");
-            let (m, _) = classify_bt_error(&msg);
+            let (m, _) = classify_device_error(&msg);
             return Err(ConnectError::Bluetooth(m));
         }
     };
@@ -374,7 +374,7 @@ pub(crate) async fn connect_ganglion(
     let mut board = match board_result {
         Ok(Ok(b))  => b,
         Ok(Err(e)) => {
-            let (m, _) = classify_bt_error(&e.to_string());
+            let (m, _) = classify_device_error(&e.to_string());
             return Err(ConnectError::Bluetooth(m));
         }
         Err(_) => return Err(ConnectError::Other("Ganglion scan task panicked".into())),
@@ -791,7 +791,7 @@ pub(crate) async fn connect_idun(
         Ok(v) => v,
         Err(msg) => {
             app_log!(app, "bluetooth", "[idun] connect failed: {msg}");
-            let (m, _) = classify_bt_error(&msg);
+            let (m, _) = classify_device_error(&msg);
             return Err(ConnectError::Bluetooth(m));
         }
     };

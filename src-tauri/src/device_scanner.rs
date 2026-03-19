@@ -115,7 +115,7 @@ pub(crate) enum Transport {
 /// Classify a raw btleplug error string into a user-visible message and a flag
 /// indicating whether the fault is BT-level (radio off / permission denied) vs
 /// a transient connection error.
-pub(crate) fn classify_bt_error(raw: &str) -> (String, bool) {
+pub(crate) fn classify_device_error(raw: &str) -> (String, bool) {
     let lo = raw.to_lowercase();
     let is_bt = lo.contains("adapter")       || lo.contains("powered")
              || lo.contains("bluetooth")     || lo.contains("permission")
@@ -137,9 +137,9 @@ pub(crate) fn classify_bt_error(raw: &str) -> (String, bool) {
 /// is present or accessible.  Called at the start of every session attempt.
 pub(crate) async fn bluetooth_ok() -> Result<(), (String, bool)> {
     let mgr = BtPlatformManager::new().await
-        .map_err(|e| classify_bt_error(&e.to_string()))?;
+        .map_err(|e| classify_device_error(&e.to_string()))?;
     let adapters = mgr.adapters().await
-        .map_err(|e| classify_bt_error(&e.to_string()))?;
+        .map_err(|e| classify_device_error(&e.to_string()))?;
     if adapters.is_empty() {
         return Err((
             "No Bluetooth adapter detected.\n\
@@ -211,7 +211,7 @@ fn scanner_bt_off(app: &AppHandle, emitted: &mut bool) {
         let idle = matches!(g.status.state.as_str(), "disconnected" | "scanning");
         if idle {
             g.status.state      = "bt_off".into();
-            g.status.bt_error   = Some(
+            g.status.device_error   = Some(
                 "Bluetooth is off — turn it on to connect to your BCI device.".into()
             );
             g.pending_reconnect = false;
@@ -240,7 +240,7 @@ async fn scanner_bt_on(
         let mut g = s.lock_or_recover();
         if g.status.state == "bt_off" {
             g.status.state      = "disconnected".into();
-            g.status.bt_error   = None;
+            g.status.device_error   = None;
             g.pending_reconnect = true;
             (true, g.preferred_id.clone())
         } else { (false, None) }

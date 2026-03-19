@@ -40,7 +40,7 @@ export interface DeviceStatus {
   battery:        number;
   eeg:            number[];
   paired_devices: PairedDevice[];
-  bt_error:       string | null;
+  device_error:       string | null;
   target_name:    string | null;
   filter_config:   FilterConfig;
   /** Per-channel quality in electrode order [TP9, AF7, AF8, TP10].

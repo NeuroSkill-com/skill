@@ -298,7 +298,7 @@ pub fn cancel_retry(app: AppHandle) {
     s.status.retry_attempt        = 0;
     s.status.retry_countdown_secs = 0;
     s.status.state                = "disconnected".into();
-    s.status.bt_error             = None;
+    s.status.device_error             = None;
     drop(s);
     cancel_session(&app);
     emit_status(&app);

@@ -268,7 +268,7 @@ the Free Software Foundation, version 3 only. -->
     serial_number: null, mac_address: null,
     csv_path: null, sample_count: 0, battery: 0,
     eeg: [0, 0, 0, 0], paired_devices: [],
-    bt_error: null, target_name: null,
+    device_error: null, target_name: null,
     filter_config:   { ...DEFAULT_FILTER_CONFIG },
     channel_quality: ['no_signal', 'no_signal', 'no_signal', 'no_signal'],
     retry_attempt: 0,
@@ -1019,8 +1019,8 @@ the Free Software Foundation, version 3 only. -->
         </div>
 
       <!-- ════ CONNECTION ERROR ══════════════════════════════════════════════ -->
-      {:else if status.bt_error && status.state === "disconnected"}
-        {#if status.bt_error === "NO_MUSE_NEARBY"}
+      {:else if status.device_error && status.state === "disconnected"}
+        {#if status.device_error === "NO_MUSE_NEARBY"}
           <div class="rounded-xl border border-amber-400/30 bg-amber-50 dark:bg-amber-950/20 p-3.5 flex flex-col gap-3">
             <p class="text-[0.8rem] font-semibold text-amber-800 dark:text-amber-300">
               {t("dashboard.noMuseNearbyTitle")}
@@ -1035,7 +1035,7 @@ the Free Software Foundation, version 3 only. -->
               <Button size="sm" variant="outline" onclick={openBtSettings}>{t("dashboard.openSettings")}</Button>
             </div>
           </div>
-        {:else if status.bt_error.includes("EEG stream not available") || status.bt_error.includes("-32230")}
+        {:else if status.device_error.includes("EEG stream not available") || status.device_error.includes("-32230")}
           <div class="rounded-xl border border-violet-400/30 bg-violet-50 dark:bg-violet-950/20 p-3.5 flex flex-col gap-3">
             <p class="text-[0.8rem] font-semibold text-violet-800 dark:text-violet-300">
               EEG Access Not Available
@@ -1053,7 +1053,7 @@ the Free Software Foundation, version 3 only. -->
           </div>
         {:else}
           <div class="rounded-xl border border-red-400/30 bg-red-50 dark:bg-[#1a0a0a] p-3.5 flex flex-col gap-3">
-            <pre class="font-mono text-[0.67rem] text-red-600 dark:text-red-400 leading-relaxed whitespace-pre-wrap">{status.bt_error}</pre>
+            <pre class="font-mono text-[0.67rem] text-red-600 dark:text-red-400 leading-relaxed whitespace-pre-wrap">{status.device_error}</pre>
             <div class="flex gap-2">
               <Button size="sm" onclick={retryConnect}>{t("common.retry")}</Button>
               <Button size="sm" variant="outline" onclick={openBtSettings}>{t("dashboard.openSettings")}</Button>

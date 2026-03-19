@@ -93,7 +93,7 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
         s.status.reset_disconnected(new_state);
 
         // Override the defaults set by reset_disconnected for retry-specific values.
-        if !retry { s.status.bt_error = error; }
+        if !retry { s.status.device_error = error; }
         s.status.retry_attempt        = if retry { attempt + 1 } else { 0 };
         s.status.retry_countdown_secs = delay;
         s.status.channel_quality = vec![SignalQuality::default(); crate::constants::EEG_CHANNELS];
