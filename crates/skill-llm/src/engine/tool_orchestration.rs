@@ -236,6 +236,34 @@ where
             "content": assistant_content,
         }));
 
+        // Auto-redirect: if the LLM called a Skill API sub-command as a
+        // top-level tool (e.g. tool="status" instead of tool="skill" +
+        // command="status"), silently rewrite the call so it goes through
+        // the skill tool with the correct payload.
+        let selected_calls: Vec<tools::ToolCall> = selected_calls
+            .into_iter()
+            .map(|mut tc| {
+                if !skill_tools::defs::is_known_builtin_tool(&tc.function.name)
+                    && skill_tools::defs::is_skill_api_command(&tc.function.name)
+                {
+                    // Parse whatever args the LLM sent (may be empty).
+                    let orig_args: Value = serde_json::from_str(&tc.function.arguments)
+                        .unwrap_or_else(|_| json!({}));
+                    // Build the redirected payload: { "command": "<name>", "args": { ...orig } }
+                    let mut redirected = json!({ "command": tc.function.name });
+                    if let Some(obj) = orig_args.as_object() {
+                        if !obj.is_empty() {
+                            redirected["args"] = orig_args;
+                        }
+                    }
+                    log::info!("[tool-redirect] {} → skill({})", tc.function.name, tc.function.name);
+                    tc.function.name = "skill".to_string();
+                    tc.function.arguments = redirected.to_string();
+                }
+                tc
+            })
+            .collect();
+
         // Record for cross-round dedup.
         for tc in &selected_calls {
             executed_calls.insert((tc.function.name.clone(), tc.function.arguments.clone()));
