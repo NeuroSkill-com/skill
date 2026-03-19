@@ -331,6 +331,23 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.idun2": "Save token, then pair/connect the headset from the device list.",
   "settings.supportedDevices.instruction.reak1": "Power on Nucleus-Hermès and keep it near this computer.",
   "settings.supportedDevices.instruction.reak2": "Scan and pair it in the Devices list, then connect from the preferred device flow.",
+  "settings.scanner.title":             "מנועי סריקה",
+  "settings.scanner.desc":              "בחרו אילו שכבות תקשורת גילוי פועלות ברקע. שינויים ייכנסו לתוקף בהפעלה מחדש של האפליקציה.",
+  "settings.scanner.ble":               "Bluetooth LE",
+  "settings.scanner.bleDesc":           "Muse, MW75, Hermes, Ganglion, IDUN",
+  "settings.scanner.usbSerial":         "USB טורי",
+  "settings.scanner.usbSerialDesc":     "דונגל OpenBCI Cyton / CytonDaisy",
+  "settings.scanner.cortex":            "Emotiv Cortex",
+  "settings.scanner.cortexDesc":        "EPOC, Insight, Flex, MN8 דרך Launcher מקומי",
+  "settings.scanner.cortexConnected":   "מחובר ל-Cortex",
+  "settings.scanner.cortexDisconnected": "לא מחובר",
+  "settings.scanner.saved":             "נשמר",
+  "settings.scanner.save":              "שמור",
+  "settings.deviceLog.title":           "יומן מכשיר",
+  "settings.deviceLog.empty":           "אין אירועי מכשיר עדיין.",
+  "settings.deviceLog.clear":           "נקה",
+  "settings.logScanner":                "סורק",
+  "settings.logScannerDesc":            "גילוי מכשירים מרובה-תעבורה (BLE, USB, Cortex)",
   "settings.deviceApi.title": "Device API",
   "settings.deviceApi.emotivTitle": "Emotiv Cortex",
   "settings.deviceApi.emotivDesc": "Required for Emotiv devices only. Other devices ignore these fields.",
@@ -344,6 +361,14 @@ const settings: Record<string, string> = {
   "settings.deviceApi.hide": "hide",
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
+
+  // ── פורמט הקלטה ──────────────────────────────────────────────────────────
+  "settings.storageFormat":                      "פורמט הקלטה",
+  "settings.storageFormatDesc":                  "בחרו את פורמט הקובץ להקלטות EEG, PPG, IMU ומטריקות. CSV קריא לאדם; Parquet קומפקטי ומהיר לטעינה. „שניהם" כותב את שני הפורמטים בו-זמנית.",
+  "settings.storageFormatBoth":                  "שניהם",
+  "settings.storageFormatCsvDesc":               "קריא לאדם, אוניברסלי",
+  "settings.storageFormatParquetDesc":           "עמודי, דחוס",
+  "settings.storageFormatBothDesc":              "CSV + Parquet בו-זמנית",
 };
 
 export default settings;

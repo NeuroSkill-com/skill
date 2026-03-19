@@ -332,6 +332,23 @@ const settings: Record<string, string> = {
   "settings.supportedDevices.instruction.idun2": "Save token, then pair/connect the headset from the device list.",
   "settings.supportedDevices.instruction.reak1": "Power on Nucleus-Hermès and keep it near this computer.",
   "settings.supportedDevices.instruction.reak2": "Scan and pair it in the Devices list, then connect from the preferred device flow.",
+  "settings.scanner.title":             "Scanner-Backends",
+  "settings.scanner.desc":              "Wählen Sie, welche Erkennungstransporte im Hintergrund laufen. Änderungen werden beim nächsten App-Neustart wirksam.",
+  "settings.scanner.ble":               "Bluetooth LE",
+  "settings.scanner.bleDesc":           "Muse, MW75, Hermes, Ganglion, IDUN",
+  "settings.scanner.usbSerial":         "USB Seriell",
+  "settings.scanner.usbSerialDesc":     "OpenBCI Cyton / CytonDaisy Dongle",
+  "settings.scanner.cortex":            "Emotiv Cortex",
+  "settings.scanner.cortexDesc":        "EPOC, Insight, Flex, MN8 über lokalen Launcher",
+  "settings.scanner.cortexConnected":   "Mit Cortex verbunden",
+  "settings.scanner.cortexDisconnected": "Nicht verbunden",
+  "settings.scanner.saved":             "Gespeichert",
+  "settings.scanner.save":              "Speichern",
+  "settings.deviceLog.title":           "Geräteprotokoll",
+  "settings.deviceLog.empty":           "Noch keine Geräteereignisse.",
+  "settings.deviceLog.clear":           "Löschen",
+  "settings.logScanner":                "Scanner",
+  "settings.logScannerDesc":            "Geräte-Erkennung über mehrere Transporte (BLE, USB, Cortex)",
   "settings.deviceApi.title": "Device API",
   "settings.deviceApi.emotivTitle": "Emotiv Cortex",
   "settings.deviceApi.emotivDesc": "Required for Emotiv devices only. Other devices ignore these fields.",
@@ -345,6 +362,14 @@ const settings: Record<string, string> = {
   "settings.deviceApi.hide": "hide",
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
+
+  // ── Aufnahmeformat ───────────────────────────────────────────────────────
+  "settings.storageFormat":                      "Aufnahmeformat",
+  "settings.storageFormatDesc":                  "Wählen Sie das Dateiformat für EEG-, PPG-, IMU- und Metrik-Aufnahmen. CSV ist menschenlesbar; Parquet ist kompakt und schnell ladbar. „Beides" schreibt beide Formate gleichzeitig.",
+  "settings.storageFormatBoth":                  "Beides",
+  "settings.storageFormatCsvDesc":               "Menschenlesbar, universell",
+  "settings.storageFormatParquetDesc":           "Spaltenorientiert, komprimiert",
+  "settings.storageFormatBothDesc":              "CSV + Parquet gleichzeitig",
 };
 
 export default settings;
