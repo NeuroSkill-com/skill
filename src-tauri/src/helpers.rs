@@ -193,6 +193,7 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
         hooks:                  s.hooks.clone(),
         ws_host:                s.ws_host.clone(),
         ws_port:                s.ws_port,
+        api_token:              s.api_token.clone(),
         update_check_interval_secs: s.update_check_interval_secs,
         openbci:                s.openbci_config.clone(),
         device_api:             s.device_api_config.clone(),

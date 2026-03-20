@@ -419,6 +419,7 @@ pub struct AppState {
     // ── Network / services ────────────────────────────────────────────────
     pub ws_host: String,
     pub ws_port: u16,
+    pub api_token: String,
     pub update_check_interval_secs: u64,
 
     // ── Device configs ────────────────────────────────────────────────────
@@ -570,6 +571,7 @@ impl Default for AppState {
             hook_runtime: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             ws_host: default_ws_host(),
             ws_port: default_ws_port(),
+            api_token: String::new(),
             update_check_interval_secs: default_update_check_interval(),
             openbci_config: crate::settings::OpenBciConfig::default(),
             device_api_config: crate::settings::DeviceApiConfig::default(),

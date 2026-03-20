@@ -512,3 +512,89 @@ pub const COMMANDS: &[&str] = &[
     "llm_add_model",
     "llm_hardware_fit",
 ];
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Rounding helpers ──────────────────────────────────────────────────
+
+    #[test]
+    fn r1_rounds_to_one_decimal() {
+        assert_eq!(r1(1.234), 1.2);
+        assert_eq!(r1(1.25), 1.3);  // 0.5 rounds up
+        assert_eq!(r1(0.0), 0.0);
+        assert_eq!(r1(-3.78), -3.8);
+    }
+
+    #[test]
+    fn r2_rounds_to_two_decimals() {
+        assert_eq!(r2(1.2345), 1.23);
+        assert_eq!(r2(1.235), 1.24);  // 0.5 rounds up (banker's rounding in some cases)
+        assert_eq!(r2(0.001), 0.0);
+    }
+
+    #[test]
+    fn r3_rounds_to_three_decimals() {
+        assert_eq!(r3(1.23456), 1.235);
+        assert_eq!(r3(0.0005), 0.001);
+    }
+
+    #[test]
+    fn r1d_rounds_f64_to_one_decimal() {
+        assert_eq!(r1d(72.3456), 72.3);
+        assert_eq!(r1d(-5.55), -5.6); // rounds away from zero
+    }
+
+    #[test]
+    fn r2d_rounds_f64_to_two_decimals() {
+        assert_eq!(r2d(3.14159), 3.14);
+    }
+
+    #[test]
+    fn r2f_is_alias_for_r2d() {
+        let v = 3.14159;
+        assert_eq!(r2f(v), r2d(v));
+    }
+
+    #[test]
+    fn rounding_preserves_nan() {
+        assert!(r1(f32::NAN).is_nan());
+        assert!(r1d(f64::NAN).is_nan());
+    }
+
+    #[test]
+    fn rounding_preserves_infinity() {
+        assert!(r1(f32::INFINITY).is_infinite());
+        assert!(r1d(f64::NEG_INFINITY).is_infinite());
+    }
+
+    // ── COMMANDS ──────────────────────────────────────────────────────
+
+    #[test]
+    fn ws_commands_has_no_duplicates() {
+        let mut sorted = COMMANDS.to_vec();
+        sorted.sort_unstable();
+        let before = sorted.len();
+        sorted.dedup();
+        assert_eq!(before, sorted.len(), "duplicate WS command names found");
+    }
+
+    #[test]
+    fn ws_commands_are_nonempty_strings() {
+        for cmd in COMMANDS {
+            assert!(!cmd.is_empty(), "empty WS command name");
+        }
+    }
+
+    #[test]
+    fn ws_commands_contains_core_commands() {
+        assert!(COMMANDS.contains(&"status"));
+        assert!(COMMANDS.contains(&"sessions"));
+        assert!(COMMANDS.contains(&"label"));
+        assert!(COMMANDS.contains(&"search"));
+        assert!(COMMANDS.contains(&"say"));
+    }
+}
