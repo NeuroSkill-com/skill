@@ -177,6 +177,10 @@ const llm: Record<string, string> = {
   "llm.fit.scoreLabel":                 "Score",
   "llm.verbose":                        "Verbose LLM logging",
   "llm.verboseDesc":                    "Show raw llama.cpp / clip_model_loader output in the log. Off by default — only enable when debugging model loading.",
+  "llm.inference.gpuMemThreshold":      "GPU memory safety",
+  "llm.inference.gpuMemThresholdDesc":  "Minimum free GPU/unified memory required before running inference. Prevents Metal/CUDA crashes when memory is low. Set to Off to disable (not recommended).",
+  "llm.inference.gpuMemDecode":         "Before decode",
+  "llm.inference.gpuMemGen":            "During generation",
 
   "chat.status.running":                "Running",
   "chat.status.loading":                "Loading model…",

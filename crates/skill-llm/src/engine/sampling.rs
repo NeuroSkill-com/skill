@@ -11,6 +11,7 @@ use llama_cpp_4::{
 };
 
 use crate::event::LlmEventEmitter;
+use super::generation::GpuMemoryGuard;
 use super::logging::{LlmLogBuffer, LlmLogFile};
 use super::protocol::{InferToken, GenParams};
 use super::think_tracker::ThinkTracker;
@@ -30,6 +31,7 @@ pub(super) fn run_sampling_loop(
     params:   &GenParams,
     token_tx: UnboundedSender<InferToken>,
     n_prompt: usize,
+    gpu_guard: GpuMemoryGuard,
 ) {
     let n_ctx = ctx.n_ctx() as usize;
     let n_batch = ctx.n_batch() as usize; let _ = n_batch; // available for future use
@@ -152,6 +154,22 @@ pub(super) fn run_sampling_loop(
         }
 
         // Decode the new token so `sampler.sample(ctx, -1)` works next iteration.
+        // Periodic GPU memory check (every 64 tokens) to avoid Metal abort().
+        if n_cur % 64 == 0 && gpu_guard.gen_threshold > 0.0 {
+            let (mem_ok, free_gb) = super::generation::gpu_memory_check(gpu_guard.gen_threshold);
+            if !mem_ok {
+                llm_warn!(app, log_buf, log_file,
+                    "stopping generation — GPU memory critically low ({:.2} GB free < {:.2} GB threshold)",
+                    free_gb.unwrap_or(0.0), gpu_guard.gen_threshold);
+                token_tx.send(InferToken::Delta(
+                    format!("\n\n*[Generation stopped: GPU memory low ({:.2} GB free). \
+                             Adjust threshold in Settings → LLM.]*",
+                        free_gb.unwrap_or(0.0))
+                )).ok();
+                finish_reason = "gpu_memory".to_string();
+                break;
+            }
+        }
         let mut gen_batch = LlamaBatch::new(1, 1);
         if gen_batch.add(token, n_cur as i32, &[0], true).is_err() { break; }
         if ctx.decode(&mut gen_batch).is_err() {

@@ -20,7 +20,7 @@ use crate::config::LlmConfig;
 use crate::event::LlmEventEmitter;
 use super::logging::{LlmLogBuffer, LlmLogFile};
 use super::protocol::{InferRequest, InferToken};
-use super::generation::run_generation;
+use super::generation::{run_generation, GpuMemoryGuard};
 
 #[cfg(feature = "llm-mtmd")]
 use super::generation::run_generation_multimodal;
@@ -251,8 +251,23 @@ pub(super) fn run_actor(
     #[cfg(not(feature = "llm-mtmd"))]
     let _ = &mmproj_path;
 
+    // Build GPU memory guard from config thresholds.
+    let gpu_guard = GpuMemoryGuard {
+        decode_threshold: config.gpu_memory_threshold,
+        gen_threshold:    config.gpu_memory_gen_threshold,
+    };
+
     // ── Warmup / prewarm ──────────────────────────────────────────────────────
     let warmup_ok = (|| -> bool {
+        // Pre-check GPU memory to avoid Metal abort() during warmup.
+        let (mem_ok, free_gb) = super::generation::gpu_memory_check(gpu_guard.decode_threshold);
+        if !mem_ok {
+            llm_warn!(&app, &log_buf, log_file,
+                "skipping warmup — insufficient GPU memory ({:.2} GB free < {:.2} GB threshold)",
+                free_gb.unwrap_or(0.0), gpu_guard.decode_threshold);
+            return false;
+        }
+
         let bos = model.token_bos();
         let warmup_tokens = if let Ok(toks) = model.str_to_token(" ", AddBos::Always) {
             toks
@@ -414,7 +429,7 @@ pub(super) fn run_actor(
                                         }
                                     })
                                     .unwrap_or(0.0);
-                                let mem_budget = available_gb * 0.85;
+                                let mem_budget = available_gb * 0.70;
                                 let estimated = crate::catalog::estimate_memory_gb(
                                     config.params_b, &config.quant, needed_ctx);
                                 estimated <= mem_budget
@@ -482,19 +497,19 @@ pub(super) fn run_actor(
                 if use_mtmd {
                     if let Some(ref mc) = mtmd_ctx {
                         run_generation_multimodal(&model, &mut ctx, mc,
-                            &app, &log_buf, log_file, prompt, images, params, token_tx);
+                            &app, &log_buf, log_file, prompt, images, params, token_tx, gpu_guard);
                         continue;
                     }
                 }
 
                 run_generation(&model, &mut ctx, &app, &log_buf, log_file,
-                               prompt, params, token_tx);
+                               prompt, params, token_tx, gpu_guard);
             }
 
             InferRequest::Complete { prompt, params, token_tx } => {
                 llm_info!(&app, &log_buf, log_file, "completion request — max_tokens={}", params.max_tokens);
                 run_generation(&model, &mut ctx, &app, &log_buf, log_file,
-                               prompt, params, token_tx);
+                               prompt, params, token_tx, gpu_guard);
             }
 
             InferRequest::Embed { inputs, result_tx } => {

@@ -14,6 +14,26 @@ use super::logging::{LlmLogBuffer, LlmLogFile};
 use super::protocol::{InferToken, GenParams};
 use super::sampling::run_sampling_loop;
 
+/// GPU memory safety thresholds (configurable via LlmConfig).
+#[derive(Clone, Copy, Debug)]
+pub(super) struct GpuMemoryGuard {
+    /// Minimum free GB before starting a decode pass.
+    pub decode_threshold: f64,
+    /// Minimum free GB during token-by-token generation.
+    pub gen_threshold: f64,
+}
+
+/// Check whether the system has enough free GPU/unified memory to safely run
+/// a Metal/CUDA decode pass.  Returns `(ok, free_gb)` — `ok` is `true` when
+/// we either cannot determine memory (optimistic) or when at least
+/// `min_free_gb` is available.
+pub(super) fn gpu_memory_check(min_free_gb: f64) -> (bool, Option<f64>) {
+    let Some(gpu) = skill_data::gpu_stats::read() else { return (true, None) };
+    let free_gb = gpu.free_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0));
+    let ok = free_gb.map_or(true, |f| f >= min_free_gb);
+    (ok, free_gb)
+}
+
 // ── Text-only generation ───────────────────────────────────────────────────────
 
 #[allow(clippy::too_many_arguments)]
@@ -26,6 +46,7 @@ pub(super) fn run_generation(
     prompt:   String,
     params:   GenParams,
     token_tx: UnboundedSender<InferToken>,
+    gpu_guard: GpuMemoryGuard,
 ) {
     ctx.clear_kv_cache();
 
@@ -51,6 +72,22 @@ pub(super) fn run_generation(
         return;
     }
 
+    // Guard: verify enough GPU memory is available before starting decode.
+    // Metal's ggml backend will call abort() on allocation failure, which
+    // kills the entire process.  By checking early we can return a
+    // recoverable error instead.
+    let (mem_ok, free_gb) = gpu_memory_check(gpu_guard.decode_threshold);
+    if !mem_ok {
+        let msg = format!(
+            "Insufficient GPU memory for decode ({:.2} GB free, {:.2} GB required). \
+             Reduce context size, close other GPU apps, or adjust the GPU memory threshold in Settings → LLM.",
+            free_gb.unwrap_or(0.0), gpu_guard.decode_threshold,
+        );
+        llm_error!(app, log_buf, log_file, "{msg}");
+        token_tx.send(InferToken::Error(msg)).ok();
+        return;
+    }
+
     let n_batch = ctx.n_batch() as usize;
     let mut i = 0;
     while i < n_prompt {
@@ -68,7 +105,7 @@ pub(super) fn run_generation(
         i = end;
     }
 
-    run_sampling_loop(model, ctx, app, log_buf, log_file, &params, token_tx, n_prompt);
+    run_sampling_loop(model, ctx, app, log_buf, log_file, &params, token_tx, n_prompt, gpu_guard);
 }
 
 // ── Multimodal generation (llm-mtmd feature) ──────────────────────────────────
@@ -86,6 +123,7 @@ pub(super) fn run_generation_multimodal(
     images:    Vec<Vec<u8>>,
     params:    GenParams,
     token_tx:  UnboundedSender<InferToken>,
+    gpu_guard: GpuMemoryGuard,
 ) {
     use llama_cpp_4::mtmd::{MtmdBitmap, MtmdInputChunks, MtmdInputText};
 
@@ -143,6 +181,19 @@ pub(super) fn run_generation_multimodal(
         return;
     }
 
+    // Guard: verify enough GPU memory before multimodal decode.
+    let (mem_ok, free_gb) = gpu_memory_check(gpu_guard.decode_threshold);
+    if !mem_ok {
+        let msg = format!(
+            "Insufficient GPU memory for multimodal decode ({:.2} GB free, {:.2} GB required). \
+             Reduce context size, close other GPU apps, or adjust the GPU memory threshold in Settings → LLM.",
+            free_gb.unwrap_or(0.0), gpu_guard.decode_threshold,
+        );
+        llm_error!(app, log_buf, log_file, "{msg}");
+        token_tx.send(InferToken::Error(msg)).ok();
+        return;
+    }
+
     let n_batch = ctx.n_batch() as i32;
     let mut n_past = 0i32;
     if let Err(e) = mtmd_ctx.eval_chunks(ctx.as_ptr(), &chunks, 0, 0, n_batch, true, &mut n_past) {
@@ -153,5 +204,5 @@ pub(super) fn run_generation_multimodal(
     }
 
     let n_prompt = n_past as usize;
-    run_sampling_loop(model, ctx, app, log_buf, log_file, &params, token_tx, n_prompt);
+    run_sampling_loop(model, ctx, app, log_buf, log_file, &params, token_tx, n_prompt, gpu_guard);
 }

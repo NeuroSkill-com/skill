@@ -76,6 +76,7 @@
     tools: LlmToolsConfig;
     mmproj: string | null; mmproj_n_threads: number; no_mmproj_gpu: boolean;
     autoload_mmproj: boolean; verbose: boolean;
+    gpu_memory_threshold: number; gpu_memory_gen_threshold: number;
   }
 
   interface ModelFamily {
@@ -112,6 +113,7 @@
     tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 10, max_calls_per_round: 4 },
     mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
     verbose: false,
+    gpu_memory_threshold: 0.5, gpu_memory_gen_threshold: 0.3,
   });
 
   let configSaving    = $state(false);
@@ -1215,6 +1217,46 @@
                         transform transition-transform duration-200
                         {config.verbose ? 'translate-x-4' : 'translate-x-0'}"></span>
         </button>
+      </div>
+
+      <!-- GPU memory safety thresholds -->
+      <div class="flex flex-col gap-2 px-4 py-3.5 border-t border-border/40 dark:border-white/[0.04]">
+        <div class="flex flex-col gap-0.5">
+          <span class="text-[0.78rem] font-semibold text-foreground">{t("llm.inference.gpuMemThreshold")}</span>
+          <span class="text-[0.65rem] text-muted-foreground leading-relaxed">{t("llm.inference.gpuMemThresholdDesc")}</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex flex-col gap-1 flex-1">
+            <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.gpuMemDecode")}</span>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              {#each [0, 0.25, 0.5, 0.75, 1.0] as val}
+                <button
+                  onclick={async () => { config = { ...config, gpu_memory_threshold: val }; await saveConfig(); }}
+                  class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                         {config.gpu_memory_threshold === val
+                           ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                           : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
+                  {val === 0 ? "Off" : `${val} GB`}
+                </button>
+              {/each}
+            </div>
+          </div>
+          <div class="flex flex-col gap-1 flex-1">
+            <span class="text-[0.6rem] text-muted-foreground">{t("llm.inference.gpuMemGen")}</span>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              {#each [0, 0.15, 0.3, 0.5, 0.75] as val}
+                <button
+                  onclick={async () => { config = { ...config, gpu_memory_gen_threshold: val }; await saveConfig(); }}
+                  class="rounded-lg border px-2 py-1 text-[0.62rem] font-semibold transition-all cursor-pointer
+                         {config.gpu_memory_gen_threshold === val
+                           ? 'border-violet-500/50 bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                           : 'border-border bg-muted text-muted-foreground hover:text-foreground'}">
+                  {val === 0 ? "Off" : `${val} GB`}
+                </button>
+              {/each}
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- curl quick test -->

@@ -88,6 +88,20 @@ pub struct LlmConfig {
     #[serde(default = "default_offload_kqv")]
     pub offload_kqv: bool,
 
+    /// Minimum free GPU/unified memory (in GB) required before starting a
+    /// decode pass.  If available memory drops below this threshold, the
+    /// request is rejected with a recoverable error instead of risking a
+    /// Metal/CUDA abort that crashes the process.  Default: `0.5` GB.
+    #[serde(default = "default_gpu_memory_threshold")]
+    pub gpu_memory_threshold: f64,
+
+    /// Minimum free GPU/unified memory (in GB) during token generation.
+    /// If memory drops below this during sampling, generation stops early
+    /// with a `gpu_memory` finish reason.  Default: `0.3` GB.
+    /// Checked every 64 tokens to minimize overhead.
+    #[serde(default = "default_gpu_memory_gen_threshold")]
+    pub gpu_memory_gen_threshold: f64,
+
     // ── Model metadata (populated by init.rs from the catalog entry) ──────────
 
     /// Model parameter count in billions (e.g. 7.0 for a 7B model).
@@ -106,11 +120,13 @@ pub struct LlmConfig {
     pub max_context_length: u32,
 }
 
-fn default_llm_parallel()      -> usize { 1 }
-fn default_mmproj_n_threads()  -> i32   { 4 }
-fn default_autoload_mmproj()   -> bool  { true }
-fn default_flash_attention()   -> bool  { true }
-fn default_offload_kqv()       -> bool  { true }
+fn default_llm_parallel()            -> usize { 1 }
+fn default_mmproj_n_threads()        -> i32   { 4 }
+fn default_autoload_mmproj()         -> bool  { true }
+fn default_flash_attention()         -> bool  { true }
+fn default_offload_kqv()             -> bool  { true }
+fn default_gpu_memory_threshold()    -> f64   { 0.5 }
+fn default_gpu_memory_gen_threshold() -> f64  { 0.3 }
 
 impl Default for LlmConfig {
     fn default() -> Self {
@@ -130,6 +146,8 @@ impl Default for LlmConfig {
             autostart:        false,
             flash_attention:  default_flash_attention(),
             offload_kqv:      default_offload_kqv(),
+            gpu_memory_threshold:     default_gpu_memory_threshold(),
+            gpu_memory_gen_threshold: default_gpu_memory_gen_threshold(),
             params_b:         0.0,
             quant:            String::new(),
             max_context_length: 0,
