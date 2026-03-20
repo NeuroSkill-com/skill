@@ -6,9 +6,9 @@ license = "GPL-3.0-only"
 description = "Apple HealthKit data store — sync, query, and summary over SQLite"
 
 [dependencies]
-serde      = { version = "1", features = ["derive"] }
-serde_json = "1"
-rusqlite   = { version = "0.37", features = ["bundled"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rusqlite = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

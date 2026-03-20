@@ -9,6 +9,6 @@ description = "EEG embedding search, timestamp helpers, SVG/DOT graph generation
 skill-constants = { path = "../skill-constants" }
 skill-data      = { path = "../skill-data" }
 fast-hnsw  = "1.0.1"
-rusqlite   = { version = "0.37", features = ["bundled"] }
+rusqlite = { workspace = true }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"

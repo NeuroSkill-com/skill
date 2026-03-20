@@ -60,6 +60,15 @@ btleplug        = { git = "https://github.com/eugenehp/btleplug.git", branch = "
 # kittentts = { path = "kittentts-rs" }
 # neutts    = { path = "neutts-rs" }
 
+# ── Workspace dependencies ─────────────────────────────────────────────────────
+#
+# Shared across multiple crates to ensure a single version + feature set.
+
+[workspace.dependencies]
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
 # ── Build profiles ────────────────────────────────────────────────────────────
 #
 # incremental = false (dev only)

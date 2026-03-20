@@ -18,7 +18,7 @@ skill-constants = { path = "../skill-constants" }
 skill-data      = { path = "../skill-data" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite   = { version = "0.37", features = ["bundled"] }
+rusqlite = { workspace = true }
 axum       = { version = "0.8", features = ["ws"] }
 tokio      = { version = "1", features = ["full"] }
 async-stream = "0.3"
