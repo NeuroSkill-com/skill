@@ -492,6 +492,7 @@ the Free Software Foundation, version 3 only. -->
               <label class="col-span-3 flex items-center gap-2 text-xs text-muted-foreground">
                 <input
                   type="checkbox"
+                  class="accent-violet-500"
                   checked={hook.enabled}
                   onchange={(e) => updateHook(i, { enabled: (e.currentTarget as HTMLInputElement).checked })}
                 />
@@ -508,7 +509,7 @@ the Free Software Foundation, version 3 only. -->
                   <span class="font-medium text-foreground">{t("hooks.lastTrigger")}</span>
                   <span class="ml-1">{fmtUtc(statuses[hook.name]?.triggered_at_utc ?? 0)}</span>
                   {#if statuses[hook.name]?.triggered_at_utc}
-                    <span class="ml-1 text-primary/70">({relativeAge(statuses[hook.name]!.triggered_at_utc)})</span>
+                    <span class="ml-1 text-violet-500/70">({relativeAge(statuses[hook.name]!.triggered_at_utc)})</span>
                   {/if}
                   {#if statuses[hook.name]?.label_text}
                     <span class="ml-2">• {statuses[hook.name]?.label_text}</span>
@@ -553,7 +554,7 @@ the Free Software Foundation, version 3 only. -->
                   <div class="flex flex-wrap gap-1.5">
                     {#each keywordSuggestions[i] ?? [] as s, sIdx}
                       <button
-                        class="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[0.65rem] text-foreground hover:bg-muted {sIdx === (keywordSuggestionFocus[i] ?? -1) ? 'border-primary/70 bg-primary/10' : 'border-border/60'}"
+                        class="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[0.65rem] text-foreground hover:bg-muted {sIdx === (keywordSuggestionFocus[i] ?? -1) ? 'border-violet-500/70 bg-violet-500/10' : 'border-border/60'}"
                         onclick={() => applyKeywordSuggestion(i, s.keyword)}
                         onmouseenter={() => keywordSuggestionFocus = { ...keywordSuggestionFocus, [i]: sIdx }}
                       >
@@ -570,7 +571,7 @@ the Free Software Foundation, version 3 only. -->
               <span class="col-span-4 text-xs text-muted-foreground">{t("hooks.scenarioLabel")}</span>
               <div class="col-span-8 relative">
                 <select
-                  class="w-full appearance-none rounded-md border border-border bg-background px-2 py-1.5 pr-7 text-xs text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  class="w-full appearance-none rounded-md border border-border bg-background px-2 py-1.5 pr-7 text-xs text-foreground ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50 focus-visible:ring-offset-2"
                   value={hook.scenario ?? "any"}
                   onchange={(e) => updateHook(i, { scenario: (e.currentTarget as HTMLSelectElement).value })}
                 >
@@ -657,11 +658,11 @@ the Free Software Foundation, version 3 only. -->
             <!-- Suggestion result panel -->
             {#if suggestions[i]}
               {@const sug = suggestions[i]!}
-              <div class="rounded-md border border-primary/30 bg-primary/5 p-3 space-y-2 text-[0.68rem]">
+              <div class="rounded-md border border-violet-500/30 bg-violet-500/5 p-3 space-y-2 text-[0.68rem]">
                 <div class="flex items-center justify-between gap-2">
                   <span class="font-medium text-foreground">{t("hooks.suggestResult")}</span>
                   <div class="flex items-center gap-2">
-                    <span class="text-primary font-semibold">{t("hooks.suggestThreshold")} {sug.suggested.toFixed(2)}</span>
+                    <span class="text-violet-600 dark:text-violet-400 font-semibold">{t("hooks.suggestThreshold")} {sug.suggested.toFixed(2)}</span>
                     <Button size="sm" class="h-6 px-2 text-[0.67rem]" onclick={() => applySuggestion(i)}>
                       {t("hooks.applyThreshold")}
                     </Button>
@@ -678,27 +679,27 @@ the Free Software Foundation, version 3 only. -->
                     <div class="relative h-4 rounded bg-muted overflow-hidden">
                       <!-- p25 zone (closest matches) -->
                       <div
-                        class="absolute top-0 bottom-0 bg-primary/35"
+                        class="absolute top-0 bottom-0 bg-violet-500/35"
                         style="left: 0%; width: {Math.min((sug.eeg_p25 / sug.eeg_max) * 100, 100)}%"
                       ></div>
                       <!-- p25–p50 zone -->
                       <div
-                        class="absolute top-0 bottom-0 bg-primary/22"
+                        class="absolute top-0 bottom-0 bg-violet-500/22"
                         style="left: {(sug.eeg_p25 / sug.eeg_max) * 100}%; width: {((sug.eeg_p50 - sug.eeg_p25) / sug.eeg_max) * 100}%"
                       ></div>
                       <!-- p50–p75 zone -->
                       <div
-                        class="absolute top-0 bottom-0 bg-primary/12"
+                        class="absolute top-0 bottom-0 bg-violet-500/12"
                         style="left: {(sug.eeg_p50 / sug.eeg_max) * 100}%; width: {((sug.eeg_p75 - sug.eeg_p50) / sug.eeg_max) * 100}%"
                       ></div>
                       <!-- current threshold marker -->
                       <div
-                        class="absolute top-0 bottom-0 w-0.5 bg-primary"
+                        class="absolute top-0 bottom-0 w-0.5 bg-violet-500"
                         style="left: {Math.min((hook.distance_threshold / sug.eeg_max) * 100, 100)}%"
                       ></div>
                       <!-- suggested threshold marker -->
                       <div
-                        class="absolute top-0 bottom-0 w-0.5 bg-primary"
+                        class="absolute top-0 bottom-0 w-0.5 bg-violet-500"
                         style="left: {Math.min((sug.suggested / sug.eeg_max) * 100, 100)}%"
                       ></div>
                     </div>
