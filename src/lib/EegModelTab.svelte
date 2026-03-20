@@ -187,6 +187,98 @@ the Free Software Foundation, version 3 only. -->
   });
 </script>
 
+<!-- ── Model backend ─────────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      {t("model.backend")}
+    </span>
+    <span class="ml-auto text-[0.56rem] text-muted-foreground/60">{t("model.backendReloadsEncoder")}</span>
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+
+      <!-- Backend picker -->
+      <div class="flex flex-col gap-2 px-4 py-3.5">
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
+          {t("model.backendDesc")}
+        </p>
+        <div class="flex items-center gap-1.5">
+          {#each [
+            { id: "zuna", label: t("model.backendZuna"), desc: t("model.backendZunaDesc") },
+            { id: "luna", label: t("model.backendLuna"), desc: t("model.backendLunaDesc") },
+          ] as opt}
+            <button
+              onclick={() => saveModelConfig({ model_backend: opt.id })}
+              class="rounded-lg border px-3 py-2 text-left transition-all cursor-pointer select-none flex-1
+                     {modelConfig.model_backend === opt.id
+                       ? 'border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15'
+                       : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
+              <span class="text-[0.72rem] font-semibold {modelConfig.model_backend === opt.id
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-muted-foreground hover:text-foreground'}">{opt.label}</span>
+              <span class="block text-[0.58rem] text-muted-foreground/70 mt-0.5">{opt.desc}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <!-- LUNA variant (only when LUNA is selected) -->
+      {#if modelConfig.model_backend === "luna"}
+        <div class="flex flex-col gap-2 px-4 py-3.5">
+          <div class="flex items-baseline justify-between">
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("model.lunaVariant")}</span>
+            <span class="text-[0.68rem] text-muted-foreground">{modelConfig.luna_variant}</span>
+          </div>
+          <p class="text-[0.68rem] text-muted-foreground leading-relaxed -mt-0.5">
+            {t("model.lunaVariantDesc")}
+          </p>
+          <div class="flex items-center gap-1.5">
+            {#each [
+              { id: "base",  label: t("model.lunaVariantBase") },
+              { id: "large", label: t("model.lunaVariantLarge") },
+              { id: "huge",  label: t("model.lunaVariantHuge") },
+            ] as v}
+              <button
+                onclick={() => saveModelConfig({ luna_variant: v.id })}
+                class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
+                       transition-all cursor-pointer select-none
+                       {modelConfig.luna_variant === v.id
+                         ? 'border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                         : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
+                {v.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Embedding speed (shown when data is available) -->
+      {#if modelStatus.avg_embed_ms > 0}
+        <div class="flex items-center gap-6 flex-wrap px-4 py-3 bg-slate-50 dark:bg-[#111118]">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+              {t("model.embedSpeed")}
+            </span>
+          </div>
+          <div class="flex items-center gap-3 ml-auto">
+            <Badge variant="outline"
+              class="text-[0.56rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+              {t("model.embedSpeedLast", { ms: modelStatus.last_embed_ms.toFixed(1) })}
+            </Badge>
+            <Badge variant="outline"
+              class="text-[0.56rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+              {t("model.embedSpeedAvg", { ms: modelStatus.avg_embed_ms.toFixed(1) })}
+            </Badge>
+          </div>
+        </div>
+      {/if}
+
+    </CardContent>
+  </Card>
+</section>
+
 <!-- ── Encoder status ────────────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
   <div class="flex items-center gap-2 px-0.5">
@@ -596,98 +688,6 @@ the Free Software Foundation, version 3 only. -->
           {t("model.cosineDistance")}
         </Badge>
       </div>
-
-    </CardContent>
-  </Card>
-</section>
-
-<!-- ── Model backend ─────────────────────────────────────────────────────────── -->
-<section class="flex flex-col gap-2">
-  <div class="flex items-center gap-2 px-0.5">
-    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-      {t("model.backend")}
-    </span>
-    <span class="ml-auto text-[0.56rem] text-muted-foreground/60">{t("model.backendReloadsEncoder")}</span>
-  </div>
-
-  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
-    <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
-
-      <!-- Backend picker -->
-      <div class="flex flex-col gap-2 px-4 py-3.5">
-        <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
-          {t("model.backendDesc")}
-        </p>
-        <div class="flex items-center gap-1.5">
-          {#each [
-            { id: "zuna", label: t("model.backendZuna"), desc: t("model.backendZunaDesc") },
-            { id: "luna", label: t("model.backendLuna"), desc: t("model.backendLunaDesc") },
-          ] as opt}
-            <button
-              onclick={() => saveModelConfig({ model_backend: opt.id })}
-              class="rounded-lg border px-3 py-2 text-left transition-all cursor-pointer select-none flex-1
-                     {modelConfig.model_backend === opt.id
-                       ? 'border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15'
-                       : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
-              <span class="text-[0.72rem] font-semibold {modelConfig.model_backend === opt.id
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-muted-foreground hover:text-foreground'}">{opt.label}</span>
-              <span class="block text-[0.58rem] text-muted-foreground/70 mt-0.5">{opt.desc}</span>
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <!-- LUNA variant (only when LUNA is selected) -->
-      {#if modelConfig.model_backend === "luna"}
-        <div class="flex flex-col gap-2 px-4 py-3.5">
-          <div class="flex items-baseline justify-between">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("model.lunaVariant")}</span>
-            <span class="text-[0.68rem] text-muted-foreground">{modelConfig.luna_variant}</span>
-          </div>
-          <p class="text-[0.68rem] text-muted-foreground leading-relaxed -mt-0.5">
-            {t("model.lunaVariantDesc")}
-          </p>
-          <div class="flex items-center gap-1.5">
-            {#each [
-              { id: "base",  label: t("model.lunaVariantBase") },
-              { id: "large", label: t("model.lunaVariantLarge") },
-              { id: "huge",  label: t("model.lunaVariantHuge") },
-            ] as v}
-              <button
-                onclick={() => saveModelConfig({ luna_variant: v.id })}
-                class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
-                       transition-all cursor-pointer select-none
-                       {modelConfig.luna_variant === v.id
-                         ? 'border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                         : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
-                {v.label}
-              </button>
-            {/each}
-          </div>
-        </div>
-      {/if}
-
-      <!-- Embedding speed (shown when data is available) -->
-      {#if modelStatus.avg_embed_ms > 0}
-        <div class="flex items-center gap-6 flex-wrap px-4 py-3 bg-slate-50 dark:bg-[#111118]">
-          <div class="flex flex-col gap-0.5">
-            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-              {t("model.embedSpeed")}
-            </span>
-          </div>
-          <div class="flex items-center gap-3 ml-auto">
-            <Badge variant="outline"
-              class="text-[0.56rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
-              {t("model.embedSpeedLast", { ms: modelStatus.last_embed_ms.toFixed(1) })}
-            </Badge>
-            <Badge variant="outline"
-              class="text-[0.56rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
-              {t("model.embedSpeedAvg", { ms: modelStatus.avg_embed_ms.toFixed(1) })}
-            </Badge>
-          </div>
-        </div>
-      {/if}
 
     </CardContent>
   </Card>
