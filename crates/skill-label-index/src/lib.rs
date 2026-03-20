@@ -349,15 +349,15 @@ pub fn rebuild(skill_dir: &Path, state: &LabelIndexState) -> RebuildStats {
     let mut eeg_idx     = fresh_index();
     let mut eeg_skipped = 0usize;
 
-    for row in &rows {
+    for row in rows {
         // ── text HNSW ─────────────────────────────────────────────────────────
-        if let Some(ref emb) = row.text_embedding {
-            if !emb.is_empty() { text_idx.insert(emb.clone(), row.id); }
+        if let Some(emb) = row.text_embedding {
+            if !emb.is_empty() { text_idx.insert(emb, row.id); }
         }
 
         // ── context HNSW ──────────────────────────────────────────────────────
-        if let Some(ref emb) = row.context_embedding {
-            if !emb.is_empty() { context_idx.insert(emb.clone(), row.id); }
+        if let Some(emb) = row.context_embedding {
+            if !emb.is_empty() { context_idx.insert(emb, row.id); }
         }
 
         // ── EEG HNSW ──────────────────────────────────────────────────────────

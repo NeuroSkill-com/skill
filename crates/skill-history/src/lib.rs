@@ -498,7 +498,8 @@ pub fn find_session_csv_for_timestamp(skill_dir: &Path, ts_utc: u64) -> Option<S
 pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
     const GAP_SECS: u64 = skill_constants::SESSION_GAP_SECS;
 
-    let mut all_ts: Vec<(u64, String)> = Vec::new();
+    let mut all_ts: Vec<(u64, usize)> = Vec::new();
+    let mut day_names: Vec<String> = Vec::new();
 
     let entries = match std::fs::read_dir(skill_dir) { Ok(e) => e, Err(_) => return vec![] };
     for entry in entries.filter_map(|e| e.ok()) {
@@ -517,9 +518,11 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
             Ok(s) => s, Err(_) => continue,
         };
         let rows = stmt.query_map([], |row| row.get::<_, i64>(0));
+        let day_idx = day_names.len();
+        day_names.push(day_name);
         if let Ok(rows) = rows {
             for row in rows.filter_map(|r| r.ok()) {
-                all_ts.push((ts_to_unix(row), day_name.clone()));
+                all_ts.push((ts_to_unix(row), day_idx));
             }
         }
     }
@@ -531,15 +534,15 @@ pub fn list_embedding_sessions(skill_dir: &Path) -> Vec<EmbeddingSession> {
     let mut start = all_ts[0].0;
     let mut end   = start;
     let mut count: u64 = 1;
-    let mut day   = all_ts[0].1.clone();
+    let mut day_idx = all_ts[0].1;
 
-    for &(ts, ref d) in &all_ts[1..] {
+    for &(ts, di) in &all_ts[1..] {
         if ts.saturating_sub(end) > GAP_SECS {
-            sessions.push(EmbeddingSession { start_utc: start, end_utc: end, n_epochs: count, day: day.clone() });
-            start = ts; end = ts; count = 1; day = d.clone();
+            sessions.push(EmbeddingSession { start_utc: start, end_utc: end, n_epochs: count, day: day_names[day_idx].clone() });
+            start = ts; end = ts; count = 1; day_idx = di;
         } else { end = ts; count += 1; }
     }
-    sessions.push(EmbeddingSession { start_utc: start, end_utc: end, n_epochs: count, day });
+    sessions.push(EmbeddingSession { start_utc: start, end_utc: end, n_epochs: count, day: day_names[day_idx].clone() });
     sessions.reverse();
     sessions
 }

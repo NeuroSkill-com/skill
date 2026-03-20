@@ -57,16 +57,20 @@ pub fn load_csv_metrics_cached(csv_path: &Path) -> Option<CsvMetricsResult> {
 }
 
 /// Downsample a timeseries to at most `max` points.
+///
+/// Uses in-place swaps to avoid cloning the large `EpochRow` structs.
 pub fn downsample_timeseries(ts: &mut Vec<EpochRow>, max: usize) {
     let n = ts.len();
     if n <= max || max < 2 { return; }
     let step = (n - 1) as f64 / (max - 1) as f64;
-    let mut sampled = Vec::with_capacity(max);
     for i in 0..max {
-        let idx = (i as f64 * step).round() as usize;
-        sampled.push(ts[idx.min(n - 1)].clone());
+        let src = (i as f64 * step).round() as usize;
+        let src = src.min(n - 1);
+        if src != i {
+            ts.swap(i, src);
+        }
     }
-    *ts = sampled;
+    ts.truncate(max);
 }
 
 /// Batch-load metrics for multiple sessions.
@@ -643,18 +647,18 @@ pub fn analyze_search_results(result: &skill_commands::SearchResult) -> serde_js
         .flat_map(|q| q.neighbors.iter().map(|n| n.distance as f64)).collect();
     let distance_stats = metric_stats_vec(&all_distances);
     let mut hour_dist: HashMap<u8, u32> = HashMap::new();
-    let mut day_dist:  HashMap<String, u32> = HashMap::new();
+    let mut day_dist:  HashMap<&str, u32> = HashMap::new();
     let mut all_utcs: Vec<u64> = Vec::new();
     for q in &result.results {
         for n in &q.neighbors {
             all_utcs.push(n.timestamp_unix);
             *hour_dist.entry(((n.timestamp_unix % 86400) / 3600) as u8).or_insert(0) += 1;
-            *day_dist.entry(n.date.clone()).or_insert(0) += 1;
+            *day_dist.entry(&n.date).or_insert(0) += 1;
         }
     }
     let mut hourly = serde_json::Map::new();
     for h in 0..24u8 { if let Some(&c) = hour_dist.get(&h) { hourly.insert(format!("{h:02}"), c.into()); } }
-    let mut top_days: Vec<(String, u32)> = day_dist.into_iter().collect();
+    let mut top_days: Vec<(&str, u32)> = day_dist.into_iter().collect();
     top_days.sort_by(|a, b| b.1.cmp(&a.1));
     top_days.truncate(10);
     let time_span_hours = if all_utcs.len() >= 2 {

@@ -398,8 +398,9 @@ pub fn search_embeddings_in_range(
     let date_dirs = list_date_dirs(skill_dir);
 
     // ── Collect query embeddings from days that overlap [start_ts, end_ts] ────
-    let mut query_embs: Vec<(String, PathBuf, RawEmb)> = Vec::new();
-    for (date, dir) in &date_dirs {
+    // Store index into `date_dirs` to avoid cloning String/PathBuf per embedding.
+    let mut query_embs: Vec<(usize, RawEmb)> = Vec::new();
+    for (dd_idx, (date, dir)) in date_dirs.iter().enumerate() {
         let db_path = dir.join(SQLITE_FILE);
         if !db_path.exists() { continue; }
         let embs = read_embeddings_in_range(&db_path, start_ts, end_ts);
@@ -407,7 +408,7 @@ pub fn search_embeddings_in_range(
             eprintln!("[search] {} query embs from {}", embs.len(), date);
         }
         for emb in embs {
-            query_embs.push((date.clone(), dir.clone(), emb));
+            query_embs.push((dd_idx, emb));
         }
     }
     let query_count = query_embs.len();
@@ -439,9 +440,12 @@ pub fn search_embeddings_in_range(
     // ── For each query embedding, search and hydrate ───────────────────────
     let mut results: Vec<QueryEntry> = Vec::with_capacity(query_count);
 
-    for (_qdate, _qdir, qemb) in &query_embs {
+    for (_dd_idx, qemb) in &query_embs {
         let ts_unix = ts_to_unix(qemb.timestamp);
 
+        // Candidates: (date, dir, hnsw_id, timestamp, distance).
+        // For the per-day branch we build lightweight tuples referencing
+        // `day_indices` by index to avoid cloning String/PathBuf per hit.
         let mut candidates: Vec<(String, PathBuf, usize, i64, f32)> = Vec::new();
 
         if let Some(gidx) = global_idx {
@@ -453,21 +457,22 @@ pub fn search_embeddings_in_range(
                 candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
             }
         } else {
-            for day in &day_indices {
+            // Collect with day-index reference; only materialize owned
+            // Strings for the top-k candidates that survive truncation.
+            let mut raw_candidates: Vec<(usize, usize, i64, f32)> = Vec::new();
+            for (di, day) in day_indices.iter().enumerate() {
                 if day.index.is_empty() { continue; }
                 let hits = day.index.search(&qemb.embedding, k, ef.max(k));
                 for hit in hits {
-                    candidates.push((
-                        day.date.clone(),
-                        day.dir.clone(),
-                        hit.id,
-                        *hit.payload,
-                        hit.distance,
-                    ));
+                    raw_candidates.push((di, hit.id, *hit.payload, hit.distance));
                 }
             }
-            candidates.sort_by(|a, b| a.4.partial_cmp(&b.4).unwrap_or(std::cmp::Ordering::Equal));
-            candidates.truncate(k);
+            raw_candidates.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
+            raw_candidates.truncate(k);
+            candidates.reserve(raw_candidates.len());
+            for (di, hid, ts, dist) in raw_candidates {
+                candidates.push((day_indices[di].date.clone(), day_indices[di].dir.clone(), hid, ts, dist));
+            }
         }
 
         // ── Hydrate each candidate ────────────────────────────────────────
@@ -568,12 +573,14 @@ pub fn stream_search_inner(
     };
 
     // ── Collect query embeddings ─────────────────────────────────────────
-    let mut query_embs: Vec<(String, PathBuf, RawEmb)> = Vec::new();
-    for (date, dir) in &date_dirs {
+    // Store index into `date_dirs` to avoid cloning String/PathBuf per embedding.
+    let mut query_embs: Vec<(usize, RawEmb)> = Vec::new();
+    for (dd_idx, (date, dir)) in date_dirs.iter().enumerate() {
         let db_path = dir.join(SQLITE_FILE);
         if !db_path.exists() { continue; }
         let embs = read_embeddings_in_range(&db_path, start_ts, end_ts);
-        for emb in embs { query_embs.push((date.clone(), dir.clone(), emb)); }
+        let _ = date; // used only for db_path
+        for emb in embs { query_embs.push((dd_idx, emb)); }
     }
     let query_count = query_embs.len();
 
@@ -584,7 +591,7 @@ pub fn stream_search_inner(
         entry: None, total: None, error: None, done_count: None,
     });
 
-    for (idx, (_qdate, _qdir, qemb)) in query_embs.iter().enumerate() {
+    for (idx, (_dd_idx, qemb)) in query_embs.iter().enumerate() {
         let ts_unix = ts_to_unix(qemb.timestamp);
 
         let mut candidates: Vec<(String, PathBuf, usize, i64, f32)> = Vec::new();
@@ -598,15 +605,22 @@ pub fn stream_search_inner(
                 candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
             }
         } else {
-            for day in &day_indices {
+            // Collect with day-index reference; only materialize owned
+            // Strings for the top-k candidates that survive truncation.
+            let mut raw_candidates: Vec<(usize, usize, i64, f32)> = Vec::new();
+            for (di, day) in day_indices.iter().enumerate() {
                 if day.index.is_empty() { continue; }
                 let hits = day.index.search(&qemb.embedding, k, ef.max(k));
                 for hit in hits {
-                    candidates.push((day.date.clone(), day.dir.clone(), hit.id, *hit.payload, hit.distance));
+                    raw_candidates.push((di, hit.id, *hit.payload, hit.distance));
                 }
             }
-            candidates.sort_by(|a, b| a.4.partial_cmp(&b.4).unwrap_or(std::cmp::Ordering::Equal));
-            candidates.truncate(k);
+            raw_candidates.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
+            raw_candidates.truncate(k);
+            candidates.reserve(raw_candidates.len());
+            for (di, hid, ts, dist) in raw_candidates {
+                candidates.push((day_indices[di].date.clone(), day_indices[di].dir.clone(), hid, ts, dist));
+            }
         }
 
         let mut neighbors: Vec<NeighborEntry> = Vec::with_capacity(candidates.len());

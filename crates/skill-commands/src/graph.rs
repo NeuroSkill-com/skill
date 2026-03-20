@@ -315,8 +315,9 @@ pub fn generate_svg(
     let mut fl_parents: Vec<String> = {
         let mut seen = std::collections::HashSet::new();
         layers[3].iter()
-            .filter_map(|nd| nd.parent_id.clone())
-            .filter(|p| seen.insert(p.clone()))
+            .filter_map(|nd| nd.parent_id.as_deref())
+            .filter(|p| seen.insert(*p))
+            .map(|p| p.to_string())
             .collect()
     };
     fl_parents.sort_by_key(|p| {

@@ -126,8 +126,8 @@ fn load_or_rebuild_hnsw_generic(
     let mut idx = fresh_hnsw();
     let rows = fetch_rows();
     eprintln!("[screenshot] rebuilding {label} HNSW from {} embeddings", rows.len());
-    for (ts, emb) in &rows {
-        idx.insert(emb.clone(), *ts);
+    for (ts, emb) in rows {
+        idx.insert(emb, ts);
     }
     if let Err(e) = idx.save(&hnsw_path) {
         eprintln!("[screenshot] {label} HNSW save error: {e}");
