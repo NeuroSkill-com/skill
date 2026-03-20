@@ -17,9 +17,9 @@ export interface ToolUseEvent {
   status: string;           // "calling" | "done" | "error" | "approval_required" | "cancelled"
   detail?: string;
   toolCallId?: string;
-  args?: any;               // structured arguments from tool_execution_start
-  result?: any;             // structured result from tool_execution_end
-  expanded?: boolean;       // UI toggle
+  args?: Record<string, unknown>;  // structured arguments from tool_execution_start
+  result?: unknown;                // structured result from tool_execution_end
+  expanded?: boolean;              // UI toggle
 }
 
 export interface Attachment { dataUrl: string; mimeType: string; name: string; }
@@ -68,8 +68,8 @@ export interface ServerStatusPayload {
 
 export interface ChatChunkDelta         { type: "delta"; content: string; }
 export interface ChatChunkToolUse       { type: "tool_use"; tool: string; status: string; detail?: string; }
-export interface ChatChunkToolExecStart { type: "tool_execution_start"; tool_call_id: string; tool_name: string; args: any; }
-export interface ChatChunkToolExecEnd   { type: "tool_execution_end";   tool_call_id: string; tool_name: string; result: any; is_error: boolean; }
+export interface ChatChunkToolExecStart { type: "tool_execution_start"; tool_call_id: string; tool_name: string; args: Record<string, unknown>; }
+export interface ChatChunkToolExecEnd   { type: "tool_execution_end";   tool_call_id: string; tool_name: string; result: unknown; is_error: boolean; }
 export interface ChatChunkToolCancelled { type: "tool_cancelled"; tool_call_id: string; tool_name: string; }
 export interface ChatChunkDone {
   type:              "done";
@@ -152,8 +152,8 @@ export interface StoredToolCallRow {
   status:       string;
   detail?:      string | null;
   tool_call_id?: string | null;
-  args?:        any;
-  result?:      any;
+  args?:        Record<string, unknown>;
+  result?:      unknown;
   created_at:   number;
 }
 
@@ -255,13 +255,20 @@ export function storedToMessage(sm: StoredMessage, idCounter: { value: number })
   return msg;
 }
 
+/** A text segment in a multi-part user message. */
+export interface TextContentPart   { type: "text"; text: string; }
+/** An image segment in a multi-part user message. */
+export interface ImageContentPart  { type: "image_url"; image_url: { url: string }; }
+/** Union of all multi-part content segments. */
+export type ContentPart = TextContentPart | ImageContentPart;
+
 /**
  * Build the content field for a user message (plain string or parts array).
  * If images are present, returns a multi-part content array for the API.
  */
-export function buildUserContent(text: string, imgs: Attachment[]): string | any[] {
+export function buildUserContent(text: string, imgs: Attachment[]): string | ContentPart[] {
   if (imgs.length === 0) return text;
-  const parts: any[] = [];
+  const parts: ContentPart[] = [];
   if (text.trim()) parts.push({ type: "text", text });
   for (const img of imgs) {
     parts.push({ type: "image_url", image_url: { url: img.dataUrl } });

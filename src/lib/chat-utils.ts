@@ -161,8 +161,8 @@ const SENSITIVE_PATH_PREFIXES = [
  *
  * Accepts any object with `tool` and optional `args` fields.
  */
-export function detectToolDanger(tu: { tool: string; args?: Record<string, any> }): string | null {
-  if (tu.tool === "bash" && tu.args?.command) {
+export function detectToolDanger(tu: { tool: string; args?: Record<string, unknown> }): string | null {
+  if (tu.tool === "bash" && typeof tu.args?.command === "string") {
     const cmd = tu.args.command.toLowerCase();
     for (const pat of DANGEROUS_BASH_PATTERNS) {
       if (cmd.includes(pat)) {
@@ -170,7 +170,7 @@ export function detectToolDanger(tu: { tool: string; args?: Record<string, any> 
       }
     }
   }
-  if (["write_file", "edit_file", "read_file"].includes(tu.tool) && tu.args?.path) {
+  if (["write_file", "edit_file", "read_file"].includes(tu.tool) && typeof tu.args?.path === "string") {
     const path = tu.args.path;
     for (const prefix of SENSITIVE_PATH_PREFIXES) {
       if (path.startsWith(prefix)) {
