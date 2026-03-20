@@ -315,7 +315,7 @@ the Free Software Foundation, version 3 only. -->
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                hover:bg-slate-50 dark:hover:bg-white/[0.02]">
         <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
-                    {config.enabled ? 'bg-primary' : 'bg-muted dark:bg-white/[0.08]'}">
+                    {config.enabled ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
           <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
                       {config.enabled ? 'translate-x-4' : 'translate-x-0.5'}"></div>
         </div>
@@ -328,7 +328,7 @@ the Free Software Foundation, version 3 only. -->
           </span>
         </div>
         <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
-                     {config.enabled ? 'text-primary' : 'text-muted-foreground/50'}">
+                     {config.enabled ? 'text-violet-500' : 'text-muted-foreground/50'}">
           {config.enabled ? t("common.on") : t("common.off")}
         </span>
       </button>
@@ -341,7 +341,7 @@ the Free Software Foundation, version 3 only. -->
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                hover:bg-slate-50 dark:hover:bg-white/[0.02]">
         <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
-                    {config.session_only ? 'bg-primary' : 'bg-muted dark:bg-white/[0.08]'}">
+                    {config.session_only ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
           <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
                       {config.session_only ? 'translate-x-4' : 'translate-x-0.5'}"></div>
         </div>
@@ -354,7 +354,7 @@ the Free Software Foundation, version 3 only. -->
           </span>
         </div>
         <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
-                     {config.session_only ? 'text-primary' : 'text-muted-foreground/50'}">
+                     {config.session_only ? 'text-violet-500' : 'text-muted-foreground/50'}">
           {config.session_only ? t("common.on") : t("common.off")}
         </span>
       </button>
@@ -367,7 +367,7 @@ the Free Software Foundation, version 3 only. -->
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                hover:bg-slate-50 dark:hover:bg-white/[0.02]">
         <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
-                    {config.ocr_enabled ? 'bg-primary' : 'bg-muted dark:bg-white/[0.08]'}">
+                    {config.ocr_enabled ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
           <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
                       {config.ocr_enabled ? 'translate-x-4' : 'translate-x-0.5'}"></div>
         </div>
@@ -380,7 +380,7 @@ the Free Software Foundation, version 3 only. -->
           </span>
         </div>
         <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
-                     {config.ocr_enabled ? 'text-primary' : 'text-muted-foreground/50'}">
+                     {config.ocr_enabled ? 'text-violet-500' : 'text-muted-foreground/50'}">
           {config.ocr_enabled ? t("common.on") : t("common.off")}
         </span>
       </button>
@@ -393,7 +393,7 @@ the Free Software Foundation, version 3 only. -->
         class="flex items-center gap-3 px-4 py-3.5 text-left transition-colors w-full
                hover:bg-slate-50 dark:hover:bg-white/[0.02]">
         <div class="relative shrink-0 w-8 h-4 rounded-full transition-colors
-                    {config.use_gpu ? 'bg-primary' : 'bg-muted dark:bg-white/[0.08]'}">
+                    {config.use_gpu ? 'bg-violet-500' : 'bg-muted dark:bg-white/[0.08]'}">
           <div class="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform
                       {config.use_gpu ? 'translate-x-4' : 'translate-x-0.5'}"></div>
         </div>
@@ -406,7 +406,7 @@ the Free Software Foundation, version 3 only. -->
           </span>
         </div>
         <span class="ml-auto text-[0.52rem] font-bold tracking-widest uppercase shrink-0
-                     {config.use_gpu ? 'text-primary' : 'text-muted-foreground/50'}">
+                     {config.use_gpu ? 'text-violet-500' : 'text-muted-foreground/50'}">
           {config.use_gpu ? 'GPU' : 'CPU'}
         </span>
       </button>
@@ -433,7 +433,7 @@ the Free Software Foundation, version 3 only. -->
                min={SCREENSHOT_INTERVAL_MIN_SECS} max={SCREENSHOT_INTERVAL_MAX_SECS}
                step={SCREENSHOT_INTERVAL_STEP_SECS}
                bind:value={config.interval_secs}
-               class="w-full accent-primary h-1.5" />
+               class="w-full accent-violet-500 h-1.5" />
         <span class="text-[0.54rem] text-muted-foreground/60">{t("screenshots.intervalDesc")}</span>
       </div>
 
@@ -451,7 +451,7 @@ the Free Software Foundation, version 3 only. -->
         </div>
         <input id="ss-size" type="range" min="224" max="1536" step="32"
                bind:value={config.image_size}
-               class="w-full accent-primary h-1.5" />
+               class="w-full accent-violet-500 h-1.5" />
         <span class="text-[0.54rem] text-muted-foreground/60">
           {t("screenshots.imageSizeDesc")}
           <span class="font-semibold"> {t("screenshots.imageSizeRecommended")} {recommendedSize}{t("screenshots.imageSizeUnit")}</span>
@@ -470,7 +470,7 @@ the Free Software Foundation, version 3 only. -->
         </div>
         <input id="ss-quality" type="range" min="10" max="100" step="5"
                bind:value={config.quality}
-               class="w-full accent-primary h-1.5" />
+               class="w-full accent-violet-500 h-1.5" />
         <span class="text-[0.54rem] text-muted-foreground/60">{t("screenshots.qualityDesc")}</span>
       </div>
 
@@ -488,7 +488,7 @@ the Free Software Foundation, version 3 only. -->
                   class="w-full rounded-lg border border-border dark:border-white/[0.08]
                          bg-white dark:bg-[#14141e] px-3 py-2
                          text-[0.72rem] text-foreground
-                         focus:outline-none focus:ring-1 focus:ring-ring/50">
+                         focus:outline-none focus:ring-1 focus:ring-violet-500/50">
             <option value="fastembed">{t("screenshots.backendFastembed")}</option>
             <option value="mmproj">{t("screenshots.backendMmproj")}</option>
             <option value="llm-vlm">{t("screenshots.backendLlmVlm")}</option>
@@ -501,7 +501,7 @@ the Free Software Foundation, version 3 only. -->
                     class="w-full rounded-lg border border-border dark:border-white/[0.08]
                            bg-white dark:bg-[#14141e] px-3 py-2
                            text-[0.72rem] text-foreground
-                           focus:outline-none focus:ring-1 focus:ring-ring/50">
+                           focus:outline-none focus:ring-1 focus:ring-violet-500/50">
               <option value="clip-vit-b-32">{t("screenshots.modelClip")}</option>
               <option value="nomic-embed-vision-v1.5">{t("screenshots.modelNomic")}</option>
             </select>
@@ -574,7 +574,7 @@ the Free Software Foundation, version 3 only. -->
           {/if}
           {#if estimate && estimate.unembedded > 0}
             <span class="rounded-full px-1.5 py-0 text-[0.55rem] font-semibold
-                         bg-primary/15 text-primary border border-primary/25">
+                         bg-violet-500/15 text-violet-600 dark:text-violet-400 border border-violet-500/25">
               {estimate.unembedded} {t("screenshots.unembedded")}
             </span>
           {/if}
@@ -597,7 +597,7 @@ the Free Software Foundation, version 3 only. -->
       {@const pct = progress.total > 0 ? Math.round(progress.done / progress.total * 100) : 0}
       <div class="flex flex-col gap-1">
         <div class="h-1.5 rounded-full bg-muted dark:bg-white/[0.06] overflow-hidden">
-          <div class="h-full rounded-full bg-primary transition-all duration-300"
+          <div class="h-full rounded-full bg-violet-500 transition-all duration-300"
                style="width: {pct}%"></div>
         </div>
         <span class="text-[0.58rem] text-muted-foreground/60 tabular-nums">
@@ -642,7 +642,7 @@ the Free Software Foundation, version 3 only. -->
       <div class="flex items-start gap-3">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"
              stroke-linecap="round" stroke-linejoin="round"
-             class="w-5 h-5 shrink-0 text-primary/70 mt-0.5">
+             class="w-5 h-5 shrink-0 text-violet-500/70 mt-0.5">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
           <polyline points="14 2 14 8 20 8"/>
           <line x1="16" y1="13" x2="8" y2="13"/>
@@ -666,7 +666,7 @@ the Free Software Foundation, version 3 only. -->
                 class="w-full rounded-lg border border-border dark:border-white/[0.08]
                        bg-white dark:bg-[#14141e] px-3 py-2
                        text-[0.72rem] text-foreground
-                       focus:outline-none focus:ring-1 focus:ring-ring/50">
+                       focus:outline-none focus:ring-1 focus:ring-violet-500/50">
           {#if isMac}
             <option value="apple-vision">{t("screenshots.ocrEngineAppleVision")}</option>
           {/if}
@@ -718,7 +718,7 @@ the Free Software Foundation, version 3 only. -->
       <!-- Search hint — directs users to the Search window Images tab -->
       <div class="flex items-center gap-2 px-1 py-1">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             class="w-3.5 h-3.5 text-primary/50 shrink-0">
+             class="w-3.5 h-3.5 text-violet-500/50 shrink-0">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
         <span class="text-[0.58rem] text-muted-foreground leading-relaxed">
@@ -900,19 +900,19 @@ the Free Software Foundation, version 3 only. -->
   {/if}
 
   <!-- ── Privacy note ────────────────────────────────────────────────────── -->
-  <div class="rounded-xl border border-primary/20 bg-primary/5
-              dark:bg-primary/10 px-4 py-3 flex gap-3">
+  <div class="rounded-xl border border-violet-500/20 bg-violet-500/5
+              dark:bg-violet-500/10 px-4 py-3 flex gap-3">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round"
-         class="w-4 h-4 shrink-0 text-primary mt-0.5">
+         class="w-4 h-4 shrink-0 text-violet-500 mt-0.5">
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
       <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
     </svg>
     <div class="flex flex-col gap-0.5">
-      <p class="text-[0.62rem] text-primary leading-relaxed">
+      <p class="text-[0.62rem] text-violet-600 dark:text-violet-400 leading-relaxed">
         {t("screenshots.privacyNote")}
       </p>
-      <p class="text-[0.54rem] text-primary/60 font-mono">
+      <p class="text-[0.54rem] text-violet-600/60 dark:text-violet-400/60 font-mono">
         {t("screenshots.storagePath")}
       </p>
     </div>
