@@ -268,3 +268,178 @@ pub async fn get_hook_log_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -
     .map_err(|e| e.to_string())
 }
 
+
+// ── Hook CRUD + keyword suggestions (moved from mod.rs) ──────────────────────
+
+use std::collections::HashMap;
+use tauri::AppHandle;
+use crate::MutexExt;
+use crate::settings::{HookRule, HookStatus};
+
+pub fn sanitize_hook(mut h: HookRule) -> Option<HookRule> {
+    h.name = h.name.trim().to_owned();
+    if h.name.is_empty() { return None; }
+    h.command = h.command.trim().to_owned();
+    h.text = h.text.trim().to_owned();
+    let scenario = h.scenario.trim().to_lowercase();
+    h.scenario = match scenario.as_str() {
+        "emotional" | "physical" | "cognitive" => scenario,
+        _ => "any".to_owned(),
+    };
+    h.keywords = h.keywords
+        .into_iter()
+        .map(|k| k.trim().to_owned())
+        .filter(|k| !k.is_empty())
+        .take(20)
+        .collect();
+    h.distance_threshold = h.distance_threshold.clamp(0.01, 1.0);
+    h.recent_limit = h.recent_limit.clamp(10, 20);
+    Some(h)
+}
+
+#[tauri::command]
+pub fn get_hooks(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<HookRule> {
+    state.lock_or_recover().hooks.clone()
+}
+
+#[tauri::command]
+pub fn set_hooks(
+    hooks: Vec<HookRule>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    let clean: Vec<HookRule> = hooks
+        .into_iter()
+        .filter_map(sanitize_hook)
+        .take(100)
+        .collect();
+    {
+        let mut s = state.lock_or_recover();
+        s.hooks = clean;
+        let keep: std::collections::HashSet<String> = s.hooks.iter().map(|h| h.name.clone()).collect();
+        s.hook_runtime.lock_or_recover().retain(|name, _| keep.contains(name));
+    }
+    crate::save_settings(&app);
+}
+
+#[tauri::command]
+pub fn get_hook_statuses(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<HookStatus> {
+    let s = state.lock_or_recover();
+    let runtime = s.hook_runtime.lock_or_recover();
+    s.hooks
+        .iter()
+        .cloned()
+        .map(|hook| HookStatus {
+            last_trigger: runtime.get(&hook.name).cloned(),
+            hook,
+        })
+        .collect()
+}
+
+#[derive(serde::Serialize)]
+pub struct HookKeywordSuggestion {
+    pub keyword: String,
+    pub source:  String,
+    pub score:   f32,
+}
+
+fn norm_keyword(s: &str) -> String {
+    s.trim().to_lowercase()
+}
+
+fn fuzzy_score(query: &str, candidate: &str) -> f32 {
+    let q = norm_keyword(query);
+    let c = norm_keyword(candidate);
+    if q.is_empty() || c.is_empty() { return 0.0; }
+    if q == c { return 1.0; }
+    if c.contains(&q) { return 0.92; }
+    if q.contains(&c) { return 0.88; }
+    if skill_exg::fuzzy_match(&q, &c) { return 0.75; }
+    0.0
+}
+
+fn merge_suggestion(
+    out: &mut HashMap<String, HookKeywordSuggestion>,
+    keyword: &str, source: &str, score: f32,
+) {
+    let k = keyword.trim();
+    if k.is_empty() || !score.is_finite() || score <= 0.0 { return; }
+    let key = norm_keyword(k);
+    if key.is_empty() { return; }
+    if let Some(existing) = out.get_mut(&key) {
+        existing.score = existing.score.max(score);
+        if existing.source != source { existing.source = "both".to_owned(); }
+    } else {
+        out.insert(key, HookKeywordSuggestion {
+            keyword: k.to_owned(), source: source.to_owned(), score,
+        });
+    }
+}
+
+#[tauri::command]
+pub async fn suggest_hook_keywords(
+    draft:     String,
+    limit:     Option<usize>,
+    state:     tauri::State<'_, Mutex<Box<AppState>>>,
+    embedder:  tauri::State<'_, std::sync::Arc<crate::label_cmds::EmbedderState>>,
+    label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
+) -> Result<Vec<HookKeywordSuggestion>, String> {
+    let q = draft.trim().to_owned();
+    if q.len() < 2 { return Ok(vec![]); }
+
+    let max_n = limit.unwrap_or(8).clamp(1, 20);
+    let skill_dir = skill_dir(&state);
+    let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
+    let embedder = std::sync::Arc::clone(&embedder);
+    let label_idx = std::sync::Arc::clone(&label_idx);
+
+    tokio::task::spawn_blocking(move || -> Result<Vec<HookKeywordSuggestion>, String> {
+        let mut merged: HashMap<String, HookKeywordSuggestion> = HashMap::new();
+
+        // Fuzzy suggestions from labels.sqlite
+        if labels_db.exists() {
+            if let Ok(conn) = skill_data::util::open_readonly(&labels_db) {
+                if let Ok(mut stmt) = conn.prepare(
+                    "SELECT text FROM labels
+                     WHERE length(trim(text)) > 0
+                     GROUP BY text
+                     ORDER BY MAX(created_at) DESC
+                     LIMIT 600",
+                ) {
+                    if let Ok(rows) = stmt.query_map([], |r| r.get::<_, String>(0)) {
+                        for text in rows.flatten() {
+                            let score = fuzzy_score(&q, &text);
+                            if score > 0.0 { merge_suggestion(&mut merged, &text, "fuzzy", score); }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Semantic suggestions from label-text HNSW
+        {
+            let mut guard = embedder.0.lock_or_recover();
+            if let Some(te) = guard.as_mut() {
+                let mut vecs = te.embed(vec![q.as_str()], None).map_err(|e| e.to_string())?;
+                let query_vec = vecs.remove(0);
+                let k = (max_n * 3).clamp(8, 48);
+                let ef = (k * 4).max(64);
+                let hits = crate::label_index::search_by_text_vec(&query_vec, k, ef, &skill_dir, &label_idx);
+                for h in hits {
+                    let score = (1.0 - (h.distance / 2.0)).clamp(0.0, 1.0);
+                    merge_suggestion(&mut merged, &h.text, "embedding", score);
+                }
+            }
+        }
+
+        let mut out: Vec<HookKeywordSuggestion> = merged.into_values().collect();
+        out.sort_by(|a, b| {
+            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.keyword.len().cmp(&b.keyword.len()))
+        });
+        out.truncate(max_n);
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
