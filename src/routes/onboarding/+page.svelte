@@ -101,7 +101,7 @@ the Free Software Foundation, version 3 only. -->
   let modelsTimer: ReturnType<typeof setInterval> | null = null;
 
   // ── Model download step state ─────────────────────────────────────────────
-  let qwenTarget      = $state<LlmModelEntry | null>(null);
+  let llmTarget      = $state<LlmModelEntry | null>(null);
   let zunaStatus      = $state<EegModelStatusLite | null>(null);
   let modelLoadError  = $state("");
   let ttsActionBusy   = $state(false);
@@ -120,14 +120,14 @@ the Free Software Foundation, version 3 only. -->
   let autoModelInFlight   = $state(false);
   let autoModelsStarted   = $state(false);
 
-  const qwenIsDownloading = $derived(qwenTarget?.state === "downloading");
-  const qwenIsDownloaded  = $derived(qwenTarget?.state === "downloaded");
-  const qwenProgressPct   = $derived(((qwenTarget?.progress ?? 0) * 100));
+  const llmIsDownloading = $derived(llmTarget?.state === "downloading");
+  const llmIsDownloaded  = $derived(llmTarget?.state === "downloaded");
+  const llmProgressPct   = $derived(((llmTarget?.progress ?? 0) * 100));
   const zunaIsDownloading = $derived(zunaStatus?.downloading_weights ?? false);
   const zunaIsDownloaded  = $derived(zunaStatus?.weights_found ?? false);
   const zunaProgressPct   = $derived(((zunaStatus?.download_progress ?? 0) * 100));
   const allRecommendedReady = $derived(
-    qwenIsDownloaded && zunaIsDownloaded &&
+    llmIsDownloaded && zunaIsDownloaded &&
     neuttsDlState === "ready" && kittenDlState === "ready" &&
     ocrDlState === "ready"
   );
@@ -145,7 +145,7 @@ the Free Software Foundation, version 3 only. -->
       if (stage === "kitten") return fmt("Kitten", kittenDlState === "ready", kittenDlState === "downloading", 0, kittenDlState === "error");
       if (stage === "neutts") return fmt("NeuTTS", neuttsDlState === "ready", neuttsDlState === "downloading", 0, neuttsDlState === "error");
       if (stage === "ocr") return fmt("OCR", ocrDlState === "ready", ocrDlState === "downloading", 0, ocrDlState === "error");
-      return fmt("LLM", qwenIsDownloaded, qwenIsDownloading, qwenProgressPct, false);
+      return fmt("LLM", llmIsDownloaded, llmIsDownloading, llmProgressPct, false);
     };
     const parts = onboardingDownloadOrder.map(stagePart);
 
@@ -254,7 +254,7 @@ the Free Software Foundation, version 3 only. -->
         invoke<EegModelStatusLite>("get_eeg_model_status"),
         invoke<boolean>("check_ocr_models_ready"),
       ]);
-      qwenTarget = pickLlmTarget(catalog.entries);
+      llmTarget = pickLlmTarget(catalog.entries);
       zunaStatus = eeg;
       if (ocrReady && ocrDlState !== "ready") ocrDlState = "ready";
       modelLoadError = "";
@@ -263,9 +263,9 @@ the Free Software Foundation, version 3 only. -->
     }
   }
 
-  async function downloadQwen() {
-    if (!qwenTarget || qwenTarget.state === "downloading" || qwenTarget.state === "downloaded") return;
-    await invoke("download_llm_model", { filename: qwenTarget.filename });
+  async function downloadLlm() {
+    if (!llmTarget || llmTarget.state === "downloading" || llmTarget.state === "downloaded") return;
+    await invoke("download_llm_model", { filename: llmTarget.filename });
     await refreshModelDownloads();
   }
 
@@ -349,8 +349,8 @@ the Free Software Foundation, version 3 only. -->
           if (neuttsDlState !== "ready") await downloadTtsBackend("neutts");
         } else if (stage === "ocr") {
           if (ocrDlState !== "ready") await downloadOcrModels();
-        } else if (!qwenIsDownloaded && !qwenIsDownloading) {
-          await downloadQwen();
+        } else if (!llmIsDownloaded && !llmIsDownloading) {
+          await downloadLlm();
         }
       }
       await refreshModelDownloads();
@@ -366,7 +366,7 @@ the Free Software Foundation, version 3 only. -->
     if (stage === "kitten") return kittenDlState === "ready";
     if (stage === "neutts") return neuttsDlState === "ready";
     if (stage === "ocr") return ocrDlState === "ready";
-    return qwenIsDownloaded;
+    return llmIsDownloaded;
   }
 
   function isStageDownloading(stage: OnboardingModelKey): boolean {
@@ -374,7 +374,7 @@ the Free Software Foundation, version 3 only. -->
     if (stage === "kitten") return kittenDlState === "downloading" || (ttsActionBusy && autoModelStage === "kitten");
     if (stage === "neutts") return neuttsDlState === "downloading" || (ttsActionBusy && autoModelStage === "neutts");
     if (stage === "ocr") return ocrDlState === "downloading";
-    return qwenIsDownloading;
+    return llmIsDownloading;
   }
 
   function advanceAutoModelStage() {
@@ -404,8 +404,8 @@ the Free Software Foundation, version 3 only. -->
         await downloadTtsBackend("neutts");
       } else if (autoModelStage === "ocr" && ocrDlState !== "ready") {
         await downloadOcrModels();
-      } else if (autoModelStage === "llm" && !qwenIsDownloaded && !qwenIsDownloading) {
-        await downloadQwen();
+      } else if (autoModelStage === "llm" && !llmIsDownloaded && !llmIsDownloading) {
+        await downloadLlm();
       }
     } catch (e) {
       modelLoadError = String(e);
@@ -552,7 +552,7 @@ the Free Software Foundation, version 3 only. -->
 
   $effect(() => {
     zunaStatus;
-    qwenTarget;
+    llmTarget;
     kittenDlState;
     neuttsDlState;
     ocrDlState;
@@ -881,19 +881,19 @@ the Free Software Foundation, version 3 only. -->
                 <span class="text-sm">🤖</span>
                 <span class="text-[0.66rem] font-semibold">{t("onboarding.models.qwenTitle")}</span>
                 <span class="text-[0.56rem] text-emerald-600 dark:text-emerald-400 ml-auto">
-                  {qwenTarget ? qwenTarget.quant : "Q4"}
+                  {llmTarget ? llmTarget.quant : "Q4"}
                 </span>
               </div>
               <p class="text-[0.58rem] text-muted-foreground/80 leading-relaxed">{t("onboarding.models.qwenDesc")}</p>
-              {#if qwenIsDownloading}
+              {#if llmIsDownloading}
                 <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                  <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300" style="width:{qwenProgressPct.toFixed(1)}%"></div>
+                  <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300" style="width:{llmProgressPct.toFixed(1)}%"></div>
                 </div>
               {/if}
               <div class="flex justify-end">
-                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={downloadQwen}
-                        disabled={qwenIsDownloaded || qwenIsDownloading || !qwenTarget}>
-                  {qwenIsDownloaded ? t("onboarding.models.downloaded") : qwenIsDownloading ? t("onboarding.models.downloading") : t("onboarding.models.download")}
+                <Button size="sm" class="h-7 text-[0.62rem] px-3" onclick={downloadLlm}
+                        disabled={llmIsDownloaded || llmIsDownloading || !llmTarget}>
+                  {llmIsDownloaded ? t("onboarding.models.downloaded") : llmIsDownloading ? t("onboarding.models.downloading") : t("onboarding.models.download")}
                 </Button>
               </div>
             </div>
