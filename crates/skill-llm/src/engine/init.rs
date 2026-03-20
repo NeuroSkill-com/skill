@@ -99,6 +99,12 @@ pub fn init(
     // a value, cap it at the model's trained maximum context length.
     let mut config = config.clone();
     if let Some(entry) = catalog.active_model_entry() {
+        // Carry model metadata into the config so the actor can estimate
+        // memory for dynamic context resizing at runtime.
+        config.params_b = entry.params_b;
+        config.quant = entry.quant.clone();
+        config.max_context_length = entry.max_context_length;
+
         if config.ctx_size.is_none() {
             let recommended = crate::catalog::recommend_ctx_size(entry);
             push_log(&app, &log_buf, "info",
