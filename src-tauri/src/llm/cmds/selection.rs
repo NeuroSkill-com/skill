@@ -7,7 +7,7 @@ use tauri::AppHandle;
 
 use crate::MutexExt;
 use crate::AppState;
-use super::save_catalog;
+use super::save_catalog_locked;
 
 /// Set the active LLM model (by filename).
 /// The selection is persisted to `llm_catalog.json` immediately.
@@ -26,7 +26,8 @@ pub fn set_llm_active_model(
     // Mirror into LlmConfig so the server picks the updated pair up on restart.
     llm.config.model_path = llm.catalog.active_model_path();
     llm.config.mmproj     = llm.catalog.active_mmproj_path();
-    save_catalog(&app, &s);
+    save_catalog_locked(&app, &s.skill_dir, &llm);
+    drop(llm);
     drop(s);
     crate::save_settings_handle(&app);
 }
@@ -82,7 +83,8 @@ pub fn set_llm_active_mmproj(
 
     llm.config.model_path = llm.catalog.active_model_path();
     llm.config.mmproj     = llm.catalog.active_mmproj_path();
-    save_catalog(&app, &s);
+    save_catalog_locked(&app, &s.skill_dir, &llm);
+    drop(llm);
     drop(s);
     crate::save_settings_handle(&app);
 }
