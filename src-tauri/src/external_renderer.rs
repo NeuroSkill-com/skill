@@ -179,8 +179,4 @@ pub(crate) fn setup(app: &mut tauri::App) {
     });
 }
 
-// ── App setup (extracted to reduce `run()` stack frame) ───────────────────────
 
-/// Extracted from the `.setup()` closure so LLVM does not merge its locals
-/// into the already-huge `run()` stack frame produced by `generate_handler!`.
-#[inline(never)]
