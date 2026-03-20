@@ -10192,6 +10192,7 @@ dependencies = [
  "serde_json",
  "skill-constants",
  "skill-eeg",
+ "skill-health",
  "sysinfo 0.38.4",
  "tempfile",
 ]
@@ -10251,6 +10252,16 @@ dependencies = [
  "serde_json",
  "tao",
  "wry",
+]
+
+[[package]]
+name = "skill-health"
+version = "0.0.1"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
