@@ -386,7 +386,7 @@ mod tests {
             data_norm: 5.0,
             model_backend: ExgModelBackend::Luna,
             luna_variant: "large".into(),
-            luna_hf_repo: "thorir/LUNA".into(),
+            luna_hf_repo: "PulpBio/LUNA".into(),
         };
         let json = serde_json::to_string(&cfg).unwrap();
         let parsed: EegModelConfig = serde_json::from_str(&json).unwrap();
@@ -466,7 +466,7 @@ mod tests {
             data_norm: 7.5,
             model_backend: ExgModelBackend::Luna,
             luna_variant: "huge".into(),
-            luna_hf_repo: "thorir/LUNA".into(),
+            luna_hf_repo: "PulpBio/LUNA".into(),
         };
         save_model_config(&dir, &cfg);
         let loaded = load_model_config(&dir);

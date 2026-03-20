@@ -58,7 +58,7 @@ the Free Software Foundation, version 3 only. -->
   // ── State ──────────────────────────────────────────────────────────────────
   let modelConfig = $state<EegModelConfig>({
     hf_repo: "Zyphra/ZUNA", hnsw_m: 16, hnsw_ef_construction: 200, data_norm: 10,
-    model_backend: "zuna", luna_variant: "base", luna_hf_repo: "thorir/LUNA",
+    model_backend: "zuna", luna_variant: "base", luna_hf_repo: "PulpBio/LUNA",
   });
   let modelStatus = $state<EegModelStatus>({
     encoder_loaded: false, encoder_describe: null,

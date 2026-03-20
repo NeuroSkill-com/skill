@@ -395,7 +395,7 @@ pub const ZUNA_WEIGHTS_FILE: &str = "model-00001-of-00001.safetensors";
 pub const ZUNA_CONFIG_FILE: &str = "config.json";
 
 /// HuggingFace repository identifier for the LUNA EEG foundation model.
-pub const LUNA_HF_REPO: &str = "thorir/LUNA";
+pub const LUNA_HF_REPO: &str = "PulpBio/LUNA";
 
 /// Config filename within the LUNA HF repo snapshot.
 pub const LUNA_CONFIG_FILE: &str = "config.json";
