@@ -69,6 +69,9 @@ the Free Software Foundation, version 3 only. -->
 
 <section class="flex flex-col gap-4">
 
+  <!-- ── EXG Model (encoder, backend, HNSW, re-embed) ──────────────────────── -->
+  <EegModelTab />
+
   <!-- ── Signal Processing ──────────────────────────────────────────────────── -->
   <div class="flex flex-col gap-2">
     <div class="flex items-center gap-2 px-0.5">
@@ -254,7 +257,5 @@ the Free Software Foundation, version 3 only. -->
     </Card>
   </div>
 
-  <!-- ── EXG Model (encoder, backend, HNSW, re-embed) ──────────────────────── -->
-  <EegModelTab />
 
 </section>
