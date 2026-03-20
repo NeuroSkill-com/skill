@@ -121,11 +121,17 @@ the Free Software Foundation, version 3 only. -->
   }
 
   async function runCountdown(secs: number): Promise<boolean> {
-    totalSecs = secs; countdown = secs;
+    totalSecs = secs;
+    countdown = secs;
+    const endTime = Date.now() + secs * 1000;
     while (countdown > 0) {
-      await sleep(1000);
+      // Sleep until the next whole-second boundary to avoid cumulative drift.
+      const remaining = endTime - Date.now();
+      if (remaining <= 0) { countdown = 0; break; }
+      const nextTick = remaining % 1000 || 1000;
+      await sleep(nextTick);
       if (!running) return false;
-      countdown--;
+      countdown = Math.max(0, Math.round((endTime - Date.now()) / 1000));
     }
     return true;
   }
@@ -200,15 +206,14 @@ the Free Software Foundation, version 3 only. -->
           const nextAction = p.actions[(ai + 1) % p.actions.length];
           phase = { kind: "break", actionIndex: ai, loop };
 
-          // Two-part break announcement with a short gap between "Break." and
-          // "Next: <action>." so each part lands as a distinct utterance.
-          // Wait for "Break." to finish before the gap so the user has a clear
-          // stopping cue, then fire "Next: …" and immediately start the
-          // countdown — the follow-up plays in the first seconds of the break.
+          // Announce both parts sequentially so TTS is fully done before the
+          // countdown starts.  This prevents "Next: …" from bleeding into the
+          // next action phase and delaying its countdown.
           await ttsSpeakWait("Break.");
           if (!running) break;
           await sleep(300);
-          ttsSpeak(`Next: ${nextAction.label}.`);   // fire-and-forget; plays during countdown
+          await ttsSpeakWait(`Next: ${nextAction.label}.`);
+          if (!running) break;
 
           await notify(t("calibration.break"),
             t("calibration.notifBreakBody", { next: nextAction.label }));
