@@ -402,19 +402,22 @@ pub(crate) fn fetch_urls_parallel(urls: &[String]) -> Vec<String> {
 /// `web_search render=true` and the HTTP fallback in `web_fetch`.
 pub(crate) fn fetch_page_content(url: &str, max_chars: usize) -> String {
     // Try external renderer (Tauri webview with JS rendering).
-    if skill_headless::Browser::has_external_renderer() {
-        tool_log!("tool", "[fetch] external renderer: {}", url);
-        match skill_headless::external_fetch_page(url, 0) {
-            Some(Ok(t)) if !t.trim().is_empty() => {
-                return truncate_text(&t, max_chars);
+    #[cfg(feature = "headless")]
+    {
+        if skill_headless::Browser::has_external_renderer() {
+            tool_log!("tool", "[fetch] external renderer: {}", url);
+            match skill_headless::external_fetch_page(url, 0) {
+                Some(Ok(t)) if !t.trim().is_empty() => {
+                    return truncate_text(&t, max_chars);
+                }
+                Some(Ok(_)) => {
+                    tool_log!("tool", "[fetch] external renderer empty for {}, trying HTTP", url);
+                }
+                Some(Err(e)) => {
+                    tool_log!("tool", "[fetch] external renderer failed for {}: {}, trying HTTP", url, e);
+                }
+                None => {}
             }
-            Some(Ok(_)) => {
-                tool_log!("tool", "[fetch] external renderer empty for {}, trying HTTP", url);
-            }
-            Some(Err(e)) => {
-                tool_log!("tool", "[fetch] external renderer failed for {}: {}, trying HTTP", url, e);
-            }
-            None => {}
         }
     }
 
@@ -523,6 +526,26 @@ pub(crate) fn headless_fetch_url(
     selector: Option<&str>,
     eval_js: Option<&str>,
 ) -> Value {
+    #[cfg(not(feature = "headless"))]
+    {
+        let _ = (wait_ms, selector, eval_js);
+        let text = fetch_page_content(url, 12_000);
+        if text.trim().is_empty() {
+            json!({ "ok": false, "tool": "web_fetch", "url": url, "error": "headless not available, HTTP fallback returned no content", "fallback": true })
+        } else {
+            json!({
+                "ok": true,
+                "tool": "web_fetch",
+                "url": url,
+                "mode": "http_fallback",
+                "content": text,
+                "truncated": text.len() >= 12_000,
+            })
+        }
+    }
+
+    #[cfg(feature = "headless")]
+    {
     use skill_headless::{Browser, BrowserConfig, Command};
 
     // If the standalone browser is unavailable, use the unified
@@ -649,6 +672,7 @@ pub(crate) fn headless_fetch_url(
         "content": truncate_text(&body, 12_000),
         "truncated": body.chars().count() > 12_000,
     })
+    } // #[cfg(feature = "headless")]
 }
 
 /// Render multiple URLs in a single headless browser session and return the
@@ -658,6 +682,13 @@ pub(crate) fn headless_fetch_url(
 /// Returns `None` if the browser fails to launch.  Individual page errors
 /// result in an error string at that index instead of content.
 pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
+    #[cfg(not(feature = "headless"))]
+    {
+        Some(fetch_urls_parallel(urls))
+    }
+
+    #[cfg(feature = "headless")]
+    {
     use skill_headless::{Browser, BrowserConfig, Command};
 
     // If the standalone browser is unavailable, use the unified parallel
@@ -731,6 +762,7 @@ pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
 
     let _ = browser.send(Command::Close);
     Some(results)
+    } // #[cfg(feature = "headless")]
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
