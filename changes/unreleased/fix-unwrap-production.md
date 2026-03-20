@@ -1,3 +1,0 @@
-### Bugfixes
-
-- **Remove `.unwrap()` from production Rust code**: Replaced all 137 `.unwrap()` calls in production (non-test) code with safe alternatives — `expect("reason")` for provably-safe invariants, `unwrap_or`/`unwrap_or_default` for fallible values, `let Some(...) = ... else { ... }` for early returns, and `?` for propagation. Prevents potential panics in session CSV/Parquet writers, PPG analysis, screenshot store SQL queries, health store, GPU stats, history cache, tool call parsing, TTS engine, LLM init, headless browser, autostart, job queue, device session adapters, tray icons, settings commands, and all Mutex lock sites. Test code retains `.unwrap()` as is standard practice.

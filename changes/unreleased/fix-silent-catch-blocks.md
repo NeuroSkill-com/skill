@@ -1,3 +1,0 @@
-### Bugfixes
-
-- **Replace silent catch blocks with console.warn logging**: Added descriptive `console.warn` messages to ~80 silent `catch {}` / `.catch(() => {})` blocks across all frontend source files. Each warning includes a bracketed module tag (e.g. `[chat]`, `[tts]`, `[goals]`) and the failed operation name, making previously invisible failures easy to diagnose in the browser console. Affected files span routes (+page.svelte for home, chat, search, history, calibration, onboarding, settings, session, labels, api, compare, focus-timer), layout, and shared lib components (TtsTab, LlmTab, GoalsTab, SleepTab, ToolsTab, ScreenshotsTab, UpdatesTab, ChatSidebar, ChatMessageList, MarkdownRenderer, TtsTestWidget, HelpElectrodes, theme-store, window-title, i18n).

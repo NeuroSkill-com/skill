@@ -1,3 +1,0 @@
-### Bugfixes
-
-- **Test coverage expansion**: Added 164 new tests across frontend and Rust crates. Frontend: 3 new test files — `format.test.ts` (47 tests covering 31 formatting functions), `history-helpers.test.ts` (53 tests covering day math, label colors, duration formatting), `umap-helpers.test.ts` (32 tests covering easing, color conversion, geometry normalisation, gradient ticks). Rust: `skill-tools/exec.rs` (24 tests for truncation, path resolution, bash/path safety, UTC offset formatting), `skill-label-index` (8 tests for HNSW insert, search, rebuild, empty-state handling). Total test count: frontend 280→412, Rust skill-tools 58→82, skill-label-index 0→8.

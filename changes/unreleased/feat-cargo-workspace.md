@@ -1,3 +1,0 @@
-### Build
-
-- **Cargo workspace consolidation**: All 21 Rust crates now share a single Cargo workspace defined in the project root `Cargo.toml`. A shared target directory (`src-tauri/target/`) eliminates the ~3.6 GB of duplicate build artifacts that previously accumulated in per-crate `target/` directories under `crates/`. The `.cargo/config.toml` was moved from `src-tauri/` to the project root, and `[patch.crates-io]` / `[profile.dev]` sections were moved to the workspace root as required by Cargo. All CI and release workflows updated accordingly (`Swatinem/rust-cache` workspace paths, `Cargo.lock` hash keys, `cargo build -p skill` from workspace root).

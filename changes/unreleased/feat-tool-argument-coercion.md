@@ -1,3 +1,0 @@
-### Features
-
-- **Tool argument type coercion**: `validate_tool_arguments` now coerces argument types before JSON Schema validation, fixing multi-model compatibility. Handles string-to-boolean (`"true"` → `true`), string-to-number (`"3"` → `3`), number-to-string (`42` → `"42"`), integer-to-float rounding, string-encoded JSON objects/arrays, and `"yes"`/`"no"`/`"on"`/`"off"` boolean aliases. Added `coerce_tool_call_arguments` public API for pre-execution coercion. Different LLM backends (Llama, Qwen, Mistral, Gemma, DeepSeek) emit arguments in subtly different type formats — this coercion layer normalises them transparently.
