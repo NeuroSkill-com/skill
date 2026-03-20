@@ -143,7 +143,10 @@ pub async fn interactive_search(
     embedder:  tauri::State<'_, std::sync::Arc<crate::label_cmds::EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<InteractiveSearchResult, String> {
-    let skill_dir = skill_dir(&state);
+    let (skill_dir, eeg_model_backend) = {
+        let s = state.lock_or_recover();
+        (s.skill_dir.clone(), s.embedding.model_config.model_backend.as_str().to_string())
+    };
     let embedder  = std::sync::Arc::clone(&embedder);
     let label_idx = std::sync::Arc::clone(&label_idx);
 
@@ -187,7 +190,7 @@ pub async fn interactive_search(
         // ── Load all daily EEG HNSW indices once ──────────────────────────
         let day_indices: Vec<DayIndex> = list_date_dirs(&skill_dir)
             .into_iter()
-            .filter_map(|(date, dir)| load_day_index(date, dir))
+            .filter_map(|(date, dir)| load_day_index_for(date, dir, &eeg_model_backend))
             .collect();
 
         let ef_eeg    = (k_eeg * 4).max(64);

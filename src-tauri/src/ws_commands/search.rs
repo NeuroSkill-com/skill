@@ -331,7 +331,7 @@ pub(super) fn compare(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     use crate::commands::{
         InteractiveGraphNode, InteractiveGraphEdge,
-        list_date_dirs, load_day_index, get_labels_near, generate_dot, ts_to_unix,
+        list_date_dirs, load_day_index_for, get_labels_near, generate_dot, ts_to_unix,
     };
     use crate::constants::LABELS_FILE;
 
@@ -346,9 +346,10 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
     let reach_minutes = msg.get("reach_minutes").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 60);
     let reach_seconds = reach_minutes * 60;
 
-    let (skill_dir, _model_code) = crate::read_state(
+    let (skill_dir, _model_code, eeg_model_backend) = crate::read_state(
         &app.app_state(),
-        |s| (s.skill_dir.clone(), s.ui.text_embedding_model.clone()),
+        |s| (s.skill_dir.clone(), s.ui.text_embedding_model.clone(),
+             s.embedding.model_config.model_backend.as_str().to_string()),
     );
 
     let embedder_arc = std::sync::Arc::clone(
@@ -391,7 +392,7 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
     // Load all daily EEG HNSW indices once (re-used for every text label).
     let day_indices: Vec<_> = list_date_dirs(&skill_dir)
         .into_iter()
-        .filter_map(|(date, dir)| load_day_index(date, dir))
+        .filter_map(|(date, dir)| load_day_index_for(date, dir, &eeg_model_backend))
         .collect();
 
     let ef_eeg    = (k_eeg * 4).max(64);
