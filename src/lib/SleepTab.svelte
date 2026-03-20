@@ -64,7 +64,7 @@ the Free Software Foundation, version 3 only. -->
 
   async function save() {
     saving = true;
-    try { await invoke("set_sleep_config", { config }); } catch {}
+    try { await invoke("set_sleep_config", { config }); } catch (e) { console.warn("[sleep] set_sleep_config failed:", e); }
     saving = false;
   }
 
@@ -86,7 +86,7 @@ the Free Software Foundation, version 3 only. -->
   onMount(async () => {
     try {
       config = await invoke<SleepConfig>("get_sleep_config");
-    } catch {}
+    } catch (e) { console.warn("[sleep] get_sleep_config failed:", e); }
   });
 
   // Arc path for the sleep span on the clock

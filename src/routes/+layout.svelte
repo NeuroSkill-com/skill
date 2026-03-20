@@ -48,7 +48,7 @@ the Free Software Foundation, version 3 only. -->
     // macOS first launch" issue caused by calling show() in Tauri setup
     // before WKWebView has loaded any content.  For secondary windows
     // (settings, help, etc.) the command is a no-op.
-    invoke("show_main_window").catch(() => {});
+    invoke("show_main_window").catch(e => console.warn("[layout] show_main_window failed:", e));
 
     // Restore theme & language from settings.json (overrides localStorage)
     await Promise.all([initThemeFromSettings(), initLocaleFromSettings()]);

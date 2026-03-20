@@ -77,7 +77,7 @@ the Free Software Foundation, version 3 only. -->
   // Fire-and-forget: queued on the Rust TTS worker, never blocks the JS timer.
   function speakAsync(text: string) {
     if (!ttsEnabled) return;
-    invoke("tts_speak", { text, voice: null }).catch(() => { /* best-effort */ });
+    invoke("tts_speak", { text, voice: null }).catch(e => console.warn("[focus-timer] tts_speak failed:", e));
   }
 
   // Announcement spoken at the start of each phase.
@@ -237,7 +237,7 @@ the Free Software Foundation, version 3 only. -->
             labelStartUtc: phaseStartUtc,
             text: label,
           });
-        } catch (e) { /* best-effort */ }
+        } catch (e) { console.warn("[focus-timer] submit_label failed:", e); }
       }
 
       // Decide next phase
@@ -263,7 +263,7 @@ the Free Software Foundation, version 3 only. -->
           title: t("focusTimer.breakComplete"),
           message: "",
         });
-      } catch (_) {}
+      } catch (e) { console.warn("[focus-timer] show_toast_from_frontend failed:", e); }
     }
   }
 

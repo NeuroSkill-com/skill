@@ -128,14 +128,14 @@ the Free Software Foundation, version 3 only. -->
   let unlistenTts: UnlistenFn | null = null;
 
   onMount(async () => {
-    try { logConfig    = await invoke<LogConfig>("get_log_config"); }    catch {}
-    try { neuttsConfig = await invoke<NeuttsConfig>("get_neutts_config"); } catch {}
-    try { ttsPreload   = await invoke<boolean>("get_tts_preload"); } catch {}
+    try { logConfig    = await invoke<LogConfig>("get_log_config"); }    catch (e) { console.warn("[tts] get_log_config failed:", e); }
+    try { neuttsConfig = await invoke<NeuttsConfig>("get_neutts_config"); } catch (e) { console.warn("[tts] get_neutts_config failed:", e); }
+    try { ttsPreload   = await invoke<boolean>("get_tts_preload"); } catch (e) { console.warn("[tts] get_tts_preload failed:", e); }
     try {
       const voices = await invoke<string[]>("tts_list_voices");
       if (voices.length) kittenVoices = voices;
-    } catch {}
-    try { kittenVoice = await invoke<string>("tts_get_voice"); } catch {}
+    } catch (e) { console.warn("[tts] tts_list_voices failed:", e); }
+    try { kittenVoice = await invoke<string>("tts_get_voice"); } catch (e) { console.warn("[tts] tts_get_voice failed:", e); }
 
     unlistenTts = await listen<TtsProgress>("tts-progress", (ev) => {
       const p = ev.payload;
@@ -164,7 +164,7 @@ the Free Software Foundation, version 3 only. -->
     });
 
     // Pre-warm immediately
-    invoke("tts_init").catch(() => {});
+    invoke("tts_init").catch(e => console.warn("[tts] tts_init failed:", e));
   });
 
   onDestroy(() => {
@@ -177,11 +177,11 @@ the Free Software Foundation, version 3 only. -->
   function preload() {
     enginePhase = "loading";
     loadStep    = 0;
-    invoke("tts_init").catch(() => {});
+    invoke("tts_init").catch(e => console.warn("[tts] tts_init failed:", e));
   }
 
   async function unload() {
-    await invoke("tts_unload").catch(() => {});
+    await invoke("tts_unload").catch(e => console.warn("[tts] tts_unload failed:", e));
   }
 
   // ── Backend switch ─────────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ the Free Software Foundation, version 3 only. -->
 
   async function setKittenVoice(v: string) {
     kittenVoice = v;
-    try { await invoke("tts_set_voice", { voice: v }); } catch {}
+    try { await invoke("tts_set_voice", { voice: v }); } catch (e) { console.warn("[tts] tts_set_voice failed:", e); }
   }
 
   // ── NeuTTS save ────────────────────────────────────────────────────────────
@@ -217,7 +217,7 @@ the Free Software Foundation, version 3 only. -->
       enginePhase = "loading";
       loadStep    = 0;
       loadLabel   = "";
-      invoke("tts_init").catch(() => {});
+      invoke("tts_init").catch(e => console.warn("[tts] tts_init failed:", e));
     } catch (e) {
       console.error("[NeuTTS] set_neutts_config failed", e);
     }
@@ -227,14 +227,14 @@ the Free Software Foundation, version 3 only. -->
     try {
       const path = await invoke<string | null>("pick_ref_wav_file");
       if (path) { neuttsConfig = { ...neuttsConfig, ref_wav_path: path }; neuttsDirty = true; }
-    } catch {}
+    } catch (e) { console.warn("[tts] pick_ref_wav_file failed:", e); }
   }
 
   // ── Log toggle ─────────────────────────────────────────────────────────────
 
   async function toggleTtsLog() {
     logConfig = { ...logConfig, tts: !logConfig.tts };
-    try { await invoke("set_log_config", { config: logConfig }); } catch {}
+    try { await invoke("set_log_config", { config: logConfig }); } catch (e) { console.warn("[tts] set_log_config failed:", e); }
   }
 </script>
 
@@ -642,7 +642,7 @@ the Free Software Foundation, version 3 only. -->
         <button
           onclick={() => {
             ttsPreload = !ttsPreload;
-            invoke("set_tts_preload", { preload: ttsPreload }).catch(() => {});
+            invoke("set_tts_preload", { preload: ttsPreload }).catch(e => console.warn("[tts] set_tts_preload failed:", e));
           }}
           class="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors
                  hover:bg-slate-50 dark:hover:bg-white/[0.02]">

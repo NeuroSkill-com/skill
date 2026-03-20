@@ -60,7 +60,7 @@
     if (showArchive) {
       try {
         archived = await invoke<SessionSummary[]>("list_archived_chat_sessions");
-      } catch {}
+      } catch (e) { console.warn("[chat-sidebar] list_archived_chat_sessions failed:", e); }
     }
   }
 
@@ -89,7 +89,7 @@
     try {
       await invoke("rename_chat_session", { id, title });
       sessions = sessions.map(s => s.id === id ? { ...s, title } : s);
-    } catch {}
+    } catch (e) { console.warn("[chat-sidebar] rename_chat_session failed:", e); }
   }
 
   function cancelEdit(e?: KeyboardEvent) {
@@ -104,7 +104,7 @@
     const session = sessions.find(s => s.id === id);
     sessions = sessions.filter(s => s.id !== id);
     if (session) archived = [session, ...archived];
-    try { await invoke("archive_chat_session", { id }); } catch {}
+    try { await invoke("archive_chat_session", { id }); } catch (e) { console.warn("[chat-sidebar] archive_chat_session failed:", e); }
     onDelete(id);
   }
 
@@ -113,13 +113,13 @@
     const session = archived.find(s => s.id === id);
     archived = archived.filter(s => s.id !== id);
     if (session) sessions = [session, ...sessions];
-    try { await invoke("unarchive_chat_session", { id }); } catch {}
+    try { await invoke("unarchive_chat_session", { id }); } catch (e) { console.warn("[chat-sidebar] unarchive_chat_session failed:", e); }
   }
 
   async function doDelete(id: number, e: MouseEvent) {
     e.stopPropagation();
     archived = archived.filter(s => s.id !== id);
-    try { await invoke("delete_chat_session", { id }); } catch {}
+    try { await invoke("delete_chat_session", { id }); } catch (e) { console.warn("[chat-sidebar] delete_chat_session failed:", e); }
   }
 
   async function toggleArchive() {
@@ -127,7 +127,7 @@
     if (showArchive) {
       try {
         archived = await invoke<SessionSummary[]>("list_archived_chat_sessions");
-      } catch {}
+      } catch (e) { console.warn("[chat-sidebar] list_archived_chat_sessions failed:", e); }
     }
   }
 

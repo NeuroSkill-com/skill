@@ -108,7 +108,7 @@ the Free Software Foundation, version 3 only. -->
   }
 
   function persistNavWidth(px: number): void {
-    try { localStorage.setItem(NAV_WIDTH_KEY, String(px)); } catch {}
+    try { localStorage.setItem(NAV_WIDTH_KEY, String(px)); } catch (e) { console.warn("[settings] persist nav width failed:", e); }
   }
 
   function setNavWidthFromPointer(clientX: number): void {
@@ -151,7 +151,7 @@ the Free Software Foundation, version 3 only. -->
     try {
       const stored = Number(localStorage.getItem(NAV_WIDTH_KEY) ?? "");
       if (!Number.isNaN(stored) && stored > 0) navWidth = clampNavWidth(stored);
-    } catch {}
+    } catch (e) { console.warn("[settings] read nav width failed:", e); }
 
     window.addEventListener("keydown", onKeydown);
 

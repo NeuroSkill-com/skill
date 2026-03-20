@@ -159,7 +159,7 @@ the Free Software Foundation, version 3 only. -->
       modelChanged = result.model_changed;
       staleCount = result.stale_count;
       if (result.model_changed) {
-        try { estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed"); } catch {}
+        try { estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed"); } catch (e) { console.warn("[screenshots] estimate_screenshot_reembed failed:", e); }
       }
     } finally {
       saving = false;
@@ -197,7 +197,7 @@ the Free Software Foundation, version 3 only. -->
       await invoke("rebuild_screenshot_embeddings");
       modelChanged = false;
       staleCount = 0;
-      try { estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed"); } catch {}
+      try { estimate = await invoke<ReembedEstimate | null>("estimate_screenshot_reembed"); } catch (e) { console.warn("[screenshots] estimate_screenshot_reembed failed:", e); }
     } finally {
       reembedding = false;
       progress = null;
@@ -230,7 +230,7 @@ the Free Software Foundation, version 3 only. -->
         vision: m.vision_embed_us / 1000,
         text:   m.text_embed_us / 1000,
       };
-    } catch {}
+    } catch (e) { console.warn("[screenshots] get_screenshot_metrics failed:", e); }
   }
 
   onMount(async () => {

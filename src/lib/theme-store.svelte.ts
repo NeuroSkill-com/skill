@@ -267,7 +267,7 @@ export function applyAccent(id: string) {
 
 export function setAccent(id: string) {
   applyAccent(id);
-  invoke("set_accent_color", { accent: id }).catch(() => {});
+  invoke("set_accent_color", { accent: id }).catch(e => console.warn("[theme] set_accent_color failed:", e));
 }
 
 export function setTheme(m: ThemeMode) {
@@ -278,7 +278,7 @@ export function setTheme(m: ThemeMode) {
   }
   apply();
   // Persist to settings.json via Tauri
-  invoke("set_theme", { theme: m }).catch(() => {});
+  invoke("set_theme", { theme: m }).catch(e => console.warn("[theme] set_theme failed:", e));
 }
 
 export function setHighContrast(on: boolean) {

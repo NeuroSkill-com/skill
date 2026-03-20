@@ -403,7 +403,7 @@
   // ── Data loading ───────────────────────────────────────────────────────────
 
   async function loadCatalog() {
-    try { catalog = await invoke<LlmCatalog>("get_llm_catalog"); } catch {}
+    try { catalog = await invoke<LlmCatalog>("get_llm_catalog"); } catch (e) { console.warn("[llm] get_llm_catalog failed:", e); }
   }
 
   async function loadHardwareFit() {
@@ -412,18 +412,18 @@
       const map = new Map<string, ModelHardwareFit>();
       for (const f of fits) map.set(f.filename, f);
       hardwareFits = map;
-    } catch {}
+    } catch (e) { console.warn("[llm] get_model_hardware_fit failed:", e); }
   }
 
   async function loadConfig() {
     try {
       config = await invoke<LlmConfig>("get_llm_config");
       ctxSizeInput = config.ctx_size !== null ? String(config.ctx_size) : "";
-    } catch {}
+    } catch (e) { console.warn("[llm] get_llm_config failed:", e); }
     try {
       const [, port] = await invoke<[string, number]>("get_ws_config");
       wsPort = port;
-    } catch {}
+    } catch (e) { console.warn("[llm] get_ws_config failed:", e); }
   }
 
   async function saveConfig() {
@@ -487,15 +487,15 @@
   async function stopServer() {
     startError = "";
     // stop_llm_server is also fire-and-forget — actor join runs in background.
-    invoke("stop_llm_server").catch(() => {});
+    invoke("stop_llm_server").catch(e => console.warn("[llm] stop_llm_server failed:", e));
   }
 
   async function openChat() {
-    try { await invoke("open_chat_window"); } catch {}
+    try { await invoke("open_chat_window"); } catch (e) { console.warn("[llm] open_chat_window failed:", e); }
   }
 
   async function openDownloads() {
-    try { await invoke("open_downloads_window"); } catch {}
+    try { await invoke("open_downloads_window"); } catch (e) { console.warn("[llm] open_downloads_window failed:", e); }
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -509,22 +509,22 @@
       }>("get_llm_server_status");
       serverStatus = s.status;
       if (s.start_error) startError = s.start_error;
-    } catch {}
+    } catch (e) { console.warn("[llm] get_llm_server_status failed:", e); }
     try {
       unlistenStatus = await listen<{ status: string }>(
         "llm:status", ev => { serverStatus = (ev.payload as any).status ?? serverStatus; }
       );
-    } catch {}
+    } catch (e) { console.warn("[llm] listen llm:status failed:", e); }
     try {
       logs = await invoke<LlmLogEntry[]>("get_llm_logs");
       await scrollToBottom();
-    } catch {}
+    } catch (e) { console.warn("[llm] get_llm_logs failed:", e); }
     try {
       unlistenLog = await listen<LlmLogEntry>("llm:log", async ev => {
         logs = [...logs.slice(-499), ev.payload];
         if (logAutoScroll) await scrollToBottom();
       });
-    } catch {}
+    } catch (e) { console.warn("[llm] listen llm:log failed:", e); }
     // Poll every 500 ms while a download is active so the progress bar stays
     // smooth.  The backend blob-monitor fires every 400 ms, so this gives
     // roughly one UI update per backend tick.
@@ -539,7 +539,7 @@
         }>("get_llm_server_status");
         serverStatus = s.status;
         if (s.start_error) startError = s.start_error;
-      } catch {}
+      } catch (e) { console.warn("[llm] poll server status failed:", e); }
     }, 1000);
   });
 

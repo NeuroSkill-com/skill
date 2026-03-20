@@ -81,12 +81,12 @@ the Free Software Foundation, version 3 only. -->
     try {
       const v = localStorage.getItem(LAST_KEY);
       if (v) lastCheckedUtc = Number(v) || 0;
-    } catch {}
+    } catch (e) { console.warn("[updates] load last checked failed:", e); }
   }
 
   function saveLastChecked() {
     lastCheckedUtc = Math.floor(Date.now() / 1000);
-    try { localStorage.setItem(LAST_KEY, String(lastCheckedUtc)); } catch {}
+    try { localStorage.setItem(LAST_KEY, String(lastCheckedUtc)); } catch (e) { console.warn("[updates] save last checked failed:", e); }
   }
 
   async function openOnlineDownload() {

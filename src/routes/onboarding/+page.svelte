@@ -191,10 +191,10 @@ the Free Software Foundation, version 3 only. -->
 
   // ── TTS helpers ────────────────────────────────────────────────────────────
   async function ttsSpeakWait(text: string): Promise<void> {
-    try { await invoke("tts_speak", { text }); } catch {}
+    try { await invoke("tts_speak", { text }); } catch (e) { console.warn("[onboarding] tts_speak failed:", e); }
   }
   function ttsSpeak(text: string): void {
-    invoke("tts_speak", { text }).catch(() => {});
+    invoke("tts_speak", { text }).catch(e => console.warn("[onboarding] tts_speak failed:", e));
   }
 
   // ── Model download helpers ────────────────────────────────────────────────
@@ -285,7 +285,7 @@ the Free Software Foundation, version 3 only. -->
       }
     } finally {
       if (previous) {
-        invoke("set_neutts_config", { config: previous }).catch(() => {});
+        invoke("set_neutts_config", { config: previous }).catch(e => console.warn("[onboarding] set_neutts_config rollback failed:", e));
       }
       ttsActionBusy = false;
     }
@@ -431,7 +431,7 @@ the Free Software Foundation, version 3 only. -->
         });
         const actionStart = Math.floor(Date.now() / 1000);
         if (!(await runCountdown(action.duration_secs))) break;
-        try { await invoke("submit_label", { labelStartUtc: actionStart, text: action.label }); } catch {}
+        try { await invoke("submit_label", { labelStartUtc: actionStart, text: action.label }); } catch (e) { console.warn("[onboarding] submit_label failed:", e); }
 
         const isLast = loop === p.loop_count && ai === p.actions.length - 1;
         if (!isLast && calRunning) {
@@ -481,7 +481,7 @@ the Free Software Foundation, version 3 only. -->
         stage === "zuna" || stage === "kitten" || stage === "neutts" || stage === "llm" || stage === "ocr"
       );
       if (valid.length) onboardingDownloadOrder = valid;
-    } catch {}
+    } catch (e) { console.warn("[onboarding] get_onboarding_download_order failed:", e); }
 
     try {
       calProfile = await invoke<CalibrationProfile | null>("get_active_calibration");
@@ -489,7 +489,7 @@ the Free Software Foundation, version 3 only. -->
         const profiles = await invoke<CalibrationProfile[]>("list_calibration_profiles");
         calProfile = profiles[0] ?? null;
       }
-    } catch {}
+    } catch (e) { console.warn("[onboarding] load calibration profile failed:", e); }
 
     // Pre-warm TTS engine
     unlistenTts = await listen<{ phase: string; label: string }>(
@@ -498,17 +498,17 @@ the Free Software Foundation, version 3 only. -->
         else { ttsReady = false; ttsDlLabel = ev.payload.label ?? ""; }
       }
     );
-    invoke("tts_init").catch(() => {});
+    invoke("tts_init").catch(e => console.warn("[onboarding] tts_init failed:", e));
 
     await refreshModelDownloads();
     if (isMac) {
-      try { screenRecPerm = await invoke<boolean>("check_screen_recording_permission"); } catch {}
+      try { screenRecPerm = await invoke<boolean>("check_screen_recording_permission"); } catch (e) { console.warn("[onboarding] check_screen_recording_permission failed:", e); }
     }
     autoModelsStarted = true;
     void driveAutoModelQueue();
     modelsTimer = setInterval(() => {
       refreshModelDownloads();
-      if (isMac) invoke<boolean>("check_screen_recording_permission").then(v => { screenRecPerm = v; }).catch(() => {});
+      if (isMac) invoke<boolean>("check_screen_recording_permission").then(v => { screenRecPerm = v; }).catch(e => console.warn("[onboarding] check_screen_recording_permission failed:", e));
     }, 2000);
   });
   onDestroy(async () => {

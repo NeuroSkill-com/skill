@@ -117,7 +117,7 @@ the Free Software Foundation, version 3 only. -->
 
   async function notify(title: string, body: string) {
     if (!notifGranted) return;
-    try { sendNotification({ title, body }); } catch {}
+    try { sendNotification({ title, body }); } catch (e) { console.warn("[calibration] sendNotification failed:", e); }
   }
 
   async function runCountdown(secs: number): Promise<boolean> {
@@ -154,7 +154,7 @@ the Free Software Foundation, version 3 only. -->
 
   /** Fire-and-forget TTS — never throws; failures are silently ignored. */
   function ttsSpeak(text: string): void {
-    invoke("tts_speak", { text }).catch(() => {});
+    invoke("tts_speak", { text }).catch(e => console.warn("[calibration] tts_speak failed:", e));
   }
 
   // ── Calibration loop ───────────────────────────────────────────────────────
@@ -192,7 +192,7 @@ the Free Software Foundation, version 3 only. -->
         });
         const actionStart = Math.floor(Date.now() / 1000);
         if (!(await runCountdown(action.duration_secs))) break;
-        try { await invoke("submit_label", { labelStartUtc: actionStart, text: action.label }); } catch {}
+        try { await invoke("submit_label", { labelStartUtc: actionStart, text: action.label }); } catch (e) { console.warn("[calibration] submit_label failed:", e); }
 
         // BREAK phase — skip only after the very last action of the very last loop
         const isLast = loop === p.loop_count && ai === p.actions.length - 1;
@@ -289,7 +289,7 @@ the Free Software Foundation, version 3 only. -->
         const perm = await requestPermission();
         notifGranted = perm === "granted";
       }
-    } catch {}
+    } catch (e) { console.warn("[calibration] requestPermission failed:", e); }
 
     await loadProfiles();
 
@@ -328,14 +328,14 @@ the Free Software Foundation, version 3 only. -->
         }
       }
     );
-    invoke("tts_init").catch(() => {});
+    invoke("tts_init").catch(e => console.warn("[calibration] tts_init failed:", e));
 
     // Electrode signal quality
     try {
       const s = await invoke<DeviceStatus>("get_status");
       elecQuality   = s.channel_quality;
       museConnected = s.state === "connected";
-    } catch {}
+    } catch (e) { console.warn("[calibration] get_status failed:", e); }
     unlistenQualityFn = await listen<DeviceStatus>("status", (ev) => {
       elecQuality   = ev.payload.channel_quality;
       museConnected = ev.payload.state === "connected";

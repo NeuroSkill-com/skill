@@ -80,20 +80,20 @@ the Free Software Foundation, version 3 only. -->
   async function testDnd() {
     dndTesting = true;
     // Only ever sends enabled=false — activation is data-only.
-    try { await invoke("test_dnd", { enabled: false }); } catch {}
+    try { await invoke("test_dnd", { enabled: false }); } catch (e) { console.warn("[goals] test_dnd failed:", e); }
     dndTesting = false;
   }
 
   async function saveDnd() {
     dndSaving = true;
-    try { await invoke("set_dnd_config", { config: dndConfig }); } catch {}
+    try { await invoke("set_dnd_config", { config: dndConfig }); } catch (e) { console.warn("[goals] set_dnd_config failed:", e); }
     dndSaving = false;
     // Mark "set a DND threshold" onboarding step when the user saves with DND enabled.
     if (dndConfig.enabled) {
       try {
         const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
         if (!ob.dndConfigured) { ob.dndConfigured = true; localStorage.setItem("onboardDone", JSON.stringify(ob)); }
-      } catch (_) {}
+      } catch (e) { console.warn("[goals] onboarding localStorage update failed:", e); }
     }
   }
 
@@ -171,26 +171,26 @@ the Free Software Foundation, version 3 only. -->
       dndSampleCount   = status.sample_count   ?? 0;
       dndWindowSize    = status.window_size    ?? 0;
       dndThresholdLive = status.threshold      ?? dndConfig.focus_threshold;
-    } catch {}
+    } catch (e) { console.warn("[goals] refreshDndState failed:", e); }
   }
 
   onMount(async () => {
     try {
       const v = await invoke<number>("get_daily_goal");
       if (v > 0) dailyGoalMin = v;
-    } catch {}
+    } catch (e) { console.warn("[goals] get_daily_goal failed:", e); }
     await loadChart();
 
     // Load DND config + current active state
     try {
       dndConfig = await invoke<DndConfig>("get_dnd_config");
-    } catch {}
+    } catch (e) { console.warn("[goals] get_dnd_config failed:", e); }
     await refreshDndState();
 
     // Load available Focus modes from the OS (macOS full list, Linux/Windows default DND option).
     try {
       focusModes = await invoke<FocusModeOption[]>("list_focus_modes");
-    } catch {}
+    } catch (e) { console.warn("[goals] list_focus_modes failed:", e); }
     focusModesLoaded = true;
 
     // Re-sync when the user switches back to the app window after making changes
@@ -249,7 +249,7 @@ the Free Software Foundation, version 3 only. -->
 
   async function save() {
     saving = true;
-    try { await invoke("set_daily_goal", { minutes: dailyGoalMin }); } catch {}
+    try { await invoke("set_daily_goal", { minutes: dailyGoalMin }); } catch (e) { console.warn("[goals] set_daily_goal failed:", e); }
     saving = false;
     await loadChart();          // refresh chart after goal change
   }
@@ -284,7 +284,7 @@ the Free Software Foundation, version 3 only. -->
       });
       chartDays = days;
       chartMax  = Math.max(dailyGoalMin * 1.25, ...days.map(d => d.minutes), 1);
-    } catch {}
+    } catch (e) { console.warn("[goals] loadChart failed:", e); }
     loading = false;
   }
 

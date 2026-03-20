@@ -63,7 +63,7 @@
     catch { return SYSTEM_PROMPT_DEFAULT; }
   }
   let systemPrompt = $state(loadSystemPrompt());
-  $effect(() => { try { localStorage.setItem(SYSTEM_PROMPT_KEY, systemPrompt); } catch {} });
+  $effect(() => { try { localStorage.setItem(SYSTEM_PROMPT_KEY, systemPrompt); } catch (e) { console.warn("[chat] persist system prompt failed:", e); } });
 
   /** Keep the titlebar model name + status in sync. */
   $effect(() => { chatTitlebarState.modelName = modelName; chatTitlebarState.status = status; });
@@ -893,7 +893,7 @@
     unlistenBands?.();
     clearInterval(pollTimer);
     stopTypingLabelTimer();
-    if (generating) invoke("abort_llm_stream").catch(() => {});
+    if (generating) invoke("abort_llm_stream").catch(e => console.warn("[chat] abort_llm_stream cleanup failed:", e));
   });
 </script>
 

@@ -111,7 +111,7 @@
     try {
       config = await invoke<LlmConfig>("get_llm_config");
       skillsRefreshInterval = config.tools.skills_refresh_interval_secs ?? 86400;
-    } catch {}
+    } catch (e) { console.warn("[tools] get_llm_config failed:", e); }
   }
 
   async function saveConfig() {
@@ -124,7 +124,7 @@
     try {
       skillsRefreshInterval = await invoke<number>("get_skills_refresh_interval");
       skillsLastSync = await invoke<number | null>("get_skills_last_sync");
-    } catch {}
+    } catch (e) { console.warn("[tools] loadSkillsMeta failed:", e); }
   }
 
   async function setSkillsInterval(secs: number) {
@@ -140,7 +140,7 @@
       await invoke("sync_skills_now");
       await loadSkillsMeta();
       await loadSkills();
-    } catch {}
+    } catch (e) { console.warn("[tools] sync_skills_now failed:", e); }
     finally { skillsSyncing = false; }
   }
 

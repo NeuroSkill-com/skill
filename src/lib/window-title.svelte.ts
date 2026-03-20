@@ -39,7 +39,7 @@ export function useWindowTitle(key: string): void {
     if (title === lastAppliedTitle) return;
     lastAppliedTitle = title;
     import("@tauri-apps/api/window").then(({ getCurrentWindow }) => {
-      getCurrentWindow().setTitle(title).catch(() => {});
+      getCurrentWindow().setTitle(title).catch(e => console.warn("[window] setTitle failed:", e));
     });
   });
 }

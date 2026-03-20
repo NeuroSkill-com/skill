@@ -45,7 +45,7 @@ the Free Software Foundation, version 3 only. -->
       // Read the sidecar file via a simple fetch or invoke
       // Since this is a Tauri app, we can try reading it
       // The get_csv_metrics command will give us the data
-    } catch {}
+    } catch (e) { console.warn("[session] read sidecar failed:", e); }
 
     // Load metrics from CSV
     try {
@@ -65,7 +65,7 @@ the Free Software Foundation, version 3 only. -->
       const sessions = await invoke<any[]>("list_sessions");
       const match = sessions.find((s: any) => s.csv_path === csvPath);
       if (match) sessionMeta = match;
-    } catch {}
+    } catch (e) { console.warn("[session] list_sessions failed:", e); }
 
     loading = false;
 

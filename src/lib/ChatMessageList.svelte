@@ -61,7 +61,7 @@
   }
 
   function copyMessage(msg: Message) {
-    navigator.clipboard.writeText(msg.content).catch(() => {});
+    navigator.clipboard.writeText(msg.content).catch(e => console.warn("[chat] clipboard write failed:", e));
     copiedMsgId = msg.id;
     setTimeout(() => { if (copiedMsgId === msg.id) copiedMsgId = null; }, 1500);
   }
@@ -99,7 +99,7 @@
               {t("chat.btn.startServer")}
             </button>
             <button
-              onclick={() => invoke("open_settings_window").then(() => invoke("open_model_tab")).catch(() => {})}
+              onclick={() => invoke("open_settings_window").then(() => invoke("open_model_tab")).catch(e => console.warn("[chat] open_model_tab failed:", e))}
               class="px-4 py-2 rounded-xl border border-violet-500/40
                      text-violet-600 dark:text-violet-400 text-[0.72rem] font-semibold
                      hover:bg-violet-500/10 transition-colors cursor-pointer">

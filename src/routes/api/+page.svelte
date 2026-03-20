@@ -75,7 +75,7 @@ the Free Software Foundation, version 3 only. -->
     try {
       const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
       if (!ob.apiVisited) { ob.apiVisited = true; localStorage.setItem("onboardDone", JSON.stringify(ob)); }
-    } catch (_) {}
+    } catch (e) { console.warn("[api] onboarding localStorage update failed:", e); }
     pollTimer = setInterval(refresh, 2000);
     nowTimer  = setInterval(() => (now = Math.floor(Date.now() / 1000)), 1000);
     window.addEventListener("skill:api-refresh", refresh);

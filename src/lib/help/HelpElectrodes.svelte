@@ -25,7 +25,7 @@ the Free Software Foundation, version 3 only. -->
       const s = await invoke<DeviceStatus>("get_status");
       quality   = s.channel_quality;
       connected = s.state === "connected";
-    } catch {}
+    } catch (e) { console.warn("[help-electrodes] get_status failed:", e); }
     unsubs.push(
       await listen<DeviceStatus>("status", (ev) => {
         quality   = ev.payload.channel_quality;

@@ -502,7 +502,7 @@ the Free Software Foundation, version 3 only. -->
     Promise.all([
       invoke<EpochRow[]>("get_session_timeseries", { startUtc: sA, endUtc: eA }),
       invoke<EpochRow[]>("get_session_timeseries", { startUtc: sB, endUtc: eB }),
-    ]).then(([ta, tb]) => { tsA = ta; tsB = tb; }).catch(() => {});
+    ]).then(([ta, tb]) => { tsA = ta; tsB = tb; }).catch(e => console.warn("[compare] get_session_timeseries failed:", e));
   }
 
   // ── Calculate UMAP (triggered explicitly by the user) ───────────────────

@@ -323,11 +323,11 @@ the Free Software Foundation, version 3 only. -->
   let goalNotified = false;   // true once notification fired this session
 
   // Load persisted goal + today's notification state from Rust on mount
-  invoke<number>("get_daily_goal").then(v => { if (v > 0) dailyGoalMin = v; }).catch(() => {});
+  invoke<number>("get_daily_goal").then(v => { if (v > 0) dailyGoalMin = v; }).catch(e => console.warn("[home] get_daily_goal failed:", e));
   invoke<string>("get_goal_notified_date").then(stored => {
     const today = new Date().toISOString().slice(0, 10);
     if (stored === today) goalNotified = true;
-  }).catch(() => {});
+  }).catch(e => console.warn("[home] get_goal_notified_date failed:", e));
 
   const goalPct     = $derived(Math.min(100, (todayTotalSecs / 60 / dailyGoalMin) * 100));
   const goalReached = $derived(goalPct >= 100);
@@ -336,7 +336,7 @@ the Free Software Foundation, version 3 only. -->
     if (goalReached && !goalNotified && status.state === "connected") {
       goalNotified = true;
       const today = new Date().toISOString().slice(0, 10);
-      invoke("set_goal_notified_date", { date: today }).catch(() => {});
+      invoke("set_goal_notified_date", { date: today }).catch(e => console.warn("[home] set_goal_notified_date failed:", e));
       try {
         sendNotification({
           title: "🎯 Daily Goal Reached!",
@@ -491,7 +491,7 @@ the Free Software Foundation, version 3 only. -->
     try {
       const raw = localStorage.getItem("onboardDone");
       if (raw) onboardDone = { ...onboardDone, ...JSON.parse(raw) };
-    } catch (_) {}
+    } catch (e) { console.warn("[home] loadOnboarding parse failed:", e); }
   }
   function saveOnboarding() {
     localStorage.setItem("onboardDone", JSON.stringify(onboardDone));
@@ -518,7 +518,7 @@ the Free Software Foundation, version 3 only. -->
       if (stored.llmDownloaded && !onboardDone.llmDownloaded) { onboardDone.llmDownloaded = true; dirty = true; }
       if (stored.dndConfigured && !onboardDone.dndConfigured) { onboardDone.dndConfigured = true; dirty = true; }
       if (dirty) saveOnboarding();
-    } catch (_) {}
+    } catch (e) { console.warn("[home] checkOnboarding localStorage read failed:", e); }
   }
 
   /** One-shot async checks run at startup for steps that don't have live events. */
@@ -530,14 +530,14 @@ the Free Software Foundation, version 3 only. -->
         if (catalog.entries.some(e => e.state === "downloaded")) {
           onboardDone.llmDownloaded = true; saveOnboarding();
         }
-      } catch (_) {}
+      } catch (e) { console.warn("[home] get_llm_catalog onboarding check failed:", e); }
     }
     // DND: focus-threshold automation enabled by the user?
     if (!onboardDone.dndConfigured) {
       try {
         const cfg = await invoke<{ enabled: boolean }>("get_dnd_config");
         if (cfg.enabled) { onboardDone.dndConfigured = true; saveOnboarding(); }
-      } catch (_) {}
+      } catch (e) { console.warn("[home] get_dnd_config onboarding check failed:", e); }
     }
   }
 

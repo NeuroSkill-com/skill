@@ -231,7 +231,7 @@ the Free Software Foundation, version 3 only. -->
   async function viewSession(_label: LabelRow) {
     try {
       await openHistory();
-    } catch (_) {}
+    } catch (e) { console.warn("[labels] openHistory failed:", e); }
   }
 
   onMount(() => { loadLabels(); });

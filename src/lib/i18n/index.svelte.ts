@@ -127,7 +127,7 @@ export async function setLocale(code: string): Promise<void> {
       localStorage.setItem(STORAGE_KEY, code);
     }
     // Persist to settings.json via Tauri
-    invoke("set_language", { language: code }).catch(() => {});
+    invoke("set_language", { language: code }).catch(e => console.warn("[i18n] set_language failed:", e));
   } finally {
     _loading = false;
   }
@@ -140,7 +140,7 @@ export async function initLocaleFromSettings(): Promise<void> {
     if (lang && SUPPORTED_LOCALES.some(l => l.code === lang)) {
       await setLocale(lang);
     }
-  } catch { /* not available */ }
+  } catch (e) { console.warn("[i18n] initLocaleFromSettings failed:", e); }
 }
 
 /**

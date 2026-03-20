@@ -83,7 +83,7 @@ the Free Software Foundation, version 3 only. -->
         const active = await invoke<string>("tts_get_voice");
         selectedVoice = active || (kittenVoices[0] ?? "Jasper");
       }
-    } catch {}
+    } catch (e) { console.warn("[tts-test] refreshEngine failed:", e); }
   }
 
   onMount(async () => {
@@ -103,7 +103,7 @@ the Free Software Foundation, version 3 only. -->
         if (!isNeutts) {
           invoke<string[]>("tts_list_voices")
             .then(v => { if (v.length) kittenVoices = v; })
-            .catch(() => {});
+            .catch(e => console.warn("[tts-test] tts_list_voices failed:", e));
         }
       } else if (p.phase === "unloaded") {
         ready   = false;
@@ -125,7 +125,7 @@ the Free Software Foundation, version 3 only. -->
     selectedVoice = v;
     if (!isNeutts) {
       // Persist active voice for KittenTTS globally
-      invoke("tts_set_voice", { voice: v }).catch(() => {});
+      invoke("tts_set_voice", { voice: v }).catch(e => console.warn("[tts-test] tts_set_voice failed:", e));
     }
     // For NeuTTS the voice is sent per-utterance in tts_speak; no global setter.
   }
@@ -139,7 +139,7 @@ the Free Software Foundation, version 3 only. -->
     errorMsg = "";
     try {
       // Kick off init if idle
-      if (!ready) invoke("tts_init").catch(() => {});
+      if (!ready) invoke("tts_init").catch(e => console.warn("[tts-test] tts_init failed:", e));
       // Pass current voice selection; engine interprets it appropriately
       const voiceArg = selectedVoice || undefined;
       await invoke("tts_speak", { text, voice: voiceArg });

@@ -90,7 +90,7 @@ the Free Software Foundation, version 3 only. -->
     // Load screenshot server port for image URLs
     invoke<[string, number]>("get_screenshots_dir")
       .then(([, port]) => { imgPort = port; })
-      .catch(() => {});
+      .catch(e => console.warn("[search] get_screenshots_dir failed:", e));
 
     return () => {
       window.removeEventListener(SEARCH_SET_MODE_EVENT, onTitlebarSetMode as EventListener);
@@ -267,7 +267,7 @@ the Free Software Foundation, version 3 only. -->
       try {
         const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
         if (!ob.searchRun) { ob.searchRun = true; localStorage.setItem("onboardDone", JSON.stringify(ob)); }
-      } catch (_) {}
+      } catch (e) { console.warn("[search] onboarding localStorage update failed:", e); }
     } catch (e) { error = String(e); }
     finally { clearInterval(timer); searching = false; searchStatus = ""; }
     if (result && result.results.length > 0) { showUmap = true; fireUmap(); }

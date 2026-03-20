@@ -47,7 +47,7 @@
     const btn = (e.target as HTMLElement).closest("[data-copy]") as HTMLElement | null;
     if (!btn) return;
     const code = btn.closest(".mdr-pre")?.querySelector("code")?.textContent ?? "";
-    navigator.clipboard.writeText(code).catch(() => {});
+    navigator.clipboard.writeText(code).catch(e => console.warn("[markdown] clipboard write failed:", e));
     btn.textContent = "Copied!";
     setTimeout(() => { btn.textContent = "Copy"; }, 1500);
   }

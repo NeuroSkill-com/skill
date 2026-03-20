@@ -87,7 +87,7 @@ the Free Software Foundation, version 3 only. -->
     } catch { return null; }
   }
   function writeDayCache(day: string, data: SessionEntry[]) {
-    try { localStorage.setItem(DAY_CACHE_PFX + day, JSON.stringify(data)); } catch {}
+    try { localStorage.setItem(DAY_CACHE_PFX + day, JSON.stringify(data)); } catch (e) { console.warn("[history] cache day data failed:", e); }
   }
   function readMetricsCache(csvPath: string): CsvMetricsResult | null {
     try {
@@ -96,7 +96,7 @@ the Free Software Foundation, version 3 only. -->
     } catch { return null; }
   }
   function writeMetricsCache(csvPath: string, result: CsvMetricsResult) {
-    try { sessionStorage.setItem(METRICS_CACHE_PFX + csvPath, JSON.stringify(result)); } catch {}
+    try { sessionStorage.setItem(METRICS_CACHE_PFX + csvPath, JSON.stringify(result)); } catch (e) { console.warn("[history] cache metrics failed:", e); }
   }
 
   // ── Caches: sleep / metrics / timeseries ────────────────────────────────
@@ -474,7 +474,7 @@ the Free Software Foundation, version 3 only. -->
   }
   async function removeLabel(id: number) {
     try { await invoke("delete_label", { labelId: id }); allLabels = allLabels.filter(l => l.id !== id); }
-    catch {}
+    catch (e) { console.warn("[history] delete_label failed:", e); }
   }
   const filteredLabels = $derived.by(() => {
     const q = labelSearchQuery.toLowerCase().trim();
@@ -1367,11 +1367,11 @@ the Free Software Foundation, version 3 only. -->
     // Load screenshot port
     invoke<[string, number]>("get_screenshots_dir")
       .then(([, port]) => { screenshotPort = port; })
-      .catch(() => {});
+      .catch(e => console.warn("[history] get_screenshots_dir failed:", e));
     // Load aggregate stats lazily — not needed for initial render
     invoke<HistoryStatsData>("get_history_stats")
       .then(s => { historyStats = s; })
-      .catch(() => {});
+      .catch(e => console.warn("[history] get_history_stats failed:", e));
   });
 
   onDestroy(() => { hBar.active = false; });
