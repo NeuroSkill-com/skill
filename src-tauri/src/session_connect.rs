@@ -634,9 +634,33 @@ pub(crate) async fn connect_emotiv(
                         return Ok(());
                     }
                     Ok(Some(CortexEvent::Error(e))) => {
+                        app_log!(app, "bluetooth", "[emotiv] Cortex error: {e}");
                         return Err(format!("Cortex error during auth: {e}"));
                     }
-                    Ok(Some(_)) => continue, // Skip Connected, Authorized, etc.
+                    Ok(Some(other)) => {
+                        let tag = match &other {
+                            CortexEvent::Connected    => "Connected",
+                            CortexEvent::Authorized   => "Authorized",
+                            CortexEvent::Disconnected => "Disconnected",
+                            CortexEvent::Warning { code, .. } => {
+                                app_log!(app, "bluetooth",
+                                    "[emotiv] warning (code={code}) while waiting for session");
+                                "Warning"
+                            }
+                            CortexEvent::HeadsetsQueried(list) => {
+                                let ids: Vec<&str> = list.iter().map(|h| h.id.as_str()).collect();
+                                app_log!(app, "bluetooth",
+                                    "[emotiv] headsets queried: {ids:?}");
+                                "HeadsetsQueried"
+                            }
+                            _ => "other",
+                        };
+                        if tag != "Warning" && tag != "HeadsetsQueried" {
+                            app_log!(app, "bluetooth",
+                                "[emotiv] event while waiting for session: {tag}");
+                        }
+                        continue;
+                    }
                     Ok(None) => return Err("Cortex channel closed".into()),
                     Err(_) => return Err("Timed out waiting for session".into()),
                 }
