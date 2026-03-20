@@ -81,7 +81,7 @@ jobs:
       - name: Cache Cargo registry + build artifacts
         uses: Swatinem/rust-cache@v2.9.0
         with:
-          workspaces: src-tauri
+          workspaces: ". -> src-tauri/target"
 
       # ── Build cache (sccache + mold) ──────────────────────────────────────────
       - name: Setup sccache
@@ -175,8 +175,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cd src-tauri
-          cargo build --release --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan
+          cargo build -p skill --release --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan
 
       - name: Build Linux deb/rpm via system tools
         env:

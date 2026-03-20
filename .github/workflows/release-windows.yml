@@ -104,7 +104,7 @@ jobs:
       - name: Cache Cargo registry + build artifacts
         uses: Swatinem/rust-cache@v2.9.0
         with:
-          workspaces: src-tauri
+          workspaces: ". -> src-tauri/target"
           shared-key: windows-release-x86_64-msvc
 
       # ── Build cache (sccache) ─────────────────────────────────────────────────
@@ -428,8 +428,7 @@ jobs:
         run: |
           set -euo pipefail
           sccache --show-stats || true
-          cd src-tauri
-          cargo build --release --features custom-protocol,llm-vulkan
+          cargo build -p skill --release --features custom-protocol,llm-vulkan
           sccache --show-stats || true
 
       # ── Package NSIS installer ───────────────────────────────────────────────

@@ -30,7 +30,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target
-          key: linux-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+          key: linux-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: linux-cargo-
 
       - name: Cache + install Tauri system deps
@@ -65,22 +65,19 @@ jobs:
         run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
 
       - name: Update Cargo.lock for Linux
-        working-directory: src-tauri
         run: cargo fetch --target x86_64-unknown-linux-gnu
 
       - name: cargo check
-        working-directory: src-tauri
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
-        run: cargo check --locked --target x86_64-unknown-linux-gnu --features llm-vulkan
+        run: cargo check -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan
 
       - name: cargo clippy
-        working-directory: src-tauri
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
-        run: cargo clippy --locked --target x86_64-unknown-linux-gnu --features llm-vulkan -- -D warnings
+        run: cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan -- -D warnings
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:
@@ -147,7 +144,7 @@ jobs:
       - name: Cache Cargo registry + build artifacts
         uses: Swatinem/rust-cache@v2.9.0
         with:
-          workspaces: src-tauri
+          workspaces: ". -> src-tauri/target"
 
       # ── Build cache (sccache) ───────────────────────────────────────────────
       - name: Setup sccache
@@ -287,7 +284,6 @@ jobs:
       # to be safe.
       - name: cargo check
         shell: bash
-        working-directory: src-tauri
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
@@ -296,11 +292,10 @@ jobs:
           CC:            ${{ env.CC }}
           CXX:           ${{ env.CXX }}
           RUSTC_WRAPPER: sccache
-        run: cargo check --target x86_64-pc-windows-msvc --features llm-vulkan
+        run: cargo check -p skill --target x86_64-pc-windows-msvc --features llm-vulkan
 
       - name: cargo clippy
         shell: bash
-        working-directory: src-tauri
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
@@ -310,7 +305,7 @@ jobs:
           CXX:           ${{ env.CXX }}
           RUSTC_WRAPPER: sccache
         run: >
-          cargo clippy
+          cargo clippy -p skill
           --target x86_64-pc-windows-msvc
           --features llm-vulkan
           -- -D warnings
@@ -343,11 +338,10 @@ jobs:
             ~/.cargo/git
             ~/.cargo/bin/cargo-audit
           # cargo-audit's own deps change with Cargo.lock; bin is also covered.
-          key: linux-cargo-audit-${{ hashFiles('src-tauri/Cargo.lock') }}
+          key: linux-cargo-audit-${{ hashFiles('Cargo.lock') }}
           restore-keys: linux-cargo-audit-
 
       - name: cargo audit
-        working-directory: src-tauri
         run: |
           cargo install cargo-audit --locked 2>/dev/null || true
           cargo audit

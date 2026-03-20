@@ -218,7 +218,7 @@ jobs:
       - name: Cache Cargo registry + build artifacts
         uses: Swatinem/rust-cache@v2.9.0
         with:
-          workspaces: src-tauri
+          workspaces: ". -> src-tauri/target"
 
       # ── Build cache (sccache) ─────────────────────────────────────────────────
       - name: Setup sccache
@@ -308,8 +308,7 @@ jobs:
           RUSTC_WRAPPER: sccache
         run: |
           npm run build
-          cd src-tauri
-          cargo build --release --target aarch64-apple-darwin --features custom-protocol
+          cargo build -p skill --release --target aarch64-apple-darwin --features custom-protocol
 
       # ── Assemble .app bundle ──────────────────────────────────────────────
       - name: Create .app bundle
