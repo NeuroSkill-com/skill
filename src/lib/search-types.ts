@@ -69,10 +69,10 @@ export interface JobTicket {
 }
 
 export interface JobPollResult {
-  status: string; job_id: number; result?: any;
+  status: string; job_id: number; result?: unknown;
   elapsed_ms?: number; error?: string;
   queue_position?: number; estimated_secs?: number;
-  progress?: any;
+  progress?: Record<string, unknown>;
 }
 
 export interface ImgResult {

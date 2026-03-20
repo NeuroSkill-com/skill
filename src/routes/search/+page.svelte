@@ -225,7 +225,8 @@ the Free Software Foundation, version 3 only. -->
       try {
         const r = await invoke<JobPollResult>("poll_job", { jobId });
         if (r.status === "complete") {
-          let raw: UmapResult | null = r.result?.points?.length > 0 ? r.result : null;
+          const res = r.result as UmapResult | undefined;
+          let raw: UmapResult | null = res?.points?.length ? res : null;
           if (raw) raw = enrichUmapLabels(raw, buildNeighborLabelMap());
           umapResult = raw;
           finishUmap(); return;
