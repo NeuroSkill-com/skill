@@ -1875,6 +1875,7 @@ export type TranslationKey =
   | "model.cancelAutoRetry"
   | "model.backend"
   | "model.backendDesc"
+  | "model.backendReloadsEncoder"
   | "model.backendZuna"
   | "model.backendZunaDesc"
   | "model.backendLuna"

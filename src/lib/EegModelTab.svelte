@@ -607,7 +607,7 @@ the Free Software Foundation, version 3 only. -->
     <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
       {t("model.backend")}
     </span>
-    <span class="ml-auto text-[0.56rem] text-muted-foreground/60">{t("model.takesEffectRestart")}</span>
+    <span class="ml-auto text-[0.56rem] text-muted-foreground/60">{t("model.backendReloadsEncoder")}</span>
   </div>
 
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">

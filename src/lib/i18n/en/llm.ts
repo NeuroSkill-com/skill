@@ -44,7 +44,8 @@ const llm: Record<string, string> = {
   "model.cancelAutoRetry":        "Cancel retry",
 
   "model.backend":                "Model backend",
-  "model.backendDesc":            "Which EEG foundation model to use for embedding generation.",
+  "model.backendDesc":            "Which EXG foundation model to use for embedding generation.",
+  "model.backendReloadsEncoder":  "reloads encoder automatically",
   "model.backendZuna":            "ZUNA",
   "model.backendZunaDesc":        "Zyphra ZUNA encoder — default, 32-dim embeddings.",
   "model.backendLuna":            "LUNA",

@@ -66,7 +66,8 @@ const llm: Record<string, string> = {
   "model.cancelAutoRetry": "בטל ניסיון חוזר",
 
   "model.backend":                "מודל Backend",
-  "model.backendDesc":            "באיזה מודל יסוד EEG להשתמש ליצירת embeddings.",
+  "model.backendDesc":            "באיזה מודל יסוד EXG להשתמש ליצירת embeddings.",
+  "model.backendReloadsEncoder":  "טוען מחדש את המקודד אוטומטית",
   "model.backendZuna":            "ZUNA",
   "model.backendZunaDesc":        "מקודד Zyphra ZUNA — ברירת מחדל, embeddings 32-dim.",
   "model.backendLuna":            "LUNA",

@@ -8,7 +8,7 @@
 const settings: Record<string, string> = {
   "settingsTabs.settings": "Paramètres",
   "settingsTabs.appearance": "Apparence",
-  "settingsTabs.eegModel": "Modèle EEG",
+  "settingsTabs.eegModel": "Modèle EXG",
   "settingsTabs.helpFaq":  "Aide & FAQ",
   "settingsTabs.help":     "Aide",
 

@@ -44,7 +44,8 @@ const llm: Record<string, string> = {
   "model.cancelAutoRetry": "Скасувати автоповтор",
 
   "model.backend":                "Бекенд моделі",
-  "model.backendDesc":            "Яку фундаментальну модель ЕЕГ використовувати для генерації embeddings.",
+  "model.backendDesc":            "Яку фундаментальну модель EXG використовувати для генерації embeddings.",
+  "model.backendReloadsEncoder":  "перезавантажує кодер автоматично",
   "model.backendZuna":            "ZUNA",
   "model.backendZunaDesc":        "Кодер Zyphra ZUNA — за замовчуванням, 32-dim embeddings.",
   "model.backendLuna":            "LUNA",
