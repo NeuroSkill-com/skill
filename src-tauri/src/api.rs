@@ -695,7 +695,7 @@ async fn llm_chat_post(
 
     // ── Get server ────────────────────────────────────────────────────────────
     let app_state = state.app.app_state();
-    let cell = app_state.lock_or_recover().llm.state_cell.clone();
+    let cell = { let __a = app_state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r };
     let server = { cell.lock().expect("lock poisoned").as_ref().cloned() };
 
     let Some(server) = server else {
@@ -709,8 +709,9 @@ async fn llm_chat_post(
     let req_sid = msg.get("session_id").and_then(|v| v.as_i64()).unwrap_or(0);
     let is_new_session = req_sid <= 0;
     let session_id: i64 = {
-        let mut s = app_state.lock_or_recover();
-        if let Some(store) = s.llm.chat_store.as_mut() {
+        let s = app_state.lock_or_recover();
+        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        if let Some(store) = llm.chat_store.as_mut() {
             if req_sid > 0 { req_sid } else { store.new_session() }
         } else {
             0
@@ -724,8 +725,9 @@ async fn llm_chat_post(
         if let Some(um) = last_user {
             let content = um.get("content").and_then(|c| c.as_str()).unwrap_or("");
             if !content.is_empty() {
-                let mut s = app_state.lock_or_recover();
-                if let Some(store) = s.llm.chat_store.as_mut() {
+                let s = app_state.lock_or_recover();
+                let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+                if let Some(store) = llm.chat_store.as_mut() {
                     store.save_message(session_id, "user", content, None);
                     if is_new_session {
                         let title: String = content.chars().take(60).collect::<String>()
@@ -772,8 +774,9 @@ async fn llm_chat_post(
 
     // ── Persist the assistant response ────────────────────────────────────────
     if session_id > 0 && !text.is_empty() {
-        let mut s = app_state.lock_or_recover();
-        if let Some(store) = s.llm.chat_store.as_mut() {
+        let s = app_state.lock_or_recover();
+        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        if let Some(store) = llm.chat_store.as_mut() {
             let msg_id = store.save_message(session_id, "assistant", &text, None);
             eprintln!("[http] persisted assistant message id={msg_id} session={session_id} len={}", text.len());
         }
@@ -899,8 +902,9 @@ async fn handle_llm_chat_ws(
     let req_sid = msg.get("session_id").and_then(|v| v.as_i64()).unwrap_or(0);
     let is_new_session = req_sid <= 0;
     let session_id: i64 = {
-        let mut s = app_state.lock_or_recover();
-        if let Some(store) = s.llm.chat_store.as_mut() {
+        let s = app_state.lock_or_recover();
+        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        if let Some(store) = llm.chat_store.as_mut() {
             if req_sid > 0 { req_sid } else { store.new_session() }
         } else {
             0
@@ -914,8 +918,9 @@ async fn handle_llm_chat_ws(
         if let Some(um) = last_user {
             let content = um.get("content").and_then(|c| c.as_str()).unwrap_or("");
             if !content.is_empty() {
-                let mut s = app_state.lock_or_recover();
-                if let Some(store) = s.llm.chat_store.as_mut() {
+                let s = app_state.lock_or_recover();
+                let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+                if let Some(store) = llm.chat_store.as_mut() {
                     store.save_message(session_id, "user", content, None);
                     // Auto-title new sessions with the first user message (up to 60 chars).
                     if is_new_session {
@@ -933,7 +938,7 @@ async fn handle_llm_chat_ws(
         "command": "llm_chat", "type": "session", "session_id": session_id
     }));
 
-    let cell = app_state.lock_or_recover().llm.state_cell.clone();
+    let cell = { let __a = app_state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r };
     let server = { cell.lock().expect("lock poisoned").as_ref().cloned() };
 
     let Some(server) = server else {
@@ -1041,8 +1046,9 @@ async fn handle_llm_chat_ws(
             // ── Persist the assistant response ────────────────────────────
             if session_id > 0 && !text.is_empty() {
                 let tool_calls = tool_calls_collected.lock().expect("lock poisoned").clone();
-                let mut s = app_state.lock_or_recover();
-                if let Some(store) = s.llm.chat_store.as_mut() {
+                let s = app_state.lock_or_recover();
+                let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        if let Some(store) = llm.chat_store.as_mut() {
                     let msg_id = store.save_message_with_tools(
                         session_id, "assistant", &text, None, &tool_calls,
                     );

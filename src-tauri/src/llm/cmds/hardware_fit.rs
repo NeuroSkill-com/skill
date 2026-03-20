@@ -140,8 +140,9 @@ pub fn get_model_hardware_fit(
 ) -> Vec<ModelHardwareFit> {
     let specs = cached_system_specs();
     let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
 
-    s.llm.catalog.entries.iter()
+    llm.catalog.entries.iter()
         .filter(|e| !e.is_mmproj)
         .map(|entry| {
             let model = catalog_entry_to_llm_model(entry);

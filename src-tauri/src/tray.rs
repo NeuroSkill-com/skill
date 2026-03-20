@@ -76,7 +76,7 @@ fn tray_download_items(app: &AppHandle) -> Vec<TrayDownloadItem> {
     let downloads = {
         let r = app.app_state();
         let g = r.lock_or_recover();
-        g.llm.downloads.clone()
+        { let __a = g.llm.clone(); let __r = __a.lock_or_recover().downloads.clone(); __r }
     };
 
     let mut items = downloads

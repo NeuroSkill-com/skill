@@ -17,14 +17,15 @@ pub fn set_llm_active_model(
     app:      AppHandle,
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    s.llm.catalog.active_model = filename;
-    if !s.llm.catalog.active_mmproj_matches_active_model() {
-        s.llm.catalog.active_mmproj.clear();
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    llm.catalog.active_model = filename;
+    if !llm.catalog.active_mmproj_matches_active_model() {
+        llm.catalog.active_mmproj.clear();
     }
     // Mirror into LlmConfig so the server picks the updated pair up on restart.
-    s.llm.config.model_path = s.llm.catalog.active_model_path();
-    s.llm.config.mmproj     = s.llm.catalog.active_mmproj_path();
+    llm.config.model_path = llm.catalog.active_model_path();
+    llm.config.mmproj     = llm.catalog.active_mmproj_path();
     save_catalog(&app, &s);
     drop(s);
     crate::save_settings_handle(&app);
@@ -37,8 +38,9 @@ pub fn set_llm_autoload_mmproj(
     app:     AppHandle,
     state:   tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    s.llm.config.autoload_mmproj = enabled;
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    llm.config.autoload_mmproj = enabled;
     drop(s);
     crate::save_settings_handle(&app);
 }
@@ -50,35 +52,36 @@ pub fn set_llm_active_mmproj(
     app:      AppHandle,
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
     if filename.is_empty() {
-        s.llm.catalog.active_mmproj.clear();
+        llm.catalog.active_mmproj.clear();
     } else {
-        let current_matches = s.llm.catalog.active_model_entry()
-            .zip(s.llm.catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
+        let current_matches = llm.catalog.active_model_entry()
+            .zip(llm.catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
             .is_some_and(|(model, mmproj)| model.repo == mmproj.repo);
 
         if !current_matches {
-            if let Some(model_filename) = s.llm.catalog
+            if let Some(model_filename) = llm.catalog
                 .best_model_for_mmproj(&filename)
                 .map(|entry| entry.filename.clone())
             {
-                s.llm.catalog.active_model = model_filename;
+                llm.catalog.active_model = model_filename;
             }
         }
 
-        if s.llm.catalog.active_model_entry()
-            .zip(s.llm.catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
+        if llm.catalog.active_model_entry()
+            .zip(llm.catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
             .is_some_and(|(model, mmproj)| model.repo == mmproj.repo)
         {
-            s.llm.catalog.active_mmproj = filename;
+            llm.catalog.active_mmproj = filename;
         } else {
-            s.llm.catalog.active_mmproj.clear();
+            llm.catalog.active_mmproj.clear();
         }
     }
 
-    s.llm.config.model_path = s.llm.catalog.active_model_path();
-    s.llm.config.mmproj     = s.llm.catalog.active_mmproj_path();
+    llm.config.model_path = llm.catalog.active_model_path();
+    llm.config.mmproj     = llm.catalog.active_mmproj_path();
     save_catalog(&app, &s);
     drop(s);
     crate::save_settings_handle(&app);

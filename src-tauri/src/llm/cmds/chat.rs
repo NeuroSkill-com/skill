@@ -21,8 +21,9 @@ pub struct ChatSessionResponse {
 pub fn get_last_chat_session(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> ChatSessionResponse {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else {
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else {
         return ChatSessionResponse { session_id: 0, messages: vec![] };
     };
     let session_id = store.get_or_create_last_session();
@@ -36,8 +37,9 @@ pub fn load_chat_session(
     id:    i64,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> ChatSessionResponse {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else {
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else {
         return ChatSessionResponse { session_id: id, messages: vec![] };
     };
     let messages = store.load_session(id);
@@ -49,8 +51,9 @@ pub fn load_chat_session(
 pub fn list_chat_sessions(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<crate::llm::chat_store::SessionSummary> {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return vec![]; };
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else { return vec![]; };
     store.list_sessions()
 }
 
@@ -61,8 +64,9 @@ pub fn rename_chat_session(
     title: String,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else { return; };
     store.rename_session(id, &title);
 }
 
@@ -72,8 +76,9 @@ pub fn delete_chat_session(
     id:    i64,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else { return; };
     store.delete_session(id);
 }
 
@@ -83,8 +88,9 @@ pub fn archive_chat_session(
     id:    i64,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else { return; };
     store.archive_session(id);
 }
 
@@ -94,8 +100,9 @@ pub fn unarchive_chat_session(
     id:    i64,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else { return; };
     store.unarchive_session(id);
 }
 
@@ -104,8 +111,9 @@ pub fn unarchive_chat_session(
 pub fn list_archived_chat_sessions(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<crate::llm::chat_store::SessionSummary> {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return vec![]; };
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else { return vec![]; };
     store.list_archived_sessions()
 }
 
@@ -120,8 +128,9 @@ pub fn save_chat_message(
     state:      tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> i64 {
     eprintln!("[save_chat_message] called: session_id={session_id} role={role} content_len={}", content.len());
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else {
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else {
         eprintln!("[save_chat_message] chat_store is None!");
         return 0;
     };
@@ -135,7 +144,8 @@ pub fn get_session_params(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> String {
     let s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_ref() else { return String::new(); };
+    let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_ref() else { return String::new(); };
     store.get_session_params(id)
 }
 
@@ -146,8 +156,9 @@ pub fn set_session_params(
     params_json: String,
     state:       tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else { return; };
     store.set_session_params(id, &params_json);
 }
 
@@ -157,8 +168,9 @@ pub fn set_session_params(
 pub fn new_chat_session(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> i64 {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return 0; };
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else { return 0; };
     store.new_session()
 }
 
@@ -172,7 +184,8 @@ pub fn save_chat_tool_calls(
     tool_calls: Vec<crate::llm::chat_store::StoredToolCall>,
     state:      tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    let Some(store) = s.llm.chat_store.as_mut() else { return; };
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let Some(store) = llm.chat_store.as_mut() else { return; };
     store.save_tool_calls(message_id, &tool_calls);
 }

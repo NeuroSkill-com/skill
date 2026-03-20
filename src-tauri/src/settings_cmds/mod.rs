@@ -1094,7 +1094,7 @@ pub fn set_sleep_config(
 pub fn get_llm_config(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> crate::settings::LlmConfig {
-    state.lock_or_recover().llm.config.clone()
+    { let __a = state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().config.clone(); __r }
 }
 
 /// Update the LLM server configuration and persist it to `settings.json`.
@@ -1109,23 +1109,24 @@ pub fn set_llm_config(
 ) {
     #[cfg(feature = "llm")]
     let cell = {
-        let mut s = state.lock_or_recover();
-        s.llm.config = config.clone();
-        s.llm.state_cell.clone()
+        let s = state.lock_or_recover();
+        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        llm.config = config.clone();
+        llm.state_cell.clone()
     };
     #[cfg(not(feature = "llm"))]
     {
-        let mut s = state.lock_or_recover();
-        s.llm.config = config.clone();
+        let s = state.lock_or_recover();
+        { let __a = s.llm.clone(); __a.lock_or_recover().config = config.clone(); }
     }
 
     #[cfg(feature = "llm")]
-    if let Some(server) = cell.lock().expect("lock poisoned").clone() {
+    if let Some(server) = cell.lock_or_recover().clone() {
         // Preserve the runtime-only skill_api_port when updating tools config.
-        let prev_port = server.allowed_tools.lock().expect("lock poisoned").skill_api_port;
+        let prev_port = server.allowed_tools.lock_or_recover().skill_api_port;
         let mut new_tools = config.tools.clone();
         new_tools.skill_api_port = prev_port;
-        *server.allowed_tools.lock().expect("lock poisoned") = new_tools;
+        *server.allowed_tools.lock_or_recover() = new_tools;
     }
 
     save_settings(&app);
@@ -1417,7 +1418,7 @@ pub async fn search_screenshots_by_vector(
 /// Return the current community-skills refresh interval in seconds (0 = disabled).
 #[tauri::command]
 pub fn get_skills_refresh_interval(state: tauri::State<'_, Mutex<Box<AppState>>>) -> u64 {
-    state.lock_or_recover().llm.config.tools.skills_refresh_interval_secs
+    { let __a = state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().config.tools.skills_refresh_interval_secs; __r }
 }
 
 /// Persist a new skills refresh interval.  `secs` = 0 disables auto-refresh.
@@ -1427,7 +1428,7 @@ pub fn set_skills_refresh_interval(
     app:   AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    state.lock_or_recover().llm.config.tools.skills_refresh_interval_secs = secs;
+    { let __a = state.lock_or_recover().llm.clone(); __a.lock_or_recover().config.tools.skills_refresh_interval_secs = secs; }
     crate::save_settings(&app);
 }
 
@@ -1481,7 +1482,11 @@ pub struct SkillInfo {
 pub fn list_skills(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<SkillInfo> {
     let (skill_dir, disabled) = {
         let g = state.lock_or_recover();
-        (g.skill_dir.clone(), g.llm.config.tools.disabled_skills.clone())
+        let sd = g.skill_dir.clone();
+        let __a = g.llm.clone();
+        drop(g);
+        let __r = __a.lock_or_recover().config.tools.disabled_skills.clone();
+        (sd, __r)
     };
 
     let exe_dir = std::env::current_exe()
@@ -1526,7 +1531,7 @@ pub fn get_skills_license(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Opti
 /// Return the list of disabled skill names.
 #[tauri::command]
 pub fn get_disabled_skills(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<String> {
-    state.lock_or_recover().llm.config.tools.disabled_skills.clone()
+    { let __a = state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().config.tools.disabled_skills.clone(); __r }
 }
 
 /// Persist the disabled-skills list.
@@ -1536,7 +1541,7 @@ pub fn set_disabled_skills(
     app:   AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    state.lock_or_recover().llm.config.tools.disabled_skills = names;
+    { let __a = state.lock_or_recover().llm.clone(); __a.lock_or_recover().config.tools.disabled_skills = names; }
     crate::save_settings(&app);
 
     // Live-update the running LLM server's tool config so the change takes
@@ -1545,9 +1550,9 @@ pub fn set_disabled_skills(
     {
         let (cell, tools) = {
             let g = state.lock_or_recover();
-            (g.llm.state_cell.clone(), g.llm.config.tools.clone())
+            { let __llm_arc = g.llm.clone(); let llm = __llm_arc.lock_or_recover(); (llm.state_cell.clone(), llm.config.tools.clone()) }
         };
-        let server = cell.lock().expect("lock poisoned").as_ref().cloned();
+        let server = cell.lock_or_recover().as_ref().cloned();
         if let Some(server) = server {
             server.set_allowed_tools(tools);
         }

@@ -68,7 +68,7 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
             let cell = {
                 let r = self.app.app_state();
                 let g = r.lock_or_recover();
-                g.llm.state_cell.clone()
+                { let __a = g.llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r }
             };
             let state = cell.lock().ok()?.as_ref()?.clone();
             if !state.vision_ready.load(std::sync::atomic::Ordering::Relaxed) {

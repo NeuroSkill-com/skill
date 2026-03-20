@@ -28,8 +28,9 @@ pub(super) fn llm_status(app: &AppHandle) -> Result<Value, String> {
     use std::sync::atomic::Ordering;
     let state = app.app_state();
     let s = state.lock_or_recover();
-    let (status, model_name) = crate::llm::cell_status(&s.llm.state_cell);
-    let (n_ctx, supports_vision) = s.llm.state_cell.lock().expect("lock poisoned")
+    let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
+    let (status, model_name) = crate::llm::cell_status(&llm.state_cell);
+    let (n_ctx, supports_vision) = llm.state_cell.lock_or_recover()
         .as_ref()
         .map(|srv| (
             srv.n_ctx.load(Ordering::Relaxed),
@@ -58,16 +59,17 @@ pub(super) async fn llm_start(app: &AppHandle) -> Result<Value, String> {
     let (mut config, catalog, log_buf, cell, skill_dir) = {
         let st = app.app_state();
         let s = st.lock_or_recover();
+        let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
         (
-            s.llm.config.clone(),
-            s.llm.catalog.clone(),
-            s.llm.logs.clone(),
-            s.llm.state_cell.clone(),
+            llm.config.clone(),
+            llm.catalog.clone(),
+            llm.logs.clone(),
+            llm.state_cell.clone(),
             s.skill_dir.clone(),
         )
     };
 
-    if cell.lock().expect("lock poisoned").is_some() {
+    if cell.lock_or_recover().is_some() {
         return Ok(serde_json::json!({ "result": "already_running" }));
     }
 
@@ -86,7 +88,7 @@ pub(super) async fn llm_start(app: &AppHandle) -> Result<Value, String> {
 
     match new_state {
         Some(s) => {
-            *cell.lock().expect("lock poisoned") = Some(s);
+            *cell.lock_or_recover() = Some(s);
             Ok(serde_json::json!({ "result": "started" }))
         }
         None => Err(
@@ -107,9 +109,10 @@ pub(super) fn llm_stop(app: &AppHandle) -> Result<Value, String> {
     let (cell, log_buf) = {
         let st = app.app_state();
         let s = st.lock_or_recover();
-        (s.llm.state_cell.clone(), s.llm.logs.clone())
+        let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
+        (llm.state_cell.clone(), llm.logs.clone())
     };
-    let server_state = { cell.lock().expect("lock poisoned").take() };
+    let server_state = { cell.lock_or_recover().take() };
     if let Some(server_state) = server_state {
         let emitter = crate::llm::TauriEmitter(app.clone());
         crate::llm::push_log(&emitter, &log_buf, "info", "llm_stop command received via WebSocket");
@@ -134,12 +137,13 @@ pub(super) fn llm_stop(app: &AppHandle) -> Result<Value, String> {
 #[cfg(feature = "llm")]
 pub(super) fn llm_catalog(app: &AppHandle) -> Result<Value, String> {
     let state = app.app_state();
-    let mut s = state.lock_or_recover();
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
     // Sync in-flight downloads into the catalog so callers see live progress.
-    let downloads = s.llm.downloads.clone();
+    let downloads = llm.downloads.clone();
     for (filename, prog_arc) in &downloads {
         if let Ok(prog) = prog_arc.lock() {
-            if let Some(entry) = s.llm.catalog.entries
+            if let Some(entry) = llm.catalog.entries
                 .iter_mut()
                 .find(|e| &e.filename == filename)
             {
@@ -149,7 +153,7 @@ pub(super) fn llm_catalog(app: &AppHandle) -> Result<Value, String> {
             }
         }
     }
-    serde_json::to_value(&s.llm.catalog).map_err(|e| e.to_string())
+    serde_json::to_value(&llm.catalog).map_err(|e| e.to_string())
 }
 
 /// `llm_download` — start downloading a GGUF model by filename (fire-and-forget).
@@ -221,7 +225,8 @@ pub(super) fn llm_delete(app: &AppHandle, msg: &Value) -> Result<Value, String> 
 pub(super) fn llm_logs(app: &AppHandle) -> Result<Value, String> {
     let state = app.app_state();
     let s = state.lock_or_recover();
-    let log = s.llm.logs.lock().expect("lock poisoned");
+    let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
+    let log = llm.logs.lock_or_recover();
     let logs: Vec<&crate::llm::LlmLogEntry> = log.iter().collect();
     Ok(serde_json::json!({ "logs": logs, "count": logs.len() }))
 }
@@ -245,10 +250,11 @@ pub(super) fn llm_select_model(app: &AppHandle, msg: &Value) -> Result<Value, St
     );
     let state = app.app_state();
     let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
     Ok(serde_json::json!({
         "filename": filename,
-        "active_model": s.llm.catalog.active_model,
-        "active_mmproj": s.llm.catalog.active_mmproj,
+        "active_model": llm.catalog.active_model,
+        "active_mmproj": llm.catalog.active_mmproj,
     }))
 }
 
@@ -271,10 +277,11 @@ pub(super) fn llm_select_mmproj(app: &AppHandle, msg: &Value) -> Result<Value, S
     );
     let state = app.app_state();
     let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
     Ok(serde_json::json!({
         "filename": filename,
-        "active_model": s.llm.catalog.active_model,
-        "active_mmproj": s.llm.catalog.active_mmproj,
+        "active_model": llm.catalog.active_model,
+        "active_mmproj": llm.catalog.active_mmproj,
     }))
 }
 
