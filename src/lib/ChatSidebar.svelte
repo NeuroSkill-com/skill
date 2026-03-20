@@ -175,6 +175,7 @@
     <button
       onclick={onNew}
       title={t("chat.btn.newChat")}
+      aria-label={t("chat.btn.newChat")}
       class="p-1 rounded-md text-muted-foreground/60
              hover:text-foreground hover:bg-muted transition-colors cursor-pointer">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor"
@@ -261,6 +262,7 @@
                 <button
                   onclick={(e) => doArchive(s.id, e)}
                   title={t("chat.sidebar.archive")}
+                  aria-label={t("chat.sidebar.archive")}
                   class="absolute right-2 top-1/2 -translate-y-1/2
                          p-1 rounded-md transition-all cursor-pointer
                          opacity-0 group-hover:opacity-100
@@ -285,6 +287,8 @@
     <div class="border-t border-border dark:border-white/[0.06] mt-1">
       <button
         onclick={toggleArchive}
+        aria-expanded={showArchive}
+        aria-label={t("chat.sidebar.archive")}
         class="w-full flex items-center gap-1.5 px-3 py-2 transition-colors cursor-pointer
                text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50">
         <!-- Chevron -->
@@ -356,6 +360,7 @@
                     <button
                       onclick={(e) => doUnarchive(s.id, e)}
                       title={t("chat.sidebar.restore")}
+                      aria-label={t("chat.sidebar.restore")}
                       class="p-1 rounded-md transition-colors cursor-pointer
                              text-muted-foreground/40 hover:text-primary hover:bg-primary/10">
                       <!-- Undo arrow icon -->
@@ -370,6 +375,7 @@
                     <button
                       onclick={(e) => doDelete(s.id, e)}
                       title={t("chat.sidebar.deletePermanent")}
+                      aria-label={t("chat.sidebar.deletePermanent")}
                       class="p-1 rounded-md transition-colors cursor-pointer
                              text-muted-foreground/40 hover:text-red-500 hover:bg-red-500/10">
                       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor"

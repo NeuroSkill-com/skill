@@ -1166,6 +1166,7 @@ the Free Software Foundation, version 3 only. -->
           class="flex-1 h-6 text-[0.62rem] rounded border border-border dark:border-white/[0.08]
                  bg-background px-2 outline-none focus:ring-1 focus:ring-ring/50" />
         <button onclick={() => showLabels = false}
+                aria-label={t("common.close")}
                 class="text-[0.7rem] text-muted-foreground/60 hover:text-foreground">✕</button>
       </div>
       <div class="max-h-32 overflow-y-auto flex flex-col gap-1 scrollbar-thin">
@@ -1175,6 +1176,7 @@ the Free Software Foundation, version 3 only. -->
             <span class="text-foreground/80 flex-1 truncate">{label.text}</span>
             <span class="text-muted-foreground/40 tabular-nums shrink-0">{fmtTime(label.eeg_start)}</span>
             <button onclick={() => removeLabel(label.id)}
+                    aria-label={t("common.delete")}
                     class="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-red-500 shrink-0">✕</button>
           </div>
         {/each}
