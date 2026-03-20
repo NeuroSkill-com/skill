@@ -973,7 +973,8 @@ fn reembed_worker(
             }
         }
         skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
-            match luna_rs::LunaEncoder::<Wgpu>::load(&c_path, &w_path, device.clone()) {
+            let cfg_path = crate::eeg_embeddings::luna_variant_config_path(&c_path, &config.luna_variant);
+            match luna_rs::LunaEncoder::<Wgpu>::load(&cfg_path, &w_path, device.clone()) {
                 Ok((e, ms)) => { skill_log!(logger, "reembed", "LUNA encoder loaded ({ms:.0}ms)"); Enc::Luna(Box::new(e)) }
                 Err(e) => {
                     skill_log!(logger, "reembed", "LUNA load failed: {e:#}");

@@ -58,6 +58,7 @@ use crate::constants::{
 
 // Re-export public items from submodules.
 pub(crate) use worker::download_hf_weights;
+pub(crate) use worker::luna_variant_config_path;
 
 /// Linearly resample `src` to exactly `target_len` samples.
 ///

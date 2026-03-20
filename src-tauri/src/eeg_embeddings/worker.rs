@@ -573,7 +573,11 @@ pub(super) fn embed_worker(
                         .map_err(|e| format!("{e:#}"))
                 }
                 ExgModelBackend::Luna => {
-                    luna_rs::LunaEncoder::<Wgpu>::load(&c, &w, device.clone())
+                    // The HF config.json is minimal and lacks per-variant
+                    // hyperparameters.  Write a temp config with the correct
+                    // model dimensions for the selected variant.
+                    let cfg_path = luna_variant_config_path(&c, &config.luna_variant);
+                    luna_rs::LunaEncoder::<Wgpu>::load(&cfg_path, &w, device.clone())
                         .map(|(enc, ms)| (LoadedEncoder::Luna(Box::new(enc)), ms))
                         .map_err(|e| format!("{e:#}"))
                 }
@@ -1261,5 +1265,52 @@ pub(crate) fn download_hf_weights(
 ) -> Option<(PathBuf, PathBuf)> {
     // Delegate to skill_exg.
     skill_exg::download_hf_weights_files(hf_repo, weights_file, config_file, status, cancel, mark_needs_restart)
+}
+
+/// Generate a config file with variant-specific LUNA hyperparameters.
+///
+/// The HuggingFace `config.json` for LUNA is minimal and lacks per-variant
+/// model dimensions.  This function reads the base config, injects the
+/// correct hyperparameters for the selected variant, and writes the result
+/// to a sibling file (`config_<variant>.json`).
+///
+/// Returns the path to the variant-specific config (or the original path
+/// if the variant is unrecognised or the write fails).
+pub(crate) fn luna_variant_config_path(base_config: &Path, variant: &str) -> PathBuf {
+    use skill_constants::luna_variant_config;
+
+    let (embed_dim, num_queries, depth, num_heads) = match luna_variant_config(variant) {
+        Some(cfg) => cfg,
+        None => return base_config.to_path_buf(),
+    };
+
+    // Read the base config, inject model params.
+    let base_json = std::fs::read_to_string(base_config).unwrap_or_else(|_| "{}".to_string());
+    let mut val: serde_json::Value = serde_json::from_str(&base_json).unwrap_or(serde_json::json!({}));
+
+    let model_obj = serde_json::json!({
+        "embed_dim":   embed_dim,
+        "num_queries": num_queries,
+        "depth":       depth,
+        "num_heads":   num_heads,
+        "patch_size":  40,
+        "mlp_ratio":   4.0,
+        "num_classes": 0,
+        "norm_eps":    1e-5
+    });
+    val["model"] = model_obj;
+
+    // Write to a sibling file so we don't overwrite the original.
+    let variant_path = base_config.with_file_name(format!("config_{variant}.json"));
+    match serde_json::to_string_pretty(&val) {
+        Ok(json) => {
+            if std::fs::write(&variant_path, &json).is_ok() {
+                return variant_path;
+            }
+        }
+        Err(_) => {}
+    }
+
+    base_config.to_path_buf()
 }
 

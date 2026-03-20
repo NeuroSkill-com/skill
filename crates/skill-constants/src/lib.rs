@@ -410,6 +410,27 @@ pub const LUNA_VARIANTS: [(&str, &str); 3] = [
 /// Default LUNA model variant.
 pub const LUNA_DEFAULT_VARIANT: &str = "base";
 
+/// Per-variant LUNA model hyperparameters: `(variant, embed_dim, num_queries, depth, num_heads)`.
+///
+/// These override the generic `config.json` defaults so that each checkpoint
+/// is loaded with the correct architecture.  Derived from weight-tensor shapes.
+pub const LUNA_VARIANT_CONFIGS: [(&str, usize, usize, usize, usize); 3] = [
+    // variant, embed_dim, num_queries, depth, num_heads
+    ("base",  64,  4,  8, 2),
+    ("large", 96,  6, 10, 2),
+    ("huge", 128,  8, 24, 2),
+];
+
+/// Look up LUNA model hyperparameters for a variant name.
+///
+/// Returns `(embed_dim, num_queries, depth, num_heads)` or `None` if the
+/// variant is unrecognised.
+pub fn luna_variant_config(variant: &str) -> Option<(usize, usize, usize, usize)> {
+    LUNA_VARIANT_CONFIGS.iter()
+        .find(|(v, _, _, _, _)| *v == variant)
+        .map(|(_, e, q, d, h)| (*e, *q, *d, *h))
+}
+
 /// HNSW graph connectivity parameter `M`.
 pub const HNSW_M: usize = 16;
 

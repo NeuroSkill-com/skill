@@ -82,6 +82,13 @@ the Free Software Foundation, version 3 only. -->
 
   let restarting = $state(false);
 
+  // Dynamic encoder display name based on selected backend + variant.
+  const encoderName = $derived(
+    modelConfig.model_backend === "luna"
+      ? `LUNA Encoder (${modelConfig.luna_variant})`
+      : t("model.zunaEncoder")
+  );
+
   // ── Actions ────────────────────────────────────────────────────────────────
   async function refreshStatus() {
     modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
@@ -286,8 +293,8 @@ the Free Software Foundation, version 3 only. -->
       {t("model.encoder")}
     </span>
     <!-- Live status dot -->
-    {#if isDownloading}
-      <!-- Pulsing blue while downloading -->
+    {#if isDownloading || encoderLoading}
+      <!-- Pulsing while downloading or loading encoder -->
       <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
     {:else if modelStatus.encoder_loaded}
       <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -306,7 +313,7 @@ the Free Software Foundation, version 3 only. -->
         <div class="flex items-center gap-3 px-4 py-3.5">
           <div class="flex flex-col gap-0.5 min-w-0 flex-1">
             <span class="text-[0.78rem] font-semibold text-foreground">
-              {modelStatus.active_model_backend === "luna" ? "LUNA Encoder" : t("model.zunaEncoder")}
+              {encoderName}
             </span>
             {#if modelStatus.encoder_describe}
               <span class="text-[0.65rem] text-muted-foreground font-mono truncate">
@@ -331,7 +338,7 @@ the Free Software Foundation, version 3 only. -->
         <div class="flex flex-col gap-3 px-4 py-4">
           <div class="flex items-center justify-between gap-2">
             <div class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+              <span class="text-[0.78rem] font-semibold text-foreground">{encoderName}</span>
               <span class="text-[0.65rem] text-primary truncate">
                 {modelStatus.download_status_msg ?? t("model.downloading")}
               </span>
@@ -377,7 +384,7 @@ the Free Software Foundation, version 3 only. -->
         <div class="flex flex-col gap-3 px-4 py-4">
           <div class="flex items-center justify-between gap-2">
             <div class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+              <span class="text-[0.78rem] font-semibold text-foreground">{encoderName}</span>
               <span class="text-[0.65rem] text-amber-600 dark:text-amber-400">
                 {t("model.autoRetryIn", { secs: String(modelStatus.download_retry_in_secs) })}
                 · {t("model.autoRetryAttempt", { n: String(modelStatus.download_retry_attempt + 1) })}
@@ -434,7 +441,7 @@ the Free Software Foundation, version 3 only. -->
         <div class="flex flex-col gap-3 px-4 py-4">
           <div class="flex items-center justify-between gap-2">
             <div class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+              <span class="text-[0.78rem] font-semibold text-foreground">{encoderName}</span>
               <span class="text-[0.65rem] text-destructive truncate">
                 {t("model.downloadFailed")}
               </span>
@@ -463,7 +470,7 @@ the Free Software Foundation, version 3 only. -->
       {:else if wasCancelled}
         <div class="flex items-center gap-3 px-4 py-3.5">
           <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+            <span class="text-[0.78rem] font-semibold text-foreground">{encoderName}</span>
             <span class="text-[0.65rem] text-muted-foreground">{t("model.downloadCancelled")}</span>
           </div>
           <Button size="sm" variant="outline"
@@ -478,7 +485,7 @@ the Free Software Foundation, version 3 only. -->
         <div class="flex flex-col gap-3 px-4 py-4">
           <div class="flex items-center justify-between gap-2">
             <div class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+              <span class="text-[0.78rem] font-semibold text-foreground">{encoderName}</span>
               <span class="text-[0.65rem] text-amber-600 dark:text-amber-400">
                 {t("model.restartToLoad")}
               </span>
@@ -507,7 +514,7 @@ the Free Software Foundation, version 3 only. -->
       {:else if weightsReadyNoSession}
         <div class="flex items-center gap-3 px-4 py-3.5">
           <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+            <span class="text-[0.78rem] font-semibold text-foreground">{encoderName}</span>
             <span class="text-[0.65rem] text-muted-foreground/70">
               {t("model.weightsReadyConnectHeadset")}
             </span>
@@ -524,7 +531,7 @@ the Free Software Foundation, version 3 only. -->
         <div class="flex flex-col gap-3 px-4 py-4">
           <div class="flex items-center justify-between gap-2">
             <div class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+              <span class="text-[0.78rem] font-semibold text-foreground">{encoderName}</span>
               <span class="text-[0.65rem] text-muted-foreground">{t("model.encoderLoading")}</span>
             </div>
             <Badge variant="outline"
@@ -545,7 +552,7 @@ the Free Software Foundation, version 3 only. -->
         <div class="flex flex-col gap-3 px-4 py-4">
           <div class="flex items-center justify-between gap-2">
             <div class="flex flex-col gap-0.5 min-w-0">
-              <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+              <span class="text-[0.78rem] font-semibold text-foreground">{encoderName}</span>
               <span class="text-[0.65rem] text-muted-foreground/70">
                 {t("model.notFoundInCache")}
               </span>
@@ -561,7 +568,7 @@ the Free Software Foundation, version 3 only. -->
                       border border-border dark:border-white/[0.06]">
             <div class="flex flex-col gap-0.5 flex-1 min-w-0">
               <span class="text-[0.6rem] text-muted-foreground/70 font-mono truncate">
-                {modelConfig.hf_repo}
+                {modelConfig.model_backend === "luna" ? modelConfig.luna_hf_repo : modelConfig.hf_repo}
               </span>
             </div>
             <Button size="sm" class="shrink-0 h-7 text-[0.65rem] px-3" onclick={startDownload}>
