@@ -1,3 +1,12 @@
+# ── Workspace-level Cargo configuration ────────────────────────────────────────
+#
+# Moved from src-tauri/.cargo/config.toml to the workspace root so that all
+# workspace members share the same build configuration.
+#
+# `relative = true` paths are resolved relative to this file's parent
+# directory (the project root), so all espeak paths are prefixed with
+# `src-tauri/`.
+
 # ── Default build target ──────────────────────────────────────────────────────
 #
 # cargo's [build] section has no per-host-OS conditionals, so a hardcoded
@@ -40,6 +49,14 @@
 [build]
 # target intentionally omitted — defaults to the host triple
 #
+# ── Shared target directory ───────────────────────────────────────────────────
+#
+# All workspace members compile into src-tauri/target/.  This keeps the
+# binary output where the Tauri CLI and build scripts (tauri-build.js,
+# assemble-macos-app.sh, etc.) expect it, and avoids the multi-GB
+# duplication that occurred when individual crates had their own target/.
+target-dir = "src-tauri/target"
+#
 # ── Build caching (sccache) ───────────────────────────────────────────────────
 #
 # sccache caches both rustc and C/C++ compilation outputs, dramatically
@@ -58,15 +75,15 @@
 # that both skill/build.rs and kittentts/build.rs find the static archive and,
 # if it is absent, know where to find the script that builds it.
 #
-# `relative = true` resolves paths relative to this file (src-tauri/).
+# `relative = true` resolves paths relative to this file's parent (project root).
 
 [env]
-ESPEAK_LIB_DIR      = { value = "espeak-static/lib",                   relative = true }
+ESPEAK_LIB_DIR      = { value = "src-tauri/espeak-static/lib",   relative = true }
 # ESPEAK_BUILD_SCRIPT is read by kittentts/neutts build scripts to auto-build
 # the static archive when ESPEAK_LIB_DIR does not yet contain the library.
 # On macOS/Linux it points to the bash script; on Windows it points to the
 # PowerShell equivalent (overridden in the target-specific section below).
-ESPEAK_BUILD_SCRIPT = { value = "../scripts/build-espeak-static.sh",  relative = true }
+ESPEAK_BUILD_SCRIPT = { value = "scripts/build-espeak-static.sh", relative = true }
 
 # ── macOS deployment target ───────────────────────────────────────────────────
 #
@@ -177,12 +194,12 @@ rustflags = ["-C", "link-args=/STACK:8388608"]
 rustflags = ["-C", "link-args=-Wl,--stack,8388608"]
 
 [target.x86_64-pc-windows-gnu.env]
-ESPEAK_LIB_DIR      = "espeak-static-mingw/lib"
-ESPEAK_BUILD_SCRIPT = "../scripts/build-espeak-static-mingw.sh"
+ESPEAK_LIB_DIR      = "src-tauri/espeak-static-mingw/lib"
+ESPEAK_BUILD_SCRIPT = "scripts/build-espeak-static-mingw.sh"
 
 [target.i686-pc-windows-gnu]
 rustflags = ["-C", "link-args=-Wl,--stack,8388608"]
 
 [target.i686-pc-windows-gnu.env]
-ESPEAK_LIB_DIR      = "espeak-static-mingw/lib"
-ESPEAK_BUILD_SCRIPT = "../scripts/build-espeak-static-mingw.sh"
+ESPEAK_LIB_DIR      = "src-tauri/espeak-static-mingw/lib"
+ESPEAK_BUILD_SCRIPT = "scripts/build-espeak-static-mingw.sh"
