@@ -11,6 +11,7 @@
     "build": "npm run -s dev:guard && svelte-kit sync && vite build && npm run -s verify:tauri:frontend",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:llm:e2e": "cargo test -p skill-llm --features llm --test llm_e2e -- --nocapture",
     "preview": "vite preview",
     "check:markdown-renderer": "node scripts/check-markdown-renderer.js",
     "verify:tauri:frontend": "node scripts/verify-tauri-frontend-structure.js",
