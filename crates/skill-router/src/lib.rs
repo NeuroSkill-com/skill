@@ -18,11 +18,17 @@ use skill_constants::{SQLITE_FILE, LABELS_FILE};
 
 // ── Rounding helpers ──────────────────────────────────────────────────────────
 
+/// Round `f32` to 1 decimal place.
 pub fn r1(v: f32) -> f32 { (v * 10.0).round() / 10.0 }
+/// Round `f32` to 2 decimal places.
 pub fn r2(v: f32) -> f32 { (v * 100.0).round() / 100.0 }
+/// Round `f32` to 3 decimal places.
 pub fn r3(v: f32) -> f32 { (v * 1000.0).round() / 1000.0 }
+/// Round `f64` to 1 decimal place.
 pub fn r1d(v: f64) -> f64 { (v * 10.0).round() / 10.0 }
+/// Round `f64` to 2 decimal places.
 pub fn r2d(v: f64) -> f64 { (v * 100.0).round() / 100.0 }
+/// Round `f64` to 2 decimal places (alias of [`r2d`]).
 pub fn r2f(v: f64) -> f64 { (v * 100.0).round() / 100.0 }
 
 // ── Rounded metric types ─────────────────────────────────────────────────────
