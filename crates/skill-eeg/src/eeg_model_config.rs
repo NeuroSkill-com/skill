@@ -326,10 +326,18 @@ pub struct LatestEpochMetrics {
 
 pub fn load_model_config(skill_dir: &Path) -> EegModelConfig {
     let path = skill_dir.join(MODEL_CONFIG_FILE);
-    std::fs::read_to_string(&path)
+    let mut cfg: EegModelConfig = std::fs::read_to_string(&path)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+
+    // Migration: thorir/LUNA → PulpBio/LUNA (repo moved).
+    if cfg.luna_hf_repo == "thorir/LUNA" {
+        cfg.luna_hf_repo = LUNA_HF_REPO.to_string();
+        save_model_config(skill_dir, &cfg);
+    }
+
+    cfg
 }
 
 pub fn save_model_config(skill_dir: &Path, cfg: &EegModelConfig) {
