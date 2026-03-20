@@ -77,7 +77,7 @@ pub(crate) async fn run_device_session(
     let storage_format = {
         let r = app.app_state();
         let s = r.lock_or_recover();
-        StorageFormat::from_str(&s.settings_storage_format)
+        StorageFormat::parse(&s.settings_storage_format)
     };
     let mut csv: Option<SessionWriter> = None;
     write_session_meta(&app, &csv_path);

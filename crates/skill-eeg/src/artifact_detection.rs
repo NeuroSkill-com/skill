@@ -61,6 +61,7 @@ impl ArtifactDetector {
     /// Use [`with_channels`] with the device's actual sample rate and channel
     /// names for correct blink detection on non-Muse devices.
     #[deprecated(since = "0.1.0", note = "use ArtifactDetector::with_channels(sample_rate, channel_names) instead")]
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self::with_channels(MUSE_SAMPLE_RATE as f64, &["TP9", "AF7", "AF8", "TP10"])
     }

@@ -19,7 +19,7 @@ pub enum StorageFormat {
 }
 
 impl StorageFormat {
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "parquet" => Self::Parquet,
             "both"    => Self::Both,
@@ -37,6 +37,7 @@ impl StorageFormat {
 }
 
 /// Unified writer that delegates to either CSV or Parquet (or both).
+#[allow(clippy::large_enum_variant)]
 pub enum SessionWriter {
     Csv(CsvState),
     Parquet(ParquetState),

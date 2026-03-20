@@ -811,9 +811,9 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                                 matches.push("   ---".to_string());
                             }
 
-                            for j in ctx_start..ctx_end {
+                            for (j, line) in all_lines.iter().enumerate().take(ctx_end).skip(ctx_start) {
                                 let marker = if j == i { ">" } else { " " };
-                                matches.push(format!("{}{:>5}: {}", marker, j + 1, all_lines[j]));
+                                matches.push(format!("{}{:>5}: {}", marker, j + 1, line));
                             }
                             last_printed = ctx_end;
                         }

@@ -55,6 +55,7 @@ pub fn imu_csv_path(eeg_path: &Path) -> PathBuf {
 /// - 3 composite scores
 /// - 1 temperature
 /// - 3 GPU utilisation
+///
 /// Cross-channel metric column names (after the per-channel band powers).
 pub const METRICS_CROSS_CHANNEL_HEADER: [&str; 46] = [
     // ── Cross-channel EEG indices ──

@@ -39,8 +39,7 @@ pub(crate) fn strip_html_tags(s: &str) -> String {
     }
 
     // Phase 1b: Remove HTML comments <!-- ... -->.
-    loop {
-        let Some(start) = cleaned.find("<!--") else { break };
+    while let Some(start) = cleaned.find("<!--") {
         if let Some(end_rel) = cleaned[start..].find("-->") {
             cleaned.replace_range(start..start + end_rel + 3, " ");
         } else {

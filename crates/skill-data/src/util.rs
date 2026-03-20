@@ -159,7 +159,7 @@ pub fn date_dirs(skill_dir: &Path) -> Vec<(String, PathBuf)> {
 /// Whether `y` is a leap year (proleptic Gregorian).
 #[inline]
 pub fn is_leap(y: u32) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
+    y.is_multiple_of(4) && (!y.is_multiple_of(100) || y.is_multiple_of(400))
 }
 
 /// Break a Unix-second timestamp into `(year, month, day, hour, min, sec)` (UTC).
@@ -169,7 +169,7 @@ pub fn civil_from_unix(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
     let m = ((rem % 3600) / 60) as u32;
     let s = (rem % 60) as u32;
 
-    let mut days = (secs / 86400) as u64;
+    let mut days = secs / 86400;
     let mut y = 1970u32;
     loop {
         let in_yr = if is_leap(y) { 366u64 } else { 365 };

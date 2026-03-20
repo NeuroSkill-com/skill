@@ -50,9 +50,8 @@ static FETCH_CANCELLED: AtomicBool = AtomicBool::new(false);
 /// When set, `external_fetch_page` uses this instead of launching a
 /// standalone headless browser.  The function receives `(url, wait_ms)`
 /// and must return the visible text content of the rendered page.
-static EXTERNAL_RENDERER: std::sync::OnceLock<
-    Box<dyn Fn(&str, u64) -> Result<String, String> + Send + Sync>,
-> = std::sync::OnceLock::new();
+type ExternalRendererFn = Box<dyn Fn(&str, u64) -> Result<String, String> + Send + Sync>;
+static EXTERNAL_RENDERER: std::sync::OnceLock<ExternalRendererFn> = std::sync::OnceLock::new();
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
@@ -159,6 +158,7 @@ impl Browser {
     /// - **macOS**: uses WKWebView.  Must *not* be called from the main
     ///   thread if another NSApplication run loop is active.
     /// - **Windows**: uses WebView2 (Edge Chromium).
+    ///
     /// Mark the headless browser as unavailable for this process.
     ///
     /// Call this once at startup when another GUI framework (Tauri, Cocoa,
@@ -461,6 +461,7 @@ fn run_event_loop(
 
     // We need to keep webview alive for the duration of the event loop.
     // Wrap in Option so we can destroy it on Close.
+    #[allow(clippy::arc_with_non_send_sync)] // WebView is thread-confined; Arc used for move into closure
     let webview: Arc<Mutex<Option<WebView>>> = Arc::new(Mutex::new(Some(webview)));
 
     event_loop.run_return(move |event, _target, control_flow| {
@@ -515,6 +516,7 @@ fn run_event_loop(
 /// `evaluate_script_with_callback` which calls back on the webview thread
 /// without blocking the event loop.  The callback sends the response
 /// through the `reply` channel.
+#[allow(clippy::too_many_arguments)] // inherent to the command-dispatch pattern
 fn execute_command(
     wv: &WebView,
     window: &Window,

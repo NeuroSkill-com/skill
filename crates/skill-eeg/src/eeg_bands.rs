@@ -360,6 +360,7 @@ impl BandAnalyzer {
     /// **Deprecated:** defaults to 256 Hz (Muse).  Use [`new_with_rate`]
     /// with the device's actual sample rate for correct spectral analysis.
     #[deprecated(since = "0.1.0", note = "use BandAnalyzer::new_with_rate(sample_rate) instead")]
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self::new_with_rate(MUSE_SAMPLE_RATE)
     }
@@ -518,9 +519,8 @@ impl BandAnalyzer {
         let mut ch_snr_sum   = 0.0f32;
         let mut ch_alpha_abs_sum = 0.0f32;
 
-        for ch in 0..EEG_CHANNELS {
+        for (ch, (real, imag)) in spectra.iter().enumerate().take(EEG_CHANNELS) {
             if !self.active[ch] { continue; }
-            let (real, imag) = &spectra[ch];
 
             // One-sided raw PSD (length n_oneside = 257).
             // psd::psd gives (r² + i²) / n for each bin.
