@@ -34,9 +34,11 @@ the Free Software Foundation, version 3 only. -->
   interface LlmModelEntry {
     filename: string;
     quant: string;
+    size_gb: number;
     family_id: string;
     family_name: string;
     is_mmproj: boolean;
+    recommended: boolean;
     state: DownloadState;
     progress: number;
   }
@@ -198,23 +200,50 @@ the Free Software Foundation, version 3 only. -->
   }
 
   // ── Model download helpers ────────────────────────────────────────────────
-  function pickQwenTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
-    const family = entries.filter((entry) =>
-      !entry.is_mmproj && (
-        entry.family_id === "qwen35-4b" || /qwen3\.5\s*4b/i.test(entry.family_name)
-      )
+
+  /** Pick the best family match by id or name regex, preferring Q4_K_M. */
+  function pickFamilyTarget(
+    entries: LlmModelEntry[],
+    familyId: string,
+    familyRe: RegExp,
+  ): LlmModelEntry | null {
+    const family = entries.filter((e) =>
+      !e.is_mmproj && (e.family_id === familyId || familyRe.test(e.family_name))
     );
     if (!family.length) return null;
-
-    const byQuant = (q: string) =>
-      family.find((entry) => entry.quant.toUpperCase() === q);
-
+    const byQuant = (q: string) => family.find((e) => e.quant.toUpperCase() === q);
     return (
       byQuant("Q4_K_M") ??
+      byQuant("Q8_0") ??
       byQuant("Q4_0") ??
-      family.find((entry) => entry.quant.toUpperCase().startsWith("Q4")) ??
-      family.find((entry) => entry.state === "downloaded") ??
+      family.find((e) => e.quant.toUpperCase().startsWith("Q4")) ??
+      family.find((e) => e.recommended) ??
+      family.find((e) => e.state === "downloaded") ??
       family[0]
+    );
+  }
+
+  /**
+   * Pick the default LLM to download during onboarding.
+   *
+   * Priority chain:
+   *  1. Already-downloaded model (any family) — skip download.
+   *  2. Qwen3.5 4B Q4_K_M — best quality for the size.
+   *  3. LFM2.5-VL 1.6B Q8_0 — ultra-compact fallback (~1 GB).
+   *  4. Any recommended model, smallest first.
+   */
+  function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
+    // If any model is already downloaded, prefer it (skip download).
+    const downloaded = entries.find((e) => !e.is_mmproj && e.state === "downloaded");
+    if (downloaded) return downloaded;
+
+    return (
+      pickFamilyTarget(entries, "qwen35-4b", /qwen3\.5\s*4b/i) ??
+      pickFamilyTarget(entries, "lfm25-vl-1.6b", /lfm2\.5.*1\.6b/i) ??
+      entries
+        .filter((e) => !e.is_mmproj && e.recommended)
+        .sort((a, b) => a.size_gb - b.size_gb)[0] ??
+      null
     );
   }
 
@@ -225,7 +254,7 @@ the Free Software Foundation, version 3 only. -->
         invoke<EegModelStatusLite>("get_eeg_model_status"),
         invoke<boolean>("check_ocr_models_ready"),
       ]);
-      qwenTarget = pickQwenTarget(catalog.entries);
+      qwenTarget = pickLlmTarget(catalog.entries);
       zunaStatus = eeg;
       if (ocrReady && ocrDlState !== "ready") ocrDlState = "ready";
       modelLoadError = "";
