@@ -316,7 +316,7 @@ pub(crate) use helpers::{
     emit_status, emit_devices,
     send_toast, ToastLevel,
     skill_dir, read_state, mutate_and_save,
-    save_settings, save_settings_handle,
+    save_settings, save_settings_now, save_settings_handle,
     upsert_paired, upsert_discovered,
     AppStateExt,
 };
@@ -342,6 +342,9 @@ fn run_blocking_exit_shutdown(app: &tauri::AppHandle) {
     if EXIT_SHUTDOWN_STARTED.swap(true, std::sync::atomic::Ordering::AcqRel) {
         return;
     }
+
+    // Flush any pending debounced settings to disk before exit.
+    save_settings_now(app);
 
     #[cfg(feature = "llm")]
     {

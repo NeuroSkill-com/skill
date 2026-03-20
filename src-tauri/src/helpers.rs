@@ -127,11 +127,39 @@ pub(crate) fn mutate_and_save(
     save_settings(app);
 }
 
-// ── Settings persistence ──────────────────────────────────────────────────────
+// ── Settings persistence (debounced) ──────────────────────────────────────────
+
+/// Debounce interval for settings persistence.  Multiple `save_settings` calls
+/// within this window are collapsed into a single disk write.
+const SETTINGS_DEBOUNCE_MS: u64 = 500;
+
+/// Atomic flag: `true` while a debounce timer is already pending.
+static SAVE_PENDING: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 pub fn save_settings_handle(app: &AppHandle) { save_settings(app); }
 
+/// Schedule a settings save.  The actual disk write is debounced: if another
+/// `save_settings` call arrives within [`SETTINGS_DEBOUNCE_MS`], only one
+/// write is performed.  This prevents I/O storms when the user rapidly
+/// toggles multiple settings.
 pub(crate) fn save_settings(app: &AppHandle) {
+    use std::sync::atomic::Ordering;
+    // If a timer is already pending, skip — it will pick up the latest state.
+    if SAVE_PENDING.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(SETTINGS_DEBOUNCE_MS)).await;
+        SAVE_PENDING.store(false, Ordering::Release);
+        save_settings_now(&handle);
+    });
+}
+
+/// Immediately flush settings to disk (no debounce).  Called by the
+/// debounce timer and by shutdown paths that must persist before exit.
+pub(crate) fn save_settings_now(app: &AppHandle) {
     let s_ref = app.app_state();
     let s = s_ref.lock_or_recover();
     let data = UserSettings {

@@ -10,7 +10,10 @@
 //! WebSocket client can send.  The dispatcher in [`super::ws_server`] calls
 //! into this module and forwards the `Result` back to the client.
 
+mod calibration;
+mod health;
 mod hooks;
+mod screenshots;
 mod search;
 #[cfg(feature = "llm")]
 mod llm_cmds;
@@ -555,97 +558,7 @@ pub fn umap_poll(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 // umap_compute_inner, cache helpers, analyze_umap_points, load_embeddings_range,
 // load_labels_range, find_label_for_epoch — all re-exported from skill_router above.
 
-// ── calibration profile commands ──────────────────────────────────────────────
-
-/// `list_calibrations` — return all saved calibration profiles.
-pub fn list_calibrations(app: &AppHandle) -> Result<Value, String> {
-    let profiles = crate::calibration_service::list_profiles(app);
-    Ok(serde_json::json!({ "profiles": profiles }))
-}
-
-/// `get_calibration { "id": "…" }` — return a single profile by ID.
-pub fn get_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let id = msg.get("id").and_then(|v| v.as_str())
-        .ok_or_else(|| "missing required field: \"id\" (string)".to_string())?;
-    crate::calibration_service::get_profile(app, id)
-        .map(|p| serde_json::json!({ "profile": p }))
-        .ok_or_else(|| format!("profile not found: {id}"))
-}
-
-/// `create_calibration { "name": "…", "actions": […], "break_duration_secs": n, "loop_count": n }`
-pub fn create_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let name = msg.get("name").and_then(|v| v.as_str())
-        .ok_or_else(|| "missing required field: \"name\"".to_string())?
-        .trim().to_owned();
-    if name.is_empty() { return Err("\"name\" must not be empty".into()); }
-
-    let actions: Vec<crate::CalibrationAction> = msg.get("actions")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .filter(|v: &Vec<_>| !v.is_empty())
-        .ok_or_else(|| "\"actions\" must be a non-empty array of {label, duration_secs}".to_string())?;
-
-    let break_secs  = msg.get("break_duration_secs").and_then(|v| v.as_u64()).unwrap_or(5) as u32;
-    let loop_count  = msg.get("loop_count").and_then(|v| v.as_u64()).unwrap_or(3) as u32;
-    let auto_start  = msg.get("auto_start").and_then(|v| v.as_bool()).unwrap_or(false);
-
-    let profile = crate::CalibrationProfile {
-        id:                   String::new(), // overwritten by create_profile
-        name,
-        actions,
-        break_duration_secs:  break_secs,
-        loop_count,
-        auto_start,
-        last_calibration_utc: None,
-    };
-
-    let created = crate::calibration_service::create_profile(app, profile);
-    Ok(serde_json::json!({ "profile": created }))
-}
-
-/// `update_calibration { "id": "…", …fields… }` — partial-update an existing profile.
-pub fn update_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let id = msg.get("id").and_then(|v| v.as_str())
-        .ok_or_else(|| "missing required field: \"id\"".to_string())?;
-
-    // Fetch the existing profile, apply partial updates from msg, then save.
-    let mut profile = crate::calibration_service::get_profile(app, id)
-        .ok_or_else(|| format!("profile not found: {id}"))?;
-
-    if let Some(name) = msg.get("name").and_then(|v| v.as_str()) {
-        profile.name = name.to_owned();
-    }
-    if let Some(actions) = msg.get("actions").and_then(|v| serde_json::from_value::<Vec<crate::CalibrationAction>>(v.clone()).ok()) {
-        if !actions.is_empty() { profile.actions = actions; }
-    }
-    if let Some(b) = msg.get("break_duration_secs").and_then(|v| v.as_u64()) {
-        profile.break_duration_secs = b as u32;
-    }
-    if let Some(n) = msg.get("loop_count").and_then(|v| v.as_u64()) {
-        profile.loop_count = n as u32;
-    }
-    if let Some(a) = msg.get("auto_start").and_then(|v| v.as_bool()) {
-        profile.auto_start = a;
-    }
-
-    let updated = crate::calibration_service::update_profile(app, profile)?;
-    Ok(serde_json::json!({ "profile": updated }))
-}
-
-/// `delete_calibration { "id": "…" }` — remove a profile.
-pub fn delete_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let id = msg.get("id").and_then(|v| v.as_str())
-        .ok_or_else(|| "missing required field: \"id\"".to_string())?;
-    crate::calibration_service::delete_profile(app, id)?;
-    Ok(serde_json::json!({}))
-}
-
-/// `run_calibration { "id"?: "…" }` — open the calibration window and start
-/// the specified (or active) profile immediately.
-pub async fn run_calibration(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let profile_id = msg.get("id").and_then(|v| v.as_str()).map(str::to_owned);
-    crate::open_calibration_window_inner(app, profile_id, true).await?;
-    Ok(serde_json::json!({}))
-}
+// Calibration commands — delegated to calibration.rs sub-module.
 
 // ── dnd ───────────────────────────────────────────────────────────────────────
 
@@ -867,215 +780,7 @@ pub async fn say(_app: &AppHandle, msg: &Value) -> Result<Value, String> {
     Ok(resp)
 }
 
-// ── Screenshot search commands ────────────────────────────────────────────────
-
-/// `search_screenshots` — search screenshots by OCR text (semantic or substring).
-///
-/// Accepts:
-/// ```json
-/// { "command": "search_screenshots", "query": "some text", "k": 20, "mode": "semantic" }
-/// ```
-/// - `query` (required): the search text.
-/// - `k` (optional, default 20): max results.
-/// - `mode` (optional, default "semantic"): "semantic" or "substring".
-fn search_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let query = msg.get("query")
-        .and_then(|v| v.as_str())
-        .ok_or("missing \"query\" field")?
-        .to_owned();
-    let k    = msg.get("k").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
-    let mode = msg.get("mode")
-        .and_then(|v| v.as_str())
-        .unwrap_or("semantic")
-        .to_owned();
-
-    let (skill_dir, store) = {
-        let st = app.app_state();
-        let s  = st.lock_or_recover();
-        (s.skill_dir.clone(), s.screenshot_store.clone())
-    };
-
-    let embedder = std::sync::Arc::clone(&*app.state::<std::sync::Arc<crate::EmbedderState>>());
-
-    let store = store
-        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))
-        .ok_or("screenshot store not available")?;
-
-    let results = match mode.as_str() {
-        "substring" => crate::screenshot::search_by_ocr_text_like(&store, &query, k),
-        _ => {
-            let embed_fn = |text: &str| -> Option<Vec<f32>> {
-                let mut guard = embedder.0.lock().ok()?;
-                let te = guard.as_mut()?;
-                let mut vecs = te.embed(vec![text], None).ok()?;
-                if vecs.is_empty() { None } else { Some(vecs.remove(0)) }
-            };
-            crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k, &embed_fn)
-        }
-    };
-
-    Ok(serde_json::json!({
-        "query":   query,
-        "mode":    mode,
-        "k":       k,
-        "count":   results.len(),
-        "results": results,
-    }))
-}
-
-/// `screenshots_around` — find screenshots near a given unix timestamp.
-///
-/// Accepts:
-/// ```json
-/// { "command": "screenshots_around", "timestamp": 1740412800, "window_secs": 60 }
-/// ```
-fn screenshots_around(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let timestamp   = msg.get("timestamp")
-        .and_then(|v| v.as_i64())
-        .ok_or("missing \"timestamp\" field")?;
-    let window_secs = msg.get("window_secs")
-        .and_then(|v| v.as_i64())
-        .unwrap_or(60) as i32;
-
-    let (skill_dir, store) = {
-        let st = app.app_state();
-        let s  = st.lock_or_recover();
-        (s.skill_dir.clone(), s.screenshot_store.clone())
-    };
-
-    let store = store
-        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))
-        .ok_or("screenshot store not available")?;
-
-    let results = crate::screenshot::get_around(&store, timestamp, window_secs);
-
-    Ok(serde_json::json!({
-        "timestamp":   timestamp,
-        "window_secs": window_secs,
-        "count":       results.len(),
-        "results":     results,
-    }))
-}
-
-// ── HealthKit commands ─────────────────────────────────────────────────────────
-
-/// `health_sync` — upsert Apple HealthKit data from the iOS companion app.
-///
-/// Accepts a batch payload with typed sample arrays.  Idempotent — sending
-/// the same samples again is safe (deduplication by source + timestamps).
-///
-/// ```json
-/// { "command": "health_sync",
-///   "sleep": [{ "source_id": "watch", "start_utc": 1740000000, "end_utc": 1740028800, "value": "REM" }],
-///   "workouts": [{ "workout_type": "Running", "start_utc": 1740030000, "end_utc": 1740033600,
-///                   "duration_secs": 3600, "active_calories": 450, "distance_meters": 8000 }],
-///   "heart_rate": [{ "timestamp": 1740030000, "bpm": 72.0, "context": "sedentary" }],
-///   "steps": [{ "start_utc": 1740000000, "end_utc": 1740086400, "count": 9500 }],
-///   "mindfulness": [{ "start_utc": 1740040000, "end_utc": 1740041200 }],
-///   "metrics": [{ "metric_type": "restingHeartRate", "timestamp": 1740000000, "value": 58.0, "unit": "bpm" }]
-/// }
-/// ```
-fn health_sync(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let payload: skill_data::health_store::HealthSyncPayload =
-        serde_json::from_value(msg.clone()).map_err(|e| format!("invalid health_sync payload: {e}"))?;
-
-    let st = app.app_state();
-    let store = {
-        let s = st.lock_or_recover();
-        s.health_store.clone()
-    };
-    let store = store.ok_or_else(|| "health store not available".to_string())?;
-    let result = store.sync(&payload);
-    eprintln!(
-        "[health] sync: sleep={} workouts={} hr={} steps={} mindful={} metrics={}",
-        result.sleep_upserted, result.workouts_upserted, result.heart_rate_upserted,
-        result.steps_upserted, result.mindfulness_upserted, result.metrics_upserted,
-    );
-    serde_json::to_value(&result).map_err(|e| e.to_string())
-}
-
-/// `health_query` — query stored HealthKit data by type and time range.
-///
-/// ```json
-/// { "command": "health_query", "type": "sleep", "start_utc": 1740000000, "end_utc": 1740086400, "limit": 100 }
-/// ```
-///
-/// Valid `type` values: `sleep`, `workouts`, `heart_rate`, `steps`, `metrics`.
-/// For `metrics`, an additional `metric_type` field is required (e.g. `"restingHeartRate"`).
-fn health_query(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let data_type = msg.get("type").and_then(|v| v.as_str())
-        .ok_or_else(|| "missing required field: \"type\" (sleep|workouts|heart_rate|steps|metrics)".to_string())?;
-    let start_utc = msg.get("start_utc").and_then(|v| v.as_i64()).unwrap_or(0);
-    let end_utc   = msg.get("end_utc").and_then(|v| v.as_i64())
-        .unwrap_or_else(|| std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
-    let limit     = msg.get("limit").and_then(|v| v.as_i64()).unwrap_or(500).clamp(1, 10_000);
-
-    let st = app.app_state();
-    let store = {
-        let s = st.lock_or_recover();
-        s.health_store.clone()
-    };
-    let store = store.ok_or_else(|| "health store not available".to_string())?;
-
-    match data_type {
-        "sleep" => {
-            let rows = store.query_sleep(start_utc, end_utc, limit);
-            Ok(serde_json::json!({ "type": "sleep", "count": rows.len(), "results": rows }))
-        }
-        "workouts" => {
-            let rows = store.query_workouts(start_utc, end_utc, limit);
-            Ok(serde_json::json!({ "type": "workouts", "count": rows.len(), "results": rows }))
-        }
-        "heart_rate" => {
-            let rows = store.query_heart_rate(start_utc, end_utc, limit);
-            Ok(serde_json::json!({ "type": "heart_rate", "count": rows.len(), "results": rows }))
-        }
-        "steps" => {
-            let rows = store.query_steps(start_utc, end_utc, limit);
-            Ok(serde_json::json!({ "type": "steps", "count": rows.len(), "results": rows }))
-        }
-        "metrics" => {
-            let metric_type = msg.get("metric_type").and_then(|v| v.as_str())
-                .ok_or_else(|| "\"metric_type\" required when type=\"metrics\" (e.g. \"restingHeartRate\")".to_string())?;
-            let rows = store.query_metrics(metric_type, start_utc, end_utc, limit);
-            Ok(serde_json::json!({ "type": "metrics", "metric_type": metric_type, "count": rows.len(), "results": rows }))
-        }
-        other => Err(format!("invalid health data type: \"{other}\" — must be sleep|workouts|heart_rate|steps|metrics")),
-    }
-}
-
-/// `health_summary` — aggregate counts for a time range.
-///
-/// ```json
-/// { "command": "health_summary", "start_utc": 1740000000, "end_utc": 1740086400 }
-/// ```
-fn health_summary(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let start_utc = msg.get("start_utc").and_then(|v| v.as_i64()).unwrap_or(0);
-    let end_utc   = msg.get("end_utc").and_then(|v| v.as_i64())
-        .unwrap_or_else(|| std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
-
-    let st = app.app_state();
-    let store = {
-        let s = st.lock_or_recover();
-        s.health_store.clone()
-    };
-    let store = store.ok_or_else(|| "health store not available".to_string())?;
-    Ok(store.summary(start_utc, end_utc))
-}
-
-/// `health_metric_types` — list all distinct metric types in the database.
-fn health_metric_types(app: &AppHandle) -> Result<Value, String> {
-    let st = app.app_state();
-    let store = {
-        let s = st.lock_or_recover();
-        s.health_store.clone()
-    };
-    let store = store.ok_or_else(|| "health store not available".to_string())?;
-    let types = store.list_metric_types();
-    Ok(serde_json::json!({ "metric_types": types }))
-}
+// Screenshot + HealthKit commands — delegated to sub-modules.
 
 // ── Central dispatcher ────────────────────────────────────────────────────────
 
@@ -1109,25 +814,25 @@ pub async fn dispatch(
         "hooks_suggest"       => hooks::hooks_suggest(app, msg),
         "hooks_log"           => hooks::hooks_log(app, msg),
         "umap_poll"           => umap_poll(app, msg),
-        "list_calibrations"   => list_calibrations(app),
-        "get_calibration"     => get_calibration(app, msg),
-        "create_calibration"  => create_calibration(app, msg),
-        "update_calibration"  => update_calibration(app, msg),
-        "delete_calibration"  => delete_calibration(app, msg),
-        "run_calibration"     => run_calibration(app, msg).await,
+        "list_calibrations"   => calibration::list_calibrations(app),
+        "get_calibration"     => calibration::get_calibration(app, msg),
+        "create_calibration"  => calibration::create_calibration(app, msg),
+        "update_calibration"  => calibration::update_calibration(app, msg),
+        "delete_calibration"  => calibration::delete_calibration(app, msg),
+        "run_calibration"     => calibration::run_calibration(app, msg).await,
         "say"                 => say(app, msg).await,
         "dnd"                 => dnd_status(app),
         "dnd_set"             => dnd_set(app, msg),
         "sleep_schedule"      => sleep_schedule(app),
         "sleep_schedule_set"  => sleep_schedule_set(app, msg),
         // ── Screenshot search ─────────────────────────────────────────────
-        "search_screenshots"  => search_screenshots(app, msg),
-        "screenshots_around"  => screenshots_around(app, msg),
+        "search_screenshots"  => screenshots::search_screenshots(app, msg),
+        "screenshots_around"  => screenshots::screenshots_around(app, msg),
         // ── HealthKit ─────────────────────────────────────────────────────
-        "health_sync"         => health_sync(app, msg),
-        "health_query"        => health_query(app, msg),
-        "health_summary"      => health_summary(app, msg),
-        "health_metric_types" => health_metric_types(app),
+        "health_sync"         => health::health_sync(app, msg),
+        "health_query"        => health::health_query(app, msg),
+        "health_summary"      => health::health_summary(app, msg),
+        "health_metric_types" => health::health_metric_types(app),
         // ── LLM commands (llm_chat is handled before dispatch — see api.rs) ──
         #[cfg(feature = "llm")]
         "llm_status"          => llm_cmds::llm_status(app),
