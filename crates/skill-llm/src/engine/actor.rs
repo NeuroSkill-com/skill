@@ -584,13 +584,13 @@ pub(super) fn run_actor(
                                     let embd = mtmd.output_embd(n_elements);
                                     let mut pooled = vec![0.0f32; n_embd];
                                     for t in 0..n_tokens {
-                                        for d in 0..n_embd {
-                                            pooled[d] += embd[t * n_embd + d];
+                                        for (d, p) in pooled.iter_mut().enumerate().take(n_embd) {
+                                            *p += embd[t * n_embd + d];
                                         }
                                     }
                                     if n_tokens > 0 {
-                                        for d in 0..n_embd {
-                                            pooled[d] /= n_tokens as f32;
+                                        for p in pooled.iter_mut().take(n_embd) {
+                                            *p /= n_tokens as f32;
                                         }
                                     }
                                     let norm: f32 = pooled.iter().map(|x| x * x).sum::<f32>().sqrt();

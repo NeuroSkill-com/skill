@@ -705,7 +705,7 @@ where
                 (tc, result, !ok)
             }));
         } else {
-            let err_val = p.validation.as_ref().err().expect("guarded by else branch").clone();
+            let err_val = p.validation.as_ref().expect_err("guarded by else branch").clone();
             futures.push(tokio::spawn(async move {
                 (tc, err_val, true)
             }));

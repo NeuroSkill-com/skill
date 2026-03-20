@@ -155,7 +155,7 @@ pub(super) fn run_sampling_loop(
 
         // Decode the new token so `sampler.sample(ctx, -1)` works next iteration.
         // Periodic GPU memory check (every 64 tokens) to avoid Metal abort().
-        if n_cur % 64 == 0 && gpu_guard.gen_threshold > 0.0 {
+        if n_cur.is_multiple_of(64) && gpu_guard.gen_threshold > 0.0 {
             let (mem_ok, free_gb) = super::generation::gpu_memory_check(gpu_guard.gen_threshold);
             if !mem_ok {
                 llm_warn!(app, log_buf, log_file,

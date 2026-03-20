@@ -30,7 +30,7 @@ pub(super) struct GpuMemoryGuard {
 pub(super) fn gpu_memory_check(min_free_gb: f64) -> (bool, Option<f64>) {
     let Some(gpu) = skill_data::gpu_stats::read() else { return (true, None) };
     let free_gb = gpu.free_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0));
-    let ok = free_gb.map_or(true, |f| f >= min_free_gb);
+    let ok = free_gb.is_none_or(|f| f >= min_free_gb);
     (ok, free_gb)
 }
 
@@ -93,9 +93,9 @@ pub(super) fn run_generation(
     while i < n_prompt {
         let end = (i + n_batch).min(n_prompt);
         let mut batch = LlamaBatch::new(end - i, 1);
-        for j in i..end {
+        for (j, &token) in tokens.iter().enumerate().take(end).skip(i) {
             let logits = j == n_prompt - 1;
-            if batch.add(tokens[j], j as i32, &[0], logits).is_err() { break; }
+            if batch.add(token, j as i32, &[0], logits).is_err() { break; }
         }
         if ctx.decode(&mut batch).is_err() {
             llm_error!(app, log_buf, log_file, "decode error on prompt (batch at token {i})");
