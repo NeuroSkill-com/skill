@@ -431,7 +431,7 @@ impl LlmCatalog {
 /// * `params_b` — parameter count in billions
 /// * `quant`    — quantization tag (e.g. `"Q4_K_M"`)
 /// * `ctx`      — context length in tokens
-fn estimate_memory_gb(params_b: f64, quant: &str, ctx: u32) -> f64 {
+pub fn estimate_memory_gb(params_b: f64, quant: &str, ctx: u32) -> f64 {
     let bpp: f64 = match quant {
         "F32"                 => 4.0,
         "F16" | "BF16"        => 2.0,

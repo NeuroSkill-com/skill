@@ -1,6 +1,10 @@
+### Features
+
+- **Dynamic context window growth**: When a prompt exceeds the current context window, the LLM engine now automatically attempts to grow the context size (up to the model's max trained context length) if VRAM/memory permits, before falling back to trimming chat history. This avoids unnecessary message loss on systems with enough memory.
+
 ### Bugfixes
 
-- **Fix "prompt too long" error when prompt exceeds n_ctx**: The LLM engine now automatically trims older chat history messages (keeping system prompt and latest user turn) when the tokenized prompt exceeds the context window budget. Previously, conversations would fail with "prompt too long (N ≥ n_ctx M)" once history grew past the context limit.
+- **Fix "prompt too long" error when prompt exceeds n_ctx**: The LLM engine now automatically trims older chat history messages (keeping system prompt and latest user turn) when the tokenized prompt exceeds the context window budget and the context cannot be grown further. Previously, conversations would fail with "prompt too long (N >= n_ctx M)" once history grew past the context limit.
 
 ### Performance
 

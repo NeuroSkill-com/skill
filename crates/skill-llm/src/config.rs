@@ -87,6 +87,23 @@ pub struct LlmConfig {
     /// are offloaded.  Default: `true`.
     #[serde(default = "default_offload_kqv")]
     pub offload_kqv: bool,
+
+    // ── Model metadata (populated by init.rs from the catalog entry) ──────────
+
+    /// Model parameter count in billions (e.g. 7.0 for a 7B model).
+    /// Used at runtime to estimate memory for dynamic context resizing.
+    #[serde(default, skip_serializing)]
+    pub params_b: f64,
+
+    /// Quantization tag (e.g. `"Q4_K_M"`).
+    /// Used at runtime to estimate memory for dynamic context resizing.
+    #[serde(default, skip_serializing)]
+    pub quant: String,
+
+    /// Maximum context length the model was trained on (in tokens).
+    /// The runtime context size is never grown beyond this value.
+    #[serde(default, skip_serializing)]
+    pub max_context_length: u32,
 }
 
 fn default_llm_parallel()      -> usize { 1 }
@@ -113,6 +130,9 @@ impl Default for LlmConfig {
             autostart:        false,
             flash_attention:  default_flash_attention(),
             offload_kqv:      default_offload_kqv(),
+            params_b:         0.0,
+            quant:            String::new(),
+            max_context_length: 0,
         }
     }
 }

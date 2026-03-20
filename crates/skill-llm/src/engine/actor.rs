@@ -341,15 +341,7 @@ pub(super) fn run_actor(
                 #[cfg(not(feature = "llm-mtmd"))]
                 let marker = "";
 
-                // ── Build chat messages and truncate history if prompt exceeds n_ctx ──
-                // Keep the first message (system prompt) and the last message (latest
-                // user turn) intact.  Drop the oldest middle messages one at a time
-                // until the tokenized prompt fits within the context window, leaving
-                // room for generation (reserve 25% of n_ctx for completion).
-                let n_ctx = ctx.n_ctx() as usize;
-                let reserve_for_generation = n_ctx / 4;
-                let token_budget = n_ctx.saturating_sub(reserve_for_generation);
-
+                // ── Build chat messages ──────────────────────────────────────────
                 let build_chat_msgs = |msgs: &[serde_json::Value]| -> Vec<llama_cpp_4::model::LlamaChatMessage> {
                     msgs.iter()
                         .filter_map(|m| {
@@ -366,38 +358,122 @@ pub(super) fn run_actor(
                         .collect()
                 };
 
+                // ── Fit prompt to context: grow context or trim history ──────────
+                // Strategy:
+                //   1. Tokenize the full prompt.
+                //   2. If it fits in the current n_ctx (with 25% reserved for
+                //      generation) → proceed.
+                //   3. Otherwise, try to grow the context window up to the model's
+                //      max_context_length, as long as estimated VRAM usage allows.
+                //   4. If we still can't fit → trim oldest middle messages.
                 let mut trimmed_messages = messages.clone();
                 let prompt: Option<String> = 'build_prompt: {
                     loop {
                         let chat_msgs = build_chat_msgs(&trimmed_messages);
-                        match model.apply_chat_template(None, chat_msgs, true) {
-                            Ok(p) => {
-                                // Check token count fits
-                                match model.str_to_token(&p, llama_cpp_4::model::AddBos::Always) {
-                                    Ok(tokens) if tokens.len() < token_budget => break 'build_prompt Some(p),
-                                    Ok(tokens) => {
-                                        // Need to trim — drop the second message (first after system)
-                                        if trimmed_messages.len() <= 2 {
-                                            // Only system + user left, can't trim further
-                                            llm_warn!(&app, &log_buf, log_file,
-                                                "prompt still too long after trimming all history ({} >= {})",
-                                                tokens.len(), token_budget);
-                                            break 'build_prompt Some(p); // let generation.rs emit the error
-                                        }
-                                        llm_info!(&app, &log_buf, log_file,
-                                            "prompt too long ({} tokens >= {} budget), dropping message at index 1 ({} messages remaining)",
-                                            tokens.len(), token_budget, trimmed_messages.len() - 1);
-                                        trimmed_messages.remove(1);
-                                    }
-                                    Err(_) => break 'build_prompt Some(p), // tokenization error — let downstream handle
-                                }
-                            }
+                        let p = match model.apply_chat_template(None, chat_msgs, true) {
+                            Ok(p) => p,
                             Err(e) => {
                                 llm_error!(&app, &log_buf, log_file, "apply_chat_template failed: {e}");
                                 token_tx.send(InferToken::Error(format!("template error: {e}"))).ok();
-                                break 'build_prompt None; // skip this request
+                                break 'build_prompt None;
+                            }
+                        };
+
+                        let tokens = match model.str_to_token(&p, llama_cpp_4::model::AddBos::Always) {
+                            Ok(t) => t,
+                            Err(_) => break 'build_prompt Some(p), // let downstream handle
+                        };
+
+                        let n_ctx_cur = ctx.n_ctx() as usize;
+                        let reserve = n_ctx_cur / 4;
+                        let budget = n_ctx_cur.saturating_sub(reserve);
+
+                        if tokens.len() < budget {
+                            break 'build_prompt Some(p); // fits fine
+                        }
+
+                        // ── Try to grow the context window ──────────────────────
+                        // We need at least tokens.len() * 4/3 (to keep 25% headroom).
+                        let needed_ctx = ((tokens.len() as f64) * 4.0 / 3.0).ceil() as u32 + 64;
+                        let max_ctx = if config.max_context_length > 0 {
+                            config.max_context_length
+                        } else {
+                            n_ctx_cur as u32 // no metadata → can't grow
+                        };
+
+                        if needed_ctx > n_ctx_cur as u32 && needed_ctx <= max_ctx {
+                            // Check if memory allows the larger context.
+                            let can_afford = if config.params_b > 0.0 {
+                                let gpu = skill_data::gpu_stats::read();
+                                let available_gb: f64 = gpu.as_ref()
+                                    .and_then(|g| {
+                                        if g.is_unified_memory {
+                                            g.free_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+                                        } else {
+                                            g.total_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+                                        }
+                                    })
+                                    .unwrap_or(0.0);
+                                let mem_budget = available_gb * 0.85;
+                                let estimated = crate::catalog::estimate_memory_gb(
+                                    config.params_b, &config.quant, needed_ctx);
+                                estimated <= mem_budget
+                            } else {
+                                false // no model metadata → don't risk OOM
+                            };
+
+                            if can_afford {
+                                // Round up to next power-of-two-ish standard size for cleanliness.
+                                let new_ctx = [4096u32, 8192, 16384, 32768, 65536, 131072]
+                                    .iter()
+                                    .copied()
+                                    .find(|&c| c >= needed_ctx && c <= max_ctx)
+                                    .unwrap_or(needed_ctx.min(max_ctx));
+
+                                llm_info!(&app, &log_buf, log_file,
+                                    "prompt needs {} tokens, growing context {} -> {} (max={})",
+                                    tokens.len(), n_ctx_cur, new_ctx, max_ctx);
+
+                                let new_ctx_params = LlamaContextParams::default()
+                                    .with_n_ctx(NonZeroU32::new(new_ctx))
+                                    .with_n_threads(-1)
+                                    .with_n_threads_batch(-1)
+                                    .with_flash_attention(config.flash_attention)
+                                    .with_offload_kqv(config.offload_kqv);
+
+                                match model.new_context(backend, new_ctx_params) {
+                                    Ok(new_c) => {
+                                        ctx = new_c;
+                                        n_ctx_flag.store(ctx.n_ctx() as usize, Ordering::Relaxed);
+                                        llm_info!(&app, &log_buf, log_file,
+                                            "context resized to n_ctx={}", ctx.n_ctx());
+                                        // Re-check with new budget
+                                        let new_budget = (ctx.n_ctx() as usize).saturating_sub(ctx.n_ctx() as usize / 4);
+                                        if tokens.len() < new_budget {
+                                            break 'build_prompt Some(p);
+                                        }
+                                        // Still doesn't fit — fall through to trimming
+                                    }
+                                    Err(e) => {
+                                        llm_warn!(&app, &log_buf, log_file,
+                                            "failed to grow context to {}: {e} — will trim messages instead",
+                                            new_ctx);
+                                    }
+                                }
                             }
                         }
+
+                        // ── Fall back: trim oldest middle messages ───────────────
+                        if trimmed_messages.len() <= 2 {
+                            llm_warn!(&app, &log_buf, log_file,
+                                "prompt still too long after trimming all history ({} >= {})",
+                                tokens.len(), budget);
+                            break 'build_prompt Some(p); // let generation.rs emit the error
+                        }
+                        llm_info!(&app, &log_buf, log_file,
+                            "prompt too long ({} tokens >= {} budget, n_ctx={}), dropping message at index 1 ({} messages remaining)",
+                            tokens.len(), budget, n_ctx_cur, trimmed_messages.len() - 1);
+                        trimmed_messages.remove(1);
                     }
                 };
                 let Some(prompt) = prompt else { continue };
