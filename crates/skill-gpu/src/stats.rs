@@ -696,3 +696,46 @@ mod non_macos {
         })
     }
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gpu_stats_struct_default_values() {
+        let stats = GpuStats {
+            render: 0.0,
+            tiler: 0.0,
+            overall: 0.0,
+            is_unified_memory: false,
+            total_memory_bytes: None,
+            free_memory_bytes: None,
+        };
+        assert!(!stats.is_unified_memory);
+        assert!(stats.total_memory_bytes.is_none());
+        assert!(stats.free_memory_bytes.is_none());
+    }
+
+    #[test]
+    fn gpu_stats_serializes_to_json() {
+        let stats = GpuStats {
+            render: 0.75,
+            tiler: 0.50,
+            overall: 0.60,
+            is_unified_memory: true,
+            total_memory_bytes: Some(16 * 1024 * 1024 * 1024),
+            free_memory_bytes: Some(8 * 1024 * 1024 * 1024),
+        };
+        let json = serde_json::to_string(&stats).unwrap();
+        assert!(json.contains("0.75"));
+        assert!(json.contains("isUnifiedMemory"));
+    }
+
+    #[test]
+    fn read_does_not_panic() {
+        // read() may return None on CI/headless systems — just ensure no panic
+        let _ = read();
+    }
+}

@@ -483,85 +483,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     crate::tts::init_tts_logger(app.handle());
     crate::llm::init_llm_logger(app.handle());
     crate::llm::init_tool_logger(app.handle());
-    let data = load_settings(&skill_dir);
-    {
-        let r = app.app_state();
-        let mut s = r.lock_or_recover();
-        s.status.paired_devices         = data.paired.clone();
-        s.preferred_id                  = data.preferred_id.clone();
-        s.status.filter_config          = data.filter_config;
-        s.status.embedding_overlap_secs = data.embedding_overlap_secs;
-        s.shortcuts.label_shortcut                = data.label_shortcut;
-        s.shortcuts.search_shortcut               = data.search_shortcut;
-        s.shortcuts.settings_shortcut             = data.settings_shortcut;
-        s.shortcuts.calibration_shortcut          = data.calibration_shortcut;
-        s.shortcuts.help_shortcut                 = data.help_shortcut;
-        s.shortcuts.history_shortcut              = data.history_shortcut;
-        s.shortcuts.api_shortcut                  = data.api_shortcut;
-        s.shortcuts.theme_shortcut                = data.theme_shortcut;
-        s.shortcuts.focus_timer_shortcut          = data.focus_timer_shortcut;
-        let mut profiles = data.calibration_profiles;
-        if profiles.is_empty() {
-            profiles.push(CalibrationProfile::from_legacy(&data.calibration));
-        }
-        s.calibration_profiles = profiles;
-        s.active_calibration_id = if data.active_calibration_id.is_empty() {
-            s.calibration_profiles.first().map(|p| p.id.clone()).unwrap_or_default()
-        } else {
-            data.active_calibration_id
-        };
-        s.ui.onboarding_complete                = data.onboarding_complete;
-        s.ui.last_seen_whats_new_version        = data.last_seen_whats_new_version;
-        s.ui.theme                        = data.theme;
-        s.ui.language                     = data.language;
-        s.ui.daily_goal_min               = data.daily_goal_min;
-        s.ui.goal_notified_date           = data.goal_notified_date;
-        s.ui.text_embedding_model         = data.text_embedding_model.clone();
-        s.hooks                        = data.hooks;
-        s.ws_host                      = data.ws_host.clone();
-        s.ws_port                      = data.ws_port;
-        s.api_token                    = data.api_token.clone();
-        s.update_check_interval_secs   = data.update_check_interval_secs;
-        s.openbci_config               = data.openbci;
-        s.device_api_config            = data.device_api;
-        s.scanner_config               = data.scanner;
-        s.neutts_config                = data.neutts.clone();
-        s.tts_preload                  = data.tts_preload;
-        s.input.track_active_window          = data.track_active_window;
-        s.input.track_input_activity         = data.track_input_activity;
-        s.input.input_activity_enabled
-            .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
-        s.dnd.lock_or_recover().config = data.do_not_disturb;
-        { let __a = s.llm.clone(); __a.lock_or_recover().config = data.llm; }
-        s.settings_storage_format = data.storage_format;
-        s.sleep_config      = data.sleep;
-        s.screenshot_config = data.screenshot;
-        if let Some(os_active) = skill_data::dnd::query_os_active() {
-            if !os_active { s.dnd.lock_or_recover().active = false; }
-        }
-        neutts_apply_config(&data.neutts);
-        for pd in &data.paired {
-            let transport = crate::helpers::transport_from_id(&pd.id);
-            s.discovered.push(DiscoveredDevice {
-                id: pd.id.clone(), name: pd.name.clone(),
-                last_seen: pd.last_seen, last_rssi: 0,
-                is_paired: true,
-                is_preferred: data.preferred_id.as_deref() == Some(&pd.id),
-                transport,
-            });
-        }
-        // Migrate legacy "cortex:emotiv" paired entries — these were created
-        // before the scanner listed individual headsets as "cortex:<headset_id>".
-        // They are kept for backward compatibility (auto-connect will still
-        // work with the generic ID) but no longer need special filtering.
-    }
 
-    if data.tts_preload {
-        let app_handle = app.handle().clone();
-        tauri::async_runtime::spawn(async move {
-            crate::tts::tts_init(app_handle).await.ok();
-        });
-    }
+    load_and_apply_settings(app, &skill_dir);
 
     // ── Gather values from AppState in a single lock acquisition ─────
     // Avoids 4 separate lock/unlock cycles that were here previously.
@@ -946,6 +869,90 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     setup_background_tasks(app);
     Ok(())
+}
+
+/// Load persisted settings from disk and apply them to `AppState`.
+///
+/// Extracted from `setup_app` to keep the setup function under 300 lines.
+/// Reads `settings.json`, populates every `AppState` field, and pre-warms
+/// TTS if configured.
+#[inline(never)]
+fn load_and_apply_settings(app: &mut tauri::App, skill_dir: &std::path::Path) {
+    let data = load_settings(skill_dir);
+    {
+        let r = app.app_state();
+        let mut s = r.lock_or_recover();
+        s.status.paired_devices         = data.paired.clone();
+        s.preferred_id                  = data.preferred_id.clone();
+        s.status.filter_config          = data.filter_config;
+        s.status.embedding_overlap_secs = data.embedding_overlap_secs;
+        s.shortcuts.label_shortcut                = data.label_shortcut;
+        s.shortcuts.search_shortcut               = data.search_shortcut;
+        s.shortcuts.settings_shortcut             = data.settings_shortcut;
+        s.shortcuts.calibration_shortcut          = data.calibration_shortcut;
+        s.shortcuts.help_shortcut                 = data.help_shortcut;
+        s.shortcuts.history_shortcut              = data.history_shortcut;
+        s.shortcuts.api_shortcut                  = data.api_shortcut;
+        s.shortcuts.theme_shortcut                = data.theme_shortcut;
+        s.shortcuts.focus_timer_shortcut          = data.focus_timer_shortcut;
+        let mut profiles = data.calibration_profiles;
+        if profiles.is_empty() {
+            profiles.push(CalibrationProfile::from_legacy(&data.calibration));
+        }
+        s.calibration_profiles = profiles;
+        s.active_calibration_id = if data.active_calibration_id.is_empty() {
+            s.calibration_profiles.first().map(|p| p.id.clone()).unwrap_or_default()
+        } else {
+            data.active_calibration_id
+        };
+        s.ui.onboarding_complete                = data.onboarding_complete;
+        s.ui.last_seen_whats_new_version        = data.last_seen_whats_new_version;
+        s.ui.theme                        = data.theme;
+        s.ui.language                     = data.language;
+        s.ui.daily_goal_min               = data.daily_goal_min;
+        s.ui.goal_notified_date           = data.goal_notified_date;
+        s.ui.text_embedding_model         = data.text_embedding_model.clone();
+        s.hooks                        = data.hooks;
+        s.ws_host                      = data.ws_host.clone();
+        s.ws_port                      = data.ws_port;
+        s.api_token                    = data.api_token.clone();
+        s.update_check_interval_secs   = data.update_check_interval_secs;
+        s.openbci_config               = data.openbci;
+        s.device_api_config            = data.device_api;
+        s.scanner_config               = data.scanner;
+        s.neutts_config                = data.neutts.clone();
+        s.tts_preload                  = data.tts_preload;
+        s.input.track_active_window          = data.track_active_window;
+        s.input.track_input_activity         = data.track_input_activity;
+        s.input.input_activity_enabled
+            .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
+        s.dnd.lock_or_recover().config = data.do_not_disturb;
+        { let __a = s.llm.clone(); __a.lock_or_recover().config = data.llm; }
+        s.settings_storage_format = data.storage_format;
+        s.sleep_config      = data.sleep;
+        s.screenshot_config = data.screenshot;
+        if let Some(os_active) = skill_data::dnd::query_os_active() {
+            if !os_active { s.dnd.lock_or_recover().active = false; }
+        }
+        neutts_apply_config(&data.neutts);
+        for pd in &data.paired {
+            let transport = crate::helpers::transport_from_id(&pd.id);
+            s.discovered.push(DiscoveredDevice {
+                id: pd.id.clone(), name: pd.name.clone(),
+                last_seen: pd.last_seen, last_rssi: 0,
+                is_paired: true,
+                is_preferred: data.preferred_id.as_deref() == Some(&pd.id),
+                transport,
+            });
+        }
+    }
+
+    if data.tts_preload {
+        let app_handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+            crate::tts::tts_init(app_handle).await.ok();
+        });
+    }
 }
 
 /// Long-running background async tasks (updater poll, DND OS poll).

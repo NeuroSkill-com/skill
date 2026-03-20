@@ -1183,7 +1183,7 @@ the Free Software Foundation, version 3 only. -->
           {#if connected.serial_number}
             <button
               onclick={() => revealSN = !revealSN}
-              title={revealSN ? "Click to hide" : "Click to reveal"}
+              title={revealSN ? t("common.clickToHide") : t("common.clickToReveal")}
               class="font-mono text-[0.6rem] text-muted-foreground/80 hover:text-muted-foreground
                      cursor-pointer select-none transition-colors text-left">
               SN&nbsp;<span class="text-foreground/70">
@@ -1194,7 +1194,7 @@ the Free Software Foundation, version 3 only. -->
           {#if connected.mac_address}
             <button
               onclick={() => revealMAC = !revealMAC}
-              title={revealMAC ? "Click to hide" : "Click to reveal"}
+              title={revealMAC ? t("common.clickToHide") : t("common.clickToReveal")}
               class="font-mono text-[0.6rem] text-muted-foreground/80 hover:text-muted-foreground
                      cursor-pointer select-none transition-colors text-left">
               MAC&nbsp;<span class="text-foreground/70">

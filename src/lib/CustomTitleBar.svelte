@@ -230,7 +230,7 @@ the Free Software Foundation, version 3 only. -->
         hBar.compareMode ? 'text-blue-500 bg-blue-500/10' : undefined
       )}
       {#if hBar.compareMode && hBar.compareCount >= 2}
-        <button type="button" title="Open comparison" onclick={hCbs.openCompare}
+        <button type="button" title={t("common.openComparison")} onclick={hCbs.openCompare}
           class="flex items-center justify-center h-6 px-1.5 rounded-md text-[0.58rem] font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors">
           {hBar.compareCount}/2
         </button>
@@ -267,21 +267,21 @@ the Free Software Foundation, version 3 only. -->
   {#if hBar.viewMode === "day"}
     <div class="history-daynav">
       <button class="history-daynav-btn" disabled={hBar.daysLoading || hBar.currentDayIdx === 0}
-              onclick={hCbs.prev} title="Newer day (←)">{@render iconChevronLeft()}</button>
+              onclick={hCbs.prev} title={t("common.newer") + " (←)"}>{@render iconChevronLeft()}</button>
       <span class="history-daynav-label">
         {#if hBar.daysLoading}<span class="history-daynav-skeleton"></span>{:else}{hBar.currentDayLabel || "—"}{/if}
       </span>
       <button class="history-daynav-btn" disabled={hBar.daysLoading || hBar.currentDayIdx >= hBar.dayCount - 1}
-              onclick={hCbs.next} title="Older day (→)">{@render iconChevronRight()}</button>
+              onclick={hCbs.next} title={t("common.older") + " (→)"}>{@render iconChevronRight()}</button>
       {#if !hBar.daysLoading && hBar.dayCount > 0}
         <span class="history-daynav-pos">{hBar.currentDayIdx + 1}/{hBar.dayCount}</span>
       {/if}
     </div>
   {:else}
     <div class="history-daynav">
-      <button class="history-daynav-btn" onclick={hCbs.calendarPrev} title="Previous">{@render iconChevronLeft()}</button>
+      <button class="history-daynav-btn" onclick={hCbs.calendarPrev} title={t("common.prev")}>{@render iconChevronLeft()}</button>
       <span class="history-daynav-label">{hBar.calendarLabel || "—"}</span>
-      <button class="history-daynav-btn" onclick={hCbs.calendarNext} title="Next">{@render iconChevronRight()}</button>
+      <button class="history-daynav-btn" onclick={hCbs.calendarNext} title={t("common.next")}>{@render iconChevronRight()}</button>
     </div>
   {/if}
 {/snippet}

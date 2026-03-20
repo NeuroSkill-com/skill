@@ -830,7 +830,7 @@ the Free Software Foundation, version 3 only. -->
               <button
                 disabled={!dayStr || sortedDays.indexOf(dayStr) <= 0}
                 onclick={() => navigateDay(side, -1)}
-                title="Newer"
+                title={t("common.newer")}
                 class="w-5 h-5 rounded flex items-center justify-center text-muted-foreground
                        hover:text-foreground hover:bg-muted/60 disabled:opacity-25
                        disabled:pointer-events-none transition-colors">
@@ -856,7 +856,7 @@ the Free Software Foundation, version 3 only. -->
               <button
                 disabled={!dayStr || sortedDays.indexOf(dayStr) >= sortedDays.length - 1}
                 onclick={() => navigateDay(side, +1)}
-                title="Older"
+                title={t("common.older")}
                 class="w-5 h-5 rounded flex items-center justify-center text-muted-foreground
                        hover:text-foreground hover:bg-muted/60 disabled:opacity-25
                        disabled:pointer-events-none transition-colors">

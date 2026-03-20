@@ -40,7 +40,20 @@ const common: Record<string, string> = {
   "common.settings":   "Einstellungen",
   "common.expand":     "Erweitern",
   "common.minimise":   "Minimieren",
-  "common.noResults":  "Keine Ergebnisse",
+  "common.noResults":       "No results",
+  "common.copy":            "Copy",
+  "common.copyToClipboard": "Copy to clipboard",
+  "common.newer":           "Newer",
+  "common.older":           "Older",
+  "common.clickToHide":     "Click to hide",
+  "common.clickToReveal":   "Click to reveal",
+  "common.goalReached":     "Goal reached!",
+  "common.resetZoom":       "Double-click chart or click to reset zoom",
+  "common.openComparison":  "Open comparison",
+  "common.error":           "Something went wrong",
+  "error.description":      "An unexpected error occurred. You can try reloading the page or going back to the dashboard.",
+  "error.goHome":           "Go to Dashboard",
+  "error.reload":           "Reload Page",
 };
 
 export default common;

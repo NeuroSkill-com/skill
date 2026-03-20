@@ -957,7 +957,7 @@ the Free Software Foundation, version 3 only. -->
                 {#if status.serial_number}
                   <button
                     onclick={() => revealSN = !revealSN}
-                    title={revealSN ? "Click to hide" : "Click to reveal"}
+                    title={revealSN ? t("common.clickToHide") : t("common.clickToReveal")}
                     class="font-mono text-[0.6rem] text-muted-foreground/70 hover:text-muted-foreground
                            cursor-pointer select-none transition-colors">
                     SN&nbsp;{revealSN ? status.serial_number : redact(status.serial_number)}
@@ -966,7 +966,7 @@ the Free Software Foundation, version 3 only. -->
                 {#if status.mac_address}
                   <button
                     onclick={() => revealMAC = !revealMAC}
-                    title={revealMAC ? "Click to hide" : "Click to reveal"}
+                    title={revealMAC ? t("common.clickToHide") : t("common.clickToReveal")}
                     class="font-mono text-[0.6rem] text-muted-foreground/70 hover:text-muted-foreground
                            cursor-pointer select-none transition-colors">
                     {revealMAC ? status.mac_address : redact(status.mac_address)}
@@ -1438,7 +1438,7 @@ the Free Software Foundation, version 3 only. -->
             {Math.floor(todayTotalSecs / 60)}m / {dailyGoalMin}m
           </span>
           {#if goalReached}
-            <span class="text-xs" title="Goal reached!">🎯</span>
+            <span class="text-xs" title={t("common.goalReached")}>🎯</span>
           {/if}
         </div>
 

@@ -261,7 +261,7 @@
                   <div class="flex gap-1 opacity-0 group-hover/bubble:opacity-100 transition-opacity duration-150">
                     <button
                       onclick={() => copyMessage(msg)}
-                      title="Copy"
+                      title={t("common.copy")}
                       class="flex items-center gap-1 px-1.5 py-0.5 rounded-md
                              text-muted-foreground/50 hover:text-muted-foreground
                              hover:bg-muted transition-colors cursor-pointer text-[0.6rem]">

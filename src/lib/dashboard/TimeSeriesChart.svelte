@@ -18,6 +18,7 @@ the Free Software Foundation, version 3 only. -->
 -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
+  import { t } from "$lib/i18n/index.svelte";
   import { getResolved } from "$lib/stores/theme.svelte";
   import { getDpr, setupHiDpiCanvas } from "$lib/format";
 
@@ -697,7 +698,7 @@ the Free Software Foundation, version 3 only. -->
       <button
         class="absolute top-1 right-1 text-[8px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
         onclick={onDblClick}
-        title="Double-click chart or click to reset zoom"
+        title={t("common.resetZoom")}
       >⟲ reset</button>
     {/if}
   </div>

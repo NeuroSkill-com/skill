@@ -323,7 +323,7 @@ ws.on("message", (data) => {
                  rounded border border-border dark:border-white/[0.08]
                  bg-background/80 text-muted-foreground
                  hover:text-foreground hover:bg-accent transition-colors"
-          title="Copy to clipboard"
+          title={t("common.copyToClipboard")}
         >
           {copied.startsWith("cli-") && copied === `cli-${activeTab}` ? "✓ copied" : "⎘ copy"}
         </button>
