@@ -463,7 +463,7 @@ fn estimate_memory_gb(params_b: f64, quant: &str, ctx: u32) -> f64 {
 /// 2. Fits within the available GPU / unified memory with at least 15%
 ///    headroom (so the OS and other apps still have breathing room).
 ///
-/// Falls back to **2048** if nothing larger fits, or to **4096** if the
+/// Falls back to **4096** if nothing larger fits, or to **4096** if the
 /// model entry has no `params_b` / `max_context_length` metadata.
 pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
     // Need model metadata to make an intelligent recommendation.
@@ -488,7 +488,9 @@ pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
     let budget = available_gb * 0.85;
 
     // Standard context sizes to try, largest first.
-    const CANDIDATES: &[u32] = &[131072, 65536, 32768, 16384, 8192, 4096, 2048];
+    // Minimum 4096 — 2048 is too small for most conversations with system
+    // prompts, tool results, and multi-turn history.
+    const CANDIDATES: &[u32] = &[131072, 65536, 32768, 16384, 8192, 4096];
 
     for &ctx in CANDIDATES {
         if ctx > entry.max_context_length {
@@ -500,7 +502,7 @@ pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
         }
     }
 
-    2048 // absolute minimum
+    4096 // absolute minimum — 2048 is too small for practical use
 }
 
 // ── Path extension helper (avoids a temporary binding) ───────────────────────

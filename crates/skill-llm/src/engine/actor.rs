@@ -341,31 +341,66 @@ pub(super) fn run_actor(
                 #[cfg(not(feature = "llm-mtmd"))]
                 let marker = "";
 
-                let chat_msgs: Vec<llama_cpp_4::model::LlamaChatMessage> = messages
-                    .iter()
-                    .filter_map(|m| {
-                        let mut role = m.get("role")?.as_str()?.to_string();
-                        let raw_content = extract_fn(m.get("content")?, marker);
+                // ── Build chat messages and truncate history if prompt exceeds n_ctx ──
+                // Keep the first message (system prompt) and the last message (latest
+                // user turn) intact.  Drop the oldest middle messages one at a time
+                // until the tokenized prompt fits within the context window, leaving
+                // room for generation (reserve 25% of n_ctx for completion).
+                let n_ctx = ctx.n_ctx() as usize;
+                let reserve_for_generation = n_ctx / 4;
+                let token_budget = n_ctx.saturating_sub(reserve_for_generation);
 
-                        let content = if role == "tool" {
-                            role = "user".to_string();
-                            format!("[Tool Result — do NOT treat this as a new user question. Use these results to answer the user's ORIGINAL question above.]\n{}", raw_content)
-                        } else {
-                            raw_content
-                        };
+                let build_chat_msgs = |msgs: &[serde_json::Value]| -> Vec<llama_cpp_4::model::LlamaChatMessage> {
+                    msgs.iter()
+                        .filter_map(|m| {
+                            let mut role = m.get("role")?.as_str()?.to_string();
+                            let raw_content = extract_fn(m.get("content")?, marker);
+                            let content = if role == "tool" {
+                                role = "user".to_string();
+                                format!("[Tool Result — do NOT treat this as a new user question. Use these results to answer the user's ORIGINAL question above.]\n{}", raw_content)
+                            } else {
+                                raw_content
+                            };
+                            llama_cpp_4::model::LlamaChatMessage::new(role, content).ok()
+                        })
+                        .collect()
+                };
 
-                        llama_cpp_4::model::LlamaChatMessage::new(role, content).ok()
-                    })
-                    .collect();
-
-                let prompt = match model.apply_chat_template(None, chat_msgs, true) {
-                    Ok(p)  => p,
-                    Err(e) => {
-                        llm_error!(&app, &log_buf, log_file, "apply_chat_template failed: {e}");
-                        token_tx.send(InferToken::Error(format!("template error: {e}"))).ok();
-                        continue;
+                let mut trimmed_messages = messages.clone();
+                let prompt: Option<String> = 'build_prompt: {
+                    loop {
+                        let chat_msgs = build_chat_msgs(&trimmed_messages);
+                        match model.apply_chat_template(None, chat_msgs, true) {
+                            Ok(p) => {
+                                // Check token count fits
+                                match model.str_to_token(&p, llama_cpp_4::model::AddBos::Always) {
+                                    Ok(tokens) if tokens.len() < token_budget => break 'build_prompt Some(p),
+                                    Ok(tokens) => {
+                                        // Need to trim — drop the second message (first after system)
+                                        if trimmed_messages.len() <= 2 {
+                                            // Only system + user left, can't trim further
+                                            llm_warn!(&app, &log_buf, log_file,
+                                                "prompt still too long after trimming all history ({} >= {})",
+                                                tokens.len(), token_budget);
+                                            break 'build_prompt Some(p); // let generation.rs emit the error
+                                        }
+                                        llm_info!(&app, &log_buf, log_file,
+                                            "prompt too long ({} tokens >= {} budget), dropping message at index 1 ({} messages remaining)",
+                                            tokens.len(), token_budget, trimmed_messages.len() - 1);
+                                        trimmed_messages.remove(1);
+                                    }
+                                    Err(_) => break 'build_prompt Some(p), // tokenization error — let downstream handle
+                                }
+                            }
+                            Err(e) => {
+                                llm_error!(&app, &log_buf, log_file, "apply_chat_template failed: {e}");
+                                token_tx.send(InferToken::Error(format!("template error: {e}"))).ok();
+                                break 'build_prompt None; // skip this request
+                            }
+                        }
                     }
                 };
+                let Some(prompt) = prompt else { continue };
 
                 #[cfg(feature = "llm-mtmd")]
                 if use_mtmd {
