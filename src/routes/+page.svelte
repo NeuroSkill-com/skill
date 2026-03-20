@@ -262,6 +262,7 @@ the Free Software Foundation, version 3 only. -->
   let revealSN  = $state(false);
   let revealMAC = $state(false);
   let showElectrodes = $state(false);
+  let showDeviceSwitcher = $state(false);
 
   let status = $state<DeviceStatus>({
     state: "disconnected", device_name: null, device_id: null,
@@ -559,6 +560,12 @@ the Free Software Foundation, version 3 only. -->
   async function cancelRetry()    { await invoke("cancel_retry"); }
   async function forgetDevice(id: string) { status = await invoke<DeviceStatus>("forget_device", { id }); }
   async function connectDevice(id: string) {
+    // If currently connected or scanning, cancel first before switching
+    if (status.state === "connected" || status.state === "scanning") {
+      await invoke("cancel_retry");
+      // Small delay so the backend finishes teardown before starting a new session
+      await new Promise(r => setTimeout(r, 200));
+    }
     await invoke("set_preferred_device", { id });
     await invoke("retry_connect");
   }
@@ -647,7 +654,7 @@ the Free Software Foundation, version 3 only. -->
       const prev = status.state;
       status = ev.payload;
       if (prev !== "connected" && status.state === "connected") startUptime();
-      if (prev === "connected"  && status.state !== "connected") stopUptime();
+      if (prev === "connected"  && status.state !== "connected") { stopUptime(); showDeviceSwitcher = false; }
     }));
 
     // When the background scanner discovers a new unpaired device, let the user
@@ -1100,6 +1107,34 @@ the Free Software Foundation, version 3 only. -->
             <p class="text-[0.73rem] text-muted-foreground text-center leading-relaxed">
               {status.target_name ? t("dashboard.connectingTo", { name: status.target_name }) : isGanglion ? t("dashboard.lookingForGanglion") : isEmotiv ? t("dashboard.connectingEmotiv") : isMw75 ? t("dashboard.connectingTo", { name: "MW75 Neuro" }) : isHermes ? t("dashboard.connectingTo", { name: "Hermes" }) : isIdun ? t("dashboard.connectingTo", { name: "IDUN Guardian" }) : t("dashboard.lookingForMuse")}
             </p>
+            <Button size="sm" variant="outline" onclick={cancelRetry}>{t("common.cancel")}</Button>
+
+            <!-- Switch to a different paired device while scanning -->
+            {#if status.paired_devices.length > 1 || (status.paired_devices.length > 0 && !status.target_name)}
+              <div class="w-full mt-1">
+                <p class="text-[0.52rem] font-semibold tracking-widest uppercase text-muted-foreground mb-1.5 text-center">
+                  {t("dashboard.connectDifferent")}
+                </p>
+                <div class="flex flex-col gap-1">
+                  {#each status.paired_devices.filter(d => d.name !== status.target_name) as dev}
+                    <button
+                      onclick={() => connectDevice(dev.id)}
+                      class="flex items-center justify-between gap-2 rounded-lg
+                             border border-border dark:border-white/[0.06]
+                             bg-muted dark:bg-[#1a1a28] px-3 py-1.5
+                             hover:border-primary/40 hover:bg-primary/5
+                             transition-colors group">
+                      <span class="text-[0.68rem] font-medium text-foreground/70 group-hover:text-foreground truncate">
+                        {dev.name}
+                      </span>
+                      <span class="text-[0.52rem] font-semibold text-primary/70 group-hover:text-primary shrink-0">
+                        {t("common.connect")}
+                      </span>
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
           {/if}
         </div>
 
@@ -1516,6 +1551,46 @@ the Free Software Foundation, version 3 only. -->
         {/if}
       {/if}
 
+      <!-- ════ Device switcher (connected, multiple paired devices) ════════ -->
+      {#if showDeviceSwitcher && status.state === "connected" && status.paired_devices.length > 1}
+        <div class="rounded-xl border border-primary/20 bg-primary/5 dark:bg-primary/[0.04] px-3.5 py-3 flex flex-col gap-2"
+             transition:fade={{ duration: 150 }}>
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+              {t("dashboard.switchDevice")}
+            </span>
+            <button onclick={() => showDeviceSwitcher = false}
+                    class="text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
+                    aria-label={t("common.close")}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                   class="w-3 h-3">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <p class="text-[0.58rem] text-muted-foreground/60 -mt-0.5">
+            {t("dashboard.switchDeviceHint")}
+          </p>
+          <div class="flex flex-col gap-1.5">
+            {#each status.paired_devices.filter(d => d.id !== status.device_id) as dev}
+              <div class="flex items-center justify-between gap-2 rounded-lg
+                          border border-border dark:border-white/[0.06]
+                          bg-white dark:bg-[#1a1a28] px-3 py-2">
+                <div class="flex flex-col gap-0.5 min-w-0">
+                  <span class="text-[0.72rem] font-semibold text-foreground/80 dark:text-slate-400 truncate">{dev.name}</span>
+                  <span class="font-mono text-[0.52rem] text-muted-foreground/50 truncate">{dev.id}</span>
+                </div>
+                <Button size="sm" class="h-5 px-2 text-[0.56rem] shrink-0"
+                        onclick={() => { showDeviceSwitcher = false; connectDevice(dev.id); }}>
+                  {t("dashboard.switchTo")}
+                </Button>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       <!-- ════ Band Powers & EEG Waveforms — only during active session ════ -->
       {#if status.state === "connected"}
       <Separator class="bg-border dark:bg-white/[0.06]" />
@@ -1550,11 +1625,18 @@ the Free Software Foundation, version 3 only. -->
         {#if status.state === "connected"}
           {t("dashboard.streamingCsv")}
         {:else if status.state === "scanning"}
-          {t("dashboard.cancelViaTray")}
+          {t("dashboard.scanningFooter")}
         {/if}
       </p>
       <div class="flex items-center gap-2 shrink-0">
         {#if status.state === "connected"}
+          {#if status.paired_devices.length > 1}
+            <Button size="sm" variant="outline"
+                    class="h-5 px-2 text-[0.56rem]"
+                    onclick={() => showDeviceSwitcher = !showDeviceSwitcher}>
+              {t("dashboard.switchDevice")}
+            </Button>
+          {/if}
           <Button size="sm" variant="outline"
                   class="h-5 px-2 text-[0.56rem] text-muted-foreground hover:text-destructive hover:border-destructive/50"
                   onclick={cancelRetry}>
