@@ -512,7 +512,7 @@ the Free Software Foundation, version 3 only. -->
         <span class="text-[0.58rem] font-semibold tracking-widest uppercase text-muted-foreground/60 shrink-0">
           {t("search.last")}
         </span>
-        {#each PRESETS as [label, mins]}
+        {#each PRESETS as [label, mins] (mins)}
           <button onclick={() => applyPreset(mins)}
                   class="px-2 py-0.5 rounded text-[0.62rem] font-semibold border
                          border-border dark:border-white/[0.1]

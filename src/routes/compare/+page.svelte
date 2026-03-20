@@ -848,7 +848,7 @@ the Free Software Foundation, version 3 only. -->
                 {#if !dayStr}
                   <option value="" disabled>— pick a day —</option>
                 {/if}
-                {#each sortedDays as d}
+                {#each sortedDays as d (d)}
                   <option value={d}>{dayLabel(d)}</option>
                 {/each}
               </select>
@@ -1160,7 +1160,7 @@ the Free Software Foundation, version 3 only. -->
             {t("compare.scores")}
           </span>
           <div class="grid grid-cols-3 gap-2">
-            {#each scoreKeys as sk}
+            {#each scoreKeys as sk (sk)}
               {@const a = metricsA[sk.key]}
               {@const b = metricsB[sk.key]}
               <div class="rounded-xl border border-border dark:border-white/[0.06]

@@ -58,7 +58,7 @@ the Free Software Foundation, version 3 only. -->
     const testMesh = new Mesh(testGeo, testMat);
     testMesh.position.set(0, 0, 0);
     scene.add(testMesh);
-    console.log("[UmapScene] added test sphere at origin");
+    console.debug("[UmapScene] added test sphere at origin");
   }
 
   // ── Camera — add directly to scene and set as default ────────────────────
@@ -66,7 +66,7 @@ the Free Software Foundation, version 3 only. -->
   cam.position.set(0, 0, 25);
   scene.add(cam);
   ctx.camera.set(cam);
-  console.log("[UmapScene] camera set, current:", ctx.camera.current === cam);
+  console.debug("[UmapScene] camera set, current:", ctx.camera.current === cam);
 
   // Update aspect ratio from canvas size
   const size = ctx.size;
@@ -237,7 +237,7 @@ the Free Software Foundation, version 3 only. -->
     labeledIdx   = lIdx;
     curPositions = positions.slice();
 
-    console.log(`[UmapScene] built cloud: ${n} points, main added to scene:`, scene.children.length, "children");
+    console.debug(`[UmapScene] built cloud: ${n} points, main added to scene:`, scene.children.length, "children");
   }
 
   function applyPositions(pos: Float32Array) {
@@ -265,7 +265,7 @@ the Free Software Foundation, version 3 only. -->
     if (d === prevData) return;
     prevData = d;
 
-    console.log(`[UmapScene] $effect fired, ${d.points.length} pts, dim=${d.dim}`);
+    console.debug(`[UmapScene] $effect fired, ${d.points.length} pts, dim=${d.dim}`);
 
     const target = normalise(d.points);
     const start  = randomPositions(d.points);
@@ -356,7 +356,7 @@ the Free Software Foundation, version 3 only. -->
 
   // ── DOM event listeners ──────────────────────────────────────────────────
   onMount(async () => {
-    console.log("[UmapScene] onMount, scene children:", scene.children.length);
+    console.debug("[UmapScene] onMount, scene children:", scene.children.length);
     ctx.dom.addEventListener("pointermove",  onPointerMove);
     ctx.dom.addEventListener("pointerdown",  onPointerDown);
     ctx.dom.addEventListener("pointerup",    onPointerUp);
@@ -371,10 +371,10 @@ the Free Software Foundation, version 3 only. -->
     controls.autoRotateSpeed = 0.8;
     controls.minDistance = 5;
     controls.maxDistance = 80;
-    console.log("[UmapScene] OrbitControls attached");
+    console.debug("[UmapScene] OrbitControls attached");
 
     // Debug: force one render to check if anything shows
-    console.log("[UmapScene] debug render, renderer:", !!ctx.renderer, "cam:", cam.position.toArray(), "scene children:", scene.children.length);
+    console.debug("[UmapScene] debug render, renderer:", !!ctx.renderer, "cam:", cam.position.toArray(), "scene children:", scene.children.length);
     ctx.renderer.render(scene, cam);
   });
 

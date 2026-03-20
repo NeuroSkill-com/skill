@@ -196,7 +196,7 @@ the Free Software Foundation, version 3 only. -->
                 overflow-y-auto py-2 flex flex-col gap-0.5
                 bg-muted/20 dark:bg-white/[0.015]"
          aria-label={t("settingsTabs.settings")}>
-      {#each TAB_IDS as id, i}
+      {#each TAB_IDS as id, i (id)}
         {@const active = tab === id}
         <button
           onclick={() => tab = id}

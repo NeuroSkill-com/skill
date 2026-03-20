@@ -1530,7 +1530,7 @@ the Free Software Foundation, version 3 only. -->
               </div>
             </div>
             <div class="flex flex-col gap-1.5 mt-0.5">
-              {#each onboardSteps as step}
+              {#each onboardSteps as step (step.label)}
                 <div class="flex items-center gap-2">
                   <div class="w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0
                               {step.done ? 'bg-emerald-500' : 'border border-border dark:border-white/20 bg-transparent'}">
@@ -1559,7 +1559,7 @@ the Free Software Foundation, version 3 only. -->
         {#if status.paired_devices.length > 0}
           <p class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">{t("dashboard.pairedDevices")}</p>
           <div class="flex flex-col gap-1.5">
-            {#each status.paired_devices as dev}
+            {#each status.paired_devices as dev (dev.id)}
               <div class="flex items-center justify-between gap-2 rounded-xl
                           border border-border dark:border-white/[0.06]
                           bg-muted dark:bg-[#1a1a28] px-3 py-2">

@@ -1355,7 +1355,7 @@ the Free Software Foundation, version 3 only. -->
                     {:else if hasData}
                       <!-- Session bars fallback (no timeseries yet) -->
                       <div class="absolute inset-0">
-                        {#each daySessions as session, sIdx}
+                        {#each daySessions as session, sIdx (session.csv_path)}
                           {#if session.session_start_utc && session.session_end_utc}
                             {@const left  = dayPct(session.session_start_utc, dayBounds.startSec)}
                             {@const width = Math.max(0.3, dayPct(session.session_end_utc, dayBounds.startSec) - left)}
@@ -1484,7 +1484,7 @@ the Free Software Foundation, version 3 only. -->
               <!-- Session color legend -->
               <div class="flex items-center gap-3 px-2.5 py-1 border-t border-border/20 dark:border-white/[0.03]
                           bg-muted/10 dark:bg-white/[0.005]">
-                {#each sessions as session, idx}
+                {#each sessions as session, idx (session.csv_path)}
                   {#if session.session_start_utc}
                     <div class="flex items-center gap-1">
                       <span class="w-1.5 h-1.5 rounded-full shrink-0" style="background:{sessionColor(idx)}"></span>
