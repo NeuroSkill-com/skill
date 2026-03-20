@@ -538,7 +538,7 @@ the Free Software Foundation, version 3 only. -->
               aria-expanded={supportedCompanyExpanded === company.id}
             >
               <!-- Company logo -->
-              <div class="w-8 h-8 rounded-md overflow-hidden shrink-0 bg-muted/40 dark:bg-white/[0.04] flex items-center justify-center">
+              <div class="w-8 h-8 rounded-md overflow-hidden shrink-0 bg-white flex items-center justify-center">
                 <img src={company.logo} alt={t(company.name_key)} class="w-full h-full object-contain" />
               </div>
               <div class="flex flex-col items-start gap-0 flex-1 min-w-0">
