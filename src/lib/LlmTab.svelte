@@ -17,36 +17,26 @@
   import { Card, CardContent }        from "$lib/components/ui/card";
   import { t }                        from "$lib/i18n/index.svelte";
   import { fmtGB }                    from "$lib/format";
+  import {
+    type DownloadState,
+    type LlmModelEntry,
+    type LlmCatalog,
+    type ModelFamily,
+    vendorLabel,
+    compareModelEntries,
+    runModeLabel,
+    tagLabel,
+    tagColor,
+    buildFamilies,
+    splitEntryGroups,
+    familyOptionLabel,
+    autoSelectFamily,
+  } from "$lib/llm-helpers";
 
   // ── Types ──────────────────────────────────────────────────────────────────
 
   interface LlmLogEntry { ts: number; level: string; message: string; }
 
-  type DownloadState = "not_downloaded"|"downloading"|"paused"|"downloaded"|"failed"|"cancelled";
-
-  interface LlmModelEntry {
-    repo:        string;
-    filename:    string;
-    quant:       string;
-    size_gb:     number;
-    description: string;
-    family_id:   string;
-    family_name: string;
-    family_desc: string;
-    tags:        string[];
-    is_mmproj:   boolean;
-    recommended: boolean;
-    advanced:    boolean;
-    params_b:    number;
-    max_context_length: number;
-    shard_files: string[];
-    local_path:  string | null;
-    state:       DownloadState;
-    status_msg:  string | null;
-    progress:    number;
-  }
-
-  interface LlmCatalog { entries: LlmModelEntry[]; active_model: string; active_mmproj: string; }
   type ToolExecutionMode = "sequential" | "parallel";
   interface WebSearchProvider {
     backend: "duckduckgo" | "brave" | "searxng";
@@ -102,6 +92,9 @@
     notes:             string[];
   }
 
+  // Re-export fmtGB as fmtSize for template use
+  const fmtSize = fmtGB;
+
   // ── State ──────────────────────────────────────────────────────────────────
 
   let hardwareFits = $state<Map<string, ModelHardwareFit>>(new Map());
@@ -151,58 +144,12 @@
 
   // ── Derived ────────────────────────────────────────────────────────────────
 
-  const families = $derived.by<ModelFamily[]>(() => {
-    const map = new Map<string, ModelFamily>();
-    for (const e of catalog.entries) {
-      if (!map.has(e.family_id)) {
-        map.set(e.family_id, {
-          id: e.family_id, name: e.family_name || e.family_id,
-          desc: e.family_desc || "", tags: [], vendors: [],
-          entries: [], mmproj: [],
-          recommended: undefined, downloaded: [],
-        });
-      }
-      const f = map.get(e.family_id)!;
-      for (const tag of e.tags) { if (!f.tags.includes(tag)) f.tags.push(tag); }
-      const vendor = vendorLabel(e.repo);
-      if (!f.vendors.includes(vendor)) f.vendors.push(vendor);
-      if (e.is_mmproj) {
-        f.mmproj.push(e);
-      } else {
-        f.entries.push(e);
-        if (e.recommended && !f.recommended) f.recommended = e;
-        if (e.state === "downloaded") f.downloaded.push(e);
-      }
-    }
-    // Sort dropdown families by model name, then by size.
-    return Array.from(map.values())
-      .filter(f => f.entries.length > 0)
-      .sort((a, b) => {
-      const byName = a.name.localeCompare(b.name);
-      if (byName !== 0) return byName;
-
-      const aSize = familyPrimarySize(a.entries);
-      const bSize = familyPrimarySize(b.entries);
-      if (aSize !== bSize) return aSize - bSize;
-
-      const aTagSize = familySizeRank(a.tags);
-      const bTagSize = familySizeRank(b.tags);
-      if (aTagSize !== bTagSize) return aTagSize - bTagSize;
-
-        return a.id.localeCompare(b.id);
-      });
-  });
+  const families = $derived.by<ModelFamily[]>(() => buildFamilies(catalog.entries));
 
   /** Auto-select a family when the list first loads or active model changes. */
   $effect(() => {
-    if (families.length === 0) return;
-    // If current selection still exists, keep it
-    if (selectedFamilyId && families.some(f => f.id === selectedFamilyId)) return;
-    // Otherwise pick: active model's family → first downloaded → first
-    const activeEntry = catalog.entries.find(e => !e.is_mmproj && e.filename === catalog.active_model);
-    if (activeEntry) { selectedFamilyId = activeEntry.family_id; return; }
-    const dlFamily = families.find(f => f.downloaded.length > 0);
-    selectedFamilyId = (dlFamily ?? families[0]).id;
+    const next = autoSelectFamily(families, catalog, selectedFamilyId);
+    if (next && next !== selectedFamilyId) selectedFamilyId = next;
   });
 
   const selectedFamily = $derived(
@@ -213,32 +160,18 @@
 
   const orderedSelectedEntries = $derived.by<LlmModelEntry[]>(() => {
     if (!selectedFamily) return [];
-    return [...selectedFamily.entries].sort(compareModelEntries);
+    const active = catalog.active_model;
+    return [...selectedFamily.entries].sort((a, b) => compareModelEntries(a, b, active));
   });
 
-  const selectedEntryGroups = $derived.by(() => {
-    const pinned = new Set<string>();
-    for (const entry of orderedSelectedEntries) {
-      if (
-        entry.filename === catalog.active_model ||
-        entry.recommended ||
-        entry.state === "downloaded" ||
-        entry.state === "downloading" ||
-        !entry.advanced
-      ) {
-        pinned.add(entry.filename);
-      }
-    }
-
-    return {
-      primary: orderedSelectedEntries.filter(entry => pinned.has(entry.filename)),
-      extra: orderedSelectedEntries.filter(entry => !pinned.has(entry.filename)),
-    };
-  });
+  const selectedEntryGroups = $derived.by(() =>
+    splitEntryGroups(orderedSelectedEntries, catalog.active_model)
+  );
 
   const orderedSelectedMmproj = $derived.by<LlmModelEntry[]>(() => {
     if (!selectedFamily) return [];
-    return [...selectedFamily.mmproj].sort(compareModelEntries);
+    const active = catalog.active_model;
+    return [...selectedFamily.mmproj].sort((a, b) => compareModelEntries(a, b, active));
   });
 
   const hasActive = $derived(
@@ -257,77 +190,6 @@
   });
 
   // ── Helpers ────────────────────────────────────────────────────────────────
-
-  const fmtSize = fmtGB;
-
-  function vendorLabel(repo: string): string {
-    const owner = repo.split("/")[0] ?? repo;
-    const labels: Record<string, string> = {
-      bartowski: "Bartowski",
-      unsloth: "Unsloth",
-      HauhauCS: "HauhauCS",
-    };
-    return labels[owner] ?? owner;
-  }
-
-  function familySizeRank(tags: string[]): number {
-    if (tags.includes("tiny")) return 0;
-    if (tags.includes("small")) return 1;
-    if (tags.includes("medium")) return 2;
-    if (tags.includes("large")) return 3;
-    return 4;
-  }
-
-  function familyPrimarySize(entries: LlmModelEntry[]): number {
-    const recommended = entries.find(entry => entry.recommended);
-    if (recommended) return recommended.size_gb;
-
-    const standard = entries.find(entry => !entry.advanced);
-    if (standard) return standard.size_gb;
-
-    return entries.reduce((smallest, entry) => Math.min(smallest, entry.size_gb), Number.POSITIVE_INFINITY);
-  }
-
-  function quantRank(quant: string): number {
-    const order = [
-      "Q4_K_M", "Q4_0", "Q4_K_S", "Q4_K_L", "Q4_1",
-      "Q5_K_M", "Q5_K_S", "Q5_K_L",
-      "Q6_K", "Q6_K_L",
-      "Q8_0",
-      "IQ4_XS", "IQ4_NL",
-      "Q3_K_M", "Q3_K_L", "Q3_K_XL", "Q3_K_S",
-      "IQ3_M", "IQ3_XS", "IQ3_XXS",
-      "Q2_K", "Q2_K_L",
-      "IQ2_M", "IQ2_S", "IQ2_XS", "IQ2_XXS",
-      "BF16", "F16", "F32",
-    ];
-    const index = order.indexOf(quant.toUpperCase());
-    return index === -1 ? order.length : index;
-  }
-
-  function compareModelEntries(a: LlmModelEntry, b: LlmModelEntry): number {
-    const aPin =
-      a.filename === catalog.active_model ? 0 :
-      a.state === "downloading" ? 1 :
-      a.state === "downloaded" ? 2 :
-      a.recommended ? 3 :
-      !a.advanced ? 4 : 5;
-    const bPin =
-      b.filename === catalog.active_model ? 0 :
-      b.state === "downloading" ? 1 :
-      b.state === "downloaded" ? 2 :
-      b.recommended ? 3 :
-      !b.advanced ? 4 : 5;
-
-    if (aPin !== bPin) return aPin - bPin;
-
-    const aQuant = quantRank(a.quant);
-    const bQuant = quantRank(b.quant);
-    if (aQuant !== bQuant) return aQuant - bQuant;
-
-    if (a.size_gb !== b.size_gb) return a.size_gb - b.size_gb;
-    return a.quant.localeCompare(b.quant) || a.filename.localeCompare(b.filename);
-  }
 
   function fitBadgeClass(level: string): string {
     switch (level) {
@@ -358,50 +220,6 @@
       default:          return "";
     }
   }
-
-  function runModeLabel(mode: string): string {
-    switch (mode) {
-      case "gpu":     return "GPU";
-      case "moe":     return "MoE offload";
-      case "cpu_gpu": return "CPU + GPU";
-      case "cpu":     return "CPU";
-      default:        return mode;
-    }
-  }
-
-  function tagColor(tag: string): string {
-    switch (tag) {
-      case "chat":      return "bg-primary/10 text-primary border-primary/20";
-      case "reasoning": return "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20";
-      case "coding":    return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20";
-      case "vision": case "multimodal":
-                        return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20";
-      default:          return "bg-slate-500/10 text-slate-500 border-slate-500/20";
-    }
-  }
-
-  function tagLabel(tag: string): string {
-    const MAP: Record<string,string> = {
-      chat: "Chat", reasoning: "Reasoning", coding: "Coding",
-      vision: "Vision", multimodal: "Multimodal",
-      tiny: "Tiny", small: "Small", medium: "Medium", large: "Large",
-    };
-    return MAP[tag] ?? tag;
-  }
-
-  /** Option label for the <select> dropdown — concise with status hint. */
-  function familyOptionLabel(f: ModelFamily): string {
-    const active = f.entries.some(e => e.filename === catalog.active_model);
-    const dlCount = f.downloaded.length;
-    const loading = f.entries.some(e => e.state === "downloading");
-    let prefix = "";
-    if (active)        prefix = "✓ ";
-    else if (loading)  prefix = "⬇ ";
-    let suffix = "";
-    if (dlCount > 0 && !active) suffix = ` (${dlCount} downloaded)`;
-    return `${prefix}${f.name}${suffix}`;
-  }
-
   // ── Data loading ───────────────────────────────────────────────────────────
 
   async function loadCatalog() {
@@ -741,7 +559,7 @@
                px-3.5 py-2.5 pr-9 cursor-pointer focus:outline-none
                focus-visible:ring-2 focus-visible:ring-ring/50">
         {#each families as f (f.id)}
-          <option value={f.id}>{familyOptionLabel(f)}</option>
+          <option value={f.id}>{familyOptionLabel(f, catalog.active_model)}</option>
         {/each}
       </select>
       <!-- Custom caret -->
