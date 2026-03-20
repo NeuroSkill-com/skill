@@ -80,6 +80,11 @@ pub struct QualityMonitor {
 
 impl QualityMonitor {
     /// Create a quality monitor with the default window (256 samples ≈ 1 s @ 256 Hz).
+    ///
+    /// **Deprecated:** defaults to 256-sample window (Muse 256 Hz).
+    /// Use [`with_window(channels, sample_rate as usize)`] for a 1-second
+    /// window at any device sample rate.
+    #[deprecated(since = "0.1.0", note = "use QualityMonitor::with_window(channels, sample_rate as usize) instead")]
     pub fn new(channels: usize) -> Self {
         Self::with_window(channels, WINDOW)
     }
@@ -151,8 +156,9 @@ impl QualityMonitor {
             return SignalQuality::NoSignal;
         }
 
-        // ── Clip count (uses absolute values — DC offset doesn't matter) ──
-        let clips = buf.iter().filter(|&&x| x.abs() > THRESH_CLIP_UV).count();
+        // ── Clip count (AC-coupled — subtract mean so DC-coupled devices
+        //    like Emotiv don't trigger false clips from their baseline) ──
+        let clips = buf.iter().filter(|&&x| (x - mean).abs() > THRESH_CLIP_UV).count();
 
         if clips >= THRESH_POOR_CLIPS || rms > THRESH_POOR_RMS {
             return SignalQuality::Poor;
@@ -169,6 +175,7 @@ impl QualityMonitor {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 
@@ -270,10 +277,17 @@ mod tests {
         assert_eq!(q(&m), SignalQuality::Poor);
     }
 
+    /// Helper: 30 µV sine at 10 Hz — AC RMS ≈ 21 µV (Good).
+    fn good_signal() -> Vec<f64> {
+        (0..WINDOW)
+            .map(|i| 30.0 * (2.0 * std::f64::consts::PI * 10.0 * i as f64 / 256.0).sin())
+            .collect()
+    }
+
     #[test]
     fn reset_clears_window() {
         let mut m = monitor();
-        fill(&mut m, &vec![30.0; WINDOW]);
+        fill(&mut m, &good_signal());
         assert_eq!(q(&m), SignalQuality::Good);
         m.reset();
         assert_eq!(q(&m), SignalQuality::NoSignal);
@@ -282,9 +296,13 @@ mod tests {
     #[test]
     fn window_is_rolling() {
         let mut m = monitor();
-        fill(&mut m, &vec![30.0; WINDOW]);
+        fill(&mut m, &good_signal());
         assert_eq!(q(&m), SignalQuality::Good);
-        fill(&mut m, &vec![450.0; WINDOW]);    // evicts the good data
+        // 640 µV sine → AC RMS ≈ 452 µV — above THRESH_POOR_RMS=400
+        let poor: Vec<f64> = (0..WINDOW)
+            .map(|i| 640.0 * (2.0 * std::f64::consts::PI * 10.0 * i as f64 / 256.0).sin())
+            .collect();
+        fill(&mut m, &poor);    // evicts the good data
         assert_eq!(q(&m), SignalQuality::Poor);
     }
 }

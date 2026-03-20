@@ -36,7 +36,6 @@ use tauri::{AppHandle, Manager};
 
 use crate::MutexExt;
 use skill_eeg::artifact_detection::ArtifactDetector;
-use crate::constants::EEG_CHANNELS;
 use skill_eeg::eeg_bands::BandAnalyzer;
 use crate::eeg_embeddings::EegAccumulator;
 use skill_eeg::eeg_filter::{EegFilter, FilterConfig};
@@ -67,6 +66,7 @@ impl SessionDsp {
     /// Acquires the `AppState` lock exactly once, clones the needed values,
     /// and releases it before building any DSP object.
     pub(crate) fn new(app: &AppHandle, channel_names: &[&str]) -> Self {
+        let num_channels = channel_names.len();
         let (filter_cfg, overlap_secs, hooks, skill_dir, model_config,
              model_status, download_cancel, encoder_reload_requested, logger, hook_runtime) = {
             let r = app.app_state();
@@ -118,7 +118,7 @@ impl SessionDsp {
             filter:            EegFilter::new(filter_cfg),
             band_analyzer:     BandAnalyzer::new_with_rate(filter_cfg.sample_rate),
             quality:           QualityMonitor::with_window(
-                EEG_CHANNELS, filter_cfg.sample_rate as usize,
+                num_channels, filter_cfg.sample_rate as usize,
             ),
             artifact_detector: ArtifactDetector::with_channels(
                 filter_cfg.sample_rate as f64, channel_names,

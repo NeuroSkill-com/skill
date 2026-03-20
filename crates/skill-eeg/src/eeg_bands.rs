@@ -357,8 +357,9 @@ pub struct BandAnalyzer {
 impl BandAnalyzer {
     /// Create a new analyser with pre-computed Hann coefficients.
     ///
-    /// Uses the default Muse sample rate (256 Hz).  For non-Muse devices
-    /// call [`new_with_rate`] instead.
+    /// **Deprecated:** defaults to 256 Hz (Muse).  Use [`new_with_rate`]
+    /// with the device's actual sample rate for correct spectral analysis.
+    #[deprecated(since = "0.1.0", note = "use BandAnalyzer::new_with_rate(sample_rate) instead")]
     pub fn new() -> Self {
         Self::new_with_rate(MUSE_SAMPLE_RATE)
     }
@@ -922,6 +923,7 @@ impl BandAnalyzer {
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use std::f64::consts::PI;

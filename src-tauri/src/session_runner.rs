@@ -173,7 +173,7 @@ pub(crate) async fn run_device_session(
                                     .iter().map(|s| s.as_str()).collect();
                                 dsp.filter.reset();
                                 dsp.quality = QualityMonitor::with_window(
-                                    crate::constants::EEG_CHANNELS,
+                                    fresh.channel_names.len(),
                                     fresh.eeg_sample_rate as usize,
                                 );
                                 dsp.band_analyzer = BandAnalyzer::new_with_rate(
@@ -541,7 +541,9 @@ fn process_eeg(
     }
 
     // ── Periodic full status emit ────────────────────────────────────────────
-    if count % 256 == 0 {
+    // Emit full status roughly once per second regardless of device sample rate.
+    let emit_interval = (sample_rate as u64).max(1);
+    if count % emit_interval == 0 {
         emit_status(app);
     }
 }

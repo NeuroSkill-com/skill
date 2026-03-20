@@ -234,9 +234,17 @@ impl FilterConfig {
     }
 
     /// Passthrough: no filtering, raw samples are forwarded as-is.
+    ///
+    /// Uses the default 256 Hz sample rate.  Call
+    /// `passthrough_with_rate(sr)` for non-Muse devices.
     pub fn passthrough() -> Self {
+        Self::passthrough_with_rate(MUSE_SAMPLE_RATE)
+    }
+
+    /// Passthrough at a specific sample rate — no filtering applied.
+    pub fn passthrough_with_rate(sample_rate: f32) -> Self {
         Self {
-            sample_rate:        MUSE_SAMPLE_RATE,
+            sample_rate,
             low_pass_hz:        None,
             high_pass_hz:       None,
             notch:              None,
