@@ -271,6 +271,8 @@ pub struct SupportedCompany {
     pub id: String,
     /// i18n key for the company name.
     pub name_key: String,
+    /// Path to the company logo (relative to `/logos/`).
+    pub logo: String,
     /// Individual device models.
     pub devices: Vec<SupportedDevice>,
     /// i18n keys for setup instructions (rendered as ordered steps).
@@ -286,6 +288,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "muse".into(),
             name_key: "settings.supportedDevices.company.muse".into(),
+            logo: "/logos/muse.png".into(),
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.muse2016".into(),
@@ -312,6 +315,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "neurable".into(),
             name_key: "settings.supportedDevices.company.neurable".into(),
+            logo: "/logos/neurable.png".into(),
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.mw75Neuro".into(),
@@ -326,6 +330,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "openbci".into(),
             name_key: "settings.supportedDevices.company.openbci".into(),
+            logo: "/logos/openbci.png".into(),
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.ganglion".into(),
@@ -352,6 +357,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "emotiv".into(),
             name_key: "settings.supportedDevices.company.emotiv".into(),
+            logo: "/logos/emotiv.png".into(),
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.epocX".into(),
@@ -378,6 +384,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "idun".into(),
             name_key: "settings.supportedDevices.company.idun".into(),
+            logo: "/logos/idun.png".into(),
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.guardian".into(),
@@ -392,6 +399,7 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
         SupportedCompany {
             id: "reak".into(),
             name_key: "settings.supportedDevices.company.reak".into(),
+            logo: "/logos/reak.png".into(),
             devices: vec![
                 SupportedDevice {
                     name_key: "settings.supportedDevices.device.nucleusHermes".into(),

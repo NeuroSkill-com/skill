@@ -16,6 +16,7 @@ the Free Software Foundation, version 3 only. -->
   import { Separator }     from "$lib/components/ui/separator";
   import { t }             from "$lib/i18n/index.svelte";
   import HistoryStatsBar   from "$lib/HistoryStatsBar.svelte";
+  import HistoryCalendar   from "$lib/HistoryCalendar.svelte";
   import { useWindowTitle } from "$lib/stores/window-title.svelte";
   import { getResolved }   from "$lib/stores/theme.svelte";
   import DisclaimerFooter  from "$lib/DisclaimerFooter.svelte";
@@ -1204,221 +1205,26 @@ the Free Software Foundation, version 3 only. -->
 
     <!-- ── Calendar heatmap views (year / month / week) ──────────────── -->
       {#if viewMode !== "day"}
-        <div class="flex flex-col gap-2" transition:fade={{ duration: 120 }}>
-          {#if viewMode === "year"}
-            <!-- Year heatmap (GitHub-style) -->
-            <div class="rounded-xl border border-border dark:border-white/[0.06]
-                        bg-white dark:bg-[#14141e] p-4 overflow-x-auto">
-              <div class="flex gap-[3px] min-w-max">
-                {#each yearWeeks as week, wi}
-                  <div class="flex flex-col gap-[3px]">
-                    {#each week as cell}
-                      {#if cell.dayKey}
-                        <button
-                          class="w-[11px] h-[11px] rounded-[2px] transition-colors
-                                 {cell.count > 0 ? heatColor(cell.count, maxCount) : 'bg-muted/40 dark:bg-white/[0.04]'}
-                                 {cell.isToday ? 'ring-1 ring-primary/50' : ''}
-                                 {cell.count > 0 ? 'cursor-pointer hover:ring-1 hover:ring-foreground/30' : 'cursor-default'}"
-                          title="{cell.dayKey}: {cell.count} {cell.count === 1 ? 'session' : 'sessions'}{(() => { const c = cell.count > 0 ? readDayCache(cell.dayKey) : null; return c ? ` (${fmtDurCompact(totalDurationSecs(c))})` : ''; })()}"
-                          onclick={() => cell.count > 0 && navigateToDay(cell.dayKey)}>
-                        </button>
-                      {:else}
-                        <div class="w-[11px] h-[11px]"></div>
-                      {/if}
-                    {/each}
-                  </div>
-                {/each}
-              </div>
-              <!-- Month labels along the top -->
-              <div class="flex mt-2 text-[0.45rem] text-muted-foreground/50">
-                {#each ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"] as month, i}
-                  <span style="width:{100/12}%" class="text-center">{month}</span>
-                {/each}
-              </div>
-              <!-- Legend -->
-              <div class="flex items-center gap-1.5 mt-2 justify-end text-[0.45rem] text-muted-foreground/40">
-                <span>{t("history.heatmap.less")}</span>
-                <div class="w-[11px] h-[11px] rounded-[2px] bg-muted/40 dark:bg-white/[0.04]"></div>
-                <div class="w-[11px] h-[11px] rounded-[2px] bg-violet-200/60 dark:bg-violet-900/40"></div>
-                <div class="w-[11px] h-[11px] rounded-[2px] bg-violet-300/70 dark:bg-violet-800/50"></div>
-                <div class="w-[11px] h-[11px] rounded-[2px] bg-violet-400/80 dark:bg-violet-700/60"></div>
-                <div class="w-[11px] h-[11px] rounded-[2px] bg-violet-500 dark:bg-violet-600/80"></div>
-                <span>{t("history.heatmap.more")}</span>
-              </div>
-            </div>
-
-          {:else if viewMode === "month"}
-            <!-- Month calendar grid -->
-            <div class="rounded-xl border border-border dark:border-white/[0.06]
-                        bg-white dark:bg-[#14141e] p-3">
-              <!-- Weekday headers -->
-              <div class="grid grid-cols-7 gap-1 mb-1">
-                {#each [0,1,2,3,4,5,6] as dow}
-                  <span class="text-center text-[0.48rem] font-semibold text-muted-foreground/50 uppercase tracking-wider">
-                    {new Date(2024, 0, dow).toLocaleDateString(undefined, { weekday: "short" }).slice(0, 2)}
-                  </span>
-                {/each}
-              </div>
-              <!-- Day cells (#4: mini duration bars, #12: richer tooltip) -->
-              <div class="grid grid-cols-7 gap-1">
-                {#each calendarCells as cell}
-                  {@const cached = cell.count > 0 ? readDayCache(cell.dayKey) : null}
-                  {@const durSecs = cached ? totalDurationSecs(cached) : 0}
-                  {@const maxDayDur = 4 * 3600}
-                  <button
-                    class="aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5 transition-colors text-[0.62rem] relative overflow-hidden
-                           {cell.inRange ? '' : 'opacity-30'}
-                           {cell.count > 0 ? heatColor(cell.count, maxCount) + ' cursor-pointer hover:ring-1 hover:ring-foreground/30' : 'bg-muted/20 dark:bg-white/[0.02] cursor-default'}
-                           {cell.isToday ? 'ring-1 ring-primary/50' : ''}"
-                    title="{cell.dayKey}: {cell.count} {cell.count === 1 ? 'session' : 'sessions'}{durSecs > 0 ? ` (${fmtDurCompact(durSecs)})` : ''}"
-                    onclick={() => cell.count > 0 && navigateToDay(cell.dayKey)}>
-                    <span class="font-semibold {cell.inRange ? 'text-foreground' : 'text-muted-foreground/50'}
-                                 {cell.count > 0 ? 'text-violet-900 dark:text-violet-100' : ''}">
-                      {cell.date.getDate()}
-                    </span>
-                    {#if cell.count > 0}
-                      <span class="text-[0.4rem] font-bold text-violet-700 dark:text-violet-300">
-                        {cell.count}
-                      </span>
-                    {/if}
-                    <!-- Mini duration bar at the bottom of the cell -->
-                    {#if durSecs > 0}
-                      <div class="absolute bottom-0 left-0 right-0 h-[2px] bg-violet-500/20 dark:bg-violet-400/15">
-                        <div class="h-full bg-violet-500/60 dark:bg-violet-400/50 rounded-r-full"
-                             style="width:{Math.min(100, (durSecs / maxDayDur) * 100)}%"></div>
-                      </div>
-                    {/if}
-                  </button>
-                {/each}
-              </div>
-            </div>
-
-          {:else if viewMode === "week"}
-            <!-- Week timeline grid -->
-            <div class="rounded-xl border border-border dark:border-white/[0.06]
-                        bg-white dark:bg-[#14141e] overflow-hidden">
-              <!-- Hour labels header -->
-              <div class="relative h-4 border-b border-border/30 dark:border-white/[0.04]
-                          bg-muted/20 dark:bg-white/[0.01] select-none">
-                {#each [0,3,6,9,12,15,18,21] as hr}
-                  <span class="absolute top-0 text-[7px] text-muted-foreground/35 tabular-nums"
-                        style="left:calc(3.5rem + {(hr/24) * 100}% * (1 - 3.5rem / 100%)); transform:translateX({hr === 0 ? '2px' : hr >= 21 ? '-100%' : '-50%'})">
-                    {String(hr).padStart(2,"0")}
-                  </span>
-                {/each}
-              </div>
-              <!-- Day rows -->
-              {#each calendarCells as cell}
-                {@const daySessions = weekSessions.get(cell.dayKey) ?? []}
-                {@const dayLbls     = labelsForDay(cell.dayKey, daySessions)}
-                {@const dayBounds   = localDayBounds(cell.dayKey)}
-                {@const hasData     = daySessions.length > 0}
-                {@const hasTsData   = hasTsForDay(daySessions)}
-                {@const dayDur      = totalDurationSecs(daySessions)}
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div class="flex items-stretch border-b border-border/20 dark:border-white/[0.03] last:border-0 relative
-                            {cell.isToday ? 'bg-primary/[0.04]' : ''}"
-                     role="button" tabindex="0"
-                     onclick={() => hasData && navigateToDay(cell.dayKey)}
-                     onkeydown={(e) => e.key === "Enter" && hasData && navigateToDay(cell.dayKey)}
-                     style="cursor:{hasData ? 'pointer' : 'default'}">
-                  <!-- #7: Today accent bar -->
-                  {#if cell.isToday}
-                    <div class="absolute left-0 top-0 bottom-0 w-[3px] bg-primary/60 rounded-r-sm"></div>
-                  {/if}
-                  <!-- Day label sidebar (#1: show duration) -->
-                  <div
-                    class="w-14 shrink-0 flex flex-col items-center justify-center py-1 border-r border-border/20
-                           dark:border-white/[0.04] transition-colors
-                           {hasData ? 'hover:bg-accent/40' : ''}">
-                    <span class="text-[0.46rem] font-semibold text-muted-foreground/50 uppercase leading-none">
-                      {cell.date.toLocaleDateString(undefined, { weekday: "short" })}
-                    </span>
-                    <span class="text-[0.72rem] font-bold {hasData ? 'text-foreground' : 'text-muted-foreground/30'} leading-tight">
-                      {cell.date.getDate()}
-                    </span>
-                    {#if hasData}
-                      <span class="text-[0.38rem] text-muted-foreground/40 tabular-nums leading-tight">
-                        {daySessions.length}s · {fmtDurCompact(dayDur)}
-                      </span>
-                    {/if}
-                  </div>
-                  <!-- Epoch dot canvas (#3: entire row clickable) -->
-                  <div class="flex-1 relative min-h-[36px]"
-                       style="--dot-grid:{'rgba(128,128,128,0.06)'}; --dot-hour-text:{'rgba(128,128,128,0.0)'}; --dot-label-text:{'rgba(245,158,11,0.75)'};">
-                    {#if hasData && hasTsData}
-                      {#key cell.dayKey + JSON.stringify(daySessions.map(s => tsCache[s.csv_path] === "loading" ? "l" : "r"))}
-                        <canvas class="w-full h-full absolute inset-0"
-                                use:drawDayDots={{ sessions: daySessions, dayStart: dayBounds.startSec, labels: dayLbls }}>
-                        </canvas>
-                      {/key}
-                    {:else if hasData}
-                      <!-- Session bars fallback (no timeseries yet) -->
-                      <div class="absolute inset-0">
-                        {#each daySessions as session, sIdx (session.csv_path)}
-                          {#if session.session_start_utc && session.session_end_utc}
-                            {@const left  = dayPct(session.session_start_utc, dayBounds.startSec)}
-                            {@const width = Math.max(0.3, dayPct(session.session_end_utc, dayBounds.startSec) - left)}
-                            <div class="absolute top-1 bottom-1 rounded-[2px] opacity-50"
-                                 style="left:{left}%; width:{width}%; background:{sessionColor(sIdx)}">
-                            </div>
-                          {/if}
-                        {/each}
-                      </div>
-                    {:else}
-                      <!-- Empty day -->
-                      <div class="absolute inset-0 flex items-center justify-center">
-                        <span class="text-[0.45rem] text-muted-foreground/15 select-none">—</span>
-                      </div>
-                    {/if}
-                    <!-- #14: Session color dots legend (inline, right-aligned) -->
-                    {#if hasData && daySessions.length > 1}
-                      <div class="absolute right-1 top-0.5 flex items-center gap-0.5 pointer-events-none">
-                        {#each daySessions as _, sIdx}
-                          <span class="w-1 h-1 rounded-full opacity-60" style="background:{sessionColor(sIdx)}"></span>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-
-          <!-- Empty state hint -->
-          {#if !daysLoading && localDays.length === 0}
-            <div class="flex flex-col items-center gap-2 py-6 text-center">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
-                   class="w-8 h-8 text-muted-foreground/15">
-                <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-              </svg>
-              <span class="text-[0.68rem] font-medium text-muted-foreground/50">{t("history.noSessions")}</span>
-              <span class="text-[0.58rem] text-muted-foreground/35 max-w-xs">{t("history.noSessionsHint")}</span>
-            </div>
-          {/if}
-
-          <!-- Loading overlay -->
-          {#if daysLoading}
-            <div class="flex items-center justify-center gap-2 py-4 text-muted-foreground/40">
-              <Spinner size="w-3 h-3" />
-              <span class="text-[0.6rem]">{t("common.loading")}</span>
-            </div>
-          {/if}
-
-          <!-- Summary stats -->
-          {#if !daysLoading && localDays.length > 0}
-            <div class="flex items-center gap-4 px-1 text-[0.55rem] text-muted-foreground/50">
-              <span>{localDays.length} {t("history.days")}</span>
-              {#if historyStats}
-                <span>{totalHours.toFixed(1)} {t("history.heatmap.hours")}</span>
-                <span>{historyStats.total_sessions} {t("history.sessions")}</span>
-              {/if}
-              {#if recordingStreak > 0}
-                <span>🔥 {recordingStreak}-{t("history.heatmap.dayStreak")}</span>
-              {/if}
-            </div>
-          {/if}
-        </div>
+        <HistoryCalendar
+          {viewMode}
+          {calendarCells}
+          {yearWeeks}
+          {maxCount}
+          {heatColor}
+          {navigateToDay}
+          {recordingStreak}
+          {calendarMonth}
+          weekGridDays={[]}
+          drawDayDots={() => {}}
+          renderDayDots={() => {}}
+          handleDayDotsHover={() => {}}
+          drawDayGrid={() => {}}
+          renderDayGrid={() => {}}
+          handleGridHover={() => {}}
+          gridDataForDay={() => null}
+          daySessionsMap={new Map()}
+          gridTooltip={null}
+        />
 
       <!-- ── Current day view ──────────────────────────────────────────── -->
       {:else if currentLocalKey}

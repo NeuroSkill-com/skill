@@ -23,6 +23,7 @@ export interface SupportedDeviceItem {
 export interface SupportedCompany {
   id: string;
   name_key: string;
+  logo: string;
   devices: SupportedDeviceItem[];
   instruction_keys: string[];
 }
