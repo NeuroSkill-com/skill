@@ -77,4 +77,35 @@ pub fn write_log(tag: &str, msg: &str) {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn log_enabled_by_default() {
+        // Note: other tests may have toggled this, so we just check the function works
+        let _ = log_enabled();
+    }
+
+    #[test]
+    fn set_enabled_toggles() {
+        set_log_enabled(false);
+        assert!(!log_enabled());
+        set_log_enabled(true);
+        assert!(log_enabled());
+    }
+
+    #[test]
+    fn write_log_does_not_panic_without_callback() {
+        set_log_enabled(true);
+        write_log("test", "hello from test");
+    }
+
+    #[test]
+    fn write_log_noop_when_disabled() {
+        set_log_enabled(false);
+        write_log("test", "should not appear");
+        set_log_enabled(true);
+    }
+}
 

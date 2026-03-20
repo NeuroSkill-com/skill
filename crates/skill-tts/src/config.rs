@@ -45,3 +45,44 @@ impl Default for NeuttsConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_is_disabled() {
+        let cfg = NeuttsConfig::default();
+        assert!(!cfg.enabled);
+    }
+
+    #[test]
+    fn default_voice_preset_is_jo() {
+        assert_eq!(NeuttsConfig::default().voice_preset, "jo");
+    }
+
+    #[test]
+    fn default_backbone_repo() {
+        assert!(NeuttsConfig::default().backbone_repo.contains("neutts"));
+    }
+
+    #[test]
+    fn json_round_trip() {
+        let cfg = NeuttsConfig {
+            enabled: true,
+            voice_preset: "dave".into(),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let parsed: NeuttsConfig = serde_json::from_str(&json).unwrap();
+        assert!(parsed.enabled);
+        assert_eq!(parsed.voice_preset, "dave");
+    }
+
+    #[test]
+    fn deserialize_empty_json_gives_defaults() {
+        let cfg: NeuttsConfig = serde_json::from_str("{}").unwrap();
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.voice_preset, "jo");
+    }
+}
