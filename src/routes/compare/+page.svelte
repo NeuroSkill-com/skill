@@ -607,7 +607,7 @@ the Free Software Foundation, version 3 only. -->
           if (r.queue_position! > 0) {
             umapEta = `queued #${r.queue_position! + 1}`;
           } else if (r.progress) {
-            const p = r.progress as UmapProgress;
+            const p = r.progress as unknown as UmapProgress;
             umapProgress = p;
             const pct = p.total_epochs > 0 ? Math.round(p.epoch / p.total_epochs * 100) : 0;
             const remaining = p.epoch_ms > 0 ? ((p.total_epochs - p.epoch) * p.epoch_ms / 1000).toFixed(0) : "?";

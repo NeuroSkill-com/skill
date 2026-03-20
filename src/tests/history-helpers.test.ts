@@ -28,7 +28,7 @@ function session(overrides: Partial<SessionEntry> = {}): SessionEntry {
 function label(id: number, eeg_start: number, text = "test"): LabelRow {
   return {
     id, text, eeg_start, eeg_end: eeg_start + 5,
-    wall_start: eeg_start, wall_end: eeg_start + 5,
+    label_start: eeg_start, label_end: eeg_start + 5,
     context: "", created_at: eeg_start,
   } as LabelRow;
 }
