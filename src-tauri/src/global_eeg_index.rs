@@ -46,7 +46,7 @@ use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
 use serde::Serialize;
 
 use crate::MutexExt;
-use crate::constants::{GLOBAL_HNSW_FILE, HNSW_EF_CONSTRUCTION, HNSW_M, SQLITE_FILE};
+use crate::constants::{GLOBAL_HNSW_FILE, HNSW_EF_CONSTRUCTION, HNSW_M, SQLITE_FILE, global_hnsw_file_for};
 
 // ── Managed state ─────────────────────────────────────────────────────────────
 
@@ -83,6 +83,10 @@ fn fresh_index() -> LabeledIndex<Cosine, i64> {
 
 fn index_path(skill_dir: &Path) -> PathBuf {
     skill_dir.join(GLOBAL_HNSW_FILE)
+}
+
+fn index_path_for(skill_dir: &Path, model_backend: &str) -> PathBuf {
+    skill_dir.join(global_hnsw_file_for(model_backend))
 }
 
 /// List all valid `YYYYMMDD` sub-directories under `skill_dir`, oldest first.
@@ -131,12 +135,23 @@ pub fn load_or_build(skill_dir: &Path) -> LabeledIndex<Cosine, i64> {
 /// Scan every daily `eeg.sqlite`, re-insert all embeddings into a fresh
 /// global HNSW, persist it, and return the new index.
 ///
+/// Only includes embeddings whose `model_backend` matches. Legacy rows
+/// with `NULL` model_backend are assumed to be ZUNA.
+///
 /// **Blocking** — may take several seconds for large datasets.
 pub fn rebuild_from_scratch(skill_dir: &Path) -> LabeledIndex<Cosine, i64> {
-    eprintln!("[global_idx] rebuilding cross-day HNSW from all daily SQLite files…");
+    rebuild_from_scratch_for(skill_dir, "zuna")
+}
+
+/// Rebuild the global HNSW for a specific model backend.
+pub fn rebuild_from_scratch_for(skill_dir: &Path, model_backend: &str) -> LabeledIndex<Cosine, i64> {
+    eprintln!("[global_idx] rebuilding cross-day HNSW for model={model_backend} from all daily SQLite files…");
     let mut idx = fresh_index();
     let mut total_embeddings = 0usize;
     let mut days_scanned     = 0usize;
+
+    // For ZUNA (default), also include legacy rows with NULL model_backend.
+    let is_default = model_backend.is_empty() || model_backend == "zuna";
 
     for (_date, dir) in date_dirs(skill_dir) {
         let db_path = dir.join(SQLITE_FILE);
@@ -150,20 +165,34 @@ pub fn rebuild_from_scratch(skill_dir: &Path) -> LabeledIndex<Cosine, i64> {
             continue;
         };
 
-        let Ok(mut stmt) = conn.prepare(
+        let query = if is_default {
             "SELECT timestamp, eeg_embedding \
              FROM embeddings \
              WHERE eeg_embedding IS NOT NULL \
-             ORDER BY timestamp ASC",
-        ) else {
+               AND (model_backend IS NULL OR model_backend = 'zuna' OR model_backend = '') \
+             ORDER BY timestamp ASC"
+        } else {
+            "SELECT timestamp, eeg_embedding \
+             FROM embeddings \
+             WHERE eeg_embedding IS NOT NULL \
+               AND model_backend = ?1 \
+             ORDER BY timestamp ASC"
+        };
+
+        let Ok(mut stmt) = conn.prepare(query) else {
             eprintln!("[global_idx] prepare failed for {}", db_path.display());
             continue;
         };
 
-        let rows: Vec<(i64, Vec<u8>)> = stmt
-            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-            .map(|r| r.flatten().collect())
-            .unwrap_or_default();
+        let rows: Vec<(i64, Vec<u8>)> = if is_default {
+            stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map(|r| r.flatten().collect())
+                .unwrap_or_default()
+        } else {
+            stmt.query_map(rusqlite::params![model_backend], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map(|r| r.flatten().collect())
+                .unwrap_or_default()
+        };
 
         for (ts, blob) in rows {
             if blob.is_empty() {
@@ -182,11 +211,12 @@ pub fn rebuild_from_scratch(skill_dir: &Path) -> LabeledIndex<Cosine, i64> {
     }
 
     eprintln!(
-        "[global_idx] built index: {} embeddings from {} day(s)",
+        "[global_idx] built index: {} embeddings from {} day(s) (model={model_backend})",
         total_embeddings, days_scanned
     );
 
-    let path = index_path(skill_dir);
+    let filename = global_hnsw_file_for(model_backend);
+    let path = skill_dir.join(&filename);
     if let Err(e) = idx.save(&path) {
         eprintln!("[global_idx] save failed: {e}");
     } else {
@@ -195,10 +225,16 @@ pub fn rebuild_from_scratch(skill_dir: &Path) -> LabeledIndex<Cosine, i64> {
     idx
 }
 
-/// Persist `idx` to `~/.skill/eeg_global.hnsw`.
-/// Called by the embed worker every `GLOBAL_HNSW_SAVE_EVERY` insertions.
+/// Persist `idx` to `~/.skill/eeg_global.hnsw` (default / ZUNA).
+/// Kept for backward compatibility — new code should use [`save_index_for`].
+#[allow(dead_code)]
 pub fn save_index(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path) {
-    let path = index_path(skill_dir);
+    save_index_for(idx, skill_dir, "zuna")
+}
+
+/// Persist `idx` to the model-specific global HNSW file.
+pub fn save_index_for(idx: &LabeledIndex<Cosine, i64>, skill_dir: &Path, model_backend: &str) {
+    let path = index_path_for(skill_dir, model_backend);
     if let Err(e) = idx.save(&path) {
         eprintln!("[global_idx] periodic save failed: {e}");
     }

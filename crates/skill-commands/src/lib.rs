@@ -32,7 +32,7 @@ use fast_hnsw::{distance::Cosine, labeled::LabeledIndex};
 use rusqlite::params;
 use serde::Serialize;
 
-use skill_constants::{HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE};
+use skill_constants::{HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE, hnsw_index_file_for};
 
 pub mod graph;
 pub use graph::{
@@ -179,12 +179,26 @@ pub fn list_date_dirs(skill_dir: &Path) -> Vec<(String, PathBuf)> {
 }
 
 /// Load a `LabeledIndex<Cosine, i64>` from a date directory (read-only mmap).
+///
+/// Uses the default HNSW file (`eeg_embeddings.hnsw` for ZUNA).
 pub fn load_day_index(date: String, dir: PathBuf) -> Option<DayIndex> {
-    let path = dir.join(HNSW_INDEX_FILE);
+    load_day_index_for(date, dir, "zuna")
+}
+
+/// Load the model-specific HNSW index for a date directory.
+pub fn load_day_index_for(date: String, dir: PathBuf, model_backend: &str) -> Option<DayIndex> {
+    let filename = hnsw_index_file_for(model_backend);
+    let path = dir.join(&filename);
+    // Fall back to legacy filename for old data.
+    let path = if !path.exists() && model_backend == "zuna" {
+        dir.join(HNSW_INDEX_FILE)
+    } else {
+        path
+    };
     if !path.exists() { return None; }
     match LabeledIndex::load_mmap(&path, Cosine) {
         Ok(idx) => {
-            eprintln!("[search] loaded HNSW {} ({} vecs)", date, idx.len());
+            eprintln!("[search] loaded HNSW {} ({} vecs, model={})", date, idx.len(), model_backend);
             Some(DayIndex { date, dir, index: idx })
         }
         Err(e) => {

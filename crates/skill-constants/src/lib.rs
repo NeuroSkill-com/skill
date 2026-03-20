@@ -69,6 +69,7 @@ pub mod prelude {
         // HNSW
         HNSW_M, HNSW_EF_CONSTRUCTION,
         HNSW_INDEX_FILE, GLOBAL_HNSW_FILE, GLOBAL_HNSW_SAVE_EVERY,
+        hnsw_index_file_for, global_hnsw_file_for,
         // Data files
         SQLITE_FILE, LABELS_FILE, ACTIVITY_FILE, HOOKS_LOG_FILE,
         SETTINGS_FILE, MODEL_CONFIG_FILE, UMAP_CONFIG_FILE, LOG_CONFIG_FILE,
@@ -582,11 +583,31 @@ pub const LOG_CONFIG_FILE: &str = "log_config.json";
 
 // ── HNSW index files ──────────────────────────────────────────────────────────
 
-/// Per-day HNSW embedding index filename.
+/// Per-day HNSW embedding index filename (default / ZUNA).
 pub const HNSW_INDEX_FILE: &str = "eeg_embeddings.hnsw";
 
-/// Global cross-day HNSW index filename.
+/// Global cross-day HNSW index filename (default / ZUNA).
 pub const GLOBAL_HNSW_FILE: &str = "eeg_global.hnsw";
+
+/// Return the per-day HNSW filename for a given model backend.
+///
+/// - `"zuna"` or `""` or `None`-like → `"eeg_embeddings.hnsw"` (backward compat)
+/// - `"luna"` → `"eeg_embeddings_luna.hnsw"`
+/// - other   → `"eeg_embeddings_{backend}.hnsw"`
+pub fn hnsw_index_file_for(backend: &str) -> String {
+    match backend {
+        "" | "zuna" => HNSW_INDEX_FILE.to_string(),
+        other       => format!("eeg_embeddings_{other}.hnsw"),
+    }
+}
+
+/// Return the global HNSW filename for a given model backend.
+pub fn global_hnsw_file_for(backend: &str) -> String {
+    match backend {
+        "" | "zuna" => GLOBAL_HNSW_FILE.to_string(),
+        other       => format!("eeg_global_{other}.hnsw"),
+    }
+}
 
 /// Periodic save interval for the global HNSW index.
 pub const GLOBAL_HNSW_SAVE_EVERY: usize = 10;

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use crate::skill_log::SkillLogger;
-use crate::constants::{HNSW_INDEX_FILE, SQLITE_FILE};
+use crate::constants::{SQLITE_FILE, hnsw_index_file_for};
 use skill_exg::EpochMetrics;
 
 // ── Metrics JSON serialization ─────────────────────────────────────────────────
@@ -127,12 +127,28 @@ pub(in crate::eeg_embeddings) struct DayStore {
     pub(in crate::eeg_embeddings) db_path:    PathBuf,
     pub(in crate::eeg_embeddings) conn:       rusqlite::Connection,
     pub(in crate::eeg_embeddings) logger:     Arc<SkillLogger>,
+    /// Which model backend owns this HNSW file (for logging / future use).
+    #[allow(dead_code)]
+    pub(in crate::eeg_embeddings) model_backend: String,
 }
 
 impl DayStore {
-    /// Open (or create) the HNSW index and SQLite DB for `date` inside
-    /// `skill_dir`, using the supplied HNSW graph parameters.
-    pub(super) fn open(skill_dir: &Path, date: &str, hnsw_m: usize, hnsw_ef: usize, logger: Arc<SkillLogger>) -> Option<Self> {
+    /// Open (or create) the model-specific HNSW index and the shared SQLite DB
+    /// for `date` inside `skill_dir`.
+    ///
+    /// Each model backend gets its own HNSW file:
+    /// - `eeg_embeddings.hnsw` for ZUNA (backward-compatible)
+    /// - `eeg_embeddings_luna.hnsw` for LUNA
+    ///
+    /// SQLite is shared — rows are differentiated by the `model_backend` column.
+    pub(super) fn open(
+        skill_dir:     &Path,
+        date:          &str,
+        hnsw_m:        usize,
+        hnsw_ef:       usize,
+        model_backend: &str,
+        logger:        Arc<SkillLogger>,
+    ) -> Option<Self> {
         use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
 
         let dir = skill_dir.join(date);
@@ -141,8 +157,9 @@ impl DayStore {
             return None;
         }
 
-        // ── HNSW ─────────────────────────────────────────────────────────────
-        let index_path = dir.join(HNSW_INDEX_FILE);
+        // ── HNSW (model-specific file) ────────────────────────────────────────
+        let hnsw_file = hnsw_index_file_for(model_backend);
+        let index_path = dir.join(&hnsw_file);
         let index: LabeledIndex<Cosine, i64> = if index_path.exists() {
             match LabeledIndex::load(&index_path, Cosine) {
                 Ok(idx) => {
@@ -228,8 +245,8 @@ impl DayStore {
             let _ = conn.execute(stmt, []);
         }
 
-        skill_log!(logger, "embedder", "day store ready — {}", dir.display());
-        Some(Self { index, index_path, db_path, conn, logger })
+        skill_log!(logger, "embedder", "day store ready — {} (model={})", dir.display(), model_backend);
+        Some(Self { index, index_path, db_path, conn, logger, model_backend: model_backend.to_string() })
     }
 
     /// Insert one embedding + optional metrics into both HNSW index and SQLite.
@@ -247,7 +264,7 @@ impl DayStore {
         model_backend:      Option<&str>,
         embed_speed_ms:     Option<f64>,
     ) -> usize {
-        // ── HNSW ─────────────────────────────────────────────────────────────
+        // ── HNSW (model-specific file — no dimension conflicts) ───────────
         let hnsw_id = self.index.insert(embedding.to_vec(), timestamp);
 
         if let Err(e) = self.index.save(&self.index_path) {

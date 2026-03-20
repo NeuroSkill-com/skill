@@ -398,9 +398,11 @@ pub(super) fn embed_worker(
     // "weights found but no session yet".
     status.lock_or_recover().embed_worker_active = true;
 
+    let active_backend = config.model_backend.clone();
+
     // ── 1. Open today's DayStore immediately (files created before encoder) ───
     let mut current_date = yyyymmdd_utc();
-    let mut store = DayStore::open(&skill_dir, &current_date, config.hnsw_m, config.hnsw_ef_construction, logger.clone());
+    let mut store = DayStore::open(&skill_dir, &current_date, config.hnsw_m, config.hnsw_ef_construction, active_backend.as_str(), logger.clone());
 
     if let Some(ref s) = store {
         let mut st = status.lock_or_recover();
@@ -412,8 +414,6 @@ pub(super) fn embed_worker(
     // ── 2. Locate weights — download with exponential-backoff retry ─────────
     // Backoff delays (seconds): 1 2 3 5 15 30 60 120 300 600 900 1800 1800 …
     const BACKOFF_SECS: &[u64] = &[1, 2, 3, 5, 15, 30, 60, 120, 300, 600, 900, 1800];
-
-    let active_backend = config.model_backend.clone();
 
     // Resolve weights based on the selected backend.
     let resolve_fn = || -> Option<(std::path::PathBuf, std::path::PathBuf)> {
@@ -538,8 +538,8 @@ pub(super) fn embed_worker(
 
     // ── Encoder variants ──────────────────────────────────────────────────────
     enum LoadedEncoder {
-        Zuna(ZunaEncoder<Wgpu>),
-        Luna(luna_rs::LunaEncoder<Wgpu>),
+        Zuna(#[allow(dead_code)] ZunaEncoder<Wgpu>),
+        Luna(#[allow(dead_code)] luna_rs::LunaEncoder<Wgpu>),
     }
 
     impl LoadedEncoder {
@@ -639,7 +639,7 @@ pub(super) fn embed_worker(
         if today != current_date {
             skill_log!(logger, "embedder", "date rolled over {current_date} → {today}");
             current_date = today;
-            store = DayStore::open(&skill_dir, &current_date, config.hnsw_m, config.hnsw_ef_construction, logger.clone());
+            store = DayStore::open(&skill_dir, &current_date, config.hnsw_m, config.hnsw_ef_construction, active_backend.as_str(), logger.clone());
             if let Some(ref s) = store {
                 let mut st = status.lock_or_recover();
                 st.daily_hnsw_path  = s.index_path.display().to_string();
@@ -744,16 +744,59 @@ pub(super) fn embed_worker(
                         let result = luna_enc.run_batch(&batch)
                             .map_err(|e| format!("luna encode: {e:#}"))?;
 
-                        // LUNA output shape depends on mode:
-                        // - Reconstruction: [C, T] — mean-pool over channels to get [T] then mean again
-                        // - Classification: [num_classes]
-                        // For embedding use, we take the full output and flatten/pool.
                         let out = &result.output;
+                        let shape = &result.shape;
                         if out.is_empty() { return Err("empty luna output".into()); }
 
-                        // Use the output directly as the embedding vector.
-                        // For reconstruction mode [C, T], mean-pool to get a fixed-size embedding.
-                        Ok(out.clone())
+                        // LUNA output shape depends on mode:
+                        //   Reconstruction: [C, T] — large, variable-size
+                        //   Classification: [num_classes] — fixed-size
+                        //
+                        // For embeddings we need a fixed-dimension vector.
+                        //
+                        // Reconstruction mode: the raw output is [C, T] (channels × time).
+                        // We mean-pool across both dimensions to produce a compact
+                        // per-patch embedding.  Specifically: reshape to [C, num_patches, patch_size],
+                        // mean over patch_size → [C, S], then flatten to [C*S].
+                        // If that's too large, further mean-pool across channels → [S].
+                        //
+                        // Classification mode: output is already [num_classes], use as-is.
+                        let emb = if shape.len() == 2 {
+                            // Reconstruction: shape = [C, T]
+                            let c = shape[0];
+                            let t = shape[1];
+                            let ps = luna_enc.model_cfg.patch_size;
+                            let n_patches = t / ps.max(1);
+
+                            if n_patches == 0 || c == 0 {
+                                return Err("luna output has zero patches or channels".into());
+                            }
+
+                            // Mean-pool across channels → [T], then pool over
+                            // patch windows → [n_patches] to get a compact
+                            // fixed-size embedding.
+                            let mut patch_means = vec![0f32; n_patches];
+                            for p in 0..n_patches {
+                                let mut sum = 0f64;
+                                let count = (c * ps) as f64;
+                                for ch in 0..c {
+                                    for s in 0..ps {
+                                        let idx = ch * t + p * ps + s;
+                                        if idx < out.len() {
+                                            sum += out[idx] as f64;
+                                        }
+                                    }
+                                }
+                                patch_means[p] = (sum / count) as f32;
+                            }
+                            patch_means
+                        } else {
+                            // Classification or 1-D output: use as-is.
+                            out.clone()
+                        };
+
+                        if emb.is_empty() { return Err("empty luna embedding after pooling".into()); }
+                        Ok(emb)
                     }
                 }
             }));
@@ -857,14 +900,30 @@ pub(super) fn embed_worker(
             // that a single HNSW search can find near-neighbors from any date.
             // The payload is the YYYYMMDDHHmmss timestamp; the date is derived
             // from it during search result hydration.
+            //
+            // Guard: only insert if the embedding dimension matches existing
+            // entries.  ZUNA (32-dim) and LUNA (variable-dim) embeddings are
+            // incompatible in the same HNSW — cosine distance requires
+            // identical vector lengths.
             {
                 let mut g = global_index.lock_or_recover();
                 if let Some(ref mut gidx) = *g {
-                    gidx.insert(emb.clone(), msg.timestamp);
-                    global_save_counter += 1;
-                    if global_save_counter >= GLOBAL_HNSW_SAVE_EVERY {
-                        global_save_counter = 0;
-                        global_eeg_index::save_index(gidx, &skill_dir);
+                    let ok = if gidx.len() > 0 {
+                        gidx.get_embedding(0).len() == emb.len()
+                    } else {
+                        true // empty index — any dimension is fine
+                    };
+                    if ok {
+                        gidx.insert(emb.clone(), msg.timestamp);
+                        global_save_counter += 1;
+                        if global_save_counter >= GLOBAL_HNSW_SAVE_EVERY {
+                            global_save_counter = 0;
+                            global_eeg_index::save_index_for(gidx, &skill_dir, active_backend.as_str());
+                        }
+                    } else {
+                        skill_log!(logger, "embedder",
+                            "skipping global HNSW insert: dim mismatch (got {} vs existing {})",
+                            emb.len(), gidx.get_embedding(0).len());
                     }
                 }
             }
@@ -1027,7 +1086,7 @@ pub(super) fn embed_worker(
     {
         let g = global_index.lock_or_recover();
         if let Some(ref gidx) = *g {
-            global_eeg_index::save_index(gidx, &skill_dir);
+            global_eeg_index::save_index_for(gidx, &skill_dir, active_backend.as_str());
             skill_log!(logger, "embedder", "global HNSW flushed on exit ({} entries)", gidx.len());
         }
     }
@@ -1054,7 +1113,7 @@ fn store_metrics_only(
         .map(|s| !s.db_path.to_string_lossy().contains(&today))
         .unwrap_or(true);
     if needs_rotate {
-        *store = DayStore::open(skill_dir, &today, config.hnsw_m, config.hnsw_ef_construction, logger.clone());
+        *store = DayStore::open(skill_dir, &today, config.hnsw_m, config.hnsw_ef_construction, config.model_backend.as_str(), logger.clone());
     }
     let Some(ref mut s) = store else { return; };
 

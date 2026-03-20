@@ -870,6 +870,7 @@ fn reembed_worker(
         return;
     };
 
+    #[allow(dead_code)]
     enum Enc {
         Zuna(zuna_rs::ZunaEncoder<Wgpu>),
         Luna(luna_rs::LunaEncoder<Wgpu>),

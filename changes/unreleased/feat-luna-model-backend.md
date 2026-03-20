@@ -6,6 +6,8 @@
 
 - **Model provenance in SQLite and HNSW**: Each embedding row now records which model backend (`zuna` or `luna`) produced it via the new `model_backend` TEXT column in the daily `embeddings` table. Historical rows without the column are auto-migrated on open. This enables filtering, auditing, and future re-embedding by model.
 
+- **Per-model HNSW indices**: Each model backend now gets its own HNSW index file per day (`eeg_embeddings.hnsw` for ZUNA, `eeg_embeddings_luna.hnsw` for LUNA) and globally (`eeg_global.hnsw` / `eeg_global_luna.hnsw`). This prevents dimension mismatches when switching backends and allows side-by-side nearest-neighbor search for each model. The daily SQLite remains shared with a `model_backend` column to differentiate rows. Search APIs accept an optional model backend parameter to load the correct index.
+
 - **Re-embed historical data**: Added `estimate_reembed` and `trigger_reembed` Tauri commands with a UI section in the EEG Model settings tab. Currently tags all legacy embeddings with model metadata (`model_backend = 'zuna'`). Progress is streamed to the frontend via the `reembed-progress` event.
 
 ### Bugfixes
