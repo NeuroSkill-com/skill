@@ -207,16 +207,22 @@ pub fn get_eeg_model_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Ee
 
 #[tauri::command]
 pub fn set_eeg_model_config(config: EegModelConfig, state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    let mut s = state.lock_or_recover();
-    let backend_changed = s.embedding.model_config.model_backend != config.model_backend
-        || s.embedding.model_config.luna_variant != config.luna_variant;
-    save_model_config(&s.skill_dir, &config);
-    s.embedding.model_config = config;
-    // When the model backend or variant changes, signal the embed worker to
-    // reload so it picks up the new encoder without an app restart.
-    if backend_changed {
-        s.embedding.encoder_reload_requested.store(true, std::sync::atomic::Ordering::Relaxed);
-    }
+    let (skill_dir, backend_changed) = {
+        let mut s = state.lock_or_recover();
+        let changed = s.embedding.model_config.model_backend != config.model_backend
+            || s.embedding.model_config.luna_variant != config.luna_variant;
+        let dir = s.skill_dir.clone();
+        s.embedding.model_config = config.clone();
+        // When the model backend or variant changes, signal the embed worker to
+        // reload so it picks up the new encoder without an app restart.
+        if changed {
+            s.embedding.encoder_reload_requested.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        (dir, changed)
+    };
+    // Persist outside the lock — disk I/O must not block other subsystems.
+    save_model_config(&skill_dir, &config);
+    let _ = backend_changed;
 }
 
 #[tauri::command]
