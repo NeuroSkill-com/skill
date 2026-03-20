@@ -367,6 +367,8 @@ const settings: Record<string, string> = {
   "settings.deviceApi.hide": "hide",
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
+  "settings.deviceApi.openbciTitle":   "OpenBCI",
+  "settings.deviceApi.openbciDesc":    "הגדר לוח OpenBCI כדי להתחבר לצד או במקום אוזניית Muse.",
 
   // ── פורמט הקלטה ──────────────────────────────────────────────────────────
   "settings.storageFormat":                      "פורמט הקלטה",

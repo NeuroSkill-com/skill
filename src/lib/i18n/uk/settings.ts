@@ -368,6 +368,8 @@ const settings: Record<string, string> = {
   "settings.deviceApi.hide": "hide",
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
+  "settings.deviceApi.openbciTitle":   "OpenBCI",
+  "settings.deviceApi.openbciDesc":    "Налаштуйте плату OpenBCI для підключення поряд або замість гарнітури Muse.",
 
   // ── Формат запису ─────────────────────────────────────────────────────────
   "settings.storageFormat":                      "Формат запису",

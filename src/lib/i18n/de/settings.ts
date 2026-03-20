@@ -368,6 +368,8 @@ const settings: Record<string, string> = {
   "settings.deviceApi.hide": "hide",
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
+  "settings.deviceApi.openbciTitle":   "OpenBCI",
+  "settings.deviceApi.openbciDesc":    "Konfigurieren Sie eine OpenBCI-Karte für die Verbindung neben oder anstelle eines Muse-Headsets.",
 
   // ── Aufnahmeformat ───────────────────────────────────────────────────────
   "settings.storageFormat":                      "Aufnahmeformat",

@@ -2369,6 +2369,8 @@ export type TranslationKey =
   | "settings.deviceApi.idunTitle"
   | "settings.deviceApi.save"
   | "settings.deviceApi.saved"
+  | "settings.deviceApi.openbciTitle"
+  | "settings.deviceApi.openbciDesc"
   | "settings.deviceApi.show"
   | "settings.deviceApi.title"
   | "settings.downloading"

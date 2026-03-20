@@ -587,237 +587,6 @@ the Free Software Foundation, version 3 only. -->
     </Card>
   </div>
 
-  <!-- ── OpenBCI ────────────────────────────────────────────────────────────── -->
-  <div class="flex flex-col gap-2">
-    <button
-      onclick={() => openbciExpanded = !openbciExpanded}
-      class="flex items-center justify-between w-full px-0.5 group"
-      aria-expanded={openbciExpanded}
-    >
-      <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
-        {t("settings.openbci")}
-      </span>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-           class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
-                  {openbciExpanded ? 'rotate-180' : ''}">
-        <path d="M6 9l6 6 6-6"/>
-      </svg>
-    </button>
-
-    {#if openbciExpanded}
-    <p class="text-[0.68rem] text-muted-foreground/70 px-0.5 leading-relaxed">
-      {t("settings.openbciDesc")}
-    </p>
-
-    <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] py-0 gap-0 overflow-hidden">
-      <CardContent class="flex flex-col gap-4 p-4">
-
-        <!-- Board selector -->
-        <div class="flex flex-col gap-1.5">
-          <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciBoard")}</p>
-          <div class="grid grid-cols-2 gap-x-4 gap-y-1">
-            {#snippet boardRadio(val: OpenBciBoard, key: string)}
-              <label class="flex items-center gap-1.5 cursor-pointer select-none text-[0.7rem] leading-snug">
-                <input type="radio" name="openbci-board" value={val}
-                  checked={openbci.board === val}
-                  onchange={() => { openbci = { ...openbci, board: val }; openbciChanged = true; }}
-                  class="accent-violet-500 shrink-0" />
-                <span class="truncate">{t(key)}</span>
-              </label>
-            {/snippet}
-            {@render boardRadio("ganglion",         "settings.openbciBoardGanglion")}
-            {@render boardRadio("ganglion_wifi",    "settings.openbciBoardGanglionWifi")}
-            {@render boardRadio("cyton",            "settings.openbciBoardCyton")}
-            {@render boardRadio("cyton_wifi",       "settings.openbciBoardCytonWifi")}
-            {@render boardRadio("cyton_daisy",      "settings.openbciBoardCytonDaisy")}
-            {@render boardRadio("cyton_daisy_wifi", "settings.openbciBoardCytonDaisyWifi")}
-            {@render boardRadio("galea",            "settings.openbciBoardGalea")}
-          </div>
-
-          {#if OPENBCI_IMAGES[openbci.board]}
-            <div class="mt-2 flex justify-center">
-              <img
-                src={OPENBCI_IMAGES[openbci.board]}
-                alt={openbci.board}
-                class="h-36 max-w-full object-cover rounded-xl
-                       bg-muted/30 dark:bg-white/[0.03]
-                       border border-border dark:border-white/[0.06]
-                       transition-all duration-200" />
-            </div>
-          {/if}
-        </div>
-
-        <Separator class="bg-border dark:bg-white/[0.04]" />
-
-        <!-- BLE scan timeout -->
-        {#if isBle}
-          <div class="flex items-center gap-3">
-            <label for="openbci-scan-timeout" class="text-[0.68rem] font-medium text-foreground/80 shrink-0">
-              {t("settings.openbciScanTimeout")}
-            </label>
-            <input id="openbci-scan-timeout"
-              type="number" min="3" max="60" step="1"
-              bind:value={openbci.scan_timeout_secs}
-              oninput={() => { openbciChanged = true; }}
-              class="w-16 text-[0.73rem] text-center px-2 py-1 rounded-md border border-border
-                     bg-background text-foreground tabular-nums" />
-            <span class="text-[0.64rem] text-muted-foreground">{t("settings.openbciScanTimeoutSuffix")}</span>
-          </div>
-          <Separator class="bg-border dark:bg-white/[0.04]" />
-        {/if}
-
-        <!-- Serial port -->
-        {#if isSerial}
-          <div class="flex flex-col gap-1.5">
-            <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciSerialPort")}</p>
-            <div class="flex gap-2 items-center">
-              {#if serialPorts.length > 0}
-                <select bind:value={openbci.serial_port} onchange={() => { openbciChanged = true; }}
-                  class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground">
-                  <option value="">{t("settings.openbciSerialPortPlaceholder")}</option>
-                  {#each serialPorts as p}<option value={p}>{p}</option>{/each}
-                </select>
-              {:else}
-                <input type="text" bind:value={openbci.serial_port} oninput={() => { openbciChanged = true; }}
-                  placeholder={t("settings.openbciSerialPortPlaceholder")}
-                  class="flex-1 min-w-0 text-[0.73rem] font-mono px-2 py-1 rounded-md border border-border bg-background text-foreground" />
-              {/if}
-              <Button size="sm" variant="outline"
-                class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
-                onclick={loadSerialPorts} disabled={portsLoading}>
-                {portsLoading ? "…" : t("settings.openbciRefreshPorts")}
-              </Button>
-            </div>
-            <span class="text-[0.62rem] text-muted-foreground">{t("settings.openbciSerialPortHint")}</span>
-          </div>
-          <Separator class="bg-border dark:bg-white/[0.04]" />
-        {/if}
-
-        <!-- WiFi Shield -->
-        {#if isWifi}
-          <div class="flex flex-col gap-2">
-            <div class="flex items-center gap-3">
-              <img src="/devices/openbci-wifi-shield.png" alt="OpenBCI WiFi Shield"
-                   class="h-16 w-16 object-cover rounded-lg shrink-0
-                          bg-muted/30 dark:bg-white/[0.03]
-                          border border-border dark:border-white/[0.06]" />
-              <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciWifiShieldIp")}</p>
-            </div>
-            <input type="text" bind:value={openbci.wifi_shield_ip} oninput={() => { openbciChanged = true; }}
-              placeholder={t("settings.openbciWifiShieldIpPlaceholder")}
-              class="text-[0.73rem] font-mono px-2 py-1 rounded-md border border-border bg-background text-foreground" />
-            <div class="flex items-center gap-3 mt-1">
-              <label for="openbci-local-port" class="text-[0.68rem] font-medium text-foreground/80 shrink-0">
-                {t("settings.openbciWifiLocalPort")}
-              </label>
-              <input id="openbci-local-port"
-                type="number" min="1024" max="65535" step="1"
-                bind:value={openbci.wifi_local_port}
-                oninput={() => { openbciChanged = true; }}
-                class="w-20 text-[0.73rem] text-center px-2 py-1 rounded-md border border-border
-                       bg-background text-foreground tabular-nums" />
-            </div>
-          </div>
-          <Separator class="bg-border dark:bg-white/[0.04]" />
-        {/if}
-
-        <!-- Galea IP -->
-        {#if isGalea}
-          <div class="flex flex-col gap-1.5">
-            <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciGaleaIp")}</p>
-            <input type="text" bind:value={openbci.galea_ip} oninput={() => { openbciChanged = true; }}
-              placeholder={t("settings.openbciGaleaIpPlaceholder")}
-              class="text-[0.73rem] font-mono px-2 py-1 rounded-md border border-border bg-background text-foreground" />
-          </div>
-          <Separator class="bg-border dark:bg-white/[0.04]" />
-        {/if}
-
-        <!-- Channel labels -->
-        <div class="flex flex-col gap-2">
-          <span class="text-[0.68rem] font-medium text-foreground/80">
-            {t("settings.openbciChannelLabels")}
-            <span class="text-muted-foreground font-normal"> ({channelCount})</span>
-          </span>
-
-          {#if channelCount > 4}
-            <p class="text-[0.62rem] text-amber-600 dark:text-amber-400">
-              {t("settings.openbciChannelsBeyond4", { n: channelCount })}
-            </p>
-          {/if}
-
-          <div class="flex items-center gap-2">
-            <select
-              value={activePreset === "__custom__" ? "__custom__" : activePreset}
-              onchange={(e) => applyPreset((e.currentTarget as HTMLSelectElement).value)}
-              class="flex-1 min-w-0 text-[0.68rem] h-7 px-2 rounded border border-border
-                     bg-background text-foreground/80 cursor-pointer truncate">
-              {#if activePreset === "__custom__"}
-                <option value="__custom__">{t("settings.openbciPresetNone")}</option>
-              {/if}
-              {#each Object.entries(LABEL_PRESETS[openbci.board]) as [id, p]}
-                <option value={id}>{p.label}</option>
-              {/each}
-            </select>
-            <button onclick={() => applyPreset("__none__")}
-              class="shrink-0 text-[0.62rem] h-7 px-2.5 rounded border border-border
-                     text-muted-foreground hover:text-red-500 hover:border-red-400/50
-                     transition-colors bg-background whitespace-nowrap">
-              {t("settings.openbciClearLabels")}
-            </button>
-          </div>
-
-          <div class="grid grid-cols-4 gap-x-2 gap-y-2">
-            {#each Array.from({ length: channelCount }, (_, i) => i) as i}
-              <div class="flex flex-col gap-0.5 min-w-0">
-                <span class="text-[0.58rem] text-muted-foreground tabular-nums text-center">{i + 1}</span>
-                <input type="text"
-                  value={openbciChannelLabel(i)}
-                  oninput={(e) => setChannelLabel(i, (e.currentTarget as HTMLInputElement).value)}
-                  placeholder={defaultChannelNames[i] ?? `Ch${i+1}`}
-                  class="w-full min-w-0 text-[0.7rem] font-mono text-center px-1 py-0.5 rounded
-                         border border-border bg-background text-foreground
-                         placeholder:text-muted-foreground/35
-                      focus:outline-none focus:ring-1 focus:ring-ring/50" />
-              </div>
-            {/each}
-          </div>
-
-          <span class="text-[0.62rem] text-muted-foreground">{t("settings.openbciChannelLabelsHint")}</span>
-        </div>
-
-      </CardContent>
-    </Card>
-
-    <!-- Save + Connect -->
-    <div class="flex items-center justify-end gap-2 px-0.5">
-      <Button size="sm"
-        variant={openbciSaved ? "secondary" : "outline"}
-        class="text-[0.66rem] h-7 px-3
-               {openbciSaved ? 'text-green-600 dark:text-green-400 border-green-500/30' :
-                openbciChanged ? 'border-primary/50 text-primary' :
-                'border-border dark:border-white/10 text-muted-foreground'}"
-        onclick={saveOpenbci}
-        disabled={!openbciChanged && !openbciSaved}>
-        {openbciSaved ? t("settings.openbciSaved") : t("settings.openbciSave")}
-      </Button>
-
-      {#if !isBle}
-        <Button size="sm" variant="default"
-          class="text-[0.66rem] h-7 px-3 bg-primary hover:bg-primary/90 text-primary-foreground"
-          onclick={connectOpenbci}
-          disabled={openbciConnecting}>
-          {openbciConnecting ? t("settings.openbciConnecting") : t("settings.openbciConnect")}
-        </Button>
-      {/if}
-    </div>
-
-    {#if openbciError}
-      <p class="text-[0.65rem] text-red-500 px-0.5 -mt-1">{openbciError}</p>
-    {/if}
-    {/if}
-  </div>
-
   <!-- ── Device API ────────────────────────────────────────────────────────── -->
   <div class="flex flex-col gap-2">
     <div class="flex items-center gap-2 px-0.5">
@@ -828,6 +597,231 @@ the Free Software Foundation, version 3 only. -->
 
     <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
       <CardContent class="flex flex-col gap-3 p-4">
+
+        <!-- ── OpenBCI sub-section ──────────────────────────────────────── -->
+        <button
+          onclick={() => openbciExpanded = !openbciExpanded}
+          class="flex items-center justify-between w-full px-0.5 group"
+          aria-expanded={openbciExpanded}
+        >
+          <span class="text-[0.78rem] font-semibold text-foreground">{t("settings.deviceApi.openbciTitle")}</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               class="w-3 h-3 text-muted-foreground/50 transition-transform duration-200
+                      {openbciExpanded ? 'rotate-180' : ''}">
+            <path d="M6 9l6 6 6-6"/>
+          </svg>
+        </button>
+
+        {#if openbciExpanded}
+          <p class="text-[0.64rem] text-muted-foreground leading-relaxed">
+            {t("settings.deviceApi.openbciDesc")}
+          </p>
+
+          <!-- Board selector -->
+          <div class="flex flex-col gap-1.5">
+            <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciBoard")}</p>
+            <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+              {#snippet boardRadio(val: OpenBciBoard, key: string)}
+                <label class="flex items-center gap-1.5 cursor-pointer select-none text-[0.7rem] leading-snug">
+                  <input type="radio" name="openbci-board" value={val}
+                    checked={openbci.board === val}
+                    onchange={() => { openbci = { ...openbci, board: val }; openbciChanged = true; }}
+                    class="accent-violet-500 shrink-0" />
+                  <span class="truncate">{t(key)}</span>
+                </label>
+              {/snippet}
+              {@render boardRadio("ganglion",         "settings.openbciBoardGanglion")}
+              {@render boardRadio("ganglion_wifi",    "settings.openbciBoardGanglionWifi")}
+              {@render boardRadio("cyton",            "settings.openbciBoardCyton")}
+              {@render boardRadio("cyton_wifi",       "settings.openbciBoardCytonWifi")}
+              {@render boardRadio("cyton_daisy",      "settings.openbciBoardCytonDaisy")}
+              {@render boardRadio("cyton_daisy_wifi", "settings.openbciBoardCytonDaisyWifi")}
+              {@render boardRadio("galea",            "settings.openbciBoardGalea")}
+            </div>
+
+            {#if OPENBCI_IMAGES[openbci.board]}
+              <div class="mt-2 flex justify-center">
+                <img
+                  src={OPENBCI_IMAGES[openbci.board]}
+                  alt={openbci.board}
+                  class="h-36 max-w-full object-cover rounded-xl
+                         bg-muted/30 dark:bg-white/[0.03]
+                         border border-border dark:border-white/[0.06]
+                         transition-all duration-200" />
+              </div>
+            {/if}
+          </div>
+
+          <Separator class="bg-border dark:bg-white/[0.04]" />
+
+          <!-- BLE scan timeout -->
+          {#if isBle}
+            <div class="flex items-center gap-3">
+              <label for="openbci-scan-timeout" class="text-[0.68rem] font-medium text-foreground/80 shrink-0">
+                {t("settings.openbciScanTimeout")}
+              </label>
+              <input id="openbci-scan-timeout"
+                type="number" min="3" max="60" step="1"
+                bind:value={openbci.scan_timeout_secs}
+                oninput={() => { openbciChanged = true; }}
+                class="w-16 text-[0.73rem] text-center px-2 py-1 rounded-md border border-border
+                       bg-background text-foreground tabular-nums" />
+              <span class="text-[0.64rem] text-muted-foreground">{t("settings.openbciScanTimeoutSuffix")}</span>
+            </div>
+            <Separator class="bg-border dark:bg-white/[0.04]" />
+          {/if}
+
+          <!-- Serial port -->
+          {#if isSerial}
+            <div class="flex flex-col gap-1.5">
+              <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciSerialPort")}</p>
+              <div class="flex gap-2 items-center">
+                {#if serialPorts.length > 0}
+                  <select bind:value={openbci.serial_port} onchange={() => { openbciChanged = true; }}
+                    class="flex-1 min-w-0 text-[0.73rem] px-2 py-1 rounded-md border border-border bg-background text-foreground">
+                    <option value="">{t("settings.openbciSerialPortPlaceholder")}</option>
+                    {#each serialPorts as p}<option value={p}>{p}</option>{/each}
+                  </select>
+                {:else}
+                  <input type="text" bind:value={openbci.serial_port} oninput={() => { openbciChanged = true; }}
+                    placeholder={t("settings.openbciSerialPortPlaceholder")}
+                    class="flex-1 min-w-0 text-[0.73rem] font-mono px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+                {/if}
+                <Button size="sm" variant="outline"
+                  class="text-[0.64rem] h-7 px-2.5 shrink-0 border-border dark:border-white/10"
+                  onclick={loadSerialPorts} disabled={portsLoading}>
+                  {portsLoading ? "…" : t("settings.openbciRefreshPorts")}
+                </Button>
+              </div>
+              <span class="text-[0.62rem] text-muted-foreground">{t("settings.openbciSerialPortHint")}</span>
+            </div>
+            <Separator class="bg-border dark:bg-white/[0.04]" />
+          {/if}
+
+          <!-- WiFi Shield -->
+          {#if isWifi}
+            <div class="flex flex-col gap-2">
+              <div class="flex items-center gap-3">
+                <img src="/devices/openbci-wifi-shield.png" alt="OpenBCI WiFi Shield"
+                     class="h-16 w-16 object-cover rounded-lg shrink-0
+                            bg-muted/30 dark:bg-white/[0.03]
+                            border border-border dark:border-white/[0.06]" />
+                <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciWifiShieldIp")}</p>
+              </div>
+              <input type="text" bind:value={openbci.wifi_shield_ip} oninput={() => { openbciChanged = true; }}
+                placeholder={t("settings.openbciWifiShieldIpPlaceholder")}
+                class="text-[0.73rem] font-mono px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+              <div class="flex items-center gap-3 mt-1">
+                <label for="openbci-local-port" class="text-[0.68rem] font-medium text-foreground/80 shrink-0">
+                  {t("settings.openbciWifiLocalPort")}
+                </label>
+                <input id="openbci-local-port"
+                  type="number" min="1024" max="65535" step="1"
+                  bind:value={openbci.wifi_local_port}
+                  oninput={() => { openbciChanged = true; }}
+                  class="w-20 text-[0.73rem] text-center px-2 py-1 rounded-md border border-border
+                         bg-background text-foreground tabular-nums" />
+              </div>
+            </div>
+            <Separator class="bg-border dark:bg-white/[0.04]" />
+          {/if}
+
+          <!-- Galea IP -->
+          {#if isGalea}
+            <div class="flex flex-col gap-1.5">
+              <p class="text-[0.68rem] font-medium text-foreground/80">{t("settings.openbciGaleaIp")}</p>
+              <input type="text" bind:value={openbci.galea_ip} oninput={() => { openbciChanged = true; }}
+                placeholder={t("settings.openbciGaleaIpPlaceholder")}
+                class="text-[0.73rem] font-mono px-2 py-1 rounded-md border border-border bg-background text-foreground" />
+            </div>
+            <Separator class="bg-border dark:bg-white/[0.04]" />
+          {/if}
+
+          <!-- Channel labels -->
+          <div class="flex flex-col gap-2">
+            <span class="text-[0.68rem] font-medium text-foreground/80">
+              {t("settings.openbciChannelLabels")}
+              <span class="text-muted-foreground font-normal"> ({channelCount})</span>
+            </span>
+
+            {#if channelCount > 4}
+              <p class="text-[0.62rem] text-amber-600 dark:text-amber-400">
+                {t("settings.openbciChannelsBeyond4", { n: channelCount })}
+              </p>
+            {/if}
+
+            <div class="flex items-center gap-2">
+              <select
+                value={activePreset === "__custom__" ? "__custom__" : activePreset}
+                onchange={(e) => applyPreset((e.currentTarget as HTMLSelectElement).value)}
+                class="flex-1 min-w-0 text-[0.68rem] h-7 px-2 rounded border border-border
+                       bg-background text-foreground/80 cursor-pointer truncate">
+                {#if activePreset === "__custom__"}
+                  <option value="__custom__">{t("settings.openbciPresetNone")}</option>
+                {/if}
+                {#each Object.entries(LABEL_PRESETS[openbci.board]) as [id, p]}
+                  <option value={id}>{p.label}</option>
+                {/each}
+              </select>
+              <button onclick={() => applyPreset("__none__")}
+                class="shrink-0 text-[0.62rem] h-7 px-2.5 rounded border border-border
+                       text-muted-foreground hover:text-red-500 hover:border-red-400/50
+                       transition-colors bg-background whitespace-nowrap">
+                {t("settings.openbciClearLabels")}
+              </button>
+            </div>
+
+            <div class="grid grid-cols-4 gap-x-2 gap-y-2">
+              {#each Array.from({ length: channelCount }, (_, i) => i) as i}
+                <div class="flex flex-col gap-0.5 min-w-0">
+                  <span class="text-[0.58rem] text-muted-foreground tabular-nums text-center">{i + 1}</span>
+                  <input type="text"
+                    value={openbciChannelLabel(i)}
+                    oninput={(e) => setChannelLabel(i, (e.currentTarget as HTMLInputElement).value)}
+                    placeholder={defaultChannelNames[i] ?? `Ch${i+1}`}
+                    class="w-full min-w-0 text-[0.7rem] font-mono text-center px-1 py-0.5 rounded
+                           border border-border bg-background text-foreground
+                           placeholder:text-muted-foreground/35
+                        focus:outline-none focus:ring-1 focus:ring-ring/50" />
+                </div>
+              {/each}
+            </div>
+
+            <span class="text-[0.62rem] text-muted-foreground">{t("settings.openbciChannelLabelsHint")}</span>
+          </div>
+
+          <!-- Save + Connect -->
+          <div class="flex items-center justify-end gap-2">
+            <Button size="sm"
+              variant={openbciSaved ? "secondary" : "outline"}
+              class="text-[0.66rem] h-7 px-3
+                     {openbciSaved ? 'text-green-600 dark:text-green-400 border-green-500/30' :
+                      openbciChanged ? 'border-primary/50 text-primary' :
+                      'border-border dark:border-white/10 text-muted-foreground'}"
+              onclick={saveOpenbci}
+              disabled={!openbciChanged && !openbciSaved}>
+              {openbciSaved ? t("settings.openbciSaved") : t("settings.openbciSave")}
+            </Button>
+
+            {#if !isBle}
+              <Button size="sm" variant="default"
+                class="text-[0.66rem] h-7 px-3 bg-primary hover:bg-primary/90 text-primary-foreground"
+                onclick={connectOpenbci}
+                disabled={openbciConnecting}>
+                {openbciConnecting ? t("settings.openbciConnecting") : t("settings.openbciConnect")}
+              </Button>
+            {/if}
+          </div>
+
+          {#if openbciError}
+            <p class="text-[0.62rem] text-destructive">{openbciError}</p>
+          {/if}
+        {/if}
+
+        <Separator class="bg-border dark:bg-white/[0.04]" />
+
+        <!-- ── Emotiv sub-section ───────────────────────────────────────── -->
         <button
           onclick={() => emotivApiExpanded = !emotivApiExpanded}
           class="flex items-center justify-between w-full px-0.5 group"

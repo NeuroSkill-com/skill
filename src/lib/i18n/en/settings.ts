@@ -111,6 +111,8 @@ const settings: Record<string, string> = {
   "settings.deviceApi.hide":           "hide",
   "settings.deviceApi.save":           "Save",
   "settings.deviceApi.saved":          "Saved",
+  "settings.deviceApi.openbciTitle":   "OpenBCI",
+  "settings.deviceApi.openbciDesc":    "Configure an OpenBCI board to connect alongside or instead of a Muse headset.",
   "settings.openbci":                       "OpenBCI",
   "settings.openbciDesc":                   "Configure an OpenBCI board to connect alongside or instead of a Muse headset.",
   "settings.openbciBoard":                  "Board",
