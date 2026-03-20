@@ -1218,11 +1218,23 @@
       </div>
 
       <!-- curl quick test -->
+      {@const curlSnippet = `curl http://localhost:${wsPort}/v1/chat/completions \\\n  -H 'Content-Type: application/json' \\\n  -d '{"model":"default","messages":[{"role":"user","content":"Hello!"}]}'`}
       <div class="flex flex-col gap-1.5 px-4 py-3 bg-slate-50 dark:bg-[#111118]">
-        <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">Quick test</span>
-        <pre class="text-[0.58rem] font-mono text-muted-foreground/80 whitespace-pre-wrap break-all leading-relaxed">curl http://localhost:{wsPort}/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '&#123;"model":"default","messages":[&#123;"role":"user","content":"Hello!"&#125;]&#125;'</pre>
+        <div class="flex items-center justify-between">
+          <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">Quick test</span>
+          <button
+            onclick={async (e) => {
+              await navigator.clipboard.writeText(curlSnippet);
+              const btn = e.currentTarget;
+              btn.textContent = "Copied!";
+              setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+            }}
+            class="text-[0.54rem] text-muted-foreground/60 hover:text-foreground
+                   transition-colors cursor-pointer select-none">
+            Copy
+          </button>
+        </div>
+        <pre class="text-[0.58rem] font-mono text-muted-foreground/80 whitespace-pre-wrap break-all leading-relaxed select-text cursor-text">{curlSnippet}</pre>
       </div>
 
     </CardContent>
