@@ -33,7 +33,22 @@
     const translated = t(key);
     return translated !== key ? translated : tu.tool;
   });
-  const bashCmd    = $derived(tu.tool === "bash" ? (tu.args?.command || tu.result?.command || "") : "");
+  /** Typed view of tu.result for property access. */
+  const res = $derived(tu.result as Record<string, unknown> | undefined);
+
+  /** Type-safe string accessor for tool args. */
+  function arg(key: string): string {
+    const v = tu.args?.[key];
+    return typeof v === "string" ? v : "";
+  }
+
+  interface SourceEntry {
+    domain?: string; url?: string; preview?: string;
+    chars: number; score?: number; best?: boolean;
+  }
+  /** Typed sources array from web_search result. */
+  const sources = $derived((res?.sources ?? []) as SourceEntry[]);
+  const bashCmd    = $derived(tu.tool === "bash" ? (arg("command") || String(res?.command ?? "")) : "");
   const hasNonEmptyArgs = $derived(tu.args && Object.keys(tu.args).length > 0);
   const hasDetails = $derived(!!(hasNonEmptyArgs || tu.result || tu.detail || bashCmd));
   const dangerKey  = $derived(detectToolDanger(tu));
@@ -100,16 +115,16 @@
         <span class="text-[0.6rem] text-muted-foreground/60 truncate ml-1 flex-1 min-w-0 font-mono">
           {#if tu.tool === "bash" && bashCmd}
             {bashCmd.length > 60 ? bashCmd.slice(0, 60) + "…" : bashCmd}
-          {:else if (tu.tool === "read_file" || tu.tool === "write_file" || tu.tool === "edit_file") && tu.args.path}
-            {tu.args.path}
-          {:else if tu.tool === "web_search" && tu.args.query}
-            {tu.args.query}
-          {:else if tu.tool === "web_fetch" && tu.args.url}
-            {tu.args.url}
-          {:else if tu.tool === "search_output" && tu.args.pattern}
-            /{tu.args.pattern}/ in {tu.args.path?.split("/").pop() ?? tu.args.path}
-          {:else if tu.tool === "search_output" && tu.args.path}
-            {tu.args.path.split("/").pop() ?? tu.args.path}
+          {:else if (tu.tool === "read_file" || tu.tool === "write_file" || tu.tool === "edit_file") && arg("path")}
+            {arg("path")}
+          {:else if tu.tool === "web_search" && arg("query")}
+            {arg("query")}
+          {:else if tu.tool === "web_fetch" && arg("url")}
+            {arg("url")}
+          {:else if tu.tool === "search_output" && arg("pattern")}
+            /{arg("pattern")}/ in {arg("path")?.split("/").pop() ?? arg("path")}
+          {:else if tu.tool === "search_output" && arg("path")}
+            {arg("path").split("/").pop() ?? arg("path")}
           {/if}
         </span>
       {/if}
@@ -191,56 +206,56 @@
                       text-foreground select-text">{bashCmd}</pre>
         </div>
       <!-- File tools: show path prominently -->
-      {:else if (tu.tool === "read_file" || tu.tool === "write_file" || tu.tool === "edit_file") && tu.args?.path}
+      {:else if (tu.tool === "read_file" || tu.tool === "write_file" || tu.tool === "edit_file") && arg("path")}
         <div class="flex flex-col gap-0.5">
           <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
             {t("chat.tools.fileLabel")}
           </span>
           <pre class="font-mono text-[0.65rem] leading-relaxed whitespace-pre-wrap break-all
                       bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2
-                      text-foreground select-text">{tu.args.path}</pre>
-          {#if tu.tool === "edit_file" && tu.args.old_text}
+                      text-foreground select-text">{arg("path")}</pre>
+          {#if tu.tool === "edit_file" && arg("old_text")}
             <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50 mt-1">
               {t("chat.tools.editOldLabel")}
             </span>
             <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
                         bg-red-500/5 border border-red-500/10 rounded-lg px-2 py-1.5 max-h-32 overflow-y-auto
-                        text-foreground select-text">{tu.args.old_text}</pre>
+                        text-foreground select-text">{arg("old_text")}</pre>
           {/if}
-          {#if tu.tool === "edit_file" && tu.args.new_text}
+          {#if tu.tool === "edit_file" && arg("new_text")}
             <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50 mt-1">
               {t("chat.tools.editNewLabel")}
             </span>
             <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
                         bg-emerald-500/5 border border-emerald-500/10 rounded-lg px-2 py-1.5 max-h-32 overflow-y-auto
-                        text-foreground select-text">{tu.args.new_text}</pre>
+                        text-foreground select-text">{arg("new_text")}</pre>
           {/if}
-          {#if tu.tool === "write_file" && tu.args.content}
+          {#if tu.tool === "write_file" && arg("content")}
             <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50 mt-1">
               {t("chat.tools.contentLabel")}
             </span>
             <pre class="font-mono text-[0.6rem] leading-relaxed whitespace-pre-wrap break-all
                         bg-black/5 dark:bg-white/5 rounded-lg px-2 py-1.5 max-h-48 overflow-y-auto
-                        text-foreground select-text">{tu.args.content}</pre>
+                        text-foreground select-text">{arg("content")}</pre>
           {/if}
         </div>
       <!-- Web search: show query + sources -->
-      {:else if tu.tool === "web_search" && tu.args?.query}
+      {:else if tu.tool === "web_search" && arg("query")}
         <div class="flex flex-col gap-0.5">
           <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
             {t("chat.tools.queryLabel")}
           </span>
           <pre class="font-mono text-[0.65rem] leading-relaxed whitespace-pre-wrap break-all
                       bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2
-                      text-foreground select-text">{tu.args.query}</pre>
+                      text-foreground select-text">{arg("query")}</pre>
         </div>
         <!-- Sources: per-domain fetch results -->
-        {#if tu.result?.sources?.length}
+        {#if sources.length}
           <div class="flex flex-col gap-1 mt-1">
             <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
               {t("chat.tools.sourcesLabel")}
             </span>
-            {#each tu.result.sources as src, si}
+            {#each sources as src, si}
               {@const expanded = expandedSources.has(si)}
               <div class="rounded-lg border transition-colors
                           {src.best
@@ -298,14 +313,14 @@
           </div>
         {/if}
       <!-- Web fetch: show URL -->
-      {:else if tu.tool === "web_fetch" && tu.args?.url}
+      {:else if tu.tool === "web_fetch" && arg("url")}
         <div class="flex flex-col gap-0.5">
           <span class="text-[0.55rem] font-semibold uppercase tracking-wider text-muted-foreground/50">
             URL
           </span>
           <pre class="font-mono text-[0.65rem] leading-relaxed whitespace-pre-wrap break-all
                       bg-black/8 dark:bg-white/8 rounded-lg px-2.5 py-2
-                      text-foreground select-text">{tu.args.url}</pre>
+                      text-foreground select-text">{arg("url")}</pre>
         </div>
       <!-- Generic: show raw JSON args -->
       {:else if hasNonEmptyArgs}

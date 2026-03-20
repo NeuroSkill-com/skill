@@ -11,7 +11,7 @@ import type { UmapPoint } from "$lib/types";
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 function pt(x: number, y: number, z: number, utc = 0): UmapPoint {
-  return { x, y, z, utc, label: "", relaxation: 0.5, engagement: 0.5, session_idx: 0, epoch_idx: 0 } as UmapPoint;
+  return { x, y, z, utc, label: "", session: 0 };
 }
 
 // ── Easing ────────────────────────────────────────────────────────────────────
