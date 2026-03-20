@@ -287,6 +287,23 @@ export const EMBEDDING_OVERLAP_MIN_SECS = 0.0;
 /** Maximum configurable overlap (seconds).  Mirrors `EMBEDDING_OVERLAP_MAX_SECS`. */
 export const EMBEDDING_OVERLAP_MAX_SECS = EMBEDDING_EPOCH_SECS - 0.5; // 4.5
 
+// ── Screenshot interval (aligned with EEG epochs) ────────────────────────────
+
+/** Minimum screenshot interval multiplier (1× = every epoch = 5 s). */
+export const SCREENSHOT_INTERVAL_MIN_MULT = 1;
+
+/** Maximum screenshot interval multiplier (12× = 60 s). */
+export const SCREENSHOT_INTERVAL_MAX_MULT = 12;
+
+/** Minimum screenshot interval in seconds (= EMBEDDING_EPOCH_SECS × MIN_MULT). */
+export const SCREENSHOT_INTERVAL_MIN_SECS = EMBEDDING_EPOCH_SECS * SCREENSHOT_INTERVAL_MIN_MULT; // 5
+
+/** Maximum screenshot interval in seconds (= EMBEDDING_EPOCH_SECS × MAX_MULT). */
+export const SCREENSHOT_INTERVAL_MAX_SECS = EMBEDDING_EPOCH_SECS * SCREENSHOT_INTERVAL_MAX_MULT; // 60
+
+/** Step size for the screenshot interval slider (one epoch = 5 s). */
+export const SCREENSHOT_INTERVAL_STEP_SECS = EMBEDDING_EPOCH_SECS; // 5
+
 // ── Calibration defaults (must match constants.rs CALIBRATION_* values) ────────
 
 /** Default label for the first calibration action. */

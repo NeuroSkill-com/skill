@@ -13,6 +13,12 @@ the Free Software Foundation, version 3 only. -->
   import { Card, CardContent } from "$lib/components/ui/card";
   import { Separator } from "$lib/components/ui/separator";
   import { t }         from "$lib/i18n/index.svelte";
+  import {
+    EMBEDDING_EPOCH_SECS,
+    SCREENSHOT_INTERVAL_MIN_SECS,
+    SCREENSHOT_INTERVAL_MAX_SECS,
+    SCREENSHOT_INTERVAL_STEP_SECS,
+  } from "$lib/constants";
 
   // ── Types ──────────────────────────────────────────────────────────────────
   interface ScreenshotConfig {
@@ -413,17 +419,19 @@ the Free Software Foundation, version 3 only. -->
   <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
     <CardContent class="py-4 px-4 flex flex-col gap-4">
 
-      <!-- Interval -->
+      <!-- Interval (epoch-aligned: multiples of 5 s) -->
       <div class="flex flex-col gap-1.5">
         <div class="flex items-center justify-between">
           <label for="ss-interval" class="text-[0.72rem] font-semibold text-foreground">
             {t("screenshots.interval")}
           </label>
           <span class="text-[0.58rem] text-muted-foreground tabular-nums">
-            {config.interval_secs} {t("screenshots.intervalUnit")}
+            {config.interval_secs}{t("screenshots.intervalUnit")} ({Math.round(config.interval_secs / EMBEDDING_EPOCH_SECS)}× {t("screenshots.intervalEpoch")})
           </span>
         </div>
-        <input id="ss-interval" type="range" min="1" max="30" step="1"
+        <input id="ss-interval" type="range"
+               min={SCREENSHOT_INTERVAL_MIN_SECS} max={SCREENSHOT_INTERVAL_MAX_SECS}
+               step={SCREENSHOT_INTERVAL_STEP_SECS}
                bind:value={config.interval_secs}
                class="w-full accent-primary h-1.5" />
         <span class="text-[0.54rem] text-muted-foreground/60">{t("screenshots.intervalDesc")}</span>

@@ -8,6 +8,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use skill_constants::{EMBEDDING_EPOCH_SECS, SCREENSHOT_INTERVAL_MIN_MULT, SCREENSHOT_INTERVAL_MAX_MULT};
+
 pub fn default_screenshot_interval()        -> u32    { 5 }
 pub fn default_screenshot_image_size()      -> u32    { 768 }
 pub fn default_screenshot_quality()         -> u8     { 60 }
@@ -104,6 +106,28 @@ impl Default for ScreenshotConfig {
 }
 
 impl ScreenshotConfig {
+    /// The epoch-aligned capture interval in seconds.
+    ///
+    /// `interval_secs` must be a multiple of `EMBEDDING_EPOCH_SECS` (5 s)
+    /// in the range 5–60 s (1×–12× the EEG embedding epoch).  Legacy or
+    /// out-of-range values are snapped to the nearest valid multiple.
+    pub fn effective_interval_secs(&self) -> u64 {
+        let epoch = EMBEDDING_EPOCH_SECS as u64;
+        let mult = self.interval_multiplier() as u64;
+        epoch * mult
+    }
+
+    /// Derive the interval multiplier (1–12) from `interval_secs`.
+    ///
+    /// Legacy configs may store non-multiples (e.g. 7); those are rounded to
+    /// the nearest epoch boundary and clamped to 1–12.
+    pub fn interval_multiplier(&self) -> u32 {
+        let epoch = EMBEDDING_EPOCH_SECS as u32;
+        let raw = self.interval_secs.max(1);
+        let mult = (raw + epoch / 2) / epoch;
+        mult.clamp(SCREENSHOT_INTERVAL_MIN_MULT, SCREENSHOT_INTERVAL_MAX_MULT)
+    }
+
     pub fn model_id(&self) -> String {
         match self.embed_backend.as_str() {
             "fastembed" => match self.fastembed_model.as_str() {

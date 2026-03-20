@@ -2084,6 +2084,7 @@ export type TranslationKey =
   | "screenshots.interval"
   | "screenshots.intervalDesc"
   | "screenshots.intervalUnit"
+  | "screenshots.intervalEpoch"
   | "screenshots.modelChanged"
   | "screenshots.modelChangedDesc"
   | "screenshots.modelClip"

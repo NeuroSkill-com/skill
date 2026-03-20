@@ -76,6 +76,7 @@ pub mod prelude {
         // Screenshots
         SCREENSHOTS_SQLITE, SCREENSHOTS_DIR, SCREENSHOTS_HNSW,
         SCREENSHOT_HNSW_SAVE_EVERY, SCREENSHOTS_OCR_HNSW,
+        SCREENSHOT_INTERVAL_MIN_MULT, SCREENSHOT_INTERVAL_MAX_MULT,
         // Label index
         LABEL_TEXT_INDEX_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_EEG_INDEX_FILE,
         // LLM
@@ -359,7 +360,16 @@ pub const SESSION_GAP_SECS: u64 = 120;
 // ── EEG Embedding (ZUNA model + HNSW index) ──────────────────────────────────
 
 /// Duration of each EEG epoch fed to the ZUNA embedding model (seconds).
+///
+/// Screenshot capture interval is aligned to multiples of this value
+/// (1× = 5 s, 2× = 10 s, …, 12× = 60 s).
 pub const EMBEDDING_EPOCH_SECS: f32 = 5.0;
+
+/// Minimum screenshot interval multiplier (1× epoch = 5 s).
+pub const SCREENSHOT_INTERVAL_MIN_MULT: u32 = 1;
+
+/// Maximum screenshot interval multiplier (12× epoch = 60 s).
+pub const SCREENSHOT_INTERVAL_MAX_MULT: u32 = 12;
 
 /// Raw samples per embedding epoch per channel.
 pub const EMBEDDING_EPOCH_SAMPLES: usize =

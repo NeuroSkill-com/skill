@@ -564,7 +564,7 @@ pub fn run_screenshot_worker(
             continue;
         }
 
-        let base_secs = config.interval_secs.max(1) as u64;
+        let base_secs = config.effective_interval_secs();
         let effective_secs = base_secs * backoff_multiplier;
         std::thread::sleep(Duration::from_secs(effective_secs));
 
@@ -692,7 +692,7 @@ pub fn run_screenshot_worker(
                             .unwrap_or(0);
                         backoff_multiplier = BACKOFF_STEPS[(cur_idx + 1).min(BACKOFF_STEPS.len() - 1)];
                         eprintln!("[screenshot] embed queue full — backing off to {}× base interval ({}s)",
-                            backoff_multiplier, config.interval_secs as u64 * backoff_multiplier);
+                            backoff_multiplier, config.effective_interval_secs() * backoff_multiplier);
                     }
                 }
             }
