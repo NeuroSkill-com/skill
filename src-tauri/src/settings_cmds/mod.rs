@@ -888,12 +888,12 @@ fn read_eeg_parquet(
         }
 
         // Columns 1..=n_ch = EEG channels.
-        for ch in 0..n_ch {
+        for (ch, buf) in ch_bufs.iter_mut().enumerate() {
             let col_idx = ch + 1;
             if col_idx >= n_cols { break; }
             if let Some(col) = batch.column(col_idx).as_primitive_opt::<arrow_array::types::Float64Type>() {
                 for i in 0..n_rows {
-                    ch_bufs[ch].push(col.value(i) as f32);
+                    buf.push(col.value(i) as f32);
                 }
             }
         }
@@ -935,16 +935,15 @@ fn reembed_worker(
         return;
     };
 
-    #[allow(dead_code)]
     enum Enc {
-        Zuna(zuna_rs::ZunaEncoder<Wgpu>),
-        Luna(luna_rs::LunaEncoder<Wgpu>),
+        Zuna(Box<zuna_rs::ZunaEncoder<Wgpu>>),
+        Luna(Box<luna_rs::LunaEncoder<Wgpu>>),
     }
 
     let encoder = match backend {
         skill_eeg::eeg_model_config::ExgModelBackend::Zuna => {
             match zuna_rs::ZunaEncoder::<Wgpu>::load(&c_path, &w_path, device.clone()) {
-                Ok((e, ms)) => { skill_log!(logger, "reembed", "ZUNA encoder loaded ({ms:.0}ms)"); Enc::Zuna(e) }
+                Ok((e, ms)) => { skill_log!(logger, "reembed", "ZUNA encoder loaded ({ms:.0}ms)"); Enc::Zuna(Box::new(e)) }
                 Err(e) => {
                     skill_log!(logger, "reembed", "ZUNA load failed: {e:#}");
                     emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_load".into() });
@@ -954,7 +953,7 @@ fn reembed_worker(
         }
         skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
             match luna_rs::LunaEncoder::<Wgpu>::load(&c_path, &w_path, device.clone()) {
-                Ok((e, ms)) => { skill_log!(logger, "reembed", "LUNA encoder loaded ({ms:.0}ms)"); Enc::Luna(e) }
+                Ok((e, ms)) => { skill_log!(logger, "reembed", "LUNA encoder loaded ({ms:.0}ms)"); Enc::Luna(Box::new(e)) }
                 Err(e) => {
                     skill_log!(logger, "reembed", "LUNA load failed: {e:#}");
                     emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_load".into() });
@@ -1090,9 +1089,9 @@ fn reembed_worker(
                 let Ok(record) = result else { continue };
                 let ts: f64 = record.get(0).and_then(|s| s.parse().ok()).unwrap_or(0.0);
                 timestamps.push(ts);
-                for ch in 0..n_ch {
+                for (ch, buf) in ch_bufs.iter_mut().enumerate() {
                     let v: f32 = record.get(ch + 1).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                    ch_bufs[ch].push(v);
+                    buf.push(v);
                 }
             }
         }
@@ -1228,8 +1227,7 @@ fn reembed_worker(
                             let ps = luna_enc.model_cfg.patch_size;
                             let np = t / ps.max(1);
                             if np == 0 || c == 0 { return Err("zero patches".into()); }
-                            let mut patch_means = vec![0f32; np];
-                            for p in 0..np {
+                            let patch_means: Vec<f32> = (0..np).map(|p| {
                                 let mut sum = 0f64;
                                 let count = (c * ps) as f64;
                                 for ch_idx in 0..c {
@@ -1238,8 +1236,8 @@ fn reembed_worker(
                                         if idx < out.len() { sum += out[idx] as f64; }
                                     }
                                 }
-                                patch_means[p] = (sum / count) as f32;
-                            }
+                                (sum / count) as f32
+                            }).collect();
                             Ok(patch_means)
                         } else {
                             Ok(out.clone())

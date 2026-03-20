@@ -577,6 +577,7 @@ pub fn stream_search_inner(
 }
 
 /// Model-aware variant of [`stream_search_inner`].
+#[allow(clippy::too_many_arguments)]
 pub fn stream_search_inner_for(
     skill_dir:     &Path,
     start_utc:     u64,

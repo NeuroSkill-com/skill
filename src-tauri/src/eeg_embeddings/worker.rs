@@ -538,8 +538,8 @@ pub(super) fn embed_worker(
 
     // ── Encoder variants ──────────────────────────────────────────────────────
     enum LoadedEncoder {
-        Zuna(#[allow(dead_code)] ZunaEncoder<Wgpu>),
-        Luna(#[allow(dead_code)] luna_rs::LunaEncoder<Wgpu>),
+        Zuna(Box<ZunaEncoder<Wgpu>>),
+        Luna(Box<luna_rs::LunaEncoder<Wgpu>>),
     }
 
     impl LoadedEncoder {
@@ -561,12 +561,12 @@ pub(super) fn embed_worker(
             match backend {
                 ExgModelBackend::Zuna => {
                     ZunaEncoder::<Wgpu>::load(&c, &w, device.clone())
-                        .map(|(enc, ms)| (LoadedEncoder::Zuna(enc), ms))
+                        .map(|(enc, ms)| (LoadedEncoder::Zuna(Box::new(enc)), ms))
                         .map_err(|e| format!("{e:#}"))
                 }
                 ExgModelBackend::Luna => {
                     luna_rs::LunaEncoder::<Wgpu>::load(&c, &w, device.clone())
-                        .map(|(enc, ms)| (LoadedEncoder::Luna(enc), ms))
+                        .map(|(enc, ms)| (LoadedEncoder::Luna(Box::new(enc)), ms))
                         .map_err(|e| format!("{e:#}"))
                 }
             }
@@ -781,8 +781,7 @@ pub(super) fn embed_worker(
                             // Mean-pool across channels → [T], then pool over
                             // patch windows → [n_patches] to get a compact
                             // fixed-size embedding.
-                            let mut patch_means = vec![0f32; n_patches];
-                            for p in 0..n_patches {
+                            let patch_means: Vec<f32> = (0..n_patches).map(|p| {
                                 let mut sum = 0f64;
                                 let count = (c * ps) as f64;
                                 for ch in 0..c {
@@ -793,8 +792,8 @@ pub(super) fn embed_worker(
                                         }
                                     }
                                 }
-                                patch_means[p] = (sum / count) as f32;
-                            }
+                                (sum / count) as f32
+                            }).collect();
                             patch_means
                         } else {
                             // Classification or 1-D output: use as-is.
@@ -914,7 +913,7 @@ pub(super) fn embed_worker(
             {
                 let mut g = global_index.lock_or_recover();
                 if let Some(ref mut gidx) = *g {
-                    let ok = if gidx.len() > 0 {
+                    let ok = if !gidx.is_empty() {
                         gidx.get_embedding(0).len() == emb.len()
                     } else {
                         true // empty index — any dimension is fine

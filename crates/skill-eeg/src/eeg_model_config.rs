@@ -25,17 +25,14 @@ use crate::constants::{
 // ── EXG embedding model backend ──────────────────────────────────────────────
 
 /// Which EEG/EXG foundation model to use for embedding generation.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ExgModelBackend {
     /// ZUNA encoder (Zyphra) — default.
+    #[default]
     Zuna,
     /// LUNA encoder (thorir) — topology-agnostic, multiple sizes.
     Luna,
-}
-
-impl Default for ExgModelBackend {
-    fn default() -> Self { Self::Zuna }
 }
 
 impl std::fmt::Display for ExgModelBackend {
