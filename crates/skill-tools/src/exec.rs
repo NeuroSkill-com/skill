@@ -1127,3 +1127,201 @@ fn format_utc_offset(offset_seconds: i32) -> String {
     format!("{sign}{hours:02}:{mins:02}")
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── truncate_text ─────────────────────────────────────────────────
+
+    #[test]
+    fn truncate_text_within_limit() {
+        assert_eq!(truncate_text("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_text_at_limit() {
+        assert_eq!(truncate_text("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_text_over_limit() {
+        assert_eq!(truncate_text("hello world", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_text_empty() {
+        assert_eq!(truncate_text("", 5), "");
+    }
+
+    #[test]
+    fn truncate_text_unicode() {
+        // Each emoji is one char
+        assert_eq!(truncate_text("🧠🔬🧬🧪", 2), "🧠🔬");
+    }
+
+    // ── truncate_tool_output (tail) ───────────────────────────────────
+
+    #[test]
+    fn truncate_output_no_truncation() {
+        let out = truncate_tool_output("line1\nline2\nline3", 10, 1000);
+        assert!(!out.was_truncated);
+        assert_eq!(out.total_lines, 3);
+        assert_eq!(out.output_lines, 3);
+        assert_eq!(out.text, "line1\nline2\nline3");
+    }
+
+    #[test]
+    fn truncate_output_by_lines() {
+        let content = (0..100).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
+        let out = truncate_tool_output(&content, 5, 100_000);
+        assert!(out.was_truncated);
+        assert_eq!(out.total_lines, 100);
+        assert_eq!(out.output_lines, 5);
+        // Should keep the LAST 5 lines
+        assert!(out.text.contains("line99"));
+        assert!(out.text.contains("line95"));
+        assert!(!out.text.contains("line0"));
+    }
+
+    #[test]
+    fn truncate_output_by_bytes() {
+        let content = (0..100).map(|i| format!("line{i:03}")).collect::<Vec<_>>().join("\n");
+        let out = truncate_tool_output(&content, 1000, 50);
+        assert!(out.was_truncated);
+        // Should have truncated to fit under 50 bytes
+        assert!(out.text.len() <= 50);
+    }
+
+    // ── truncate_tool_output_head ─────────────────────────────────────
+
+    #[test]
+    fn truncate_head_no_truncation() {
+        let out = truncate_tool_output_head("a\nb\nc", 10, 1000);
+        assert!(!out.was_truncated);
+        assert_eq!(out.text, "a\nb\nc");
+    }
+
+    #[test]
+    fn truncate_head_by_lines() {
+        let content = (0..100).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
+        let out = truncate_tool_output_head(&content, 5, 100_000);
+        assert!(out.was_truncated);
+        assert_eq!(out.output_lines, 5);
+        // Should keep the FIRST 5 lines
+        assert!(out.text.contains("line0"));
+        assert!(out.text.contains("line4"));
+        assert!(!out.text.contains("line99"));
+    }
+
+    #[test]
+    fn truncate_head_by_bytes() {
+        let content = (0..100).map(|i| format!("line{i:03}")).collect::<Vec<_>>().join("\n");
+        let out = truncate_tool_output_head(&content, 1000, 50);
+        assert!(out.was_truncated);
+        assert!(out.text.len() <= 50);
+        assert!(out.text.starts_with("line000"));
+    }
+
+    // ── resolve_tool_path ─────────────────────────────────────────────
+
+    #[test]
+    fn resolve_absolute_path() {
+        let p = resolve_tool_path("/tmp/test.txt");
+        assert_eq!(p, std::path::PathBuf::from("/tmp/test.txt"));
+    }
+
+    #[test]
+    fn resolve_tilde() {
+        let p = resolve_tool_path("~");
+        assert!(p.is_absolute());
+        // Should be the home directory
+        assert_eq!(p, dirs::home_dir().unwrap());
+    }
+
+    #[test]
+    fn resolve_tilde_slash() {
+        let p = resolve_tool_path("~/Documents/file.txt");
+        assert!(p.is_absolute());
+        assert!(p.ends_with("Documents/file.txt"));
+    }
+
+    #[test]
+    fn resolve_relative_path() {
+        let p = resolve_tool_path("some/relative/path");
+        assert!(p.is_absolute()); // Should be resolved to absolute via home
+    }
+
+    // ── check_bash_safety ─────────────────────────────────────────────
+
+    #[test]
+    fn bash_safety_safe_command() {
+        assert!(check_bash_safety("ls -la").is_none());
+        assert!(check_bash_safety("echo hello").is_none());
+        assert!(check_bash_safety("cat file.txt").is_none());
+        assert!(check_bash_safety("grep pattern file").is_none());
+    }
+
+    #[test]
+    fn bash_safety_dangerous_rm() {
+        assert!(check_bash_safety("rm -rf /").is_some());
+        assert!(check_bash_safety("rm file.txt").is_some());
+    }
+
+    #[test]
+    fn bash_safety_dangerous_sudo() {
+        assert!(check_bash_safety("sudo apt install").is_some());
+    }
+
+    #[test]
+    fn bash_safety_dangerous_dd() {
+        assert!(check_bash_safety("dd if=/dev/zero of=/dev/sda").is_some());
+    }
+
+    #[test]
+    fn bash_safety_dangerous_shutdown() {
+        assert!(check_bash_safety("shutdown -h now").is_some());
+        assert!(check_bash_safety("reboot").is_some());
+    }
+
+    #[test]
+    fn bash_safety_case_insensitive() {
+        assert!(check_bash_safety("SUDO apt install").is_some());
+        assert!(check_bash_safety("Rm -rf /").is_some());
+    }
+
+    // ── check_path_safety ─────────────────────────────────────────────
+
+    #[test]
+    fn path_safety_safe() {
+        assert!(check_path_safety(std::path::Path::new("/home/user/file.txt")).is_none());
+        assert!(check_path_safety(std::path::Path::new("/tmp/test")).is_none());
+    }
+
+    #[test]
+    fn path_safety_sensitive() {
+        assert!(check_path_safety(std::path::Path::new("/etc/passwd")).is_some());
+        assert!(check_path_safety(std::path::Path::new("/boot/vmlinuz")).is_some());
+        assert!(check_path_safety(std::path::Path::new("/usr/bin/ls")).is_some());
+        assert!(check_path_safety(std::path::Path::new("/sys/class")).is_some());
+    }
+
+    // ── format_utc_offset ─────────────────────────────────────────────
+
+    #[test]
+    fn utc_offset_positive() {
+        assert_eq!(format_utc_offset(3600), "+01:00");
+        assert_eq!(format_utc_offset(19800), "+05:30"); // India
+    }
+
+    #[test]
+    fn utc_offset_negative() {
+        assert_eq!(format_utc_offset(-18000), "-05:00"); // EST
+        assert_eq!(format_utc_offset(-28800), "-08:00"); // PST
+    }
+
+    #[test]
+    fn utc_offset_zero() {
+        assert_eq!(format_utc_offset(0), "+00:00");
+    }
+}

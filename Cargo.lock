@@ -10287,6 +10287,7 @@ dependencies = [
  "skill-commands",
  "skill-constants",
  "skill-data",
+ "tempfile",
 ]
 
 [[package]]

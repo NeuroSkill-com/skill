@@ -507,3 +507,146 @@ pub fn search_by_eeg_vec(
        })
        .collect()
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn label_index_state_new_is_empty() {
+        let s = LabelIndexState::new();
+        assert!(s.text.lock().unwrap().is_none());
+        assert!(s.context.lock().unwrap().is_none());
+        assert!(s.eeg.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn fresh_index_is_empty() {
+        let idx = fresh_index();
+        let results = idx.search(&vec![0.0f32; 10], 5, HNSW_EF);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn load_from_empty_dir() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+        state.load(dir.path());
+        // load_or_fresh always creates a fresh index even without files
+        assert!(state.text.lock().unwrap().is_some());
+        assert!(state.context.lock().unwrap().is_some());
+        assert!(state.eeg.lock().unwrap().is_some());
+    }
+
+    fn create_labels_db(dir: &std::path::Path) -> rusqlite::Connection {
+        let db_path = dir.join(LABELS_FILE);
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS labels (
+                id INTEGER PRIMARY KEY,
+                eeg_start INTEGER, eeg_end INTEGER,
+                wall_start INTEGER, wall_end INTEGER,
+                text TEXT, context TEXT, created_at INTEGER,
+                text_embedding BLOB, context_embedding BLOB,
+                embedding_model TEXT
+            );"
+        ).unwrap();
+        conn
+    }
+
+    #[test]
+    fn rebuild_empty_dir() {
+        let dir = tempdir().unwrap();
+        create_labels_db(dir.path());
+
+        let state = LabelIndexState::new();
+        let stats = rebuild(dir.path(), &state);
+        assert_eq!(stats.text_nodes, 0);
+        assert_eq!(stats.eeg_nodes, 0);
+    }
+
+    #[test]
+    fn insert_and_search_text() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+
+        // Initialize with a fresh index
+        *state.text.lock().unwrap() = Some(fresh_index());
+
+        // Create labels.sqlite for hydration
+        let conn = create_labels_db(dir.path());
+        conn.execute(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at)
+             VALUES (42, 100, 200, 100, 200, 'test label', '', 1000)",
+            [],
+        ).unwrap();
+
+        let dim = 8;
+        let embedding = vec![1.0f32; dim];
+        insert_label(
+            dir.path(),
+            42,
+            &embedding,
+            &[],
+            100, 200,
+            &state,
+        );
+
+        // Search
+        let results = search_by_text_vec(&embedding, 5, HNSW_EF, dir.path(), &state);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].label_id, 42);
+        assert_eq!(results[0].text, "test label");
+        assert!(results[0].distance < 0.01);
+    }
+
+    #[test]
+    fn search_empty_index_returns_empty() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+        *state.text.lock().unwrap() = Some(fresh_index());
+
+        let query = vec![1.0f32; 8];
+        let results = search_by_text_vec(&query, 5, HNSW_EF, dir.path(), &state);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn mean_eeg_for_window_empty_dir() {
+        let dir = tempdir().unwrap();
+        let result = mean_eeg_for_window(dir.path(), 0, 100);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn multiple_inserts_and_knn() {
+        let dir = tempdir().unwrap();
+        let state = LabelIndexState::new();
+        *state.text.lock().unwrap() = Some(fresh_index());
+
+        // Create labels DB
+        let conn = create_labels_db(dir.path());
+        conn.execute_batch(
+            "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at) VALUES
+             (1, 100, 200, 100, 200, 'alpha', '', 1000),
+             (2, 200, 300, 200, 300, 'beta', '', 2000),
+             (3, 300, 400, 300, 400, 'gamma', '', 3000);"
+        ).unwrap();
+
+        // Insert 3 labels with different embeddings
+        insert_label(dir.path(), 1, &[1.0, 0.0, 0.0, 0.0], &[], 100, 200, &state);
+        insert_label(dir.path(), 2, &[0.9, 0.1, 0.0, 0.0], &[], 200, 300, &state);
+        insert_label(dir.path(), 3, &[0.0, 0.0, 1.0, 0.0], &[], 300, 400, &state);
+
+        // Query close to label 1 and 2
+        let results = search_by_text_vec(&[1.0, 0.0, 0.0, 0.0], 3, HNSW_EF, dir.path(), &state);
+        assert_eq!(results.len(), 3);
+        // Closest should be label 1 (exact match)
+        assert_eq!(results[0].label_id, 1);
+        assert!(results[0].distance < 0.01);
+        // Label 2 should be next (cosine-close)
+        assert_eq!(results[1].label_id, 2);
+    }
+}
