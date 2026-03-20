@@ -6751,10 +6751,31 @@
     },
     {
       "repo": "byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF",
+      "filename": "Qwen3-30B-A3B-Instruct-2507-Q3_K_S-2.66bpw.gguf",
+      "quant": "Q3_K_S",
+      "size_gb": 10.18,
+      "description": "Ultra-small — lowest quality, fits 16 GB VRAM",
+      "family_id": "qwen3-30b-a3b-instruct",
+      "family_name": "Qwen3 30B-A3B Instruct",
+      "family_desc": "Qwen3 MoE model — 30B total / 3B active parameters. Fast inference with strong reasoning. MoE architecture provides high quality at low active compute cost.",
+      "tags": [
+        "chat",
+        "reasoning",
+        "moe",
+        "large"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 30.0,
+      "max_context_length": 131072
+    },
+    {
+      "repo": "byteshape/Qwen3-30B-A3B-Instruct-2507-GGUF",
       "filename": "Qwen3-30B-A3B-Instruct-2507-Q3_K_S-2.70bpw.gguf",
       "quant": "Q3_K_S",
       "size_gb": 10.3,
-      "description": "Smallest — fits 16 GB VRAM",
+      "description": "Small — fits 16 GB VRAM",
       "family_id": "qwen3-30b-a3b-instruct",
       "family_name": "Qwen3 30B-A3B Instruct",
       "family_desc": "Qwen3 MoE model — 30B total / 3B active parameters. Fast inference with strong reasoning. MoE architecture provides high quality at low active compute cost.",
