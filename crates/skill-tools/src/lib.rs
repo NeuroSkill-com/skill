@@ -42,7 +42,7 @@ pub use types::{LlmToolConfig, ToolExecutionMode, ToolContextCompression, Compre
 pub use parse::{
     Tool, ToolFunction, ToolCall, ToolCallFunction,
     ChatMessage, MessageContent, ContentPart, ImageUrl,
-    validate_tool_arguments,
+    validate_tool_arguments, coerce_tool_call_arguments,
     inject_tools_into_system_prompt,
     extract_tool_calls,
     strip_tool_call_blocks, strip_tool_call_blocks_preserve,

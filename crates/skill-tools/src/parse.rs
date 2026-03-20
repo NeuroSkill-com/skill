@@ -22,19 +22,26 @@ use skill_constants::{TOOL_CALL_START, TOOL_CALL_END};
 /// Returns the (potentially coerced) arguments value, or an `Err` with a
 /// human-readable validation error message.
 ///
-/// Modelled after pi-mono's `validateToolArguments` which uses AJV against
-/// TypeBox schemas.  Here we use the `jsonschema` crate for Rust.
+/// Before validation the arguments are **coerced** to match the schema types.
+/// Different LLM backends (Llama, Qwen, Mistral, Gemma, DeepSeek, …) emit
+/// arguments in subtly different formats — e.g. `"true"` instead of `true`,
+/// `"3"` instead of `3`, or a bare string instead of an object.  The coercion
+/// step normalises these so the downstream validation and execution always see
+/// correct types.
 pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> Result<Value, String> {
     let Some(ref schema) = tool.function.parameters else {
         // No schema defined — accept any arguments.
         return Ok(args.clone());
     };
 
+    // Coerce arguments to match schema-declared types.
+    let coerced = coerce_value(args, schema);
+
     let compiled = jsonschema::validator_for(schema)
         .map_err(|e| format!("Invalid tool schema for \"{}\": {e}", tool.function.name))?;
 
     let errors: Vec<String> = compiled
-        .iter_errors(args)
+        .iter_errors(&coerced)
         .map(|err| {
             let path_str = err.instance_path.to_string();
             let path = if path_str.is_empty() {
@@ -51,11 +58,236 @@ pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> Result<Value, Strin
             "Validation failed for tool \"{}\":\n{}\n\nReceived arguments:\n{}",
             tool.function.name,
             errors.join("\n"),
-            serde_json::to_string_pretty(args).unwrap_or_default()
+            serde_json::to_string_pretty(&coerced).unwrap_or_default()
         ));
     }
 
-    Ok(args.clone())
+    Ok(coerced)
+}
+
+// ── Schema-driven type coercion ───────────────────────────────────────────────
+
+/// Recursively coerce `value` to match the types declared in `schema`.
+///
+/// Handles the most common multi-model mismatches:
+///  - `"true"` / `"false"` → `bool`    (when schema says `"type": "boolean"`)
+///  - `"123"` / `"3.14"`  → `number`   (when schema says `"type": "number"` / `"integer"`)
+///  - `42`                → `"42"`      (when schema says `"type": "string"`)
+///  - `"null"` / `""`     → `null`     (when schema says `"type": "null"` or field is nullable)
+///  - string-encoded JSON → parsed     (when schema expects object/array and value is a string)
+///  - object properties   → recurse    (each property coerced against its own sub-schema)
+///  - `null` for missing optional fields is passed through unchanged
+fn coerce_value(value: &Value, schema: &Value) -> Value {
+    // If schema is a boolean schema (`true` = accept all, `false` = reject all)
+    // or not an object, return value as-is.
+    let Some(schema_obj) = schema.as_object() else {
+        return value.clone();
+    };
+
+    // Resolve the target type(s) declared by the schema.
+    let target_types = schema_type_set(schema_obj);
+
+    // Handle `oneOf` / `anyOf` — try each sub-schema and pick the first that
+    // succeeds validation after coercion.
+    for key in &["oneOf", "anyOf"] {
+        if let Some(arr) = schema_obj.get(*key).and_then(|v| v.as_array()) {
+            for sub in arr {
+                let coerced = coerce_value(value, sub);
+                if let Ok(compiled) = jsonschema::validator_for(sub) {
+                    if compiled.iter_errors(&coerced).next().is_none() {
+                        return coerced;
+                    }
+                }
+            }
+        }
+    }
+
+    // Object coercion: recurse into properties.
+    if target_types.contains(&"object") || (target_types.is_empty() && value.is_object()) {
+        // If the value is a string that looks like JSON, try to parse it first.
+        if let Some(s) = value.as_str() {
+            let trimmed = s.trim();
+            if trimmed.starts_with('{') {
+                if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
+                    return coerce_value(&parsed, schema);
+                }
+            }
+        }
+
+        if let Some(obj) = value.as_object() {
+            let props = schema_obj.get("properties").and_then(|p| p.as_object());
+            let mut out = serde_json::Map::new();
+            for (k, v) in obj {
+                if let Some(prop_schema) = props.and_then(|p| p.get(k)) {
+                    out.insert(k.clone(), coerce_value(v, prop_schema));
+                } else {
+                    out.insert(k.clone(), v.clone());
+                }
+            }
+            return Value::Object(out);
+        }
+    }
+
+    // Array coercion: if schema expects array and value is a JSON-encoded string.
+    if target_types.contains(&"array") {
+        if let Some(s) = value.as_str() {
+            let trimmed = s.trim();
+            if trimmed.starts_with('[') {
+                if let Ok(parsed) = serde_json::from_str::<Value>(trimmed) {
+                    if parsed.is_array() {
+                        let items_schema = schema_obj.get("items").cloned()
+                            .unwrap_or(Value::Bool(true));
+                        if let Some(arr) = parsed.as_array() {
+                            let coerced: Vec<Value> = arr.iter()
+                                .map(|item| coerce_value(item, &items_schema))
+                                .collect();
+                            return Value::Array(coerced);
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(arr) = value.as_array() {
+            let items_schema = schema_obj.get("items").cloned()
+                .unwrap_or(Value::Bool(true));
+            let coerced: Vec<Value> = arr.iter()
+                .map(|item| coerce_value(item, &items_schema))
+                .collect();
+            return Value::Array(coerced);
+        }
+    }
+
+    // Scalar coercion based on target type.
+    if target_types.contains(&"boolean") {
+        if let Some(b) = coerce_to_bool(value) {
+            return Value::Bool(b);
+        }
+    }
+
+    if target_types.contains(&"number") || target_types.contains(&"integer") {
+        if let Some(n) = coerce_to_number(value, target_types.contains(&"integer")) {
+            return n;
+        }
+    }
+
+    if target_types.contains(&"string") {
+        if let Some(s) = coerce_to_string(value) {
+            return Value::String(s);
+        }
+    }
+
+    if target_types.contains(&"null") {
+        if let Some(s) = value.as_str() {
+            let lower = s.trim().to_ascii_lowercase();
+            if lower == "null" || lower.is_empty() {
+                return Value::Null;
+            }
+        }
+    }
+
+    // No coercion applicable — return as-is.
+    value.clone()
+}
+
+/// Extract the set of type names from a schema object.
+/// Handles `"type": "string"` and `"type": ["string", "null"]`.
+fn schema_type_set(schema: &serde_json::Map<String, Value>) -> Vec<&str> {
+    match schema.get("type") {
+        Some(Value::String(s)) => vec![s.as_str()],
+        Some(Value::Array(arr)) => arr.iter().filter_map(|v| v.as_str()).collect(),
+        _ => vec![],
+    }
+}
+
+/// Try to coerce a value to a boolean.
+fn coerce_to_bool(value: &Value) -> Option<bool> {
+    match value {
+        Value::Bool(b) => Some(*b),
+        Value::String(s) => match s.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => Some(true),
+            "false" | "0" | "no" | "off" => Some(false),
+            _ => None,
+        },
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Some(i != 0)
+            } else if let Some(f) = n.as_f64() {
+                Some(f != 0.0)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
+/// Try to coerce a value to a JSON number.
+fn coerce_to_number(value: &Value, integer_only: bool) -> Option<Value> {
+    match value {
+        Value::Number(_) => {
+            if integer_only {
+                // Coerce float to integer if schema requires it.
+                if let Some(f) = value.as_f64() {
+                    if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
+                        return Some(Value::Number(serde_json::Number::from(f as i64)));
+                    }
+                }
+            }
+            Some(value.clone())
+        }
+        Value::String(s) => {
+            let trimmed = s.trim();
+            if integer_only {
+                if let Ok(i) = trimmed.parse::<i64>() {
+                    return Some(Value::Number(serde_json::Number::from(i)));
+                }
+            }
+            if let Ok(f) = trimmed.parse::<f64>() {
+                if integer_only && f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
+                    return Some(Value::Number(serde_json::Number::from(f as i64)));
+                }
+                serde_json::Number::from_f64(f).map(Value::Number)
+            } else {
+                None
+            }
+        }
+        Value::Bool(b) => Some(Value::Number(serde_json::Number::from(if *b { 1 } else { 0 }))),
+        _ => None,
+    }
+}
+
+/// Try to coerce a value to a string.
+fn coerce_to_string(value: &Value) -> Option<String> {
+    match value {
+        Value::String(_) => None, // Already correct type.
+        Value::Number(n) => Some(n.to_string()),
+        Value::Bool(b) => Some(b.to_string()),
+        Value::Null => Some(String::new()),
+        // Don't coerce objects/arrays to strings — that's almost certainly wrong.
+        _ => None,
+    }
+}
+
+/// Coerce a [`ToolCall`]'s arguments string in-place against a matching tool
+/// definition.  This is useful in the execution layer to normalise arguments
+/// *before* they are parsed into typed structs.
+///
+/// Returns the coerced arguments as a parsed [`Value`].
+pub fn coerce_tool_call_arguments(call: &mut ToolCall, tools: &[Tool]) -> Value {
+    let args: Value = serde_json::from_str(&call.function.arguments)
+        .unwrap_or_else(|_| serde_json::json!({}));
+
+    let tool = tools.iter().find(|t| t.function.name == call.function.name);
+    let Some(tool) = tool else {
+        return args;
+    };
+    let Some(ref schema) = tool.function.parameters else {
+        return args;
+    };
+
+    let coerced = coerce_value(&args, schema);
+    call.function.arguments = coerced.to_string();
+    coerced
 }
 
 /// Built-in tool names used for dict-style multi-tool recognition:
@@ -1232,7 +1464,8 @@ Done."#;
     }
 
     #[test]
-    fn validate_tool_args_wrong_type() {
+    fn validate_tool_args_wrong_type_coerced() {
+        // With coercion, a number value for a string field is auto-converted.
         let tool = Tool {
             tool_type: "function".into(),
             function: ToolFunction {
@@ -1248,6 +1481,30 @@ Done."#;
             },
         };
         let args = serde_json::json!({"query": 123});
+        let result = validate_tool_arguments(&tool, &args);
+        assert!(result.is_ok(), "number should be coerced to string");
+        assert_eq!(result.unwrap()["query"], Value::String("123".into()));
+    }
+
+    #[test]
+    fn validate_tool_args_truly_wrong_type() {
+        // An array value for a string field cannot be coerced — should fail.
+        let tool = Tool {
+            tool_type: "function".into(),
+            function: ToolFunction {
+                name: "web_search".into(),
+                description: None,
+                parameters: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string" }
+                    },
+                    "required": ["query"],
+                    "additionalProperties": false
+                })),
+            },
+        };
+        let args = serde_json::json!({"query": [1, 2, 3]});
         let result = validate_tool_arguments(&tool, &args);
         assert!(result.is_err());
     }
@@ -1526,5 +1783,193 @@ Your device is connected with 89% battery."#;
             "tool call should produce no visible output, got: {:?}",
             all_visible,
         );
+    }
+
+    // ── Argument coercion tests ───────────────────────────────────────────
+
+    fn make_web_search_tool() -> Tool {
+        Tool {
+            tool_type: "function".into(),
+            function: ToolFunction {
+                name: "web_search".into(),
+                description: Some("Search the web".into()),
+                parameters: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query":        { "type": "string" },
+                        "render":       { "type": "boolean" },
+                        "render_count": { "type": "number" }
+                    },
+                    "required": ["query"],
+                    "additionalProperties": false
+                })),
+            },
+        }
+    }
+
+    fn make_read_file_tool() -> Tool {
+        Tool {
+            tool_type: "function".into(),
+            function: ToolFunction {
+                name: "read_file".into(),
+                description: Some("Read a file".into()),
+                parameters: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path":   { "type": "string" },
+                        "offset": { "type": "integer" },
+                        "limit":  { "type": "integer" }
+                    },
+                    "required": ["path"],
+                    "additionalProperties": false
+                })),
+            },
+        }
+    }
+
+    #[test]
+    fn coerce_string_true_to_bool() {
+        let tool = make_web_search_tool();
+        let args = serde_json::json!({"query": "weather", "render": "true"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["render"], Value::Bool(true));
+    }
+
+    #[test]
+    fn coerce_string_false_to_bool() {
+        let tool = make_web_search_tool();
+        let args = serde_json::json!({"query": "test", "render": "false"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["render"], Value::Bool(false));
+    }
+
+    #[test]
+    fn coerce_string_number_to_number() {
+        let tool = make_web_search_tool();
+        let args = serde_json::json!({"query": "test", "render_count": "3"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["render_count"], serde_json::json!(3.0));
+    }
+
+    #[test]
+    fn coerce_string_integer_to_integer() {
+        let tool = make_read_file_tool();
+        let args = serde_json::json!({"path": "foo.txt", "offset": "10", "limit": "50"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["offset"], serde_json::json!(10));
+        assert_eq!(result["limit"], serde_json::json!(50));
+    }
+
+    #[test]
+    fn coerce_number_to_string() {
+        let tool = make_read_file_tool();
+        let args = serde_json::json!({"path": 42});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["path"], Value::String("42".into()));
+    }
+
+    #[test]
+    fn coerce_bool_number_1_to_true() {
+        let tool = make_web_search_tool();
+        let args = serde_json::json!({"query": "test", "render": 1});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["render"], Value::Bool(true));
+    }
+
+    #[test]
+    fn coerce_bool_number_0_to_false() {
+        let tool = make_web_search_tool();
+        let args = serde_json::json!({"query": "test", "render": 0});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["render"], Value::Bool(false));
+    }
+
+    #[test]
+    fn coerce_string_yes_to_bool() {
+        let tool = make_web_search_tool();
+        let args = serde_json::json!({"query": "test", "render": "yes"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["render"], Value::Bool(true));
+    }
+
+    #[test]
+    fn coerce_no_schema_passthrough() {
+        let tool = Tool {
+            tool_type: "function".into(),
+            function: ToolFunction {
+                name: "date".into(),
+                description: Some("Get date".into()),
+                parameters: None,
+            },
+        };
+        let args = serde_json::json!({"anything": "true"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        // No coercion when there's no schema — value passes through.
+        assert_eq!(result["anything"], Value::String("true".into()));
+    }
+
+    #[test]
+    fn coerce_string_encoded_object() {
+        // Some models send arguments as a JSON-encoded string inside the args object.
+        let tool = Tool {
+            tool_type: "function".into(),
+            function: ToolFunction {
+                name: "test".into(),
+                description: None,
+                parameters: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "data": {
+                            "type": "object",
+                            "properties": {
+                                "key": { "type": "string" }
+                            }
+                        }
+                    }
+                })),
+            },
+        };
+        let args = serde_json::json!({"data": "{\"key\": \"value\"}"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["data"]["key"], Value::String("value".into()));
+    }
+
+    #[test]
+    fn coerce_multiple_fields_simultaneously() {
+        let tool = make_web_search_tool();
+        // Model sends all wrong types: bool as string, number as string.
+        let args = serde_json::json!({"query": "weather", "render": "true", "render_count": "5"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["render"], Value::Bool(true));
+        assert_eq!(result["render_count"], serde_json::json!(5.0));
+        assert_eq!(result["query"], Value::String("weather".into()));
+    }
+
+    #[test]
+    fn coerce_already_correct_types_unchanged() {
+        let tool = make_web_search_tool();
+        let args = serde_json::json!({"query": "test", "render": true, "render_count": 3});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["query"], Value::String("test".into()));
+        assert_eq!(result["render"], Value::Bool(true));
+        assert_eq!(result["render_count"], serde_json::json!(3));
+    }
+
+    #[test]
+    fn coerce_tool_call_arguments_fn() {
+        let tools = vec![make_web_search_tool()];
+        let mut call = ToolCall {
+            id: "call_0".into(),
+            call_type: "function".into(),
+            function: ToolCallFunction {
+                name: "web_search".into(),
+                arguments: r#"{"query":"test","render":"true","render_count":"3"}"#.into(),
+            },
+        };
+        let coerced = coerce_tool_call_arguments(&mut call, &tools);
+        assert_eq!(coerced["render"], Value::Bool(true));
+        // Verify the arguments string was updated.
+        let re_parsed: Value = serde_json::from_str(&call.function.arguments).unwrap();
+        assert_eq!(re_parsed["render"], Value::Bool(true));
     }
 }
