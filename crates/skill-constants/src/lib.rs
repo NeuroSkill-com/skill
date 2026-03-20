@@ -366,7 +366,7 @@ pub const EMBEDDING_EPOCH_SAMPLES: usize =
     (MUSE_SAMPLE_RATE as usize) * (EMBEDDING_EPOCH_SECS as usize);
 
 /// Default overlap between consecutive embedding epochs (seconds).
-pub const EMBEDDING_OVERLAP_SECS: f32 = 2.5;
+pub const EMBEDDING_OVERLAP_SECS: f32 = 0.0;
 
 /// Minimum configurable overlap (seconds).
 pub const EMBEDDING_OVERLAP_MIN_SECS: f32 = 0.0;
