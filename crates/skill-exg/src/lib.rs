@@ -190,13 +190,25 @@ pub fn download_hf_weights(
     cancel:             &Arc<AtomicBool>,
     mark_needs_restart: bool,
 ) -> Option<(PathBuf, PathBuf)> {
+    download_hf_weights_files(hf_repo, ZUNA_WEIGHTS_FILE, ZUNA_CONFIG_FILE, status, cancel, mark_needs_restart)
+}
+
+/// Generic download: fetches `weights_file` and `config_file` from `hf_repo`.
+pub fn download_hf_weights_files(
+    hf_repo:            &str,
+    weights_file:       &str,
+    config_file:        &str,
+    status:             &Arc<Mutex<EegModelStatus>>,
+    cancel:             &Arc<AtomicBool>,
+    mark_needs_restart: bool,
+) -> Option<(PathBuf, PathBuf)> {
     use hf_hub::api::sync::Api;
     use std::io::{Read, Write};
     use std::sync::atomic::Ordering;
 
     const ENDPOINT: &str = "https://huggingface.co";
 
-    eprintln!("[embedder] ZUNA weights not in cache — downloading from HuggingFace: {hf_repo}");
+    eprintln!("[embedder] weights not in cache — downloading from HuggingFace: {hf_repo}/{weights_file}");
 
     {
         let mut st = status.lock_or_recover();
@@ -221,16 +233,16 @@ pub fn download_hf_weights(
 
     {
         let mut st = status.lock_or_recover();
-        st.download_status_msg = Some(format!("Downloading {ZUNA_CONFIG_FILE}…"));
+        st.download_status_msg = Some(format!("Downloading {config_file}…"));
     }
-    let config_path = match repo.get(ZUNA_CONFIG_FILE) {
-        Ok(p)  => { eprintln!("[embedder] ✓ {ZUNA_CONFIG_FILE} → {}", p.display()); p }
+    let config_path = match repo.get(config_file) {
+        Ok(p)  => { eprintln!("[embedder] ✓ {config_file} → {}", p.display()); p }
         Err(e) => {
-            eprintln!("[embedder] failed to download {ZUNA_CONFIG_FILE}: {e}");
+            eprintln!("[embedder] failed to download {config_file}: {e}");
             let mut st = status.lock_or_recover();
             st.downloading_weights = false;
             st.download_progress   = 0.0;
-            st.download_status_msg = Some(format!("Download failed ({ZUNA_CONFIG_FILE}): {e}"));
+            st.download_status_msg = Some(format!("Download failed ({config_file}): {e}"));
             return None;
         }
     };
@@ -257,7 +269,7 @@ pub fn download_hf_weights(
 
     {
         let mut st = status.lock_or_recover();
-        st.download_status_msg = Some(format!("Fetching metadata for {ZUNA_WEIGHTS_FILE}…"));
+        st.download_status_msg = Some(format!("Fetching metadata for {weights_file}…"));
     }
 
     let hf_token = std::env::var("HF_TOKEN").ok()
@@ -312,7 +324,7 @@ pub fn download_hf_weights(
 
     let file_meta = info["siblings"]
         .as_array()
-        .and_then(|s| s.iter().find(|e| e["rfilename"].as_str() == Some(ZUNA_WEIGHTS_FILE)));
+        .and_then(|s| s.iter().find(|e| e["rfilename"].as_str() == Some(weights_file)));
 
     let (blob_sha, remote_size) = match file_meta {
         Some(m) => {
@@ -323,18 +335,18 @@ pub fn download_hf_weights(
             match (sha, size) {
                 (Some(s), Some(n)) => (s, n),
                 _ => {
-                    eprintln!("[embedder] LFS metadata missing for {ZUNA_WEIGHTS_FILE}, falling back to hf_hub");
+                    eprintln!("[embedder] LFS metadata missing for {weights_file}, falling back to hf_hub");
                     {
                         let mut st = status.lock_or_recover();
-                        st.download_status_msg = Some(format!("Downloading {ZUNA_WEIGHTS_FILE}…"));
+                        st.download_status_msg = Some(format!("Downloading {weights_file}…"));
                     }
-                    let weights_path = match repo.get(ZUNA_WEIGHTS_FILE) {
+                    let weights_path = match repo.get(weights_file) {
                         Ok(p)  => p,
                         Err(e) => {
                             let mut st = status.lock_or_recover();
                             st.downloading_weights = false;
                             st.download_progress   = 0.0;
-                            st.download_status_msg = Some(format!("Download failed ({ZUNA_WEIGHTS_FILE}): {e}"));
+                            st.download_status_msg = Some(format!("Download failed ({weights_file}): {e}"));
                             return None;
                         }
                     };
@@ -354,7 +366,7 @@ pub fn download_hf_weights(
             st.downloading_weights = false;
             st.download_progress   = 0.0;
             st.download_status_msg = Some(
-                format!("{ZUNA_WEIGHTS_FILE}: not listed in {hf_repo} manifest")
+                format!("{weights_file}: not listed in {hf_repo} manifest")
             );
             return None;
         }
@@ -364,9 +376,9 @@ pub fn download_hf_weights(
     let incomplete_path = blobs_dir.join(format!("{blob_sha}.incomplete"));
 
     if blob_path.exists() && blob_path.metadata().map(|m| m.len()).unwrap_or(0) >= remote_size {
-        eprintln!("[embedder] ✓ {ZUNA_WEIGHTS_FILE} already in blob cache");
+        eprintln!("[embedder] ✓ {weights_file} already in blob cache");
         let weights_path = match register_hf_snapshot(
-            &model_dir, &refs_dir, &commit_sha, ZUNA_WEIGHTS_FILE, &blob_path,
+            &model_dir, &refs_dir, &commit_sha, weights_file, &blob_path,
         ) {
             Ok(p)  => p,
             Err(e) => {
@@ -393,14 +405,14 @@ pub fn download_hf_weights(
         let mut st = status.lock_or_recover();
         st.download_progress = (resume_from as f32 / remote_size.max(1) as f32).min(0.99);
         st.download_status_msg = Some(if resume_from > 0 {
-            format!("Resuming {ZUNA_WEIGHTS_FILE} from {:.0} / {:.0} MB…",
+            format!("Resuming {weights_file} from {:.0} / {:.0} MB…",
                 resume_from as f64 / 1_048_576.0, remote_size as f64 / 1_048_576.0)
         } else {
-            format!("Downloading {ZUNA_WEIGHTS_FILE} ({:.0} MB)…", remote_size as f64 / 1_048_576.0)
+            format!("Downloading {weights_file} ({:.0} MB)…", remote_size as f64 / 1_048_576.0)
         });
     }
 
-    let file_url = format!("{ENDPOINT}/{hf_repo}/resolve/main/{ZUNA_WEIGHTS_FILE}");
+    let file_url = format!("{ENDPOINT}/{hf_repo}/resolve/main/{weights_file}");
     let mut get  = auth(dl_agent.get(&file_url)).set("User-Agent", "skill-app/1.0");
     if resume_from > 0 {
         get = get.set("Range", &format!("bytes={resume_from}-"));
@@ -409,7 +421,7 @@ pub fn download_hf_weights(
     let resp = match get.call() {
         Ok(r)  => r,
         Err(e) => {
-            eprintln!("[embedder] HTTP error downloading {ZUNA_WEIGHTS_FILE}: {e}");
+            eprintln!("[embedder] HTTP error downloading {weights_file}: {e}");
             let mut st = status.lock_or_recover();
             st.downloading_weights = false;
             st.download_progress   = 0.0;
@@ -504,7 +516,7 @@ pub fn download_hf_weights(
     }
 
     let weights_path = match register_hf_snapshot(
-        &model_dir, &refs_dir, &commit_sha, ZUNA_WEIGHTS_FILE, &blob_path,
+        &model_dir, &refs_dir, &commit_sha, weights_file, &blob_path,
     ) {
         Ok(p)  => p,
         Err(e) => {
@@ -526,7 +538,7 @@ pub fn download_hf_weights(
         st.weights_path           = Some(weights_path.display().to_string());
         st.download_needs_restart = mark_needs_restart;
     }
-    eprintln!("[embedder] ZUNA weights downloaded successfully → {}", weights_path.display());
+    eprintln!("[embedder] weights downloaded successfully → {}", weights_path.display());
     Some((weights_path, config_path))
 }
 
@@ -537,10 +549,10 @@ pub fn download_hf_weights(
 ///
 /// Must be called **before** the first `WgpuDevice` access.
 pub fn configure_cubecl_cache(skill_dir: &Path) {
-    use std::sync::Once;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use cubecl_runtime::config::{cache::CacheConfig, GlobalConfig};
 
-    static CUBECL_INIT: Once = Once::new();
+    static CUBECL_CONFIGURED: AtomicBool = AtomicBool::new(false);
 
     let cache_dir = skill_dir.join("cubecl_cache");
     match std::fs::create_dir_all(&cache_dir) {
@@ -548,11 +560,11 @@ pub fn configure_cubecl_cache(skill_dir: &Path) {
         Err(e) => eprintln!("[embedder] warn: cubecl cache mkdir {}: {e}", cache_dir.display()),
     }
 
-    CUBECL_INIT.call_once(|| {
+    if CUBECL_CONFIGURED.compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
         let mut cfg = GlobalConfig::default();
-        cfg.autotune.cache = CacheConfig::File(cache_dir.clone());
+        cfg.autotune.cache = CacheConfig::File(cache_dir);
         GlobalConfig::set(cfg);
-    });
+    }
 }
 
 // ── GPU panic flag ────────────────────────────────────────────────────────────

@@ -224,7 +224,7 @@ pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Ee
     state.lock_or_recover().embedding.model_status.lock_or_recover().clone()
 }
 
-/// Spawn a background thread that downloads ZUNA weights from HuggingFace Hub.
+/// Spawn a background thread that downloads EEG model weights from HuggingFace Hub.
 ///
 /// Resets the cancel flag before starting so a previous cancellation does not
 /// immediately abort the new attempt.  Progress and errors are reflected in
@@ -236,14 +236,28 @@ pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Ee
 #[tauri::command]
 pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     use std::sync::atomic::Ordering;
+    use skill_eeg::eeg_model_config::ExgModelBackend;
 
     let s = state.lock_or_recover();
-    let hf_repo          = s.embedding.model_config.hf_repo.clone();
+    let config           = s.embedding.model_config.clone();
     let model_status     = s.embedding.model_status.clone();
     let cancel           = s.embedding.download_cancel.clone();
     let reload_requested = s.embedding.encoder_reload_requested.clone();
     let logger           = s.logger.clone();
     drop(s); // release AppState lock before spawning
+
+    let (hf_repo, weights_file, config_file) = match config.model_backend {
+        ExgModelBackend::Zuna => (
+            config.hf_repo.clone(),
+            skill_constants::ZUNA_WEIGHTS_FILE.to_string(),
+            skill_constants::ZUNA_CONFIG_FILE.to_string(),
+        ),
+        ExgModelBackend::Luna => (
+            config.luna_hf_repo.clone(),
+            config.luna_weights_file().to_string(),
+            skill_constants::LUNA_CONFIG_FILE.to_string(),
+        ),
+    };
 
     // Clear any previous cancellation so the new attempt actually runs.
     cancel.store(false, Ordering::Relaxed);
@@ -253,7 +267,7 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
         .spawn(move || {
             // mark_needs_restart=false: instead of prompting restart we signal
             // the embed worker to reload in-place via encoder_reload_requested.
-            if download_hf_weights(&hf_repo, &model_status, &cancel, false, &logger).is_some() {
+            if download_hf_weights(&hf_repo, &weights_file, &config_file, &model_status, &cancel, false, &logger).is_some() {
                 // Signal the running embed worker (if any) to exit and respawn
                 // so it picks up the freshly downloaded encoder immediately.
                 reload_requested.store(true, Ordering::Relaxed);

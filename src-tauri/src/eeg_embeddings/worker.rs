@@ -426,9 +426,17 @@ pub(super) fn embed_worker(
         }
     };
 
-    let download_repo = match active_backend {
-        ExgModelBackend::Zuna => config.hf_repo.clone(),
-        ExgModelBackend::Luna => config.luna_hf_repo.clone(),
+    let (download_repo, download_weights_file, download_config_file) = match active_backend {
+        ExgModelBackend::Zuna => (
+            config.hf_repo.clone(),
+            skill_constants::ZUNA_WEIGHTS_FILE.to_string(),
+            skill_constants::ZUNA_CONFIG_FILE.to_string(),
+        ),
+        ExgModelBackend::Luna => (
+            config.luna_hf_repo.clone(),
+            config.luna_weights_file().to_string(),
+            skill_constants::LUNA_CONFIG_FILE.to_string(),
+        ),
     };
 
     let weights = resolve_fn().or_else(|| {
@@ -448,7 +456,7 @@ pub(super) fn embed_worker(
                 st.download_retry_in_secs = 0;
             }
 
-            if let Some(w) = download_hf_weights(&download_repo, &status, &cancel, false, &logger) {
+            if let Some(w) = download_hf_weights(&download_repo, &download_weights_file, &download_config_file, &status, &cancel, false, &logger) {
                 let mut st = status.lock_or_recover();
                 st.download_retry_attempt = 0;
                 st.download_retry_in_secs = 0;
@@ -1225,12 +1233,14 @@ fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBuf, P
 ///   encoder immediately after the download returns.
 pub(crate) fn download_hf_weights(
     hf_repo:            &str,
+    weights_file:       &str,
+    config_file:        &str,
     status:             &Arc<Mutex<EegModelStatus>>,
     cancel:             &Arc<std::sync::atomic::AtomicBool>,
     mark_needs_restart: bool,
     _logger:            &Arc<SkillLogger>,
 ) -> Option<(PathBuf, PathBuf)> {
-    // Delegate to skill_exg (logger replaced with eprintln! in the crate).
-    skill_exg::download_hf_weights(hf_repo, status, cancel, mark_needs_restart)
+    // Delegate to skill_exg.
+    skill_exg::download_hf_weights_files(hf_repo, weights_file, config_file, status, cancel, mark_needs_restart)
 }
 
