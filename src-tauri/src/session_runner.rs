@@ -555,46 +555,45 @@ fn run_dnd_tick(app: &AppHandle, snap: &BandSnapshot) {
     let focus_score = skill_devices::focus_score(engage_raw);
     let snr_db = snap.snr;
 
-    // Brief lock: read DND config + state, run pure dnd_tick, write state back.
+    // DND state is behind its own lock — no AppState lock needed.
+    let dnd_arc = app.app_state().lock_or_recover().dnd_arc();
     let d = {
-        let sr = app.app_state();
-        let mut s = sr.lock_or_recover();
+        let mut dnd = dnd_arc.lock_or_recover();
         let cfg = skill_devices::DndConfig {
-            enabled:               s.dnd_config.enabled,
-            focus_threshold:        s.dnd_config.focus_threshold as f64,
-            duration_secs:          s.dnd_config.duration_secs,
-            exit_duration_secs:     s.dnd_config.exit_duration_secs,
-            focus_lookback_secs:    s.dnd_config.focus_lookback_secs,
-            exit_notification:      s.dnd_config.exit_notification,
-            focus_mode_identifier:  s.dnd_config.focus_mode_identifier.clone(),
-            snr_exit_db:            s.dnd_config.snr_exit_db,
+            enabled:               dnd.config.enabled,
+            focus_threshold:        dnd.config.focus_threshold as f64,
+            duration_secs:          dnd.config.duration_secs,
+            exit_duration_secs:     dnd.config.exit_duration_secs,
+            focus_lookback_secs:    dnd.config.focus_lookback_secs,
+            exit_notification:      dnd.config.exit_notification,
+            focus_mode_identifier:  dnd.config.focus_mode_identifier.clone(),
+            snr_exit_db:            dnd.config.snr_exit_db,
         };
         let mut dnd_state = skill_devices::DndState {
-            active:        s.dnd_active,
-            focus_samples: std::mem::take(&mut s.dnd_focus_samples),
-            score_history: std::mem::take(&mut s.dnd_score_history),
-            below_ticks:   s.dnd_below_ticks,
-            snr_low_ticks: s.dnd_snr_low_ticks,
-            os_active:     s.dnd_os_active,
+            active:        dnd.active,
+            focus_samples: std::mem::take(&mut dnd.focus_samples),
+            score_history: std::mem::take(&mut dnd.score_history),
+            below_ticks:   dnd.below_ticks,
+            snr_low_ticks: dnd.snr_low_ticks,
+            os_active:     dnd.os_active,
         };
         let decision = skill_devices::dnd_tick(&cfg, &mut dnd_state, focus_score, snr_db);
-        s.dnd_focus_samples = dnd_state.focus_samples;
-        s.dnd_score_history = dnd_state.score_history;
-        s.dnd_below_ticks   = dnd_state.below_ticks;
-        s.dnd_snr_low_ticks = dnd_state.snr_low_ticks;
+        dnd.focus_samples = dnd_state.focus_samples;
+        dnd.score_history = dnd_state.score_history;
+        dnd.below_ticks   = dnd_state.below_ticks;
+        dnd.snr_low_ticks = dnd_state.snr_low_ticks;
         decision
-    }; // lock released
+    }; // dnd lock released
 
     // Perform OS DND change outside the lock.
     if let Some((enable, mode_id)) = d.set_dnd_to {
         let ok = skill_data::dnd::set_dnd(enable, &mode_id);
         if ok {
             {
-                let sr = app.app_state();
-                let mut s = sr.lock_or_recover();
-                s.dnd_active        = enable;
-                s.dnd_below_ticks   = 0;
-                s.dnd_snr_low_ticks = 0;
+                let mut dnd = dnd_arc.lock_or_recover();
+                dnd.active      = enable;
+                dnd.below_ticks = 0;
+                dnd.snr_low_ticks = 0;
             }
             let _ = app.emit("dnd-state-changed", enable);
             app.state::<WsBroadcaster>().send("dnd-state-changed", &enable);

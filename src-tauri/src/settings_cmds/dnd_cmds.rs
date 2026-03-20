@@ -43,7 +43,7 @@ pub fn test_dnd(
 
     let ok = skill_data::dnd::set_dnd(false, "");
     if ok {
-        state.lock_or_recover().dnd_active = false;
+        state.lock_or_recover().dnd.lock_or_recover().active = false;
         let _ = app.emit("dnd-state-changed", false);
         app.state::<crate::ws_server::WsBroadcaster>()
             .send("dnd-state-changed", &false);
@@ -54,13 +54,13 @@ pub fn test_dnd(
 /// Return whether DND is currently active (i.e. the app has enabled it).
 #[tauri::command]
 pub fn get_dnd_active(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
-    state.lock_or_recover().dnd_active
+    state.lock_or_recover().dnd.lock_or_recover().active
 }
 
 /// Return the current Do Not Disturb automation configuration.
 #[tauri::command]
 pub fn get_dnd_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DoNotDisturbConfig {
-    state.lock_or_recover().dnd_config.clone()
+    state.lock_or_recover().dnd.lock_or_recover().config.clone()
 }
 
 /// Persist new Do Not Disturb automation configuration.
@@ -74,15 +74,16 @@ pub fn set_dnd_config(
     state:  tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let was_active = {
-        let mut s = state.lock_or_recover();
-        let active = s.dnd_active;
-        s.dnd_config           = config.clone();
-        s.dnd_focus_samples.clear();   // reset activation window on any config change
-        s.dnd_below_ticks      = 0;    // reset exit counter on any config change
-        s.dnd_score_history.clear();   // reset lookback history on any config change
-        s.dnd_snr_low_ticks    = 0;    // reset SNR low counter on any config change
-        if !config.enabled && s.dnd_active {
-            s.dnd_active = false;
+        let s = state.lock_or_recover();
+        let mut dnd = s.dnd.lock_or_recover();
+        let active = dnd.active;
+        dnd.config             = config.clone();
+        dnd.focus_samples.clear();
+        dnd.below_ticks        = 0;
+        dnd.score_history.clear();
+        dnd.snr_low_ticks      = 0;
+        if !config.enabled && dnd.active {
+            dnd.active = false;
         }
         active && !config.enabled
     };
@@ -152,25 +153,25 @@ pub struct DndStatus {
 #[tauri::command]
 pub fn get_dnd_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DndStatus {
     let s                    = state.lock_or_recover();
-    let enabled              = s.dnd_config.enabled;
-    let threshold            = s.dnd_config.focus_threshold as f64;
-    let duration_secs        = s.dnd_config.duration_secs;
-    let exit_duration_secs   = s.dnd_config.exit_duration_secs;
-    let focus_lookback_secs  = s.dnd_config.focus_lookback_secs;
+    let dnd                  = s.dnd.lock_or_recover();
+    let enabled              = dnd.config.enabled;
+    let threshold            = dnd.config.focus_threshold as f64;
+    let duration_secs        = dnd.config.duration_secs;
+    let exit_duration_secs   = dnd.config.exit_duration_secs;
+    let focus_lookback_secs  = dnd.config.focus_lookback_secs;
     let window_size          = (duration_secs as usize * 4).max(8);
     let exit_window_size     = (exit_duration_secs as usize * 4).max(4);
-    let sample_count         = s.dnd_focus_samples.len();
+    let sample_count         = dnd.focus_samples.len();
     let avg_score            = if sample_count > 0 {
-        s.dnd_focus_samples.iter().sum::<f64>() / sample_count as f64
+        dnd.focus_samples.iter().sum::<f64>() / sample_count as f64
     } else { 0.0 };
-    let dnd_active           = s.dnd_active;
-    let below_ticks          = s.dnd_below_ticks;
+    let dnd_active           = dnd.active;
+    let below_ticks          = dnd.below_ticks;
     let exit_held_by_lookback = dnd_active
         && avg_score < threshold
-        && s.dnd_score_history.iter().any(|&v| v >= threshold);
-    // Use the cached OS state (refreshed every 5 s by the background poll)
-    // rather than reading the file on every UI request.
-    let os_active            = s.dnd_os_active;
+        && dnd.score_history.iter().any(|&v| v >= threshold);
+    let os_active            = dnd.os_active;
+    drop(dnd);
     drop(s);
 
     let exit_secs_remaining =

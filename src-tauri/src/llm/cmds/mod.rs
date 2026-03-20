@@ -66,9 +66,20 @@ use tauri::AppHandle;
 use crate::AppState;
 
 /// Persist the catalog to disk (called after state changes).
+/// Persist the catalog to disk.
+///
+/// Accepts `&AppState` — internally acquires the LLM sub-lock.
+/// If you already hold the LLM lock, use [`save_catalog_locked`] instead
+/// to avoid a double-lock deadlock.
 pub(super) fn save_catalog(app: &AppHandle, state: &AppState) {
-    state.llm.catalog.save(&state.skill_dir);
-    let _ = app; // suppress unused warning
+    use crate::MutexExt;
+    state.llm.lock_or_recover().catalog.save(&state.skill_dir);
+    let _ = app;
+}
+
+/// Persist the catalog when the caller already holds the LLM lock.
+pub(super) fn save_catalog_locked(_app: &AppHandle, skill_dir: &std::path::Path, llm: &crate::state::LlmState) {
+    llm.catalog.save(skill_dir);
 }
 
 /// Infer quant string from a GGUF filename.
@@ -125,7 +136,9 @@ pub(super) fn ensure_catalog_entry(
     size_gb:  Option<f32>,
     is_mmproj_override: Option<bool>,
 ) -> bool {
-    if s.llm.catalog.entries.iter().any(|e| e.filename == filename) {
+    use crate::MutexExt;
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    if llm.catalog.entries.iter().any(|e| e.filename == filename) {
         return false;
     }
 
@@ -162,6 +175,6 @@ pub(super) fn ensure_catalog_entry(
         initiated_at_unix: None,
     };
 
-    s.llm.catalog.entries.push(entry);
+    llm.catalog.entries.push(entry);
     true
 }

@@ -40,7 +40,7 @@ pub fn get_llm_catalog(
 ) -> LlmCatalog {
     let mut s = state.lock_or_recover();
     sync_download_progress(&mut s);
-    s.llm.catalog.clone()
+    { let __a = s.llm.clone(); let __r = __a.lock_or_recover().catalog.clone(); __r }
 }
 
 #[tauri::command]
@@ -49,8 +49,9 @@ pub fn get_llm_downloads(
 ) -> Vec<LlmDownloadItem> {
     let mut s = state.lock_or_recover();
     sync_download_progress(&mut s);
+    let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
 
-    let mut items: Vec<LlmDownloadItem> = s.llm.catalog.entries.iter()
+    let mut items: Vec<LlmDownloadItem> = llm.catalog.entries.iter()
         .filter(|e| {
             e.state == DownloadState::Downloading
                 || e.state == DownloadState::Paused
@@ -60,7 +61,7 @@ pub fn get_llm_downloads(
         })
         .map(|e| {
             // Read shard progress from the in-flight download if available.
-            let (current_shard, _total_shards) = s.llm.downloads.get(&e.filename)
+            let (current_shard, _total_shards) = llm.downloads.get(&e.filename)
                 .and_then(|prog| prog.lock().ok().map(|p| (p.current_shard, p.total_shards)))
                 .unwrap_or((0, 0));
             LlmDownloadItem {
@@ -88,10 +89,11 @@ pub fn get_llm_downloads(
 /// Sync in-flight download progress into the catalog entries so the UI sees
 /// the latest state.
 fn sync_download_progress(s: &mut AppState) {
-    let downloads = s.llm.downloads.clone();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let downloads = llm.downloads.clone();
     for (filename, prog_arc) in &downloads {
         if let Ok(prog) = prog_arc.lock() {
-            if let Some(entry) = s.llm.catalog.entries
+            if let Some(entry) = llm.catalog.entries
                 .iter_mut()
                 .find(|e| &e.filename == filename)
             {
@@ -156,13 +158,16 @@ pub fn refresh_llm_catalog(
     app:   AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    s.llm.catalog.refresh_cache();
-    s.llm.catalog.auto_select();
-    let model_path  = s.llm.catalog.active_model_path();
-    let mmproj_path = s.llm.catalog.active_mmproj_path();
-    s.llm.config.model_path = model_path;
-    s.llm.config.mmproj     = mmproj_path;
+    let s = state.lock_or_recover();
+    {
+        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        llm.catalog.refresh_cache();
+        llm.catalog.auto_select();
+        let model_path  = llm.catalog.active_model_path();
+        let mmproj_path = llm.catalog.active_mmproj_path();
+        llm.config.model_path = model_path;
+        llm.config.mmproj     = mmproj_path;
+    }
     save_catalog(&app, &s);
     drop(s);
     crate::save_settings_handle(&app);

@@ -680,18 +680,19 @@ pub async fn run_calibration(app: &AppHandle, msg: &Value) -> Result<Value, Stri
 pub fn dnd_status(app: &AppHandle) -> Result<Value, String> {
     let s = app.app_state();
     let guard = s.lock_or_recover();
-    let enabled       = guard.dnd_config.enabled;
-    let threshold     = guard.dnd_config.focus_threshold;
-    let duration_secs = guard.dnd_config.duration_secs;
-    let mode_id       = guard.dnd_config.focus_mode_identifier.clone();
-    let dnd_active    = guard.dnd_active;
+    let dnd = guard.dnd.lock_or_recover();
+    let enabled       = dnd.config.enabled;
+    let threshold     = dnd.config.focus_threshold;
+    let duration_secs = dnd.config.duration_secs;
+    let mode_id       = dnd.config.focus_mode_identifier.clone();
+    let dnd_active    = dnd.active;
     let window_size   = (duration_secs as usize * 4).max(8);
-    let sample_count  = guard.dnd_focus_samples.len();
+    let sample_count  = dnd.focus_samples.len();
     let avg_score     = if sample_count > 0 {
-        guard.dnd_focus_samples.iter().sum::<f64>() / sample_count as f64
+        dnd.focus_samples.iter().sum::<f64>() / sample_count as f64
     } else { 0.0 };
-    // Use the cached OS state kept fresh by the 5-second background poll.
-    let os_active     = guard.dnd_os_active;
+    let os_active     = dnd.os_active;
+    drop(dnd);
     drop(guard);
 
     Ok(serde_json::json!({
@@ -730,20 +731,22 @@ pub fn dnd_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         .ok_or_else(|| "missing required field: \"enabled\" (boolean)".to_string())?;
 
     let mode_id = {
-        let s = app.app_state();
-        let g = s.lock_or_recover();
-        g.dnd_config.focus_mode_identifier.clone()
+        let dnd_arc = app.app_state().lock_or_recover().dnd.clone();
+        let r = dnd_arc.lock_or_recover().config.focus_mode_identifier.clone();
+        r
     };
 
     let ok = skill_data::dnd::set_dnd(enabled, &mode_id);
     if ok {
         let s = app.app_state();
-        let mut guard = s.lock_or_recover();
-        guard.dnd_active = enabled;
+        let g = s.lock_or_recover();
+        let mut dnd = g.dnd.lock_or_recover();
+        dnd.active = enabled;
         if !enabled {
-            guard.dnd_focus_samples.clear();
+            dnd.focus_samples.clear();
         }
-        drop(guard);
+        drop(dnd);
+        drop(g);
         let _ = app.emit("dnd-state-changed", enabled);
     }
 

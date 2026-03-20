@@ -347,9 +347,9 @@ fn run_blocking_exit_shutdown(app: &tauri::AppHandle) {
     {
         let cell = app
             .state::<Mutex<Box<AppState>>>()
-            .lock()
-            .expect("lock poisoned")
+            .lock_or_recover()
             .llm
+            .lock_or_recover()
             .state_cell
             .clone();
         llm::shutdown_cell(&cell);
@@ -587,9 +587,10 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let (llm_cfg, catalog, log_buf, cell, skill_dir) = {
             let dir = app.app_state().lock_or_recover().skill_dir.clone();
             let llm_cfg = load_settings(&dir).llm;
-            let guard = app.app_state();
-            let s = guard.lock().expect("lock poisoned");
-            (llm_cfg, s.llm.catalog.clone(), s.llm.logs.clone(), s.llm.state_cell.clone(), s.skill_dir.clone())
+            let llm_arc = app.app_state().lock_or_recover().llm_arc();
+            let llm = llm_arc.lock_or_recover();
+            let sd = app.app_state().lock_or_recover().skill_dir.clone();
+            (llm_cfg, llm.catalog.clone(), llm.logs.clone(), llm.state_cell.clone(), sd)
         };
         if llm_cfg.enabled {
             let app_handle = app.handle().clone();
@@ -597,7 +598,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             std::thread::spawn(move || {
                 let emitter: std::sync::Arc<dyn llm::LlmEventEmitter> = std::sync::Arc::new(llm::TauriEmitter(app_handle));
                 if let Some(state) = llm::init(&llm_cfg, &catalog, emitter, log_buf, &skill_dir) {
-                    *cell2.lock().expect("lock poisoned") = Some(state);
+                    *cell2.lock_or_recover() = Some(state);
                 }
             });
         }
@@ -611,7 +612,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "llm")]
     {
         let cell = app.app_state()
-            .lock().expect("lock poisoned").llm.state_cell.clone();
+            .lock_or_recover().llm.lock_or_recover().state_cell.clone();
         serve_handle.set_llm(cell.clone());
 
         // Propagate the actual WS port to the Skill API tool so the LLM
@@ -620,8 +621,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         std::thread::spawn(move || {
             // Wait briefly for the LLM server to initialise, then set the port.
             for _ in 0..60 {
-                if let Some(ref server) = *cell.lock().expect("lock poisoned") {
-                    let mut tools = server.allowed_tools.lock().expect("lock poisoned");
+                if let Some(ref server) = *cell.lock_or_recover() {
+                    let mut tools = server.allowed_tools.lock_or_recover();
                     tools.skill_api_port = ws_port;
                     break;
                 }
@@ -691,13 +692,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         s.track_input_activity         = data.track_input_activity;
         s.input_activity_enabled
             .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
-        s.dnd_config  = data.do_not_disturb;
-        s.llm.config  = data.llm;
+        s.dnd.lock_or_recover().config = data.do_not_disturb;
+        { let __a = s.llm.clone(); __a.lock_or_recover().config = data.llm; }
         s.settings_storage_format = data.storage_format;
         s.sleep_config      = data.sleep;
         s.screenshot_config = data.screenshot;
         if let Some(os_active) = skill_data::dnd::query_os_active() {
-            if !os_active { s.dnd_active = false; }
+            if !os_active { s.dnd.lock_or_recover().active = false; }
         }
         neutts_apply_config(&data.neutts);
         for pd in &data.paired {
@@ -728,9 +729,11 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let (llm_autostart, llm_has_model, model_code, model_status, hf_repo) = {
         let r = app.app_state();
         let s = r.lock_or_recover();
-        let autostart = s.llm.config.enabled && s.llm.config.autostart;
-        let has_model = s.llm.config.model_path.as_ref()
+        let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
+        let autostart = llm.config.enabled && llm.config.autostart;
+        let has_model = llm.config.model_path.as_ref()
             .map(|p| p.exists()).unwrap_or(false);
+        drop(llm);
         (
             autostart,
             has_model,
@@ -1176,8 +1179,12 @@ fn setup_background_tasks(app: &mut tauri::App) {
         loop {
             let (skill_dir, interval_secs) = {
                 let r = app_skills.state::<Mutex<Box<AppState>>>();
-                let g = r.lock_or_recover();
-                (g.skill_dir.clone(), g.llm.config.tools.skills_refresh_interval_secs)
+                let (sd, llm_arc) = {
+                    let g = r.lock_or_recover();
+                    (g.skill_dir.clone(), g.llm.clone())
+                };
+                let iv = llm_arc.lock_or_recover().config.tools.skills_refresh_interval_secs;
+                (sd, iv)
             };
 
             if interval_secs > 0 {
@@ -1217,17 +1224,16 @@ fn setup_background_tasks(app: &mut tauri::App) {
         loop {
             let os_now = skill_data::dnd::query_os_active();
 
+            // DND state is behind its own lock — no AppState lock needed.
+            let dnd_arc = app_dnd.state::<Mutex<Box<AppState>>>()
+                .lock_or_recover().dnd_arc();
             let (prev, app_active) = {
-                let r = app_dnd.state::<Mutex<Box<AppState>>>();
-                let g = r.lock_or_recover();
-                (g.dnd_os_active, g.dnd_active)
+                let d = dnd_arc.lock_or_recover();
+                (d.os_active, d.active)
             };
 
             if os_now != prev {
-                {
-                    let r = app_dnd.state::<Mutex<Box<AppState>>>();
-                    r.lock_or_recover().dnd_os_active = os_now;
-                }
+                dnd_arc.lock_or_recover().os_active = os_now;
 
                 let payload = serde_json::json!({ "os_active": os_now });
                 let _ = app_dnd.emit("dnd-os-changed", &payload);
@@ -1239,11 +1245,10 @@ fn setup_background_tasks(app: &mut tauri::App) {
                          app believed it was active — reconciling"
                     );
                     {
-                        let r = app_dnd.state::<Mutex<Box<AppState>>>();
-                        let mut g = r.lock_or_recover();
-                        g.dnd_active      = false;
-                        g.dnd_below_ticks = 0;
-                        g.dnd_focus_samples.clear();
+                        let mut d = dnd_arc.lock_or_recover();
+                        d.active      = false;
+                        d.below_ticks = 0;
+                        d.focus_samples.clear();
                     }
                     let _ = app_dnd.emit("dnd-state-changed", false);
                     app_dnd.state::<WsBroadcaster>()

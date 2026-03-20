@@ -9,7 +9,7 @@ use tauri::{AppHandle, Manager};
 use crate::MutexExt;
 use crate::AppState;
 use crate::tray::refresh_tray;
-use super::save_catalog;
+use super::{save_catalog, save_catalog_locked};
 use crate::llm::catalog::{DownloadProgress, DownloadState};
 
 // ── Download ──────────────────────────────────────────────────────────────────
@@ -27,10 +27,11 @@ pub fn download_llm_model(
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let (entry_snapshot, prog_arc) = {
-        let mut s = state.lock_or_recover();
+        let s = state.lock_or_recover();
+        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
 
         // Find the entry.
-        let entry = match s.llm.catalog.entries
+        let entry = match llm.catalog.entries
             .iter()
             .find(|e| e.filename == filename)
         {
@@ -42,8 +43,8 @@ pub fn download_llm_model(
         };
 
         // Skip if already downloading.
-        if s.llm.downloads.contains_key(&filename) {
-            if let Some(prog) = s.llm.downloads.get(&filename) {
+        if llm.downloads.contains_key(&filename) {
+            if let Some(prog) = llm.downloads.get(&filename) {
                 if prog.lock().is_ok_and(|p| p.state == DownloadState::Downloading) {
                     return;
                 }
@@ -51,7 +52,7 @@ pub fn download_llm_model(
         }
 
         // Mark as downloading in the catalog immediately so the UI updates.
-        if let Some(e) = s.llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
+        if let Some(e) = llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
             e.state      = DownloadState::Downloading;
             e.status_msg = Some(format!("Queued: {}…", filename));
             e.progress   = 0.0;
@@ -72,7 +73,7 @@ pub fn download_llm_model(
             total_shards:  entry.shard_count() as u16,
         }));
 
-        s.llm.downloads.insert(filename.clone(), prog.clone());
+        llm.downloads.insert(filename.clone(), prog.clone());
 
         (entry, prog)
     };
@@ -115,8 +116,9 @@ pub fn download_llm_model(
 
         // After completion / failure, refresh the catalog entry.
         if let Some(state_handle) = app2.try_state::<Mutex<Box<AppState>>>() {
-            let mut s = state_handle.lock_or_recover();
-            if let Some(entry) = s.llm.catalog.entries
+            let s = state_handle.lock_or_recover();
+            let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+            if let Some(entry) = llm.catalog.entries
                 .iter_mut()
                 .find(|e| e.filename == filename2)
             {
@@ -126,15 +128,12 @@ pub fn download_llm_model(
                         entry.local_path = Some(path);
                         entry.status_msg = None;
                         entry.progress   = 1.0;
-                        // Auto-select if this is the first downloaded main model,
-                        // or if the current active model doesn't exist on disk
-                        // (stale reference from a deleted/missing model).
                         if !entry.is_mmproj {
-                            let should_activate = s.llm.catalog.active_model.is_empty()
-                                || s.llm.catalog.active_model_path()
+                            let should_activate = llm.catalog.active_model.is_empty()
+                                || llm.catalog.active_model_path()
                                     .is_none_or(|p| !p.exists());
                             if should_activate {
-                                s.llm.catalog.active_model = filename2.clone();
+                                llm.catalog.active_model = filename2.clone();
                             }
                         }
                     }
@@ -154,22 +153,21 @@ pub fn download_llm_model(
                     }
                 }
             }
-            // Mirror active model path to LlmConfig.
-            let model_path  = s.llm.catalog.active_model_path();
-            let mmproj_path = s.llm.catalog.active_mmproj_path();
-            s.llm.config.model_path = model_path;
-            s.llm.config.mmproj     = mmproj_path;
-            // Remove the in-flight progress entry when finished (not paused).
+            let model_path  = llm.catalog.active_model_path();
+            let mmproj_path = llm.catalog.active_mmproj_path();
+            llm.config.model_path = model_path;
+            llm.config.mmproj     = mmproj_path;
             if !matches!(
-                s.llm.catalog.entries
+                llm.catalog.entries
                     .iter()
                     .find(|e| e.filename == filename2)
                     .map(|e| e.state.clone()),
                 Some(DownloadState::Paused)
             ) {
-                s.llm.downloads.remove(&filename2);
+                llm.downloads.remove(&filename2);
             }
-            save_catalog(&app2, &s);
+            save_catalog_locked(&app2, &s.skill_dir, &llm);
+            drop(llm);
             drop(s);
             crate::save_settings_handle(&app2);
             refresh_tray(&app2);
@@ -184,9 +182,10 @@ fn cancel_llm_download_inner(
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
     app:      Option<&AppHandle>,
 ) {
-    let mut s = state.lock_or_recover();
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
     let mut was_paused = false;
-    if let Some(prog) = s.llm.downloads.get(&filename) {
+    if let Some(prog) = llm.downloads.get(&filename) {
         if let Ok(mut p) = prog.lock() {
             if p.state == DownloadState::Paused {
                 was_paused = true;
@@ -199,13 +198,14 @@ fn cancel_llm_download_inner(
         }
     }
     if was_paused {
-        s.llm.downloads.remove(&filename);
-        if let Some(entry) = s.llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
+        llm.downloads.remove(&filename);
+        if let Some(entry) = llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
             entry.state = DownloadState::Cancelled;
             entry.status_msg = Some("Cancelled.".into());
             entry.progress = 0.0;
         }
         if let Some(app) = app {
+            drop(llm);
             save_catalog(app, &s);
         }
     }
@@ -239,15 +239,16 @@ pub fn pause_llm_download(
     filename: String,
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    if let Some(prog) = s.llm.downloads.get(&filename) {
+    let s = state.lock_or_recover();
+    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    if let Some(prog) = llm.downloads.get(&filename) {
         if let Ok(mut p) = prog.lock() {
             p.cancelled = true;
             p.pause_requested = true;
             p.status_msg = Some("Pausing…".into());
         }
     }
-    if let Some(entry) = s.llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
+    if let Some(entry) = llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
         entry.state = DownloadState::Paused;
         entry.status_msg = Some("Pausing…".into());
     }
@@ -260,12 +261,14 @@ pub fn resume_llm_download(
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     {
-        let mut s = state.lock_or_recover();
-        if let Some(entry) = s.llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
+        let s = state.lock_or_recover();
+        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        if let Some(entry) = llm.catalog.entries.iter_mut().find(|e| e.filename == filename) {
             entry.state = DownloadState::NotDownloaded;
             entry.status_msg = None;
         }
-        s.llm.downloads.remove(&filename);
+        llm.downloads.remove(&filename);
+        drop(llm);
         save_catalog(&app, &s);
     }
     download_llm_model(filename, app, state);
@@ -282,43 +285,43 @@ pub fn delete_llm_model(
     app:      AppHandle,
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    let mut s = state.lock_or_recover();
-    if let Some(entry) = s.llm.catalog.entries
-        .iter_mut()
-        .find(|e| e.filename == filename)
+    let s = state.lock_or_recover();
     {
-        // Delete all shard files (or the single file).
-        if entry.is_split() {
-            // For split models, resolve and delete every cached shard.
-            let (cached_paths, _) = entry.resolve_cached_shards();
-            for path in cached_paths {
+        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        if let Some(entry) = llm.catalog.entries
+            .iter_mut()
+            .find(|e| e.filename == filename)
+        {
+            if entry.is_split() {
+                let (cached_paths, _) = entry.resolve_cached_shards();
+                for path in cached_paths {
+                    if path.exists() {
+                        if let Err(e) = std::fs::remove_file(&path) {
+                            eprintln!("[llm] delete shard failed for {}: {e}", path.display());
+                        }
+                    }
+                }
+            } else if let Some(ref path) = entry.local_path {
                 if path.exists() {
-                    if let Err(e) = std::fs::remove_file(&path) {
-                        eprintln!("[llm] delete shard failed for {}: {e}", path.display());
+                    if let Err(e) = std::fs::remove_file(path) {
+                        eprintln!("[llm] delete failed for {}: {e}", path.display());
                     }
                 }
             }
-        } else if let Some(ref path) = entry.local_path {
-            if path.exists() {
-                if let Err(e) = std::fs::remove_file(path) {
-                    eprintln!("[llm] delete failed for {}: {e}", path.display());
-                }
-            }
-        }
-        entry.local_path = None;
-        entry.state      = DownloadState::NotDownloaded;
-        entry.status_msg = None;
-        entry.progress   = 0.0;
-        entry.initiated_at_unix = None;
+            entry.local_path = None;
+            entry.state      = DownloadState::NotDownloaded;
+            entry.status_msg = None;
+            entry.progress   = 0.0;
+            entry.initiated_at_unix = None;
 
-        // Clear active selection if this was the active model/mmproj.
-        if s.llm.catalog.active_model == filename {
-            s.llm.catalog.active_model = String::new();
-            s.llm.config.model_path    = None;
-        }
-        if s.llm.catalog.active_mmproj == filename {
-            s.llm.catalog.active_mmproj = String::new();
-            s.llm.config.mmproj         = None;
+            if llm.catalog.active_model == filename {
+                llm.catalog.active_model = String::new();
+                llm.config.model_path    = None;
+            }
+            if llm.catalog.active_mmproj == filename {
+                llm.catalog.active_mmproj = String::new();
+                llm.config.mmproj         = None;
+            }
         }
     }
     save_catalog(&app, &s);

@@ -318,20 +318,43 @@ pub struct AppState {
     pub kbd_event_count:   std::sync::Arc<std::sync::atomic::AtomicU64>,
     pub mouse_event_count: std::sync::Arc<std::sync::atomic::AtomicU64>,
     pub activity_store: Option<std::sync::Arc<ActivityStore>>,
-    pub dnd_config:         DoNotDisturbConfig,
-    pub dnd_active:         bool,
-    pub dnd_os_active:      Option<bool>,
-    pub dnd_focus_samples:  std::collections::VecDeque<f64>,
-    pub dnd_below_ticks:    u32,
-    pub dnd_score_history:  std::collections::VecDeque<f64>,
-    pub dnd_snr_low_ticks:  u32,
+    pub dnd: std::sync::Arc<std::sync::Mutex<DndRuntimeState>>,
     pub settings_storage_format: String,
     pub sleep_config:       crate::settings::SleepConfig,
     pub screenshot_config:  ScreenshotConfig,
     pub screenshot_store: Option<std::sync::Arc<screenshot_store::ScreenshotStore>>,
     pub screenshot_metrics: std::sync::Arc<screenshot::ScreenshotMetrics>,
     pub health_store: Option<std::sync::Arc<skill_data::health_store::HealthStore>>,
-    pub llm: Box<LlmState>,
+    pub llm: std::sync::Arc<std::sync::Mutex<LlmState>>,
+}
+
+// ── DND runtime state (independently locked) ──────────────────────────────────
+
+/// Do-Not-Disturb runtime state.  Lives behind its own `Arc<Mutex<>>` so the
+/// DND polling loop and session runner can access it without contending on the
+/// main `AppState` lock.
+pub struct DndRuntimeState {
+    pub config:         DoNotDisturbConfig,
+    pub active:         bool,
+    pub os_active:      Option<bool>,
+    pub focus_samples:  std::collections::VecDeque<f64>,
+    pub below_ticks:    u32,
+    pub score_history:  std::collections::VecDeque<f64>,
+    pub snr_low_ticks:  u32,
+}
+
+impl Default for DndRuntimeState {
+    fn default() -> Self {
+        Self {
+            config:         DoNotDisturbConfig::default(),
+            active:         false,
+            os_active:      None,
+            focus_samples:  std::collections::VecDeque::new(),
+            below_ticks:    0,
+            score_history:  std::collections::VecDeque::new(),
+            snr_low_ticks:  0,
+        }
+    }
 }
 
 // ── LLM sub-state (heap-allocated) ────────────────────────────────────────────
@@ -357,6 +380,32 @@ pub struct LlmState {
     pub start_error: std::sync::Arc<std::sync::Mutex<Option<String>>>,
     #[cfg(feature = "llm")]
     pub chat_store: Option<crate::llm::chat_store::ChatStore>,
+}
+
+impl LlmState {
+    /// Create a new `LlmState` initialised from the given data directory.
+    #[cfg(feature = "llm")]
+    pub fn new(skill_dir: &std::path::Path) -> Self {
+        Self {
+            config:     crate::settings::LlmConfig::default(),
+            downloads:  std::collections::HashMap::new(),
+            logs:       crate::llm::new_log_buffer(),
+            state_cell: crate::llm::new_state_cell(),
+            loading:    std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            start_error: std::sync::Arc::new(std::sync::Mutex::new(None)),
+            catalog:    crate::llm::catalog::LlmCatalog::load(skill_dir),
+            chat_store: crate::llm::chat_store::ChatStore::open(skill_dir),
+        }
+    }
+
+    /// Create a new `LlmState` when the `llm` feature is disabled.
+    #[cfg(not(feature = "llm"))]
+    pub fn new(_skill_dir: &std::path::Path) -> Self {
+        Self {
+            config:     crate::settings::LlmConfig::default(),
+            state_cell: std::sync::Arc::new(std::sync::Mutex::new(None)),
+        }
+    }
 }
 
 impl Default for AppState {
@@ -436,25 +485,7 @@ impl Default for AppState {
             kbd_event_count:   std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             mouse_event_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
             activity_store:    ActivityStore::open(&skill_dir).map(std::sync::Arc::new),
-            llm: Box::new(LlmState {
-                config:         crate::settings::LlmConfig::default(),
-                #[cfg(feature = "llm")]
-                downloads:      std::collections::HashMap::new(),
-                #[cfg(feature = "llm")]
-                logs:           crate::llm::new_log_buffer(),
-                #[cfg(feature = "llm")]
-                state_cell:     crate::llm::new_state_cell(),
-                #[cfg(not(feature = "llm"))]
-                state_cell:     std::sync::Arc::new(Mutex::new(None)),
-                #[cfg(feature = "llm")]
-                loading:        std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-                #[cfg(feature = "llm")]
-                start_error:    std::sync::Arc::new(std::sync::Mutex::new(None)),
-                #[cfg(feature = "llm")]
-                catalog:        crate::llm::catalog::LlmCatalog::load(&skill_dir),
-                #[cfg(feature = "llm")]
-                chat_store:     crate::llm::chat_store::ChatStore::open(&skill_dir),
-            }),
+            llm: std::sync::Arc::new(std::sync::Mutex::new(LlmState::new(&skill_dir))),
             skill_dir,
             model_config,
             model_status,
@@ -462,13 +493,7 @@ impl Default for AppState {
             encoder_reload_requested,
             logger,
             session_start_utc: None,
-            dnd_config:         DoNotDisturbConfig::default(),
-            dnd_active:         false,
-            dnd_os_active:      None,
-            dnd_focus_samples:  std::collections::VecDeque::new(),
-            dnd_below_ticks:    0,
-            dnd_score_history:  std::collections::VecDeque::new(),
-            dnd_snr_low_ticks:  0,
+            dnd: std::sync::Arc::new(std::sync::Mutex::new(DndRuntimeState::default())),
             settings_storage_format: "csv".into(),
             sleep_config:       crate::settings::SleepConfig::default(),
             screenshot_config:  ScreenshotConfig::default(),
@@ -481,15 +506,27 @@ impl Default for AppState {
 
 impl AppState {
     /// Construct a heap-allocated `AppState` on a dedicated thread with a
-    /// large stack so the oversized struct is never materialised on the
-    /// main thread's (often limited) stack.
+    /// larger stack so the struct is never materialised on the main thread's
+    /// (often limited) stack.  The stack budget was reduced from 32 MB to
+    /// 8 MB after `LlmState` and `DndRuntimeState` were extracted behind
+    /// their own `Arc<Mutex<>>`.
     pub fn new_boxed() -> Box<Self> {
         std::thread::Builder::new()
             .name("appstate-init".into())
-            .stack_size(32 * 1024 * 1024)
+            .stack_size(8 * 1024 * 1024)
             .spawn(|| Box::new(Self::default()))
             .expect("[appstate] failed to spawn init thread")
             .join()
             .expect("[appstate] init thread panicked")
+    }
+
+    /// Obtain a clone of the `LlmState` arc for independent locking.
+    pub fn llm_arc(&self) -> std::sync::Arc<std::sync::Mutex<LlmState>> {
+        self.llm.clone()
+    }
+
+    /// Obtain a clone of the `DndRuntimeState` arc for independent locking.
+    pub fn dnd_arc(&self) -> std::sync::Arc<std::sync::Mutex<DndRuntimeState>> {
+        self.dnd.clone()
     }
 }
