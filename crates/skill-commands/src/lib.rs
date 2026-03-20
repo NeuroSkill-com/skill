@@ -406,6 +406,19 @@ pub fn search_embeddings_in_range(
     ef:           usize,
     global_index: GlobalIndexHandle,
 ) -> SearchResult {
+    search_embeddings_in_range_for(skill_dir, start_utc, end_utc, k, ef, global_index, "zuna")
+}
+
+/// Model-aware variant of [`search_embeddings_in_range`].
+pub fn search_embeddings_in_range_for(
+    skill_dir:     &Path,
+    start_utc:     u64,
+    end_utc:       u64,
+    k:             usize,
+    ef:            usize,
+    global_index:  GlobalIndexHandle,
+    model_backend: &str,
+) -> SearchResult {
     let start_ts  = unix_to_ts(start_utc);
     let end_ts    = unix_to_ts(end_utc);
     let labels_db = skill_dir.join(LABELS_FILE);
@@ -438,10 +451,10 @@ pub fn search_embeddings_in_range(
     let day_indices: Vec<DayIndex> = if global_ready {
         Vec::new()
     } else {
-        eprintln!("[search] global index not ready — loading per-day HNSW files");
+        eprintln!("[search] global index not ready — loading per-day HNSW files (model={})", model_backend);
         date_dirs
             .iter()
-            .filter_map(|(date, dir)| load_day_index(date.clone(), dir.clone()))
+            .filter_map(|(date, dir)| load_day_index_for(date.clone(), dir.clone(), model_backend))
             .collect()
     };
 
@@ -560,6 +573,20 @@ pub fn stream_search_inner(
     global_index: GlobalIndexHandle,
     emit:         &dyn Fn(SearchProgress),
 ) {
+    stream_search_inner_for(skill_dir, start_utc, end_utc, k, ef, global_index, emit, "zuna")
+}
+
+/// Model-aware variant of [`stream_search_inner`].
+pub fn stream_search_inner_for(
+    skill_dir:     &Path,
+    start_utc:     u64,
+    end_utc:       u64,
+    k:             usize,
+    ef:            usize,
+    global_index:  GlobalIndexHandle,
+    emit:          &dyn Fn(SearchProgress),
+    model_backend: &str,
+) {
     let start_ts  = unix_to_ts(start_utc);
     let end_ts    = unix_to_ts(end_utc);
     let labels_db = skill_dir.join(LABELS_FILE);
@@ -576,7 +603,7 @@ pub fn stream_search_inner(
         Vec::new()
     } else {
         date_dirs.iter()
-            .filter_map(|(date, dir)| load_day_index(date.clone(), dir.clone()))
+            .filter_map(|(date, dir)| load_day_index_for(date.clone(), dir.clone(), model_backend))
             .collect()
     };
 
