@@ -83,6 +83,7 @@ jobs:
           -p skill-tools -p skill-skills -p skill-devices -p skill-settings
           -p skill-history -p skill-label-index -p skill-router
           -p skill-tts -p skill-headless -p skill-vision
+          -p skill-health -p skill-gpu -p skill-screenshots -p skill-llm
           -- -D warnings
 
       - name: cargo clippy (app)
@@ -90,6 +91,17 @@ jobs:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
         run: cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan -- -D warnings
+
+      - name: cargo test (workspace crates)
+        env:
+          RUSTC_WRAPPER: sccache
+        run: >
+          cargo test --locked --target x86_64-unknown-linux-gnu
+          -p skill-eeg -p skill-data -p skill-constants -p skill-tools
+          -p skill-devices -p skill-settings -p skill-history
+          -p skill-health -p skill-router -p skill-llm
+          -p skill-autostart -p skill-tts -p skill-gpu
+          --lib
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:
