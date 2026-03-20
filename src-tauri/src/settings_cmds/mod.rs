@@ -846,58 +846,11 @@ fn reembed_worker(
     logger:    std::sync::Arc<crate::skill_log::SkillLogger>,
     app:       AppHandle,
 ) {
-    use burn::backend::{Wgpu, wgpu::WgpuDevice};
+    use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
 
     let emit = |p: &ReembedProgress| { let _ = app.emit("reembed-progress", p); };
 
-    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "loading_encoder".into() });
-
-    // ── Load encoder ──────────────────────────────────────────────────────
-    skill_exg::configure_cubecl_cache(&skill_dir);
-    let device = WgpuDevice::DefaultDevice;
-
-    let backend = &config.model_backend;
-    let weights = match backend {
-        skill_eeg::eeg_model_config::ExgModelBackend::Zuna =>
-            skill_exg::resolve_hf_weights(&config.hf_repo),
-        skill_eeg::eeg_model_config::ExgModelBackend::Luna =>
-            skill_exg::resolve_luna_weights(&config.luna_hf_repo, config.luna_weights_file()),
-    };
-
-    let Some((w_path, c_path)) = weights else {
-        skill_log!(logger, "reembed", "weights not found for {} — aborting", backend);
-        emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_no_weights".into() });
-        return;
-    };
-
-    #[allow(dead_code)]
-    enum Enc {
-        Zuna(zuna_rs::ZunaEncoder<Wgpu>),
-        Luna(luna_rs::LunaEncoder<Wgpu>),
-    }
-
-    let _encoder = match backend {
-        skill_eeg::eeg_model_config::ExgModelBackend::Zuna => {
-            match zuna_rs::ZunaEncoder::<Wgpu>::load(&c_path, &w_path, device.clone()) {
-                Ok((e, ms)) => { skill_log!(logger, "reembed", "ZUNA encoder loaded ({ms:.0}ms)"); Enc::Zuna(e) }
-                Err(e) => {
-                    skill_log!(logger, "reembed", "ZUNA load failed: {e:#}");
-                    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_load".into() });
-                    return;
-                }
-            }
-        }
-        skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
-            match luna_rs::LunaEncoder::<Wgpu>::load(&c_path, &w_path, device.clone()) {
-                Ok((e, ms)) => { skill_log!(logger, "reembed", "LUNA encoder loaded ({ms:.0}ms)"); Enc::Luna(e) }
-                Err(e) => {
-                    skill_log!(logger, "reembed", "LUNA load failed: {e:#}");
-                    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_load".into() });
-                    return;
-                }
-            }
-        }
-    };
+    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "scanning".into() });
 
     // ── Collect date directories ──────────────────────────────────────────
     let mut dates: Vec<String> = Vec::new();
@@ -928,21 +881,21 @@ fn reembed_worker(
     }
 
     let mut done = 0usize;
-    skill_log!(logger, "reembed", "starting re-embed: {} dates, {} rows, backend={}", dates.len(), total, backend);
+    skill_log!(logger, "reembed", "starting re-embed: {} dates, {} rows", dates.len(), total);
 
     // ── Process each date ─────────────────────────────────────────────────
-    // Note: this is a simplified re-embed that updates model_backend and
-    // embed_speed_ms columns. A full re-embed from raw EEG samples would
-    // require storing raw samples in the DB (which we don't currently do).
-    // Instead, we re-tag existing embeddings with the model info and allow
-    // the user to re-record with the new model for new data.
     //
-    // For now this updates the metadata columns so users can track which
-    // model was used, and flags entries for future re-computation.
+    // Phase 1: Tag legacy rows with model_backend = 'zuna'.
+    // Phase 2: Rebuild per-model HNSW indices from tagged SQLite rows.
+    //
+    // Note: a full re-embed from raw EEG samples is not possible because
+    // raw samples are not stored in the DB — only the embeddings.
+    // Future work could store raw epochs to enable true re-encoding.
     for date in &dates {
         emit(&ReembedProgress { done, total, date: date.clone(), status: "processing".into() });
 
-        let db_path = skill_dir.join(date).join(crate::constants::SQLITE_FILE);
+        let day_dir = skill_dir.join(date);
+        let db_path = day_dir.join(crate::constants::SQLITE_FILE);
         let Ok(conn) = rusqlite::Connection::open(&db_path) else { continue };
         skill_data::util::init_wal_pragmas(&conn);
 
@@ -950,19 +903,81 @@ fn reembed_worker(
         let _ = conn.execute("ALTER TABLE embeddings ADD COLUMN model_backend TEXT", []);
         let _ = conn.execute("ALTER TABLE embeddings ADD COLUMN embed_speed_ms REAL", []);
 
-        // Update all rows that don't have model_backend set yet.
-        let count: i64 = conn.query_row(
+        // Tag untagged rows as legacy "zuna".
+        let untagged: i64 = conn.query_row(
             "SELECT COUNT(*) FROM embeddings WHERE model_backend IS NULL AND eeg_embedding IS NOT NULL",
             [], |r| r.get(0),
         ).unwrap_or(0);
 
-        if count > 0 {
-            // Tag with legacy "zuna" since all historical embeddings were ZUNA.
+        if untagged > 0 {
             let _ = conn.execute(
                 "UPDATE embeddings SET model_backend = 'zuna' WHERE model_backend IS NULL AND eeg_embedding IS NOT NULL",
                 [],
             );
-            skill_log!(logger, "reembed", "{}: tagged {} legacy rows as zuna", date, count);
+            skill_log!(logger, "reembed", "{}: tagged {} legacy rows as zuna", date, untagged);
+        }
+
+        // ── Rebuild per-model HNSW indices for this day ───────────────────
+        // Find all distinct model backends that have embeddings in this day.
+        let backends: Vec<String> = {
+            let Ok(mut stmt) = conn.prepare(
+                "SELECT DISTINCT model_backend FROM embeddings WHERE eeg_embedding IS NOT NULL AND model_backend IS NOT NULL"
+            ) else { continue };
+            stmt.query_map([], |row| row.get::<_, String>(0))
+                .map(|rows| rows.flatten().collect())
+                .unwrap_or_default()
+        };
+
+        for backend in &backends {
+            let hnsw_file = crate::constants::hnsw_index_file_for(backend);
+            let hnsw_path = day_dir.join(&hnsw_file);
+
+            let mut idx: LabeledIndex<Cosine, i64> = Builder::new()
+                .m(config.hnsw_m)
+                .ef_construction(config.hnsw_ef_construction)
+                .build_labeled(Cosine);
+
+            let Ok(mut stmt) = conn.prepare(
+                "SELECT timestamp, eeg_embedding FROM embeddings \
+                 WHERE eeg_embedding IS NOT NULL AND model_backend = ?1 \
+                 ORDER BY timestamp ASC"
+            ) else { continue };
+
+            let rows: Vec<(i64, Vec<u8>)> = stmt
+                .query_map(rusqlite::params![backend], |row| Ok((row.get(0)?, row.get(1)?)))
+                .map(|r| r.flatten().collect())
+                .unwrap_or_default();
+
+            let mut inserted = 0usize;
+            for (ts, blob) in &rows {
+                if blob.is_empty() { continue; }
+                let vec: Vec<f32> = blob.chunks_exact(4)
+                    .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                    .collect();
+                if vec.is_empty() { continue; }
+                idx.insert(vec, *ts);
+                inserted += 1;
+            }
+
+            // Update hnsw_id in SQLite to match the rebuilt index order.
+            // The HNSW insert order matches our ORDER BY timestamp ASC query,
+            // so hnsw_id = 0, 1, 2, … for each row in timestamp order.
+            {
+                let Ok(mut update_stmt) = conn.prepare(
+                    "UPDATE embeddings SET hnsw_id = ?1 WHERE timestamp = ?2 AND model_backend = ?3 AND eeg_embedding IS NOT NULL"
+                ) else { continue };
+                for (hnsw_id, (ts, blob)) in rows.iter().enumerate() {
+                    if blob.is_empty() { continue; }
+                    let _ = update_stmt.execute(rusqlite::params![hnsw_id as i64, ts, backend]);
+                }
+            }
+
+            if let Err(e) = idx.save(&hnsw_path) {
+                skill_log!(logger, "reembed", "{}: HNSW save error for {}: {e}", date, backend);
+            } else {
+                skill_log!(logger, "reembed", "{}: rebuilt HNSW for model={} ({} entries) → {}",
+                    date, backend, inserted, hnsw_file);
+            }
         }
 
         done += conn.query_row(
@@ -971,7 +986,31 @@ fn reembed_worker(
         ).unwrap_or(0) as usize;
     }
 
+    // ── Rebuild global HNSW indices ───────────────────────────────────────
+    // Collect all distinct backends across all days and rebuild each global.
+    {
+        let mut all_backends: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for date in &dates {
+            let db_path = skill_dir.join(date).join(crate::constants::SQLITE_FILE);
+            if let Ok(conn) = skill_data::util::open_readonly(&db_path) {
+                if let Ok(mut stmt) = conn.prepare(
+                    "SELECT DISTINCT model_backend FROM embeddings WHERE eeg_embedding IS NOT NULL AND model_backend IS NOT NULL"
+                ) {
+                    for b in stmt.query_map([], |row| row.get::<_, String>(0))
+                        .into_iter().flatten().flatten()
+                    {
+                        all_backends.insert(b);
+                    }
+                }
+            }
+        }
+        for backend in &all_backends {
+            skill_log!(logger, "reembed", "rebuilding global HNSW for model={}…", backend);
+            crate::global_eeg_index::rebuild_from_scratch_for(&skill_dir, backend);
+        }
+    }
+
     emit(&ReembedProgress { done: total, total, date: String::new(), status: "complete".into() });
-    skill_log!(logger, "reembed", "re-embed complete: {} rows processed across {} dates", total, dates.len());
+    skill_log!(logger, "reembed", "re-embed complete: {} rows processed, HNSW indices rebuilt across {} dates", total, dates.len());
 }
 

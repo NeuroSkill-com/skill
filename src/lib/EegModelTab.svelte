@@ -715,7 +715,7 @@ the Free Software Foundation, version 3 only. -->
                    style="width:{reembedProgress.total > 0 ? ((reembedProgress.done / reembedProgress.total) * 100).toFixed(1) : 0}%"></div>
             </div>
             <span class="text-[0.6rem] text-muted-foreground/70">
-              {#if reembedProgress.status === "loading_encoder"}
+              {#if reembedProgress.status === "loading_encoder" || reembedProgress.status === "scanning"}
                 {t("model.reembedLoadingEncoder")}
               {:else if reembedProgress.status === "processing"}
                 {t("model.reembedRunning", { date: reembedProgress.date, done: String(reembedProgress.done), total: String(reembedProgress.total) })}

@@ -725,8 +725,14 @@ pub(super) fn embed_worker(
                     }
                     LoadedEncoder::Luna(luna_enc) => {
                         // Build LUNA input: use active device channels only.
+                        // msg.samples were already resampled to EMBEDDING_EPOCH_SAMPLES
+                        // by EegAccumulator::push(), so use their actual length.
                         let n_ch = ch_names.len().min(EEG_CHANNELS);
-                        let n_samples = EMBEDDING_EPOCH_SAMPLES;
+                        let n_samples = if n_ch > 0 && !msg.samples[0].is_empty() {
+                            msg.samples[0].len()
+                        } else {
+                            EMBEDDING_EPOCH_SAMPLES
+                        };
                         let flat: Vec<f32> = (0..n_ch)
                             .flat_map(|ch| {
                                 msg.samples[ch].iter().copied()
