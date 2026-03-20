@@ -537,12 +537,10 @@ the Free Software Foundation, version 3 only. -->
               class="flex items-center gap-3 w-full px-3.5 py-2.5 hover:bg-muted/30 transition-colors"
               aria-expanded={supportedCompanyExpanded === company.id}
             >
-              <!-- Tiny preview: first device image -->
-              {#if company.devices.length > 0}
-                <div class="w-8 h-8 rounded-md overflow-hidden shrink-0 bg-muted/40 dark:bg-white/[0.04]">
-                  <img src={company.devices[0].image} alt="" class="w-full h-full object-cover" />
-                </div>
-              {/if}
+              <!-- Company logo -->
+              <div class="w-8 h-8 rounded-md overflow-hidden shrink-0 bg-muted/40 dark:bg-white/[0.04] flex items-center justify-center">
+                <img src={company.logo} alt={t(company.name_key)} class="w-full h-full object-contain" />
+              </div>
               <div class="flex flex-col items-start gap-0 flex-1 min-w-0">
                 <span class="text-[0.7rem] font-semibold text-foreground">{t(company.name_key)}</span>
                 <span class="text-[0.56rem] text-muted-foreground/60">
