@@ -22,7 +22,7 @@
 
   interface LlmLogEntry { ts: number; level: string; message: string; }
 
-  type DownloadState = "not_downloaded"|"downloading"|"downloaded"|"failed"|"cancelled";
+  type DownloadState = "not_downloaded"|"downloading"|"paused"|"downloaded"|"failed"|"cancelled";
 
   interface LlmModelEntry {
     repo:        string;
@@ -527,11 +527,12 @@
         if (logAutoScroll) await scrollToBottom();
       });
     } catch (e) { console.warn("[llm] listen llm:log failed:", e); }
-    // Poll every 500 ms while a download is active so the progress bar stays
-    // smooth.  The backend blob-monitor fires every 400 ms, so this gives
-    // roughly one UI update per backend tick.
+    // Poll catalog + server status every second.  The catalog call is a cheap
+    // in-memory read on the backend.  Always polling (instead of only when a
+    // download is detected) ensures that re-opening the settings window after
+    // closing it mid-download still picks up in-flight progress immediately.
     pollTimer = setInterval(async () => {
-      if (catalog.entries.some(e => e.state === "downloading")) await loadCatalog();
+      await loadCatalog();
       // Poll server status so Loading → Running and start_error are reflected
       // without relying solely on push events.
       try {
