@@ -86,7 +86,6 @@ const dashboard: Record<string, string> = {
   "dashboard.cancelViaTray":        "ביטול דרך תפריט ההקשר",
   "dashboard.scanningFooter":       "מחפש מכשיר…",
   "dashboard.switchDevice":         "החלף מכשיר",
-  "dashboard.switchDeviceHint":     "נתק והתחבר למכשיר משויך אחר.",
   "dashboard.switchTo":             "החלף",
   "dashboard.connectDifferent":     "או התחבר למכשיר אחר",
 

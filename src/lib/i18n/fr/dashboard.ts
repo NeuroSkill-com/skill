@@ -112,7 +112,6 @@ const dashboard: Record<string, string> = {
   "dashboard.cancelViaTray":        "Annuler via le menu contextuel",
   "dashboard.scanningFooter":       "Recherche d'appareil…",
   "dashboard.switchDevice":         "Changer d'appareil",
-  "dashboard.switchDeviceHint":     "Déconnecter et se connecter à un autre appareil couplé.",
   "dashboard.switchTo":             "Changer",
   "dashboard.connectDifferent":     "Ou connecter un autre appareil",
 

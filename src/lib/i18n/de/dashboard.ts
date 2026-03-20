@@ -115,7 +115,6 @@ const dashboard: Record<string, string> = {
   "dashboard.cancelViaTray":        "Abbrechen über Kontextmenü",
   "dashboard.scanningFooter":       "Suche nach Gerät…",
   "dashboard.switchDevice":         "Gerät wechseln",
-  "dashboard.switchDeviceHint":     "Trennen und ein anderes gekoppeltes Gerät verbinden.",
   "dashboard.switchTo":             "Wechseln",
   "dashboard.connectDifferent":     "Oder ein anderes Gerät verbinden",
 

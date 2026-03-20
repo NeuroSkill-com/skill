@@ -112,7 +112,6 @@ const dashboard: Record<string, string> = {
   "dashboard.cancelViaTray":        "Скасувати через контекстне меню",
   "dashboard.scanningFooter":       "Пошук пристрою…",
   "dashboard.switchDevice":         "Змінити пристрій",
-  "dashboard.switchDeviceHint":     "Від'єднатися та підключити інший спарений пристрій.",
   "dashboard.switchTo":             "Змінити",
   "dashboard.connectDifferent":     "Або підключити інший пристрій",
 

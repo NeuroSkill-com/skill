@@ -120,7 +120,6 @@ const dashboard: Record<string, string> = {
   "dashboard.cancelViaTray":        "Cancel via right-click tray menu",
   "dashboard.scanningFooter":       "Scanning for device…",
   "dashboard.switchDevice":         "Switch Device",
-  "dashboard.switchDeviceHint":     "Disconnect and connect to a different paired device.",
   "dashboard.switchTo":             "Switch",
   "dashboard.connectDifferent":     "Or connect to a different device",
 

@@ -575,7 +575,7 @@ export type TranslationKey =
   | "dashboard.scanningFooter"
   | "dashboard.streamingCsv"
   | "dashboard.switchDevice"
-  | "dashboard.switchDeviceHint"
+
   | "dashboard.switchTo"
   | "dashboard.stressIndex"
   | "dashboard.tar"
