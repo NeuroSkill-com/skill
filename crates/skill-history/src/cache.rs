@@ -482,7 +482,7 @@ fn metric_stats_vec(values: &[f64]) -> serde_json::Value {
     let mean = values.iter().sum::<f64>() / n as f64;
     let variance = values.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
     let stddev = variance.sqrt();
-    let median = if n % 2 == 0 { (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0 } else { sorted[n / 2] };
+    let median = if n.is_multiple_of(2) { (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0 } else { sorted[n / 2] };
     let p25 = sorted[n / 4];
     let p75 = sorted[3 * n / 4];
     let slope = linear_slope(values);

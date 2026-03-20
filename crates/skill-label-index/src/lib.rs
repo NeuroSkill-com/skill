@@ -76,13 +76,19 @@ pub struct LabelIndexState {
     pub eeg:     Mutex<Option<LabeledIndex<Cosine, i64>>>,
 }
 
-impl LabelIndexState {
-    pub fn new() -> Self {
+impl Default for LabelIndexState {
+    fn default() -> Self {
         Self {
             text:    Mutex::new(None),
             context: Mutex::new(None),
             eeg:     Mutex::new(None),
         }
+    }
+}
+
+impl LabelIndexState {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Load (or create) all three indices from `skill_dir`.  Called on startup.

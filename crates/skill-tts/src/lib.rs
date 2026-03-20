@@ -359,6 +359,7 @@ pub fn tts_set_voice(voice: String) {
 }
 
 /// Initialise the active TTS backend. Returns progress events via callback.
+#[allow(unused_variables)] // `emit` is used under tts-neutts / tts-kitten feature gates
 pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'static>(
     emit: F,
 ) -> Result<(), String> {

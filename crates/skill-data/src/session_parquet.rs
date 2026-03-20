@@ -439,7 +439,7 @@ impl ParquetState {
         let Some(ref mut wtr) = self.imu_wtr else { return; };
 
         let n_rows = self.imu_pending.len();
-        let mut col_data: Vec<Vec<f64>> = vec![Vec::with_capacity(n_rows); 10];
+        let mut col_data: Vec<Vec<f64>> = (0..10).map(|_| Vec::with_capacity(n_rows)).collect();
 
         for row in &self.imu_pending {
             for (ci, col) in col_data.iter_mut().enumerate() {

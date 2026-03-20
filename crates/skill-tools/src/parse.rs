@@ -208,15 +208,7 @@ fn coerce_to_bool(value: &Value) -> Option<bool> {
             "false" | "0" | "no" | "off" => Some(false),
             _ => None,
         },
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                Some(i != 0)
-            } else if let Some(f) = n.as_f64() {
-                Some(f != 0.0)
-            } else {
-                None
-            }
-        }
+        Value::Number(n) => n.as_i64().map(|i| i != 0).or_else(|| n.as_f64().map(|f| f != 0.0)),
         _ => None,
     }
 }
@@ -405,7 +397,7 @@ fn build_compact_tool_block(tools: &[Tool]) -> String {
             .map(|props| props.keys().cloned().collect())
             .unwrap_or_default();
         if params.is_empty() {
-            names.push(format!("{name}"));
+            names.push(name.to_string());
         } else {
             names.push(format!("{name}({})", params.join(",")));
         }
@@ -758,7 +750,7 @@ fn extract_calls_from_value(v: &Value, calls: &mut Vec<ToolCall>, dedup: &mut Ha
     if is_dict_style_multi_tool(v) {
         if let Some(obj) = v.as_object() {
             for (name, params) in obj {
-                let args = if params.is_object() && params.as_object().map_or(false, |o| !o.is_empty()) {
+                let args = if params.is_object() && params.as_object().is_some_and(|o| !o.is_empty()) {
                     params.to_string()
                 } else {
                     "{}".to_string()

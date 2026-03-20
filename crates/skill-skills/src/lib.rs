@@ -522,10 +522,8 @@ fn build_ignore(dir: &Path, _root_dir: &Path) -> Option<ignore::gitignore::Gitig
     let mut found = false;
     for name in &[".gitignore", ".ignore", ".fdignore"] {
         let p = dir.join(name);
-        if p.exists() {
-            if builder.add(&p).is_none() {
-                found = true;
-            }
+        if p.exists() && builder.add(&p).is_none() {
+            found = true;
         }
     }
     if found {

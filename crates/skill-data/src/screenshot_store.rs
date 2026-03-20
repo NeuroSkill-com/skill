@@ -390,7 +390,7 @@ impl ScreenshotStore {
         ocr_hnsw_id: Option<u64>,
     ) {
         let conn = self.conn.lock_or_recover();
-        let blob: Option<Vec<u8>> = ocr_embedding.map(|emb| crate::util::f32_to_blob(emb));
+        let blob: Option<Vec<u8>> = ocr_embedding.map(crate::util::f32_to_blob);
         let dim = ocr_embedding.map_or(0i64, |e| e.len() as i64);
         let _ = conn.execute(
             "UPDATE screenshots SET

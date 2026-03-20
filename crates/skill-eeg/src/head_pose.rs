@@ -78,10 +78,16 @@ pub struct HeadPoseTracker {
     imu_sr: f64,
 }
 
+impl Default for HeadPoseTracker {
+    fn default() -> Self {
+        Self::with_imu_rate(IMU_SR)
+    }
+}
+
 impl HeadPoseTracker {
     /// Create a tracker with the default Muse IMU sample rate (52 Hz).
     pub fn new() -> Self {
-        Self::with_imu_rate(IMU_SR)
+        Self::default()
     }
 
     /// Create a tracker with a custom IMU sample rate (Hz).
