@@ -10117,6 +10117,7 @@ checksum = "b2aa850e253778c88a04c3d7323b043aeda9d3e30d5971937c1855769763678e"
 name = "skill"
 version = "0.0.45"
 dependencies = [
+ "arrow-array",
  "async-stream",
  "axum",
  "base64 0.22.1",
@@ -10153,6 +10154,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "ocrs",
  "ort",
+ "parquet",
  "png 0.17.16",
  "regex",
  "rfd",

@@ -769,12 +769,13 @@ pub fn estimate_reembed(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Reembe
     let skill_dir = s.skill_dir.clone();
     drop(s);
 
-    let is_session_csv = |fname: &str| -> bool {
-        (fname.starts_with("exg_") || fname.starts_with("muse_"))
-            && fname.ends_with(".csv")
-            && !fname.contains("_ppg")
+    let is_session_data = |fname: &str| -> bool {
+        let has_prefix = fname.starts_with("exg_") || fname.starts_with("muse_");
+        if !has_prefix { return false; }
+        let is_primary = !fname.contains("_ppg")
             && !fname.contains("_metrics")
-            && !fname.contains("_imu")
+            && !fname.contains("_imu");
+        is_primary && (fname.ends_with(".csv") || fname.ends_with(".parquet"))
     };
 
     let mut total_sessions = 0usize;
@@ -785,17 +786,22 @@ pub fn estimate_reembed(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Reembe
             let name = entry.file_name().to_string_lossy().to_string();
             if name.len() == 8 && name.chars().all(|c| c.is_ascii_digit()) {
                 let day_dir = entry.path();
-                let mut day_count = 0usize;
+                // Count unique session stems (prefer parquet, don't double-count).
+                let mut stems = std::collections::HashSet::new();
                 if let Ok(rd) = std::fs::read_dir(&day_dir) {
                     for f in rd.flatten() {
                         let fname = f.file_name().to_string_lossy().to_string();
-                        if is_session_csv(&fname) {
-                            day_count += 1;
+                        if is_session_data(&fname) {
+                            let stem = f.path().file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("")
+                                .to_string();
+                            stems.insert(stem);
                         }
                     }
                 }
-                if day_count > 0 {
-                    total_sessions += day_count;
+                if !stems.is_empty() {
+                    total_sessions += stems.len();
                     date_dirs += 1;
                 }
             }
@@ -846,6 +852,54 @@ struct ReembedProgress {
     total:  usize,
     date:   String,
     status: String,
+}
+
+/// Read raw EEG samples from a Parquet file.
+///
+/// Returns `(timestamps, per_channel_samples)` where each channel buffer
+/// contains f32 µV values in recording order.
+fn read_eeg_parquet(
+    path: &std::path::Path,
+    n_ch: usize,
+) -> Result<(Vec<f64>, Vec<Vec<f32>>), String> {
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+    use arrow_array::cast::AsArray;
+
+    let file = std::fs::File::open(path)
+        .map_err(|e| format!("open {}: {e}", path.display()))?;
+    let builder = ParquetRecordBatchReaderBuilder::try_new(file)
+        .map_err(|e| format!("parquet reader {}: {e}", path.display()))?;
+    let reader = builder.build()
+        .map_err(|e| format!("parquet build {}: {e}", path.display()))?;
+
+    let mut timestamps: Vec<f64> = Vec::new();
+    let mut ch_bufs: Vec<Vec<f32>> = vec![Vec::new(); n_ch];
+
+    for batch_result in reader {
+        let batch = batch_result.map_err(|e| format!("parquet batch: {e}"))?;
+        let n_rows = batch.num_rows();
+        let n_cols = batch.num_columns();
+
+        // Column 0 = timestamp_s.
+        if let Some(ts_col) = batch.column(0).as_primitive_opt::<arrow_array::types::Float64Type>() {
+            for i in 0..n_rows {
+                timestamps.push(ts_col.value(i));
+            }
+        }
+
+        // Columns 1..=n_ch = EEG channels.
+        for ch in 0..n_ch {
+            let col_idx = ch + 1;
+            if col_idx >= n_cols { break; }
+            if let Some(col) = batch.column(col_idx).as_primitive_opt::<arrow_array::types::Float64Type>() {
+                for i in 0..n_rows {
+                    ch_bufs[ch].push(col.value(i) as f32);
+                }
+            }
+        }
+    }
+
+    Ok((timestamps, ch_bufs))
 }
 
 fn reembed_worker(
@@ -922,23 +976,40 @@ fn reembed_worker(
     }
     dates.sort();
 
-    // Count total session CSVs across all dates.
-    // Session CSVs match `exg_<ts>.csv` or `muse_<ts>.csv` (not _ppg, _metrics, _imu).
-    let is_session_csv = |fname: &str| -> bool {
-        (fname.starts_with("exg_") || fname.starts_with("muse_"))
-            && fname.ends_with(".csv")
-            && !fname.contains("_ppg")
-            && !fname.contains("_metrics")
-            && !fname.contains("_imu")
-    };
-    let mut session_files: Vec<(String, std::path::PathBuf)> = Vec::new(); // (date, csv_path)
+    // Collect session data files across all dates.
+    // Prefer .parquet over .csv when both exist for the same session.
+    let mut session_files: Vec<(String, std::path::PathBuf)> = Vec::new(); // (date, data_path)
     for date in &dates {
         let day_dir = skill_dir.join(date);
         if let Ok(rd) = std::fs::read_dir(&day_dir) {
+            // Collect all EEG data files in this day.
+            let mut csv_files: Vec<std::path::PathBuf> = Vec::new();
+            let mut pq_files:  Vec<std::path::PathBuf> = Vec::new();
             for entry in rd.flatten() {
                 let fname = entry.file_name().to_string_lossy().to_string();
-                if is_session_csv(&fname) {
-                    session_files.push((date.clone(), entry.path()));
+                let is_primary = (fname.starts_with("exg_") || fname.starts_with("muse_"))
+                    && !fname.contains("_ppg")
+                    && !fname.contains("_metrics")
+                    && !fname.contains("_imu");
+                if !is_primary { continue; }
+                if fname.ends_with(".parquet") {
+                    pq_files.push(entry.path());
+                } else if fname.ends_with(".csv") {
+                    csv_files.push(entry.path());
+                }
+            }
+            // For each session, prefer parquet if it exists, else CSV.
+            // Match by stem: exg_12345.parquet vs exg_12345.csv.
+            let mut used_stems: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for pq in &pq_files {
+                let stem = pq.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                used_stems.insert(stem);
+                session_files.push((date.clone(), pq.clone()));
+            }
+            for csv in &csv_files {
+                let stem = csv.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                if !used_stems.contains(&stem) {
+                    session_files.push((date.clone(), csv.clone()));
                 }
             }
         }
@@ -949,7 +1020,7 @@ fn reembed_worker(
     let mut done = 0usize;
     let mut total_embeddings = 0usize;
 
-    skill_log!(logger, "reembed", "starting re-embed: {} session CSVs across {} dates with model={}",
+    skill_log!(logger, "reembed", "starting re-embed: {} sessions across {} dates with model={}",
         total, dates.len(), backend);
 
     let epoch_samples = crate::constants::EMBEDDING_EPOCH_SAMPLES;
@@ -985,28 +1056,44 @@ fn reembed_worker(
         // Native samples per epoch at device sample rate.
         let native_epoch = (sample_rate * epoch_secs as f64).round() as usize;
 
-        // Read the CSV: columns = [timestamp_s, ch1, ch2, ...].
-        let Ok(mut rdr) = csv::ReaderBuilder::new()
-            .has_headers(true)
-            .from_path(csv_path)
-        else {
-            skill_log!(logger, "reembed", "cannot open CSV {}", csv_path.display());
-            done += 1;
-            continue;
-        };
-
-        // Accumulate per-channel samples.
+        // Read EEG samples: columns = [timestamp_s, ch1, ch2, ...].
+        // Supports both CSV and Parquet formats.
         let mut ch_bufs: Vec<Vec<f32>> = vec![Vec::new(); n_ch];
         let mut timestamps: Vec<f64> = Vec::new();
 
-        for result in rdr.records() {
-            let Ok(record) = result else { continue };
-            // Column 0 = timestamp_s, columns 1..=n_ch = µV values.
-            let ts: f64 = record.get(0).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-            timestamps.push(ts);
-            for ch in 0..n_ch {
-                let v: f32 = record.get(ch + 1).and_then(|s| s.parse().ok()).unwrap_or(0.0);
-                ch_bufs[ch].push(v);
+        let is_parquet = csv_path.extension().and_then(|e| e.to_str()) == Some("parquet");
+
+        if is_parquet {
+            // ── Read Parquet ──────────────────────────────────────────────
+            match read_eeg_parquet(csv_path, n_ch) {
+                Ok((ts, bufs)) => {
+                    timestamps = ts;
+                    ch_bufs = bufs;
+                }
+                Err(e) => {
+                    skill_log!(logger, "reembed", "cannot read parquet {}: {e}", csv_path.display());
+                    done += 1;
+                    continue;
+                }
+            }
+        } else {
+            // ── Read CSV ──────────────────────────────────────────────────
+            let Ok(mut rdr) = csv::ReaderBuilder::new()
+                .has_headers(true)
+                .from_path(csv_path)
+            else {
+                skill_log!(logger, "reembed", "cannot open CSV {}", csv_path.display());
+                done += 1;
+                continue;
+            };
+            for result in rdr.records() {
+                let Ok(record) = result else { continue };
+                let ts: f64 = record.get(0).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                timestamps.push(ts);
+                for ch in 0..n_ch {
+                    let v: f32 = record.get(ch + 1).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                    ch_bufs[ch].push(v);
+                }
             }
         }
 
