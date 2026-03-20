@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-only
+# Copyright (C) 2026 NeuroSkill.com
+#
+# Pre-commit hook — enforces i18n key synchronisation.
+#
+# Runs `npm run sync:i18n:check` when any i18n source file is staged.
+# This catches missing translation keys before they reach the repository,
+# preventing structural drift between locales.
+#
+# Setup (run once per clone):
+#   git config core.hooksPath .githooks
+#
+# Or install manually:
+#   ln -sf ../../.githooks/pre-commit .git/hooks/pre-commit
+
+set -euo pipefail
+
+# ── Only check when i18n files are actually staged ─────────────────────────────
+# Avoids slowing down commits that don't touch translations.
+STAGED_I18N=$(git diff --cached --name-only --diff-filter=ACMR -- 'src/lib/i18n/' 2>/dev/null || true)
+
+if [ -z "$STAGED_I18N" ]; then
+    exit 0
+fi
+
+echo "🌐 i18n files changed — checking key synchronisation…"
+
+if ! npm run sync:i18n:check --silent 2>&1; then
+    echo ""
+    echo "❌ i18n keys are out of sync."
+    echo "   Run:  npm run sync:i18n:fix"
+    echo "   Then stage the fixed files and commit again."
+    exit 1
+fi
+
+echo "✅ i18n keys in sync."
