@@ -537,7 +537,10 @@ pub fn download_hf_weights(
 ///
 /// Must be called **before** the first `WgpuDevice` access.
 pub fn configure_cubecl_cache(skill_dir: &Path) {
+    use std::sync::Once;
     use cubecl_runtime::config::{cache::CacheConfig, GlobalConfig};
+
+    static CUBECL_INIT: Once = Once::new();
 
     let cache_dir = skill_dir.join("cubecl_cache");
     match std::fs::create_dir_all(&cache_dir) {
@@ -545,10 +548,11 @@ pub fn configure_cubecl_cache(skill_dir: &Path) {
         Err(e) => eprintln!("[embedder] warn: cubecl cache mkdir {}: {e}", cache_dir.display()),
     }
 
-    let mut cfg = GlobalConfig::default();
-    cfg.autotune.cache = CacheConfig::File(cache_dir);
-
-    let _ = std::panic::catch_unwind(|| GlobalConfig::set(cfg));
+    CUBECL_INIT.call_once(|| {
+        let mut cfg = GlobalConfig::default();
+        cfg.autotune.cache = CacheConfig::File(cache_dir.clone());
+        GlobalConfig::set(cfg);
+    });
 }
 
 // ── GPU panic flag ────────────────────────────────────────────────────────────
