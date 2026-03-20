@@ -983,6 +983,11 @@ the Free Software Foundation, version 3 only. -->
 
   const maxCount = $derived(Math.max(1, ...calendarCells.map(c => c.count)));
 
+  /** Month label for the calendar month view. */
+  const calendarMonth = $derived(
+    calendarAnchor.toLocaleString("default", { month: "long", year: "numeric" })
+  );
+
   /** Group year cells by week for the GitHub-style year heatmap. */
   const yearWeeks = $derived.by(() => {
     if (viewMode !== "year") return [];

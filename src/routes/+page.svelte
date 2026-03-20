@@ -17,6 +17,7 @@ the Free Software Foundation, version 3 only. -->
   import GpuChart                              from "$lib/GpuChart.svelte";
   import { EEG_CH, EEG_COLOR, GANGLION_CH, GANGLION_COLOR, MW75_CH, MW75_COLOR, HERMES_CH, HERMES_COLOR, EMOTIV_CH, EMOTIV_COLOR, IDUN_CH, IDUN_COLOR, DEFAULT_FILTER_CONFIG } from "$lib/constants";
   import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
+  import OnboardingChecklist from "$lib/OnboardingChecklist.svelte";
   import {
     BrainStateScores, FaaGauge, EegIndices, CompositeScores,
     ConsciousnessMetrics,
@@ -1513,45 +1514,10 @@ the Free Software Foundation, version 3 only. -->
 
         <!-- ── Onboarding checklist (hides once all steps done) ─────────── -->
         {#if !onboardComplete}
-          <div class="rounded-xl border border-amber-400/20 bg-amber-50/60 dark:bg-amber-950/20 px-3.5 py-3 flex flex-col gap-2">
-            <div class="flex items-center gap-1.5">
-              <span class="text-base pointer-events-none">🚀</span>
-              <span class="text-[0.72rem] font-semibold text-amber-800 dark:text-amber-300">
-                {t("dashboard.gettingStarted")}
-              </span>
-              <span class="ml-auto text-[0.58rem] text-muted-foreground/60">
-                {onboardSteps.filter(s => s.done).length}/{onboardSteps.length}
-              </span>
-            </div>
-            <!-- Mini progress bar -->
-            <div class="h-1 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden">
-              <div class="h-full rounded-full bg-amber-400 transition-all duration-700"
-                   style="width:{(onboardSteps.filter(s => s.done).length / onboardSteps.length) * 100}%">
-              </div>
-            </div>
-            <div class="flex flex-col gap-1.5 mt-0.5">
-              {#each onboardSteps as step (step.label)}
-                <div class="flex items-center gap-2">
-                  <div class="w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0
-                              {step.done ? 'bg-emerald-500' : 'border border-border dark:border-white/20 bg-transparent'}">
-                    {#if step.done}
-                      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"
-                           stroke-linecap="round" stroke-linejoin="round" class="w-2 h-2">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                    {/if}
-                  </div>
-                  <span class="text-[0.65rem] {step.done ? 'text-muted-foreground/60 line-through' : 'text-foreground/80'}">
-                    {step.label}
-                  </span>
-                </div>
-              {/each}
-            </div>
-            <button onclick={() => { onboardDone = { devicePaired: true, calibrated: true, firstSession: true, goalSet: true, llmDownloaded: true, searchRun: true, dndConfigured: true, apiVisited: true }; saveOnboarding(); }}
-                    class="text-[0.55rem] text-muted-foreground/40 hover:text-muted-foreground/70 mt-0.5 self-end underline underline-offset-2">
-              Dismiss
-            </button>
-          </div>
+          <OnboardingChecklist
+            steps={onboardSteps}
+            onDismiss={() => { onboardDone = { devicePaired: true, calibrated: true, firstSession: true, goalSet: true, llmDownloaded: true, searchRun: true, dndConfigured: true, apiVisited: true }; saveOnboarding(); }}
+          />
         {/if}
 
       <!-- ════ DISCONNECTED ══════════════════════════════════════════════════ -->

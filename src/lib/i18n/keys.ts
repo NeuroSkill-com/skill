@@ -346,6 +346,7 @@ export type TranslationKey =
   | "common.goalReached"
   | "common.resetZoom"
   | "common.openComparison"
+  | "common.dismiss"
   | "common.error"
   | "error.description"
   | "error.goHome"

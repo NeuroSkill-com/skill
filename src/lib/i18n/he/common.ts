@@ -48,6 +48,7 @@ const common: Record<string, string> = {
   "common.goalReached":     "Goal reached!",
   "common.resetZoom":       "Double-click chart or click to reset zoom",
   "common.openComparison":  "Open comparison",
+  "common.dismiss":         "Dismiss",
   "common.error":           "Something went wrong",
   "error.description":      "An unexpected error occurred. You can try reloading the page or going back to the dashboard.",
   "error.goHome":           "Go to Dashboard",
