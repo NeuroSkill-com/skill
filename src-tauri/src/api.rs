@@ -127,6 +127,47 @@ use crate::ws_server::SharedTracker;
 use crate::MutexExt;
 use crate::AppStateExt;
 
+// ── Bearer token middleware ───────────────────────────────────────────────────
+
+/// Axum middleware that rejects requests when a non-empty `api_token` is
+/// configured but the `Authorization: Bearer <token>` header is missing or
+/// does not match.
+///
+/// When `api_token` is empty (the default), all requests pass through.
+async fn bearer_auth(
+    State(state): State<SharedState>,
+    req:          Request,
+    next:         axum::middleware::Next,
+) -> Response {
+    let expected = {
+        let r = state.app.app_state();
+        let g = r.lock_or_recover();
+        g.api_token.clone()
+    };
+
+    // Empty token → auth disabled.
+    if expected.is_empty() {
+        return next.run(req).await;
+    }
+
+    // Extract the `Authorization: Bearer <token>` header.
+    let provided = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("");
+
+    if provided == expected {
+        next.run(req).await
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "ok": false, "error": "invalid or missing Bearer token" })),
+        ).into_response()
+    }
+}
+
 // ── Shared state ──────────────────────────────────────────────────────────────
 
 /// State passed to every HTTP and WebSocket handler.
@@ -228,6 +269,7 @@ pub fn router(state: SharedState) -> Router {
             .allow_origin(Any)
             .allow_methods(Any)
             .allow_headers(Any))
+        .layer(axum::middleware::from_fn_with_state(state.clone(), bearer_auth))
         .with_state(state)
 }
 

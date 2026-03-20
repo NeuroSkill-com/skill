@@ -247,6 +247,7 @@ use settings_cmds::{
     get_hooks, set_hooks, get_hook_statuses, open_session_for_timestamp,
     suggest_hook_distances, suggest_hook_keywords, get_hook_log, get_hook_log_count,
     get_ws_config, set_ws_config,
+    get_api_token, set_api_token,
     get_autostart_enabled, set_autostart_enabled,
     get_update_check_interval, set_update_check_interval,
     get_skills_refresh_interval, set_skills_refresh_interval,
@@ -519,6 +520,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         s.hooks                        = data.hooks;
         s.ws_host                      = data.ws_host.clone();
         s.ws_port                      = data.ws_port;
+        s.api_token                    = data.api_token.clone();
         s.update_check_interval_secs   = data.update_check_interval_secs;
         s.openbci_config               = data.openbci;
         s.device_api_config            = data.device_api;
@@ -1208,6 +1210,7 @@ pub fn run() {
             get_data_dir, set_data_dir, open_skill_dir,
             get_ws_clients, get_ws_request_log, get_ws_port,
             get_ws_config, set_ws_config,
+            get_api_token, set_api_token,
             get_autostart_enabled, set_autostart_enabled,
             get_update_check_interval, set_update_check_interval,
             get_skills_refresh_interval, set_skills_refresh_interval,

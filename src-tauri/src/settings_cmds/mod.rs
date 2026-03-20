@@ -673,6 +673,27 @@ pub fn set_ws_config(
     Ok(())
 }
 
+// ── API token ──────────────────────────────────────────────────────────────────
+
+/// Return the current API bearer token (empty string = no auth).
+#[tauri::command]
+pub fn get_api_token(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
+    state.lock_or_recover().api_token.clone()
+}
+
+/// Set the API bearer token.  Empty string disables authentication.
+/// The change takes effect immediately for new HTTP requests; existing
+/// WebSocket connections are not disconnected.
+#[tauri::command]
+pub fn set_api_token(
+    token: String,
+    app:   AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    state.lock_or_recover().api_token = token;
+    crate::save_settings(&app);
+}
+
 // ── Autostart (launch at login) ────────────────────────────────────────────────
 
 /// Returns `true` if the app is registered to launch at login.

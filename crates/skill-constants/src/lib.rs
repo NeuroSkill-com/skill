@@ -640,3 +640,145 @@ pub const SKILLS_SUBDIR: &str = "skills";
 
 /// The marker filename that identifies a directory as a skill root.
 pub const SKILL_MARKER: &str = "SKILL.md";
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Filter constants consistency ──────────────────────────────────────
+
+    #[test]
+    fn filter_overlap_equals_window_minus_hop() {
+        assert_eq!(FILTER_OVERLAP, FILTER_WINDOW - FILTER_HOP);
+    }
+
+    #[test]
+    fn filter_window_is_power_of_two() {
+        assert!(FILTER_WINDOW.is_power_of_two());
+    }
+
+    // ── Band definitions ─────────────────────────────────────────────────
+
+    #[test]
+    fn bands_count_matches_num_bands() {
+        assert_eq!(BANDS.len(), NUM_BANDS);
+        assert_eq!(BAND_COLORS.len(), NUM_BANDS);
+        assert_eq!(BAND_SYMBOLS.len(), NUM_BANDS);
+    }
+
+    #[test]
+    fn bands_are_contiguous_and_ascending() {
+        for i in 1..BANDS.len() {
+            let (_, _, prev_hi) = BANDS[i - 1];
+            let (_, curr_lo, curr_hi) = BANDS[i];
+            assert!(
+                (curr_lo - prev_hi).abs() < f32::EPSILON,
+                "band gap between {} and {}: {} vs {}",
+                BANDS[i-1].0, BANDS[i].0, prev_hi, curr_lo
+            );
+            assert!(curr_hi > curr_lo, "band {} has hi <= lo", BANDS[i].0);
+        }
+    }
+
+    #[test]
+    fn first_band_starts_above_zero() {
+        assert!(BANDS[0].1 > 0.0);
+    }
+
+    // ── Embedding epoch ──────────────────────────────────────────────────
+
+    #[test]
+    fn embedding_epoch_samples_matches_rate_times_secs() {
+        let expected = (MUSE_SAMPLE_RATE * EMBEDDING_EPOCH_SECS as f32) as usize;
+        assert_eq!(EMBEDDING_EPOCH_SAMPLES, expected);
+    }
+
+    #[test]
+    fn embedding_overlap_within_bounds() {
+        assert!(EMBEDDING_OVERLAP_SECS >= EMBEDDING_OVERLAP_MIN_SECS);
+        assert!(EMBEDDING_OVERLAP_SECS <= EMBEDDING_OVERLAP_MAX_SECS);
+    }
+
+    // ── Channel names ────────────────────────────────────────────────────
+
+    #[test]
+    fn muse_has_4_channels() {
+        assert_eq!(CHANNEL_NAMES.len(), 4);
+    }
+
+    #[test]
+    fn eeg_channels_accommodates_all_devices() {
+        assert!(EEG_CHANNELS >= CHANNEL_NAMES.len());
+        assert!(EEG_CHANNELS >= HERMES_EEG_CHANNELS);
+        assert!(EEG_CHANNELS >= MW75_EEG_CHANNELS);
+    }
+
+    #[test]
+    fn device_channel_names_match_counts() {
+        assert_eq!(GANGLION_CHANNEL_NAMES.len(), 4);
+        assert_eq!(HERMES_CHANNEL_NAMES.len(), HERMES_EEG_CHANNELS);
+        assert_eq!(MW75_CHANNEL_NAMES.len(), MW75_EEG_CHANNELS);
+        assert_eq!(EMOTIV_EPOC_CHANNEL_NAMES.len(), EMOTIV_EPOC_EEG_CHANNELS);
+        assert_eq!(EMOTIV_INSIGHT_CHANNEL_NAMES.len(), EMOTIV_INSIGHT_EEG_CHANNELS);
+        assert_eq!(IDUN_CHANNEL_NAMES.len(), IDUN_EEG_CHANNELS);
+    }
+
+    // ── Emotiv sample rate derivation ────────────────────────────────────
+
+    #[test]
+    fn emotiv_epocx_is_256hz() {
+        assert_eq!(emotiv_sample_rate_from_id("EPOCX-A1B2C3D4"), 256.0);
+    }
+
+    #[test]
+    fn emotiv_epocplus_is_256hz() {
+        assert_eq!(emotiv_sample_rate_from_id("EPOCPLUS-06F2DDBC"), 256.0);
+    }
+
+    #[test]
+    fn emotiv_insight_v1_is_128hz() {
+        assert_eq!(emotiv_sample_rate_from_id("INSIGHT-5AF2C39E"), 128.0);
+    }
+
+    #[test]
+    fn emotiv_unknown_is_128hz() {
+        assert_eq!(emotiv_sample_rate_from_id("UNKNOWN-DEVICE"), 128.0);
+    }
+
+    #[test]
+    fn emotiv_case_insensitive() {
+        assert_eq!(emotiv_sample_rate_from_id("epocx-lowercase"), 256.0);
+    }
+
+    // ── Quality thresholds ───────────────────────────────────────────────
+
+    #[test]
+    fn quality_thresholds_ordered() {
+        assert!(QUALITY_NO_SIGNAL_RMS < QUALITY_FAIR_RMS);
+        assert!(QUALITY_FAIR_RMS < QUALITY_POOR_RMS);
+    }
+
+    // ── MutexExt ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn mutex_ext_locks_normally() {
+        let m = std::sync::Mutex::new(42);
+        let g = m.lock_or_recover();
+        assert_eq!(*g, 42);
+    }
+
+    #[test]
+    fn mutex_ext_recovers_from_poison() {
+        let m = std::sync::Arc::new(std::sync::Mutex::new(99));
+        let m2 = m.clone();
+        let _ = std::thread::spawn(move || {
+            let _g = m2.lock().unwrap();
+            panic!("intentional poison");
+        }).join();
+        // Mutex is now poisoned — lock_or_recover should still work
+        let g = m.lock_or_recover();
+        assert_eq!(*g, 99);
+    }
+}

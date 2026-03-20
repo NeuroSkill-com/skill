@@ -75,6 +75,11 @@ the Free Software Foundation, version 3 only. -->
   let wsSaving      = $state(false);
   let wsChanged     = $derived(wsHostChanged || wsPortChanged);
 
+  // ── API token ───────────────────────────────────────────────────────────────
+  let apiToken      = $state("");
+  let apiTokenInput = $state("");
+  let apiTokenDirty = $derived(apiTokenInput !== apiToken);
+
   const OVERLAP_PRESETS: [string, number][] = [
     ["0 s — none",    0],
     ["1.25 s — 25%",  1.25],
@@ -120,6 +125,8 @@ the Free Software Foundation, version 3 only. -->
       wsPort = p;
       wsPortInput = String(p);
     }
+    apiToken = await invoke<string>("get_api_token");
+    apiTokenInput = apiToken;
     trackActiveWindow   = await invoke<boolean>("get_active_window_tracking");
     currentActiveWindow = await invoke<ActiveWindowInfo | null>("get_active_window");
     trackInputActivity  = await invoke<boolean>("get_input_activity_tracking");
@@ -624,6 +631,48 @@ the Free Software Foundation, version 3 only. -->
         </div>
       {/if}
 
+    </CardContent>
+  </Card>
+</section>
+
+<!-- ── API Token ────────────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+    {t("settings.apiToken")}
+  </span>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col gap-3 py-3">
+      <div class="flex flex-col gap-1">
+        <span class="text-[0.62rem] font-medium text-foreground">{t("settings.apiTokenLabel")}</span>
+        <p class="text-[0.58rem] text-muted-foreground leading-relaxed">{t("settings.apiTokenDesc")}</p>
+        <div class="flex items-center gap-2 mt-1">
+          <input type="password"
+                 bind:value={apiTokenInput}
+                 placeholder={t("settings.apiTokenPlaceholder")}
+                 class="flex-1 h-7 rounded-md border border-border bg-background px-2 text-[0.68rem]
+                        font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+          {#if apiTokenDirty}
+            <Button variant="outline" size="sm"
+                    class="h-7 text-[0.58rem] px-3"
+                    onclick={async () => {
+                      await invoke("set_api_token", { token: apiTokenInput });
+                      apiToken = apiTokenInput;
+                    }}>
+              {t("common.save")}
+            </Button>
+          {/if}
+        </div>
+        {#if apiToken}
+          <p class="text-[0.52rem] text-emerald-600 dark:text-emerald-400 mt-0.5">
+            {t("settings.apiTokenActive")}
+          </p>
+        {:else}
+          <p class="text-[0.52rem] text-muted-foreground/60 mt-0.5">
+            {t("settings.apiTokenNone")}
+          </p>
+        {/if}
+      </div>
     </CardContent>
   </Card>
 </section>

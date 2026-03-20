@@ -574,6 +574,13 @@ pub struct UserSettings {
     /// Preferred WebSocket server port.
     #[serde(default = "default_ws_port")]
     pub ws_port: u16,
+    /// Optional bearer token for the HTTP/WS API.
+    ///
+    /// When non-empty, every HTTP request and WebSocket upgrade must include
+    /// `Authorization: Bearer <token>`.  When empty (default), the API is
+    /// open — suitable for localhost-only (`127.0.0.1`) binds.
+    #[serde(default)]
+    pub api_token: String,
     /// Seconds between automatic background update checks (0 = disabled).
     #[serde(default = "default_update_check_interval")]
     pub update_check_interval_secs: u64,
@@ -713,6 +720,7 @@ impl Default for UserSettings {
             hooks:                  Vec::new(),
             ws_host:                default_ws_host(),
             ws_port:                default_ws_port(),
+            api_token:              String::new(),
             update_check_interval_secs: default_update_check_interval(),
             openbci:                OpenBciConfig::default(),
             device_api:             DeviceApiConfig::default(),

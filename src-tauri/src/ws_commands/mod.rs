@@ -11,6 +11,7 @@
 //! into this module and forwards the `Result` back to the client.
 
 mod calibration;
+mod dnd_sleep;
 mod health;
 mod hooks;
 mod screenshots;
@@ -560,183 +561,7 @@ pub fn umap_poll(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
 // Calibration commands — delegated to calibration.rs sub-module.
 
-// ── dnd ───────────────────────────────────────────────────────────────────────
-
-/// `dnd` — return the current Do Not Disturb automation status.
-///
-/// **Response**
-/// ```json
-/// {
-///   "enabled":         true,
-///   "avg_score":       68.4,
-///   "threshold":       60.0,
-///   "sample_count":    120,
-///   "window_size":     240,
-///   "duration_secs":   60,
-///   "mode_identifier": "com.apple.donotdisturb.mode.default",
-///   "dnd_active":      false,
-///   "os_active":       false
-/// }
-/// ```
-///
-/// | Field | Description |
-/// |---|---|
-/// | `enabled` | Whether DND automation is enabled in settings |
-/// | `avg_score` | Rolling average focus score over the current sample window |
-/// | `threshold` | Average must reach this (0–100) to activate DND |
-/// | `sample_count` | Samples currently in the window |
-/// | `window_size` | Target window size (≈ duration_secs × 4 Hz) |
-/// | `duration_secs` | Seconds worth of samples in the rolling window |
-/// | `mode_identifier` | macOS Focus mode identifier (ignored on non-macOS) |
-/// | `dnd_active` | Whether the app has currently activated DND |
-/// | `os_active` | Real OS Focus state (`null` on non-macOS) |
-pub fn dnd_status(app: &AppHandle) -> Result<Value, String> {
-    let s = app.app_state();
-    let guard = s.lock_or_recover();
-    let dnd = guard.dnd.lock_or_recover();
-    let enabled       = dnd.config.enabled;
-    let threshold     = dnd.config.focus_threshold;
-    let duration_secs = dnd.config.duration_secs;
-    let mode_id       = dnd.config.focus_mode_identifier.clone();
-    let dnd_active    = dnd.active;
-    let window_size   = (duration_secs as usize * 4).max(8);
-    let sample_count  = dnd.focus_samples.len();
-    let avg_score     = if sample_count > 0 {
-        dnd.focus_samples.iter().sum::<f64>() / sample_count as f64
-    } else { 0.0 };
-    let os_active     = dnd.os_active;
-    drop(dnd);
-    drop(guard);
-
-    Ok(serde_json::json!({
-        "enabled":          enabled,
-        "avg_score":        avg_score,
-        "threshold":        threshold,
-        "sample_count":     sample_count,
-        "window_size":      window_size,
-        "duration_secs":    duration_secs,
-        "mode_identifier":  mode_id,
-        "dnd_active":       dnd_active,
-        "os_active":        os_active,
-    }))
-}
-
-/// `dnd_set { "enabled": bool }` — force-enable or disable DND immediately,
-/// bypassing the EEG threshold entirely.
-///
-/// Useful for automation scripts, integrations, or testing.  The change is
-/// reflected in `dnd_active` and a `dnd-state-changed` event is emitted to all
-/// connected clients (including the desktop UI) so they can update their state.
-///
-/// **Required**
-/// - `enabled` — `true` to activate DND, `false` to deactivate.
-///
-/// **Response**
-/// ```json
-/// { "enabled": true, "ok": true }
-/// ```
-///
-/// When the OS call fails (e.g. macOS permissions not granted), `ok` is
-/// `false` and no state change is applied.
-pub fn dnd_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let enabled = msg.get("enabled")
-        .and_then(|v| v.as_bool())
-        .ok_or_else(|| "missing required field: \"enabled\" (boolean)".to_string())?;
-
-    let mode_id = {
-        let dnd_arc = app.app_state().lock_or_recover().dnd.clone();
-        let r = dnd_arc.lock_or_recover().config.focus_mode_identifier.clone();
-        r
-    };
-
-    let ok = skill_data::dnd::set_dnd(enabled, &mode_id);
-    if ok {
-        let s = app.app_state();
-        let g = s.lock_or_recover();
-        let mut dnd = g.dnd.lock_or_recover();
-        dnd.active = enabled;
-        if !enabled {
-            dnd.focus_samples.clear();
-        }
-        drop(dnd);
-        drop(g);
-        let _ = app.emit("dnd-state-changed", enabled);
-    }
-
-    Ok(serde_json::json!({ "enabled": enabled, "ok": ok }))
-}
-
-// ── sleep schedule ────────────────────────────────────────────────────────────
-
-/// `sleep_schedule` — return the current sleep schedule configuration.
-///
-/// ```json
-/// { "command": "sleep_schedule" }
-/// ```
-///
-/// Response:
-/// ```json
-/// { "bedtime": "23:00", "wake_time": "07:00", "preset": "default",
-///   "duration_minutes": 480 }
-/// ```
-pub fn sleep_schedule(app: &AppHandle) -> Result<Value, String> {
-    let s = app.app_state();
-    let guard = s.lock_or_recover();
-    let cfg = &guard.sleep_config;
-    let dur = cfg.duration_minutes();
-    Ok(serde_json::json!({
-        "bedtime":          cfg.bedtime,
-        "wake_time":        cfg.wake_time,
-        "preset":           cfg.preset,
-        "duration_minutes": dur,
-    }))
-}
-
-/// `sleep_schedule_set` — update the sleep schedule.
-///
-/// ```json
-/// { "command": "sleep_schedule_set", "bedtime": "23:00", "wake_time": "07:00", "preset": "default" }
-/// ```
-///
-/// All fields are optional — only the fields present are updated; omitted
-/// fields keep their current value.
-pub fn sleep_schedule_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    use crate::settings::SleepPreset;
-
-    let s = app.app_state();
-    let mut guard = s.lock_or_recover();
-
-    if let Some(v) = msg.get("bedtime").and_then(|v| v.as_str()) {
-        guard.sleep_config.bedtime = v.to_string();
-    }
-    if let Some(v) = msg.get("wake_time").and_then(|v| v.as_str()) {
-        guard.sleep_config.wake_time = v.to_string();
-    }
-    if let Some(v) = msg.get("preset").and_then(|v| v.as_str()) {
-        guard.sleep_config.preset = match v {
-            "default"       => SleepPreset::Default,
-            "early_bird"    => SleepPreset::EarlyBird,
-            "night_owl"     => SleepPreset::NightOwl,
-            "short_sleeper" => SleepPreset::ShortSleeper,
-            "long_sleeper"  => SleepPreset::LongSleeper,
-            _               => SleepPreset::Custom,
-        };
-    }
-
-    let cfg = guard.sleep_config.clone();
-    let dur = cfg.duration_minutes();
-    drop(guard);
-
-    crate::save_settings(app);
-
-    Ok(serde_json::json!({
-        "ok":               true,
-        "bedtime":          cfg.bedtime,
-        "wake_time":        cfg.wake_time,
-        "preset":           cfg.preset,
-        "duration_minutes": dur,
-    }))
-}
+// DND + sleep schedule commands — delegated to dnd_sleep.rs sub-module.
 
 // ── say ───────────────────────────────────────────────────────────────────────
 
@@ -821,10 +646,10 @@ pub async fn dispatch(
         "delete_calibration"  => calibration::delete_calibration(app, msg),
         "run_calibration"     => calibration::run_calibration(app, msg).await,
         "say"                 => say(app, msg).await,
-        "dnd"                 => dnd_status(app),
-        "dnd_set"             => dnd_set(app, msg),
-        "sleep_schedule"      => sleep_schedule(app),
-        "sleep_schedule_set"  => sleep_schedule_set(app, msg),
+        "dnd"                 => dnd_sleep::dnd_status(app),
+        "dnd_set"             => dnd_sleep::dnd_set(app, msg),
+        "sleep_schedule"      => dnd_sleep::sleep_schedule(app),
+        "sleep_schedule_set"  => dnd_sleep::sleep_schedule_set(app, msg),
         // ── Screenshot search ─────────────────────────────────────────────
         "search_screenshots"  => screenshots::search_screenshots(app, msg),
         "screenshots_around"  => screenshots::screenshots_around(app, msg),
