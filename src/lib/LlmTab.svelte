@@ -911,7 +911,7 @@
       <!-- Context size -->
       {@const maxCtx = activeEntry?.max_context_length || 0}
       {@const ctxOptions = ([[null,"auto"]] as [number|null, string][]).concat(
-        ([[2048,"2K"],[4096,"4K"],[8192,"8K"],[16384,"16K"],[32768,"32K"],[65536,"64K"],[131072,"128K"]] as [number, string][])
+        ([[4096,"4K"],[8192,"8K"],[16384,"16K"],[32768,"32K"],[65536,"64K"],[131072,"128K"]] as [number, string][])
           .filter(([val]) => maxCtx === 0 || (val as number) <= maxCtx)
       )}
       <div class="flex flex-col gap-2 px-4 py-3.5">
