@@ -21,8 +21,8 @@ the Free Software Foundation, version 3 only. -->
   import HelpLlm                from "$lib/help/HelpLlm.svelte";
   import HelpHooks              from "$lib/help/HelpHooks.svelte";
   import { t }                  from "$lib/i18n/index.svelte";
-  import { useWindowTitle }     from "$lib/window-title.svelte";
-  import { helpTitlebarState }  from "$lib/help-search-state.svelte";
+  import { useWindowTitle }     from "$lib/stores/window-title.svelte";
+  import { helpTitlebarState }  from "$lib/stores/titlebar.svelte";
   import DisclaimerFooter       from "$lib/DisclaimerFooter.svelte";
 
   type Tab = "dashboard" | "electrodes" | "settings" | "windows" | "api" | "tts" | "llm" | "hooks" | "privacy" | "references" | "faq";

@@ -12,7 +12,7 @@ the Free Software Foundation, version 3 only. -->
   import { invoke }             from "@tauri-apps/api/core";
   import { listen }             from "@tauri-apps/api/event";
   import { t }           from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
   import { Button }             from "$lib/components/ui/button";
   import { fmtDuration, fmtTimeShort as fmtTime, dateToCompactKey, fmtCountdown } from "$lib/format";
   import { openLabel } from "$lib/navigation";

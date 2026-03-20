@@ -12,7 +12,7 @@ the Free Software Foundation, version 3 only. -->
   import { WebGLRenderer } from "three";
   import { Badge } from "$lib/components/ui/badge";
   import { t } from "$lib/i18n/index.svelte";
-  import { getResolved } from "$lib/theme-store.svelte";
+  import { getResolved } from "$lib/stores/theme.svelte";
   import {
     type Electrode,
     type ElectrodeSystem,

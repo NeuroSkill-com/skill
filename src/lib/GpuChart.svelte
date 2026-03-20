@@ -22,7 +22,7 @@ the Free Software Foundation, version 3 only. -->
   import { invoke }             from "@tauri-apps/api/core";
   import { colorForLoad, C_NEUTRAL, rgba as toRgba } from "$lib/theme";
   import { t } from "$lib/i18n/index.svelte";
-  import { getResolved } from "$lib/theme-store.svelte";
+  import { getResolved } from "$lib/stores/theme.svelte";
   import { animatedCanvas } from "$lib/use-canvas";
 
   interface GpuStats    { render: number; tiler: number; overall: number; }

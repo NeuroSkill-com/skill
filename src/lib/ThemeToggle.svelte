@@ -9,7 +9,7 @@ the Free Software Foundation, version 3 only. -->
      Teleports tooltip to body to escape overflow clipping. -->
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { getTheme, cycleTheme } from "$lib/theme-store.svelte";
+  import { getTheme, cycleTheme } from "$lib/stores/theme.svelte";
   import { t } from "$lib/i18n/index.svelte";
 
   const icon = $derived(

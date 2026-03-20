@@ -28,7 +28,7 @@ the Free Software Foundation, version 3 only. -->
     UMAP_TRACE_INTERVAL_MS, UMAP_TRACE_GROW_MS,
     UMAP_TRACE_COLOR, UMAP_TRACE_NODE_COLOR,
   } from "$lib/constants";
-  import { getResolved } from "$lib/theme-store.svelte";
+  import { getResolved } from "$lib/stores/theme.svelte";
   import { fmtTimeShort, dateToLocalKey, fromUnix } from "$lib/format";
   import type { UmapPoint, UmapResult, UmapProgress } from "$lib/types";
   import {

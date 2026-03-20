@@ -18,7 +18,7 @@ the Free Software Foundation, version 3 only. -->
 -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { getResolved } from "$lib/theme-store.svelte";
+  import { getResolved } from "$lib/stores/theme.svelte";
   import { getDpr, setupHiDpiCanvas } from "$lib/format";
 
   export interface Series {

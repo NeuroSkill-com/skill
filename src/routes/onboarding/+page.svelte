@@ -14,7 +14,7 @@ the Free Software Foundation, version 3 only. -->
   import { Card, CardContent }  from "$lib/components/ui/card";
   import { Progress }           from "$lib/components/ui/progress";
   import { t }                  from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
   import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
   import { openSettings }       from "$lib/navigation";

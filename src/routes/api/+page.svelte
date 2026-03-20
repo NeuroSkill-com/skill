@@ -11,7 +11,7 @@ the Free Software Foundation, version 3 only. -->
   import { Badge }              from "$lib/components/ui/badge";
   import { Card, CardContent }  from "$lib/components/ui/card";
   import { t }                  from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
   import { fmtTime } from "$lib/format";
 

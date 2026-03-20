@@ -12,7 +12,7 @@ the Free Software Foundation, version 3 only. -->
   import { Button }        from "$lib/components/ui/button";
   import { Separator }     from "$lib/components/ui/separator";
   import { t }             from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
   import DisclaimerFooter  from "$lib/DisclaimerFooter.svelte";
   import Hypnogram         from "$lib/Hypnogram.svelte";
   import UmapViewer3D      from "$lib/UmapViewer3D.svelte";
@@ -20,7 +20,7 @@ the Free Software Foundation, version 3 only. -->
   import type { Series }   from "$lib/dashboard/TimeSeriesChart.svelte";
 
   import { Spinner }       from "$lib/components/ui/spinner";
-  import { getResolved }   from "$lib/theme-store.svelte";
+  import { getResolved }   from "$lib/stores/theme.svelte";
   import type { SessionMetrics, EpochRow } from "$lib/dashboard/SessionDetail.svelte";
   import type { SleepEpoch, SleepSummary, SleepStages } from "$lib/types";
   import { analyzeSleep, type SleepAnalysis } from "$lib/sleep-analysis";

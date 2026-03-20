@@ -14,7 +14,7 @@
  *
  * Usage — call once at the top level of a component's <script> block:
  *
- *   import { useWindowTitle } from "$lib/window-title.svelte";
+ *   import { useWindowTitle } from "$lib/stores/window-title.svelte";
  *   useWindowTitle("window.title.settings");
  */
 

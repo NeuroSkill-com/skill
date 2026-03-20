@@ -15,14 +15,14 @@ the Free Software Foundation, version 3 only. -->
   import { Badge }         from "$lib/components/ui/badge";
   import { Separator }     from "$lib/components/ui/separator";
   import { t }             from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
-  import { getResolved }   from "$lib/theme-store.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
+  import { getResolved }   from "$lib/stores/theme.svelte";
   import DisclaimerFooter  from "$lib/DisclaimerFooter.svelte";
   import Hypnogram         from "$lib/Hypnogram.svelte";
   import { SessionDetail } from "$lib/dashboard";
   import type { SessionMetrics, EpochRow, CsvMetricsResult } from "$lib/dashboard/SessionDetail.svelte";
   import { Spinner }       from "$lib/components/ui/spinner";
-  import { hBar, hCbs, type HistoryViewMode } from "$lib/history-titlebar.svelte";
+  import { hBar, hCbs, type HistoryViewMode } from "$lib/stores/titlebar.svelte";
   import type { LabelRow, SleepStages } from "$lib/types";
   import { ConfirmAction } from "$lib/components/ui/confirm-action";
   import {

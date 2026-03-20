@@ -20,7 +20,7 @@ the Free Software Foundation, version 3 only. -->
     Raycaster,
     type Mesh,
   } from "three";
-  import { getResolved } from "$lib/theme-store.svelte";
+  import { getResolved } from "$lib/stores/theme.svelte";
   import {
     type Electrode,
     type ElectrodeSystem,

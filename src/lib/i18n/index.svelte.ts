@@ -17,7 +17,7 @@
 
 import en from "./en/index";
 import type { TranslationKey } from "./keys";
-import { getAppName } from "$lib/app-name-store.svelte";
+import { getAppName } from "$lib/stores/app-name.svelte";
 import { invoke } from "@tauri-apps/api/core";
 
 // Re-export the key type for call-site usage.

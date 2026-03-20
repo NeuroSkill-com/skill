@@ -30,12 +30,12 @@ the Free Software Foundation, version 3 only. -->
   import { Card, CardContent, CardFooter, CardHeader } from "$lib/components/ui/card";
   import { Separator } from "$lib/components/ui/separator";
   import { t } from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
-  import { addToast } from "$lib/toast-store.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
+  import { addToast } from "$lib/stores/toast.svelte";
   import {
     openSettings, openLabel, openHistory, openBtSettings, openUpdates,
   } from "$lib/navigation";
-  import { setBtOff } from "$lib/bt-status-store.svelte";
+  import { setBtOff } from "$lib/stores/bt-status.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
   import type { DeviceStatus, DiscoveredDevice } from "$lib/types";
 

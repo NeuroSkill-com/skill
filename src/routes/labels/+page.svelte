@@ -13,7 +13,7 @@ the Free Software Foundation, version 3 only. -->
   import { Separator }  from "$lib/components/ui/separator";
   import { Spinner }    from "$lib/components/ui/spinner";
   import { t }          from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
   import { openHistory } from "$lib/navigation";
   import { ConfirmAction } from "$lib/components/ui/confirm-action";

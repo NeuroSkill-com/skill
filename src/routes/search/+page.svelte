@@ -10,8 +10,8 @@ the Free Software Foundation, version 3 only. -->
   import { Button }     from "$lib/components/ui/button";
   import { Badge }      from "$lib/components/ui/badge";
   import { t }          from "$lib/i18n/index.svelte";
-  import { getAppName } from "$lib/app-name-store.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
+  import { getAppName } from "$lib/stores/app-name.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
   import DisclaimerFooter   from "$lib/DisclaimerFooter.svelte";
   import { Spinner }        from "$lib/components/ui/spinner";
   import UmapViewer3D       from "$lib/UmapViewer3D.svelte";

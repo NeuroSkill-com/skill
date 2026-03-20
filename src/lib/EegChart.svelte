@@ -37,7 +37,7 @@ the Free Software Foundation, version 3 only. -->
     SPEC_LOG_RANGE as LOG_RANGE, SPEC_LOG_FLOOR as LOG_FLOOR,
     DC_BETA, WP_TAU_MS as WP_TAU,
   } from "$lib/constants";
-  import { getResolved } from "$lib/theme-store.svelte";
+  import { getResolved } from "$lib/stores/theme.svelte";
   import { getDpr } from "$lib/format";
 
   // ── Props ──────────────────────────────────────────────────────────────────

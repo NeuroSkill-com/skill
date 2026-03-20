@@ -11,12 +11,12 @@ the Free Software Foundation, version 3 only. -->
   import { t } from "$lib/i18n/index.svelte";
   import LanguagePicker from "./LanguagePicker.svelte";
   import ThemeToggle from "./ThemeToggle.svelte";
-  import { hBar, hCbs } from "$lib/history-titlebar.svelte";
-  import { helpTitlebarState } from "$lib/help-search-state.svelte";
-  import { labelTitlebarState } from "$lib/label-titlebar.svelte";
-  import { chatTitlebarState } from "$lib/chat-titlebar.svelte";
+  import { hBar, hCbs } from "$lib/stores/titlebar.svelte";
+  import { helpTitlebarState } from "$lib/stores/titlebar.svelte";
+  import { labelTitlebarState } from "$lib/stores/titlebar.svelte";
+  import { chatTitlebarState } from "$lib/stores/titlebar.svelte";
   import { openLabel, openHistory, openHelp } from "$lib/navigation";
-  import { isBtOff } from "$lib/bt-status-store.svelte";
+  import { isBtOff } from "$lib/stores/bt-status.svelte";
 
   // ── State ───────────────────────────────────────────────────────────────
   let osType: string | null = $state(null);

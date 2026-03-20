@@ -14,8 +14,8 @@ the Free Software Foundation, version 3 only. -->
   import { invoke }             from "@tauri-apps/api/core";
   import { fade }               from "svelte/transition";
   import { t }                  from "$lib/i18n/index.svelte";
-  import { getHighContrast, toggleHighContrast } from "$lib/theme-store.svelte";
-  import { addToast }           from "$lib/toast-store.svelte";
+  import { getHighContrast, toggleHighContrast } from "$lib/stores/theme.svelte";
+  import { addToast }           from "$lib/stores/toast.svelte";
   import * as nav               from "$lib/navigation";
 
   let open   = $state(false);

@@ -10,8 +10,8 @@ the Free Software Foundation, version 3 only. -->
   import { Button }   from "$lib/components/ui/button";
   import { Textarea } from "$lib/components/ui/textarea";
   import { t }        from "$lib/i18n/index.svelte";
-  import { labelTitlebarState } from "$lib/label-titlebar.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
+  import { labelTitlebarState } from "$lib/stores/titlebar.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
   import { fmtElapsed } from "$lib/format";
 
   // ── State ──────────────────────────────────────────────────────────────────

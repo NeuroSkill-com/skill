@@ -9,7 +9,7 @@ the Free Software Foundation, version 3 only. -->
   import { onMount }        from "svelte";
   import { invoke }         from "@tauri-apps/api/core";
   import { t }              from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/window-title.svelte";
+  import { useWindowTitle } from "$lib/stores/window-title.svelte";
 
   useWindowTitle("window.title.about");
 

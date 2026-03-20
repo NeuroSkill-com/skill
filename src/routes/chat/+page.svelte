@@ -31,7 +31,7 @@
   import ChatContextBreakdown, { type ContextSegment } from "$lib/ChatContextBreakdown.svelte";
   import ChatContextViewer            from "$lib/ChatContextViewer.svelte";
   import { t }                        from "$lib/i18n/index.svelte";
-  import { chatTitlebarState }        from "$lib/chat-titlebar.svelte";
+  import { chatTitlebarState }        from "$lib/stores/titlebar.svelte";
   import { buildEegBlock }            from "$lib/chat-eeg";
   import { parseAssistantOutput }     from "$lib/chat-utils";
   import {
