@@ -15,14 +15,14 @@ the Free Software Foundation, version 3 only. -->
   import "$lib/i18n/index.svelte";
   import { initLocaleFromSettings } from "$lib/i18n/index.svelte";
   // Side-effect: initialises theme from localStorage / system preference
-  import "$lib/theme-store.svelte";
+  import "$lib/stores/theme.svelte";
   import { initFromSettings as initThemeFromSettings, toggleTheme } from "$lib/stores/theme.svelte";
   // Side-effect: initialises font size from localStorage
-  import "$lib/font-size-store.svelte";
+  import "$lib/stores/font-size.svelte";
   // Side-effect: initialises chart color scheme from localStorage
-  import "$lib/chart-colors-store.svelte";
+  import "$lib/stores/chart-colors.svelte";
   // Side-effect: fetches canonical app name from Rust backend
-  import "$lib/app-name-store.svelte";
+  import "$lib/stores/app-name.svelte";
   import { ToastContainer } from "$lib/components/ui/toast";
   import { addToast, type ToastLevel } from "$lib/stores/toast.svelte";
   import KeyboardShortcuts from "$lib/KeyboardShortcuts.svelte";
