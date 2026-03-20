@@ -253,18 +253,19 @@ impl ScreenshotStore {
     /// Get all rows that need (re-)embedding — either stale or unembedded.
     pub fn rows_needing_embed(&self, backend: &str, model_id: &str) -> Vec<EmbeddableRow> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT id, filename FROM screenshots
              WHERE embedding IS NULL
                 OR (model_backend != ?1 OR model_id != ?2)
              ORDER BY id"
-        ).expect("static SQL");
-        stmt.query_map(params![backend, model_id], |r| {
+        ) else { return vec![] };
+        let Ok(rows) = stmt.query_map(params![backend, model_id], |r| {
             Ok(EmbeddableRow {
                 id:       r.get(0)?,
                 filename: r.get(1)?,
             })
-        }).expect("SQL query").filter_map(|r| r.ok()).collect()
+        }) else { return vec![] };
+        rows.filter_map(|r| r.ok()).collect()
     }
 
     /// Update embedding for a specific row.
@@ -299,19 +300,20 @@ impl ScreenshotStore {
     /// Load all embeddings from the database (for HNSW rebuild).
     pub fn all_embeddings(&self) -> Vec<(i64, Vec<f32>)> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, embedding, embedding_dim FROM screenshots
              WHERE embedding IS NOT NULL
              ORDER BY id"
-        ).expect("static SQL");
-        stmt.query_map([], |r| {
+        ) else { return vec![] };
+        let Ok(rows) = stmt.query_map([], |r| {
             let ts: i64 = r.get(0)?;
             let blob: Vec<u8> = r.get(1)?;
             let dim: i64 = r.get(2)?;
             let floats: Vec<f32> = crate::util::blob_to_f32(&blob);
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
-        }).expect("SQL query").filter_map(|r| r.ok()).collect()
+        }) else { return vec![] };
+        rows.filter_map(|r| r.ok()).collect()
     }
 
     /// Find a screenshot by its exact YYYYMMDDHHmmss timestamp (HNSW payload).
@@ -339,13 +341,13 @@ impl ScreenshotStore {
         let conn = self.conn.lock_or_recover();
         let lo = ts - window_secs as i64;
         let hi = ts + window_secs as i64;
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text, gif_filename
              FROM screenshots
              WHERE unix_ts BETWEEN ?1 AND ?2
              ORDER BY unix_ts"
-        ).expect("static SQL");
-        stmt.query_map(params![lo, hi], |r| {
+        ) else { return vec![] };
+        let Ok(rows) = stmt.query_map(params![lo, hi], |r| {
             Ok(ScreenshotResult {
                 timestamp:    r.get(0)?,
                 unix_ts:      r.get::<_, i64>(1)? as u64,
@@ -356,25 +358,27 @@ impl ScreenshotStore {
                 similarity:   0.0,
                 gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
-        }).expect("SQL query").filter_map(|r| r.ok()).collect()
+        }) else { return vec![] };
+        rows.filter_map(|r| r.ok()).collect()
     }
 
     /// Load all OCR text embeddings from the database (for HNSW rebuild).
     pub fn all_ocr_embeddings(&self) -> Vec<(i64, Vec<f32>)> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, ocr_embedding, ocr_embedding_dim FROM screenshots
              WHERE ocr_embedding IS NOT NULL
              ORDER BY id"
-        ).expect("static SQL");
-        stmt.query_map([], |r| {
+        ) else { return vec![] };
+        let Ok(rows) = stmt.query_map([], |r| {
             let ts: i64 = r.get(0)?;
             let blob: Vec<u8> = r.get(1)?;
             let dim: i64 = r.get(2)?;
             let floats: Vec<f32> = crate::util::blob_to_f32(&blob);
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
-        }).expect("SQL query").filter_map(|r| r.ok()).collect()
+        }) else { return vec![] };
+        rows.filter_map(|r| r.ok()).collect()
     }
 
     /// Update OCR text and embedding for a specific row.
@@ -406,14 +410,14 @@ impl ScreenshotStore {
     pub fn search_by_ocr_text(&self, query: &str, limit: usize) -> Vec<ScreenshotResult> {
         let conn = self.conn.lock_or_recover();
         let pattern = format!("%{query}%");
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text, gif_filename
              FROM screenshots
              WHERE ocr_text LIKE ?1
              ORDER BY unix_ts DESC
              LIMIT ?2"
-        ).expect("static SQL");
-        stmt.query_map(params![pattern, limit as i64], |r| {
+        ) else { return vec![] };
+        let Ok(rows) = stmt.query_map(params![pattern, limit as i64], |r| {
             Ok(ScreenshotResult {
                 timestamp:    r.get(0)?,
                 unix_ts:      r.get::<_, i64>(1)? as u64,
@@ -424,39 +428,42 @@ impl ScreenshotStore {
                 similarity:   0.0,
                 gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
-        }).expect("SQL query").filter_map(|r| r.ok()).collect()
+        }) else { return vec![] };
+        rows.filter_map(|r| r.ok()).collect()
     }
 
     /// Get rows that have no vision embedding yet (captured but not embedded).
     pub fn rows_without_embedding(&self) -> Vec<EmbeddableRow> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT id, filename FROM screenshots
              WHERE embedding IS NULL
              ORDER BY id"
-        ).expect("static SQL");
-        stmt.query_map([], |r| {
+        ) else { return vec![] };
+        let Ok(rows) = stmt.query_map([], |r| {
             Ok(EmbeddableRow {
                 id:       r.get(0)?,
                 filename: r.get(1)?,
             })
-        }).expect("SQL query").filter_map(|r| r.ok()).collect()
+        }) else { return vec![] };
+        rows.filter_map(|r| r.ok()).collect()
     }
 
     /// Get rows that have no OCR text yet (ocr_text is empty).
     pub fn rows_without_ocr(&self) -> Vec<EmbeddableRow> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT id, filename FROM screenshots
              WHERE ocr_text = '' OR ocr_text IS NULL
              ORDER BY id"
-        ).expect("static SQL");
-        stmt.query_map([], |r| {
+        ) else { return vec![] };
+        let Ok(rows) = stmt.query_map([], |r| {
             Ok(EmbeddableRow {
                 id:       r.get(0)?,
                 filename: r.get(1)?,
             })
-        }).expect("SQL query").filter_map(|r| r.ok()).collect()
+        }) else { return vec![] };
+        rows.filter_map(|r| r.ok()).collect()
     }
 
     /// Fetch the vision embedding, model provenance, OCR text, and OCR

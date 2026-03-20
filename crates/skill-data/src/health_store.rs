@@ -308,90 +308,96 @@ impl HealthStore {
 
         // ── Sleep ─────────────────────────────────────────────────────────
         if !payload.sleep.is_empty() {
-            let mut stmt = conn.prepare_cached(
+            if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR IGNORE INTO sleep_samples (source_id, start_utc, end_utc, value, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)"
-            ).expect("static SQL");
-            for s in &payload.sleep {
-                if stmt.execute(params![s.source_id, s.start_utc, s.end_utc, s.value, now]).is_ok() {
-                    result.sleep_upserted += 1;
+            ) {
+                for s in &payload.sleep {
+                    if stmt.execute(params![s.source_id, s.start_utc, s.end_utc, s.value, now]).is_ok() {
+                        result.sleep_upserted += 1;
+                    }
                 }
             }
         }
 
         // ── Workouts ──────────────────────────────────────────────────────
         if !payload.workouts.is_empty() {
-            let mut stmt = conn.prepare_cached(
+            if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR REPLACE INTO workouts
                  (source_id, workout_type, start_utc, end_utc, duration_secs,
                   total_calories, active_calories, distance_meters,
                   avg_heart_rate, max_heart_rate, metadata, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
-            ).expect("static SQL");
-            for w in &payload.workouts {
-                let meta = w.metadata.as_ref().map(|m| serde_json::to_string(m).unwrap_or_default());
-                if stmt.execute(params![
-                    w.source_id, w.workout_type, w.start_utc, w.end_utc, w.duration_secs,
-                    w.total_calories, w.active_calories, w.distance_meters,
-                    w.avg_heart_rate, w.max_heart_rate, meta, now
-                ]).is_ok() {
-                    result.workouts_upserted += 1;
+            ) {
+                for w in &payload.workouts {
+                    let meta = w.metadata.as_ref().map(|m| serde_json::to_string(m).unwrap_or_default());
+                    if stmt.execute(params![
+                        w.source_id, w.workout_type, w.start_utc, w.end_utc, w.duration_secs,
+                        w.total_calories, w.active_calories, w.distance_meters,
+                        w.avg_heart_rate, w.max_heart_rate, meta, now
+                    ]).is_ok() {
+                        result.workouts_upserted += 1;
+                    }
                 }
             }
         }
 
         // ── Heart rate ────────────────────────────────────────────────────
         if !payload.heart_rate.is_empty() {
-            let mut stmt = conn.prepare_cached(
+            if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR IGNORE INTO heart_rate_samples (source_id, timestamp, bpm, context, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)"
-            ).expect("static SQL");
-            for hr in &payload.heart_rate {
-                if stmt.execute(params![hr.source_id, hr.timestamp, hr.bpm, hr.context, now]).is_ok() {
-                    result.heart_rate_upserted += 1;
+            ) {
+                for hr in &payload.heart_rate {
+                    if stmt.execute(params![hr.source_id, hr.timestamp, hr.bpm, hr.context, now]).is_ok() {
+                        result.heart_rate_upserted += 1;
+                    }
                 }
             }
         }
 
         // ── Steps ─────────────────────────────────────────────────────────
         if !payload.steps.is_empty() {
-            let mut stmt = conn.prepare_cached(
+            if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR IGNORE INTO steps_samples (source_id, start_utc, end_utc, count, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)"
-            ).expect("static SQL");
-            for s in &payload.steps {
-                if stmt.execute(params![s.source_id, s.start_utc, s.end_utc, s.count, now]).is_ok() {
-                    result.steps_upserted += 1;
+            ) {
+                for s in &payload.steps {
+                    if stmt.execute(params![s.source_id, s.start_utc, s.end_utc, s.count, now]).is_ok() {
+                        result.steps_upserted += 1;
+                    }
                 }
             }
         }
 
         // ── Mindfulness ───────────────────────────────────────────────────
         if !payload.mindfulness.is_empty() {
-            let mut stmt = conn.prepare_cached(
+            if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR IGNORE INTO mindfulness_samples (source_id, start_utc, end_utc, created_at)
                  VALUES (?1, ?2, ?3, ?4)"
-            ).expect("static SQL");
-            for m in &payload.mindfulness {
-                if stmt.execute(params![m.source_id, m.start_utc, m.end_utc, now]).is_ok() {
-                    result.mindfulness_upserted += 1;
+            ) {
+                for m in &payload.mindfulness {
+                    if stmt.execute(params![m.source_id, m.start_utc, m.end_utc, now]).is_ok() {
+                        result.mindfulness_upserted += 1;
+                    }
                 }
             }
         }
 
         // ── Generic metrics ───────────────────────────────────────────────
         if !payload.metrics.is_empty() {
-            let mut stmt = conn.prepare_cached(
+            if let Ok(mut stmt) = conn.prepare_cached(
                 "INSERT OR REPLACE INTO health_metrics
                  (source_id, metric_type, timestamp, value, unit, metadata, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
-            ).expect("static SQL");
-            for m in &payload.metrics {
-                let meta = m.metadata.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default());
-                if stmt.execute(params![
-                    m.source_id, m.metric_type, m.timestamp, m.value, m.unit, meta, now
-                ]).is_ok() {
-                    result.metrics_upserted += 1;
+            ) {
+                for m in &payload.metrics {
+                    let meta = m.metadata.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default());
+                    if stmt.execute(params![
+                        m.source_id, m.metric_type, m.timestamp, m.value, m.unit, meta, now
+                    ]).is_ok() {
+                        result.metrics_upserted += 1;
+                    }
                 }
             }
         }
@@ -404,11 +410,11 @@ impl HealthStore {
     /// Query sleep samples in a time range.
     pub fn query_sleep(&self, start_utc: i64, end_utc: i64, limit: i64) -> Vec<SleepRow> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT id, source_id, start_utc, end_utc, value, created_at
              FROM sleep_samples WHERE start_utc >= ?1 AND start_utc <= ?2
              ORDER BY start_utc DESC LIMIT ?3"
-        ).expect("static SQL");
+        ) else { return vec![] };
         stmt.query_map(params![start_utc, end_utc, limit], |row| Ok(SleepRow {
             id:         row.get(0)?,
             source_id:  row.get(1)?,
@@ -422,13 +428,13 @@ impl HealthStore {
     /// Query workouts in a time range.
     pub fn query_workouts(&self, start_utc: i64, end_utc: i64, limit: i64) -> Vec<WorkoutRow> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT id, source_id, workout_type, start_utc, end_utc, duration_secs,
                     total_calories, active_calories, distance_meters,
                     avg_heart_rate, max_heart_rate, metadata, created_at
              FROM workouts WHERE start_utc >= ?1 AND start_utc <= ?2
              ORDER BY start_utc DESC LIMIT ?3"
-        ).expect("static SQL");
+        ) else { return vec![] };
         stmt.query_map(params![start_utc, end_utc, limit], |row| Ok(WorkoutRow {
             id:              row.get(0)?,
             source_id:       row.get(1)?,
@@ -449,11 +455,11 @@ impl HealthStore {
     /// Query heart rate samples in a time range.
     pub fn query_heart_rate(&self, start_utc: i64, end_utc: i64, limit: i64) -> Vec<HeartRateRow> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT id, source_id, timestamp, bpm, context, created_at
              FROM heart_rate_samples WHERE timestamp >= ?1 AND timestamp <= ?2
              ORDER BY timestamp DESC LIMIT ?3"
-        ).expect("static SQL");
+        ) else { return vec![] };
         stmt.query_map(params![start_utc, end_utc, limit], |row| Ok(HeartRateRow {
             id:         row.get(0)?,
             source_id:  row.get(1)?,
@@ -467,11 +473,11 @@ impl HealthStore {
     /// Query step samples in a time range.
     pub fn query_steps(&self, start_utc: i64, end_utc: i64, limit: i64) -> Vec<StepsRow> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT id, source_id, start_utc, end_utc, count, created_at
              FROM steps_samples WHERE start_utc >= ?1 AND start_utc <= ?2
              ORDER BY start_utc DESC LIMIT ?3"
-        ).expect("static SQL");
+        ) else { return vec![] };
         stmt.query_map(params![start_utc, end_utc, limit], |row| Ok(StepsRow {
             id:         row.get(0)?,
             source_id:  row.get(1)?,
@@ -485,11 +491,11 @@ impl HealthStore {
     /// Query generic health metrics by type and time range.
     pub fn query_metrics(&self, metric_type: &str, start_utc: i64, end_utc: i64, limit: i64) -> Vec<HealthMetricRow> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT id, source_id, metric_type, timestamp, value, unit, metadata, created_at
              FROM health_metrics WHERE metric_type = ?1 AND timestamp >= ?2 AND timestamp <= ?3
              ORDER BY timestamp DESC LIMIT ?4"
-        ).expect("static SQL");
+        ) else { return vec![] };
         stmt.query_map(params![metric_type, start_utc, end_utc, limit], |row| Ok(HealthMetricRow {
             id:          row.get(0)?,
             source_id:   row.get(1)?,
@@ -505,9 +511,9 @@ impl HealthStore {
     /// List distinct metric types stored in the database.
     pub fn list_metric_types(&self) -> Vec<String> {
         let conn = self.conn.lock_or_recover();
-        let mut stmt = conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT DISTINCT metric_type FROM health_metrics ORDER BY metric_type"
-        ).expect("static SQL");
+        ) else { return vec![] };
         stmt.query_map([], |row| row.get(0))
             .map(|rows| rows.flatten().collect())
             .unwrap_or_default()
