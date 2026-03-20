@@ -17,9 +17,10 @@
     nCtx: number;
     isEstimate: boolean;
     onClose: () => void;
+    onViewFull?: () => void;
   }
 
-  let { segments, totalUsed, nCtx, isEstimate, onClose }: Props = $props();
+  let { segments, totalUsed, nCtx, isEstimate, onClose, onViewFull }: Props = $props();
 
   const sortedSegments = $derived(
     [...segments].filter(s => s.tokens > 0).sort((a, b) => b.tokens - a.tokens)
@@ -104,5 +105,26 @@
         <span class="text-muted-foreground/50 font-normal ml-1">({fmtPct1(pctOfCtx(totalUsed))}%)</span>
       </span>
     </div>
+
+    <!-- View full context button -->
+    {#if onViewFull}
+      <button
+        class="mt-2.5 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg
+               text-[0.65rem] font-medium
+               text-muted-foreground hover:text-foreground
+               bg-muted/30 hover:bg-muted/50 dark:bg-white/[0.03] dark:hover:bg-white/[0.06]
+               border border-border/40 dark:border-white/[0.04]
+               transition-colors"
+        onclick={(e) => { e.stopPropagation(); onViewFull(); }}
+      >
+        <!-- Expand icon -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" class="size-3">
+          <path d="M15 3h6v6" /><path d="M9 21H3v-6" />
+          <path d="M21 3l-7 7" /><path d="M3 21l7-7" />
+        </svg>
+        {t("chat.ctx.viewFull")}
+      </button>
+    {/if}
   </div>
 </div>

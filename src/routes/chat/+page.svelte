@@ -29,6 +29,7 @@
   import ChatMessageList              from "$lib/ChatMessageList.svelte";
   import ChatInputBar                 from "$lib/ChatInputBar.svelte";
   import ChatContextBreakdown, { type ContextSegment } from "$lib/ChatContextBreakdown.svelte";
+  import ChatContextViewer            from "$lib/ChatContextViewer.svelte";
   import { t }                        from "$lib/i18n/index.svelte";
   import { chatTitlebarState }        from "$lib/chat-titlebar.svelte";
   import { buildEegBlock }            from "$lib/chat-eeg";
@@ -124,6 +125,7 @@
   let showSettings   = $state(false);
   let showTools      = $state(false);
   let showContextBreakdown = $state(false);
+  let showContextViewer    = $state(false);
   let temperature    = $state(0.8);
   let maxTokens      = $state(2048);
   let topK           = $state(40);
@@ -948,6 +950,20 @@
         {nCtx}
         isEstimate={realPromptTokens === null && liveUsedTokens > 0}
         onClose={() => showContextBreakdown = false}
+        onViewFull={() => { showContextBreakdown = false; showContextViewer = true; }}
+      />
+    {/if}
+
+    {#if showContextViewer}
+      <ChatContextViewer
+        {messages}
+        {systemPrompt}
+        eegActive={eegActive}
+        {latestBands}
+        {toolConfig}
+        {supportsTools}
+        {nCtx}
+        onClose={() => showContextViewer = false}
       />
     {/if}
 
