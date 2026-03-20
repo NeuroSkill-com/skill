@@ -108,7 +108,7 @@ impl MuseAdapter {
 
             for _ in 0..min_len {
                 let channels: Vec<f64> = (0..MUSE_EEG_CHANNELS)
-                    .map(|c| self.ch_bufs[c].pop_front().unwrap())
+                    .filter_map(|c| self.ch_bufs[c].pop_front())
                     .collect();
                 self.pending.push_back(DeviceEvent::Eeg(EegFrame {
                     channels,

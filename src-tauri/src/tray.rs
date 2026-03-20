@@ -203,10 +203,10 @@ const ICON_DISCONNECTED: &[u8] = include_bytes!("../icons/tray-disconnected.png"
 const ICON_SCANNING:     &[u8] = include_bytes!("../icons/tray-scanning.png");
 const ICON_BT_OFF:       &[u8] = include_bytes!("../icons/tray-bt-off.png");
 
-fn icon_connected()             -> Image<'static> { Image::from_bytes(ICON_CONNECTED).unwrap() }
-pub(crate) fn icon_disconnected() -> Image<'static> { Image::from_bytes(ICON_DISCONNECTED).unwrap() }
-fn icon_scanning()              -> Image<'static> { Image::from_bytes(ICON_SCANNING).unwrap() }
-fn icon_bt_off()                -> Image<'static> { Image::from_bytes(ICON_BT_OFF).unwrap() }
+fn icon_connected()             -> Image<'static> { Image::from_bytes(ICON_CONNECTED).expect("embedded tray icon") }
+pub(crate) fn icon_disconnected() -> Image<'static> { Image::from_bytes(ICON_DISCONNECTED).expect("embedded tray icon") }
+fn icon_scanning()              -> Image<'static> { Image::from_bytes(ICON_SCANNING).expect("embedded tray icon") }
+fn icon_bt_off()                -> Image<'static> { Image::from_bytes(ICON_BT_OFF).expect("embedded tray icon") }
 
 fn overlay_progress_bar(base: Image<'static>, progress: f32) -> Image<'static> {
     let width = base.width();

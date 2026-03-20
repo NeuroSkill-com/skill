@@ -25,8 +25,7 @@ fn metrics_cache_path(csv_path: &Path) -> std::path::PathBuf {
 /// Load metrics from disk cache if valid, otherwise compute from data file and cache.
 pub fn load_csv_metrics_cached(csv_path: &Path) -> Option<CsvMetricsResult> {
     let metrics_file = find_metrics_path(csv_path);
-    if metrics_file.is_none() { return None; }
-    let metrics_file = metrics_file.unwrap();
+    let metrics_file = metrics_file?;
 
     let cache_path = metrics_cache_path(csv_path);
 
@@ -435,7 +434,7 @@ pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Sleep
             .map(|w| (w[1].utc as f64) - (w[0].utc as f64))
             .filter(|g| *g > 0.0 && *g < 30.0).collect();
         if !gaps.is_empty() {
-            gaps.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            gaps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
             summary.epoch_secs = gaps[gaps.len() / 2];
         } else { summary.epoch_secs = 2.5; }
     } else { summary.epoch_secs = 2.5; }
@@ -659,8 +658,8 @@ pub fn analyze_search_results(result: &skill_commands::SearchResult) -> serde_js
     top_days.sort_by(|a, b| b.1.cmp(&a.1));
     top_days.truncate(10);
     let time_span_hours = if all_utcs.len() >= 2 {
-        let mn = *all_utcs.iter().min().unwrap();
-        let mx = *all_utcs.iter().max().unwrap();
+        let mn = all_utcs.iter().copied().min().unwrap_or(0);
+        let mx = all_utcs.iter().copied().max().unwrap_or(0);
         mx.saturating_sub(mn) as f64 / 3600.0
     } else { 0.0 };
     let metric_names = ["relaxation","engagement","meditation","cognitive_load","drowsiness","hr","snr","mood"];

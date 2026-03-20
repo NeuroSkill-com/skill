@@ -17,7 +17,7 @@ use crate::llm::catalog::DownloadState;
 #[tauri::command]
 pub fn get_llm_logs(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<LlmLogEntry> {
     let s      = state.lock_or_recover();
-    let log    = s.llm.logs.lock().unwrap();
+    let log    = s.llm.logs.lock().expect("lock poisoned");
     let result: Vec<LlmLogEntry> = log.iter().cloned().collect();
     result
 }
@@ -70,7 +70,7 @@ pub fn start_llm_server(
         )
     };
 
-    if cell.lock().unwrap().is_some() {
+    if cell.lock().expect("lock poisoned").is_some() {
         return Ok("already_running".to_string());
     }
     if loading.load(Ordering::Relaxed) {
@@ -78,7 +78,7 @@ pub fn start_llm_server(
     }
 
     // Clear any previous error and mark loading.
-    *start_error.lock().unwrap() = None;
+    *start_error.lock().expect("lock poisoned") = None;
     loading.store(true, Ordering::Relaxed);
 
     let emitter = crate::llm::TauriEmitter(app.clone());
@@ -104,16 +104,16 @@ pub fn start_llm_server(
         loading.store(false, Ordering::Relaxed);
 
         match result {
-            Ok(Some(s))  => { *cell.lock().unwrap() = Some(s); }
+            Ok(Some(s))  => { *cell.lock().expect("lock poisoned") = Some(s); }
             Ok(None)     => {
-                *start_error.lock().unwrap() = Some(
+                *start_error.lock().expect("lock poisoned") = Some(
                     "Failed to start LLM server. \
                      Check that a model is downloaded and selected in Settings → LLM."
                     .to_string()
                 );
             }
             Err(e) => {
-                *start_error.lock().unwrap() = Some(format!("Load task panicked: {e}"));
+                *start_error.lock().expect("lock poisoned") = Some(format!("Load task panicked: {e}"));
             }
         }
     });
@@ -145,11 +145,11 @@ pub fn stop_llm_server(
 
     // Cancel any in-progress load as well.
     loading.store(false, std::sync::atomic::Ordering::Relaxed);
-    *start_error.lock().unwrap() = None;
+    *start_error.lock().expect("lock poisoned") = None;
 
     // Take the Arc out of the cell so the server is immediately "Stopped"
     // from the UI's perspective before the actor thread finishes joining.
-    let server_state = { cell.lock().unwrap().take() };
+    let server_state = { cell.lock().expect("lock poisoned").take() };
     if let Some(server_state) = server_state {
         let emitter = crate::llm::TauriEmitter(app);
         push_log(&emitter, &log_buf, "info", "stopping LLM server — freeing resources in background…");
@@ -205,10 +205,10 @@ pub fn switch_llm_model(
     crate::save_settings(&app);
 
     // Clear any previous error.
-    *start_error.lock().unwrap() = None;
+    *start_error.lock().expect("lock poisoned") = None;
 
     // Take the running server out of the cell (if any).
-    let server_state = { cell.lock().unwrap().take() };
+    let server_state = { cell.lock().expect("lock poisoned").take() };
 
     let app2  = app.clone();
 
@@ -254,14 +254,14 @@ pub fn switch_llm_model(
         loading.store(false, std::sync::atomic::Ordering::Relaxed);
 
         match result {
-            Ok(Some(s)) => { *cell.lock().unwrap() = Some(s); }
+            Ok(Some(s)) => { *cell.lock().expect("lock poisoned") = Some(s); }
             Ok(None) => {
-                *start_error.lock().unwrap() = Some(
+                *start_error.lock().expect("lock poisoned") = Some(
                     "Failed to start LLM server after model switch.".to_string()
                 );
             }
             Err(e) => {
-                *start_error.lock().unwrap() = Some(format!("Load task panicked: {e}"));
+                *start_error.lock().expect("lock poisoned") = Some(format!("Load task panicked: {e}"));
             }
         }
     });
@@ -298,7 +298,7 @@ pub fn get_llm_server_status(
     if matches!(status, LlmStatus::Stopped) && s.llm.loading.load(Ordering::Relaxed) {
         status = LlmStatus::Loading;
     }
-    let (n_ctx, supports_vision, supports_tools) = s.llm.state_cell.lock().unwrap()
+    let (n_ctx, supports_vision, supports_tools) = s.llm.state_cell.lock().expect("lock poisoned")
         .as_ref()
         .map(|srv| (
             srv.n_ctx.load(Ordering::Relaxed),
@@ -306,6 +306,6 @@ pub fn get_llm_server_status(
             srv.is_ready(),
         ))
         .unwrap_or((0, false, false));
-    let start_error = s.llm.start_error.lock().unwrap().clone();
+    let start_error = s.llm.start_error.lock().expect("lock poisoned").clone();
     LlmServerStatusResponse { status, model_name, n_ctx, supports_vision, supports_tools, start_error }
 }

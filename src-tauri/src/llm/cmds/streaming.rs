@@ -55,7 +55,7 @@ pub async fn chat_completions_ipc(
     state:    tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let cell = state.lock_or_recover().llm.state_cell.clone();
-    let srv  = cell.lock().unwrap().clone()
+    let srv  = cell.lock().expect("lock poisoned").clone()
         .ok_or_else(|| "LLM server not running — start it in Settings → LLM".to_string())?;
 
     // Subscribe to the abort watch and mark the current value as "seen" so
@@ -141,7 +141,7 @@ pub async fn chat_completions_ipc(
 #[tauri::command]
 pub fn abort_llm_stream(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let cell = { let g = state.lock_or_recover(); g.llm.state_cell.clone() };
-    let guard = cell.lock().unwrap();
+    let guard = cell.lock().expect("lock poisoned");
     if let Some(srv) = guard.as_ref() {
         srv.abort_tx.send_modify(|v| *v = v.wrapping_add(1));
     }
@@ -165,9 +165,9 @@ pub fn cancel_tool_call(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let cell = { let g = state.lock_or_recover(); g.llm.state_cell.clone() };
-    let guard = cell.lock().unwrap();
+    let guard = cell.lock().expect("lock poisoned");
     if let Some(srv) = guard.as_ref() {
-        srv.cancelled_tool_calls.lock().unwrap().insert(tool_call_id);
+        srv.cancelled_tool_calls.lock().expect("lock poisoned").insert(tool_call_id);
     }
     // Also cancel any in-progress external page fetch (headless webview).
     skill_headless::cancel_current_fetch();

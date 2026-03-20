@@ -429,7 +429,7 @@ pub fn umap_compute_inner(
             "utc": timestamps[i],
         });
         if let Some(lbl) = find_label_for_epoch(&all_labels, timestamps[i]) {
-            pt.as_object_mut().unwrap().insert("label".into(), serde_json::Value::String(lbl));
+            if let Some(obj) = pt.as_object_mut() { obj.insert("label".into(), serde_json::Value::String(lbl)); }
         }
         pt
     }).collect();

@@ -311,7 +311,7 @@ impl HealthStore {
             let mut stmt = conn.prepare_cached(
                 "INSERT OR IGNORE INTO sleep_samples (source_id, start_utc, end_utc, value, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)"
-            ).unwrap();
+            ).expect("static SQL");
             for s in &payload.sleep {
                 if stmt.execute(params![s.source_id, s.start_utc, s.end_utc, s.value, now]).is_ok() {
                     result.sleep_upserted += 1;
@@ -327,7 +327,7 @@ impl HealthStore {
                   total_calories, active_calories, distance_meters,
                   avg_heart_rate, max_heart_rate, metadata, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
-            ).unwrap();
+            ).expect("static SQL");
             for w in &payload.workouts {
                 let meta = w.metadata.as_ref().map(|m| serde_json::to_string(m).unwrap_or_default());
                 if stmt.execute(params![
@@ -345,7 +345,7 @@ impl HealthStore {
             let mut stmt = conn.prepare_cached(
                 "INSERT OR IGNORE INTO heart_rate_samples (source_id, timestamp, bpm, context, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)"
-            ).unwrap();
+            ).expect("static SQL");
             for hr in &payload.heart_rate {
                 if stmt.execute(params![hr.source_id, hr.timestamp, hr.bpm, hr.context, now]).is_ok() {
                     result.heart_rate_upserted += 1;
@@ -358,7 +358,7 @@ impl HealthStore {
             let mut stmt = conn.prepare_cached(
                 "INSERT OR IGNORE INTO steps_samples (source_id, start_utc, end_utc, count, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)"
-            ).unwrap();
+            ).expect("static SQL");
             for s in &payload.steps {
                 if stmt.execute(params![s.source_id, s.start_utc, s.end_utc, s.count, now]).is_ok() {
                     result.steps_upserted += 1;
@@ -371,7 +371,7 @@ impl HealthStore {
             let mut stmt = conn.prepare_cached(
                 "INSERT OR IGNORE INTO mindfulness_samples (source_id, start_utc, end_utc, created_at)
                  VALUES (?1, ?2, ?3, ?4)"
-            ).unwrap();
+            ).expect("static SQL");
             for m in &payload.mindfulness {
                 if stmt.execute(params![m.source_id, m.start_utc, m.end_utc, now]).is_ok() {
                     result.mindfulness_upserted += 1;
@@ -385,7 +385,7 @@ impl HealthStore {
                 "INSERT OR REPLACE INTO health_metrics
                  (source_id, metric_type, timestamp, value, unit, metadata, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)"
-            ).unwrap();
+            ).expect("static SQL");
             for m in &payload.metrics {
                 let meta = m.metadata.as_ref().map(|v| serde_json::to_string(v).unwrap_or_default());
                 if stmt.execute(params![
@@ -408,7 +408,7 @@ impl HealthStore {
             "SELECT id, source_id, start_utc, end_utc, value, created_at
              FROM sleep_samples WHERE start_utc >= ?1 AND start_utc <= ?2
              ORDER BY start_utc DESC LIMIT ?3"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map(params![start_utc, end_utc, limit], |row| Ok(SleepRow {
             id:         row.get(0)?,
             source_id:  row.get(1)?,
@@ -428,7 +428,7 @@ impl HealthStore {
                     avg_heart_rate, max_heart_rate, metadata, created_at
              FROM workouts WHERE start_utc >= ?1 AND start_utc <= ?2
              ORDER BY start_utc DESC LIMIT ?3"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map(params![start_utc, end_utc, limit], |row| Ok(WorkoutRow {
             id:              row.get(0)?,
             source_id:       row.get(1)?,
@@ -453,7 +453,7 @@ impl HealthStore {
             "SELECT id, source_id, timestamp, bpm, context, created_at
              FROM heart_rate_samples WHERE timestamp >= ?1 AND timestamp <= ?2
              ORDER BY timestamp DESC LIMIT ?3"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map(params![start_utc, end_utc, limit], |row| Ok(HeartRateRow {
             id:         row.get(0)?,
             source_id:  row.get(1)?,
@@ -471,7 +471,7 @@ impl HealthStore {
             "SELECT id, source_id, start_utc, end_utc, count, created_at
              FROM steps_samples WHERE start_utc >= ?1 AND start_utc <= ?2
              ORDER BY start_utc DESC LIMIT ?3"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map(params![start_utc, end_utc, limit], |row| Ok(StepsRow {
             id:         row.get(0)?,
             source_id:  row.get(1)?,
@@ -489,7 +489,7 @@ impl HealthStore {
             "SELECT id, source_id, metric_type, timestamp, value, unit, metadata, created_at
              FROM health_metrics WHERE metric_type = ?1 AND timestamp >= ?2 AND timestamp <= ?3
              ORDER BY timestamp DESC LIMIT ?4"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map(params![metric_type, start_utc, end_utc, limit], |row| Ok(HealthMetricRow {
             id:          row.get(0)?,
             source_id:   row.get(1)?,
@@ -507,7 +507,7 @@ impl HealthStore {
         let conn = self.conn.lock_or_recover();
         let mut stmt = conn.prepare(
             "SELECT DISTINCT metric_type FROM health_metrics ORDER BY metric_type"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map([], |row| row.get(0))
             .map(|rows| rows.flatten().collect())
             .unwrap_or_default()

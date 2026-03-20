@@ -1120,12 +1120,12 @@ pub fn set_llm_config(
     }
 
     #[cfg(feature = "llm")]
-    if let Some(server) = cell.lock().unwrap().clone() {
+    if let Some(server) = cell.lock().expect("lock poisoned").clone() {
         // Preserve the runtime-only skill_api_port when updating tools config.
-        let prev_port = server.allowed_tools.lock().unwrap().skill_api_port;
+        let prev_port = server.allowed_tools.lock().expect("lock poisoned").skill_api_port;
         let mut new_tools = config.tools.clone();
         new_tools.skill_api_port = prev_port;
-        *server.allowed_tools.lock().unwrap() = new_tools;
+        *server.allowed_tools.lock().expect("lock poisoned") = new_tools;
     }
 
     save_settings(&app);
@@ -1547,7 +1547,7 @@ pub fn set_disabled_skills(
             let g = state.lock_or_recover();
             (g.llm.state_cell.clone(), g.llm.config.tools.clone())
         };
-        let server = cell.lock().unwrap().as_ref().cloned();
+        let server = cell.lock().expect("lock poisoned").as_ref().cloned();
         if let Some(server) = server {
             server.set_allowed_tools(tools);
         }

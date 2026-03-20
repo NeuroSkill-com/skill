@@ -36,7 +36,7 @@ fn check_auth(state: &LlmServerState, headers: &axum::http::HeaderMap) -> bool {
 
 macro_rules! get_state {
     ($cell:expr) => {{
-        match $cell.lock().unwrap().clone() {
+        match $cell.lock().expect("lock poisoned").clone() {
             Some(s) => s,
             None => return (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -62,7 +62,7 @@ macro_rules! require_auth {
 // ── Handlers ───────────────────────────────────────────────────────────────────
 
 async fn health(State(cell): State<LlmStateCell>) -> Response {
-    match &*cell.lock().unwrap() {
+    match &*cell.lock().expect("lock poisoned") {
         None    => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"status":"stopped"}))).into_response(),
         Some(s) => {
             let status = if s.is_ready() { "ok" } else { "loading" };

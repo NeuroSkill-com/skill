@@ -280,8 +280,8 @@ fn lf_hf_from_ibis(ibis: &[f64]) -> f64 {
     let resample_rate = 4.0; // Hz
     let mut t = Vec::with_capacity(ibis.len() + 1);
     t.push(0.0);
-    for ibi in ibis { t.push(t.last().unwrap() + ibi); }
-    let total_time = *t.last().unwrap();
+    for ibi in ibis { t.push(t.last().unwrap_or(&0.0) + ibi); }
+    let total_time = match t.last() { Some(&v) => v, None => return 0.0 };
     if total_time < 5.0 { return 0.0; } // Need at least 5s for meaningful LF
 
     let n_resamp = (total_time * resample_rate) as usize;
@@ -459,8 +459,8 @@ fn baevsky_stress_index(ibis: &[f64]) -> f64 {
     }
 
     // Mode: bin with highest count
-    let (mode_idx, &mode_count) = bins.iter().enumerate()
-        .max_by_key(|(_, &c)| c).unwrap();
+    let Some((mode_idx, &mode_count)) = bins.iter().enumerate()
+        .max_by_key(|(_, &c)| c) else { return 0.0 };
     let mo = min_ibi + (mode_idx as f64 + 0.5) * bin_width; // Mode in ms
     let amo = mode_count as f64 / ibis_ms.len() as f64 * 100.0; // AMo in %
     let mxdmn = range / 1000.0; // Convert back to seconds

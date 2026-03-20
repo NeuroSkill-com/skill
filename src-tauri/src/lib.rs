@@ -348,7 +348,7 @@ fn run_blocking_exit_shutdown(app: &tauri::AppHandle) {
         let cell = app
             .state::<Mutex<Box<AppState>>>()
             .lock()
-            .unwrap()
+            .expect("lock poisoned")
             .llm
             .state_cell
             .clone();
@@ -588,7 +588,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let dir = app.app_state().lock_or_recover().skill_dir.clone();
             let llm_cfg = load_settings(&dir).llm;
             let guard = app.app_state();
-            let s = guard.lock().unwrap();
+            let s = guard.lock().expect("lock poisoned");
             (llm_cfg, s.llm.catalog.clone(), s.llm.logs.clone(), s.llm.state_cell.clone(), s.skill_dir.clone())
         };
         if llm_cfg.enabled {
@@ -597,7 +597,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             std::thread::spawn(move || {
                 let emitter: std::sync::Arc<dyn llm::LlmEventEmitter> = std::sync::Arc::new(llm::TauriEmitter(app_handle));
                 if let Some(state) = llm::init(&llm_cfg, &catalog, emitter, log_buf, &skill_dir) {
-                    *cell2.lock().unwrap() = Some(state);
+                    *cell2.lock().expect("lock poisoned") = Some(state);
                 }
             });
         }
@@ -611,7 +611,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "llm")]
     {
         let cell = app.app_state()
-            .lock().unwrap().llm.state_cell.clone();
+            .lock().expect("lock poisoned").llm.state_cell.clone();
         serve_handle.set_llm(cell.clone());
 
         // Propagate the actual WS port to the Skill API tool so the LLM
@@ -620,8 +620,8 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         std::thread::spawn(move || {
             // Wait briefly for the LLM server to initialise, then set the port.
             for _ in 0..60 {
-                if let Some(ref server) = *cell.lock().unwrap() {
-                    let mut tools = server.allowed_tools.lock().unwrap();
+                if let Some(ref server) = *cell.lock().expect("lock poisoned") {
+                    let mut tools = server.allowed_tools.lock().expect("lock poisoned");
                     tools.skill_api_port = ws_port;
                     break;
                 }

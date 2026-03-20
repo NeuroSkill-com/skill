@@ -29,7 +29,7 @@ pub(super) fn llm_status(app: &AppHandle) -> Result<Value, String> {
     let state = app.app_state();
     let s = state.lock_or_recover();
     let (status, model_name) = crate::llm::cell_status(&s.llm.state_cell);
-    let (n_ctx, supports_vision) = s.llm.state_cell.lock().unwrap()
+    let (n_ctx, supports_vision) = s.llm.state_cell.lock().expect("lock poisoned")
         .as_ref()
         .map(|srv| (
             srv.n_ctx.load(Ordering::Relaxed),
@@ -67,7 +67,7 @@ pub(super) async fn llm_start(app: &AppHandle) -> Result<Value, String> {
         )
     };
 
-    if cell.lock().unwrap().is_some() {
+    if cell.lock().expect("lock poisoned").is_some() {
         return Ok(serde_json::json!({ "result": "already_running" }));
     }
 
@@ -86,7 +86,7 @@ pub(super) async fn llm_start(app: &AppHandle) -> Result<Value, String> {
 
     match new_state {
         Some(s) => {
-            *cell.lock().unwrap() = Some(s);
+            *cell.lock().expect("lock poisoned") = Some(s);
             Ok(serde_json::json!({ "result": "started" }))
         }
         None => Err(
@@ -109,7 +109,7 @@ pub(super) fn llm_stop(app: &AppHandle) -> Result<Value, String> {
         let s = st.lock_or_recover();
         (s.llm.state_cell.clone(), s.llm.logs.clone())
     };
-    let server_state = { cell.lock().unwrap().take() };
+    let server_state = { cell.lock().expect("lock poisoned").take() };
     if let Some(server_state) = server_state {
         let emitter = crate::llm::TauriEmitter(app.clone());
         crate::llm::push_log(&emitter, &log_buf, "info", "llm_stop command received via WebSocket");
@@ -221,7 +221,7 @@ pub(super) fn llm_delete(app: &AppHandle, msg: &Value) -> Result<Value, String> 
 pub(super) fn llm_logs(app: &AppHandle) -> Result<Value, String> {
     let state = app.app_state();
     let s = state.lock_or_recover();
-    let log = s.llm.logs.lock().unwrap();
+    let log = s.llm.logs.lock().expect("lock poisoned");
     let logs: Vec<&crate::llm::LlmLogEntry> = log.iter().collect();
     Ok(serde_json::json!({ "logs": logs, "count": logs.len() }))
 }

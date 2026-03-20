@@ -180,8 +180,8 @@ pub fn play_f32_audio(
     let silence_samples = (TAIL_SILENCE_SECS * sample_rate as f32) as usize;
     samples.resize(samples.len() + silence_samples, 0.0f32);
 
-    let channels = NonZero::<u16>::new(1).unwrap();
-    let rate     = NonZero::<u32>::new(sample_rate.max(1)).unwrap();
+    let channels = NonZero::<u16>::new(1).expect("1 is non-zero");
+    let rate     = NonZero::<u32>::new(sample_rate.max(1)).expect("max(1) is non-zero");
     let buf      = SamplesBuffer::new(channels, rate, samples);
 
     let player = rodio::Player::connect_new(stream.mixer());

@@ -72,7 +72,7 @@ fn cfg_lock() -> &'static RwLock<RuntimeConfig> {
 }
 
 pub fn read_cfg() -> (String, Option<String>, String, String, String) {
-    let g = cfg_lock().read().unwrap();
+    let g = cfg_lock().read().unwrap_or_else(|e| e.into_inner());
     (g.backbone_repo.clone(), g.gguf_file.clone(),
      g.voice_preset.clone(), g.ref_wav_path.clone(), g.ref_text.clone())
 }
@@ -192,8 +192,13 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                     }
                 }
 
+                let Some(model_ref) = model.as_ref() else {
+                    LOADING.store(false, Ordering::Relaxed);
+                    done.send(Err("NeuTTS model not loaded".into())).ok();
+                    continue;
+                };
                 let (codes, txt, vkey) = load_ref_codes(
-                    model.as_ref().unwrap(), &voice_preset, &ref_wav_path, &ref_text,
+                    model_ref, &voice_preset, &ref_wav_path, &ref_text,
                 );
                 ref_codes        = codes;
                 ref_text_cached  = txt;
@@ -250,7 +255,8 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 ) = match voice_override.as_deref().filter(|v| !v.is_empty()) {
                     Some(ovr) if is_preset(ovr) => {
                         tts_log!("neutts", "per-utterance preset override: {ovr:?}");
-                        let (c, t, k) = load_ref_codes(model.as_ref().unwrap(), ovr, "", "");
+                        let Some(model_ref) = model.as_ref() else { continue };
+                        let (c, t, k) = load_ref_codes(model_ref, ovr, "", "");
                         (std::borrow::Cow::Owned(c),
                          std::borrow::Cow::Owned(t),
                          std::borrow::Cow::Owned(k))

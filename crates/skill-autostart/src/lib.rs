@@ -91,7 +91,7 @@ mod macos {
 
     pub fn enable(app_name: &str, exe: &str) -> Result<(), String> {
         let path = plist_path(app_name).ok_or_else(|| "HOME not set".to_string())?;
-        let _ = std::fs::create_dir_all(path.parent().unwrap());
+        if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
         let label = format!("{AUTOSTART_PLIST_LABEL_PREFIX}.{app_name}.loginitem");
         let plist = format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -152,7 +152,7 @@ mod linux {
 
     pub fn enable(app_name: &str, exe: &str) -> Result<(), String> {
         let path = desktop_path(app_name);
-        let _ = std::fs::create_dir_all(path.parent().unwrap());
+        if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
         // Capitalise first letter for display name
         let display = {
             let mut c = app_name.chars();

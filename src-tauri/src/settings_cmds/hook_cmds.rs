@@ -170,7 +170,7 @@ fn suggest_hook_distances_sync(
     let eeg_p25 = percentile(25.0);
     let eeg_p50 = percentile(50.0);
     let eeg_p75 = percentile(75.0);
-    let eeg_max = *distances.last().unwrap();
+    let eeg_max = distances.last().copied().unwrap_or(1.0);
     // Suggest p25 rounded to 2 decimal places — catches the closest quarter of hits.
     let suggested = (eeg_p25 * 100.0).round() / 100.0;
     let suggested = suggested.clamp(0.01, 0.99);

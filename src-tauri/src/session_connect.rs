@@ -165,7 +165,8 @@ pub(crate) async fn connect_mw75(
                 devices.into_iter().find(|d| &d.id == pref)
                     .ok_or_else(|| format!("Preferred MW75 ({pref}) not found; try re-pairing."))?
             } else {
-                devices.into_iter().next().unwrap()
+                // Safe: devices is confirmed non-empty above.
+                devices.into_iter().next().expect("devices non-empty")
             };
             client.connect_to(device).await.map_err(|e| format!("{e}"))
         } => r,
@@ -295,7 +296,8 @@ pub(crate) async fn connect_hermes(
                 devices.into_iter().find(|d| &d.id == pref)
                     .ok_or_else(|| format!("Preferred Hermes ({pref}) not found; try re-pairing."))?
             } else {
-                devices.into_iter().next().unwrap()
+                // Safe: devices is confirmed non-empty above.
+                devices.into_iter().next().expect("devices non-empty")
             };
             client.connect_to(device).await.map_err(|e| format!("{e}"))
         } => r,

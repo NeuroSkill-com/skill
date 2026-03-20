@@ -212,13 +212,13 @@ impl ParquetState {
 
         // Build column arrays.
         let n = self.n_eeg;
-        let ts_col: Vec<f64> = (0..ready).map(|_| self.eeg_ts[0].pop_front().unwrap()).collect();
+        let ts_col: Vec<f64> = (0..ready).filter_map(|_| self.eeg_ts[0].pop_front()).collect();
         for k in 1..n { for _ in 0..ready { self.eeg_ts[k].pop_front(); } }
 
         let mut columns: Vec<Arc<dyn arrow_array::Array>> = Vec::with_capacity(n + 1);
         columns.push(Arc::new(Float64Array::from(ts_col)));
         for k in 0..n {
-            let col: Vec<f64> = (0..ready).map(|_| self.eeg_bufs[k].pop_front().unwrap()).collect();
+            let col: Vec<f64> = (0..ready).filter_map(|_| self.eeg_bufs[k].pop_front()).collect();
             columns.push(Arc::new(Float64Array::from(col)));
         }
 
@@ -263,12 +263,12 @@ impl ParquetState {
             }
         }
 
-        let ts_col: Vec<f64> = (0..ready).map(|_| self.ppg_ts[0].pop_front().unwrap()).collect();
+        let ts_col: Vec<f64> = (0..ready).filter_map(|_| self.ppg_ts[0].pop_front()).collect();
         for k in 1..3 { for _ in 0..ready { self.ppg_ts[k].pop_front(); } }
 
-        let ambient:  Vec<f64> = (0..ready).map(|_| self.ppg_bufs[0].pop_front().unwrap()).collect();
-        let infrared: Vec<f64> = (0..ready).map(|_| self.ppg_bufs[1].pop_front().unwrap()).collect();
-        let red:      Vec<f64> = (0..ready).map(|_| self.ppg_bufs[2].pop_front().unwrap()).collect();
+        let ambient:  Vec<f64> = (0..ready).filter_map(|_| self.ppg_bufs[0].pop_front()).collect();
+        let infrared: Vec<f64> = (0..ready).filter_map(|_| self.ppg_bufs[1].pop_front()).collect();
+        let red:      Vec<f64> = (0..ready).filter_map(|_| self.ppg_bufs[2].pop_front()).collect();
 
         let vitals_row = |field: fn(&PpgMetrics) -> f64| -> Vec<f64> {
             (0..ready).map(|_| ppg_vitals.map_or(f64::NAN, field)).collect()

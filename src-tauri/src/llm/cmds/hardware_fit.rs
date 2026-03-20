@@ -56,7 +56,7 @@ fn parse_param_count(family_name: &str) -> (String, Option<u64>) {
             }
             let num_str = &family_name[start..i];
             if i < len && (bytes[i] == b'B' || bytes[i] == b'b' || bytes[i] == b'M' || bytes[i] == b'm') {
-                let unit = (bytes[i] as char).to_uppercase().next().unwrap();
+                let unit = (bytes[i] as char).to_uppercase().next().unwrap_or('B');
                 if let Ok(num) = num_str.parse::<f64>() {
                     let raw = match unit {
                         'B' => (num * 1_000_000_000.0) as u64,

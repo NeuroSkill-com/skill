@@ -114,7 +114,7 @@ pub fn init(
             config.ctx_size = Some(recommended);
         } else if entry.max_context_length > 0 {
             // Cap user-set context at the model's trained maximum.
-            let user_ctx = config.ctx_size.unwrap();
+            let user_ctx = config.ctx_size.unwrap_or(entry.max_context_length);
             if user_ctx > entry.max_context_length {
                 push_log(&app, &log_buf, "warn",
                     &format!("user ctx_size {} exceeds model max {} — capping",

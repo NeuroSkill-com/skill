@@ -205,12 +205,13 @@ impl CsvState {
         let ready = self.bufs.iter().map(|b| b.len()).min().unwrap_or(0);
         let n = self.n_eeg;
         for _ in 0..ready {
-            let ts = self.ts_bufs[0].pop_front().unwrap();
+            let Some(ts) = self.ts_bufs[0].pop_front() else { break };
             for k in 1..n { self.ts_bufs[k].pop_front(); }
 
             let mut row = vec![format!("{:.6}", ts)];
             for k in 0..n {
-                row.push(format!("{:.4}", self.bufs[k].pop_front().unwrap()));
+                let Some(v) = self.bufs[k].pop_front() else { break };
+                row.push(format!("{:.4}", v));
             }
             let refs: Vec<&str> = row.iter().map(String::as_str).collect();
             let _ = self.wtr.write_record(&refs);
@@ -260,12 +261,13 @@ impl CsvState {
         let ready = self.ppg_bufs.iter().map(|b| b.len()).min().unwrap_or(0);
         if let Some(ref mut wtr) = self.ppg_wtr {
             for _ in 0..ready {
-                let ts = self.ppg_ts_bufs[0].pop_front().unwrap();
+                let Some(ts) = self.ppg_ts_bufs[0].pop_front() else { break };
                 for k in 1..3 { self.ppg_ts_bufs[k].pop_front(); }
 
                 let mut row = vec![format!("{:.6}", ts)];
                 for k in 0..3 {
-                    row.push(format!("{:.1}", self.ppg_bufs[k].pop_front().unwrap()));
+                    let Some(v) = self.ppg_bufs[k].pop_front() else { break };
+                    row.push(format!("{:.1}", v));
                 }
                 if let Some(v) = ppg_vitals {
                     row.push(format!("{:.1}", v.hr));

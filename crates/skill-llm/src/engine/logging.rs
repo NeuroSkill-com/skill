@@ -61,13 +61,13 @@ pub fn push_log_inner(
     let ts    = unix_ts_ms();
     let entry = LlmLogEntry { ts, level: level.to_string(), message: msg.to_string() };
 
-    { let mut q = buf.lock().unwrap(); if q.len() >= LOG_CAP { q.pop_front(); } q.push_back(entry.clone()); }
+    { let mut q = buf.lock().expect("lock poisoned"); if q.len() >= LOG_CAP { q.pop_front(); } q.push_back(entry.clone()); }
     app.emit_event("llm:log", serde_json::to_value(&entry).unwrap_or_default());
 
     if let Some(f) = file {
         use std::io::Write;
         let dt = chrono_iso(ts);
-        let _ = writeln!(f.lock().unwrap(), "[{dt}] [{level:5}] {msg}");
+        let _ = writeln!(f.lock().expect("lock poisoned"), "[{dt}] [{level:5}] {msg}");
     }
 }
 

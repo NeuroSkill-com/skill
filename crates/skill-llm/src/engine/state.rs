@@ -58,7 +58,7 @@ impl LlmServerState {
     pub fn is_ready(&self) -> bool { self.ready.load(Ordering::Relaxed) }
 
     pub fn set_allowed_tools(&self, tools: LlmToolConfig) {
-        *self.allowed_tools.lock().unwrap() = tools;
+        *self.allowed_tools.lock().expect("lock poisoned") = tools;
     }
 
     /// Stop the actor and **block until the thread has fully exited**.
@@ -72,7 +72,7 @@ impl LlmServerState {
     pub fn shutdown(self) {
         // Taking the join handle *before* `req_tx` is dropped prevents a race
         // where the thread exits and the handle becomes invalid.
-        let handle = self.join_handle.lock().unwrap().take();
+        let handle = self.join_handle.lock().expect("lock poisoned").take();
         // Dropping `self` here also drops `req_tx`, closing the channel.
         drop(self);
         if let Some(h) = handle {
@@ -119,7 +119,7 @@ pub fn new_state_cell() -> LlmStateCell {
 /// thread has fully exited.  Safe to call from any thread, including the Tauri
 /// `RunEvent::Exit` handler.  No-op if the server is not running.
 pub fn shutdown_cell(cell: &LlmStateCell) {
-    if let Some(server_state) = cell.lock().unwrap().take() {
+    if let Some(server_state) = cell.lock().expect("lock poisoned").take() {
         match Arc::try_unwrap(server_state) {
             Ok(owned) => owned.shutdown(),
             Err(arc)  => drop(arc),   // in-flight axum handler; actor exits when arc drops
@@ -135,7 +135,7 @@ pub enum LlmStatus { Stopped, Loading, Running }
 
 /// Query the current server status from the cell.
 pub fn cell_status(cell: &LlmStateCell) -> (LlmStatus, String) {
-    match &*cell.lock().unwrap() {
+    match &*cell.lock().expect("lock poisoned") {
         None    => (LlmStatus::Stopped, String::new()),
         Some(s) => (
             if s.is_ready() { LlmStatus::Running } else { LlmStatus::Loading },

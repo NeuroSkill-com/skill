@@ -696,7 +696,7 @@ async fn llm_chat_post(
     // ── Get server ────────────────────────────────────────────────────────────
     let app_state = state.app.app_state();
     let cell = app_state.lock_or_recover().llm.state_cell.clone();
-    let server = { cell.lock().unwrap().as_ref().cloned() };
+    let server = { cell.lock().expect("lock poisoned").as_ref().cloned() };
 
     let Some(server) = server else {
         let body = json!({ "command": "llm_chat", "ok": false,
@@ -934,7 +934,7 @@ async fn handle_llm_chat_ws(
     }));
 
     let cell = app_state.lock_or_recover().llm.state_cell.clone();
-    let server = { cell.lock().unwrap().as_ref().cloned() };
+    let server = { cell.lock().expect("lock poisoned").as_ref().cloned() };
 
     let Some(server) = server else {
         ws_send!(sink, json!({
@@ -984,7 +984,7 @@ async fn handle_llm_chat_ws(
                 let msg = match &event {
                     ToolEvent::ExecutionStart { tool_call_id, tool_name, args } => {
                         // Record tool call start (we'll update with result on End).
-                        tool_calls_for_cb.lock().unwrap().push(
+                        tool_calls_for_cb.lock().expect("lock poisoned").push(
                             crate::llm::chat_store::NewToolCall {
                                 tool:         tool_name.clone(),
                                 status:       "running".to_string(),
@@ -1001,7 +1001,7 @@ async fn handle_llm_chat_ws(
                     }
                     ToolEvent::ExecutionEnd { tool_call_id, tool_name, result, is_error } => {
                         // Update the matching tool call with the result.
-                        let mut tcs = tool_calls_for_cb.lock().unwrap();
+                        let mut tcs = tool_calls_for_cb.lock().expect("lock poisoned");
                         if let Some(tc) = tcs.iter_mut().rev().find(|tc|
                             tc.tool_call_id.as_deref() == Some(tool_call_id)
                         ) {
@@ -1040,7 +1040,7 @@ async fn handle_llm_chat_ws(
         Ok(Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx))) => {
             // ── Persist the assistant response ────────────────────────────
             if session_id > 0 && !text.is_empty() {
-                let tool_calls = tool_calls_collected.lock().unwrap().clone();
+                let tool_calls = tool_calls_collected.lock().expect("lock poisoned").clone();
                 let mut s = app_state.lock_or_recover();
                 if let Some(store) = s.llm.chat_store.as_mut() {
                     let msg_id = store.save_message_with_tools(

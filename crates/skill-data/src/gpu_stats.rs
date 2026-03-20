@@ -491,9 +491,9 @@ mod macos {
                             ewma_overall = Some(o + alpha * (raw.overall - o));
 
                             let smoothed = super::GpuStats {
-                                render:  ewma_render.unwrap(),
-                                tiler:   ewma_tiler.unwrap(),
-                                overall: ewma_overall.unwrap(),
+                                render:  ewma_render.unwrap_or(raw.render),
+                                tiler:   ewma_tiler.unwrap_or(raw.tiler),
+                                overall: ewma_overall.unwrap_or(raw.overall),
                                 ..raw
                             };
                             *shared.lock().unwrap_or_else(|e| e.into_inner()) = Some(smoothed);

@@ -366,7 +366,7 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
                 let args = v.get("arguments")
                     .or_else(|| v.get("parameters"))
                     .map(|a| if a.is_string() {
-                        a.as_str().unwrap().to_string()
+                        a.as_str().unwrap_or_default().to_string()
                     } else {
                         a.to_string()
                     })
@@ -526,7 +526,7 @@ fn extract_calls_from_value(v: &Value, calls: &mut Vec<ToolCall>, dedup: &mut Ha
     if is_dict_style_multi_tool(v) {
         if let Some(obj) = v.as_object() {
             for (name, params) in obj {
-                let args = if params.is_object() && !params.as_object().unwrap().is_empty() {
+                let args = if params.is_object() && params.as_object().map_or(false, |o| !o.is_empty()) {
                     params.to_string()
                 } else {
                     "{}".to_string()

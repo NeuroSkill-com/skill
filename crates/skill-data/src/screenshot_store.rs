@@ -258,13 +258,13 @@ impl ScreenshotStore {
              WHERE embedding IS NULL
                 OR (model_backend != ?1 OR model_id != ?2)
              ORDER BY id"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map(params![backend, model_id], |r| {
             Ok(EmbeddableRow {
                 id:       r.get(0)?,
                 filename: r.get(1)?,
             })
-        }).unwrap().filter_map(|r| r.ok()).collect()
+        }).expect("SQL query").filter_map(|r| r.ok()).collect()
     }
 
     /// Update embedding for a specific row.
@@ -303,7 +303,7 @@ impl ScreenshotStore {
             "SELECT timestamp, embedding, embedding_dim FROM screenshots
              WHERE embedding IS NOT NULL
              ORDER BY id"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map([], |r| {
             let ts: i64 = r.get(0)?;
             let blob: Vec<u8> = r.get(1)?;
@@ -311,7 +311,7 @@ impl ScreenshotStore {
             let floats: Vec<f32> = crate::util::blob_to_f32(&blob);
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
-        }).unwrap().filter_map(|r| r.ok()).collect()
+        }).expect("SQL query").filter_map(|r| r.ok()).collect()
     }
 
     /// Find a screenshot by its exact YYYYMMDDHHmmss timestamp (HNSW payload).
@@ -344,7 +344,7 @@ impl ScreenshotStore {
              FROM screenshots
              WHERE unix_ts BETWEEN ?1 AND ?2
              ORDER BY unix_ts"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map(params![lo, hi], |r| {
             Ok(ScreenshotResult {
                 timestamp:    r.get(0)?,
@@ -356,7 +356,7 @@ impl ScreenshotStore {
                 similarity:   0.0,
                 gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
-        }).unwrap().filter_map(|r| r.ok()).collect()
+        }).expect("SQL query").filter_map(|r| r.ok()).collect()
     }
 
     /// Load all OCR text embeddings from the database (for HNSW rebuild).
@@ -366,7 +366,7 @@ impl ScreenshotStore {
             "SELECT timestamp, ocr_embedding, ocr_embedding_dim FROM screenshots
              WHERE ocr_embedding IS NOT NULL
              ORDER BY id"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map([], |r| {
             let ts: i64 = r.get(0)?;
             let blob: Vec<u8> = r.get(1)?;
@@ -374,7 +374,7 @@ impl ScreenshotStore {
             let floats: Vec<f32> = crate::util::blob_to_f32(&blob);
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
-        }).unwrap().filter_map(|r| r.ok()).collect()
+        }).expect("SQL query").filter_map(|r| r.ok()).collect()
     }
 
     /// Update OCR text and embedding for a specific row.
@@ -412,7 +412,7 @@ impl ScreenshotStore {
              WHERE ocr_text LIKE ?1
              ORDER BY unix_ts DESC
              LIMIT ?2"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map(params![pattern, limit as i64], |r| {
             Ok(ScreenshotResult {
                 timestamp:    r.get(0)?,
@@ -424,7 +424,7 @@ impl ScreenshotStore {
                 similarity:   0.0,
                 gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
-        }).unwrap().filter_map(|r| r.ok()).collect()
+        }).expect("SQL query").filter_map(|r| r.ok()).collect()
     }
 
     /// Get rows that have no vision embedding yet (captured but not embedded).
@@ -434,13 +434,13 @@ impl ScreenshotStore {
             "SELECT id, filename FROM screenshots
              WHERE embedding IS NULL
              ORDER BY id"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map([], |r| {
             Ok(EmbeddableRow {
                 id:       r.get(0)?,
                 filename: r.get(1)?,
             })
-        }).unwrap().filter_map(|r| r.ok()).collect()
+        }).expect("SQL query").filter_map(|r| r.ok()).collect()
     }
 
     /// Get rows that have no OCR text yet (ocr_text is empty).
@@ -450,13 +450,13 @@ impl ScreenshotStore {
             "SELECT id, filename FROM screenshots
              WHERE ocr_text = '' OR ocr_text IS NULL
              ORDER BY id"
-        ).unwrap();
+        ).expect("static SQL");
         stmt.query_map([], |r| {
             Ok(EmbeddableRow {
                 id:       r.get(0)?,
                 filename: r.get(1)?,
             })
-        }).unwrap().filter_map(|r| r.ok()).collect()
+        }).expect("SQL query").filter_map(|r| r.ok()).collect()
     }
 
     /// Fetch the vision embedding, model provenance, OCR text, and OCR

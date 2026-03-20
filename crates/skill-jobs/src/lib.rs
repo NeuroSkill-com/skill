@@ -307,9 +307,9 @@ impl JobQueue {
             let job = {
                 let mut inner = self.inner.lock_or_recover();
                 while inner.queue.is_empty() {
-                    inner = self.condvar.wait(inner).unwrap();
+                    inner = self.condvar.wait(inner).unwrap_or_else(|e| e.into_inner());
                 }
-                let job = inner.queue.pop_front().unwrap();
+                let Some(job) = inner.queue.pop_front() else { continue };
                 inner.running_id = Some(job.id);
                 job
             };

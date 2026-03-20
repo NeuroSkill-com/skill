@@ -355,7 +355,7 @@ fn run_event_loop(
                 b"<!DOCTYPE html><html><head><title></title></head><body></body></html>"
                     as &[u8],
             ))
-            .unwrap()
+            .expect("static HTTP response")
     });
 
     // Use our custom protocol as the initial URL if the user specified about:blank.
@@ -394,7 +394,7 @@ fn run_event_loop(
         .with_devtools(config.devtools)
         .with_navigation_handler({
             move |url: String| {
-                let patterns = blocked_urls_nav.lock().unwrap();
+                let patterns = blocked_urls_nav.lock().expect("lock poisoned");
                 let blocked = patterns.iter().any(|p| url.contains(p.as_str()));
                 let ts = js_timestamp();
                 intercept_store_nav.push_navigation(NavigationEvent {
@@ -425,7 +425,7 @@ fn run_event_loop(
             // ── Async IPC replies (existing) ─────────────────────────
             // Expected format: "ipc_id:result_text"
             if let Some((id, result)) = body.split_once(':') {
-                let mut pending = pending_ipc_clone.lock().unwrap();
+                let mut pending = pending_ipc_clone.lock().expect("lock poisoned");
                 if let Some(reply) = pending.remove(id) {
                     let _ = reply.send(Response::Text(result.to_string()));
                 }
@@ -473,7 +473,7 @@ fn run_event_loop(
             Event::UserEvent(UserEvent::Command(envelope)) => {
                 let Envelope { command, reply } = envelope;
 
-                let wv_guard = webview.lock().unwrap();
+                let wv_guard = webview.lock().expect("lock poisoned");
                 if let Some(ref wv) = *wv_guard {
                     execute_command(
                         wv, &window, &command, reply.clone(), &pending_ipc,
@@ -486,7 +486,7 @@ fn run_event_loop(
 
                 // Handle Close — destroy the webview and exit.
                 if matches!(command, Command::Close) {
-                    *webview.lock().unwrap() = None;
+                    *webview.lock().expect("lock poisoned") = None;
                     *control_flow = ControlFlow::Exit;
                     closed.store(true, Ordering::Relaxed);
                 }
@@ -971,12 +971,12 @@ fn execute_command(
         }
 
         Command::SetBlockedUrls { patterns } => {
-            *blocked_urls.lock().unwrap() = patterns.clone();
+            *blocked_urls.lock().expect("lock poisoned") = patterns.clone();
             let _ = reply.send(Response::Ok);
         }
 
         Command::ClearBlockedUrls => {
-            blocked_urls.lock().unwrap().clear();
+            blocked_urls.lock().expect("lock poisoned").clear();
             let _ = reply.send(Response::Ok);
         }
 
@@ -1006,7 +1006,7 @@ fn eval_async_ipc(
     let id_str = format!("__ipc_{id}");
 
     // Register the pending reply.
-    pending_ipc.lock().unwrap().insert(id_str.clone(), reply.clone());
+    pending_ipc.lock().expect("lock poisoned").insert(id_str.clone(), reply.clone());
 
     let wrapped = format!(
         r#"
@@ -1020,7 +1020,7 @@ fn eval_async_ipc(
 
     if let Err(e) = wv.evaluate_script(&wrapped) {
         // Remove pending entry and send error immediately.
-        pending_ipc.lock().unwrap().remove(&id_str);
+        pending_ipc.lock().expect("lock poisoned").remove(&id_str);
         let _ = reply.send(Response::Error(format!("eval failed: {e}")));
     }
 }
