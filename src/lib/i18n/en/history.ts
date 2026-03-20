@@ -236,6 +236,13 @@ const history: Record<string, string> = {
   "history.quickCompare":      "Quick Compare",
   "history.clearSelection":    "Clear selection",
   "history.deselectSession":   "Deselect",
+  "history.hours":             "hours",
+  "history.hoursTotal":        "hours total",
+  "history.thisWeek":          "this week",
+  "history.streakDays":        "{n}-day streak!",
+  "history.streakAmazing":     "Amazing consistency!",
+  "history.streakKeepGoing":   "Keep it going!",
+  "history.streakGreatStart":  "Great start!",
 };
 
 export default history;

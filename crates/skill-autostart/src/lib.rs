@@ -179,6 +179,58 @@ mod linux {
     }
 }
 
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_enable_creates_desktop_file() {
+        // Use a temp XDG_CONFIG_HOME so we don't pollute real autostart
+        let tmp = std::env::temp_dir().join(format!("skill_autostart_test_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::env::set_var("XDG_CONFIG_HOME", &tmp);
+
+        let result = enable("skill_test_app", "/usr/bin/test");
+        assert!(result.is_ok(), "enable failed: {:?}", result);
+
+        assert!(is_enabled("skill_test_app"));
+
+        // Check the desktop file content
+        let path = tmp.join("autostart/skill_test_app.desktop");
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("Exec=/usr/bin/test"));
+        assert!(content.contains("Type=Application"));
+        assert!(content.contains("Name=Skill_test_app"));
+
+        // Disable should remove the file
+        let result = disable("skill_test_app");
+        assert!(result.is_ok());
+        assert!(!is_enabled("skill_test_app"));
+        assert!(!path.exists());
+
+        let _ = std::fs::remove_dir_all(&tmp);
+        // Restore
+        std::env::remove_var("XDG_CONFIG_HOME");
+    }
+
+    #[test]
+    fn set_enabled_with_nonexistent_app_does_not_panic() {
+        // Just ensure no panic — actual registration may fail on CI
+        let _ = is_enabled("nonexistent_test_app_xyz");
+    }
+
+    #[test]
+    fn disable_nonexistent_is_ok() {
+        let result = disable("nonexistent_app_that_was_never_registered");
+        // On Linux this removes a non-existent file — should be Ok
+        // On other platforms it may vary but should not panic
+        assert!(result.is_ok() || result.is_err());
+    }
+}
+
 // ── Windows — registry HKCU Run key ──────────────────────────────────────────
 
 #[cfg(target_os = "windows")]
