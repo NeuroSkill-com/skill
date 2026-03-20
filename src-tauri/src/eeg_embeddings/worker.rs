@@ -736,18 +736,37 @@ pub(super) fn embed_worker(
                         // msg.samples were already resampled to EMBEDDING_EPOCH_SAMPLES
                         // by EegAccumulator::push(), so use their actual length.
                         let n_ch = ch_names.len().min(EEG_CHANNELS);
-                        let n_samples = if n_ch > 0 && !msg.samples[0].is_empty() {
-                            msg.samples[0].len()
+
+                        // Normalise channel names to uppercase to match LUNA's
+                        // vocabulary (e.g. "Pz" → "PZ", "AF3" stays "AF3").
+                        // Filter out channels not in the LUNA vocabulary so we
+                        // don't panic on unknown electrode names.
+                        let mut luna_ch_names: Vec<String> = Vec::with_capacity(n_ch);
+                        let mut luna_ch_indices: Vec<usize> = Vec::with_capacity(n_ch);
+                        for (idx, name) in ch_names.iter().take(n_ch).enumerate() {
+                            let upper = name.to_uppercase();
+                            if luna_rs::channel_index(&upper).is_some() {
+                                luna_ch_names.push(upper);
+                                luna_ch_indices.push(idx);
+                            }
+                        }
+
+                        if luna_ch_names.is_empty() {
+                            return Err("no device channels match LUNA vocabulary".into());
+                        }
+
+                        let n_samples = if !luna_ch_indices.is_empty() && !msg.samples[luna_ch_indices[0]].is_empty() {
+                            msg.samples[luna_ch_indices[0]].len()
                         } else {
                             EMBEDDING_EPOCH_SAMPLES
                         };
-                        let flat: Vec<f32> = (0..n_ch)
-                            .flat_map(|ch| {
+                        let flat: Vec<f32> = luna_ch_indices.iter()
+                            .flat_map(|&ch| {
                                 msg.samples[ch].iter().copied()
                             })
                             .collect();
 
-                        let ch_refs: Vec<&str> = ch_names.iter().take(n_ch).map(|s| s.as_str()).collect();
+                        let ch_refs: Vec<&str> = luna_ch_names.iter().map(|s| s.as_str()).collect();
                         let batch = luna_rs::build_batch_named::<Wgpu>(
                             flat,
                             &ch_refs,

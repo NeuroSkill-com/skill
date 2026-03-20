@@ -925,6 +925,21 @@ fn run_embed_thread(
 
         // ── Backfill vision embedding ──
         if let Some(ref emb) = embedding {
+            // If the vision model changed and produces a different embedding
+            // dimension, the existing HNSW is incompatible.  Reset to a fresh
+            // index so we don't panic on mismatched dimensions.
+            if hnsw.len() > 0 {
+                if let Some(dim) = hnsw.inner.dim() {
+                    if dim != emb.len() {
+                        eprintln!(
+                            "[screenshot] vision HNSW dimension mismatch (index={dim}, new={}); \
+                             resetting index — run re-embed to backfill",
+                            emb.len()
+                        );
+                        hnsw = fresh_hnsw();
+                    }
+                }
+            }
             let id = hnsw.len() as u64;
             hnsw.insert(emb.clone(), job.ts_i64);
             inserts_since_save += 1;
@@ -958,6 +973,19 @@ fn run_embed_thread(
         let t0 = Instant::now();
         if !ocr_text.is_empty() {
             if let Some(emb) = ctx.embed_text(&ocr_text) {
+                // Guard against dimension mismatch if text embedding model changed.
+                if ocr_hnsw.len() > 0 {
+                    if let Some(dim) = ocr_hnsw.inner.dim() {
+                        if dim != emb.len() {
+                            eprintln!(
+                                "[screenshot] OCR HNSW dimension mismatch (index={dim}, new={}); \
+                                 resetting index — run re-embed to backfill",
+                                emb.len()
+                            );
+                            ocr_hnsw = fresh_hnsw();
+                        }
+                    }
+                }
                 let id = ocr_hnsw.len() as u64;
                 ocr_hnsw.insert(emb.clone(), job.ts_i64);
                 ocr_inserts_since_save += 1;

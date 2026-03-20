@@ -197,7 +197,7 @@ impl DayStore {
                 device_id       TEXT,
                 device_name     TEXT,
                 hnsw_id         INTEGER NOT NULL,
-                eeg_embedding   BLOB    NOT NULL,
+                eeg_embedding   BLOB,
                 label           TEXT,
                 extra_embedding BLOB,
                 -- All computed metrics stored as a single JSON object.
@@ -309,12 +309,16 @@ impl DayStore {
         let metrics_json: Option<String> = metrics.map(|m| metrics_to_json(m, ppg_averages, band_channels_json));
 
         // hnsw_id = 0 (sentinel) — no HNSW entry.
+        // Use an empty blob for eeg_embedding: new databases allow NULL, but
+        // existing databases may still have the legacy NOT NULL constraint
+        // (SQLite cannot ALTER COLUMN to drop NOT NULL).
+        let empty_blob: &[u8] = &[];
         let r = self.conn.execute(
             "INSERT INTO embeddings
              (timestamp, device_id, device_name, hnsw_id, eeg_embedding, label, extra_embedding,
               metrics_json)
-             VALUES (?1, ?2, ?3, 0, NULL, NULL, NULL, ?4)",
-            rusqlite::params![timestamp, device_id, device_name, metrics_json],
+             VALUES (?1, ?2, ?3, 0, ?4, NULL, NULL, ?5)",
+            rusqlite::params![timestamp, device_id, device_name, empty_blob, metrics_json],
         );
         if let Err(e) = r { skill_log!(self.logger, "embedder", "sqlite metrics-only insert: {e}"); }
         0
