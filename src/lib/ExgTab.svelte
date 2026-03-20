@@ -4,7 +4,7 @@
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
-<!-- EXG tab — signal processing filters, EEG embedding config. -->
+<!-- EXG tab — signal processing filters, EEG embedding config, model backend. -->
 <script lang="ts">
   import { onMount }                   from "svelte";
   import { invoke }                   from "@tauri-apps/api/core";
@@ -15,6 +15,7 @@ the Free Software Foundation, version 3 only. -->
   import { Badge }                    from "$lib/components/ui/badge";
   import { Card, CardContent }        from "$lib/components/ui/card";
   import { t }                        from "$lib/i18n/index.svelte";
+  import EegModelTab                  from "$lib/EegModelTab.svelte";
 
   // ── Types ──────────────────────────────────────────────────────────────────
   type PowerlineFreq = "Hz60" | "Hz50";
@@ -246,12 +247,14 @@ the Free Software Foundation, version 3 only. -->
             class="text-[0.56rem] py-0 px-1.5 bg-primary/10 text-primary border-primary/20">
             {Math.round(overlapSecs / EMBEDDING_EPOCH_SECS * 100)}% shared
           </Badge>
-          <span class="ml-auto text-[0.56rem] text-muted-foreground/60 shrink-0">ZUNA · wgpu</span>
+          <span class="ml-auto text-[0.56rem] text-muted-foreground/60 shrink-0">wgpu</span>
         </div>
 
       </CardContent>
     </Card>
   </div>
 
+  <!-- ── EXG Model (encoder, backend, HNSW, re-embed) ──────────────────────── -->
+  <EegModelTab />
 
 </section>

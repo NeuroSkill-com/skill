@@ -12,7 +12,7 @@ the Free Software Foundation, version 3 only. -->
   import DevicesTab       from "$lib/DevicesTab.svelte";
   import ExgTab           from "$lib/ExgTab.svelte";
   import AppearanceTab    from "$lib/AppearanceTab.svelte";
-  import EegModelTab      from "$lib/EegModelTab.svelte";
+
   import ShortcutsTab     from "$lib/ShortcutsTab.svelte";
   import UmapTab          from "$lib/UmapTab.svelte";
   import GoalsTab         from "$lib/GoalsTab.svelte";
@@ -29,10 +29,10 @@ the Free Software Foundation, version 3 only. -->
   import { t }            from "$lib/i18n/index.svelte";
   import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
 
-  type Tab = "goals" | "devices" | "exg" | "sleep" | "calibration" | "embeddings" | "hooks" | "appearance" | "settings" | "shortcuts" | "model" | "umap" | "updates" | "tts" | "permissions" | "llm" | "tools" | "screenshots";
+  type Tab = "goals" | "devices" | "exg" | "sleep" | "calibration" | "embeddings" | "hooks" | "appearance" | "settings" | "shortcuts" | "umap" | "updates" | "tts" | "permissions" | "llm" | "tools" | "screenshots";
   let tab = $state<Tab>("goals");
 
-  const TAB_IDS: Tab[] = ["goals", "devices", "exg", "sleep", "calibration", "tts", "llm", "tools", "model", "embeddings", "screenshots", "hooks", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
+  const TAB_IDS: Tab[] = ["goals", "devices", "exg", "sleep", "calibration", "tts", "llm", "tools", "embeddings", "screenshots", "hooks", "appearance", "settings", "shortcuts", "umap", "updates", "permissions"];
   const TAB_LABELS: Record<Tab, () => string> = {
     goals:       () => t("settingsTabs.goals"),
     devices:     () => t("settingsTabs.devices"),
@@ -47,7 +47,7 @@ the Free Software Foundation, version 3 only. -->
     appearance:  () => t("settingsTabs.appearance"),
     settings:    () => t("settingsTabs.settings"),
     shortcuts:   () => t("settingsTabs.shortcuts"),
-    model:       () => t("settingsTabs.eegModel"),
+
     umap:        () => t("settingsTabs.umap"),
     updates:     () => t("settingsTabs.updates"),
     permissions: () => t("settingsTabs.permissions"),
@@ -64,7 +64,6 @@ the Free Software Foundation, version 3 only. -->
     tts:         `<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>`,
     llm:         `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>`,
     tools:       `<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>`,
-    model:       `<path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.04z"/><path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.04z"/>`,
     embeddings:  `<circle cx="12" cy="12" r="2"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><path d="m6 6.5 4 4.5M14 6.5l-2 4M18 7l-4 4.5M6 17l4-4.5M14 17.5l2-4M18 17l-4-4.5"/>`,
     hooks:       `<path d="M10 13a5 5 0 0 1 0-7l1.5-1.5a5 5 0 0 1 7 7L17 13"/><path d="M14 11a5 5 0 0 1 0 7L12.5 19.5a5 5 0 1 1-7-7L7 11"/>`,
     appearance:  `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>`,
@@ -281,8 +280,6 @@ the Free Software Foundation, version 3 only. -->
         <ScreenshotsTab />
       {:else if tab === "permissions"}
         <PermissionsTab />
-      {:else}
-        <EegModelTab />
       {/if}
 
       <DisclaimerFooter />

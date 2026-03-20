@@ -324,8 +324,8 @@ window_cmd!(open_settings_window, "settings", "settings",
     "NeuroSkill™ – Settings",
     size: (760.0, 720.0), min: (580.0, 560.0));
 
-window_tab_cmd!(open_model_tab, "settings", "settings?tab=model",
-    "NeuroSkill™ – Model",
+window_tab_cmd!(open_model_tab, "settings", "settings?tab=exg",
+    "NeuroSkill™ – EXG",
     size: (760.0, 720.0), min: (580.0, 560.0),
     event: "switch-tab", payload: "model");
 
