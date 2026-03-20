@@ -459,8 +459,8 @@
   async function selectModel(filename: string) {
     startError = "";
     // Atomic switch: stop → set model → start in one backend call.
-    invoke("switch_llm_model", { filename }).catch((e: any) => {
-      startError = typeof e === "string" ? e : (e?.message ?? "Failed to switch model");
+    invoke("switch_llm_model", { filename }).catch((e: unknown) => {
+      startError = typeof e === "string" ? e : (e instanceof Error ? e.message : "Failed to switch model");
     });
     await loadCatalog();
   }
@@ -481,8 +481,8 @@
     // start_llm_server is fire-and-forget on the Rust side — returns immediately
     // with "starting"; the 2-second poll picks up Loading → Running transitions
     // and surfaces any start_error from the background task.
-    invoke("start_llm_server").catch((e: any) => {
-      startError = typeof e === "string" ? e : (e?.message ?? "Unknown error");
+    invoke("start_llm_server").catch((e: unknown) => {
+      startError = typeof e === "string" ? e : (e instanceof Error ? e.message : "Unknown error");
     });
   }
 
@@ -514,7 +514,7 @@
     } catch (e) { console.warn("[llm] get_llm_server_status failed:", e); }
     try {
       unlistenStatus = await listen<{ status: string }>(
-        "llm:status", ev => { serverStatus = (ev.payload as any).status ?? serverStatus; }
+        "llm:status", ev => { const p = ev.payload as Record<string, string>; if (p.status) serverStatus = p.status as typeof serverStatus; }
       );
     } catch (e) { console.warn("[llm] listen llm:status failed:", e); }
     try {

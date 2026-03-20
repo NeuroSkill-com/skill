@@ -62,8 +62,8 @@ the Free Software Foundation, version 3 only. -->
 
     // Try loading session metadata
     try {
-      const sessions = await invoke<any[]>("list_sessions");
-      const match = sessions.find((s: any) => s.csv_path === csvPath);
+      const sessions = await invoke<Array<Record<string, unknown>>>("list_sessions");
+      const match = sessions.find((s) => s.csv_path === csvPath);
       if (match) sessionMeta = match;
     } catch (e) { console.warn("[session] list_sessions failed:", e); }
 

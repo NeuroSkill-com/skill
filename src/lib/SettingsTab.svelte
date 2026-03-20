@@ -523,7 +523,7 @@ the Free Software Foundation, version 3 only. -->
                       dataDirChanged = false;
                       // Offer restart
                       try { await relaunch(); } catch { /* user can restart manually */ }
-                    } catch (e: any) {
+                    } catch (e: unknown) {
                       console.error("set_data_dir error:", e);
                     } finally {
                       dataDirSaving = false;
@@ -613,7 +613,7 @@ the Free Software Foundation, version 3 only. -->
                       wsHostChanged = false;
                       wsPortChanged = false;
                       try { await relaunch(); } catch { /* user can restart manually */ }
-                    } catch (e: any) {
+                    } catch (e: unknown) {
                       console.error("set_ws_config error:", e);
                     } finally {
                       wsSaving = false;
