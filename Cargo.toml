@@ -24,6 +24,7 @@ members = [
     "crates/skill-exg",
     "crates/skill-headless",
     "crates/skill-health",
+    "crates/skill-gpu",
     "crates/skill-history",
     "crates/skill-jobs",
     "crates/skill-label-index",

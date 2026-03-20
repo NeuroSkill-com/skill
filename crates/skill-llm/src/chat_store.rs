@@ -547,4 +547,138 @@ mod tests {
         // Cleanup
         let _ = std::fs::remove_dir_all(&tmp);
     }
+
+    fn temp_store() -> (PathBuf, ChatStore) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static CTR: AtomicU64 = AtomicU64::new(0);
+        let id = CTR.fetch_add(1, Ordering::Relaxed);
+        let tmp = std::env::temp_dir()
+            .join(format!("skill_chat_test_{}_{}", std::process::id(), id));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = std::fs::create_dir_all(&tmp);
+        let store = ChatStore::open(&tmp).expect("open store");
+        (tmp, store)
+    }
+
+    #[test]
+    fn list_sessions_empty() {
+        let (tmp, mut store) = temp_store();
+        let sessions = store.list_sessions();
+        assert!(sessions.is_empty());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn list_sessions_after_create() {
+        let (tmp, mut store) = temp_store();
+        let id1 = store.new_session();
+        let id2 = store.new_session();
+        let sessions = store.list_sessions();
+        assert_eq!(sessions.len(), 2);
+        // Newest first
+        assert_eq!(sessions[0].id, id2);
+        assert_eq!(sessions[1].id, id1);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn delete_session_removes_messages() {
+        let (tmp, mut store) = temp_store();
+        let sid = store.new_session();
+        store.save_message(sid, "user", "test", None);
+        store.save_message(sid, "assistant", "reply", None);
+        assert_eq!(store.load_session(sid).len(), 2);
+
+        store.delete_session(sid);
+        assert_eq!(store.load_session(sid).len(), 0);
+        assert!(!store.list_sessions().iter().any(|s| s.id == sid));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn rename_session() {
+        let (tmp, mut store) = temp_store();
+        let sid = store.new_session();
+        store.rename_session(sid, "My Chat");
+        let sessions = store.list_sessions();
+        assert_eq!(sessions[0].title, "My Chat");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn get_or_create_last_returns_existing() {
+        let (tmp, mut store) = temp_store();
+        let id1 = store.new_session();
+        store.save_message(id1, "user", "first", None);
+        let id2 = store.new_session();
+        store.save_message(id2, "user", "second", None);
+        let last = store.get_or_create_last_session();
+        assert_eq!(last, id2);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn save_and_load_tool_calls() {
+        let (tmp, mut store) = temp_store();
+        let sid = store.new_session();
+        let mid = store.save_message(sid, "assistant", "Let me search.", None);
+
+        let tc = StoredToolCall {
+            id:           0,
+            message_id:   mid,
+            tool:         "web_search".into(),
+            status:       "ok".into(),
+            detail:       Some("Found 5 results".into()),
+            tool_call_id: Some("call_123".into()),
+            args:         Some(serde_json::json!({"query": "rust programming"})),
+            result:       Some(serde_json::json!({"count": 5})),
+            created_at:   0,
+        };
+        store.save_tool_calls(mid, &[tc]);
+
+        let msgs = store.load_session(sid);
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].tool_calls.len(), 1);
+        assert_eq!(msgs[0].tool_calls[0].tool, "web_search");
+        assert_eq!(msgs[0].tool_calls[0].status, "ok");
+        assert_eq!(msgs[0].tool_calls[0].tool_call_id.as_deref(), Some("call_123"));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn archive_and_unarchive() {
+        let (tmp, mut store) = temp_store();
+        let sid = store.new_session();
+        store.save_message(sid, "user", "test", None);
+
+        // Initially not archived
+        let active = store.list_sessions();
+        assert_eq!(active.len(), 1);
+
+        // Archive
+        store.archive_session(sid);
+        let active = store.list_sessions();
+        assert!(active.is_empty());
+        let archived = store.list_archived_sessions();
+        assert_eq!(archived.len(), 1);
+
+        // Unarchive
+        store.unarchive_session(sid);
+        let active = store.list_sessions();
+        assert_eq!(active.len(), 1);
+        let archived = store.list_archived_sessions();
+        assert!(archived.is_empty());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn session_params_roundtrip() {
+        let (tmp, mut store) = temp_store();
+        let sid = store.new_session();
+        let params = r#"{"temperature":0.7,"top_p":0.9}"#;
+        store.set_session_params(sid, params);
+        let loaded = store.get_session_params(sid);
+        assert_eq!(loaded, params);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }

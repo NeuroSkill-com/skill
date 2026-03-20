@@ -10192,6 +10192,7 @@ dependencies = [
  "serde_json",
  "skill-constants",
  "skill-eeg",
+ "skill-gpu",
  "skill-health",
  "sysinfo 0.38.4",
  "tempfile",
@@ -10238,6 +10239,17 @@ dependencies = [
  "skill-data",
  "skill-eeg",
  "ureq 2.12.1",
+]
+
+[[package]]
+name = "skill-gpu"
+version = "0.0.1"
+dependencies = [
+ "libc",
+ "llmfit-core",
+ "serde",
+ "serde_json",
+ "sysinfo 0.38.4",
 ]
 
 [[package]]

@@ -803,7 +803,102 @@ mod tests {
             summary: SleepSummary::default(),
         };
         let result = analyze_sleep_stages(&stages);
-        // Result can be an object or null — just check it doesn't panic
         assert!(result.is_object() || result.is_null() || result.is_string());
+    }
+
+    // ── metrics_cache_path ────────────────────────────────────────────────
+
+    #[test]
+    fn metrics_cache_path_from_csv() {
+        let p = metrics_cache_path(Path::new("/data/20260320/exg_1710000000.csv"));
+        assert_eq!(
+            p.file_name().unwrap().to_str().unwrap(),
+            "exg_1710000000_metrics_cache.json"
+        );
+    }
+
+    #[test]
+    fn metrics_cache_path_from_parquet() {
+        let p = metrics_cache_path(Path::new("/data/20260320/exg_1710000000.parquet"));
+        assert_eq!(
+            p.file_name().unwrap().to_str().unwrap(),
+            "exg_1710000000_metrics_cache.json"
+        );
+    }
+
+    // ── downsample edge cases ─────────────────────────────────────────────
+
+    #[test]
+    fn downsample_empty_is_noop() {
+        let mut ts: Vec<EpochRow> = vec![];
+        downsample_timeseries(&mut ts, 10);
+        assert_eq!(ts.len(), 0);
+    }
+
+    #[test]
+    fn downsample_single_element() {
+        let mut ts = vec![make_epoch(42)];
+        downsample_timeseries(&mut ts, 10);
+        assert_eq!(ts.len(), 1);
+        assert_eq!(ts[0].t, 42.0);
+    }
+
+    #[test]
+    fn downsample_max_zero_is_noop() {
+        let mut ts: Vec<EpochRow> = (0..10).map(|i| make_epoch(i)).collect();
+        downsample_timeseries(&mut ts, 0);
+        assert_eq!(ts.len(), 10);
+    }
+
+    #[test]
+    fn downsample_max_one_is_noop() {
+        let mut ts: Vec<EpochRow> = (0..10).map(|i| make_epoch(i)).collect();
+        downsample_timeseries(&mut ts, 1);
+        assert_eq!(ts.len(), 10); // max < 2 → noop
+    }
+
+    #[test]
+    fn downsample_evenly_spaced() {
+        let mut ts: Vec<EpochRow> = (0..10).map(|i| make_epoch(i)).collect();
+        downsample_timeseries(&mut ts, 5);
+        assert_eq!(ts.len(), 5);
+        // First and last preserved
+        assert_eq!(ts[0].t, 0.0);
+        assert_eq!(ts[4].t, 9.0);
+    }
+
+    // ── SleepSummary default ──────────────────────────────────────────────
+
+    #[test]
+    fn sleep_summary_default_is_zeroed() {
+        let s = SleepSummary::default();
+        assert_eq!(s.total_epochs, 0);
+        assert_eq!(s.rem_epochs, 0);
+        assert_eq!(s.n3_epochs, 0);
+    }
+
+    // ── analyze_sleep_stages with data ────────────────────────────────────
+
+    #[test]
+    fn analyze_sleep_stages_with_epochs() {
+        use super::super::SleepEpoch;
+        let stages = SleepStages {
+            epochs: vec![
+                SleepEpoch { utc: 1000, stage: 4, ..Default::default() }, // REM
+                SleepEpoch { utc: 1030, stage: 3, ..Default::default() }, // N3
+                SleepEpoch { utc: 1060, stage: 2, ..Default::default() }, // N2
+            ],
+            summary: SleepSummary {
+                total_epochs: 3,
+                wake_epochs: 0,
+                n1_epochs: 0,
+                n2_epochs: 1,
+                n3_epochs: 1,
+                rem_epochs: 1,
+                epoch_secs: 30.0,
+            },
+        };
+        let result = analyze_sleep_stages(&stages);
+        assert!(result.is_object() || result.is_string());
     }
 }

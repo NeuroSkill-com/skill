@@ -198,7 +198,7 @@ pub struct CsvMetricsResult {
 
 // ── Sleep types ───────────────────────────────────────────────────────────────
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SleepEpoch {
     pub utc: u64,
     pub stage: u8,

@@ -9,6 +9,7 @@ description = "Pure data/utility modules for NeuroSkill — extracted workspace 
 skill-constants = { path = "../skill-constants" }
 skill-eeg       = { path = "../skill-eeg" }
 skill-health    = { path = "../skill-health" }
+skill-gpu       = { path = "../skill-gpu" }
 serde      = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite    = { version = "0.37", features = ["bundled"] }
