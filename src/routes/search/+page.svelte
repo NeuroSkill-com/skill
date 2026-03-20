@@ -583,6 +583,8 @@ the Free Software Foundation, version 3 only. -->
 
         <!-- Card header (always visible) -->
         <button onclick={() => showIxCard = !showIxCard}
+                aria-expanded={showIxCard}
+                aria-label={t("search.interactiveQueryLabel")}
                 class="w-full flex items-center gap-2 px-3 py-1.5
                        bg-muted/20 hover:bg-muted/30 transition-colors text-left select-none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -647,6 +649,7 @@ the Free Software Foundation, version 3 only. -->
               <span class="text-[0.52rem] text-muted-foreground/40 flex-1 min-w-0 truncate">{step.hint}</span>
               <div class="flex items-center gap-0.5 shrink-0">
                 <button onclick={() => step.set(Math.max(step.min, step.val - 1))}
+                        aria-label="Decrease {step.title}"
                         class="w-5 h-5 rounded flex items-center justify-center text-[0.7rem] font-bold
                                text-muted-foreground/50 hover:text-foreground hover:bg-muted/40
                                transition-colors select-none">−</button>
@@ -656,6 +659,7 @@ the Free Software Foundation, version 3 only. -->
                               bg-background px-0.5 py-0.5 text-[0.68rem] text-center font-mono
                               focus:outline-none focus:ring-1 focus:ring-ring" />
                 <button onclick={() => step.set(Math.min(step.max, step.val + 1))}
+                        aria-label="Increase {step.title}"
                         class="w-5 h-5 rounded flex items-center justify-center text-[0.7rem] font-bold
                                text-muted-foreground/50 hover:text-foreground hover:bg-muted/40
                                transition-colors select-none">+</button>
@@ -916,6 +920,8 @@ the Free Software Foundation, version 3 only. -->
             {@const maxH = Math.max(...sa.hourHist, 1)}
             <div class="border-b border-border dark:border-white/[0.05]">
               <button onclick={() => showAnalysis = !showAnalysis}
+                      aria-expanded={showAnalysis}
+                      aria-label={t("search.analysisLabel")}
                       class="w-full flex items-center gap-2 px-4 py-2 text-left
                              hover:bg-muted/20 transition-colors select-none">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
