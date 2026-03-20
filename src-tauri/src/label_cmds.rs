@@ -178,7 +178,7 @@ pub fn submit_label(
     let s = state.lock_or_recover();
     let now        = unix_secs();
     let skill_dir  = s.skill_dir.clone();
-    let model_code = s.text_embedding_model.clone();
+    let model_code = s.ui.text_embedding_model.clone();
     match &s.label_store {
         Some(store) => {
             let id = store
@@ -297,7 +297,7 @@ pub fn list_embedding_models() -> Vec<EmbedModelInfo> {
 
 #[tauri::command]
 pub fn get_embedding_model(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
-    state.lock_or_recover().text_embedding_model.clone()
+    state.lock_or_recover().ui.text_embedding_model.clone()
 }
 
 #[tauri::command]
@@ -312,7 +312,7 @@ pub async fn set_embedding_model(
         .map_err(|e| format!("unknown model: {e}"))?;
     {
         let mut s = state.lock_or_recover();
-        s.text_embedding_model = model_code.clone();
+        s.ui.text_embedding_model = model_code.clone();
     }
     save_settings_handle(&app);
 
@@ -360,7 +360,7 @@ pub async fn set_embedding_model(
 pub async fn get_stale_label_count(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Result<usize, String> {
     let (model_code, skill_dir) = {
         let s = state.lock_or_recover();
-        (s.text_embedding_model.clone(), s.skill_dir.clone())
+        (s.ui.text_embedding_model.clone(), s.skill_dir.clone())
     };
     tokio::task::spawn_blocking(move || {
         skill_data::label_store::LabelStore::open(&skill_dir)
@@ -428,7 +428,7 @@ pub async fn reembed_all_labels(
     app:       AppHandle,
 ) -> Result<(), String> {
     let (skill_dir, model_code) = crate::read_state(&state,
-        |s| (s.skill_dir.clone(), s.text_embedding_model.clone()));
+        |s| (s.skill_dir.clone(), s.ui.text_embedding_model.clone()));
     let embedder   = std::sync::Arc::clone(&embedder);
     let label_idx  = std::sync::Arc::clone(&label_idx);
 

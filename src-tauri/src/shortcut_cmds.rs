@@ -50,15 +50,15 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
         let r = app.app_state();
         let g = r.lock_or_recover();
         (
-            g.label_shortcut.clone(),
-            g.search_shortcut.clone(),
-            g.settings_shortcut.clone(),
-            g.calibration_shortcut.clone(),
-            g.help_shortcut.clone(),
-            g.history_shortcut.clone(),
-            g.api_shortcut.clone(),
-            g.theme_shortcut.clone(),
-            g.focus_timer_shortcut.clone(),
+            g.shortcuts.label_shortcut.clone(),
+            g.shortcuts.search_shortcut.clone(),
+            g.shortcuts.settings_shortcut.clone(),
+            g.shortcuts.calibration_shortcut.clone(),
+            g.shortcuts.help_shortcut.clone(),
+            g.shortcuts.history_shortcut.clone(),
+            g.shortcuts.api_shortcut.clone(),
+            g.shortcuts.theme_shortcut.clone(),
+            g.shortcuts.focus_timer_shortcut.clone(),
         )
     };
 
@@ -104,7 +104,7 @@ pub(crate) fn apply_all_shortcuts(app: &AppHandle) -> Result<(), String> {
     {
         let chat = {
             let r = app.app_state();
-            let s = r.lock_or_recover().chat_shortcut.clone();
+            let s = r.lock_or_recover().shortcuts.chat_shortcut.clone();
             s
         };
         if let Err(e) = register_one(app, &chat, |a| {
@@ -140,11 +140,11 @@ macro_rules! shortcut_pair {
     ($get:ident, $set:ident, $field:ident, $name:literal) => {
         #[tauri::command]
         pub fn $get(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
-            state.lock_or_recover().$field.clone()
+            state.lock_or_recover().shortcuts.$field.clone()
         }
         #[tauri::command]
         pub fn $set(shortcut: String, app: AppHandle) -> Result<(), String> {
-            app.app_state().lock_or_recover().$field = shortcut;
+            app.app_state().lock_or_recover().shortcuts.$field = shortcut;
             apply_all_shortcuts(&app)?;
             save_settings(&app);
             refresh_tray(&app);

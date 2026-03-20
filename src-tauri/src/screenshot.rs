@@ -41,7 +41,7 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
     fn active_window(&self) -> skill_screenshots::ActiveWindowInfo {
         let r = self.app.app_state();
         let g = r.lock_or_recover();
-        match &g.current_active_window {
+        match &g.input.current_active_window {
             Some(aw) => skill_screenshots::ActiveWindowInfo {
                 app_name: aw.app_name.clone(),
                 window_title: aw.window_title.clone(),

@@ -339,19 +339,19 @@ pub fn set_log_config(config: crate::skill_log::LogConfig, state: tauri::State<'
 
 #[tauri::command]
 pub fn get_eeg_model_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> EegModelConfig {
-    state.lock_or_recover().model_config.clone()
+    state.lock_or_recover().embedding.model_config.clone()
 }
 
 #[tauri::command]
 pub fn set_eeg_model_config(config: EegModelConfig, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let mut s = state.lock_or_recover();
     save_model_config(&s.skill_dir, &config);
-    s.model_config = config;
+    s.embedding.model_config = config;
 }
 
 #[tauri::command]
 pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> EegModelStatus {
-    state.lock_or_recover().model_status.lock_or_recover().clone()
+    state.lock_or_recover().embedding.model_status.lock_or_recover().clone()
 }
 
 /// Spawn a background thread that downloads ZUNA weights from HuggingFace Hub.
@@ -368,10 +368,10 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     use std::sync::atomic::Ordering;
 
     let s = state.lock_or_recover();
-    let hf_repo          = s.model_config.hf_repo.clone();
-    let model_status     = s.model_status.clone();
-    let cancel           = s.download_cancel.clone();
-    let reload_requested = s.encoder_reload_requested.clone();
+    let hf_repo          = s.embedding.model_config.hf_repo.clone();
+    let model_status     = s.embedding.model_status.clone();
+    let cancel           = s.embedding.download_cancel.clone();
+    let reload_requested = s.embedding.encoder_reload_requested.clone();
     let logger           = s.logger.clone();
     drop(s); // release AppState lock before spawning
 
@@ -403,10 +403,10 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
 pub fn cancel_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
     use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
-    s.download_cancel.store(true, Ordering::Relaxed);
+    s.embedding.download_cancel.store(true, Ordering::Relaxed);
     // Immediately reflect cancellation in the status so the UI updates before
     // the download thread has a chance to notice the flag.
-    let mut st = s.model_status.lock_or_recover();
+    let mut st = s.embedding.model_status.lock_or_recover();
     if st.downloading_weights {
         st.download_status_msg = Some("Cancelling…".to_string());
     }
@@ -436,22 +436,22 @@ pub fn set_umap_config(config: UmapUserConfig, state: tauri::State<'_, Mutex<Box
 #[tauri::command]
 pub fn get_theme_and_language(state: tauri::State<'_, Mutex<Box<AppState>>>) -> (String, String) {
     let s = state.lock_or_recover();
-    (s.theme.clone(), s.language.clone())
+    (s.ui.theme.clone(), s.ui.language.clone())
 }
 
 #[tauri::command]
 pub fn set_theme(theme: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    mutate_and_save(&app, |s| s.theme = theme);
+    mutate_and_save(&app, |s| s.ui.theme = theme);
 }
 
 #[tauri::command]
 pub fn set_language(language: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    mutate_and_save(&app, |s| s.language = language);
+    mutate_and_save(&app, |s| s.ui.language = language);
 }
 
 #[tauri::command]
 pub fn get_accent_color(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
-    state.lock_or_recover().accent_color.clone()
+    state.lock_or_recover().ui.accent_color.clone()
 }
 
 #[tauri::command]
@@ -460,32 +460,32 @@ pub fn set_accent_color(
     app:    AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    mutate_and_save(&app, |s| s.accent_color = accent);
+    mutate_and_save(&app, |s| s.ui.accent_color = accent);
 }
 
 // ── Daily goal ────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub fn get_daily_goal(state: tauri::State<'_, Mutex<Box<AppState>>>) -> u32 {
-    state.lock_or_recover().daily_goal_min
+    state.lock_or_recover().ui.daily_goal_min
 }
 
 #[tauri::command]
 pub fn set_daily_goal(minutes: u32, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let clamped = minutes.min(480);
-    state.lock_or_recover().daily_goal_min = clamped;
+    state.lock_or_recover().ui.daily_goal_min = clamped;
     save_settings(&app);
     let _ = app.emit("daily-goal-changed", clamped);
 }
 
 #[tauri::command]
 pub fn get_goal_notified_date(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
-    state.lock_or_recover().goal_notified_date.clone()
+    state.lock_or_recover().ui.goal_notified_date.clone()
 }
 
 #[tauri::command]
 pub fn set_goal_notified_date(date: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    mutate_and_save(&app, |s| s.goal_notified_date = date);
+    mutate_and_save(&app, |s| s.ui.goal_notified_date = date);
 }
 
 // ── Hooks ─────────────────────────────────────────────────────────────────────

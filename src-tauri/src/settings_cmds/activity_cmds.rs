@@ -19,7 +19,7 @@ use skill_data::activity_store::{ActiveWindowRow, InputActivityRow, InputBucketR
 /// Return whether active-window tracking is currently enabled.
 #[tauri::command]
 pub fn get_active_window_tracking(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
-    state.lock_or_recover().track_active_window
+    state.lock_or_recover().input.track_active_window
 }
 
 /// Enable or disable active-window tracking and persist the change.
@@ -29,7 +29,7 @@ pub fn set_active_window_tracking(
     app:     AppHandle,
     state:   tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
-    state.lock_or_recover().track_active_window = enabled;
+    state.lock_or_recover().input.track_active_window = enabled;
     crate::save_settings(&app);
 }
 
@@ -37,13 +37,13 @@ pub fn set_active_window_tracking(
 /// is disabled or no window has been observed yet.
 #[tauri::command]
 pub fn get_active_window(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<ActiveWindowInfo> {
-    state.lock_or_recover().current_active_window.clone()
+    state.lock_or_recover().input.current_active_window.clone()
 }
 
 /// Return whether keyboard/mouse input tracking is currently enabled.
 #[tauri::command]
 pub fn get_input_activity_tracking(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
-    state.lock_or_recover().track_input_activity
+    state.lock_or_recover().input.track_input_activity
 }
 
 /// Enable or disable keyboard/mouse input tracking and persist the change.
@@ -57,9 +57,9 @@ pub fn set_input_activity_tracking(
 ) {
     use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
-    s.input_activity_enabled.store(enabled, Ordering::Relaxed);
+    s.input.input_activity_enabled.store(enabled, Ordering::Relaxed);
     drop(s);
-    state.lock_or_recover().track_input_activity = enabled;
+    state.lock_or_recover().input.track_input_activity = enabled;
     crate::save_settings(&app);
 }
 
@@ -70,8 +70,8 @@ pub fn get_last_input_activity(state: tauri::State<'_, Mutex<Box<AppState>>>) ->
     use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
     (
-        s.last_keyboard_ts.load(Ordering::Relaxed),
-        s.last_mouse_ts.load(Ordering::Relaxed),
+        s.input.last_keyboard_ts.load(Ordering::Relaxed),
+        s.input.last_mouse_ts.load(Ordering::Relaxed),
     )
 }
 
@@ -85,6 +85,7 @@ pub fn get_recent_active_windows(
     let n = limit.unwrap_or(50).min(500);
     state
         .lock_or_recover()
+        .input
         .activity_store
         .as_ref()
         .map(|s| s.get_recent_windows(n))
@@ -101,6 +102,7 @@ pub fn get_recent_input_activity(
     let n = limit.unwrap_or(50).min(500);
     state
         .lock_or_recover()
+        .input
         .activity_store
         .as_ref()
         .map(|s| s.get_recent_input(n))
@@ -126,9 +128,9 @@ pub fn get_input_buckets(
     let start = from_ts.unwrap_or_else(|| end.saturating_sub(24 * 3600));
     state
         .lock_or_recover()
+        .input
         .activity_store
         .as_ref()
         .map(|s| s.get_input_buckets(start, end))
         .unwrap_or_default()
 }
-

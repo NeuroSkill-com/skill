@@ -254,9 +254,134 @@ impl DeviceStatus {
     }
 }
 
+// ── Sub-state: keyboard shortcuts ─────────────────────────────────────────────
+
+/// All user-configurable global keyboard shortcuts.
+///
+/// Extracted from `AppState` so shortcut logic can be read/written without
+/// contending on unrelated fields.
+pub struct ShortcutState {
+    pub label_shortcut:       String,
+    pub search_shortcut:      String,
+    pub settings_shortcut:    String,
+    pub calibration_shortcut: String,
+    pub help_shortcut:        String,
+    pub history_shortcut:     String,
+    pub api_shortcut:         String,
+    pub theme_shortcut:       String,
+    pub focus_timer_shortcut: String,
+    #[cfg(feature = "llm")]
+    pub chat_shortcut:        String,
+}
+
+impl Default for ShortcutState {
+    fn default() -> Self {
+        Self {
+            label_shortcut:       default_label_shortcut(),
+            search_shortcut:      default_search_shortcut(),
+            settings_shortcut:    default_settings_shortcut(),
+            calibration_shortcut: default_calibration_shortcut(),
+            help_shortcut:        default_help_shortcut(),
+            history_shortcut:     default_history_shortcut(),
+            api_shortcut:         default_api_shortcut(),
+            theme_shortcut:       default_theme_shortcut(),
+            focus_timer_shortcut: default_focus_timer_shortcut(),
+            #[cfg(feature = "llm")]
+            chat_shortcut:        default_chat_shortcut(),
+        }
+    }
+}
+
+// ── Sub-state: UI preferences ─────────────────────────────────────────────────
+
+/// User-facing appearance and onboarding preferences.
+pub struct UiPrefsState {
+    pub theme:        String,
+    pub language:     String,
+    pub accent_color: String,
+    pub daily_goal_min: u32,
+    pub goal_notified_date: String,
+    pub onboarding_complete: bool,
+    pub last_seen_whats_new_version: String,
+    pub text_embedding_model: String,
+}
+
+impl Default for UiPrefsState {
+    fn default() -> Self {
+        Self {
+            theme:                       default_theme(),
+            language:                    String::new(),
+            accent_color:                default_accent_color(),
+            daily_goal_min:              default_daily_goal_min(),
+            goal_notified_date:          String::new(),
+            onboarding_complete:         false,
+            last_seen_whats_new_version: String::new(),
+            text_embedding_model:        default_embedding_model(),
+        }
+    }
+}
+
+// ── Sub-state: input / activity tracking ──────────────────────────────────────
+
+/// Keyboard, mouse and active-window tracking state.
+///
+/// The `Arc<Atomic*>` fields are shared with background threads (input
+/// monitor, active-window poller) that update them without locking `AppState`.
+pub struct InputTrackingState {
+    pub track_active_window:    bool,
+    pub current_active_window:  Option<ActiveWindowInfo>,
+    pub track_input_activity:   bool,
+    pub input_activity_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub last_keyboard_ts:       std::sync::Arc<std::sync::atomic::AtomicU64>,
+    pub last_mouse_ts:          std::sync::Arc<std::sync::atomic::AtomicU64>,
+    pub kbd_event_count:        std::sync::Arc<std::sync::atomic::AtomicU64>,
+    pub mouse_event_count:      std::sync::Arc<std::sync::atomic::AtomicU64>,
+    pub activity_store:         Option<std::sync::Arc<ActivityStore>>,
+}
+
+impl Default for InputTrackingState {
+    fn default() -> Self {
+        Self {
+            track_active_window:    default_track_active_window(),
+            current_active_window:  None,
+            track_input_activity:   default_track_input_activity(),
+            input_activity_enabled: std::sync::Arc::new(
+                std::sync::atomic::AtomicBool::new(default_track_input_activity())
+            ),
+            last_keyboard_ts:  std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            last_mouse_ts:     std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            kbd_event_count:   std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            mouse_event_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            activity_store:    None,
+        }
+    }
+}
+
+// ── Sub-state: EEG embedding model ────────────────────────────────────────────
+
+/// EEG model weights, download progress, and encoder reload flag.
+pub struct EmbeddingModelState {
+    pub model_config:             EegModelConfig,
+    pub model_status:             std::sync::Arc<std::sync::Mutex<EegModelStatus>>,
+    pub download_cancel:          std::sync::Arc<std::sync::atomic::AtomicBool>,
+    pub encoder_reload_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl EmbeddingModelState {
+    pub fn new(skill_dir: &std::path::Path) -> Self {
+        Self {
+            model_config:             load_model_config(skill_dir),
+            model_status:             std::sync::Arc::new(std::sync::Mutex::new(EegModelStatus::default())),
+            download_cancel:          std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            encoder_reload_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+}
+
 // ── Full app state (Mutex-managed) ────────────────────────────────────────────
 
 pub struct AppState {
+    // ── Device session ────────────────────────────────────────────────────
     pub status:       DeviceStatus,
     pub stream:       Option<StreamHandle>,
     pub scanner:      Option<ScannerHandle>,
@@ -269,63 +394,53 @@ pub struct AppState {
     pub latest_bands: Option<BandSnapshot>,
     pub pending_reconnect: bool,
     pub retry_attempt: u32,
-    pub skill_dir:        std::path::PathBuf,
-    pub model_config:     EegModelConfig,
-    pub model_status:     std::sync::Arc<std::sync::Mutex<EegModelStatus>>,
-    pub download_cancel:  std::sync::Arc<std::sync::atomic::AtomicBool>,
-    pub encoder_reload_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    pub logger:           std::sync::Arc<SkillLogger>,
     pub session_start_utc: Option<u64>,
+
+    // ── Infrastructure ────────────────────────────────────────────────────
+    pub skill_dir:        std::path::PathBuf,
+    pub logger:           std::sync::Arc<SkillLogger>,
     pub label_store:      Option<label_store::LabelStore>,
-    pub label_shortcut:       String,
-    pub search_shortcut:      String,
-    pub settings_shortcut:    String,
-    pub calibration_shortcut: String,
-    pub help_shortcut:        String,
-    pub history_shortcut:     String,
-    pub api_shortcut:         String,
-    pub theme_shortcut:       String,
-    pub focus_timer_shortcut: String,
-    #[cfg(feature = "llm")]
-    pub chat_shortcut:        String,
+
+    // ── Grouped sub-states ────────────────────────────────────────────────
+    pub shortcuts:    ShortcutState,
+    pub ui:           UiPrefsState,
+    pub input:        InputTrackingState,
+    pub embedding:    EmbeddingModelState,
+
+    // ── Calibration ───────────────────────────────────────────────────────
     pub calibration_profiles: Vec<CalibrationProfile>,
     pub active_calibration_id: String,
-    pub onboarding_complete: bool,
-    pub last_seen_whats_new_version: String,
     pub umap_config: UmapUserConfig,
-    pub theme:        String,
-    pub language:     String,
-    pub accent_color: String,
-    pub daily_goal_min: u32,
-    pub goal_notified_date: String,
-    pub text_embedding_model: String,
+
+    // ── Hooks ─────────────────────────────────────────────────────────────
     pub hooks: Vec<HookRule>,
     pub hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
+
+    // ── Network / services ────────────────────────────────────────────────
     pub ws_host: String,
     pub ws_port: u16,
     pub update_check_interval_secs: u64,
-    pub openbci_config: crate::settings::OpenBciConfig,
+
+    // ── Device configs ────────────────────────────────────────────────────
+    pub openbci_config:    crate::settings::OpenBciConfig,
     pub device_api_config: crate::settings::DeviceApiConfig,
-    pub scanner_config: crate::settings::ScannerConfig,
+    pub scanner_config:    crate::settings::ScannerConfig,
+
+    // ── TTS ───────────────────────────────────────────────────────────────
     pub neutts_config: NeuttsConfig,
-    pub tts_preload: bool,
-    pub track_active_window: bool,
-    pub current_active_window: Option<ActiveWindowInfo>,
-    pub track_input_activity: bool,
-    pub input_activity_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    pub last_keyboard_ts:  std::sync::Arc<std::sync::atomic::AtomicU64>,
-    pub last_mouse_ts:     std::sync::Arc<std::sync::atomic::AtomicU64>,
-    pub kbd_event_count:   std::sync::Arc<std::sync::atomic::AtomicU64>,
-    pub mouse_event_count: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    pub activity_store: Option<std::sync::Arc<ActivityStore>>,
+    pub tts_preload:   bool,
+
+    // ── Independently-locked sub-states ───────────────────────────────────
     pub dnd: std::sync::Arc<std::sync::Mutex<DndRuntimeState>>,
+    pub llm: std::sync::Arc<std::sync::Mutex<LlmState>>,
+
+    // ── Storage / recording ───────────────────────────────────────────────
     pub settings_storage_format: String,
     pub sleep_config:       crate::settings::SleepConfig,
     pub screenshot_config:  ScreenshotConfig,
     pub screenshot_store: Option<std::sync::Arc<screenshot_store::ScreenshotStore>>,
     pub screenshot_metrics: std::sync::Arc<screenshot::ScreenshotMetrics>,
     pub health_store: Option<std::sync::Arc<skill_data::health_store::HealthStore>>,
-    pub llm: std::sync::Arc<std::sync::Mutex<LlmState>>,
 }
 
 // ── DND runtime state (independently locked) ──────────────────────────────────
@@ -416,10 +531,6 @@ impl Default for AppState {
         init_tts_dirs(&skill_dir);
 
         let health_store = skill_data::health_store::HealthStore::open(&skill_dir).map(std::sync::Arc::new);
-        let model_config    = load_model_config(&skill_dir);
-        let model_status    = std::sync::Arc::new(std::sync::Mutex::new(EegModelStatus::default()));
-        let download_cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let encoder_reload_requested = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
         let log_config = crate::skill_log::load_log_config(&skill_dir);
         crate::skill_log::ensure_log_config(&skill_dir);
@@ -427,6 +538,9 @@ impl Default for AppState {
         let log_path  = today_dir.join(format!("log_{}.txt", unix_secs()));
         crate::skill_log::tee_stderr_to_file(&log_path);
         let logger = std::sync::Arc::new(SkillLogger::new(log_config));
+
+        let mut input = InputTrackingState::default();
+        input.activity_store = ActivityStore::open(&skill_dir).map(std::sync::Arc::new);
 
         Self {
             status:            DeviceStatus::default(),
@@ -441,29 +555,17 @@ impl Default for AppState {
             latest_bands:      None,
             pending_reconnect: false,
             retry_attempt:     0,
+            session_start_utc: None,
             label_store: label_store::LabelStore::open(&skill_dir),
-            label_shortcut:       default_label_shortcut(),
-            search_shortcut:      default_search_shortcut(),
-            settings_shortcut:    default_settings_shortcut(),
-            calibration_shortcut: default_calibration_shortcut(),
-            help_shortcut:        default_help_shortcut(),
-            history_shortcut:     default_history_shortcut(),
-            api_shortcut:         default_api_shortcut(),
-            theme_shortcut:       default_theme_shortcut(),
-            focus_timer_shortcut: default_focus_timer_shortcut(),
-            #[cfg(feature = "llm")]
-            chat_shortcut:        default_chat_shortcut(),
+
+            shortcuts: ShortcutState::default(),
+            ui:        UiPrefsState::default(),
+            input,
+            embedding: EmbeddingModelState::new(&skill_dir),
+
             calibration_profiles: vec![CalibrationProfile::default()],
             active_calibration_id: "default".into(),
-            onboarding_complete: false,
-            last_seen_whats_new_version: String::new(),
             umap_config: load_umap_config(&skill_dir),
-            theme:        default_theme(),
-            language:     String::new(),
-            accent_color: default_accent_color(),
-            daily_goal_min: default_daily_goal_min(),
-            goal_notified_date: String::new(),
-            text_embedding_model: default_embedding_model(),
             hooks: Vec::new(),
             hook_runtime: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             ws_host: default_ws_host(),
@@ -474,25 +576,9 @@ impl Default for AppState {
             scanner_config: crate::settings::ScannerConfig::default(),
             neutts_config: NeuttsConfig::default(),
             tts_preload:   true,
-            track_active_window:    default_track_active_window(),
-            current_active_window:  None,
-            track_input_activity:   default_track_input_activity(),
-            input_activity_enabled: std::sync::Arc::new(
-                std::sync::atomic::AtomicBool::new(default_track_input_activity())
-            ),
-            last_keyboard_ts:  std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            last_mouse_ts:     std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            kbd_event_count:   std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            mouse_event_count: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
-            activity_store:    ActivityStore::open(&skill_dir).map(std::sync::Arc::new),
             llm: std::sync::Arc::new(std::sync::Mutex::new(LlmState::new(&skill_dir))),
             skill_dir,
-            model_config,
-            model_status,
-            download_cancel,
-            encoder_reload_requested,
             logger,
-            session_start_utc: None,
             dnd: std::sync::Arc::new(std::sync::Mutex::new(DndRuntimeState::default())),
             settings_storage_format: "csv".into(),
             sleep_config:       crate::settings::SleepConfig::default(),

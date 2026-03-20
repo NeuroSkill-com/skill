@@ -138,17 +138,17 @@ fn tray_download_icon_progress(_app: &AppHandle) -> Option<(usize, f32)> {
 fn structure_key(st: &DeviceStatus, app: &AppHandle) -> String {
     let r = app.app_state();
     let g = r.lock_or_recover();
-    let ls   = g.label_shortcut.clone();
-    let ss   = g.search_shortcut.clone();
-    let sets = g.settings_shortcut.clone();
-    let cs   = g.calibration_shortcut.clone();
-    let hs   = g.help_shortcut.clone();
-    let hist = g.history_shortcut.clone();
-    let api  = g.api_shortcut.clone();
-    let ts   = g.theme_shortcut.clone();
-    let ft   = g.focus_timer_shortcut.clone();
+    let ls   = g.shortcuts.label_shortcut.clone();
+    let ss   = g.shortcuts.search_shortcut.clone();
+    let sets = g.shortcuts.settings_shortcut.clone();
+    let cs   = g.shortcuts.calibration_shortcut.clone();
+    let hs   = g.shortcuts.help_shortcut.clone();
+    let hist = g.shortcuts.history_shortcut.clone();
+    let api  = g.shortcuts.api_shortcut.clone();
+    let ts   = g.shortcuts.theme_shortcut.clone();
+    let ft   = g.shortcuts.focus_timer_shortcut.clone();
     #[cfg(feature = "llm")]
-    let chat = g.chat_shortcut.clone();
+    let chat = g.shortcuts.chat_shortcut.clone();
     #[cfg(not(feature = "llm"))]
     let chat = String::new();
     drop(g);
@@ -237,20 +237,20 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
         let r = app.app_state();
         let g = r.lock_or_recover();
         (
-            g.label_shortcut.clone(),
-            g.search_shortcut.clone(),
-            g.settings_shortcut.clone(),
-            g.calibration_shortcut.clone(),
-            g.help_shortcut.clone(),
-            g.history_shortcut.clone(),
-            g.api_shortcut.clone(),
-            g.focus_timer_shortcut.clone(),
+            g.shortcuts.label_shortcut.clone(),
+            g.shortcuts.search_shortcut.clone(),
+            g.shortcuts.settings_shortcut.clone(),
+            g.shortcuts.calibration_shortcut.clone(),
+            g.shortcuts.help_shortcut.clone(),
+            g.shortcuts.history_shortcut.clone(),
+            g.shortcuts.api_shortcut.clone(),
+            g.shortcuts.focus_timer_shortcut.clone(),
         )
     };
     #[cfg(feature = "llm")]
     let chat_shortcut = {
         let r = app.app_state();
-        let s = r.lock_or_recover().chat_shortcut.clone();
+        let s = r.lock_or_recover().shortcuts.chat_shortcut.clone();
         s
     };
 

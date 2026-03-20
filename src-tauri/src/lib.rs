@@ -487,15 +487,15 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         s.preferred_id                  = data.preferred_id.clone();
         s.status.filter_config          = data.filter_config;
         s.status.embedding_overlap_secs = data.embedding_overlap_secs;
-        s.label_shortcut                = data.label_shortcut;
-        s.search_shortcut               = data.search_shortcut;
-        s.settings_shortcut             = data.settings_shortcut;
-        s.calibration_shortcut          = data.calibration_shortcut;
-        s.help_shortcut                 = data.help_shortcut;
-        s.history_shortcut              = data.history_shortcut;
-        s.api_shortcut                  = data.api_shortcut;
-        s.theme_shortcut                = data.theme_shortcut;
-        s.focus_timer_shortcut          = data.focus_timer_shortcut;
+        s.shortcuts.label_shortcut                = data.label_shortcut;
+        s.shortcuts.search_shortcut               = data.search_shortcut;
+        s.shortcuts.settings_shortcut             = data.settings_shortcut;
+        s.shortcuts.calibration_shortcut          = data.calibration_shortcut;
+        s.shortcuts.help_shortcut                 = data.help_shortcut;
+        s.shortcuts.history_shortcut              = data.history_shortcut;
+        s.shortcuts.api_shortcut                  = data.api_shortcut;
+        s.shortcuts.theme_shortcut                = data.theme_shortcut;
+        s.shortcuts.focus_timer_shortcut          = data.focus_timer_shortcut;
         let mut profiles = data.calibration_profiles;
         if profiles.is_empty() {
             profiles.push(CalibrationProfile::from_legacy(&data.calibration));
@@ -506,13 +506,13 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         } else {
             data.active_calibration_id
         };
-        s.onboarding_complete                = data.onboarding_complete;
-        s.last_seen_whats_new_version        = data.last_seen_whats_new_version;
-        s.theme                        = data.theme;
-        s.language                     = data.language;
-        s.daily_goal_min               = data.daily_goal_min;
-        s.goal_notified_date           = data.goal_notified_date;
-        s.text_embedding_model         = data.text_embedding_model.clone();
+        s.ui.onboarding_complete                = data.onboarding_complete;
+        s.ui.last_seen_whats_new_version        = data.last_seen_whats_new_version;
+        s.ui.theme                        = data.theme;
+        s.ui.language                     = data.language;
+        s.ui.daily_goal_min               = data.daily_goal_min;
+        s.ui.goal_notified_date           = data.goal_notified_date;
+        s.ui.text_embedding_model         = data.text_embedding_model.clone();
         s.hooks                        = data.hooks;
         s.ws_host                      = data.ws_host.clone();
         s.ws_port                      = data.ws_port;
@@ -522,9 +522,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         s.scanner_config               = data.scanner;
         s.neutts_config                = data.neutts.clone();
         s.tts_preload                  = data.tts_preload;
-        s.track_active_window          = data.track_active_window;
-        s.track_input_activity         = data.track_input_activity;
-        s.input_activity_enabled
+        s.input.track_active_window          = data.track_active_window;
+        s.input.track_input_activity         = data.track_input_activity;
+        s.input.input_activity_enabled
             .store(data.track_input_activity, std::sync::atomic::Ordering::Relaxed);
         s.dnd.lock_or_recover().config = data.do_not_disturb;
         { let __a = s.llm.clone(); __a.lock_or_recover().config = data.llm; }
@@ -571,9 +571,9 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         (
             autostart,
             has_model,
-            s.text_embedding_model.clone(),
-            s.model_status.clone(),
-            s.model_config.hf_repo.clone(),
+            s.ui.text_embedding_model.clone(),
+            s.embedding.model_status.clone(),
+            s.embedding.model_config.hf_repo.clone(),
         )
     };
 
@@ -878,7 +878,7 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         let done = {
             let r = app_onboard.state::<Mutex<Box<AppState>>>();
             let g = r.lock_or_recover();
-            g.onboarding_complete
+            g.ui.onboarding_complete
         };
         if !done { let _ = open_onboarding_window(app_onboard).await; }
     });
@@ -888,12 +888,12 @@ fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             let state_ref = app.app_state();
             let s = state_ref.lock_or_recover();
             (
-                s.activity_store.clone(),
-                s.last_keyboard_ts.clone(),
-                s.last_mouse_ts.clone(),
-                s.input_activity_enabled.clone(),
-                s.kbd_event_count.clone(),
-                s.mouse_event_count.clone(),
+                s.input.activity_store.clone(),
+                s.input.last_keyboard_ts.clone(),
+                s.input.last_mouse_ts.clone(),
+                s.input.input_activity_enabled.clone(),
+                s.input.kbd_event_count.clone(),
+                s.input.mouse_event_count.clone(),
             )
         };
         if let Some(store) = act_store.clone() {

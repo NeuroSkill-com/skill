@@ -109,6 +109,7 @@ fn catalog_entry_to_llm_model(entry: &crate::llm::catalog::LlmModelEntry) -> llm
     };
 
     llmfit_core::models::LlmModel {
+        format: llmfit_core::models::ModelFormat::Gguf,
         name: entry.family_name.clone(),
         provider: entry.repo.split('/').next().unwrap_or("unknown").to_string(),
         parameter_count: param_count_str,

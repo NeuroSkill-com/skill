@@ -374,14 +374,14 @@ pub fn run_poller(app: AppHandle, store: Arc<ActivityStore>) {
         let enabled = app
             .state::<std::sync::Mutex<Box<AppState>>>()
             .lock_or_recover()
-            .track_active_window;
+            .input.track_active_window;
 
         if !enabled {
             if last.is_some() {
                 last = None;
                 app.state::<std::sync::Mutex<Box<AppState>>>()
                     .lock_or_recover()
-                    .current_active_window = None;
+                    .input.current_active_window = None;
                 let _ = app.emit("active-window-changed", Option::<ActiveWindowInfo>::None);
             }
             continue;
@@ -402,12 +402,12 @@ pub fn run_poller(app: AppHandle, store: Arc<ActivityStore>) {
                 store.insert_active_window(info);
                 app.state::<std::sync::Mutex<Box<AppState>>>()
                     .lock_or_recover()
-                    .current_active_window = current.clone();
+                    .input.current_active_window = current.clone();
                 let _ = app.emit("active-window-changed", info.clone());
             } else {
                 app.state::<std::sync::Mutex<Box<AppState>>>()
                     .lock_or_recover()
-                    .current_active_window = None;
+                    .input.current_active_window = None;
                 let _ = app.emit("active-window-changed", Option::<ActiveWindowInfo>::None);
             }
             last = current;

@@ -97,6 +97,127 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression
     }
 }
 
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use crate::types::CompressionLevel;
+
+    fn msg(role: &str, content: &str) -> Value {
+        json!({"role": role, "content": content})
+    }
+
+    fn tool_msg(content: &str) -> Value {
+        json!({"role": "tool", "content": content})
+    }
+
+    #[test]
+    fn estimate_tokens_is_nonzero_for_empty() {
+        assert!(estimate_tokens("") >= 1);
+    }
+
+    #[test]
+    fn estimate_tokens_roughly_4_chars_per_token() {
+        // 400 chars → ~100 tokens (+ 1)
+        let s = "a".repeat(400);
+        let t = estimate_tokens(&s);
+        assert!(t >= 90 && t <= 110, "expected ~101, got {t}");
+    }
+
+    #[test]
+    fn estimate_messages_tokens_counts_overhead() {
+        let messages = vec![msg("user", "hello")];
+        let t = estimate_messages_tokens(&messages);
+        // "hello" = 5 chars → 2 tokens + 10 overhead = 12
+        assert!(t >= 10, "expected at least 10, got {t}");
+    }
+
+    #[test]
+    fn trim_is_noop_for_zero_ctx() {
+        let mut messages = vec![msg("system", "sys"), msg("user", "hi")];
+        trim_messages_to_fit(&mut messages, 0, &ToolContextCompression::default());
+        assert_eq!(messages.len(), 2);
+    }
+
+    #[test]
+    fn trim_preserves_system_and_last_user() {
+        let mut messages = vec![
+            msg("system", "You are a helpful assistant."),
+            msg("user", "old question"),
+            msg("assistant", "old answer"),
+            msg("user", "current question"),
+        ];
+        // Very small context → must drop middle messages but keep system + last
+        trim_messages_to_fit(&mut messages, 50, &ToolContextCompression::default());
+        assert!(messages.len() >= 2);
+        assert_eq!(messages[0]["role"], "system");
+        assert_eq!(messages.last().unwrap()["role"], "user");
+    }
+
+    #[test]
+    fn trim_truncates_long_tool_results() {
+        let long_content = "x".repeat(5000);
+        let mut messages = vec![
+            msg("system", "sys"),
+            tool_msg(&long_content),
+            msg("user", "hi"),
+        ];
+        let compression = ToolContextCompression {
+            level: CompressionLevel::Normal,
+            max_search_results: 0,
+            max_result_chars: 500,
+        };
+        trim_messages_to_fit(&mut messages, 100_000, &compression);
+        let tool_content = messages[1]["content"].as_str().unwrap();
+        assert!(tool_content.len() < 5000, "expected truncation");
+        assert!(tool_content.contains("[truncated"));
+    }
+
+    #[test]
+    fn trim_compression_off_does_not_truncate() {
+        let long_content = "x".repeat(3000);
+        let mut messages = vec![
+            msg("system", "sys"),
+            tool_msg(&long_content),
+            msg("user", "hi"),
+        ];
+        let compression = ToolContextCompression {
+            level: CompressionLevel::Off,
+            max_search_results: 0,
+            max_result_chars: 0, // Off level defaults to 16000
+        };
+        trim_messages_to_fit(&mut messages, 100_000, &compression);
+        let tool_content = messages[1]["content"].as_str().unwrap();
+        assert_eq!(tool_content.len(), 3000, "Off should not truncate");
+    }
+
+    #[test]
+    fn effective_defaults_match_levels() {
+        let off = ToolContextCompression { level: CompressionLevel::Off, ..Default::default() };
+        let norm = ToolContextCompression::default(); // Normal
+        let agg = ToolContextCompression { level: CompressionLevel::Aggressive, ..Default::default() };
+
+        assert!(off.effective_max_search_results() > norm.effective_max_search_results());
+        assert!(norm.effective_max_search_results() > agg.effective_max_search_results());
+
+        assert!(off.effective_max_result_chars() > norm.effective_max_result_chars());
+        assert!(norm.effective_max_result_chars() > agg.effective_max_result_chars());
+    }
+
+    #[test]
+    fn custom_overrides_take_precedence() {
+        let c = ToolContextCompression {
+            level: CompressionLevel::Normal,
+            max_search_results: 42,
+            max_result_chars: 999,
+        };
+        assert_eq!(c.effective_max_search_results(), 42);
+        assert_eq!(c.effective_max_result_chars(), 999);
+    }
+}
+
 /// Compact a web_search JSON result to fit within `max_chars`.
 ///
 /// Extracts just the query and a condensed list of titles + URLs,

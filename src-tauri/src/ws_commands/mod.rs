@@ -111,7 +111,7 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
     let session_duration_secs = session_start_utc.map(|s| unix_secs().saturating_sub(s));
 
     // ── Embeddings (today + all-time) ────────────────────────────────────────
-    let model_status     = guard.model_status.lock_or_recover().clone();
+    let model_status     = guard.embedding.model_status.lock_or_recover().clone();
     let embeddings_today = model_status.embeddings_today;
     let encoder_loaded   = model_status.encoder_loaded;
     let latest_metrics   = model_status.latest_metrics.clone();

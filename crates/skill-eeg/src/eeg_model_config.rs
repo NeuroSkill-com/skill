@@ -256,3 +256,150 @@ pub fn save_model_config(skill_dir: &Path, cfg: &EegModelConfig) {
         let _ = std::fs::write(path, json);
     }
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── EegModelConfig defaults ───────────────────────────────────────────
+
+    #[test]
+    fn default_config_has_zuna_repo() {
+        let cfg = EegModelConfig::default();
+        assert_eq!(cfg.hf_repo, ZUNA_HF_REPO);
+    }
+
+    #[test]
+    fn default_hnsw_m_matches_constant() {
+        let cfg = EegModelConfig::default();
+        assert_eq!(cfg.hnsw_m, HNSW_M);
+    }
+
+    #[test]
+    fn default_hnsw_ef_matches_constant() {
+        let cfg = EegModelConfig::default();
+        assert_eq!(cfg.hnsw_ef_construction, HNSW_EF_CONSTRUCTION);
+    }
+
+    #[test]
+    fn default_data_norm_matches_constant() {
+        let cfg = EegModelConfig::default();
+        assert!((cfg.data_norm - ZUNA_DATA_NORM).abs() < f32::EPSILON);
+    }
+
+    // ── JSON round-trip ───────────────────────────────────────────────────
+
+    #[test]
+    fn config_round_trips_through_json() {
+        let cfg = EegModelConfig {
+            hf_repo: "custom/repo".into(),
+            hnsw_m: 32,
+            hnsw_ef_construction: 400,
+            data_norm: 5.0,
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let parsed: EegModelConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.hf_repo, "custom/repo");
+        assert_eq!(parsed.hnsw_m, 32);
+        assert_eq!(parsed.hnsw_ef_construction, 400);
+        assert!((parsed.data_norm - 5.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn config_deserialises_with_missing_fields() {
+        let json = r#"{"hf_repo": "test/model"}"#;
+        let cfg: EegModelConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.hf_repo, "test/model");
+        assert_eq!(cfg.hnsw_m, HNSW_M);
+        assert_eq!(cfg.hnsw_ef_construction, HNSW_EF_CONSTRUCTION);
+    }
+
+    #[test]
+    fn config_deserialises_from_empty_json() {
+        let cfg: EegModelConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(cfg.hf_repo, ZUNA_HF_REPO);
+    }
+
+    // ── EegModelStatus defaults ───────────────────────────────────────────
+
+    #[test]
+    fn status_default_is_inactive() {
+        let st = EegModelStatus::default();
+        assert!(!st.encoder_loaded);
+        assert!(!st.embed_worker_active);
+        assert!(!st.weights_found);
+        assert!(!st.downloading_weights);
+        assert_eq!(st.embeddings_today, 0);
+        assert!(st.encoder_describe.is_none());
+        assert!(st.weights_path.is_none());
+    }
+
+    #[test]
+    fn status_round_trips_through_json() {
+        let mut st = EegModelStatus::default();
+        st.encoder_loaded = true;
+        st.embeddings_today = 42;
+        st.weights_path = Some("/path/to/weights.safetensors".into());
+        let json = serde_json::to_string(&st).unwrap();
+        let parsed: EegModelStatus = serde_json::from_str(&json).unwrap();
+        assert!(parsed.encoder_loaded);
+        assert_eq!(parsed.embeddings_today, 42);
+        assert_eq!(parsed.weights_path.as_deref(), Some("/path/to/weights.safetensors"));
+    }
+
+    // ── LatestEpochMetrics ────────────────────────────────────────────────
+
+    #[test]
+    fn epoch_metrics_default_is_zeroed() {
+        let m = LatestEpochMetrics::default();
+        assert!((m.rel_alpha).abs() < f32::EPSILON);
+        assert!((m.meditation).abs() < f64::EPSILON);
+        assert_eq!(m.blink_count, 0);
+        assert_eq!(m.epoch_timestamp, 0);
+    }
+
+    // ── Persistence ───────────────────────────────────────────────────────
+
+    #[test]
+    fn save_and_load_config() {
+        let dir = std::env::temp_dir().join("skill_test_model_config");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let cfg = EegModelConfig {
+            hf_repo: "test/repo".into(),
+            hnsw_m: 24,
+            hnsw_ef_construction: 300,
+            data_norm: 7.5,
+        };
+        save_model_config(&dir, &cfg);
+        let loaded = load_model_config(&dir);
+        assert_eq!(loaded.hf_repo, "test/repo");
+        assert_eq!(loaded.hnsw_m, 24);
+        assert_eq!(loaded.hnsw_ef_construction, 300);
+        assert!((loaded.data_norm - 7.5).abs() < f32::EPSILON);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_config_returns_default_for_missing_dir() {
+        let cfg = load_model_config(Path::new("/nonexistent/path"));
+        assert_eq!(cfg.hf_repo, ZUNA_HF_REPO);
+    }
+
+    #[test]
+    fn load_config_returns_default_for_corrupt_json() {
+        let dir = std::env::temp_dir().join("skill_test_model_config_corrupt");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join(MODEL_CONFIG_FILE), "not valid json!!!").unwrap();
+
+        let cfg = load_model_config(&dir);
+        assert_eq!(cfg.hf_repo, ZUNA_HF_REPO);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

@@ -14,7 +14,7 @@ pub(crate) fn confirm_and_quit(app: AppHandle) {
     let lang = {
         let s = app.app_state();
         let g = s.lock_or_recover();
-        g.language.clone()
+        g.ui.language.clone()
     };
     std::thread::spawn(move || {
         if quit_confirmed(&lang, &app) { app.exit(0); }

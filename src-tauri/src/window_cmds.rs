@@ -248,7 +248,7 @@ pub fn show_main_window(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     if win.label() != "main" { return; }
-    if !state.lock_or_recover().onboarding_complete { return; }
+    if !state.lock_or_recover().ui.onboarding_complete { return; }
     let _ = win.show();
     let _ = win.set_focus();
     crate::linux_fix_decorations(&win);
@@ -412,7 +412,7 @@ window_cmd!(open_api_window, "api", "api",
 /// An empty string means the window has never been seen.
 #[tauri::command]
 pub fn get_whats_new_seen_version(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
-    state.lock_or_recover().last_seen_whats_new_version.clone()
+    state.lock_or_recover().ui.last_seen_whats_new_version.clone()
 }
 
 /// Persist the acknowledged version and close the What's New window.
@@ -421,7 +421,7 @@ pub fn get_whats_new_seen_version(state: tauri::State<'_, Mutex<Box<AppState>>>)
 /// API (which can silently fail in secondary webview windows).
 #[tauri::command]
 pub fn dismiss_whats_new(version: String, app: AppHandle) {
-    mutate_and_save(&app, |s| s.last_seen_whats_new_version = version);
+    mutate_and_save(&app, |s| s.ui.last_seen_whats_new_version = version);
     if let Some(win) = app.get_webview_window("whats-new") {
         let _ = win.close();
     }
@@ -450,7 +450,7 @@ window_cmd!(open_onboarding_window, "onboarding", "onboarding",
 
 #[tauri::command]
 pub fn complete_onboarding(app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    mutate_and_save(&app, |s| s.onboarding_complete = true);
+    mutate_and_save(&app, |s| s.ui.onboarding_complete = true);
     if let Some(win) = app.get_webview_window("onboarding") { let _ = win.close(); }
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show(); let _ = win.set_focus();
@@ -486,7 +486,7 @@ pub fn complete_onboarding(app: AppHandle, _state: tauri::State<'_, Mutex<Box<Ap
 
 #[tauri::command]
 pub fn get_onboarding_complete(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
-    state.lock_or_recover().onboarding_complete
+    state.lock_or_recover().ui.onboarding_complete
 }
 
 // ── Calibration window ────────────────────────────────────────────────────────

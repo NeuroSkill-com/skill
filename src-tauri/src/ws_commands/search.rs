@@ -70,7 +70,7 @@ pub(super) fn search_labels(app: &AppHandle, msg: &Value) -> Result<Value, Strin
 
     let (skill_dir, model_code) = crate::read_state(
         &app.app_state(),
-        |s| (s.skill_dir.clone(), s.text_embedding_model.clone()),
+        |s| (s.skill_dir.clone(), s.ui.text_embedding_model.clone()),
     );
 
     // Embed the query synchronously — ws_commands are called from a blocking
@@ -348,7 +348,7 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
 
     let (skill_dir, _model_code) = crate::read_state(
         &app.app_state(),
-        |s| (s.skill_dir.clone(), s.text_embedding_model.clone()),
+        |s| (s.skill_dir.clone(), s.ui.text_embedding_model.clone()),
     );
 
     let embedder_arc = std::sync::Arc::clone(

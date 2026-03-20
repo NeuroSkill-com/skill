@@ -411,3 +411,182 @@ pub fn filter_allowed_tool_defs(tool_defs: Vec<Tool>, config: &LlmToolConfig) ->
         .filter(|tool| is_builtin_tool_enabled(config, &tool.function.name))
         .collect()
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── builtin_llm_tools ─────────────────────────────────────────────────
+
+    #[test]
+    fn builtin_tools_are_nonempty() {
+        assert!(!builtin_llm_tools().is_empty());
+    }
+
+    #[test]
+    fn all_builtin_tools_have_function_type() {
+        for tool in builtin_llm_tools() {
+            assert_eq!(tool.tool_type, "function", "tool {} has wrong type", tool.function.name);
+        }
+    }
+
+    #[test]
+    fn all_builtin_tools_have_nonempty_name() {
+        for tool in builtin_llm_tools() {
+            assert!(!tool.function.name.is_empty());
+        }
+    }
+
+    #[test]
+    fn all_builtin_tools_have_description() {
+        for tool in builtin_llm_tools() {
+            assert!(
+                tool.function.description.is_some(),
+                "tool {} missing description", tool.function.name
+            );
+        }
+    }
+
+    #[test]
+    fn builtin_tools_contain_expected_names() {
+        let names: Vec<String> = builtin_llm_tools().iter()
+            .map(|t| t.function.name.clone())
+            .collect();
+        assert!(names.contains(&"date".into()));
+        assert!(names.contains(&"web_search".into()));
+        assert!(names.contains(&"web_fetch".into()));
+        assert!(names.contains(&"location".into()));
+    }
+
+    #[test]
+    fn builtin_tools_have_no_duplicate_names() {
+        let tools = builtin_llm_tools();
+        let mut names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
+        let before = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(before, names.len(), "duplicate tool names found");
+    }
+
+    // ── is_builtin_tool_enabled ───────────────────────────────────────────
+
+    #[test]
+    fn master_switch_disables_all_tools() {
+        let cfg = LlmToolConfig { enabled: false, ..Default::default() };
+        assert!(!is_builtin_tool_enabled(&cfg, "date"));
+        assert!(!is_builtin_tool_enabled(&cfg, "web_search"));
+        assert!(!is_builtin_tool_enabled(&cfg, "bash"));
+    }
+
+    #[test]
+    fn individual_toggles_work() {
+        let mut cfg = LlmToolConfig::default();
+        assert!(is_builtin_tool_enabled(&cfg, "date"));
+
+        cfg.date = false;
+        assert!(!is_builtin_tool_enabled(&cfg, "date"));
+    }
+
+    #[test]
+    fn skill_api_needs_port() {
+        let mut cfg = LlmToolConfig::default();
+        cfg.skill_api = true;
+        cfg.skill_api_port = 0;
+        assert!(!is_builtin_tool_enabled(&cfg, "skill"), "skill needs port > 0");
+
+        cfg.skill_api_port = 8080;
+        assert!(is_builtin_tool_enabled(&cfg, "skill"));
+    }
+
+    #[test]
+    fn unknown_tool_is_disabled() {
+        let cfg = LlmToolConfig::default();
+        assert!(!is_builtin_tool_enabled(&cfg, "nonexistent_tool"));
+    }
+
+    #[test]
+    fn search_output_follows_bash() {
+        let mut cfg = LlmToolConfig::default();
+        assert!(!cfg.bash);
+        assert!(!is_builtin_tool_enabled(&cfg, "search_output"));
+
+        cfg.bash = true;
+        assert!(is_builtin_tool_enabled(&cfg, "search_output"));
+    }
+
+    // ── enabled_builtin_llm_tools ─────────────────────────────────────────
+
+    #[test]
+    fn enabled_tools_respects_config() {
+        let mut cfg = LlmToolConfig::default();
+        cfg.date = false;
+        cfg.location = false;
+        let tools = enabled_builtin_llm_tools(&cfg);
+        let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
+        assert!(!names.contains(&"date"));
+        assert!(!names.contains(&"location"));
+        assert!(names.contains(&"web_search"));
+    }
+
+    #[test]
+    fn enabled_tools_includes_skill_when_port_set() {
+        let mut cfg = LlmToolConfig::default();
+        cfg.skill_api = true;
+        cfg.skill_api_port = 9000;
+        let tools = enabled_builtin_llm_tools(&cfg);
+        let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
+        assert!(names.contains(&"skill"));
+    }
+
+    // ── is_skill_api_command ──────────────────────────────────────────────
+
+    #[test]
+    fn known_skill_commands_are_recognised() {
+        assert!(is_skill_api_command("status"));
+        assert!(is_skill_api_command("sessions"));
+        assert!(is_skill_api_command("label"));
+        assert!(is_skill_api_command("search"));
+        assert!(is_skill_api_command("dnd"));
+        assert!(is_skill_api_command("llm_status"));
+    }
+
+    #[test]
+    fn unknown_commands_are_not_skill_api() {
+        assert!(!is_skill_api_command("random_thing"));
+        assert!(!is_skill_api_command(""));
+    }
+
+    // ── resolve_skill_alias ───────────────────────────────────────────────
+
+    #[test]
+    fn bare_subcommand_resolves() {
+        assert_eq!(resolve_skill_alias("status"), Some("status".into()));
+    }
+
+    #[test]
+    fn neuroskill_alone_resolves_to_status() {
+        assert_eq!(resolve_skill_alias("neuroskill"), Some("status".into()));
+    }
+
+    #[test]
+    fn hyphenated_prefix_resolves() {
+        assert_eq!(resolve_skill_alias("neuroskill-sessions"), Some("sessions".into()));
+    }
+
+    #[test]
+    fn underscore_prefix_resolves() {
+        assert_eq!(resolve_skill_alias("neuroskill_sessions"), Some("sessions".into()));
+    }
+
+    #[test]
+    fn hooks_folder_maps_to_hooks_status() {
+        assert_eq!(resolve_skill_alias("neuroskill-hooks"), Some("hooks_status".into()));
+    }
+
+    #[test]
+    fn unknown_alias_returns_none() {
+        assert_eq!(resolve_skill_alias("totally_unrelated"), None);
+    }
+}

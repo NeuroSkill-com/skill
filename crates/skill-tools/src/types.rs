@@ -251,3 +251,176 @@ impl Default for LlmToolConfig {
         }
     }
 }
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── LlmToolConfig defaults ────────────────────────────────────────────
+
+    #[test]
+    fn default_config_has_tools_enabled() {
+        let cfg = LlmToolConfig::default();
+        assert!(cfg.enabled);
+        assert!(cfg.date);
+        assert!(cfg.web_search);
+        assert!(cfg.skill_api);
+    }
+
+    #[test]
+    fn default_config_has_dangerous_tools_disabled() {
+        let cfg = LlmToolConfig::default();
+        assert!(!cfg.bash);
+        assert!(!cfg.read_file);
+        assert!(!cfg.write_file);
+        assert!(!cfg.edit_file);
+    }
+
+    #[test]
+    fn default_execution_mode_is_parallel() {
+        assert_eq!(LlmToolConfig::default().execution_mode, ToolExecutionMode::Parallel);
+    }
+
+    #[test]
+    fn default_max_rounds_is_positive() {
+        assert!(LlmToolConfig::default().max_rounds > 0);
+    }
+
+    #[test]
+    fn default_skills_refresh_interval_is_24h() {
+        assert_eq!(LlmToolConfig::default().skills_refresh_interval_secs, 86_400);
+    }
+
+    // ── JSON round-trip ───────────────────────────────────────────────────
+
+    #[test]
+    fn config_round_trips_through_json() {
+        let cfg = LlmToolConfig {
+            bash: true,
+            read_file: true,
+            max_rounds: 5,
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        let parsed: LlmToolConfig = serde_json::from_str(&json).unwrap();
+        assert!(parsed.bash);
+        assert!(parsed.read_file);
+        assert_eq!(parsed.max_rounds, 5);
+    }
+
+    #[test]
+    fn config_deserialises_from_empty_json() {
+        let cfg: LlmToolConfig = serde_json::from_str("{}").unwrap();
+        assert!(cfg.enabled);
+        assert!(!cfg.bash);
+        assert_eq!(cfg.execution_mode, ToolExecutionMode::Parallel);
+    }
+
+    #[test]
+    fn skill_api_port_is_not_serialised() {
+        let mut cfg = LlmToolConfig::default();
+        cfg.skill_api_port = 9999;
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(!json.contains("skill_api_port"), "skip field should not appear in JSON");
+        let parsed: LlmToolConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.skill_api_port, 0);
+    }
+
+    // ── WebSearchProvider ─────────────────────────────────────────────────
+
+    #[test]
+    fn default_search_provider_is_duckduckgo() {
+        let p = WebSearchProvider::default();
+        assert_eq!(p.backend, "duckduckgo");
+        assert!(p.brave_api_key.is_empty());
+        assert!(p.searxng_url.is_empty());
+    }
+
+    // ── ToolExecutionMode ─────────────────────────────────────────────────
+
+    #[test]
+    fn execution_mode_serialises_lowercase() {
+        let json = serde_json::to_string(&ToolExecutionMode::Sequential).unwrap();
+        assert_eq!(json, "\"sequential\"");
+        let json = serde_json::to_string(&ToolExecutionMode::Parallel).unwrap();
+        assert_eq!(json, "\"parallel\"");
+    }
+
+    #[test]
+    fn execution_mode_deserialises_lowercase() {
+        let p: ToolExecutionMode = serde_json::from_str("\"parallel\"").unwrap();
+        assert_eq!(p, ToolExecutionMode::Parallel);
+        let s: ToolExecutionMode = serde_json::from_str("\"sequential\"").unwrap();
+        assert_eq!(s, ToolExecutionMode::Sequential);
+    }
+
+    // ── CompressionLevel ──────────────────────────────────────────────────
+
+    #[test]
+    fn compression_level_serialises_lowercase() {
+        assert_eq!(serde_json::to_string(&CompressionLevel::Off).unwrap(), "\"off\"");
+        assert_eq!(serde_json::to_string(&CompressionLevel::Normal).unwrap(), "\"normal\"");
+        assert_eq!(serde_json::to_string(&CompressionLevel::Aggressive).unwrap(), "\"aggressive\"");
+    }
+
+    // ── ToolContextCompression ────────────────────────────────────────────
+
+    #[test]
+    fn default_compression_is_normal() {
+        let c = ToolContextCompression::default();
+        assert_eq!(c.level, CompressionLevel::Normal);
+        assert_eq!(c.max_search_results, 0);
+        assert_eq!(c.max_result_chars, 0);
+    }
+
+    #[test]
+    fn compression_off_has_highest_limits() {
+        let off = ToolContextCompression { level: CompressionLevel::Off, ..Default::default() };
+        assert_eq!(off.effective_max_search_results(), 10);
+        assert_eq!(off.effective_max_result_chars(), 16_000);
+        assert!(!off.should_truncate_urls());
+        assert!(!off.should_compress_old_results());
+    }
+
+    #[test]
+    fn compression_aggressive_has_lowest_limits() {
+        let agg = ToolContextCompression { level: CompressionLevel::Aggressive, ..Default::default() };
+        assert!(agg.effective_max_search_results() <= 3);
+        assert!(agg.effective_max_result_chars() <= 1_000);
+        assert!(agg.should_truncate_urls());
+        assert!(agg.should_compress_old_results());
+    }
+
+    #[test]
+    fn compression_custom_overrides_level_defaults() {
+        let c = ToolContextCompression {
+            level: CompressionLevel::Off,
+            max_search_results: 2,
+            max_result_chars: 500,
+        };
+        assert_eq!(c.effective_max_search_results(), 2);
+        assert_eq!(c.effective_max_result_chars(), 500);
+    }
+
+    // ── Disabled skills serialisation ─────────────────────────────────────
+
+    #[test]
+    fn empty_disabled_skills_is_not_serialised() {
+        let cfg = LlmToolConfig::default();
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(!json.contains("disabled_skills"));
+    }
+
+    #[test]
+    fn nonempty_disabled_skills_is_serialised() {
+        let cfg = LlmToolConfig {
+            disabled_skills: vec!["some-skill".into()],
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("disabled_skills"));
+        assert!(json.contains("some-skill"));
+    }
+}
