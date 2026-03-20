@@ -65,6 +65,7 @@ pub mod prelude {
         EMBEDDING_OVERLAP_SECS, EMBEDDING_OVERLAP_SAMPLES, EMBEDDING_HOP_SAMPLES,
         EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS,
         ZUNA_DATA_NORM, ZUNA_HF_REPO, ZUNA_WEIGHTS_FILE, ZUNA_CONFIG_FILE,
+        LUNA_HF_REPO, LUNA_CONFIG_FILE, LUNA_VARIANTS, LUNA_DEFAULT_VARIANT,
         // HNSW
         HNSW_M, HNSW_EF_CONSTRUCTION,
         HNSW_INDEX_FILE, GLOBAL_HNSW_FILE, GLOBAL_HNSW_SAVE_EVERY,
@@ -391,6 +392,22 @@ pub const ZUNA_WEIGHTS_FILE: &str = "model-00001-of-00001.safetensors";
 
 /// Config filename within the ZUNA HF repo snapshot.
 pub const ZUNA_CONFIG_FILE: &str = "config.json";
+
+/// HuggingFace repository identifier for the LUNA EEG foundation model.
+pub const LUNA_HF_REPO: &str = "thorir/LUNA";
+
+/// Config filename within the LUNA HF repo snapshot.
+pub const LUNA_CONFIG_FILE: &str = "config.json";
+
+/// Available LUNA model size variants: `(variant_name, weights_filename)`.
+pub const LUNA_VARIANTS: [(&str, &str); 3] = [
+    ("base",  "LUNA_base.safetensors"),
+    ("large", "LUNA_large.safetensors"),
+    ("huge",  "LUNA_huge.safetensors"),
+];
+
+/// Default LUNA model variant.
+pub const LUNA_DEFAULT_VARIANT: &str = "base";
 
 /// HNSW graph connectivity parameter `M`.
 pub const HNSW_M: usize = 16;

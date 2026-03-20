@@ -3694,6 +3694,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "exg"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a3250007dee9c140f3e974b92ac04937bed030287f27f793ba8340188e455579"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ndarray 0.17.2",
+ "rayon",
+ "rustfft",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "exg-luna"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7ec7573cd743e0827a2ead2b0692637cefb77d1a4f2513b2eb7688df1f9941a"
+dependencies = [
+ "anyhow",
+ "exg 0.0.3",
+ "ndarray 0.17.2",
+ "serde_json",
+]
+
+[[package]]
 name = "exr"
 version = "1.74.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6324,6 +6352,26 @@ name = "lru-slab"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
+
+[[package]]
+name = "luna-rs"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "858bf8706132674ca077292a8fd60c22267f729b27ca006902365f8e0ef10cd4"
+dependencies = [
+ "anyhow",
+ "burn",
+ "bytemuck",
+ "clap",
+ "exg 0.0.3",
+ "exg-luna",
+ "half",
+ "ndarray 0.17.2",
+ "rustfft",
+ "safetensors 0.7.0",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "lzma-rust2"
@@ -10095,6 +10143,7 @@ dependencies = [
  "libc",
  "llama-cpp-4",
  "llmfit-core",
+ "luna-rs",
  "macos-focus",
  "mdns-sd",
  "ndarray 0.17.2",
@@ -14378,7 +14427,7 @@ dependencies = [
  "anyhow",
  "burn",
  "clap",
- "exg",
+ "exg 0.0.1",
  "half",
  "ndarray 0.17.2",
  "safetensors 0.7.0",

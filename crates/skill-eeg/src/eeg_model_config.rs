@@ -19,7 +19,51 @@ use std::path::Path;
 use crate::constants::{
     HNSW_EF_CONSTRUCTION, HNSW_M, MODEL_CONFIG_FILE,
     ZUNA_DATA_NORM, ZUNA_HF_REPO,
+    LUNA_HF_REPO, LUNA_DEFAULT_VARIANT,
 };
+
+// ── EXG embedding model backend ──────────────────────────────────────────────
+
+/// Which EEG/EXG foundation model to use for embedding generation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExgModelBackend {
+    /// ZUNA encoder (Zyphra) — default.
+    Zuna,
+    /// LUNA encoder (thorir) — topology-agnostic, multiple sizes.
+    Luna,
+}
+
+impl Default for ExgModelBackend {
+    fn default() -> Self { Self::Zuna }
+}
+
+impl std::fmt::Display for ExgModelBackend {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Zuna => write!(f, "zuna"),
+            Self::Luna => write!(f, "luna"),
+        }
+    }
+}
+
+impl ExgModelBackend {
+    /// Parse from a string (case-insensitive).
+    pub fn from_str_loose(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "luna" => Self::Luna,
+            _ => Self::Zuna,
+        }
+    }
+
+    /// Canonical short name used in SQLite `model_backend` column.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Zuna => "zuna",
+            Self::Luna => "luna",
+        }
+    }
+}
 
 // ── Persisted configuration ───────────────────────────────────────────────────
 
@@ -62,12 +106,30 @@ pub struct EegModelConfig {
     /// you are using a custom ZUNA checkpoint.  Default: 10.0.
     #[serde(default = "default_data_norm")]
     pub data_norm: f32,
+
+    /// Which EXG model backend to use for embeddings.
+    ///
+    /// Default: `Zuna`.  Set to `Luna` to use the LUNA foundation model.
+    #[serde(default)]
+    pub model_backend: ExgModelBackend,
+
+    /// LUNA model size variant: `"base"`, `"large"`, or `"huge"`.
+    ///
+    /// Ignored when `model_backend` is `Zuna`.
+    #[serde(default = "default_luna_variant")]
+    pub luna_variant: String,
+
+    /// HuggingFace repository for LUNA weights.
+    #[serde(default = "default_luna_hf_repo")]
+    pub luna_hf_repo: String,
 }
 
-fn default_hf_repo()  -> String { ZUNA_HF_REPO.to_string() }
-fn default_hnsw_m()   -> usize  { HNSW_M }
-fn default_hnsw_ef()  -> usize  { HNSW_EF_CONSTRUCTION }
-fn default_data_norm() -> f32   { ZUNA_DATA_NORM }
+fn default_hf_repo()       -> String { ZUNA_HF_REPO.to_string() }
+fn default_hnsw_m()        -> usize  { HNSW_M }
+fn default_hnsw_ef()       -> usize  { HNSW_EF_CONSTRUCTION }
+fn default_data_norm()     -> f32    { ZUNA_DATA_NORM }
+fn default_luna_variant()  -> String { LUNA_DEFAULT_VARIANT.to_string() }
+fn default_luna_hf_repo()  -> String { LUNA_HF_REPO.to_string() }
 
 impl Default for EegModelConfig {
     fn default() -> Self {
@@ -76,7 +138,22 @@ impl Default for EegModelConfig {
             hnsw_m:              default_hnsw_m(),
             hnsw_ef_construction: default_hnsw_ef(),
             data_norm:           default_data_norm(),
+            model_backend:       ExgModelBackend::default(),
+            luna_variant:        default_luna_variant(),
+            luna_hf_repo:        default_luna_hf_repo(),
         }
+    }
+}
+
+impl EegModelConfig {
+    /// Return the LUNA safetensors filename for the current variant.
+    ///
+    /// Falls back to `LUNA_base.safetensors` if the variant is unrecognised.
+    pub fn luna_weights_file(&self) -> &'static str {
+        crate::constants::LUNA_VARIANTS.iter()
+            .find(|(v, _)| *v == self.luna_variant.as_str())
+            .map(|(_, f)| *f)
+            .unwrap_or(crate::constants::LUNA_VARIANTS[0].1)
     }
 }
 
@@ -141,6 +218,15 @@ pub struct EegModelStatus {
     /// Non-zero only while the embed worker is in the backoff wait between
     /// attempts.  Counts down to 0 each second.
     pub download_retry_in_secs: u64,
+
+    /// Which model backend is currently active.
+    pub active_model_backend: Option<String>,
+
+    /// Embedding speed: milliseconds for the most recent embedding.
+    pub last_embed_ms: f64,
+
+    /// Embedding speed: exponential moving average (ms).
+    pub avg_embed_ms: f64,
 
     /// Number of embeddings inserted into today's HNSW index.
     pub embeddings_today: usize,
@@ -269,6 +355,9 @@ mod tests {
     fn default_config_has_zuna_repo() {
         let cfg = EegModelConfig::default();
         assert_eq!(cfg.hf_repo, ZUNA_HF_REPO);
+        assert_eq!(cfg.model_backend, ExgModelBackend::Zuna);
+        assert_eq!(cfg.luna_variant, LUNA_DEFAULT_VARIANT);
+        assert_eq!(cfg.luna_hf_repo, LUNA_HF_REPO);
     }
 
     #[test]
@@ -298,6 +387,9 @@ mod tests {
             hnsw_m: 32,
             hnsw_ef_construction: 400,
             data_norm: 5.0,
+            model_backend: ExgModelBackend::Luna,
+            luna_variant: "large".into(),
+            luna_hf_repo: "thorir/LUNA".into(),
         };
         let json = serde_json::to_string(&cfg).unwrap();
         let parsed: EegModelConfig = serde_json::from_str(&json).unwrap();
@@ -305,6 +397,8 @@ mod tests {
         assert_eq!(parsed.hnsw_m, 32);
         assert_eq!(parsed.hnsw_ef_construction, 400);
         assert!((parsed.data_norm - 5.0).abs() < f32::EPSILON);
+        assert_eq!(parsed.model_backend, ExgModelBackend::Luna);
+        assert_eq!(parsed.luna_variant, "large");
     }
 
     #[test]
@@ -373,6 +467,9 @@ mod tests {
             hnsw_m: 24,
             hnsw_ef_construction: 300,
             data_norm: 7.5,
+            model_backend: ExgModelBackend::Luna,
+            luna_variant: "huge".into(),
+            luna_hf_repo: "thorir/LUNA".into(),
         };
         save_model_config(&dir, &cfg);
         let loaded = load_model_config(&dir);

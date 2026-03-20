@@ -203,15 +203,21 @@ impl DayStore {
                 --   consciousness_lzc, consciousness_wakefulness,
                 --   consciousness_integration,
                 --   band_channels (array of per-channel band power objects)
-                metrics_json    TEXT
+                metrics_json    TEXT,
+                -- Which model backend produced this embedding (zuna | luna | NULL for legacy).
+                model_backend   TEXT,
+                -- Embedding inference time in milliseconds.
+                embed_speed_ms  REAL
             );
             CREATE INDEX IF NOT EXISTS idx_timestamp ON embeddings (timestamp);
         ";
-        // Migration: add metrics_json to databases created before this schema.
+        // Migration: add columns to databases created before this schema.
         // Old individual-column rows will have NULL metrics_json and are read
         // through the json_extract() fallback (which returns NULL → 0.0).
         let migrate = [
             "ALTER TABLE embeddings ADD COLUMN metrics_json TEXT",
+            "ALTER TABLE embeddings ADD COLUMN model_backend TEXT",
+            "ALTER TABLE embeddings ADD COLUMN embed_speed_ms REAL",
         ];
         if let Err(e) = conn.execute_batch(ddl) {
             skill_log!(logger, "embedder", "sqlite DDL failed: {e}");
@@ -238,6 +244,8 @@ impl DayStore {
         metrics:            Option<&EpochMetrics>,
         ppg_averages:       Option<&[f64; 3]>,
         band_channels_json: Option<&str>,
+        model_backend:      Option<&str>,
+        embed_speed_ms:     Option<f64>,
     ) -> usize {
         // ── HNSW ─────────────────────────────────────────────────────────────
         let hnsw_id = self.index.insert(embedding.to_vec(), timestamp);
@@ -253,11 +261,11 @@ impl DayStore {
         let r = self.conn.execute(
             "INSERT INTO embeddings
              (timestamp, device_id, device_name, hnsw_id, eeg_embedding, label, extra_embedding,
-              metrics_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6)",
+              metrics_json, model_backend, embed_speed_ms)
+             VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, ?6, ?7, ?8)",
             rusqlite::params![
                 timestamp, device_id, device_name, hnsw_id as i64, blob,
-                metrics_json,
+                metrics_json, model_backend, embed_speed_ms,
             ],
         );
         if let Err(e) = r { skill_log!(self.logger, "embedder", "sqlite insert: {e}"); }

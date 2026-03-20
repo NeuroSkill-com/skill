@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, atomic::AtomicBool};
 use std::time::SystemTime;
 
-use skill_constants::{ZUNA_CONFIG_FILE, ZUNA_WEIGHTS_FILE};
+use skill_constants::{ZUNA_CONFIG_FILE, ZUNA_WEIGHTS_FILE, LUNA_CONFIG_FILE};
 use skill_data::util::MutexExt;
 use skill_eeg::eeg_bands::BandSnapshot;
 use skill_eeg::eeg_model_config::EegModelStatus;
@@ -115,6 +115,24 @@ pub fn resolve_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
 /// Public alias for [`resolve_hf_weights`] (backwards compatibility).
 pub fn probe_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
     resolve_hf_weights(hf_repo)
+}
+
+/// Find LUNA weights in the HuggingFace disk cache for the given `hf_repo`
+/// and `weights_file` (e.g. `LUNA_base.safetensors`).
+pub fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBuf, PathBuf)> {
+    let snaps = skill_data::util::hf_model_dir(hf_repo).join("snapshots");
+    let mut dirs: Vec<_> = std::fs::read_dir(&snaps).ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .collect();
+    dirs.sort_by_key(|e| e.metadata().and_then(|m| m.modified())
+        .unwrap_or(SystemTime::UNIX_EPOCH));
+    for snap in dirs.into_iter().rev() {
+        let w = snap.path().join(weights_file);
+        let c = snap.path().join(LUNA_CONFIG_FILE);
+        if w.exists() && c.exists() { return Some((w, c)); }
+    }
+    None
 }
 
 /// Register a completed blob in the HF Hub snapshot directory structure.

@@ -241,6 +241,9 @@ mdns-sd = "0.18"
 # burn-wgpu → cubecl-wgpu → wgpu 26.0.1, the same version gpu-fft uses.
 zuna-rs   = { version = "0.0.1", default-features = false, features = ["wgpu"] }
 
+# LUNA EEG foundation model — topology-agnostic encoder, wgpu GPU backend.
+luna-rs   = { version = "0.0.2", default-features = false, features = ["wgpu"] }
+
 # Pure-Rust HNSW approximate nearest-neighbour index with binary persistence.
 fast-hnsw = { version = "1.0.1" }
 

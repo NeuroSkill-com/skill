@@ -16,7 +16,7 @@ use crate::constants::{
     GLOBAL_HNSW_SAVE_EVERY, MUSE_SAMPLE_RATE,
 };
 use crate::global_eeg_index;
-use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus};
+use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus, ExgModelBackend};
 use skill_exg::{
     EpochMetrics, configure_cubecl_cache, GPU_DEVICE_POISONED,
     panic_msg, yyyymmdd_utc, yyyymmddhhmmss_utc,
@@ -390,9 +390,10 @@ pub(super) fn embed_worker(
     use burn::backend::{Wgpu, wgpu::WgpuDevice};
     use ndarray::Array2;
     use std::collections::HashMap;
+    use std::time::Instant;
     use zuna_rs::{ZunaEncoder, config::DataConfig, load_from_named_tensor};
 
-    skill_log!(logger, "embedder", "worker started — skill_dir={}", skill_dir.display());
+    skill_log!(logger, "embedder", "worker started — skill_dir={} backend={}", skill_dir.display(), config.model_backend);
     // Mark worker as active so the UI can distinguish "loading on GPU" from
     // "weights found but no session yet".
     status.lock_or_recover().embed_worker_active = true;
@@ -408,38 +409,52 @@ pub(super) fn embed_worker(
         st.embeddings_today = s.hnsw_len();
     }
 
-    // ── 2. Locate ZUNA weights — download with exponential-backoff retry ─────
+    // ── 2. Locate weights — download with exponential-backoff retry ─────────
     // Backoff delays (seconds): 1 2 3 5 15 30 60 120 300 600 900 1800 1800 …
     const BACKOFF_SECS: &[u64] = &[1, 2, 3, 5, 15, 30, 60, 120, 300, 600, 900, 1800];
 
-    let weights = resolve_hf_weights(&config.hf_repo).or_else(|| {
+    let active_backend = config.model_backend.clone();
+
+    // Resolve weights based on the selected backend.
+    let resolve_fn = || -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+        match active_backend {
+            ExgModelBackend::Zuna => resolve_hf_weights(&config.hf_repo),
+            ExgModelBackend::Luna => {
+                let wf = config.luna_weights_file();
+                skill_exg::resolve_luna_weights(&config.luna_hf_repo, wf)
+            }
+        }
+    };
+
+    let download_repo = match active_backend {
+        ExgModelBackend::Zuna => config.hf_repo.clone(),
+        ExgModelBackend::Luna => config.luna_hf_repo.clone(),
+    };
+
+    let weights = resolve_fn().or_else(|| {
         use std::sync::atomic::Ordering;
         use std::time::Duration;
 
         let mut attempt = 0u32;
         loop {
-            // Respect an explicit user cancellation before each attempt.
             if cancel.load(Ordering::Relaxed) {
                 skill_log!(logger, "embedder", "auto-download cancelled by user — stopping retry loop");
                 return None;
             }
 
-            // Stamp the current attempt number so the UI can show it.
             {
                 let mut st = status.lock_or_recover();
                 st.download_retry_attempt = attempt;
                 st.download_retry_in_secs = 0;
             }
 
-            if let Some(w) = download_hf_weights(&config.hf_repo, &status, &cancel, false, &logger) {
+            if let Some(w) = download_hf_weights(&download_repo, &status, &cancel, false, &logger) {
                 let mut st = status.lock_or_recover();
                 st.download_retry_attempt = 0;
                 st.download_retry_in_secs = 0;
                 return Some(w);
             }
 
-            // If the download function itself was cancelled (not just failed),
-            // stop the auto-retry so the user is in control.
             if cancel.load(Ordering::Relaxed) {
                 skill_log!(logger, "embedder", "download cancelled mid-attempt — stopping auto-retry");
                 let mut st = status.lock_or_recover();
@@ -451,14 +466,11 @@ pub(super) fn embed_worker(
             attempt += 1;
             skill_log!(logger, "embedder", "download failed — retrying in {delay}s (attempt {attempt})");
 
-            // Countdown: drain the epoch channel every second so the bounded
-            // sender does not block the EEG accumulator during a long wait.
             for remaining in (1..=delay).rev() {
                 {
                     let mut st = status.lock_or_recover();
                     st.download_retry_in_secs = remaining;
                 }
-                // Drain any queued epochs (encoder not ready yet — discard).
                 while rx.try_recv().is_ok() {}
                 std::thread::sleep(Duration::from_secs(1));
                 if cancel.load(Ordering::Relaxed) {
@@ -467,8 +479,6 @@ pub(super) fn embed_worker(
                     st.download_retry_in_secs = 0;
                     return None;
                 }
-                // A successful UI download set reload_requested — exit so the
-                // accumulator respawns a fresh worker that finds the new files.
                 if reload_requested.load(Ordering::Relaxed) {
                     skill_log!(logger, "embedder", "reload requested during backoff wait — exiting for respawn");
                     let mut st = status.lock_or_recover();
@@ -487,9 +497,10 @@ pub(super) fn embed_worker(
         let mut st = status.lock_or_recover();
         st.weights_found = weights.is_some();
         st.weights_path  = weights.as_ref().map(|(w, _)| w.display().to_string());
+        st.active_model_backend = Some(active_backend.as_str().to_string());
     }
     if weights.is_none() {
-        skill_log!(logger, "embedder", "ZUNA weights unavailable — embeddings skipped.");
+        skill_log!(logger, "embedder", "{} weights unavailable — embeddings skipped.", active_backend);
     }
 
     // ── 3. Load ZUNA encoder on wgpu ─────────────────────────────────────────
@@ -525,17 +536,44 @@ pub(super) fn embed_worker(
 
     let device = WgpuDevice::DefaultDevice;
 
+    // ── Encoder variants ──────────────────────────────────────────────────────
+    enum LoadedEncoder {
+        Zuna(ZunaEncoder<Wgpu>),
+        Luna(luna_rs::LunaEncoder<Wgpu>),
+    }
+
+    impl LoadedEncoder {
+        fn describe(&self) -> String {
+            match self {
+                Self::Zuna(e) => e.describe().to_string(),
+                Self::Luna(e) => e.describe(),
+            }
+        }
+    }
+
     // Wrap the encoder load in `catch_unwind` so that a cubecl panic does not
     // kill the entire thread.  If it panics we mark the device poisoned and
     // fall back to metrics-only mode.
-    let mut encoder: Option<ZunaEncoder<Wgpu>> = weights.and_then(|(w, c)| {
-        skill_log!(logger, "embedder", "loading ZUNA encoder from {}", w.display());
-        let load_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            ZunaEncoder::<Wgpu>::load(&c, &w, device.clone())
+    let mut encoder: Option<LoadedEncoder> = weights.and_then(|(w, c)| {
+        skill_log!(logger, "embedder", "loading {} encoder from {}", active_backend, w.display());
+        let backend = active_backend.clone();
+        let load_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(LoadedEncoder, f64), String> {
+            match backend {
+                ExgModelBackend::Zuna => {
+                    ZunaEncoder::<Wgpu>::load(&c, &w, device.clone())
+                        .map(|(enc, ms)| (LoadedEncoder::Zuna(enc), ms))
+                        .map_err(|e| format!("{e:#}"))
+                }
+                ExgModelBackend::Luna => {
+                    luna_rs::LunaEncoder::<Wgpu>::load(&c, &w, device.clone())
+                        .map(|(enc, ms)| (LoadedEncoder::Luna(enc), ms))
+                        .map_err(|e| format!("{e:#}"))
+                }
+            }
         }));
         match load_result {
             Ok(Ok((enc, ms))) => {
-                let desc = enc.describe().to_string();
+                let desc = enc.describe();
                 skill_log!(logger, "embedder", "encoder ready ({ms:.0} ms) — {desc}");
                 let mut st = status.lock_or_recover();
                 st.encoder_loaded   = true;
@@ -562,6 +600,10 @@ pub(super) fn embed_worker(
     let mut epoch_sample_rate: f32              = MUSE_SAMPLE_RATE;
     let data_cfg                                 = DataConfig::default();
     let pos_overrides: HashMap<String, [f32; 3]> = HashMap::new();
+
+    // Embedding speed EMA (exponential moving average, alpha = 0.1).
+    let mut embed_speed_ema: f64 = 0.0;
+    let mut embed_speed_count: u64 = 0;
 
     // Counter for periodic global index saves.
     let mut global_save_counter: usize = 0;
@@ -645,38 +687,75 @@ pub(super) fn embed_worker(
         // process lifetime (respawning the thread does not help — the global
         // wgpu device's mutexes stay poisoned) and set encoder = None so the
         // loop continues in metrics-only mode.
+        let embed_start = Instant::now();
         let mean_emb: Option<Vec<f32>> = if let Some(ref enc) = encoder {
             let gpu_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                // Pad channel names to EEG_CHANNELS so they match the array's
-                // row count.  Inactive channels (zero-filled) get synthetic
-                // names that won't match any 10-20 electrode position.
-                let mut padded_names: Vec<String> = ch_names.clone();
-                while padded_names.len() < EEG_CHANNELS {
-                    padded_names.push(format!("_pad{}", padded_names.len()));
+                match enc {
+                    LoadedEncoder::Zuna(zuna_enc) => {
+                        // Pad channel names to EEG_CHANNELS so they match the array's
+                        // row count.  Inactive channels (zero-filled) get synthetic
+                        // names that won't match any 10-20 electrode position.
+                        let mut padded_names: Vec<String> = ch_names.clone();
+                        while padded_names.len() < EEG_CHANNELS {
+                            padded_names.push(format!("_pad{}", padded_names.len()));
+                        }
+                        let ch_refs: Vec<&str> = padded_names.iter().map(|s| s.as_str()).collect();
+                        let mut batches = load_from_named_tensor::<Wgpu>(
+                            array, &ch_refs, epoch_sample_rate, config.data_norm,
+                            &pos_overrides, &data_cfg, &device,
+                        ).map_err(|e| format!("preprocess: {e:#}"))?;
+
+                        if batches.is_empty() { return Err::<Vec<f32>, String>("empty batch".into()); }
+
+                        let mut epochs = zuna_enc.encode_batches(batches.drain(..1).collect())
+                            .map_err(|e| format!("encode: {e:#}"))?;
+
+                        let epoch = epochs.pop().ok_or("no epoch output")?;
+                        let dim   = epoch.output_dim();
+                        let n_tok = epoch.n_tokens();
+                        if dim == 0 || n_tok == 0 { return Err("zero dim/tokens".into()); }
+
+                        let mut mean_emb = vec![0f32; dim];
+                        for tok in epoch.embeddings.chunks(dim) {
+                            for (i, &v) in tok.iter().enumerate() { mean_emb[i] += v; }
+                        }
+                        let scale = 1.0 / n_tok as f32;
+                        for v in &mut mean_emb { *v *= scale; }
+                        Ok(mean_emb)
+                    }
+                    LoadedEncoder::Luna(luna_enc) => {
+                        // Build LUNA input: use active device channels only.
+                        let n_ch = ch_names.len().min(EEG_CHANNELS);
+                        let n_samples = EMBEDDING_EPOCH_SAMPLES;
+                        let flat: Vec<f32> = (0..n_ch)
+                            .flat_map(|ch| {
+                                msg.samples[ch].iter().copied()
+                            })
+                            .collect();
+
+                        let ch_refs: Vec<&str> = ch_names.iter().take(n_ch).map(|s| s.as_str()).collect();
+                        let batch = luna_rs::build_batch_named::<Wgpu>(
+                            flat,
+                            &ch_refs,
+                            n_samples,
+                            &device,
+                        );
+
+                        let result = luna_enc.run_batch(&batch)
+                            .map_err(|e| format!("luna encode: {e:#}"))?;
+
+                        // LUNA output shape depends on mode:
+                        // - Reconstruction: [C, T] — mean-pool over channels to get [T] then mean again
+                        // - Classification: [num_classes]
+                        // For embedding use, we take the full output and flatten/pool.
+                        let out = &result.output;
+                        if out.is_empty() { return Err("empty luna output".into()); }
+
+                        // Use the output directly as the embedding vector.
+                        // For reconstruction mode [C, T], mean-pool to get a fixed-size embedding.
+                        Ok(out.clone())
+                    }
                 }
-                let ch_refs: Vec<&str> = padded_names.iter().map(|s| s.as_str()).collect();
-                let mut batches = load_from_named_tensor::<Wgpu>(
-                    array, &ch_refs, epoch_sample_rate, config.data_norm,
-                    &pos_overrides, &data_cfg, &device,
-                ).map_err(|e| format!("preprocess: {e:#}"))?;
-
-                if batches.is_empty() { return Err::<Vec<f32>, String>("empty batch".into()); }
-
-                let mut epochs = enc.encode_batches(batches.drain(..1).collect())
-                    .map_err(|e| format!("encode: {e:#}"))?;
-
-                let epoch = epochs.pop().ok_or("no epoch output")?;
-                let dim   = epoch.output_dim();
-                let n_tok = epoch.n_tokens();
-                if dim == 0 || n_tok == 0 { return Err("zero dim/tokens".into()); }
-
-                let mut mean_emb = vec![0f32; dim];
-                for tok in epoch.embeddings.chunks(dim) {
-                    for (i, &v) in tok.iter().enumerate() { mean_emb[i] += v; }
-                }
-                let scale = 1.0 / n_tok as f32;
-                for v in &mut mean_emb { *v *= scale; }
-                Ok(mean_emb)
             }));
 
             match gpu_result {
@@ -698,6 +777,18 @@ pub(super) fn embed_worker(
         } else {
             None  // encoder unavailable — metrics-only mode
         };
+
+        // ── Track embedding speed ─────────────────────────────────────────────
+        let embed_elapsed_ms = embed_start.elapsed().as_secs_f64() * 1000.0;
+        let current_speed_ms = if mean_emb.is_some() { Some(embed_elapsed_ms) } else { None };
+        if let Some(ms) = current_speed_ms {
+            embed_speed_count += 1;
+            if embed_speed_count == 1 {
+                embed_speed_ema = ms;
+            } else {
+                embed_speed_ema = embed_speed_ema * 0.9 + ms * 0.1;
+            }
+        }
 
         // ── Derive metrics from the band snapshot ───────────────────────────
         let metrics = msg.band_snapshot.as_ref().map(|snap| {
@@ -757,6 +848,8 @@ pub(super) fn embed_worker(
                 metrics.as_ref(),
                 msg.ppg_averages.as_ref(),
                 channels_json.as_deref(),
+                Some(active_backend.as_str()),
+                current_speed_ms,
             );
 
             // ── Also insert into the persistent cross-day global HNSW ─────
@@ -841,6 +934,10 @@ pub(super) fn embed_worker(
         {
             let mut st = status.lock_or_recover();
             st.embeddings_today = total;
+            if let Some(ms) = current_speed_ms {
+                st.last_embed_ms = ms;
+                st.avg_embed_ms  = embed_speed_ema;
+            }
             // Publish latest epoch metrics so the WS status command can return them.
             st.latest_metrics = metrics.as_ref().map(|m| {
                 skill_eeg::eeg_model_config::LatestEpochMetrics {
@@ -905,20 +1002,23 @@ pub(super) fn embed_worker(
         }
 
         let dim = mean_emb.as_ref().map(|e| e.len()).unwrap_or(0);
+        let speed_str = current_speed_ms.map(|ms| format!(" {ms:.1}ms (avg {embed_speed_ema:.1}ms)")).unwrap_or_default();
         if let Some(ref m) = metrics {
             eprintln!(
-                "[embed] #{hnsw_id} ts={} dev={} dim={dim} relax={:.0} engage={:.0} faa={:.3} tar={:.2} bar={:.2} dtr={:.2} pse={:.2} apf={:.1} bps={:.2} snr={:.1} coh={:.3} mu={:.3} mood={:.0}",
+                "[embed] #{hnsw_id} ts={} dev={} dim={dim} model={}{speed_str} relax={:.0} engage={:.0} faa={:.3} tar={:.2} bar={:.2} dtr={:.2} pse={:.2} apf={:.1} bps={:.2} snr={:.1} coh={:.3} mu={:.3} mood={:.0}",
                 msg.timestamp,
                 msg.device_name.as_deref().unwrap_or("?"),
+                active_backend,
                 m.relaxation, m.engagement, m.faa,
                 m.tar, m.bar, m.dtr, m.pse, m.apf, m.bps, m.snr,
                 m.coherence, m.mu_suppression, m.mood,
             );
         } else {
             eprintln!(
-                "[embed] #{hnsw_id} ts={} dev={} dim={dim} (no band data — metrics will be NULL)",
+                "[embed] #{hnsw_id} ts={} dev={} dim={dim} model={}{speed_str} (no band data — metrics will be NULL)",
                 msg.timestamp,
                 msg.device_name.as_deref().unwrap_or("?"),
+                active_backend,
             );
         }
     }
@@ -1034,6 +1134,12 @@ fn store_metrics_only(
 
 fn resolve_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
     skill_exg::resolve_hf_weights(hf_repo)
+}
+
+/// Resolve LUNA weights — searches for the variant-specific safetensors file.
+#[allow(dead_code)]
+fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBuf, PathBuf)> {
+    skill_exg::resolve_luna_weights(hf_repo, weights_file)
 }
 
 /// Download ZUNA weights from HuggingFace Hub using the `hf-hub` crate.

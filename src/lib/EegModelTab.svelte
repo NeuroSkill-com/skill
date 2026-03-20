@@ -8,6 +8,7 @@ the Free Software Foundation, version 3 only. -->
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { invoke }             from "@tauri-apps/api/core";
+  import { listen }             from "@tauri-apps/api/event";
   import { relaunch }           from "@tauri-apps/plugin-process";
   import { Badge }              from "$lib/components/ui/badge";
   import { Button }             from "$lib/components/ui/button";
@@ -20,6 +21,9 @@ the Free Software Foundation, version 3 only. -->
     hnsw_m:               number;
     hnsw_ef_construction: number;
     data_norm:            number;
+    model_backend:        string;
+    luna_variant:         string;
+    luna_hf_repo:         string;
   }
   interface EegModelStatus {
     encoder_loaded:         boolean;
@@ -27,6 +31,9 @@ the Free Software Foundation, version 3 only. -->
     embed_worker_active:    boolean;
     weights_found:          boolean;
     weights_path:           string | null;
+    active_model_backend:   string | null;
+    last_embed_ms:          number;
+    avg_embed_ms:           number;
     embeddings_today:       number;
     daily_db_path:          string;
     daily_hnsw_path:        string;
@@ -37,15 +44,28 @@ the Free Software Foundation, version 3 only. -->
     download_retry_attempt: number;
     download_retry_in_secs: number;
   }
+  interface ReembedEstimate {
+    date_dirs: number;
+    total_rows: number;
+  }
+  interface ReembedProgress {
+    done:   number;
+    total:  number;
+    date:   string;
+    status: string;
+  }
 
   // ── State ──────────────────────────────────────────────────────────────────
   let modelConfig = $state<EegModelConfig>({
     hf_repo: "Zyphra/ZUNA", hnsw_m: 16, hnsw_ef_construction: 200, data_norm: 10,
+    model_backend: "zuna", luna_variant: "base", luna_hf_repo: "thorir/LUNA",
   });
   let modelStatus = $state<EegModelStatus>({
     encoder_loaded: false, encoder_describe: null,
     embed_worker_active: false,
     weights_found: false, weights_path: null,
+    active_model_backend: null,
+    last_embed_ms: 0, avg_embed_ms: 0,
     embeddings_today: 0, daily_db_path: "", daily_hnsw_path: "",
     downloading_weights: false, download_progress: 0,
     download_status_msg: null,
@@ -53,6 +73,9 @@ the Free Software Foundation, version 3 only. -->
     download_retry_attempt: 0, download_retry_in_secs: 0,
   });
   let modelConfigSaving = $state(false);
+  let reembedEstimate   = $state<ReembedEstimate | null>(null);
+  let reembedProgress   = $state<ReembedProgress | null>(null);
+  let reembedRunning    = $state(false);
 
   const HNSW_M_PRESETS:  number[] = [8, 16, 32, 64];
   const HNSW_EF_PRESETS: number[] = [50, 100, 200, 400];
@@ -83,6 +106,16 @@ the Free Software Foundation, version 3 only. -->
   async function restartApp() {
     restarting = true;
     try { await relaunch(); } catch { restarting = false; }
+  }
+
+  async function loadReembedEstimate() {
+    reembedEstimate = await invoke<ReembedEstimate>("estimate_reembed");
+  }
+
+  async function startReembed() {
+    reembedRunning = true;
+    reembedProgress = null;
+    await invoke("trigger_reembed");
   }
 
   // Derived state helpers
@@ -132,13 +165,26 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   let statusTimer: ReturnType<typeof setInterval> | undefined;
+  let unlistenReembed: (() => void) | undefined;
 
   onMount(async () => {
     modelConfig = await invoke<EegModelConfig>("get_eeg_model_config");
     modelStatus = await invoke<EegModelStatus>("get_eeg_model_status");
     statusTimer = setInterval(refreshStatus, 2000);
+    loadReembedEstimate();
+
+    unlistenReembed = await listen<ReembedProgress>("reembed-progress", (ev) => {
+      reembedProgress = ev.payload;
+      if (ev.payload.status === "complete" || ev.payload.status.startsWith("error")) {
+        reembedRunning = false;
+        loadReembedEstimate();
+      }
+    });
   });
-  onDestroy(() => clearInterval(statusTimer));
+  onDestroy(() => {
+    clearInterval(statusTimer);
+    unlistenReembed?.();
+  });
 </script>
 
 <!-- ── Encoder status ────────────────────────────────────────────────────────── -->
@@ -167,10 +213,17 @@ the Free Software Foundation, version 3 only. -->
       {#if modelStatus.encoder_loaded}
         <div class="flex items-center gap-3 px-4 py-3.5">
           <div class="flex flex-col gap-0.5 min-w-0 flex-1">
-            <span class="text-[0.78rem] font-semibold text-foreground">{t("model.zunaEncoder")}</span>
+            <span class="text-[0.78rem] font-semibold text-foreground">
+              {modelStatus.active_model_backend === "luna" ? "LUNA Encoder" : t("model.zunaEncoder")}
+            </span>
             {#if modelStatus.encoder_describe}
               <span class="text-[0.65rem] text-muted-foreground font-mono truncate">
                 {modelStatus.encoder_describe}
+              </span>
+            {/if}
+            {#if modelStatus.avg_embed_ms > 0}
+              <span class="text-[0.58rem] text-muted-foreground/70 font-mono">
+                {t("model.embedSpeedLast", { ms: modelStatus.last_embed_ms.toFixed(1) })} · {t("model.embedSpeedAvg", { ms: modelStatus.avg_embed_ms.toFixed(1) })}
               </span>
             {/if}
           </div>
@@ -548,6 +601,155 @@ the Free Software Foundation, version 3 only. -->
   </Card>
 </section>
 
+<!-- ── Model backend ─────────────────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <div class="flex items-center gap-2 px-0.5">
+    <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+      {t("model.backend")}
+    </span>
+    <span class="ml-auto text-[0.56rem] text-muted-foreground/60">{t("model.takesEffectRestart")}</span>
+  </div>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+
+      <!-- Backend picker -->
+      <div class="flex flex-col gap-2 px-4 py-3.5">
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
+          {t("model.backendDesc")}
+        </p>
+        <div class="flex items-center gap-1.5">
+          {#each [
+            { id: "zuna", label: t("model.backendZuna"), desc: t("model.backendZunaDesc") },
+            { id: "luna", label: t("model.backendLuna"), desc: t("model.backendLunaDesc") },
+          ] as opt}
+            <button
+              onclick={() => saveModelConfig({ model_backend: opt.id })}
+              class="rounded-lg border px-3 py-2 text-left transition-all cursor-pointer select-none flex-1
+                     {modelConfig.model_backend === opt.id
+                       ? 'border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15'
+                       : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
+              <span class="text-[0.72rem] font-semibold {modelConfig.model_backend === opt.id
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-muted-foreground hover:text-foreground'}">{opt.label}</span>
+              <span class="block text-[0.58rem] text-muted-foreground/70 mt-0.5">{opt.desc}</span>
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <!-- LUNA variant (only when LUNA is selected) -->
+      {#if modelConfig.model_backend === "luna"}
+        <div class="flex flex-col gap-2 px-4 py-3.5">
+          <div class="flex items-baseline justify-between">
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("model.lunaVariant")}</span>
+            <span class="text-[0.68rem] text-muted-foreground">{modelConfig.luna_variant}</span>
+          </div>
+          <p class="text-[0.68rem] text-muted-foreground leading-relaxed -mt-0.5">
+            {t("model.lunaVariantDesc")}
+          </p>
+          <div class="flex items-center gap-1.5">
+            {#each [
+              { id: "base",  label: t("model.lunaVariantBase") },
+              { id: "large", label: t("model.lunaVariantLarge") },
+              { id: "huge",  label: t("model.lunaVariantHuge") },
+            ] as v}
+              <button
+                onclick={() => saveModelConfig({ luna_variant: v.id })}
+                class="rounded-lg border px-2.5 py-1.5 text-[0.66rem] font-semibold
+                       transition-all cursor-pointer select-none
+                       {modelConfig.luna_variant === v.id
+                         ? 'border-emerald-500/50 bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                         : 'border-border dark:border-white/[0.08] bg-muted dark:bg-[#1a1a28] text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-white/[0.04]'}">
+                {v.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Embedding speed (shown when data is available) -->
+      {#if modelStatus.avg_embed_ms > 0}
+        <div class="flex items-center gap-6 flex-wrap px-4 py-3 bg-slate-50 dark:bg-[#111118]">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground">
+              {t("model.embedSpeed")}
+            </span>
+          </div>
+          <div class="flex items-center gap-3 ml-auto">
+            <Badge variant="outline"
+              class="text-[0.56rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+              {t("model.embedSpeedLast", { ms: modelStatus.last_embed_ms.toFixed(1) })}
+            </Badge>
+            <Badge variant="outline"
+              class="text-[0.56rem] py-0 px-1.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20">
+              {t("model.embedSpeedAvg", { ms: modelStatus.avg_embed_ms.toFixed(1) })}
+            </Badge>
+          </div>
+        </div>
+      {/if}
+
+    </CardContent>
+  </Card>
+</section>
+
+<!-- ── Re-embed historical data ──────────────────────────────────────────────── -->
+<section class="flex flex-col gap-2">
+  <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
+    {t("model.reembed")}
+  </span>
+
+  <Card class="border-border dark:border-white/[0.06] bg-white dark:bg-[#14141e] gap-0 py-0 overflow-hidden">
+    <CardContent class="flex flex-col divide-y divide-border dark:divide-white/[0.05] py-0 px-0">
+
+      <div class="flex flex-col gap-3 px-4 py-3.5">
+        <p class="text-[0.68rem] text-muted-foreground leading-relaxed">
+          {t("model.reembedDesc")}
+        </p>
+
+        {#if reembedRunning && reembedProgress}
+          <!-- Progress -->
+          <div class="flex flex-col gap-2">
+            <div class="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+              <div class="h-full rounded-full bg-blue-500 transition-[width] duration-300"
+                   style="width:{reembedProgress.total > 0 ? ((reembedProgress.done / reembedProgress.total) * 100).toFixed(1) : 0}%"></div>
+            </div>
+            <span class="text-[0.6rem] text-muted-foreground/70">
+              {#if reembedProgress.status === "loading_encoder"}
+                {t("model.reembedLoadingEncoder")}
+              {:else if reembedProgress.status === "processing"}
+                {t("model.reembedRunning", { date: reembedProgress.date, done: String(reembedProgress.done), total: String(reembedProgress.total) })}
+              {:else if reembedProgress.status === "complete"}
+                {t("model.reembedComplete", { total: String(reembedProgress.total) })}
+              {:else if reembedProgress.status.startsWith("error")}
+                {t("model.reembedError")}
+              {/if}
+            </span>
+          </div>
+        {:else}
+          <!-- Estimate + button -->
+          <div class="flex items-center justify-between gap-2">
+            {#if reembedEstimate && reembedEstimate.total_rows > 0}
+              <span class="text-[0.65rem] text-muted-foreground font-mono">
+                {t("model.reembedEstimate", { days: String(reembedEstimate.date_dirs), rows: String(reembedEstimate.total_rows) })}
+              </span>
+            {:else}
+              <span class="text-[0.65rem] text-muted-foreground/70">{t("model.reembedNoData")}</span>
+            {/if}
+            <Button size="sm" variant="outline"
+                    class="shrink-0 h-7 text-[0.65rem] px-3"
+                    disabled={reembedRunning || !reembedEstimate || reembedEstimate.total_rows === 0}
+                    onclick={startReembed}>
+              {t("model.reembedBtn")}
+            </Button>
+          </div>
+        {/if}
+      </div>
+
+    </CardContent>
+  </Card>
+</section>
+
 <!-- ── Model source ──────────────────────────────────────────────────────────── -->
 <section class="flex flex-col gap-2">
   <span class="text-[0.56rem] font-semibold tracking-widest uppercase text-muted-foreground px-0.5">
@@ -559,16 +761,20 @@ the Free Software Foundation, version 3 only. -->
 
       <div class="flex items-center justify-between gap-4 px-4 py-3.5">
         <span class="text-[0.78rem] font-semibold text-foreground">{t("model.hfRepo")}</span>
-        <span class="text-[0.68rem] font-mono text-muted-foreground">{modelConfig.hf_repo}</span>
+        <span class="text-[0.68rem] font-mono text-muted-foreground">
+          {modelConfig.model_backend === "luna" ? modelConfig.luna_hf_repo : modelConfig.hf_repo}
+        </span>
       </div>
 
-      <div class="flex items-center justify-between gap-4 px-4 py-3.5">
-        <div class="flex flex-col gap-0.5">
-          <span class="text-[0.78rem] font-semibold text-foreground">{t("model.dataNormalisation")}</span>
-          <span class="text-[0.65rem] text-muted-foreground">{t("model.dataNormDesc")}</span>
+      {#if modelConfig.model_backend === "zuna"}
+        <div class="flex items-center justify-between gap-4 px-4 py-3.5">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.78rem] font-semibold text-foreground">{t("model.dataNormalisation")}</span>
+            <span class="text-[0.65rem] text-muted-foreground">{t("model.dataNormDesc")}</span>
+          </div>
+          <span class="text-[0.78rem] font-mono font-semibold text-foreground">{modelConfig.data_norm}</span>
         </div>
-        <span class="text-[0.78rem] font-mono font-semibold text-foreground">{modelConfig.data_norm}</span>
-      </div>
+      {/if}
 
     </CardContent>
   </Card>

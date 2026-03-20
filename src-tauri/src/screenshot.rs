@@ -136,7 +136,7 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
                 ..Default::default()
             };
 
-            let (tok_tx, tok_rx) = tokio::sync::mpsc::unbounded_channel();
+            let (tok_tx, mut tok_rx) = tokio::sync::mpsc::unbounded_channel();
             state.req_tx.send(crate::llm::InferRequest::Generate {
                 messages,
                 images,
@@ -146,7 +146,7 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
 
             // Collect tokens synchronously (we're on the embed thread).
             let mut text = String::new();
-            while let Ok(tok) = tok_rx.blocking_recv() {
+            while let Some(tok) = tok_rx.blocking_recv() {
                 match tok {
                     crate::llm::InferToken::Delta(t) => text.push_str(&t),
                     crate::llm::InferToken::Done { .. } => break,
