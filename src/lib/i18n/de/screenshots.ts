@@ -24,6 +24,7 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddingModelDesc": "Vision-Modell für Bild-Einbettungen zur Ähnlichkeitssuche.",
   "screenshots.backendFastembed": "fastembed (lokales ONNX)",
   "screenshots.backendMmproj": "mmproj (LLM-Vision-Projektor)",
+  "screenshots.backendLlmVlm":                   "LLM VLM (embed + OCR via vision model)",
   "screenshots.modelClip": "CLIP ViT-B/32 — 512d (schnell, Standard)",
   "screenshots.modelNomic": "Nomic Embed Vision v1.5 — 768d",
   "screenshots.reembed": "Screenshots neu einbetten",

@@ -351,6 +351,86 @@ async fn collect_tokens(
     Ok((text, fr, pt, ct, nc))
 }
 
+/// Create a minimal 100x100 white PNG with some visual content for testing.
+/// Uses a raw minimal PNG encoder — no image crate dependency needed.
+fn create_test_png() -> Vec<u8> {
+    // Generate a simple 2x2 white PNG (smallest valid PNG).
+    // For the embedding test, even a tiny image works — the model will
+    // process whatever it gets.
+    let mut png = Vec::new();
+    // PNG signature
+    png.extend_from_slice(&[137, 80, 78, 71, 13, 10, 26, 10]);
+    // IHDR chunk: 2x2, 8-bit RGB
+    let ihdr_data: [u8; 13] = [
+        0, 0, 0, 2,  // width = 2
+        0, 0, 0, 2,  // height = 2
+        8,           // bit depth = 8
+        2,           // color type = RGB
+        0, 0, 0,     // compression, filter, interlace
+    ];
+    write_png_chunk(&mut png, b"IHDR", &ihdr_data);
+    // IDAT chunk: 2 rows, each with filter byte (0) + 6 bytes RGB
+    // Row 1: white white, Row 2: black white (simple pattern)
+    let raw_rows: [u8; 14] = [
+        0, 255, 255, 255, 255, 255, 255, // filter=0, white, white
+        0, 0, 0, 0, 255, 255, 255,       // filter=0, black, white
+    ];
+    // Compress with deflate (use miniz_oxide or manual zlib)
+    let compressed = zlib_compress(&raw_rows);
+    write_png_chunk(&mut png, b"IDAT", &compressed);
+    // IEND chunk
+    write_png_chunk(&mut png, b"IEND", &[]);
+    png
+}
+
+fn write_png_chunk(buf: &mut Vec<u8>, chunk_type: &[u8; 4], data: &[u8]) {
+    buf.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    buf.extend_from_slice(chunk_type);
+    buf.extend_from_slice(data);
+    let mut crc_data = Vec::with_capacity(4 + data.len());
+    crc_data.extend_from_slice(chunk_type);
+    crc_data.extend_from_slice(data);
+    buf.extend_from_slice(&crc32(&crc_data).to_be_bytes());
+}
+
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFFFFFF;
+    for &byte in data {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            if crc & 1 != 0 {
+                crc = (crc >> 1) ^ 0xEDB88320;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+    !crc
+}
+
+fn zlib_compress(data: &[u8]) -> Vec<u8> {
+    // Minimal zlib: header + stored block (no compression) + adler32
+    let mut out = Vec::new();
+    out.push(0x78); // CMF: deflate, window size 32K
+    out.push(0x01); // FLG: no dict, check bits
+    // Stored block: final=1, type=00 (stored)
+    out.push(0x01);
+    let len = data.len() as u16;
+    out.extend_from_slice(&len.to_le_bytes());
+    out.extend_from_slice(&(!len).to_le_bytes());
+    out.extend_from_slice(data);
+    // Adler-32 checksum
+    let mut a: u32 = 1;
+    let mut b: u32 = 0;
+    for &byte in data {
+        a = (a + byte as u32) % 65521;
+        b = (b + a) % 65521;
+    }
+    let adler = (b << 16) | a;
+    out.extend_from_slice(&adler.to_be_bytes());
+    out
+}
+
 fn tps(ct: usize, dur: Duration) -> f64 {
     let s = dur.as_secs_f64();
     if s > 0.0 { ct as f64 / s } else { 0.0 }
@@ -656,16 +736,77 @@ async fn e2e_download_start_and_chat() {
     assert!(skill_ok, "skill tool must be called and succeed");
     assert!(got_mock_data, "mock EEG data must appear in skill tool result");
 
-    // ── 9. Shutdown ──────────────────────────────────────────────────────────
+    // ── 9. VLM image embedding benchmark ────────────────────────────────────
+    //
+    // Test the EmbedImage path (mean-pooled vision token embedding).
+    // This is the same path used by the "mmproj" and "llm-vlm" screenshot
+    // backends.  On models without a vision projector this step is skipped.
     let t = Instant::now();
-    eprintln!("[step 9] shutting down …");
+    eprintln!("[step 9] VLM image embedding benchmark");
+    let has_vision = server.vision_ready.load(Ordering::Relaxed);
+    if has_vision {
+        // Create a simple test image: 100x100 white PNG with "Hello World" text
+        let test_png = create_test_png();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let send_ok = server.req_tx.send(skill_llm::InferRequest::EmbedImage {
+            bytes: test_png.clone(),
+            result_tx: tx,
+        }).is_ok();
+        if send_ok {
+            match rx.await {
+                Ok(Some(emb)) => {
+                    let dur = t.elapsed();
+                    eprintln!("[step 9] ✅ image embedding: {} dims in {:.2}s", emb.len(), dur.as_secs_f64());
+                    report.steps.push(Step {
+                        name: "VLM image embed", duration: dur, status: StepStatus::Ok,
+                        detail: format!("dims={}, time={:.2}s", emb.len(), dur.as_secs_f64()),
+                    });
+                }
+                Ok(None) => {
+                    let dur = t.elapsed();
+                    eprintln!("[step 9] ⚠️  EmbedImage returned None");
+                    report.steps.push(Step {
+                        name: "VLM image embed", duration: dur,
+                        status: StepStatus::Warn("EmbedImage returned None".into()),
+                        detail: String::new(),
+                    });
+                }
+                Err(e) => {
+                    let dur = t.elapsed();
+                    eprintln!("[step 9] ⚠️  EmbedImage channel error: {e}");
+                    report.steps.push(Step {
+                        name: "VLM image embed", duration: dur,
+                        status: StepStatus::Warn(format!("channel error: {e}")),
+                        detail: String::new(),
+                    });
+                }
+            }
+        } else {
+            report.steps.push(Step {
+                name: "VLM image embed", duration: t.elapsed(),
+                status: StepStatus::Warn("failed to send EmbedImage request".into()),
+                detail: String::new(),
+            });
+        }
+    } else {
+        eprintln!("[step 9] ⚠️  vision not available (no mmproj) — skipping image embed benchmark");
+        report.steps.push(Step {
+            name: "VLM image embed", duration: t.elapsed(),
+            status: StepStatus::Warn("vision not available (no mmproj loaded)".into()),
+            detail: String::new(),
+        });
+    }
+
+    // ── 10. Shutdown ─────────────────────────────────────────────────────────
+    let t = Instant::now();
+    eprintln!("[step 10] shutting down …");
     let n_ctx_final = server.n_ctx.load(Ordering::Relaxed);
     match Arc::try_unwrap(server) {
         Ok(owned) => owned.shutdown(),
         Err(arc) => drop(arc),
     }
     let dur = t.elapsed();
-    eprintln!("[step 9] LLM shutdown ({:.2}s)", dur.as_secs_f64());
+    eprintln!("[step 10] LLM shutdown ({:.2}s)", dur.as_secs_f64());
     report.steps.push(Step {
         name: "Shutdown LLM", duration: dur, status: StepStatus::Ok,
         detail: format!("n_ctx={n_ctx_final}"),

@@ -24,6 +24,7 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddingModelDesc": "Screenshots",
   "screenshots.backendFastembed": "fastembed (ONNX)",
   "screenshots.backendMmproj": "mmproj",
+  "screenshots.backendLlmVlm":                   "LLM VLM (embed + OCR via vision model)",
   "screenshots.modelClip": "CLIP ViT-B/32 — 512d",
   "screenshots.modelNomic": "Nomic Embed Vision v1.5 — 768d",
   "screenshots.reembed": "Screenshots",

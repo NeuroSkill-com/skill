@@ -111,8 +111,9 @@ impl ScreenshotConfig {
                 "nomic-embed-vision-v1.5" => "nomic-ai/nomic-embed-vision-v1.5".into(),
                 other                     => other.into(),
             },
-            "mmproj" => "mmproj".into(),
-            other    => other.into(),
+            "mmproj"  => "mmproj".into(),
+            "llm-vlm" => "llm-vlm".into(),
+            other      => other.into(),
         }
     }
 
@@ -122,8 +123,8 @@ impl ScreenshotConfig {
                 "nomic-embed-vision-v1.5" => 768,
                 _                         => 768,
             },
-            "mmproj" => 768,
-            _        => 768,
+            "mmproj" | "llm-vlm" => 768,
+            _                    => 768,
         }
     }
 }

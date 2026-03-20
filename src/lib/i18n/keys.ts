@@ -2044,6 +2044,7 @@ export type TranslationKey =
   | "quitDialog.title"
   | "screenshots.backendFastembed"
   | "screenshots.backendMmproj"
+  | "screenshots.backendLlmVlm"
   | "screenshots.embeddedCount"
   | "screenshots.embeddingModel"
   | "screenshots.embeddingModelDesc"

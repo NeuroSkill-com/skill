@@ -42,4 +42,14 @@ pub trait ScreenshotContext: Send + Sync + 'static {
     /// fails.  The default implementation always returns `None` (standalone /
     /// test contexts that don't have a text embedder).
     fn embed_text(&self, _text: &str) -> Option<Vec<f32>> { None }
+
+    /// Run OCR on an image via the LLM vision model (VLM-based OCR).
+    ///
+    /// Sends the image to the LLM with a prompt asking it to extract all
+    /// visible text.  Returns the extracted text, or `None` if no VLM is
+    /// loaded or generation fails.
+    ///
+    /// This is an alternative to traditional OCR engines (ocrs / Apple Vision)
+    /// that can be benchmarked against them.
+    fn ocr_via_llm(&self, _png_bytes: &[u8]) -> Option<String> { None }
 }

@@ -87,4 +87,80 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
             None
         }
     }
+
+    fn ocr_via_llm(&self, png_bytes: &[u8]) -> Option<String> {
+        #[cfg(feature = "llm")]
+        {
+            let cell = {
+                let r = self.app.app_state();
+                let g = r.lock_or_recover();
+                { let __a = g.llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r }
+            };
+            let state = cell.lock().ok()?.as_ref()?.clone();
+            if !state.is_ready() || !state.vision_ready.load(std::sync::atomic::Ordering::Relaxed) {
+                return None;
+            }
+
+            // Encode the image as a base64 data URL for the chat message.
+            let b64 = base64::Engine::encode(
+                &base64::engine::general_purpose::STANDARD,
+                png_bytes,
+            );
+            let data_url = format!("data:image/png;base64,{b64}");
+
+            let messages = vec![
+                serde_json::json!({
+                    "role": "system",
+                    "content": "You are an OCR assistant. Extract ALL visible text from the image exactly as it appears. Output only the extracted text, nothing else. Preserve line breaks. If no text is visible, output an empty string."
+                }),
+                serde_json::json!({
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": { "url": data_url }
+                        },
+                        {
+                            "type": "text",
+                            "text": "Extract all visible text from this screenshot."
+                        }
+                    ]
+                }),
+            ];
+
+            let images = crate::llm::extract_images_from_messages(&messages);
+            let params = crate::llm::GenParams {
+                max_tokens: 2048,
+                temperature: 0.0,
+                thinking_budget: Some(0),
+                ..Default::default()
+            };
+
+            let (tok_tx, tok_rx) = tokio::sync::mpsc::unbounded_channel();
+            state.req_tx.send(crate::llm::InferRequest::Generate {
+                messages,
+                images,
+                params,
+                token_tx: tok_tx,
+            }).ok()?;
+
+            // Collect tokens synchronously (we're on the embed thread).
+            let mut text = String::new();
+            while let Ok(tok) = tok_rx.blocking_recv() {
+                match tok {
+                    crate::llm::InferToken::Delta(t) => text.push_str(&t),
+                    crate::llm::InferToken::Done { .. } => break,
+                    crate::llm::InferToken::Error(_) => return None,
+                }
+            }
+
+            let trimmed = text.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        }
+        #[cfg(not(feature = "llm"))]
+        {
+            let _ = png_bytes;
+            None
+        }
+    }
 }

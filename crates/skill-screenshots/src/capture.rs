@@ -908,11 +908,12 @@ fn run_embed_thread(
                     (None, String::new(), String::new())
                 }
             }
-            "mmproj" => {
+            "mmproj" | "llm-vlm" => {
                 let result = ctx.embed_image_via_llm(&job.resized_png);
+                let backend = config.embed_backend.clone();
                 let mid = config.model_id();
                 if result.is_some() {
-                    (result, "mmproj".to_string(), mid)
+                    (result, backend, mid)
                 } else {
                     (None, String::new(), String::new())
                 }
@@ -940,7 +941,10 @@ fn run_embed_thread(
         // ── OCR extraction (on the already-resized PNG — typically 768px) ──
         let t_ocr = Instant::now();
         let ocr_text = if job.run_ocr {
-            if let Some(ref engine) = ocr_engine {
+            if config.embed_backend == "llm-vlm" || config.ocr_engine == "llm-vlm" {
+                // VLM-based OCR — use the LLM vision model to extract text.
+                ctx.ocr_via_llm(&job.resized_png).unwrap_or_default()
+            } else if let Some(ref engine) = ocr_engine {
                 run_ocr(engine, &job.resized_png).unwrap_or_default()
             } else {
                 String::new()

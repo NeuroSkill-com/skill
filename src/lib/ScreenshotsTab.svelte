@@ -130,7 +130,7 @@ the Free Software Foundation, version 3 only. -->
 
   // ── Recommended image size for current model ──────────────────────────────
   const recommendedSize = $derived.by(() => {
-    if (config.embed_backend === "mmproj") return 768;
+    if (config.embed_backend === "mmproj" || config.embed_backend === "llm-vlm") return 768;
     if (config.fastembed_model === "nomic-embed-vision-v1.5") return 768;
     return 768;
   });
@@ -483,6 +483,7 @@ the Free Software Foundation, version 3 only. -->
                          focus:outline-none focus:ring-1 focus:ring-ring/50">
             <option value="fastembed">{t("screenshots.backendFastembed")}</option>
             <option value="mmproj">{t("screenshots.backendMmproj")}</option>
+            <option value="llm-vlm">{t("screenshots.backendLlmVlm")}</option>
           </select>
 
           <!-- fastembed model select (only when fastembed is selected) -->
