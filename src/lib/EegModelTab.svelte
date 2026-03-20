@@ -46,7 +46,7 @@ the Free Software Foundation, version 3 only. -->
   }
   interface ReembedEstimate {
     date_dirs: number;
-    total_rows: number;
+    total_sessions: number;
   }
   interface ReembedProgress {
     done:   number;
@@ -729,16 +729,16 @@ the Free Software Foundation, version 3 only. -->
         {:else}
           <!-- Estimate + button -->
           <div class="flex items-center justify-between gap-2">
-            {#if reembedEstimate && reembedEstimate.total_rows > 0}
+            {#if reembedEstimate && reembedEstimate.total_sessions > 0}
               <span class="text-[0.65rem] text-muted-foreground font-mono">
-                {t("model.reembedEstimate", { days: String(reembedEstimate.date_dirs), rows: String(reembedEstimate.total_rows) })}
+                {t("model.reembedEstimate", { days: String(reembedEstimate.date_dirs), rows: String(reembedEstimate.total_sessions) })}
               </span>
             {:else}
               <span class="text-[0.65rem] text-muted-foreground/70">{t("model.reembedNoData")}</span>
             {/if}
             <Button size="sm" variant="outline"
                     class="shrink-0 h-7 text-[0.65rem] px-3"
-                    disabled={reembedRunning || !reembedEstimate || reembedEstimate.total_rows === 0}
+                    disabled={reembedRunning || !reembedEstimate || reembedEstimate.total_sessions === 0}
                     onclick={startReembed}>
               {t("model.reembedBtn")}
             </Button>

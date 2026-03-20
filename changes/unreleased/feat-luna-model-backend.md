@@ -8,7 +8,7 @@
 
 - **Per-model HNSW indices**: Each model backend now gets its own HNSW index file per day (`eeg_embeddings.hnsw` for ZUNA, `eeg_embeddings_luna.hnsw` for LUNA) and globally (`eeg_global.hnsw` / `eeg_global_luna.hnsw`). This prevents dimension mismatches when switching backends and allows side-by-side nearest-neighbor search for each model. The daily SQLite remains shared with a `model_backend` column to differentiate rows. Search APIs accept an optional model backend parameter to load the correct index.
 
-- **Re-embed historical data**: Added `estimate_reembed` and `trigger_reembed` Tauri commands with a UI section in the EEG Model settings tab. Tags all legacy embeddings with model metadata (`model_backend = 'zuna'`), rebuilds per-model HNSW indices for each day, and rebuilds the per-model global HNSW indices. Progress is streamed to the frontend via the `reembed-progress` event.
+- **Re-embed from raw EXG data**: Added `estimate_reembed` and `trigger_reembed` Tauri commands. The re-embed worker reads raw EEG samples from session CSV files (`exg_*.csv` / `muse_*.csv`), reads channel names and sample rate from the JSON sidecar, chunks data into 5-second epochs with 50% overlap, resamples to model input size, runs the selected encoder (ZUNA or LUNA) on the GPU, and writes new embedding rows to SQLite. Per-model HNSW indices are rebuilt per day and globally. Progress is streamed to the frontend via the `reembed-progress` event.
 
 ### Bugfixes
 

@@ -67,7 +67,7 @@ pub(crate) use worker::download_hf_weights;
 ///
 /// Converts device-native epoch buffers (e.g. 2500 samples at 500 Hz)
 /// to the ZUNA model's expected input size (1280 samples at 256 Hz).
-fn resample_linear(src: &[f32], target_len: usize) -> Vec<f32> {
+pub(crate) fn resample_linear(src: &[f32], target_len: usize) -> Vec<f32> {
     if src.is_empty() || target_len == 0 { return vec![0.0; target_len]; }
     if src.len() == target_len { return src.to_vec(); }
     let ratio = (src.len() - 1) as f64 / (target_len - 1).max(1) as f64;

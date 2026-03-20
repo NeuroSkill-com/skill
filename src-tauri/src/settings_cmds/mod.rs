@@ -762,46 +762,54 @@ pub async fn pick_gguf_file() -> Option<String> {
 // ── Re-embed all raw EXG data ─────────────────────────────────────────────────
 
 /// Get a summary of what re-embedding would do: how many date directories
-/// exist and how many total embeddings would be regenerated.
+/// and session CSV files exist.
 #[tauri::command]
 pub fn estimate_reembed(state: tauri::State<'_, Mutex<Box<AppState>>>) -> ReembedEstimate {
     let s = state.lock_or_recover();
     let skill_dir = s.skill_dir.clone();
     drop(s);
 
-    let mut total_rows = 0usize;
+    let is_session_csv = |fname: &str| -> bool {
+        (fname.starts_with("exg_") || fname.starts_with("muse_"))
+            && fname.ends_with(".csv")
+            && !fname.contains("_ppg")
+            && !fname.contains("_metrics")
+            && !fname.contains("_imu")
+    };
+
+    let mut total_sessions = 0usize;
     let mut date_dirs = 0usize;
 
     if let Ok(entries) = std::fs::read_dir(&skill_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            // Date directories are 8-digit strings like 20260320.
             if name.len() == 8 && name.chars().all(|c| c.is_ascii_digit()) {
-                let db_path = entry.path().join(crate::constants::SQLITE_FILE);
-                if db_path.exists() {
-                    if let Ok(conn) = skill_data::util::open_readonly(&db_path) {
-                        let count: i64 = conn.query_row(
-                            "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NOT NULL",
-                            [], |r| r.get(0),
-                        ).unwrap_or(0);
-                        if count > 0 {
-                            total_rows += count as usize;
-                            date_dirs += 1;
+                let day_dir = entry.path();
+                let mut day_count = 0usize;
+                if let Ok(rd) = std::fs::read_dir(&day_dir) {
+                    for f in rd.flatten() {
+                        let fname = f.file_name().to_string_lossy().to_string();
+                        if is_session_csv(&fname) {
+                            day_count += 1;
                         }
                     }
+                }
+                if day_count > 0 {
+                    total_sessions += day_count;
+                    date_dirs += 1;
                 }
             }
         }
     }
 
-    ReembedEstimate { date_dirs, total_rows }
+    ReembedEstimate { date_dirs, total_sessions }
 }
 
 /// Lightweight estimate for the re-embed UI.
 #[derive(serde::Serialize, Clone)]
 pub struct ReembedEstimate {
-    pub date_dirs:  usize,
-    pub total_rows: usize,
+    pub date_dirs:      usize,
+    pub total_sessions: usize,
 }
 
 /// Trigger a background re-embed of all existing EXG data using the currently
@@ -846,171 +854,357 @@ fn reembed_worker(
     logger:    std::sync::Arc<crate::skill_log::SkillLogger>,
     app:       AppHandle,
 ) {
+    use burn::backend::{Wgpu, wgpu::WgpuDevice};
     use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
+    use std::time::Instant;
 
     let emit = |p: &ReembedProgress| { let _ = app.emit("reembed-progress", p); };
 
-    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "scanning".into() });
+    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "loading_encoder".into() });
 
-    // ── Collect date directories ──────────────────────────────────────────
+    // ── Load encoder ──────────────────────────────────────────────────────
+    skill_exg::configure_cubecl_cache(&skill_dir);
+    let device = WgpuDevice::DefaultDevice;
+
+    let backend = &config.model_backend;
+    let backend_str = backend.as_str();
+    let weights = match backend {
+        skill_eeg::eeg_model_config::ExgModelBackend::Zuna =>
+            skill_exg::resolve_hf_weights(&config.hf_repo),
+        skill_eeg::eeg_model_config::ExgModelBackend::Luna =>
+            skill_exg::resolve_luna_weights(&config.luna_hf_repo, config.luna_weights_file()),
+    };
+
+    let Some((w_path, c_path)) = weights else {
+        skill_log!(logger, "reembed", "weights not found for {} — aborting", backend);
+        emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_no_weights".into() });
+        return;
+    };
+
+    #[allow(dead_code)]
+    enum Enc {
+        Zuna(zuna_rs::ZunaEncoder<Wgpu>),
+        Luna(luna_rs::LunaEncoder<Wgpu>),
+    }
+
+    let encoder = match backend {
+        skill_eeg::eeg_model_config::ExgModelBackend::Zuna => {
+            match zuna_rs::ZunaEncoder::<Wgpu>::load(&c_path, &w_path, device.clone()) {
+                Ok((e, ms)) => { skill_log!(logger, "reembed", "ZUNA encoder loaded ({ms:.0}ms)"); Enc::Zuna(e) }
+                Err(e) => {
+                    skill_log!(logger, "reembed", "ZUNA load failed: {e:#}");
+                    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_load".into() });
+                    return;
+                }
+            }
+        }
+        skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
+            match luna_rs::LunaEncoder::<Wgpu>::load(&c_path, &w_path, device.clone()) {
+                Ok((e, ms)) => { skill_log!(logger, "reembed", "LUNA encoder loaded ({ms:.0}ms)"); Enc::Luna(e) }
+                Err(e) => {
+                    skill_log!(logger, "reembed", "LUNA load failed: {e:#}");
+                    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_load".into() });
+                    return;
+                }
+            }
+        }
+    };
+
+    // ── Collect date directories with session CSVs ────────────────────────
     let mut dates: Vec<String> = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&skill_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
             if name.len() == 8 && name.chars().all(|c| c.is_ascii_digit()) {
-                let db_path = entry.path().join(crate::constants::SQLITE_FILE);
-                if db_path.exists() {
-                    dates.push(name);
-                }
+                dates.push(name);
             }
         }
     }
     dates.sort();
 
-    // Count total
-    let mut total = 0usize;
+    // Count total session CSVs across all dates.
+    // Session CSVs match `exg_<ts>.csv` or `muse_<ts>.csv` (not _ppg, _metrics, _imu).
+    let is_session_csv = |fname: &str| -> bool {
+        (fname.starts_with("exg_") || fname.starts_with("muse_"))
+            && fname.ends_with(".csv")
+            && !fname.contains("_ppg")
+            && !fname.contains("_metrics")
+            && !fname.contains("_imu")
+    };
+    let mut session_files: Vec<(String, std::path::PathBuf)> = Vec::new(); // (date, csv_path)
     for date in &dates {
-        let db_path = skill_dir.join(date).join(crate::constants::SQLITE_FILE);
-        if let Ok(conn) = skill_data::util::open_readonly(&db_path) {
-            let count: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NOT NULL",
-                [], |r| r.get(0),
-            ).unwrap_or(0);
-            total += count as usize;
+        let day_dir = skill_dir.join(date);
+        if let Ok(rd) = std::fs::read_dir(&day_dir) {
+            for entry in rd.flatten() {
+                let fname = entry.file_name().to_string_lossy().to_string();
+                if is_session_csv(&fname) {
+                    session_files.push((date.clone(), entry.path()));
+                }
+            }
         }
     }
+    session_files.sort_by(|a, b| a.1.cmp(&b.1));
 
+    let total = session_files.len();
     let mut done = 0usize;
-    skill_log!(logger, "reembed", "starting re-embed: {} dates, {} rows", dates.len(), total);
+    let mut total_embeddings = 0usize;
 
-    // ── Process each date ─────────────────────────────────────────────────
-    //
-    // Phase 1: Tag legacy rows with model_backend = 'zuna'.
-    // Phase 2: Rebuild per-model HNSW indices from tagged SQLite rows.
-    //
-    // Note: a full re-embed from raw EEG samples is not possible because
-    // raw samples are not stored in the DB — only the embeddings.
-    // Future work could store raw epochs to enable true re-encoding.
-    for date in &dates {
+    skill_log!(logger, "reembed", "starting re-embed: {} session CSVs across {} dates with model={}",
+        total, dates.len(), backend);
+
+    let epoch_samples = crate::constants::EMBEDDING_EPOCH_SAMPLES;
+    let epoch_secs    = crate::constants::EMBEDDING_EPOCH_SECS;
+    let data_cfg      = zuna_rs::config::DataConfig::default();
+    let pos_overrides = std::collections::HashMap::<String, [f32; 3]>::new();
+
+    // ── Process each session CSV ──────────────────────────────────────────
+    for (date, csv_path) in &session_files {
         emit(&ReembedProgress { done, total, date: date.clone(), status: "processing".into() });
 
+        // Read session metadata (channel names, sample rate).
+        let meta_path = csv_path.with_extension("json");
+        let (channel_names, sample_rate): (Vec<String>, f64) = if meta_path.exists() {
+            match std::fs::read_to_string(&meta_path).ok()
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            {
+                Some(meta) => {
+                    let names: Vec<String> = meta["channels"]
+                        .as_array()
+                        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                        .unwrap_or_else(|| vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()]);
+                    let sr = meta["sample_rate_hz"].as_f64().unwrap_or(256.0);
+                    (names, sr)
+                }
+                None => (vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()], 256.0),
+            }
+        } else {
+            (vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()], 256.0)
+        };
+
+        let n_ch = channel_names.len();
+        // Native samples per epoch at device sample rate.
+        let native_epoch = (sample_rate * epoch_secs as f64).round() as usize;
+
+        // Read the CSV: columns = [timestamp_s, ch1, ch2, ...].
+        let Ok(mut rdr) = csv::ReaderBuilder::new()
+            .has_headers(true)
+            .from_path(csv_path)
+        else {
+            skill_log!(logger, "reembed", "cannot open CSV {}", csv_path.display());
+            done += 1;
+            continue;
+        };
+
+        // Accumulate per-channel samples.
+        let mut ch_bufs: Vec<Vec<f32>> = vec![Vec::new(); n_ch];
+        let mut timestamps: Vec<f64> = Vec::new();
+
+        for result in rdr.records() {
+            let Ok(record) = result else { continue };
+            // Column 0 = timestamp_s, columns 1..=n_ch = µV values.
+            let ts: f64 = record.get(0).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+            timestamps.push(ts);
+            for ch in 0..n_ch {
+                let v: f32 = record.get(ch + 1).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                ch_bufs[ch].push(v);
+            }
+        }
+
+        let total_samples = ch_bufs.first().map(|b| b.len()).unwrap_or(0);
+        if total_samples < native_epoch || n_ch == 0 {
+            skill_log!(logger, "reembed", "{}: skipping {} — only {} samples (need {})",
+                date, csv_path.file_name().unwrap_or_default().to_string_lossy(),
+                total_samples, native_epoch);
+            done += 1;
+            continue;
+        }
+
+        // ── Open SQLite for this day ──────────────────────────────────────
         let day_dir = skill_dir.join(date);
         let db_path = day_dir.join(crate::constants::SQLITE_FILE);
-        let Ok(conn) = rusqlite::Connection::open(&db_path) else { continue };
+        let Ok(conn) = rusqlite::Connection::open(&db_path) else {
+            done += 1;
+            continue;
+        };
         skill_data::util::init_wal_pragmas(&conn);
-
-        // Migration: ensure columns exist
         let _ = conn.execute("ALTER TABLE embeddings ADD COLUMN model_backend TEXT", []);
         let _ = conn.execute("ALTER TABLE embeddings ADD COLUMN embed_speed_ms REAL", []);
 
-        // Tag untagged rows as legacy "zuna".
-        let untagged: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM embeddings WHERE model_backend IS NULL AND eeg_embedding IS NOT NULL",
-            [], |r| r.get(0),
-        ).unwrap_or(0);
+        // Build HNSW for the new model from scratch.
+        let mut idx: LabeledIndex<Cosine, i64> = Builder::new()
+            .m(config.hnsw_m)
+            .ef_construction(config.hnsw_ef_construction)
+            .build_labeled(Cosine);
 
-        if untagged > 0 {
-            let _ = conn.execute(
-                "UPDATE embeddings SET model_backend = 'zuna' WHERE model_backend IS NULL AND eeg_embedding IS NOT NULL",
-                [],
-            );
-            skill_log!(logger, "reembed", "{}: tagged {} legacy rows as zuna", date, untagged);
-        }
+        // Delete existing embeddings for this model backend in this day
+        // (we're replacing them with fresh ones from raw data).
+        let _ = conn.execute(
+            "DELETE FROM embeddings WHERE model_backend = ?1",
+            rusqlite::params![backend_str],
+        );
 
-        // ── Rebuild per-model HNSW indices for this day ───────────────────
-        // Find all distinct model backends that have embeddings in this day.
-        let backends: Vec<String> = {
-            let Ok(mut stmt) = conn.prepare(
-                "SELECT DISTINCT model_backend FROM embeddings WHERE eeg_embedding IS NOT NULL AND model_backend IS NOT NULL"
-            ) else { continue };
-            stmt.query_map([], |row| row.get::<_, String>(0))
-                .map(|rows| rows.flatten().collect())
-                .unwrap_or_default()
-        };
+        // ── Chunk into epochs and embed ───────────────────────────────────
+        let hop = native_epoch / 2; // 50% overlap
+        let mut offset = 0usize;
+        let mut day_embeddings = 0usize;
 
-        for backend in &backends {
-            let hnsw_file = crate::constants::hnsw_index_file_for(backend);
-            let hnsw_path = day_dir.join(&hnsw_file);
+        while offset + native_epoch <= total_samples {
+            // Extract epoch per channel.
+            let epoch_raw: Vec<Vec<f32>> = (0..n_ch)
+                .map(|ch| ch_bufs[ch][offset..offset + native_epoch].to_vec())
+                .collect();
 
-            let mut idx: LabeledIndex<Cosine, i64> = Builder::new()
-                .m(config.hnsw_m)
-                .ef_construction(config.hnsw_ef_construction)
-                .build_labeled(Cosine);
+            // Derive timestamp for this epoch centre.
+            let epoch_centre_idx = offset + native_epoch / 2;
+            let ts_secs = timestamps.get(epoch_centre_idx).copied().unwrap_or(0.0);
+            // Convert to YYYYMMDDHHmmss.
+            let epoch_ts = skill_exg::yyyymmddhhmmss_utc(); // fallback
+            let _ = epoch_ts; // suppress unused
+            // Approximate timestamp from the CSV timestamp_s column.
+            let ts_i64 = {
+                let dt = chrono::DateTime::from_timestamp(ts_secs as i64, 0)
+                    .unwrap_or_default();
+                use chrono::Datelike;
+                use chrono::Timelike;
+                let d = dt;
+                (d.year() as i64) * 10_000_000_000
+                    + (d.month() as i64) * 100_000_000
+                    + (d.day() as i64) * 1_000_000
+                    + (d.hour() as i64) * 10_000
+                    + (d.minute() as i64) * 100
+                    + (d.second() as i64)
+            };
 
-            let Ok(mut stmt) = conn.prepare(
-                "SELECT timestamp, eeg_embedding FROM embeddings \
-                 WHERE eeg_embedding IS NOT NULL AND model_backend = ?1 \
-                 ORDER BY timestamp ASC"
-            ) else { continue };
+            // Resample to EMBEDDING_EPOCH_SAMPLES if needed.
+            let epoch_resampled: Vec<Vec<f32>> = epoch_raw.iter().map(|ch| {
+                if ch.len() == epoch_samples { ch.clone() }
+                else { crate::eeg_embeddings::resample_linear(ch, epoch_samples) }
+            }).collect();
 
-            let rows: Vec<(i64, Vec<u8>)> = stmt
-                .query_map(rusqlite::params![backend], |row| Ok((row.get(0)?, row.get(1)?)))
-                .map(|r| r.flatten().collect())
-                .unwrap_or_default();
+            // Run inference.
+            let infer_start = Instant::now();
+            let emb_result: Result<Vec<f32>, String> = (|| -> Result<Vec<f32>, String> {
+                match &encoder {
+                    Enc::Zuna(zuna_enc) => {
+                        // Pad to EEG_CHANNELS.
+                        let mut padded: Vec<Vec<f32>> = epoch_resampled;
+                        while padded.len() < crate::constants::EEG_CHANNELS {
+                            padded.push(vec![0.0f32; epoch_samples]);
+                        }
+                        let flat: Vec<f32> = padded.iter().flatten().copied().collect();
+                        let array = ndarray::Array2::from_shape_vec(
+                            (crate::constants::EEG_CHANNELS, epoch_samples), flat,
+                        ).map_err(|e| format!("array: {e}"))?;
 
-            let mut inserted = 0usize;
-            for (ts, blob) in &rows {
-                if blob.is_empty() { continue; }
-                let vec: Vec<f32> = blob.chunks_exact(4)
-                    .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
-                    .collect();
-                if vec.is_empty() { continue; }
-                idx.insert(vec, *ts);
-                inserted += 1;
-            }
+                        let mut pad_names: Vec<String> = channel_names.clone();
+                        while pad_names.len() < crate::constants::EEG_CHANNELS {
+                            pad_names.push(format!("_pad{}", pad_names.len()));
+                        }
+                        let ch_refs: Vec<&str> = pad_names.iter().map(|s| s.as_str()).collect();
 
-            // Update hnsw_id in SQLite to match the rebuilt index order.
-            // The HNSW insert order matches our ORDER BY timestamp ASC query,
-            // so hnsw_id = 0, 1, 2, … for each row in timestamp order.
-            {
-                let Ok(mut update_stmt) = conn.prepare(
-                    "UPDATE embeddings SET hnsw_id = ?1 WHERE timestamp = ?2 AND model_backend = ?3 AND eeg_embedding IS NOT NULL"
-                ) else { continue };
-                for (hnsw_id, (ts, blob)) in rows.iter().enumerate() {
-                    if blob.is_empty() { continue; }
-                    let _ = update_stmt.execute(rusqlite::params![hnsw_id as i64, ts, backend]);
-                }
-            }
+                        let mut batches = zuna_rs::load_from_named_tensor::<Wgpu>(
+                            array, &ch_refs, sample_rate as f32, config.data_norm,
+                            &pos_overrides, &data_cfg, &device,
+                        ).map_err(|e| format!("preprocess: {e:#}"))?;
+                        if batches.is_empty() { return Err("empty batch".into()); }
 
-            if let Err(e) = idx.save(&hnsw_path) {
-                skill_log!(logger, "reembed", "{}: HNSW save error for {}: {e}", date, backend);
-            } else {
-                skill_log!(logger, "reembed", "{}: rebuilt HNSW for model={} ({} entries) → {}",
-                    date, backend, inserted, hnsw_file);
-            }
-        }
+                        let mut epochs = zuna_enc.encode_batches(batches.drain(..1).collect())
+                            .map_err(|e| format!("encode: {e:#}"))?;
+                        let ep = epochs.pop().ok_or("no epoch")?;
+                        let dim = ep.output_dim();
+                        let n_tok = ep.n_tokens();
+                        if dim == 0 || n_tok == 0 { return Err("zero dim".into()); }
 
-        done += conn.query_row(
-            "SELECT COUNT(*) FROM embeddings WHERE eeg_embedding IS NOT NULL",
-            [], |r| r.get::<_, i64>(0),
-        ).unwrap_or(0) as usize;
-    }
+                        let mut mean = vec![0f32; dim];
+                        for tok in ep.embeddings.chunks(dim) {
+                            for (i, &v) in tok.iter().enumerate() { mean[i] += v; }
+                        }
+                        let s = 1.0 / n_tok as f32;
+                        for v in &mut mean { *v *= s; }
+                        Ok(mean)
+                    }
+                    Enc::Luna(luna_enc) => {
+                        let flat: Vec<f32> = epoch_resampled.iter().flatten().copied().collect();
+                        let ch_refs: Vec<&str> = channel_names.iter().map(|s| s.as_str()).collect();
+                        let batch = luna_rs::build_batch_named::<Wgpu>(
+                            flat, &ch_refs, epoch_samples, &device,
+                        );
+                        let result = luna_enc.run_batch(&batch)
+                            .map_err(|e| format!("luna: {e:#}"))?;
+                        let out = &result.output;
+                        let shape = &result.shape;
+                        if out.is_empty() { return Err("empty luna output".into()); }
 
-    // ── Rebuild global HNSW indices ───────────────────────────────────────
-    // Collect all distinct backends across all days and rebuild each global.
-    {
-        let mut all_backends: std::collections::HashSet<String> = std::collections::HashSet::new();
-        for date in &dates {
-            let db_path = skill_dir.join(date).join(crate::constants::SQLITE_FILE);
-            if let Ok(conn) = skill_data::util::open_readonly(&db_path) {
-                if let Ok(mut stmt) = conn.prepare(
-                    "SELECT DISTINCT model_backend FROM embeddings WHERE eeg_embedding IS NOT NULL AND model_backend IS NOT NULL"
-                ) {
-                    for b in stmt.query_map([], |row| row.get::<_, String>(0))
-                        .into_iter().flatten().flatten()
-                    {
-                        all_backends.insert(b);
+                        if shape.len() == 2 {
+                            let c = shape[0];
+                            let t = shape[1];
+                            let ps = luna_enc.model_cfg.patch_size;
+                            let np = t / ps.max(1);
+                            if np == 0 || c == 0 { return Err("zero patches".into()); }
+                            let mut patch_means = vec![0f32; np];
+                            for p in 0..np {
+                                let mut sum = 0f64;
+                                let count = (c * ps) as f64;
+                                for ch_idx in 0..c {
+                                    for si in 0..ps {
+                                        let idx = ch_idx * t + p * ps + si;
+                                        if idx < out.len() { sum += out[idx] as f64; }
+                                    }
+                                }
+                                patch_means[p] = (sum / count) as f32;
+                            }
+                            Ok(patch_means)
+                        } else {
+                            Ok(out.clone())
+                        }
                     }
                 }
+            })();
+            let embed_ms = infer_start.elapsed().as_secs_f64() * 1000.0;
+
+            if let Ok(emb) = emb_result {
+                let hnsw_id = idx.insert(emb.clone(), ts_i64) as i64;
+                let blob: Vec<u8> = emb.iter().flat_map(|v| v.to_le_bytes()).collect();
+
+                let _ = conn.execute(
+                    "INSERT INTO embeddings \
+                     (timestamp, device_id, device_name, hnsw_id, eeg_embedding, \
+                      model_backend, embed_speed_ms) \
+                     VALUES (?1, NULL, NULL, ?2, ?3, ?4, ?5)",
+                    rusqlite::params![ts_i64, hnsw_id, blob, backend_str, embed_ms],
+                );
+                day_embeddings += 1;
+                total_embeddings += 1;
             }
+
+            offset += hop;
         }
-        for backend in &all_backends {
-            skill_log!(logger, "reembed", "rebuilding global HNSW for model={}…", backend);
-            crate::global_eeg_index::rebuild_from_scratch_for(&skill_dir, backend);
+
+        // Save the HNSW for this day/model.
+        let hnsw_file = crate::constants::hnsw_index_file_for(backend_str);
+        let hnsw_path = day_dir.join(&hnsw_file);
+        if let Err(e) = idx.save(&hnsw_path) {
+            skill_log!(logger, "reembed", "{}: HNSW save error: {e}", date);
+        } else if day_embeddings > 0 {
+            skill_log!(logger, "reembed", "{}: {} embeddings → {} (model={})",
+                date, day_embeddings, hnsw_file, backend_str);
         }
+
+        // Also tag any remaining legacy NULL rows in this day as 'zuna'.
+        let _ = conn.execute(
+            "UPDATE embeddings SET model_backend = 'zuna' WHERE model_backend IS NULL AND eeg_embedding IS NOT NULL",
+            [],
+        );
+
+        done += 1;
     }
 
+    // ── Rebuild global HNSW for the target model ──────────────────────────
+    skill_log!(logger, "reembed", "rebuilding global HNSW for model={backend_str}…");
+    crate::global_eeg_index::rebuild_from_scratch_for(&skill_dir, backend_str);
+
     emit(&ReembedProgress { done: total, total, date: String::new(), status: "complete".into() });
-    skill_log!(logger, "reembed", "re-embed complete: {} rows processed, HNSW indices rebuilt across {} dates", total, dates.len());
+    skill_log!(logger, "reembed", "re-embed complete: {} embeddings from {} sessions (model={})",
+        total_embeddings, total, backend_str);
 }
 
