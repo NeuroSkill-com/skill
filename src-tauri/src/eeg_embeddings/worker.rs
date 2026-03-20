@@ -647,7 +647,14 @@ pub(super) fn embed_worker(
         // loop continues in metrics-only mode.
         let mean_emb: Option<Vec<f32>> = if let Some(ref enc) = encoder {
             let gpu_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let ch_refs: Vec<&str> = ch_names.iter().map(|s| s.as_str()).collect();
+                // Pad channel names to EEG_CHANNELS so they match the array's
+                // row count.  Inactive channels (zero-filled) get synthetic
+                // names that won't match any 10-20 electrode position.
+                let mut padded_names: Vec<String> = ch_names.clone();
+                while padded_names.len() < EEG_CHANNELS {
+                    padded_names.push(format!("_pad{}", padded_names.len()));
+                }
+                let ch_refs: Vec<&str> = padded_names.iter().map(|s| s.as_str()).collect();
                 let mut batches = load_from_named_tensor::<Wgpu>(
                     array, &ch_refs, epoch_sample_rate, config.data_norm,
                     &pos_overrides, &data_cfg, &device,

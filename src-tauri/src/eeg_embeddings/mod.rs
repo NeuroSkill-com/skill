@@ -168,6 +168,10 @@ const PPG_CHANNELS: usize = crate::constants::PPG_CHANNELS;
 pub struct EegAccumulator {
     bufs:        [VecDeque<f32>; EEG_CHANNELS],
     since_last:  [usize; EEG_CHANNELS],
+    /// Number of EEG channels the connected device actually uses.
+    /// Only `bufs[0..device_channels]` are populated; the rest stay empty
+    /// and are zero-filled when building the model input tensor.
+    device_channels: usize,
     /// Hop in native samples (device sample rate).
     hop_samples: usize,
     /// Epoch size in native samples (sample_rate × EMBEDDING_EPOCH_SECS).
@@ -243,6 +247,7 @@ impl EegAccumulator {
         Self {
             bufs:        std::array::from_fn(|_| VecDeque::new()),
             since_last:  [0; EEG_CHANNELS],
+            device_channels: CHANNEL_NAMES.len(),
             hop_samples: EMBEDDING_HOP_SAMPLES,
             native_epoch_samples: EMBEDDING_EPOCH_SAMPLES,
             device_id:    None,
@@ -340,6 +345,7 @@ impl EegAccumulator {
     /// Called by the session runner after a device connects so the embedding
     /// worker receives the correct channel labels and sample rate.
     pub fn set_device_channels(&mut self, names: Vec<String>, sample_rate: f32) {
+        self.device_channels = names.len().min(EEG_CHANNELS);
         self.channel_names = names;
         self.sample_rate   = sample_rate;
         // Recompute native epoch/hop for the new sample rate.
@@ -348,6 +354,9 @@ impl EegAccumulator {
         let epoch_native = self.native_epoch_samples;
         let hop_frac = self.hop_samples as f32 / EMBEDDING_EPOCH_SAMPLES as f32;
         self.hop_samples = (epoch_native as f32 * hop_frac).round().max(1.0) as usize;
+        // Clear buffers for the new channel configuration.
+        for b in &mut self.bufs { b.clear(); }
+        self.since_last = [0; EEG_CHANNELS];
     }
 
     /// Update the overlap between consecutive epochs (seconds).
@@ -390,31 +399,43 @@ impl EegAccumulator {
         self.bufs[electrode].extend(samples.iter().copied());
         self.since_last[electrode] += samples.len();
 
+        let n_ch = self.device_channels;
         let native_epoch = self.native_epoch_samples;
-        let min_buf        = self.bufs.iter().map(|b| b.len()).min().unwrap_or(0);
-        let min_since_last = *self.since_last.iter().min().unwrap_or(&0);
+
+        // Only check active device channels (0..n_ch) — inactive channels
+        // (n_ch..EEG_CHANNELS) are never pushed and would block forever.
+        let min_buf        = self.bufs[..n_ch].iter().map(|b| b.len()).min().unwrap_or(0);
+        let min_since_last = self.since_last[..n_ch].iter().copied().min().unwrap_or(0);
 
         if min_buf < native_epoch || min_since_last < self.hop_samples {
             return;
         }
 
-        // Extract the last `native_epoch` samples from each channel,
-        // then resample to EMBEDDING_EPOCH_SAMPLES (1280) for the ZUNA model.
-        let epoch: Vec<Vec<f32>> = self.bufs.iter()
-            .map(|b| {
-                let raw: Vec<f32> = b.iter()
-                    .skip(b.len() - native_epoch)
-                    .copied()
-                    .collect();
-                if native_epoch == EMBEDDING_EPOCH_SAMPLES {
-                    raw // already 256 Hz — no resampling needed
+        // Build epoch: extract `native_epoch` samples from each active channel,
+        // resample to EMBEDDING_EPOCH_SAMPLES (1280) for the ZUNA model, and
+        // zero-fill inactive channels so the tensor is always EEG_CHANNELS wide.
+        let epoch: Vec<Vec<f32>> = (0..EEG_CHANNELS)
+            .map(|ch| {
+                let b = &self.bufs[ch];
+                if ch >= n_ch || b.len() < native_epoch {
+                    // Inactive or under-filled channel → zero-fill.
+                    vec![0.0f32; EMBEDDING_EPOCH_SAMPLES]
                 } else {
-                    resample_linear(&raw, EMBEDDING_EPOCH_SAMPLES)
+                    let raw: Vec<f32> = b.iter()
+                        .skip(b.len() - native_epoch)
+                        .copied()
+                        .collect();
+                    if native_epoch == EMBEDDING_EPOCH_SAMPLES {
+                        raw // already 256 Hz — no resampling needed
+                    } else {
+                        resample_linear(&raw, EMBEDDING_EPOCH_SAMPLES)
+                    }
                 }
             })
             .collect();
 
-        for b in &mut self.bufs { b.drain(..self.hop_samples); }
+        // Only drain active channel buffers.
+        for b in &mut self.bufs[..n_ch] { b.drain(..self.hop_samples); }
         self.since_last = [0; EEG_CHANNELS];
 
         // Compute PPG averages for this epoch, then reset accumulators.
@@ -482,5 +503,55 @@ impl EegAccumulator {
         self.latest_ppg.as_ref()
     }
 
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resample_identity() {
+        let src: Vec<f32> = (0..1280).map(|i| i as f32).collect();
+        let out = resample_linear(&src, 1280);
+        assert_eq!(out.len(), 1280);
+        assert_eq!(out, src);
+    }
+
+    #[test]
+    fn resample_upsample() {
+        // 640 samples → 1280 (doubles)
+        let src: Vec<f32> = (0..640).map(|i| i as f32).collect();
+        let out = resample_linear(&src, 1280);
+        assert_eq!(out.len(), 1280);
+        // First and last should be preserved exactly.
+        assert!((out[0] - 0.0).abs() < 1e-5);
+        assert!((out[1279] - 639.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn resample_downsample() {
+        // 2500 samples (500 Hz × 5 s) → 1280
+        let src: Vec<f32> = (0..2500).map(|i| (i as f32 * 0.01).sin()).collect();
+        let out = resample_linear(&src, 1280);
+        assert_eq!(out.len(), 1280);
+        // Endpoints preserved.
+        assert!((out[0] - src[0]).abs() < 1e-5);
+        assert!((out[1279] - src[2499]).abs() < 1e-3);
+    }
+
+    #[test]
+    fn resample_empty_source() {
+        let out = resample_linear(&[], 1280);
+        assert_eq!(out.len(), 1280);
+        assert!(out.iter().all(|&v| v == 0.0));
+    }
+
+    #[test]
+    fn resample_zero_target() {
+        let out = resample_linear(&[1.0, 2.0, 3.0], 0);
+        assert!(out.is_empty());
+    }
 }
 
