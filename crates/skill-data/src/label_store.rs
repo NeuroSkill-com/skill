@@ -276,17 +276,17 @@ pub struct LabelRow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
+    use tempfile::{TempDir, tempdir};
 
-    fn open_temp() -> LabelStore {
+    fn open_temp() -> (LabelStore, TempDir) {
         let dir = tempdir().expect("tempdir");
-        // keep the TempDir alive long enough — open returns immediately
-        LabelStore::open(dir.path()).expect("LabelStore::open")
+        let store = LabelStore::open(dir.path()).expect("LabelStore::open");
+        (store, dir)
     }
 
     #[test]
     fn insert_and_count() {
-        let store = open_temp();
+        let (store, _dir) = open_temp();
         assert_eq!(store.count(), 0);
         let id = store.insert(100, 200, 100, 200, "alpha", "", 1_700_000_000).unwrap();
         assert!(id > 0);
@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn list_all_order() {
-        let store = open_temp();
+        let (store, _dir) = open_temp();
         store.insert(100, 200, 100, 200, "first",  "", 1_000).unwrap();
         store.insert(200, 300, 200, 300, "second", "", 2_000).unwrap();
         let rows = store.list_all();
@@ -306,7 +306,7 @@ mod tests {
 
     #[test]
     fn update_text_roundtrip() {
-        let store = open_temp();
+        let (store, _dir) = open_temp();
         let id = store.insert(10, 20, 10, 20, "original", "", 999).unwrap();
         assert!(store.update_text(id, "updated", "some context"));
         let rows = store.list_all();
@@ -316,13 +316,13 @@ mod tests {
 
     #[test]
     fn update_nonexistent_returns_false() {
-        let store = open_temp();
+        let (store, _dir) = open_temp();
         assert!(!store.update_text(9999, "x", ""));
     }
 
     #[test]
     fn delete_removes_row() {
-        let store = open_temp();
+        let (store, _dir) = open_temp();
         let id = store.insert(10, 20, 10, 20, "to_delete", "", 1).unwrap();
         assert_eq!(store.count(), 1);
         assert!(store.delete(id));
@@ -331,13 +331,13 @@ mod tests {
 
     #[test]
     fn delete_nonexistent_returns_false() {
-        let store = open_temp();
+        let (store, _dir) = open_temp();
         assert!(!store.delete(9999));
     }
 
     #[test]
     fn query_range_filters_correctly() {
-        let store = open_temp();
+        let (store, _dir) = open_temp();
         store.insert(100, 200, 100, 200, "in_range",     "", 1).unwrap();
         store.insert(500, 600, 500, 600, "out_of_range", "", 2).unwrap();
         let rows = store.query_range(50, 250);
