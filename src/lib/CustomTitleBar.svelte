@@ -61,7 +61,9 @@ the Free Software Foundation, version 3 only. -->
   let downloadedModels = $state<LlmModelEntry[]>([]);
   let activeFilename = $state("");
   let modelSwitching = $state(false);
-  let pickerWrapEl = $state<HTMLDivElement | null>(null);
+  let pickerBtnEl = $state<HTMLButtonElement | null>(null);
+  let dropdownX = $state(0);
+  let dropdownY = $state(0);
 
   function prettyModelName(filename: string): string {
     return filename.replace(/\.gguf$/i, "").replace(/-(\d{5})-of-\d{5}$/, "");
@@ -82,6 +84,12 @@ the Free Software Foundation, version 3 only. -->
       downloadedModels = [];
     }
     if (downloadedModels.length === 0) return;
+    // Position dropdown below the button
+    if (pickerBtnEl) {
+      const rect = pickerBtnEl.getBoundingClientRect();
+      dropdownX = rect.left + rect.width / 2;
+      dropdownY = rect.bottom + 4;
+    }
     modelPickerOpen = true;
   }
 
@@ -96,10 +104,14 @@ the Free Software Foundation, version 3 only. -->
     finally { modelSwitching = false; }
   }
 
+  let dropdownEl = $state<HTMLDivElement | null>(null);
+
   function onPickerOutsideClick(e: MouseEvent) {
-    if (modelPickerOpen && pickerWrapEl && !pickerWrapEl.contains(e.target as Node)) {
-      closeModelPicker();
-    }
+    if (!modelPickerOpen) return;
+    const target = e.target as Node;
+    if (pickerBtnEl?.contains(target)) return;
+    if (dropdownEl?.contains(target)) return;
+    closeModelPicker();
   }
 
   const pickerGroups = $derived.by(() => {
@@ -249,13 +261,13 @@ the Free Software Foundation, version 3 only. -->
       <span class="help-license-badge" title="GNU General Public License v3.0">{t("settings.license")}</span>
     </div>
   {:else if isChatWindow}
-    <div class="chat-window-head" bind:this={pickerWrapEl}>
+    <div class="chat-window-head">
       <span class="chat-status-dot
         {chatTitlebarState.status === 'running'  ? 'chat-status-running'
         : chatTitlebarState.status === 'loading' ? 'chat-status-loading'
         :                                          'chat-status-stopped'}"></span>
       {#if chatTitlebarState.status === 'running' && chatTitlebarState.modelName}
-        <button class="chat-model-picker-btn"
+        <button class="chat-model-picker-btn" bind:this={pickerBtnEl}
                 onclick={(e) => { e.stopPropagation(); modelPickerOpen ? closeModelPicker() : openModelPicker(); }}
                 disabled={modelSwitching}>
           <span class="chat-model-picker-text">
@@ -277,26 +289,6 @@ the Free Software Foundation, version 3 only. -->
             {t("chat.status.stopped")}
           {/if}
         </span>
-      {/if}
-
-      <!-- Model picker dropdown -->
-      {#if modelPickerOpen && downloadedModels.length > 0}
-        <div class="chat-model-dropdown">
-          {#each pickerGroups as group}
-            {#if pickerGroups.length > 1}
-              <div class="chat-model-group-label">{group.family}</div>
-            {/if}
-            {#each group.entries as entry}
-              {@const isActive = entry.filename === activeFilename}
-              <button class="chat-model-item {isActive ? 'chat-model-item-active' : ''}"
-                      onclick={() => switchToModel(entry.filename)}>
-                <span class="chat-model-dot {isActive ? 'chat-model-dot-active' : ''}"></span>
-                <span class="chat-model-item-name">{modelDisplayLabel(entry)}</span>
-                <span class="chat-model-item-size">{entry.size_gb.toFixed(1)} GB</span>
-              </button>
-            {/each}
-          {/each}
-        </div>
       {/if}
     </div>
   {:else}
@@ -406,6 +398,30 @@ the Free Software Foundation, version 3 only. -->
   {/if}
 </div>
 
+<!-- Model picker dropdown — rendered outside titlebar to avoid overflow clipping -->
+{#if modelPickerOpen && downloadedModels.length > 0}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="chat-model-dropdown" bind:this={dropdownEl}
+       style="left: {dropdownX}px; top: {dropdownY}px;"
+       onclick={(e) => e.stopPropagation()}>
+    {#each pickerGroups as group}
+      {#if pickerGroups.length > 1}
+        <div class="chat-model-group-label">{group.family}</div>
+      {/if}
+      {#each group.entries as entry}
+        {@const isActive = entry.filename === activeFilename}
+        <button class="chat-model-item {isActive ? 'chat-model-item-active' : ''}"
+                onclick={() => switchToModel(entry.filename)}>
+          <span class="chat-model-dot {isActive ? 'chat-model-dot-active' : ''}"></span>
+          <span class="chat-model-item-name">{modelDisplayLabel(entry)}</span>
+          <span class="chat-model-item-size">{entry.size_gb.toFixed(1)} GB</span>
+        </button>
+      {/each}
+    {/each}
+  </div>
+{/if}
+
 <style>
   /* ── Titlebar shell ──────────────────────────────────────────────────── */
   .titlebar {
@@ -491,7 +507,7 @@ the Free Software Foundation, version 3 only. -->
     display: flex; align-items: center; justify-content: center; gap: 5px;
     max-width: min(400px, calc(100vw - 200px));
     min-width: 0; padding: 0 10px; height: 100%;
-    overflow: visible; pointer-events: auto; z-index: 1;
+    overflow: hidden; pointer-events: auto; z-index: 1;
   }
   .chat-status-dot {
     width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
@@ -531,17 +547,16 @@ the Free Software Foundation, version 3 only. -->
 
   /* ── Model picker dropdown ───────────────────────────────────────────── */
   .chat-model-dropdown {
-    position: absolute;
-    left: 50%; top: 100%; transform: translateX(-50%);
-    margin-top: 4px;
-    min-width: 220px; max-width: 340px; max-height: 360px;
+    position: fixed;
+    transform: translateX(-50%);
+    min-width: 240px; max-width: 360px; max-height: 400px;
     overflow-y: auto; overscroll-behavior: contain;
     border-radius: 8px;
     border: 1px solid var(--color-border);
     background: var(--color-surface);
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.10);
     padding: 4px 0;
-    z-index: 9999;
+    z-index: 10000;
     pointer-events: auto;
   }
   .chat-model-group-label {
