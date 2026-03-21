@@ -232,7 +232,7 @@ const settings: Record<string, string> = {
   "umapSettings.apply":               "Appliquer & vider le cache",
 
   "settings.openbci": "OpenBCI",
-  "settings.openbciDesc": "Configurez une carte OpenBCI pour vous connecter à côté ou à la place d'un casque Muse.",
+  "settings.openbciDesc": "Configurez une carte OpenBCI pour vous connecter à côté ou à la place d'un autre appareil BCI.",
   "settings.openbciBoard": "Conseil",
   "settings.openbciBoardGanglion": "Ganglion - 4 canaux · BLE",
   "settings.openbciBoardGanglionWifi": "Ganglion - 4 canaux · Bouclier WiFi",
@@ -369,7 +369,7 @@ const settings: Record<string, string> = {
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
   "settings.deviceApi.openbciTitle":   "OpenBCI",
-  "settings.deviceApi.openbciDesc":    "Configurer une carte OpenBCI pour se connecter en plus ou a la place d'un casque Muse.",
+  "settings.deviceApi.openbciDesc":    "Configurer une carte OpenBCI pour se connecter en plus ou à la place d'un autre appareil BCI.",
 
   // ── Format d'enregistrement ──────────────────────────────────────────────
   "settings.storageFormat":                      "Format d'enregistrement",

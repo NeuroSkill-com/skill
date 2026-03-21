@@ -133,7 +133,7 @@ const settings: Record<string, string> = {
   "settings.dataDirRestart":          "נדרש אתחול מחדש כדי שהשינויים ייכנסו לתוקף.",
   "settings.dataDirRestartNow":       "אתחל עכשיו",
   "settings.openbci": "OpenBCI",
-  "settings.openbciDesc": "הגדר לוח OpenBCI כדי להתחבר לצד או במקום אוזניית Muse.",
+  "settings.openbciDesc": "הגדר לוח OpenBCI כדי להתחבר לצד או במקום מכשיר BCI אחר.",
   "settings.openbciBoard": "לוח",
   "settings.openbciBoardGanglion": "Ganglion — 4 ערוצים · BLE",
   "settings.openbciBoardGanglionWifi": "Ganglion WiFi — 4 ערוצים · WiFi",
@@ -368,7 +368,7 @@ const settings: Record<string, string> = {
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
   "settings.deviceApi.openbciTitle":   "OpenBCI",
-  "settings.deviceApi.openbciDesc":    "הגדר לוח OpenBCI כדי להתחבר לצד או במקום אוזניית Muse.",
+  "settings.deviceApi.openbciDesc":    "הגדר לוח OpenBCI כדי להתחבר לצד או במקום מכשיר BCI אחר.",
 
   // ── פורמט הקלטה ──────────────────────────────────────────────────────────
   "settings.storageFormat":                      "פורמט הקלטה",

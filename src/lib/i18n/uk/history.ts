@@ -183,7 +183,7 @@ const history: Record<string, string> = {
   "history.refresh":        "Оновити",
   "history.loading":        "Завантаження сесій…",
   "history.noSessions":     "Записів ще немає",
-  "history.noSessionsHint": "Підключіть пристрій BCI (Muse або OpenBCI) та запишіть дані ЕЕГ. Сесії з'являться тут.",
+  "history.noSessionsHint": "Підключіть пристрій BCI та запишіть дані ЕЕГ. Сесії з'являться тут.",
   "history.startTime":      "Початок",
   "history.endTime":        "Кінець",
   "history.duration":       "Тривалість",

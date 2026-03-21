@@ -232,7 +232,7 @@ const settings: Record<string, string> = {
   "umapSettings.apply":               "Застосувати й очистити кеш",
 
   "settings.openbci": "OpenBCI",
-  "settings.openbciDesc": "Налаштуйте плату OpenBCI для підключення разом із гарнітурою Muse або замість неї.",
+  "settings.openbciDesc": "Налаштуйте плату OpenBCI для підключення разом із іншим BCI-пристроєм або замість нього.",
   "settings.openbciBoard": "Плата",
   "settings.openbciBoardGanglion": "Ganglion — 4 канали · BLE",
   "settings.openbciBoardGanglionWifi": "Ganglion WiFi — 4 канали · WiFi",
@@ -369,7 +369,7 @@ const settings: Record<string, string> = {
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
   "settings.deviceApi.openbciTitle":   "OpenBCI",
-  "settings.deviceApi.openbciDesc":    "Налаштуйте плату OpenBCI для підключення поряд або замість гарнітури Muse.",
+  "settings.deviceApi.openbciDesc":    "Налаштуйте плату OpenBCI для підключення поряд або замість іншого BCI-пристрою.",
 
   // ── Формат запису ─────────────────────────────────────────────────────────
   "settings.storageFormat":                      "Формат запису",
