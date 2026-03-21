@@ -355,6 +355,8 @@ const llm: Record<string, string> = {
   "llm.tools.skillsRefresh12h":        "12 ש'",
   "llm.tools.skillsRefresh24h":        "24 ש'",
   "llm.tools.skillsRefresh7d":         "7 י'",
+  "llm.tools.skillsSyncOnLaunch":      "סנכרון בהפעלה",
+  "llm.tools.skillsSyncOnLaunchDesc":  "תמיד הורד את הכישורים העדכניים כשהאפליקציה נפתחת",
   "llm.tools.skillsSyncNow":           "סנכרן עכשיו",
   "llm.tools.skillsSyncing":           "מסנכרן...",
   "llm.tools.skillsLastSync":          "סנכרון אחרון",

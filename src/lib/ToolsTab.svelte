@@ -75,6 +75,7 @@
 
   let configSaving = $state(false);
   let skillsRefreshInterval = $state(86400);
+  let skillsSyncOnLaunch = $state(false);
   let skillsLastSync = $state<number | null>(null);
   let skillsSyncing = $state(false);
 
@@ -123,6 +124,7 @@
   async function loadSkillsMeta() {
     try {
       skillsRefreshInterval = await invoke<number>("get_skills_refresh_interval");
+      skillsSyncOnLaunch = await invoke<boolean>("get_skills_sync_on_launch");
       skillsLastSync = await invoke<number | null>("get_skills_last_sync");
     } catch (e) { console.warn("[tools] loadSkillsMeta failed:", e); }
   }
@@ -662,6 +664,26 @@
               </button>
             {/each}
           </div>
+        </div>
+
+        <!-- Sync on launch toggle -->
+        <div class="flex items-center justify-between gap-4">
+          <div class="flex flex-col gap-0.5">
+            <span class="text-[0.72rem] font-semibold text-foreground">{t("llm.tools.skillsSyncOnLaunch")}</span>
+            <span class="text-[0.6rem] text-muted-foreground">{t("llm.tools.skillsSyncOnLaunchDesc")}</span>
+          </div>
+          <button role="switch" aria-checked={skillsSyncOnLaunch} aria-label={t("llm.tools.skillsSyncOnLaunch")}
+            onclick={async () => {
+              skillsSyncOnLaunch = !skillsSyncOnLaunch;
+              await invoke("set_skills_sync_on_launch", { enabled: skillsSyncOnLaunch });
+            }}
+            class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2
+                   border-transparent transition-colors duration-200
+                   {skillsSyncOnLaunch ? 'bg-violet-500' : 'bg-muted dark:bg-white/10'}">
+            <span class="pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-md
+                          transform transition-transform duration-200
+                          {skillsSyncOnLaunch ? 'translate-x-4' : 'translate-x-0'}"></span>
+          </button>
         </div>
 
         <!-- Last sync + manual sync button -->

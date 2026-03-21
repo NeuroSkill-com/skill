@@ -31,6 +31,23 @@ pub fn set_skills_refresh_interval(
     crate::save_settings(&app);
 }
 
+/// Return whether skills should be synced on every app launch.
+#[tauri::command]
+pub fn get_skills_sync_on_launch(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
+    { let __a = state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().config.tools.skills_sync_on_launch; __r }
+}
+
+/// Persist the sync-on-launch flag.
+#[tauri::command]
+pub fn set_skills_sync_on_launch(
+    enabled: bool,
+    app:     AppHandle,
+    state:   tauri::State<'_, Mutex<Box<AppState>>>,
+) {
+    { let __a = state.lock_or_recover().llm.clone(); __a.lock_or_recover().config.tools.skills_sync_on_launch = enabled; }
+    crate::save_settings(&app);
+}
+
 /// Return the Unix timestamp of the last successful skills sync, or `null`.
 #[tauri::command]
 pub fn get_skills_last_sync(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<u64> {

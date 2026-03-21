@@ -1852,6 +1852,8 @@ export type TranslationKey =
   | "llm.tools.skillsRefresh12h"
   | "llm.tools.skillsRefresh24h"
   | "llm.tools.skillsRefresh7d"
+  | "llm.tools.skillsSyncOnLaunch"
+  | "llm.tools.skillsSyncOnLaunchDesc"
   | "llm.tools.skillsSyncNow"
   | "llm.tools.skillsSyncing"
   | "llm.tools.skillsLastSync"

@@ -252,6 +252,7 @@ use settings_cmds::{
     get_autostart_enabled, set_autostart_enabled,
     get_update_check_interval, set_update_check_interval,
     get_skills_refresh_interval, set_skills_refresh_interval,
+    get_skills_sync_on_launch, set_skills_sync_on_launch,
     get_skills_last_sync, sync_skills_now,
     list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
     get_openbci_config, set_openbci_config, list_serial_ports,
@@ -1023,21 +1024,30 @@ fn setup_background_tasks(app: &mut tauri::App) {
     tauri::async_runtime::spawn(async move {
         // Wait a bit after startup before first sync attempt.
         tokio::time::sleep(Duration::from_secs(45)).await;
+        let mut first_run = true;
         loop {
-            let (skill_dir, interval_secs) = {
+            let (skill_dir, interval_secs, sync_on_launch) = {
                 let r = app_skills.state::<Mutex<Box<AppState>>>();
                 let (sd, llm_arc) = {
                     let g = r.lock_or_recover();
                     (g.skill_dir.clone(), g.llm.clone())
                 };
-                let iv = llm_arc.lock_or_recover().config.tools.skills_refresh_interval_secs;
-                (sd, iv)
+                let tools = &llm_arc.lock_or_recover().config.tools;
+                let iv = tools.skills_refresh_interval_secs;
+                let sol = tools.skills_sync_on_launch;
+                (sd, iv, sol)
             };
 
-            if interval_secs > 0 {
+            // On first run, force sync if sync_on_launch is enabled;
+            // otherwise respect the normal interval.
+            let force_launch = first_run && sync_on_launch;
+            let effective_interval = if force_launch { 0 } else { interval_secs };
+            first_run = false;
+
+            if force_launch || interval_secs > 0 {
                 eprintln!("[skills-sync] checking for community skills update");
                 let sd = skill_dir.clone();
-                let iv = interval_secs;
+                let iv = effective_interval;
                 let outcome = tokio::task::spawn_blocking(move || {
                     skill_skills::sync::sync_skills(&sd, iv, None)
                 }).await;
@@ -1223,6 +1233,7 @@ pub fn run() {
             get_autostart_enabled, set_autostart_enabled,
             get_update_check_interval, set_update_check_interval,
             get_skills_refresh_interval, set_skills_refresh_interval,
+            get_skills_sync_on_launch, set_skills_sync_on_launch,
             get_skills_last_sync, sync_skills_now,
             list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
             get_openbci_config, set_openbci_config, list_serial_ports,

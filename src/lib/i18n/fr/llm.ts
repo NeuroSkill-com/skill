@@ -173,6 +173,8 @@ const llm: Record<string, string> = {
   "llm.tools.skillsRefresh12h":        "12 h",
   "llm.tools.skillsRefresh24h":        "24 h",
   "llm.tools.skillsRefresh7d":         "7 j",
+  "llm.tools.skillsSyncOnLaunch":      "Synchroniser au lancement",
+  "llm.tools.skillsSyncOnLaunchDesc":  "Toujours recuperer les derniers skills au demarrage de l'application",
   "llm.tools.skillsSyncNow":           "Synchroniser",
   "llm.tools.skillsSyncing":           "Synchronisation...",
   "llm.tools.skillsLastSync":          "Dernière synchronisation",

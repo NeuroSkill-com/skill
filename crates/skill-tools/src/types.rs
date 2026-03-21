@@ -86,6 +86,12 @@ pub struct LlmToolConfig {
     #[serde(default = "default_skills_refresh_interval")]
     pub skills_refresh_interval_secs: u64,
 
+    /// When `true`, force a community-skills sync every time the app launches,
+    /// regardless of the refresh interval.  The periodic schedule still applies
+    /// afterwards.  Default: `false`.
+    #[serde(default)]
+    pub skills_sync_on_launch: bool,
+
     /// Skill names that are explicitly disabled (will not be injected into the
     /// LLM system prompt).  Empty = all discovered skills are available.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -247,6 +253,7 @@ impl Default for LlmToolConfig {
             thinking_budget:    None,
             context_compression: ToolContextCompression::default(),
             skills_refresh_interval_secs: default_skills_refresh_interval(),
+            skills_sync_on_launch: false,
             disabled_skills: Vec::new(),
         }
     }

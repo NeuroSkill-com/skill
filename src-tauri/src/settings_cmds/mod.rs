@@ -47,6 +47,7 @@ pub use screenshot_cmds::{
 };
 pub use skills_cmds::{
     get_skills_refresh_interval, set_skills_refresh_interval,
+    get_skills_sync_on_launch, set_skills_sync_on_launch,
     get_skills_last_sync, sync_skills_now,
     list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
 };

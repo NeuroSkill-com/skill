@@ -173,6 +173,8 @@ const llm: Record<string, string> = {
   "llm.tools.skillsRefresh12h":        "12 год",
   "llm.tools.skillsRefresh24h":        "24 год",
   "llm.tools.skillsRefresh7d":         "7 д",
+  "llm.tools.skillsSyncOnLaunch":      "Синхронізувати при запуску",
+  "llm.tools.skillsSyncOnLaunchDesc":  "Завжди завантажувати найновіші навички при запуску додатку",
   "llm.tools.skillsSyncNow":           "Синхронізувати",
   "llm.tools.skillsSyncing":           "Синхронізація...",
   "llm.tools.skillsLastSync":          "Остання синхронізація",
