@@ -603,9 +603,20 @@ pub fn set_openbci_config(
 }
 
 /// Return the current device API credential configuration.
+///
+/// `DeviceApiConfig` uses `#[serde(skip_serializing)]` on secret fields so
+/// they are never written to the JSON settings file on disk.  That also means
+/// a plain `-> DeviceApiConfig` return would omit the secrets from the Tauri
+/// IPC response.  We return a `serde_json::Value` instead so the frontend
+/// receives the full credentials loaded from the system keychain.
 #[tauri::command]
-pub fn get_device_api_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DeviceApiConfig {
-    state.lock_or_recover().device_api_config.clone()
+pub fn get_device_api_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> serde_json::Value {
+    let c = state.lock_or_recover().device_api_config.clone();
+    serde_json::json!({
+        "emotiv_client_id":     c.emotiv_client_id,
+        "emotiv_client_secret": c.emotiv_client_secret,
+        "idun_api_token":       c.idun_api_token,
+    })
 }
 
 /// Persist device API credential configuration.
