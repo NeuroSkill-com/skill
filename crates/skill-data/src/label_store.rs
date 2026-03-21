@@ -232,6 +232,49 @@ impl LabelStore {
         }
     }
 
+    /// Return the top `limit` most frequently used label texts, optionally
+    /// filtered to labels created at or after `since` (unix seconds).
+    pub fn top_texts(&self, limit: usize, since: Option<u64>) -> Vec<LabelFreqRow> {
+        let (sql, since_val): (&str, i64) = match since {
+            Some(ts) => (
+                "SELECT text, COUNT(*) AS cnt, MAX(created_at) AS last_used
+                 FROM labels WHERE created_at >= ?1
+                 GROUP BY text ORDER BY cnt DESC LIMIT ?2",
+                ts as i64,
+            ),
+            None => (
+                "SELECT text, COUNT(*) AS cnt, MAX(created_at) AS last_used
+                 FROM labels WHERE 1=1 OR ?1=?1
+                 GROUP BY text ORDER BY cnt DESC LIMIT ?2",
+                0i64,
+            ),
+        };
+        let mut stmt = match self.conn.prepare(sql) {
+            Ok(s)  => s,
+            Err(e) => { eprintln!("[labels] top_texts: {e}"); return vec![]; }
+        };
+        stmt.query_map(params![since_val, limit as i64], |row| {
+            Ok(LabelFreqRow {
+                text:      row.get(0)?,
+                count:     row.get::<_, i64>(1)? as u64,
+                last_used: row.get::<_, i64>(2)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
+    /// Return the count of labels that have a text embedding.
+    pub fn count_embedded(&self) -> u64 {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM labels WHERE text_embedding IS NOT NULL",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64
+    }
+
     /// Return all labels whose EEG window overlaps [`from`, `to`] (unix seconds).
     pub fn query_range(&self, from: u64, to: u64) -> Vec<LabelRow> {
         // prepare_cached reuses the compiled statement across calls — avoids
@@ -260,6 +303,13 @@ impl LabelStore {
         };
         rows.filter_map(|r| r.ok()).collect()
     }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct LabelFreqRow {
+    pub text:      String,
+    pub count:     u64,
+    pub last_used: u64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

@@ -204,6 +204,39 @@ impl ActivityStore {
         .unwrap_or_default()
     }
 
+    /// Return the top `limit` most-used apps by number of active-window
+    /// switches, optionally filtered to windows activated at or after `since`.
+    pub fn top_apps(&self, limit: u32, since: Option<u64>) -> Vec<AppUsageRow> {
+        let c = self.conn.lock_or_recover();
+        let (sql, since_val): (&str, i64) = match since {
+            Some(ts) => (
+                "SELECT app_name, COUNT(*) AS cnt, MAX(activated_at) AS last_seen
+                 FROM active_windows WHERE activated_at >= ?1
+                 GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
+                ts as i64,
+            ),
+            None => (
+                "SELECT app_name, COUNT(*) AS cnt, MAX(activated_at) AS last_seen
+                 FROM active_windows WHERE 1=1 OR ?1=?1
+                 GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
+                0i64,
+            ),
+        };
+        let mut stmt = match c.prepare_cached(sql) {
+            Ok(s)  => s,
+            Err(e) => { eprintln!("[activity] top_apps: {e}"); return vec![]; }
+        };
+        stmt.query_map(params![since_val, limit as i64], |row| {
+            Ok(AppUsageRow {
+                app_name:  row.get(0)?,
+                switches:  row.get::<_, i64>(1)? as u64,
+                last_seen: row.get::<_, i64>(2)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
+    }
+
     /// Return all per-minute buckets whose `minute_ts` falls in `[from_ts, to_ts]`,
     /// ordered oldest-first (natural order for charting).
     pub fn get_input_buckets(&self, from_ts: u64, to_ts: u64) -> Vec<InputBucketRow> {
@@ -250,6 +283,15 @@ pub struct InputActivityRow {
     pub last_mouse:    Option<u64>,
     /// Unix seconds when this row was written (flush time).
     pub sampled_at:    u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppUsageRow {
+    pub app_name:  String,
+    /// Number of window-activation switches to this app.
+    pub switches:  u64,
+    /// Most recent activation timestamp (unix seconds).
+    pub last_seen: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

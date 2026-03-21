@@ -256,6 +256,8 @@ pub fn skill_api_tool() -> Tool {
                  CALIBRATION: list_calibrations | get_calibration(id) | create_calibration(name,actions,loop_count) | update_calibration(id,...) | delete_calibration(id) | run_calibration(id?)\n\
                  HOOKS: hooks_status | hooks_get | hooks_set(hooks) | hooks_suggest(keywords) | hooks_log(limit?,offset?)\n\
                  DND: dnd | dnd_set(enabled)\n\
+                 SLEEP SCHEDULE: sleep_schedule | sleep_schedule_set(bedtime?,wake_time?,preset?)\n\
+                 HEALTH: health_summary(start_utc?,end_utc?) | health_query(type,start_utc?,end_utc?,limit?) | health_metric_types | health_sync\n\
                  ADVANCED: umap(a_start_utc,a_end_utc,b_start_utc,b_end_utc) | umap_poll(job_id) | llm_status | llm_catalog".into()
             ),
             parameters: Some(json!({
@@ -276,7 +278,9 @@ pub fn skill_api_tool() -> Tool {
                             "llm_status", "llm_catalog", "llm_downloads", "llm_hardware_fit",
                             "search_screenshots", "screenshots_around",
                             "screenshots_for_eeg", "eeg_for_screenshots",
-                            "search_screenshots_vision", "search_screenshots_by_image_b64"
+                            "search_screenshots_vision", "search_screenshots_by_image_b64",
+                            "sleep_schedule", "sleep_schedule_set",
+                            "health_summary", "health_query", "health_metric_types", "health_sync"
                         ]
                     },
                     "args": {
@@ -317,7 +321,10 @@ pub fn is_skill_api_command(name: &str) -> bool {
         "umap" | "umap_poll" |
         "llm_status" | "llm_catalog" | "llm_downloads" | "llm_hardware_fit" |
         "search_screenshots" | "screenshots_around" |
-        "screenshots_for_eeg" | "eeg_for_screenshots"
+        "screenshots_for_eeg" | "eeg_for_screenshots" |
+        "search_screenshots_vision" | "search_screenshots_by_image_b64" |
+        "sleep_schedule" | "sleep_schedule_set" |
+        "health_summary" | "health_query" | "health_metric_types" | "health_sync"
     )
 }
 
