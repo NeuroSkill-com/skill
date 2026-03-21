@@ -25,7 +25,7 @@ import { execSync, spawn } from "child_process";
 import { platform, arch } from "os";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { existsSync, renameSync } from "fs";
+import { existsSync, renameSync, unlinkSync } from "fs";
 import http from "http";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -225,6 +225,32 @@ try {
 } catch (e) {
   console.error(`✖ ${e.message}`);
   process.exit(1);
+}
+
+// ── Clean stale trace files ──────────────────────────────────────────────────
+// cargo-flamegraph refuses to overwrite an existing trace file and exits with
+// code 42 ("Trace file already exists … Specify append-run option …").
+// Remove leftover traces from previous runs so the command succeeds cleanly.
+
+for (const stale of [
+  resolve(root, "src-tauri", "cargo-flamegraph.trace"),
+  resolve(root, "src-tauri", "flamegraph.svg"),
+  resolve(root, "cargo-flamegraph.trace"),
+]) {
+  if (existsSync(stale)) {
+    console.log(`→ Removing stale trace file: ${stale}`);
+    try { unlinkSync(stale); } catch { /* ignore */ }
+  }
+}
+
+// ── Enable debug symbols for useful flamegraphs ─────────────────────────────
+// cargo flamegraph defaults to --release. Without debuginfo the SVG shows only
+// hex addresses.  Set CARGO_PROFILE_RELEASE_DEBUG=true so the release build
+// includes symbol names without needing to edit Cargo.toml permanently.
+
+if (!process.env.CARGO_PROFILE_RELEASE_DEBUG) {
+  process.env.CARGO_PROFILE_RELEASE_DEBUG = "true";
+  console.log("→ Enabling debug symbols in release build (CARGO_PROFILE_RELEASE_DEBUG=true)");
 }
 
 // ── Build flamegraph command ─────────────────────────────────────────────────
