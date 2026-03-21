@@ -385,6 +385,40 @@ for (const stale of [
   forceRemove(stale);
 }
 
+// ── Step 3b: Clear WebView cache ─────────────────────────────────────────────
+// WebKitGTK (Linux) and WebKit (macOS) aggressively cache HTML/CSS/JS/icons.
+// Without clearing this, the profiled binary loads stale frontend assets from
+// a previous session instead of the fresh content served by the Vite dev server.
+{
+  const home = process.env.HOME || "";
+  const appId = "com.neuroskill.skill";
+
+  const webviewCaches = [];
+
+  if (isLinux) {
+    // WebKitGTK stores per-app data under XDG_DATA_HOME/<id>/
+    const dataHome = process.env.XDG_DATA_HOME || resolve(home, ".local", "share");
+    const cacheHome = process.env.XDG_CACHE_HOME || resolve(home, ".cache");
+    webviewCaches.push(
+      resolve(dataHome, appId),              // CacheStorage, WebKitCache, localstorage, etc.
+      resolve(cacheHome, appId),             // additional cache
+    );
+  } else if (isMac) {
+    // macOS WebKit caches per-app under ~/Library/
+    webviewCaches.push(
+      resolve(home, "Library", "WebKit", appId),
+      resolve(home, "Library", "Caches", appId),
+    );
+  }
+
+  for (const dir of webviewCaches) {
+    if (existsSync(dir)) {
+      console.log(`→ Clearing WebView cache: ${dir}`);
+      forceRemove(dir);
+    }
+  }
+}
+
 // ── Step 4: Profile with flamegraph ──────────────────────────────────────────
 // We run `flamegraph` (standalone, not `cargo flamegraph`) against the
 // pre-built binary.  On macOS/Linux we use sudo so the profiler (dtrace/perf)
