@@ -333,7 +333,7 @@ fn capture_linux() -> Option<CapturedImage> {
 
 /// Capture via the `xcap` crate — works on both X11 and Wayland without
 /// requiring external tools (grim, scrot, xdotool, etc.).
-#[cfg(all(any(target_os = "linux", target_os = "windows"), feature = "capture"))]
+#[cfg(all(target_os = "linux", feature = "capture"))]
 fn capture_xcap() -> Option<CapturedImage> {
     // ── Attempt 1: capture the focused window ──
     if let Ok(windows) = xcap::Window::all() {
@@ -373,6 +373,13 @@ fn capture_xcap() -> Option<CapturedImage> {
     }
 
     // ── Attempt 2: full-screen capture of the primary monitor ──
+    capture_xcap_monitor()
+}
+
+/// Full-screen capture of the primary monitor via xcap.
+/// Shared fallback for both Linux and Windows capture paths.
+#[cfg(all(any(target_os = "linux", target_os = "windows"), feature = "capture"))]
+fn capture_xcap_monitor() -> Option<CapturedImage> {
     if let Ok(monitors) = xcap::Monitor::all() {
         // Prefer the primary monitor, fall back to the first one.
         let monitor = monitors.iter().find(|m| m.is_primary().unwrap_or(false)).or_else(|| monitors.first());
@@ -391,18 +398,82 @@ fn capture_xcap() -> Option<CapturedImage> {
             }
         }
     }
-
     None
 }
 
+/// Windows-specific capture — targets only the foreground window.
+///
+/// The generic Linux `capture_xcap()` iterates through ALL non-minimized
+/// windows and calls `capture_image()` on each one until it gets a result.
+/// On Windows, xcap's GDI capture uses `PrintWindow` which sends a
+/// `WM_PRINT` message to the target window, forcing it to repaint.  When
+/// this is called on multiple windows every few seconds, it causes constant
+/// visible flickering across all open windows.
+///
+/// This implementation uses xcap's `is_focused()` to find the single active
+/// foreground window, then captures only that one — no iteration, no
+/// spurious `PrintWindow` calls on background windows.
 #[cfg(target_os = "windows")]
 fn capture_windows() -> Option<CapturedImage> {
     #[cfg(feature = "capture")]
-    { capture_xcap() }
+    {
+        capture_windows_foreground()
+            .or_else(capture_xcap_monitor)
+    }
     #[cfg(not(feature = "capture"))]
     {
         eprintln!("[screenshot] capture disabled (built without `capture` feature / xcap)");
         None
     }
+}
+
+/// Capture only the foreground window on Windows.
+///
+/// Enumerates all windows via xcap but uses `is_focused()` to identify
+/// the single active foreground window, then captures only that one.
+/// This avoids calling `PrintWindow` (via `capture_image()`) on multiple
+/// background windows which would cause them to repaint and flicker.
+#[cfg(all(target_os = "windows", feature = "capture"))]
+fn capture_windows_foreground() -> Option<CapturedImage> {
+    let windows = xcap::Window::all().ok()?;
+
+    // Find the focused (foreground) window.
+    // xcap's is_focused() calls GetForegroundWindow() internally and
+    // compares it to the window's HWND — no capture or WM_PRINT is sent.
+    let target = windows.iter().find(|w| {
+        w.is_focused().unwrap_or(false)
+    });
+
+    if let Some(win) = target {
+        if win.is_minimized().unwrap_or(false) {
+            return None;
+        }
+
+        match win.capture_image() {
+            Ok(rgba) => {
+                let w = rgba.width();
+                let h = rgba.height();
+                if w == 0 || h == 0 { return None; }
+
+                // Check for dark/empty screenshot (all zeros or near-zero)
+                let sample = rgba.as_raw();
+                let non_zero = sample.iter().take(4096).any(|&b| b > 5);
+                if !non_zero { return None; }
+
+                let dyn_img = image::DynamicImage::ImageRgba8(rgba);
+                return Some(CapturedImage {
+                    raw_bytes: Vec::new(),
+                    decoded: Some(dyn_img),
+                    width: w,
+                    height: h,
+                });
+            }
+            Err(e) => {
+                eprintln!("[screenshot] xcap foreground window capture failed: {e}");
+            }
+        }
+    }
+
+    None
 }
 
