@@ -18,13 +18,15 @@ the Free Software Foundation, version 3 only. -->
   onMount(() => {
     portalEl = document.createElement("div");
     document.body.appendChild(portalEl);
+    document.addEventListener("pointerdown", handleOutsidePointerDown, true);
   });
   onDestroy(() => {
+    document.removeEventListener("pointerdown", handleOutsidePointerDown, true);
     portalEl?.remove();
   });
 
   async function toggle() {
-    if (open) { open = false; return; }
+    if (open) { close(); return; }
     if (!btnEl) return;
     const r = btnEl.getBoundingClientRect();
     const menuW = 160;
@@ -45,7 +47,7 @@ the Free Software Foundation, version 3 only. -->
 
   function pick(code: string) {
     setLocale(code);
-    open = false;
+    // Keep dropdown open so user sees the updated checkmark; it closes on outside click
     renderMenu();
   }
 
@@ -65,8 +67,8 @@ the Free Software Foundation, version 3 only. -->
       "rounded-lg border border-neutral-200 dark:border-white/10 " +
       "bg-white dark:bg-[#1a1a28] shadow-xl py-1";
 
-    // Prevent closing when clicking inside menu
-    menu.addEventListener("click", (e) => e.stopPropagation());
+    // Prevent closing when clicking/pressing inside menu
+    menu.addEventListener("pointerdown", (e) => e.stopPropagation());
 
     for (const loc of SUPPORTED_LOCALES) {
       const btn = document.createElement("button");
@@ -88,7 +90,12 @@ the Free Software Foundation, version 3 only. -->
     portalEl.appendChild(menu);
   }
 
-  function handleWindowClick() {
+  function handleOutsidePointerDown(e: PointerEvent) {
+    if (!open) return;
+    // Ignore clicks inside the portal menu or the toggle button
+    const target = e.target as Node;
+    if (portalEl?.contains(target)) return;
+    if (btnEl?.contains(target)) return;
     close();
   }
 
@@ -97,10 +104,9 @@ the Free Software Foundation, version 3 only. -->
   );
 </script>
 
-<svelte:window onclick={handleWindowClick} onkeydown={(e) => { if (e.key === "Escape" && open) close(); }} />
+<svelte:window onkeydown={(e) => { if (e.key === "Escape" && open) close(); }} />
 
-<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="lang-picker-anchor" onclick={(e) => e.stopPropagation()}>
+<div class="lang-picker-anchor">
   <button
     bind:this={btnEl}
     onclick={toggle}
