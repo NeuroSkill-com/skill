@@ -8,28 +8,35 @@
  * Usage (via npm):
  *   npm run tauri:flamegraph              # record until app exits / Ctrl+C
  *   npm run tauri:flamegraph -- 30        # record for 30 seconds
- *   npm run tauri:flamegraph -- --release # profile a release build
+ *   npm run tauri:flamegraph -- --release # profile a release build (default: dev)
  *
  * Output: flamegraph.svg in the project root.
  *
  * The script:
  *   1. Pre-builds espeak-ng (same env setup as tauri-build.js)
- *   2. Starts the Vite dev server in the background
- *   3. Waits for localhost:1420 to be ready
- *   4. Runs `cargo flamegraph` in src-tauri/
- *   5. Moves the SVG to the project root
- *   6. Cleans up the dev server on exit
+ *   2. Builds the Tauri binary via `cargo build` (same profile as `tauri dev`)
+ *   3. Starts the Vite dev server in the background
+ *   4. Waits for localhost:1420 to be ready
+ *   5. Profiles the binary with `flamegraph` (not `cargo flamegraph`)
+ *   6. Produces flamegraph.svg in the project root
+ *   7. Cleans up the dev server on exit
+ *
+ * The build and profile steps are separated so that:
+ *   - The build runs as the normal user (no permission issues with cargo cache)
+ *   - The profiler runs as root (required for dtrace on macOS, perf on some Linux)
+ *     and owns the trace file it creates, avoiding permission mismatches
  */
 
 import { execSync, spawn } from "child_process";
 import { platform, arch } from "os";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { existsSync, renameSync, unlinkSync, rmSync } from "fs";
+import { existsSync, rmSync } from "fs";
 import http from "http";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
+const srcTauri = resolve(root, "src-tauri");
 
 const isMac = platform() === "darwin";
 const isWin = platform() === "win32";
@@ -38,16 +45,21 @@ const isLinux = platform() === "linux";
 // ── Parse arguments ──────────────────────────────────────────────────────────
 
 const userArgs = process.argv.slice(2);
-let recordSecs = 0; // 0 = until exit
+let recordSecs = 0;        // 0 = until exit
+let useRelease = false;
 let extraCargoArgs = [];
 
 for (const arg of userArgs) {
   if (/^\d+$/.test(arg)) {
     recordSecs = parseInt(arg, 10);
+  } else if (arg === "--release") {
+    useRelease = true;
   } else {
     extraCargoArgs.push(arg);
   }
 }
+
+const profile = useRelease ? "release" : "dev";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -87,12 +99,36 @@ function waitForPort(port, timeoutMs = 60_000) {
   });
 }
 
-// ── Preflight: cargo-flamegraph ──────────────────────────────────────────────
+function forceRemove(filePath) {
+  if (!existsSync(filePath)) return;
+  console.log(`→ Removing stale file: ${filePath}`);
+  try {
+    rmSync(filePath, { recursive: true, force: true });
+  } catch {
+    try {
+      execSync(`sudo rm -rf ${JSON.stringify(filePath)}`, { stdio: "inherit" });
+    } catch { /* best effort */ }
+  }
+}
 
-if (!commandExists("cargo-flamegraph")) {
+// ── Preflight: flamegraph tool ───────────────────────────────────────────────
+
+if (!commandExists("flamegraph")) {
   console.log("→ Installing cargo-flamegraph …");
   run("cargo install flamegraph");
 }
+
+// Resolve the `flamegraph` binary path (needed for sudo invocation)
+let flamegraphBin;
+try {
+  flamegraphBin = execSync(isWin ? "where flamegraph" : "which flamegraph", {
+    encoding: "utf8",
+  }).trim().split("\n")[0];
+} catch {
+  console.error("✖ Could not find `flamegraph` binary after install.");
+  process.exit(1);
+}
+console.log(`→ Using flamegraph binary: ${flamegraphBin}`);
 
 // ── Preflight: platform profiler ─────────────────────────────────────────────
 
@@ -123,11 +159,8 @@ if (isLinux) {
     console.warn("→ Could not check/set perf_event_paranoid — flamegraph may need sudo");
   }
 } else if (isMac) {
-  // dtrace is built into macOS; cargo flamegraph uses it automatically.
-  // It requires root/sudo — cargo flamegraph handles this via --root.
-  // Warm the sudo credential cache now so the password prompt happens before
-  // the long compilation, not awkwardly after it.
-  console.log("→ macOS: cargo flamegraph will use dtrace (requires sudo)");
+  // dtrace requires root on macOS. Warm sudo now, before the long build.
+  console.log("→ macOS: dtrace requires sudo — authenticating now …");
   try {
     execSync("sudo -v", { stdio: "inherit" });
   } catch {
@@ -135,7 +168,6 @@ if (isLinux) {
     process.exit(1);
   }
 } else if (isWin) {
-  // On Windows, cargo flamegraph can use dtrace (Windows 10+) or xperf.
   const hasDtrace = commandExists("dtrace");
   const hasXperf = commandExists("xperf");
   if (!hasDtrace && !hasXperf) {
@@ -166,7 +198,6 @@ if (isMac) {
   run("powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build-espeak-static.ps1");
   espeakLib = resolve(root, "src-tauri\\espeak-static\\lib");
 } else {
-  // Linux
   console.log("→ Ensuring Vulkan SDK …");
   run("bash scripts/install-vulkan-sdk.sh");
   console.log("→ Building espeak-ng static library …");
@@ -187,15 +218,47 @@ if (isLinux) {
 
 let features = "";
 if (!extraCargoArgs.includes("--features") && !extraCargoArgs.includes("--no-default-features")) {
-  if (isLinux) {
-    features = "llm-vulkan";
-  } else if (isWin) {
+  if (isLinux || isWin) {
     features = "llm-vulkan";
   }
-  // macOS: Metal is the default via target-specific deps, no extra feature needed
 }
 
-// ── Start Vite dev server ────────────────────────────────────────────────────
+// ── Enable debug symbols ─────────────────────────────────────────────────────
+// Both dev and release profiles need debuginfo for useful flamegraphs.
+// Dev has it by default; release needs it explicitly.
+
+if (useRelease && !process.env.CARGO_PROFILE_RELEASE_DEBUG) {
+  process.env.CARGO_PROFILE_RELEASE_DEBUG = "true";
+  console.log("→ Enabling debug symbols in release build (CARGO_PROFILE_RELEASE_DEBUG=true)");
+}
+
+// ── Step 1: Build the binary (normal user) ───────────────────────────────────
+
+const buildArgs = ["build"];
+if (useRelease) buildArgs.push("--release");
+if (features) buildArgs.push("--features", features);
+buildArgs.push(...extraCargoArgs);
+
+const buildCmd = `cargo ${buildArgs.join(" ")}`;
+console.log(`→ Building: ${buildCmd}`);
+execSync(buildCmd, {
+  cwd: srcTauri,
+  stdio: "inherit",
+  env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
+});
+
+// Locate the built binary
+const profileDir = useRelease ? "release" : "debug";
+const binaryName = isWin ? "skill.exe" : "skill";
+const binaryPath = resolve(srcTauri, "target", profileDir, binaryName);
+
+if (!existsSync(binaryPath)) {
+  console.error(`✖ Built binary not found at: ${binaryPath}`);
+  process.exit(1);
+}
+console.log(`→ Binary: ${binaryPath}`);
+
+// ── Step 2: Start Vite dev server ────────────────────────────────────────────
 
 let viteProc = null;
 
@@ -203,7 +266,6 @@ function cleanup() {
   if (viteProc && !viteProc.killed) {
     console.log(`→ Stopping Vite dev server (PID ${viteProc.pid}) …`);
     if (isWin) {
-      // On Windows, spawn creates a process tree; kill the tree
       try { execSync(`taskkill /PID ${viteProc.pid} /T /F`, { stdio: "ignore" }); } catch { /* ignore */ }
     } else {
       try { process.kill(-viteProc.pid, "SIGTERM"); } catch {
@@ -223,7 +285,7 @@ const npmCmd = isWin ? "npm.cmd" : "npm";
 viteProc = spawn(npmCmd, ["run", "dev"], {
   cwd: root,
   stdio: "ignore",
-  detached: !isWin, // process group for clean kill on Unix
+  detached: !isWin,
 });
 
 console.log("→ Waiting for Vite on http://localhost:1420 …");
@@ -235,133 +297,93 @@ try {
   process.exit(1);
 }
 
-// ── Clean stale trace files ──────────────────────────────────────────────────
-// cargo-flamegraph refuses to overwrite an existing trace file and exits with
-// code 42 ("Trace file already exists … Specify append-run option …").
-//
-// On macOS the trace file is created by `sudo dtrace` and is root-owned, so a
-// normal unlinkSync fails silently.  We use `sudo rm -f` as a fallback.
-
-function forceRemove(filePath) {
-  if (!existsSync(filePath)) return;
-  console.log(`→ Removing stale file: ${filePath}`);
-  try {
-    // rmSync with recursive handles both files and directories
-    rmSync(filePath, { recursive: true, force: true });
-  } catch {
-    // Likely root-owned (macOS dtrace creates as root). Use sudo rm -rf.
-    try {
-      execSync(`sudo rm -rf ${JSON.stringify(filePath)}`, { stdio: "inherit" });
-    } catch { /* best effort */ }
-  }
-}
+// ── Step 3: Clean stale trace files ──────────────────────────────────────────
 
 for (const stale of [
-  resolve(root, "src-tauri", "cargo-flamegraph.trace"),
-  resolve(root, "src-tauri", "flamegraph.svg"),
+  resolve(srcTauri, "cargo-flamegraph.trace"),
   resolve(root, "cargo-flamegraph.trace"),
   resolve(root, "flamegraph.svg"),
 ]) {
   forceRemove(stale);
 }
 
-// ── Enable debug symbols for useful flamegraphs ─────────────────────────────
-// cargo flamegraph defaults to --release. Without debuginfo the SVG shows only
-// hex addresses.  Set CARGO_PROFILE_RELEASE_DEBUG=true so the release build
-// includes symbol names without needing to edit Cargo.toml permanently.
+// ── Step 4: Profile with flamegraph ──────────────────────────────────────────
+// We run `flamegraph` (standalone, not `cargo flamegraph`) against the
+// pre-built binary.  On macOS/Linux we use sudo so the profiler (dtrace/perf)
+// has the permissions it needs AND owns the trace files it creates.
 
-if (!process.env.CARGO_PROFILE_RELEASE_DEBUG) {
-  process.env.CARGO_PROFILE_RELEASE_DEBUG = "true";
-  console.log("→ Enabling debug symbols in release build (CARGO_PROFILE_RELEASE_DEBUG=true)");
+const svgPath = resolve(root, "flamegraph.svg");
+
+// Refresh sudo right before profiling (macOS) so the cache hasn't expired
+// during the build step.
+if (isMac) {
+  try { execSync("sudo -v", { stdio: "inherit" }); } catch { /* ignore */ }
 }
 
-// ── Build flamegraph command ─────────────────────────────────────────────────
+// Build the flamegraph invocation
+const fgArgs = ["-o", svgPath, "--", binaryPath];
 
-const flamegraphArgs = [
-  "flamegraph",
-  "-o", resolve(root, "flamegraph.svg"),
-  "--root",  // sudo for perf/dtrace
-];
-
-if (features) {
-  flamegraphArgs.push("--features", features);
-}
-
-// Pass through any extra cargo args (e.g. --release)
-flamegraphArgs.push(...extraCargoArgs);
-
-// Trailing args for the binary itself
-flamegraphArgs.push("--");
-
-const cmd = ["cargo", ...flamegraphArgs].join(" ");
+// On macOS and Linux, use sudo for the profiler.
+// On Windows, run directly (dtrace/xperf need admin — user should run terminal as admin).
+const needsSudo = isMac || isLinux;
+const fgCmd = needsSudo ? "sudo" : flamegraphBin;
+const fgFullArgs = needsSudo ? [flamegraphBin, ...fgArgs] : fgArgs;
 
 console.log("");
 console.log("================================================================");
+console.log(`  Profile:    ${profile} (${useRelease ? "optimized + debuginfo" : "debug"})`);
 if (recordSecs > 0) {
   console.log(`  Flamegraph: recording for ${recordSecs}s (app will be killed after)`);
 } else {
   console.log("  Flamegraph: recording until you close the app or press Ctrl+C");
 }
-console.log(`  Output:     ${resolve(root, "flamegraph.svg")}`);
+console.log(`  Output:     ${svgPath}`);
 console.log("================================================================");
 console.log("");
-
-// ── Refresh sudo before profiling (macOS) ────────────────────────────────────
-// The sudo cache from the preflight check may have expired during the compile
-// step.  Refresh it so dtrace doesn't fail or re-prompt mid-run.
-if (isMac) {
-  try { execSync("sudo -v", { stdio: "inherit" }); } catch { /* ignore */ }
-}
-
-// ── Run cargo flamegraph ─────────────────────────────────────────────────────
 
 const env = { ...process.env, ESPEAK_LIB_DIR: espeakLib };
 
 try {
-  if (recordSecs > 0) {
-    // Run with a timeout — spawn so we can kill after N seconds
-    const fg = spawn("cargo", flamegraphArgs, {
-      cwd: resolve(root, "src-tauri"),
-      stdio: "inherit",
-      env,
-    });
+  const fg = spawn(fgCmd, fgFullArgs, {
+    cwd: srcTauri,
+    stdio: "inherit",
+    env,
+  });
 
-    const timer = setTimeout(() => {
+  let timer;
+  if (recordSecs > 0) {
+    timer = setTimeout(() => {
       console.log(`\n→ ${recordSecs}s elapsed — stopping profiled app …`);
       if (isWin) {
         try { execSync(`taskkill /PID ${fg.pid} /T /F`, { stdio: "ignore" }); } catch { /* ignore */ }
       } else {
-        fg.kill("SIGINT"); // triggers flamegraph SVG generation
+        // Send SIGINT to the sudo/flamegraph process group to trigger SVG generation
+        fg.kill("SIGINT");
       }
     }, recordSecs * 1000);
-
-    await new Promise((resolve, reject) => {
-      fg.on("close", (code) => {
-        clearTimeout(timer);
-        // cargo flamegraph exits non-zero when killed by signal — that's expected
-        resolve(code);
-      });
-      fg.on("error", reject);
-    });
-  } else {
-    execSync(cmd, {
-      cwd: resolve(root, "src-tauri"),
-      stdio: "inherit",
-      env,
-    });
   }
+
+  await new Promise((res, rej) => {
+    fg.on("close", (code) => {
+      if (timer) clearTimeout(timer);
+      res(code);
+    });
+    fg.on("error", rej);
+  });
 } catch {
-  // cargo flamegraph may exit non-zero when the app is killed — that's fine
+  // flamegraph may exit non-zero when the app is killed — that's fine
+}
+
+// ── Step 5: Fix ownership (sudo may have created root-owned SVG) ─────────────
+
+if (needsSudo && existsSync(svgPath)) {
+  try {
+    const whoami = execSync("whoami", { encoding: "utf8" }).trim();
+    execSync(`sudo chown ${whoami} ${JSON.stringify(svgPath)}`, { stdio: "ignore" });
+  } catch { /* best effort */ }
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
-
-const svgPath = resolve(root, "flamegraph.svg");
-// Also check src-tauri in case -o didn't land in root
-const svgAlt = resolve(root, "src-tauri", "flamegraph.svg");
-if (!existsSync(svgPath) && existsSync(svgAlt)) {
-  renameSync(svgAlt, svgPath);
-}
 
 console.log("");
 if (existsSync(svgPath)) {
