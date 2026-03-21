@@ -953,7 +953,7 @@ fn reembed_worker(
     logger:    std::sync::Arc<crate::skill_log::SkillLogger>,
     app:       AppHandle,
 ) {
-    use burn::backend::{Wgpu, wgpu::WgpuDevice};
+    use burn::backend::Wgpu;
     use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
     use std::time::Instant;
 
@@ -963,14 +963,43 @@ fn reembed_worker(
 
     // ── Load encoder ──────────────────────────────────────────────────────
     skill_exg::configure_cubecl_cache(&skill_dir);
-    let device = WgpuDevice::DefaultDevice;
 
-    // Force DX12 on Windows (Vulkan can crash — see embed worker).
-    #[cfg(target_os = "windows")]
-    {
-        use burn::backend::wgpu::{init_setup, RuntimeOptions, graphics::Dx12};
-        init_setup::<Dx12>(&device, RuntimeOptions::default());
-    }
+    // Manual wgpu init with env-controlled validation (same as embed worker).
+    let device = {
+        use burn::backend::wgpu::{
+            RuntimeOptions, WgpuSetup, init_device,
+            graphics::AutoGraphicsApi,
+        };
+        use burn::backend::wgpu::graphics::GraphicsApi;
+
+        let backend = AutoGraphicsApi::backend();
+        let setup = pollster::block_on(async {
+            let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+                backends: backend.into(),
+                flags: wgpu::InstanceFlags::from_build_config().with_env(),
+                ..Default::default()
+            });
+            let adapter = instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    force_fallback_adapter: false,
+                    compatible_surface: None,
+                })
+                .await
+                .expect("[reembed] no GPU adapter found");
+            let (device, queue) = adapter
+                .request_device(&wgpu::DeviceDescriptor {
+                    label: Some("skill-reembed"),
+                    required_features: adapter.features(),
+                    required_limits: adapter.limits(),
+                    ..Default::default()
+                })
+                .await
+                .expect("[reembed] failed to create wgpu device");
+            WgpuSetup { instance, adapter, device, queue, backend }
+        });
+        init_device(setup, RuntimeOptions::default())
+    };
 
     let backend = &config.model_backend;
     let backend_str = backend.as_str();

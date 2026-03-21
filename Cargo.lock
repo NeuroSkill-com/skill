@@ -10262,6 +10262,7 @@ dependencies = [
  "ort",
  "parquet",
  "png 0.17.16",
+ "pollster",
  "regex",
  "rfd",
  "rodio",
@@ -10307,6 +10308,7 @@ dependencies = [
  "tokio-util",
  "tower-http",
  "ureq 2.12.1",
+ "wgpu",
  "zuna-rs",
 ]
 

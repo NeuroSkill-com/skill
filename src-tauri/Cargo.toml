@@ -275,6 +275,9 @@ fast-umap = { version = "1.2.3", default-features = false }
 
 # Direct access to burn::backend::{Wgpu, wgpu::WgpuDevice} in eeg_embeddings.rs.
 burn      = { version = "0.20.1", default-features = false, features = ["wgpu"] }
+# Direct dep on wgpu for manual device init with validation flags control.
+wgpu      = "26.0.1"
+pollster  = "0.4"
 
 # Raw CubeBackend + WgpuRuntime needed for fast-umap's AutodiffBackend bound
 # (the Fusion<CubeBackend> wrapper from burn::backend::Wgpu is not supported).

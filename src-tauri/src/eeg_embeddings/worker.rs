@@ -387,7 +387,7 @@ pub(super) fn embed_worker(
     hook_runtime: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, HookLastTrigger>>>,
     app: tauri::AppHandle,
 ) {
-    use burn::backend::{Wgpu, wgpu::WgpuDevice};
+    use burn::backend::Wgpu;
     use ndarray::Array2;
     use std::collections::HashMap;
     use std::time::Instant;
@@ -542,18 +542,63 @@ pub(super) fn embed_worker(
         return;
     }
 
-    let device = WgpuDevice::DefaultDevice;
+    // Pre-initialise the wgpu device with Vulkan validation layers **disabled**.
+    //
+    // In debug builds, cubecl creates a `wgpu::Instance` with
+    // `InstanceFlags::default()` → `from_build_config()` → `debugging()`
+    // which enables `VALIDATION | VALIDATION_INDIRECT_CALL`.  The Vulkan
+    // validation layer can trigger `STATUS_ACCESS_VIOLATION` (0xc0000005)
+    // on certain Windows GPU drivers during shader compilation.
+    //
+    // By calling `init_device` with a manually-created `WgpuSetup` that
+    // has validation disabled, we register the device in cubecl's global
+    // client registry *before* the encoder load.  Subsequent
+    // `ZunaEncoder::<Wgpu>::load(&c, &w, device)` finds the already-
+    // registered client and skips re-initialisation.
+    let device = {
+        use burn::backend::wgpu::{
+            RuntimeOptions, WgpuSetup, init_device,
+            graphics::AutoGraphicsApi,
+        };
+        use burn::backend::wgpu::graphics::GraphicsApi;
 
-    // On Windows, wgpu's AutoGraphicsApi selects Vulkan by default.  Vulkan
-    // shader compilation can trigger STATUS_ACCESS_VIOLATION (0xc0000005) on
-    // some GPU drivers.  Force DX12 which is stable on Windows and matches
-    // the DirectML backend used by screenshot CLIP embeddings.
-    #[cfg(target_os = "windows")]
-    {
-        use burn::backend::wgpu::{init_setup, RuntimeOptions, graphics::Dx12};
-        init_setup::<Dx12>(&device, RuntimeOptions::default());
-        skill_log!(logger, "embedder", "wgpu backend: DX12");
-    }
+        let backend = AutoGraphicsApi::backend();
+
+        let setup = pollster::block_on(async {
+            let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+                backends: backend.into(),
+                flags: wgpu::InstanceFlags::from_build_config().with_env(),
+                ..Default::default()
+            });
+
+            let adapter = instance
+                .request_adapter(&wgpu::RequestAdapterOptions {
+                    power_preference: wgpu::PowerPreference::HighPerformance,
+                    force_fallback_adapter: false,
+                    compatible_surface: None,
+                })
+                .await
+                .expect("[embedder] no GPU adapter found");
+
+            let (device, queue) = adapter
+                .request_device(&wgpu::DeviceDescriptor {
+                    label: Some("skill-embed"),
+                    required_features: adapter.features(),
+                    required_limits: adapter.limits(),
+                    ..Default::default()
+                })
+                .await
+                .expect("[embedder] failed to create wgpu device");
+
+            WgpuSetup { instance, adapter, device, queue, backend }
+        });
+
+        skill_log!(logger, "embedder",
+            "wgpu device ready (backend={}, validation=env-controlled)",
+            setup.backend);
+
+        init_device(setup, RuntimeOptions::default())
+    };
 
     // ── Encoder variants ──────────────────────────────────────────────────────
     enum LoadedEncoder {

@@ -1130,6 +1130,22 @@ pub fn run() {
         .install_default()
         .expect("Failed to install rustls CryptoProvider");
 
+    // ── wgpu / Vulkan: disable validation layers in debug builds ────────
+    // In debug builds, wgpu enables Vulkan validation layers by default
+    // (InstanceFlags::debugging()).  On Windows, the validation layer can
+    // trigger STATUS_ACCESS_VIOLATION (0xc0000005) in certain GPU drivers
+    // during shader compilation.  Disable validation via env vars that
+    // wgpu's InstanceFlags::with_env() / from_build_config() respect.
+    // These must be set before any wgpu Instance is created.
+    if cfg!(debug_assertions) {
+        if std::env::var("WGPU_VALIDATION").is_err() {
+            std::env::set_var("WGPU_VALIDATION", "0");
+        }
+        if std::env::var("WGPU_GPU_BASED_VALIDATION").is_err() {
+            std::env::set_var("WGPU_GPU_BASED_VALIDATION", "0");
+        }
+    }
+
     // ── Linux: suppress noisy libEGL / DRI2 warnings ──────────────────────
     // WebKitGTK probes for DRI2/DMABuf GPU rendering at startup.  On systems
     // without full DRI2 support (VMs, Wayland-only, missing Mesa drivers)
