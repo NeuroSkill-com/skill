@@ -73,8 +73,10 @@ pub fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
 fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
     init_espeak_data_path();
 
-    let mut stream: Option<MixerDeviceSink> = DeviceSinkBuilder::open_default_sink()
-        .map_err(|e| tts_log!("tts", "warning: could not open audio: {e}")).ok();
+    // Audio device is NOT pre-opened here — we open fresh on every Speak
+    // command so that device changes (e.g. Bluetooth reconnect, USB DAC
+    // unplug) are always picked up.  See the Speak arm below.
+    let mut stream: Option<MixerDeviceSink> = None;
     let mut model: Option<KittenTTS> = None;
 
     for cmd in rx {
@@ -114,10 +116,17 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         }
                     }
                 }
-                if stream.is_none() {
-                    stream = DeviceSinkBuilder::open_default_sink()
-                        .map_err(|e| tts_log!("tts", "could not open audio: {e}")).ok();
-                }
+                // Re-open the audio device on every utterance.
+                //
+                // The system default output device can change at any time —
+                // Bluetooth headphones reconnect, the user switches output,
+                // a USB DAC is unplugged, etc.  A stale `MixerDeviceSink`
+                // from a previous utterance would either route audio to the
+                // wrong device or fail with "device is no longer available".
+                //
+                // Re-opening is cheap (~1 ms) relative to synthesis time.
+                stream = DeviceSinkBuilder::open_default_sink()
+                    .map_err(|e| tts_log!("tts", "could not open audio: {e}")).ok();
                 if let (Some(m), Some(s)) = (&model, &stream) {
                     if let Err(e) = speak_inner(m, s, &text, &voice) {
                         tts_log!("tts", "synthesis error: {e}");
