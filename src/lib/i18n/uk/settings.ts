@@ -348,6 +348,7 @@ const settings: Record<string, string> = {
   "settings.scanner.cortex":            "Emotiv Cortex",
   "settings.scanner.cortexDesc":        "EPOC, Insight, Flex, MN8 через локальний Launcher",
   "settings.scanner.cortexConnected":   "Підключено до Cortex",
+  "settings.scanner.cortexConnecting":  "Підключення…",
   "settings.scanner.cortexDisconnected": "Не підключено",
   "settings.scanner.saved":             "Збережено",
   "settings.scanner.save":              "Зберегти",

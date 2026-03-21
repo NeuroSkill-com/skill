@@ -636,6 +636,12 @@ pub fn get_scanner_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> skil
     state.lock_or_recover().scanner_config.clone()
 }
 
+/// Return the current Cortex WebSocket connection state.
+#[tauri::command]
+pub fn get_cortex_ws_state(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
+    state.lock_or_recover().cortex_ws_state.clone()
+}
+
 /// Return recent device/scanner log entries for the frontend log viewer.
 #[tauri::command]
 pub fn get_device_log() -> Vec<crate::device_scanner::DeviceLogEntry> {
