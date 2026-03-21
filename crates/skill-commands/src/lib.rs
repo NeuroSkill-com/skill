@@ -829,7 +829,7 @@ pub struct InteractiveGraphEdge {
     pub to_id:    String,
     /// Strength of connection — same scale as the corresponding distance.
     pub distance: f32,
-    /// Edge kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox"
+    /// Edge kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_prox" | "ocr_sim"
     pub kind:     String,
 }
 
