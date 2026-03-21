@@ -392,6 +392,12 @@ pub struct ScreenshotMetrics {
     pub backoff_multiplier: AtomicU64,  // current interval multiplier (1 = no backoff)
 }
 
+impl Default for ScreenshotMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScreenshotMetrics {
     pub fn new() -> Self {
         Self {
@@ -753,7 +759,7 @@ fn run_embed_thread(
     // (or a session is active).
     let should_backfill = {
         let cfg = ctx.config();
-        cfg.enabled && !(cfg.session_only && !ctx.is_session_active())
+        cfg.enabled && (!cfg.session_only || ctx.is_session_active())
     };
 
     if should_backfill {
@@ -928,7 +934,7 @@ fn run_embed_thread(
             // If the vision model changed and produces a different embedding
             // dimension, the existing HNSW is incompatible.  Reset to a fresh
             // index so we don't panic on mismatched dimensions.
-            if hnsw.len() > 0 {
+            if !hnsw.is_empty() {
                 if let Some(dim) = hnsw.inner.dim() {
                     if dim != emb.len() {
                         eprintln!(
@@ -974,7 +980,7 @@ fn run_embed_thread(
         if !ocr_text.is_empty() {
             if let Some(emb) = ctx.embed_text(&ocr_text) {
                 // Guard against dimension mismatch if text embedding model changed.
-                if ocr_hnsw.len() > 0 {
+                if !ocr_hnsw.is_empty() {
                     if let Some(dim) = ocr_hnsw.inner.dim() {
                         if dim != emb.len() {
                             eprintln!(
