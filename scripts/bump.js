@@ -75,7 +75,7 @@ function hasPkgConfig(packageName) {
 function ensureLinuxTauriDeps() {
   if (process.platform !== "linux") return;
 
-  const requiredPackages = ["webkit2gtk-4.1", "javascriptcoregtk-4.1", "libsoup-3.0"];
+  const requiredPackages = ["webkit2gtk-4.1", "javascriptcoregtk-4.1", "libsoup-3.0", "libpipewire-0.3"];
   const missingPackages = requiredPackages.filter((name) => !hasPkgConfig(name));
 
   if (missingPackages.length === 0) return;
@@ -85,7 +85,7 @@ function ensureLinuxTauriDeps() {
     [
       `Missing Linux Tauri system dependencies (${missingList}).`,
       "Install required packages before running npm run bump:",
-      "  sudo apt install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev",
+      "  sudo apt install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libpipewire-0.3-dev",
       "If those are unavailable on your distro image, see LINUX.md for legacy alternatives.",
     ].join("\n")
   );
