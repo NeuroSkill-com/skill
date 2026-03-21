@@ -31,7 +31,35 @@ function validateVersion(v) {
 
 function runCheckStep(label, command) {
   console.log(`\n[preflight] ${label}`);
-  execSync(command, { stdio: "inherit" });
+  let output = "";
+  try {
+    // Merge stderr into stdout so we capture warnings from both streams
+    output = execSync(`${command} 2>&1`, { encoding: "utf8" }) || "";
+  } catch (err) {
+    // execSync throws on non-zero exit — show captured output, then re-throw
+    output = (err.stdout || "").toString();
+    if (output) process.stdout.write(output);
+    throw err;
+  }
+  if (output) process.stdout.write(output);
+
+  // Detect warning lines in combined output — treat any warning as fatal
+  const warningLines = output
+    .split("\n")
+    .filter(
+      (line) =>
+        /\bwarning\b/i.test(line) &&
+        !/0 warnings/i.test(line) &&
+        !/warnings?\s*=|deny\(warnings\)/i.test(line)
+    );
+
+  if (warningLines.length > 0) {
+    console.error(`\n[preflight] ✗ ${label} — ${warningLines.length} warning(s) detected:`);
+    for (const w of warningLines.slice(0, 10)) {
+      console.error(`  ${w.trim()}`);
+    }
+    throw new Error(`Bump aborted: warnings found during "${label}"`);
+  }
   console.log(`[preflight] ✓ ${label}`);
 }
 
@@ -69,7 +97,7 @@ function runPreflightChecks() {
   console.log("\n[preflight] linux tauri deps (pkg-config)");
   ensureLinuxTauriDeps();
   console.log("[preflight] ✓ linux tauri deps (pkg-config)");
-  runCheckStep("cargo clippy (src-tauri)", "cargo clippy --manifest-path src-tauri/Cargo.toml");
+  runCheckStep("cargo clippy (src-tauri)", "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings");
   runCheckStep("npm run sync:i18n:check", "npm run sync:i18n:check");
 }
 
