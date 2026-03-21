@@ -250,6 +250,7 @@ pub fn skill_api_tool() -> Tool {
                  STATUS: status | sessions | session_metrics(start_utc,end_utc) | sleep(start_utc,end_utc)\n\
                  ACTIONS: say(text) | notify(title,body?) | label(text,context?) | calibrate | timer\n\
                  SEARCH: search_labels(query,k?,mode?) | interactive_search(query) | search(start_utc,end_utc,k?) | compare(a_start_utc,a_end_utc,b_start_utc,b_end_utc)\n\
+                 SCREENSHOTS: search_screenshots(query,k?,mode?) | screenshots_around(timestamp,window_secs?) | screenshots_for_eeg(start_utc?,end_utc?,window_secs?,limit?) | eeg_for_screenshots(query,k?,window_secs?,mode?)\n\
                  CALIBRATION: list_calibrations | get_calibration(id) | create_calibration(name,actions,loop_count) | update_calibration(id,...) | delete_calibration(id) | run_calibration(id?)\n\
                  HOOKS: hooks_status | hooks_get | hooks_set(hooks) | hooks_suggest(keywords) | hooks_log(limit?,offset?)\n\
                  DND: dnd | dnd_set(enabled)\n\
@@ -270,7 +271,9 @@ pub fn skill_api_tool() -> Tool {
                             "dnd", "dnd_set",
                             "hooks_status", "hooks_get", "hooks_set", "hooks_suggest", "hooks_log",
                             "umap", "umap_poll",
-                            "llm_status", "llm_catalog", "llm_downloads", "llm_hardware_fit"
+                            "llm_status", "llm_catalog", "llm_downloads", "llm_hardware_fit",
+                            "search_screenshots", "screenshots_around",
+                            "screenshots_for_eeg", "eeg_for_screenshots"
                         ]
                     },
                     "args": {
@@ -309,7 +312,9 @@ pub fn is_skill_api_command(name: &str) -> bool {
         "dnd" | "dnd_set" |
         "hooks_status" | "hooks_get" | "hooks_set" | "hooks_suggest" | "hooks_log" |
         "umap" | "umap_poll" |
-        "llm_status" | "llm_catalog" | "llm_downloads" | "llm_hardware_fit"
+        "llm_status" | "llm_catalog" | "llm_downloads" | "llm_hardware_fit" |
+        "search_screenshots" | "screenshots_around" |
+        "screenshots_for_eeg" | "eeg_for_screenshots"
     )
 }
 
@@ -323,6 +328,15 @@ pub fn is_skill_api_command(name: &str) -> bool {
 ///
 /// Returns `None` if the name is not a skill-related alias.
 pub fn resolve_skill_alias(name: &str) -> Option<String> {
+    // CLI command name aliases (hyphenated CLI names → underscore WS names).
+    match name {
+        "search-images"        => return Some("search_screenshots".to_string()),
+        "screenshots-around"   => return Some("screenshots_around".to_string()),
+        "screenshots-for-eeg"  => return Some("screenshots_for_eeg".to_string()),
+        "eeg-for-screenshots"  => return Some("eeg_for_screenshots".to_string()),
+        _ => {}
+    }
+
     // Exact sub-command match.
     if is_skill_api_command(name) {
         return Some(name.to_string());
@@ -356,7 +370,7 @@ pub fn resolve_skill_alias(name: &str) -> Option<String> {
             "dnd"          => return Some("dnd".to_string()),
             "llm"          => return Some("llm_status".to_string()),
             "protocols"    => return Some("list_calibrations".to_string()),
-            "screenshots"  => return Some("status".to_string()),
+            "screenshots"  => return Some("search_screenshots".to_string()),
             "streaming"    => return Some("status".to_string()),
             "transport"    => return Some("status".to_string()),
             "recipes"      => return Some("status".to_string()),
