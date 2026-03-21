@@ -532,9 +532,9 @@ pub async fn interactive_search(
                     }
                     "eeg_point" => {
                         if nd.proj_z.is_none() {
-                            // Spread EEG points along the Z axis by timestamp
-                            let t = nd.timestamp_unix.unwrap_or(0) as f32;
-                            let z = (t % 3600.0) / 3600.0 * 2.0 - 1.0;
+                            // Spread EEG points along the Z axis by hour-of-day
+                            let ts = nd.timestamp_unix.unwrap_or(0);
+                            let z = ((ts % 3600) as f32) / 3600.0 * 2.0 - 1.0;
                             nd.proj_x = nd.proj_x.or(Some(nd.distance * 0.5));
                             nd.proj_y = nd.proj_y.or(Some(-0.5));
                             nd.proj_z = Some(z);
