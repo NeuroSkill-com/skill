@@ -339,12 +339,26 @@ pub fn is_skill_api_command(name: &str) -> bool {
 /// Returns `None` if the name is not a skill-related alias.
 pub fn resolve_skill_alias(name: &str) -> Option<String> {
     // CLI command name aliases (hyphenated CLI names → underscore WS names).
+    // Small/local LLMs sometimes pick these up from skill docs or bash examples.
     match name {
         "search-images"        => return Some("search_screenshots".to_string()),
+        "search-labels"        => return Some("search_labels".to_string()),
         "screenshots-around"   => return Some("screenshots_around".to_string()),
         "screenshots-for-eeg"  => return Some("screenshots_for_eeg".to_string()),
         "eeg-for-screenshots"  => return Some("eeg_for_screenshots".to_string()),
+        "sleep-schedule"       => return Some("sleep_schedule".to_string()),
+        "interactive-search"   => return Some("interactive_search".to_string()),
         _ => {}
+    }
+
+    // Generic hyphen-to-underscore: if the name contains hyphens, try the
+    // underscored form as a skill API command.  This catches any CLI-style
+    // name the LLM might copy from docs (e.g. "session-metrics").
+    if name.contains('-') && !name.starts_with("neuroskill") {
+        let underscored = name.replace('-', "_");
+        if is_skill_api_command(&underscored) {
+            return Some(underscored);
+        }
     }
 
     // Exact sub-command match.
@@ -632,6 +646,23 @@ mod tests {
     #[test]
     fn neuroskill_screenshots_resolves_to_search() {
         assert_eq!(resolve_skill_alias("neuroskill-screenshots"), Some("search_screenshots".into()));
+    }
+
+    #[test]
+    fn hyphenated_cli_names_resolve() {
+        // Generic hyphen-to-underscore fallback for any known command
+        assert_eq!(resolve_skill_alias("search-labels"), Some("search_labels".into()));
+        assert_eq!(resolve_skill_alias("sleep-schedule"), Some("sleep_schedule".into()));
+        assert_eq!(resolve_skill_alias("session-metrics"), Some("session_metrics".into()));
+        assert_eq!(resolve_skill_alias("hooks-status"), Some("hooks_status".into()));
+        assert_eq!(resolve_skill_alias("dnd-set"), Some("dnd_set".into()));
+        assert_eq!(resolve_skill_alias("interactive-search"), Some("interactive_search".into()));
+        assert_eq!(resolve_skill_alias("health-summary"), Some("health_summary".into()));
+    }
+
+    #[test]
+    fn hyphenated_unknown_does_not_resolve() {
+        assert_eq!(resolve_skill_alias("foo-bar-baz"), None);
     }
 
     #[test]
