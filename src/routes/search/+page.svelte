@@ -292,8 +292,13 @@ the Free Software Foundation, version 3 only. -->
   let ixDedupeLabels = $state(true);  // deduplicate found_labels by text
   let ixUsePca       = $state(true);  // cluster found_labels by embedding similarity
   let ixShowScreenshots = $state(false); // show screenshot thumbnails on EEG nodes
-  /** Raw screenshot results keyed by EEG node ID. */
-  let ixScreenshotMap = $state<Map<string, { filename: string; appName: string; windowTitle: string; unixTs: number }>>(new Map());
+  /**
+   * Screenshot results.  Keys are `"parentNodeId_filename"`, values carry
+   * the screenshot data.  The parentNodeId portion tells us which graph
+   * node the screenshot should be connected to (query, text_label, or
+   * eeg_point).
+   */
+  let ixScreenshotMap = $state<Map<string, { filename: string; appName: string; windowTitle: string; unixTs: number; similarity: number }>>(new Map());
 
   // ── Derived display graph (applies found-label deduplication) ────────────
   const ixDisplayGraph = $derived.by(() => {
@@ -302,28 +307,32 @@ the Free Software Foundation, version 3 only. -->
       : { nodes: ixNodes, edges: ixEdges };
 
     // Inject screenshot nodes + edges when the toggle is on and we have data
-    console.log("[ss] displayGraph: show=", ixShowScreenshots, "mapSize=", ixScreenshotMap.size);
     if (ixShowScreenshots && ixScreenshotMap.size > 0) {
       const extraNodes: typeof n = [];
       const extraEdges: typeof e = [];
-      for (const node of n) {
-        if (node.kind !== "eeg_point") continue;
-        const ss = ixScreenshotMap.get(node.id);
-        if (!ss) continue;
-        const ssId = `ss_${node.id}`;
+      // Collect valid parent IDs from current graph
+      const nodeIds = new Set(n.map(nd => nd.id));
+      let idx = 0;
+      for (const [key, ss] of ixScreenshotMap) {
+        // key = "parentNodeId\0filename"
+        const sepIdx = key.indexOf("\0");
+        const parentId = sepIdx > 0 ? key.slice(0, sepIdx) : key;
+        // Parent must exist in the current (possibly deduped) graph
+        if (!nodeIds.has(parentId)) continue;
+        const ssId = `ss_${idx++}_${ss.filename}`;
         extraNodes.push({
           id:             ssId,
           kind:           "screenshot",
           text:           ss.appName || ss.windowTitle || "Screenshot",
           timestamp_unix: ss.unixTs,
-          distance:       0,
-          parent_id:      node.id,
+          distance:       ss.similarity,
+          parent_id:      parentId,
           screenshot_url: imgSrc(ss.filename),
         });
         extraEdges.push({
-          from_id:  node.id,
+          from_id:  parentId,
           to_id:    ssId,
-          distance: 0,
+          distance: ss.similarity,
           kind:     "screenshot_link",
         });
       }
@@ -384,44 +393,82 @@ the Free Software Foundation, version 3 only. -->
     finally { ixSearching = false; ixStatus = ""; }
   }
 
-  /** Fetch nearby screenshots for all EEG-point nodes. */
+  type SsEntry = { filename: string; appName: string; windowTitle: string; unixTs: number; similarity: number };
+
+  /**
+   * Multi-strategy screenshot fetch:
+   *  1. Semantic text search with the query → attach to "query" node
+   *  2. Semantic text search per text_label → attach to that label node
+   *  3. Timestamp proximity (±30 min) per eeg_point → attach to that EEG node
+   *
+   * Deduplicates by filename so the same screenshot doesn't appear twice.
+   */
   async function fetchIxScreenshots() {
-    console.log("[ss] fetchIxScreenshots called, show=", ixShowScreenshots, "nodes=", ixNodes.length);
     if (!ixShowScreenshots) { ixScreenshotMap = new Map(); return; }
-    const eegNodes = ixNodes.filter(n => n.kind === "eeg_point" && n.timestamp_unix != null);
-    console.log("[ss] EEG nodes with timestamps:", eegNodes.length, eegNodes.map(n => ({ id: n.id, ts: n.timestamp_unix })));
-    if (eegNodes.length === 0) { ixScreenshotMap = new Map(); return; }
+    if (ixNodes.length === 0) { ixScreenshotMap = new Map(); return; }
 
-    type SsResult = { unix_ts: number; filename: string; app_name: string; window_title: string };
-    const results = new Map<string, { filename: string; appName: string; windowTitle: string; unixTs: number }>();
+    type SsResult = { unix_ts: number; filename: string; app_name: string; window_title: string; similarity: number };
+    const results = new Map<string, SsEntry>();
+    const usedFilenames = new Set<string>();
 
-    // Fetch screenshots in parallel for all EEG nodes (±120 sec window)
-    const promises = eegNodes.map(async (node) => {
+    function addResult(nodeId: string, r: SsResult) {
+      if (usedFilenames.has(r.filename)) return;
+      usedFilenames.add(r.filename);
+      results.set(nodeId + "\0" + r.filename, {
+        filename:    r.filename,
+        appName:     r.app_name,
+        windowTitle: r.window_title,
+        unixTs:      r.unix_ts,
+        similarity:  r.similarity ?? 0,
+      });
+    }
+
+    const promises: Promise<void>[] = [];
+
+    // Strategy 1: semantic search with the interactive query → attach to "query"
+    promises.push((async () => {
       try {
-        const around = await invoke<SsResult[]>("get_screenshots_around", {
-          timestamp: Math.floor(node.timestamp_unix!),
-          windowSecs: 120,
+        const hits = await invoke<SsResult[]>("search_screenshots_by_text", {
+          query: ixQuery.trim(), k: 5, mode: "semantic",
         });
-        console.log("[ss] node", node.id, "ts=", node.timestamp_unix, "=> around:", around.length, around.slice(0, 2));
-        if (around.length > 0) {
-          // Pick the closest screenshot to the node timestamp
-          const sorted = [...around].sort((a, b) =>
-            Math.abs(a.unix_ts - node.timestamp_unix!) - Math.abs(b.unix_ts - node.timestamp_unix!)
-          );
-          const best = sorted[0];
-          results.set(node.id, {
-            filename:    best.filename,
-            appName:     best.app_name,
-            windowTitle: best.window_title,
-            unixTs:      best.unix_ts,
+        for (const h of hits) addResult("query", h);
+      } catch { /* no semantic index or model */ }
+    })());
+
+    // Strategy 2: semantic search per text_label text → attach to that label
+    const textLabels = ixNodes.filter(n => n.kind === "text_label" && n.text);
+    for (const tl of textLabels.slice(0, 5)) {
+      promises.push((async () => {
+        try {
+          const hits = await invoke<SsResult[]>("search_screenshots_by_text", {
+            query: tl.text!, k: 2, mode: "semantic",
           });
-        }
-      } catch (e) {
-        console.warn("[ss] error fetching for node", node.id, e);
-      }
-    });
+          for (const h of hits) addResult(tl.id, h);
+        } catch { /* skip */ }
+      })());
+    }
+
+    // Strategy 3: timestamp proximity (±30 min) per eeg_point
+    const eegNodes = ixNodes.filter(n => n.kind === "eeg_point" && n.timestamp_unix != null);
+    for (const node of eegNodes) {
+      promises.push((async () => {
+        try {
+          const around = await invoke<SsResult[]>("get_screenshots_around", {
+            timestamp: Math.floor(node.timestamp_unix!),
+            windowSecs: 1800,
+          });
+          if (around.length > 0) {
+            // Pick the closest screenshot to the node timestamp
+            const sorted = [...around].sort((a, b) =>
+              Math.abs(a.unix_ts - node.timestamp_unix!) - Math.abs(b.unix_ts - node.timestamp_unix!)
+            );
+            addResult(node.id, { ...sorted[0], similarity: 0 });
+          }
+        } catch { /* skip */ }
+      })());
+    }
+
     await Promise.all(promises);
-    console.log("[ss] results map size:", results.size, [...results.entries()].slice(0, 3));
     ixScreenshotMap = results;
   }
 
