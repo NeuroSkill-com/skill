@@ -50,23 +50,67 @@ pub fn ellipsize_middle(text: &str, max_chars: usize) -> String {
 
 /// Format a keyboard shortcut string for display in a menu label.
 ///
-/// Returns `"  (Cmd+Shift+O)"` on macOS, `"  (Ctrl+Shift+O)"` on other
-/// platforms, or an empty string if `shortcut` is blank.
+/// On macOS, modifier keys are replaced with their standard symbols
+/// (⌘, ⇧, ⌥, ⌃) and the `+` separators between modifiers are removed,
+/// matching native macOS menu conventions.
+///
+/// On Linux/Windows, modifiers are spelled out (`Ctrl`, `Shift`, `Alt`)
+/// and joined with `+`.
+///
+/// Returns an empty string if `shortcut` is blank.
+///
+/// ```
+/// # use skill_tray::shortcut_suffix;
+/// // On Linux: "  Ctrl+Shift+O"
+/// // On macOS: "  ⌃⇧O"
+/// let s = shortcut_suffix("CmdOrCtrl+Shift+O");
+/// assert!(!s.is_empty());
+/// ```
 pub fn shortcut_suffix(shortcut: &str) -> String {
     if shortcut.trim().is_empty() {
         return String::new();
     }
 
-    let mut s = shortcut.trim().replace(
-        "CmdOrCtrl",
-        if cfg!(target_os = "macos") { "Cmd" } else { "Ctrl" },
-    );
-    s = s.replace("Command", "Cmd");
-    s = s.replace("Meta", "Cmd");
-    s = s.replace("Option", "Alt");
-    s = s.replace("Plus", "+");
-    s = s.replace("Arrow", "");
-    format!("  ({s})")
+    let parts: Vec<&str> = shortcut.trim().split('+').collect();
+
+    if cfg!(target_os = "macos") {
+        // macOS: render modifiers as symbols, no separators between them,
+        // then append the key character.
+        let mut modifiers = String::new();
+        let mut key = String::new();
+        for part in &parts {
+            let p = part.trim();
+            match p {
+                "CmdOrCtrl" | "Command" | "Cmd" | "Meta" => modifiers.push('\u{2318}'),
+                "Ctrl" | "Control"                        => modifiers.push('\u{2303}'),
+                "Shift"                                   => modifiers.push('\u{21E7}'),
+                "Alt" | "Option"                          => modifiers.push('\u{2325}'),
+                "Plus"                                    => key = "+".into(),
+                other => {
+                    let cleaned = other.replace("Arrow", "");
+                    key = cleaned;
+                }
+            }
+        }
+        format!("  {modifiers}{key}")
+    } else {
+        // Linux / Windows: human-readable text joined with +.
+        let mut tokens: Vec<String> = Vec::new();
+        for part in &parts {
+            let p = part.trim();
+            match p {
+                "CmdOrCtrl" | "Command" | "Meta" => tokens.push("Ctrl".into()),
+                "Cmd"                             => tokens.push("Ctrl".into()),
+                "Option"                          => tokens.push("Alt".into()),
+                "Plus"                            => tokens.push("+".into()),
+                other => {
+                    let cleaned = other.replace("Arrow", "");
+                    tokens.push(cleaned);
+                }
+            }
+        }
+        format!("  {}", tokens.join("+"))
+    }
 }
 
 /// Append the formatted shortcut suffix to a menu label.
@@ -74,8 +118,8 @@ pub fn shortcut_suffix(shortcut: &str) -> String {
 /// ```
 /// # use skill_tray::with_shortcut;
 /// let label = with_shortcut("Open", "CmdOrCtrl+O");
-/// // On macOS: "Open  (Cmd+O)"
-/// // On Linux: "Open  (Ctrl+O)"
+/// // On macOS: "Open  ⌘O"
+/// // On Linux: "Open  Ctrl+O"
 /// ```
 pub fn with_shortcut(label: &str, shortcut: &str) -> String {
     format!("{label}{}", shortcut_suffix(shortcut))
@@ -248,9 +292,42 @@ mod tests {
     }
 
     #[test]
+    fn shortcut_suffix_formats_modifiers() {
+        // On Linux this should produce "  Ctrl+Shift+O"
+        // On macOS this should produce "  ⌘⇧O"
+        let s = shortcut_suffix("CmdOrCtrl+Shift+O");
+        assert!(!s.is_empty());
+        if cfg!(target_os = "macos") {
+            assert_eq!(s, "  \u{2318}\u{21E7}O");
+        } else {
+            assert_eq!(s, "  Ctrl+Shift+O");
+        }
+    }
+
+    #[test]
+    fn shortcut_suffix_single_key() {
+        let s = shortcut_suffix("CmdOrCtrl+,");
+        if cfg!(target_os = "macos") {
+            assert_eq!(s, "  \u{2318},");
+        } else {
+            assert_eq!(s, "  Ctrl+,");
+        }
+    }
+
+    #[test]
     fn with_shortcut_appends() {
         let s = with_shortcut("Open", "");
         assert_eq!(s, "Open");
+    }
+
+    #[test]
+    fn with_shortcut_formats_nicely() {
+        let s = with_shortcut("Settings…", "CmdOrCtrl+,");
+        if cfg!(target_os = "macos") {
+            assert_eq!(s, "Settings…  \u{2318},");
+        } else {
+            assert_eq!(s, "Settings…  Ctrl+,");
+        }
     }
 
     #[test]
