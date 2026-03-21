@@ -1077,12 +1077,31 @@ const SENSITIVE_PATH_PREFIXES: &[&str] = &[
     "/bin/", "/sbin/", "/lib/", "/opt/",
 ];
 
+/// Characters that act as word boundaries before a dangerous pattern.
+/// A match is only flagged if the pattern appears at the start of the string
+/// or is preceded by one of these characters.  This prevents false positives
+/// like "skill" matching "kill".
+const BOUNDARY_CHARS: &[char] = &[
+    ' ', '\t', '\n', '\r', ';', '|', '&', '(', ')', '{', '}', '`', '$', '/',
+];
+
 /// Check if a bash command looks dangerous and return a human-readable reason.
 pub fn check_bash_safety(command: &str) -> Option<String> {
     let lower = command.to_lowercase();
     for pat in DANGEROUS_BASH_PATTERNS {
-        if lower.contains(pat) {
-            return Some(format!("Command contains `{}`", pat.trim()));
+        // Find all occurrences and check word-boundary before each one.
+        let mut start = 0;
+        while let Some(pos) = lower[start..].find(pat) {
+            let abs_pos = start + pos;
+            let at_boundary = abs_pos == 0
+                || lower[..abs_pos]
+                    .chars()
+                    .next_back()
+                    .map_or(true, |c| BOUNDARY_CHARS.contains(&c));
+            if at_boundary {
+                return Some(format!("Command contains `{}`", pat.trim()));
+            }
+            start = abs_pos + 1;
         }
     }
     None
@@ -1288,6 +1307,21 @@ mod tests {
     fn bash_safety_case_insensitive() {
         assert!(check_bash_safety("SUDO apt install").is_some());
         assert!(check_bash_safety("Rm -rf /").is_some());
+    }
+
+    #[test]
+    fn bash_safety_no_false_positive_on_skill() {
+        // "skill" contains "kill" but should NOT trigger the "kill " pattern.
+        assert!(check_bash_safety("skill --help").is_none());
+        assert!(check_bash_safety("skill status").is_none());
+        assert!(check_bash_safety("neuroskill-status").is_none());
+        // Actual "kill" commands should still be caught.
+        assert!(check_bash_safety("kill 1234").is_some());
+        assert!(check_bash_safety("killall firefox").is_some());
+        assert!(check_bash_safety("pkill node").is_some());
+        // "kill" after a pipe/semicolon should be caught.
+        assert!(check_bash_safety("echo hi; kill 1234").is_some());
+        assert!(check_bash_safety("ps aux | kill 42").is_some());
     }
 
     // ── check_path_safety ─────────────────────────────────────────────
