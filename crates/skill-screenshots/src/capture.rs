@@ -814,8 +814,13 @@ fn run_embed_thread(
     let mut hnsw = load_or_rebuild_hnsw(&skill_dir, &store);
     let mut ocr_hnsw = load_or_rebuild_ocr_hnsw(&skill_dir, &store);
 
-    // Load vision encoder
-    let mut fe_encoder = load_fastembed_image(&initial_config, &skill_dir);
+    // Load vision encoder — hold the GPU init lock to prevent concurrent
+    // GPU framework initialisation (DirectML + wgpu/Vulkan) which can crash
+    // on Windows with STATUS_ACCESS_VIOLATION.
+    let mut fe_encoder = {
+        let _gpu_guard = ctx.gpu_init_guard();
+        load_fastembed_image(&initial_config, &skill_dir)
+    };
     let mut last_backend = initial_config.embed_backend.clone();
     let mut last_model   = initial_config.fastembed_model.clone();
 
@@ -985,6 +990,7 @@ fn run_embed_thread(
         // Hot-reload vision encoder if model changed
         if config.embed_backend != last_backend || config.fastembed_model != last_model {
             eprintln!("[screenshot-embed] model changed — reloading encoder");
+            let _gpu_guard = ctx.gpu_init_guard();
             fe_encoder = load_fastembed_image(config, &skill_dir);
             last_backend = config.embed_backend.clone();
             last_model   = config.fastembed_model.clone();

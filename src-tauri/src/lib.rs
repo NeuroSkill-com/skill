@@ -317,7 +317,7 @@ mod helpers;
 pub(crate) use helpers::{
     unix_secs, yyyymmdd_utc,
     emit_status, emit_devices, set_cortex_ws_state,
-    send_toast, ToastLevel,
+    send_toast, ToastLevel, gpu_init_lock,
     skill_dir, read_state, mutate_and_save,
     save_settings, save_settings_now, save_settings_handle,
     upsert_paired, upsert_discovered,

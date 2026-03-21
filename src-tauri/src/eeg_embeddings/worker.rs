@@ -562,9 +562,14 @@ pub(super) fn embed_worker(
     // Wrap the encoder load in `catch_unwind` so that a cubecl panic does not
     // kill the entire thread.  If it panics we mark the device poisoned and
     // fall back to metrics-only mode.
+    //
+    // The GPU init lock prevents simultaneous GPU framework initialisation
+    // (e.g. DirectML for screenshots and wgpu/Vulkan for EEG) which can
+    // trigger STATUS_ACCESS_VIOLATION on Windows.
     let mut encoder: Option<LoadedEncoder> = weights.and_then(|(w, c)| {
         skill_log!(logger, "embedder", "loading {} encoder from {}", active_backend, w.display());
         let backend = active_backend.clone();
+        let _gpu_guard = crate::gpu_init_lock();
         let load_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(LoadedEncoder, f64), String> {
             match backend {
                 ExgModelBackend::Zuna => {
@@ -583,6 +588,7 @@ pub(super) fn embed_worker(
                 }
             }
         }));
+        drop(_gpu_guard);
         match load_result {
             Ok(Ok((enc, ms))) => {
                 let desc = enc.describe();

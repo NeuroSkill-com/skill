@@ -52,4 +52,15 @@ pub trait ScreenshotContext: Send + Sync + 'static {
     /// This is an alternative to traditional OCR engines (ocrs / Apple Vision)
     /// that can be benchmarked against them.
     fn ocr_via_llm(&self, _png_bytes: &[u8]) -> Option<String> { None }
+
+    /// Acquire a process-wide GPU initialisation lock.
+    ///
+    /// On Windows, simultaneously initialising DirectML (ONNX) and
+    /// wgpu/Vulkan can trigger a `STATUS_ACCESS_VIOLATION` in the GPU
+    /// driver.  Implementations should return a guard that is held for the
+    /// duration of model load / first warmup inference.
+    ///
+    /// The default implementation returns `None` (no serialisation) which
+    /// is fine for single-framework setups or non-Windows platforms.
+    fn gpu_init_guard(&self) -> Option<Box<dyn std::any::Any + Send>> { None }
 }

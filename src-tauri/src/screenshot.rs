@@ -163,4 +163,19 @@ impl skill_screenshots::ScreenshotContext for TauriScreenshotContext {
             None
         }
     }
+
+    fn gpu_init_guard(&self) -> Option<Box<dyn std::any::Any + Send>> {
+        // Acquire the lock and wrap it in a newtype that is Send.
+        // The guard cannot outlive the static mutex, so this is safe —
+        // the Box keeps the guard alive until dropped.
+        #[allow(dead_code)]
+        struct GpuGuard(std::sync::MutexGuard<'static, ()>);
+        // SAFETY: The MutexGuard borrows a process-global static Mutex.
+        // It is only ever used on the calling thread (the screenshot embed
+        // thread) and dropped in place — never actually transferred across
+        // threads.  The Send bound is required by the trait signature but
+        // the guard is held and dropped on the same thread.
+        unsafe impl Send for GpuGuard {}
+        Some(Box::new(GpuGuard(crate::gpu_init_lock())))
+    }
 }

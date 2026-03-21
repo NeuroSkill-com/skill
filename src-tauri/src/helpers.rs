@@ -4,7 +4,7 @@
 //! Shared helpers: time, status/device emitters, toast, device upsert,
 //! settings persistence, state access shortcuts.
 
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -66,6 +66,29 @@ pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
         g.cortex_ws_state = state.to_owned();
     }
     emit_cortex_ws_state(app);
+}
+
+// ── GPU init serialisation ────────────────────────────────────────────────────
+
+/// Process-global mutex that serialises GPU framework initialisation.
+///
+/// On Windows, simultaneously initialising DirectML (ONNX, for screenshot
+/// CLIP embeddings) and wgpu/Vulkan (cubecl, for ZUNA/LUNA EEG embeddings)
+/// can trigger a `STATUS_ACCESS_VIOLATION` in the Vulkan driver.  Both init
+/// paths acquire this lock so only one GPU framework initialises at a time.
+///
+/// The lock is held only during model load / first inference — once both
+/// frameworks are initialised they can run concurrently without issue.
+static GPU_INIT_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+/// Acquire the GPU init lock.  Returns a `MutexGuard` — hold it for the
+/// duration of the GPU framework initialisation (model load / first warmup
+/// inference).
+pub(crate) fn gpu_init_lock() -> std::sync::MutexGuard<'static, ()> {
+    GPU_INIT_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
 }
 
 // ── Toast / notification helpers ──────────────────────────────────────────────
