@@ -42,6 +42,8 @@ automation pipeline.
    - [raw](#raw)
    - [search-images](#search-images)
    - [screenshots-around](#screenshots-around)
+   - [screenshots-for-eeg](#screenshots-for-eeg)
+   - [eeg-for-screenshots](#eeg-for-screenshots)
 8. [Screenshots](#screenshots)
 9. [Data Reference](#data-reference)
    - [EEG Band Powers](#eeg-band-powers)
@@ -586,7 +588,9 @@ node cli.ts listen --seconds 60 --json | jq '[.[] | select(.event == "hook") | .
 | `--dot` | (`interactive` only) Graphviz DOT to stdout — pipe to `dot -Tsvg` |
 | `--trends` | (`sessions` only) Show first-half → second-half deltas |
 | `--mode <m>` | (`search-labels`) `text` \| `context` \| `both`; (`search-images`) `semantic` \| `substring` |
-| `--k <n>` | Number of nearest neighbors (`search`, `search-labels`, `search-images`) |
+| `--k <n>` | Number of nearest neighbors (`search`, `search-labels`, `search-images`, `eeg-for-screenshots`) |
+| `--by-image <path>` | (`search-images`) Search by visual similarity using CLIP embeddings instead of OCR text |
+| `--window <n>` | (`screenshots-for-eeg`, `eeg-for-screenshots`) Temporal window in seconds (default 30 / 60) |
 | `--k-text <n>` | (`interactive`) k for text-label HNSW search (default 5) |
 | `--k-eeg <n>` | (`interactive`) k for EEG-similarity HNSW search (default 5) |
 | `--k-labels <n>` | (`interactive`) k for label-proximity step (default 3) |
@@ -3078,7 +3082,8 @@ separate HNSW indices for similarity search.
 - **Image serving:** `GET /screenshots/<day>/<filename>` on the API server
 
 Screenshot images appear as indicators on the History day-view heatmap grid and can
-be searched from the CLI via `search-images` and `screenshots-around`.
+be searched from the CLI via `search-images`, `screenshots-around`, `screenshots-for-eeg`,
+and `eeg-for-screenshots`.
 
 ---
 
@@ -3096,6 +3101,8 @@ Screenshot images can be viewed at: `http://127.0.0.1:<port>/screenshots/<filena
 - `semantic` (default) — embeds the query text and searches the OCR HNSW index
   for semantically similar on-screen text
 - `substring` — direct SQL LIKE matching against raw OCR text
+- `vision` (via `--by-image`) — embeds a reference image with CLIP and searches
+  the visual HNSW index for visually similar screenshots
 
 ```bash
 node cli.ts search-images "compiler error"
@@ -3104,6 +3111,11 @@ node cli.ts search-images "TODO" --mode substring
 node cli.ts search-images "dashboard" --json | jq '.results[].filename'
 node cli.ts search-images "meeting notes" --json | jq '.results[] | {file: .filename, app: .app_name, sim: .similarity}'
 node cli.ts search-images "error stack trace" --mode semantic --k 10
+
+# Vision search — find screenshots visually similar to a reference image:
+node cli.ts search-images --by-image reference.png
+node cli.ts search-images --by-image screenshot.jpg --k 5
+node cli.ts search-images --by-image layout-mock.webp --json | jq '.results[].filename'
 ```
 
 **HTTP:**
@@ -3117,6 +3129,12 @@ curl -s -X POST http://127.0.0.1:8375/ \
 curl -s -X POST http://127.0.0.1:8375/ \
   -H "Content-Type: application/json" \
   -d '{"command":"search_screenshots","query":"TODO","k":10,"mode":"substring"}'
+
+# Vision search (base64-encoded image):
+IMAGE_B64=$(base64 -w0 reference.png)
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d "{\"command\":\"search_screenshots_by_image_b64\",\"image_b64\":\"$IMAGE_B64\",\"k\":20}"
 ```
 
 **Example output:**
@@ -3266,6 +3284,216 @@ PORT=8375
 FILE=$(node cli.ts screenshots-around --at 1740412800 --json | jq -r '.results[0].filename')
 open "http://127.0.0.1:$PORT/screenshots/$FILE"   # macOS
 xdg-open "http://127.0.0.1:$PORT/screenshots/$FILE"  # Linux
+```
+
+---
+
+### `screenshots-for-eeg`
+
+Find screenshots captured near EEG recording timestamps.  Given an EEG time range
+(auto: latest session, or `--start`/`--end`), finds all EEG embedding timestamps in
+that range, then returns screenshots within `--window` seconds (default ±30s) of
+each epoch.
+
+This is the **"EEG → screenshots" cross-modal bridge**: start from brain data,
+discover what was on screen at that moment.
+
+```bash
+node cli.ts screenshots-for-eeg                             # auto: last session
+node cli.ts screenshots-for-eeg --start 1740412800 --end 1740415500
+node cli.ts screenshots-for-eeg --window 60                  # ±60s around each epoch
+node cli.ts screenshots-for-eeg --limit 20                   # max 20 results
+node cli.ts screenshots-for-eeg --json | jq '.results[].screenshot.filename'
+node cli.ts screenshots-for-eeg --json | jq '.results[] | {eeg: .eeg_timestamp_utc, file: .screenshot.filename, app: .screenshot.app_name}'
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--start <utc>` | auto (latest session) | Start of EEG range (unix seconds) |
+| `--end <utc>` | auto (latest session) | End of EEG range (unix seconds) |
+| `--window <n>` | `30` | Temporal window: ±N seconds around each EEG epoch |
+| `--limit <n>` | `50` | Maximum number of screenshot results |
+
+**HTTP / WebSocket API:**
+```bash
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"screenshots_for_eeg","start_utc":1740412800,"end_utc":1740415500,"window_secs":30,"limit":50}'
+```
+
+**Example output:**
+```
+⚡ screenshots-for-eeg
+  range: 1740412800–1740415500 (auto: 2/24/2026 8:00 AM → 8:45 AM, 45m 0s)
+  window: ±30s   limit: 50
+
+  EEG epochs scanned: 541
+  screenshots found:  12
+
+  20260224/20260224080530.webp
+     EEG at:     2/24/2026, 8:05:30 AM
+     screenshot: 2/24/2026, 8:05:28 AM   app: VS Code  window: main.rs
+     ocr:        fn dispatch(app: &AppHandle, command: &str…
+
+  20260224/20260224081245.webp
+     EEG at:     2/24/2026, 8:12:45 AM
+     screenshot: 2/24/2026, 8:12:44 AM   app: Terminal  window: cargo test
+     ocr:        running 12 tests… test result: ok…
+```
+
+**JSON response:**
+```jsonc
+{
+  "command": "screenshots_for_eeg",
+  "ok": true,
+  "start_utc":   1740412800,
+  "end_utc":     1740415500,
+  "window_secs": 30,
+  "eeg_count":   541,
+  "count":       12,
+  "results": [
+    {
+      "eeg_timestamp_utc": 1740413130,
+      "screenshot": {
+        "timestamp":    20260224080530,
+        "unix_ts":      1740413128,
+        "filename":     "20260224/20260224080530.webp",
+        "app_name":     "VS Code",
+        "window_title": "main.rs",
+        "ocr_text":     "fn dispatch(app: &AppHandle, command: &str…",
+        "similarity":   0.0
+      }
+    }
+    // ... more results
+  ]
+}
+```
+
+---
+
+### `eeg-for-screenshots`
+
+Find EEG data and labels near screenshots matching an OCR text query.
+This is the **"screenshots → EEG" cross-modal bridge**: start from what
+was on screen, discover what your brain was doing at that moment.
+
+**Pipeline:**
+1. Search screenshots by OCR text (semantic or substring mode).
+2. For each matched screenshot, find EEG labels within `--window` seconds.
+3. Report the associated EEG session and labels alongside each screenshot.
+
+Use this to answer: *"When I was looking at [X], what was my brain doing?"*
+
+```bash
+node cli.ts eeg-for-screenshots "compiler error"
+node cli.ts eeg-for-screenshots "TODO" --mode substring --k 5
+node cli.ts eeg-for-screenshots "dashboard" --window 120
+node cli.ts eeg-for-screenshots "login page" --json | jq '.results[].labels[].text'
+node cli.ts eeg-for-screenshots "slack message" --json | jq '.results[] | {file: .screenshot.filename, labels: [.labels[].text], session: .session.device_name}'
+```
+
+**Options:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--mode <m>` | `semantic` | Search mode: `semantic` or `substring` |
+| `--k <n>` | `10` | Maximum number of screenshot matches |
+| `--window <n>` | `60` | Temporal window: ±N seconds to search for EEG labels |
+
+**HTTP / WebSocket API:**
+```bash
+curl -s -X POST http://127.0.0.1:8375/ \
+  -H "Content-Type: application/json" \
+  -d '{"command":"eeg_for_screenshots","query":"compiler error","k":10,"window_secs":60,"mode":"semantic"}'
+```
+
+**Example output:**
+```
+⚡ eeg-for-screenshots "compiler error"  (mode: semantic, k: 10, window: ±60s)
+
+  screenshots matched: 3
+  results with EEG:    3
+
+  20260315/20260315143025.webp
+     time:       3/15/2026, 2:30:25 PM   app: VS Code  window: skill — cli.ts
+     similarity: 87%
+     ocr:        error[E0308]: mismatched types expected…
+     EEG session: 3/15/2026, 2:00:00 PM → 3:00:00 PM  (1h 0m)  device: Muse-A1B2
+     labels (2):
+       "debugging session"  3/15/2026, 2:28:00 PM  id: 47
+       "frustrated"         3/15/2026, 2:31:00 PM  id: 48
+```
+
+**JSON response:**
+```jsonc
+{
+  "command": "eeg_for_screenshots",
+  "ok": true,
+  "query":            "compiler error",
+  "mode":             "semantic",
+  "k":                10,
+  "window_secs":      60,
+  "screenshot_count": 3,
+  "count":            3,
+  "results": [
+    {
+      "screenshot": {
+        "timestamp":    20260315143025,
+        "unix_ts":      1741963825,
+        "filename":     "20260315/20260315143025.webp",
+        "app_name":     "VS Code",
+        "window_title": "skill — cli.ts",
+        "ocr_text":     "error[E0308]: mismatched types expected…",
+        "similarity":   0.87
+      },
+      "labels": [
+        {
+          "id": 47, "text": "debugging session",
+          "eeg_start": 1741963560, "eeg_end": 1741963860,
+          "label_start": 1741963680, "label_end": 1741963680
+        },
+        {
+          "id": 48, "text": "frustrated",
+          "eeg_start": 1741963740, "eeg_end": 1741964040,
+          "label_start": 1741963860, "label_end": 1741963860
+        }
+      ],
+      "session": {
+        "csv_path": "/home/user/.skill/20260315/exg_1741960800.csv",
+        "session_start_utc": 1741960800,
+        "session_end_utc":   1741964400,
+        "device_name":       "Muse-A1B2"
+      }
+    }
+    // ... more results
+  ]
+}
+```
+
+**Cross-modal workflows combining all screenshot commands:**
+
+```bash
+# ── Workflow 1: "What was I looking at during my best focus session?" ──────────
+# Find the focus peak, then see the screenshots
+START=$(node cli.ts sessions --json | jq '.sessions[0].start_utc')
+END=$(node cli.ts sessions --json | jq '.sessions[0].end_utc')
+node cli.ts screenshots-for-eeg --start $START --end $END --window 15
+
+# ── Workflow 2: "How did my brain react when I saw error messages?" ────────────
+# Search for error screenshots, get the EEG context
+node cli.ts eeg-for-screenshots "error" --window 120
+
+# ── Workflow 3: "Find screenshots similar to this reference image" ─────────────
+# CLIP vision similarity search
+node cli.ts search-images --by-image reference-layout.png --k 10
+
+# ── Workflow 4: "Full cross-modal chain — OCR → screenshots → EEG → labels" ───
+# Search for code review screenshots, get the brain state, then find similar moments
+node cli.ts eeg-for-screenshots "pull request" --json | jq '.results[0].session'
+# Use the session timestamps for a neural search:
+node cli.ts search --start <session_start> --end <session_end> --k 5
 ```
 
 ---
