@@ -258,7 +258,14 @@ pub fn skill_api_tool() -> Tool {
                  DND: dnd | dnd_set(enabled)\n\
                  SLEEP SCHEDULE: sleep_schedule | sleep_schedule_set(bedtime?,wake_time?,preset?)\n\
                  HEALTH: health_summary(start_utc?,end_utc?) | health_query(type,start_utc?,end_utc?,limit?) | health_metric_types | health_sync\n\
-                 ADVANCED: umap(a_start_utc,a_end_utc,b_start_utc,b_end_utc) | umap_poll(job_id) | llm_status | llm_catalog".into()
+                 ADVANCED: umap(a_start_utc,a_end_utc,b_start_utc,b_end_utc) | umap_poll(job_id) | llm_status | llm_catalog\n\n\
+                 Cross-modal query guide — pick the right command by direction:\n\
+                 • What apps/screen content? → status (has apps.top_24h) or search_screenshots(query)\n\
+                 • What was on screen during EEG/brain session? → screenshots_for_eeg (EEG→Screenshots)\n\
+                 • What was my brain doing when I saw X? → eeg_for_screenshots(query) (Screenshots→EEG)\n\
+                 • Find past brain states like current/described → search_labels(query) or search(start,end)\n\
+                 • What was on screen at a specific moment? → screenshots_around(timestamp)\n\
+                 • Full cross-modal graph (text→labels→EEG→labels) → interactive_search(query)".into()
             ),
             parameters: Some(json!({
                 "type": "object",
