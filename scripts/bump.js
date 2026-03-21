@@ -253,4 +253,10 @@ if (result.entryCount > 0) {
   console.log("  ✓  CHANGELOG.md (Unreleased → versioned section, no fragments)");
 }
 
+// ── clean Rust build artifacts ────────────────────────────────────────────────
+
+console.log("\nCleaning Rust build artifacts...");
+execSync("npm run clean:rust", { stdio: "inherit" });
+console.log("  ✓  clean:rust");
+
 console.log(`\nDone! Version is now ${newVersion}`);
