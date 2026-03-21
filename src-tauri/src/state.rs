@@ -427,6 +427,10 @@ pub struct AppState {
     pub device_api_config: crate::settings::DeviceApiConfig,
     pub scanner_config:    crate::settings::ScannerConfig,
 
+    /// Emotiv Cortex WebSocket connection state for the UI.
+    /// One of: `"disconnected"`, `"connecting"`, `"connected"`.
+    pub cortex_ws_state: String,
+
     // ── TTS ───────────────────────────────────────────────────────────────
     pub neutts_config: NeuttsConfig,
     pub tts_preload:   bool,
@@ -565,6 +569,7 @@ impl Default for AppState {
             openbci_config: crate::settings::OpenBciConfig::default(),
             device_api_config: crate::settings::DeviceApiConfig::default(),
             scanner_config: crate::settings::ScannerConfig::default(),
+            cortex_ws_state: "disconnected".into(),
             neutts_config: NeuttsConfig::default(),
             tts_preload:   true,
             llm: std::sync::Arc::new(std::sync::Mutex::new(LlmState::new(&skill_dir))),

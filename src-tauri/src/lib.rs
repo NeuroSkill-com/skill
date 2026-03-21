@@ -257,7 +257,7 @@ use settings_cmds::{
     list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
     get_openbci_config, set_openbci_config, list_serial_ports,
     get_device_api_config, set_device_api_config,
-    get_scanner_config, set_scanner_config, get_device_log,
+    get_scanner_config, set_scanner_config, get_device_log, get_cortex_ws_state,
     get_neutts_config, set_neutts_config, pick_ref_wav_file,
     get_tts_preload, set_tts_preload,
     get_active_window_tracking, set_active_window_tracking, get_active_window,
@@ -316,7 +316,7 @@ pub(crate) use state::*;
 mod helpers;
 pub(crate) use helpers::{
     unix_secs, yyyymmdd_utc,
-    emit_status, emit_devices,
+    emit_status, emit_devices, set_cortex_ws_state,
     send_toast, ToastLevel,
     skill_dir, read_state, mutate_and_save,
     save_settings, save_settings_now, save_settings_handle,
@@ -1238,7 +1238,7 @@ pub fn run() {
             list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
             get_openbci_config, set_openbci_config, list_serial_ports,
             get_device_api_config, set_device_api_config,
-            get_scanner_config, set_scanner_config, get_device_log,
+            get_scanner_config, set_scanner_config, get_device_log, get_cortex_ws_state,
             get_neutts_config, set_neutts_config, pick_ref_wav_file,
             get_tts_preload, set_tts_preload,
             get_active_window_tracking, set_active_window_tracking, get_active_window,

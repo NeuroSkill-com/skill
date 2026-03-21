@@ -47,6 +47,27 @@ pub(crate) fn emit_devices(app: &AppHandle) {
     let _ = app.emit("devices-updated", &d);
 }
 
+/// Emit the Cortex WebSocket connection state to the frontend.
+pub(crate) fn emit_cortex_ws_state(app: &AppHandle) {
+    let state = {
+        let s_ref = app.app_state();
+        let g = s_ref.lock_or_recover();
+        g.cortex_ws_state.clone()
+    };
+    let _ = app.emit("cortex-ws-state", &state);
+}
+
+/// Update the Cortex WS state in AppState and emit it to the frontend.
+pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
+    {
+        let s_ref = app.app_state();
+        let mut g = s_ref.lock_or_recover();
+        if g.cortex_ws_state == state { return; }
+        g.cortex_ws_state = state.to_owned();
+    }
+    emit_cortex_ws_state(app);
+}
+
 // ── Toast / notification helpers ──────────────────────────────────────────────
 
 /// Toast severity levels — serialised to the frontend as lowercase strings.

@@ -41,7 +41,7 @@ use crate::AppStateExt;
 use crate::{
     MutexExt, ScannerHandle,
     emit_devices, emit_status, refresh_tray, send_toast, start_session, upsert_discovered,
-    ToastLevel,
+    set_cortex_ws_state, ToastLevel,
 };
 
 // ── Device log ring buffer ────────────────────────────────────────────────────
@@ -517,6 +517,7 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
             biased;
             _ = cancel.cancelled() => {
                 app_log!(app, "scanner", "[cortex] stopped");
+                set_cortex_ws_state(&app, "disconnected");
                 return;
             }
             _ = poll_tick.tick() => {
@@ -564,8 +565,11 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                     (cid, csec)
                 };
                 if client_id.is_empty() || client_secret.is_empty() {
+                    set_cortex_ws_state(&app, "disconnected");
                     continue; // No credentials — skip this poll.
                 }
+
+                set_cortex_ws_state(&app, "connecting");
 
                 // Probe the Cortex service with auto_create_session disabled
                 // so queryHeadsets returns the headset list without triggering
@@ -585,8 +589,13 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
 
                 let headsets = match result {
                     Ok(Ok(list)) => list,
-                    _ => continue, // Launcher not running or auth/query failed.
+                    _ => {
+                        set_cortex_ws_state(&app, "disconnected");
+                        continue; // Launcher not running or auth/query failed.
+                    }
                 };
+
+                set_cortex_ws_state(&app, "connected");
 
                 if headsets.is_empty() {
                     // Launcher is running but no headsets are paired/visible.

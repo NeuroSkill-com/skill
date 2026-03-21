@@ -99,6 +99,10 @@ the Free Software Foundation, version 3 only. -->
   let scannerChanged   = $state(false);
   let scannerSaved     = $state(false);
 
+  // ── Cortex WebSocket state ──────────────────────────────────────────────────
+  type CortexWsState = "disconnected" | "connecting" | "connected";
+  let cortexWsState  = $state<CortexWsState>("disconnected");
+
   // ── Device log ──────────────────────────────────────────────────────────────
   interface DeviceLogEntry {
     ts:  number;
@@ -391,6 +395,7 @@ the Free Software Foundation, version 3 only. -->
     openbci = await invoke<OpenBciConfig>("get_openbci_config");
     deviceApi = await invoke<DeviceApiConfig>("get_device_api_config");
     scannerConfig = await invoke<ScannerConfig>("get_scanner_config");
+    cortexWsState = await invoke<CortexWsState>("get_cortex_ws_state");
     await loadSerialPorts();
     await refreshDeviceLog();
     deviceLogInterval = setInterval(refreshDeviceLog, 3000);
@@ -406,6 +411,7 @@ the Free Software Foundation, version 3 only. -->
           mac_address:   ev.payload.mac_address   ?? null,
         };
       }),
+      await listen<CortexWsState>("cortex-ws-state", ev => { cortexWsState = ev.payload; }),
     );
   });
   onDestroy(() => {
@@ -1007,16 +1013,33 @@ the Free Software Foundation, version 3 only. -->
             <span class="text-[0.6rem] text-muted-foreground">{t("settings.scanner.cortexDesc")}</span>
           </div>
           {#if scannerConfig.cortex && deviceApi.emotiv_client_id && deviceApi.emotiv_client_secret}
-            {#if devices.some(d => d.transport === "cortex")}
+            {#if cortexWsState === "connected"}
               <Badge variant="outline"
-                class="text-[0.5rem] py-0 px-1.5 shrink-0
+                class="text-[0.5rem] py-0 px-1.5 shrink-0 flex items-center gap-1
                        bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20">
+                <span class="relative flex h-1.5 w-1.5">
+                  <span class="absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500"></span>
+                </span>
                 {t("settings.scanner.cortexConnected")}
+              </Badge>
+            {:else if cortexWsState === "connecting"}
+              <Badge variant="outline"
+                class="text-[0.5rem] py-0 px-1.5 shrink-0 flex items-center gap-1
+                       bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20">
+                <span class="relative flex h-1.5 w-1.5">
+                  <span class="absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75 animate-ping"></span>
+                  <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                </span>
+                {t("settings.scanner.cortexConnecting")}
               </Badge>
             {:else}
               <Badge variant="outline"
-                class="text-[0.5rem] py-0 px-1.5 shrink-0
-                       bg-slate-500/10 text-muted-foreground border-slate-500/20">
+                class="text-[0.5rem] py-0 px-1.5 shrink-0 flex items-center gap-1
+                       bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20">
+                <span class="relative flex h-1.5 w-1.5">
+                  <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                </span>
                 {t("settings.scanner.cortexDisconnected")}
               </Badge>
             {/if}
