@@ -106,6 +106,69 @@ pub struct SessionEntry {
     pub file_size_bytes:   u64,
 }
 
+// ── Typed session JSON sidecar (replaces serde_json::Value for speed) ─────────
+
+/// Lightweight typed representation of the session JSON sidecar.
+///
+/// Using a typed struct avoids the cost of `serde_json::Value` which internally
+/// uses `BTreeMap<String, Value>` for JSON objects — expensive to build and
+/// drop for every session file.  Only the fields needed by `list_sessions_for_day`
+/// are included; unknown fields are silently ignored via `deny_unknown_fields = false`.
+#[derive(Deserialize, Default)]
+struct SessionJsonMeta {
+    #[serde(default)]
+    csv_file: Option<String>,
+    #[serde(default)]
+    session_start_utc: Option<u64>,
+    #[serde(default)]
+    session_end_utc: Option<u64>,
+    #[serde(default)]
+    session_duration_s: Option<u64>,
+    #[serde(default)]
+    device: SessionDeviceMeta,
+    // Flat fallback fields (legacy format without nested `device` object).
+    #[serde(default)]
+    device_name: Option<String>,
+    #[serde(default)]
+    device_id: Option<String>,
+    #[serde(default)]
+    serial_number: Option<String>,
+    #[serde(default)]
+    mac_address: Option<String>,
+    #[serde(default)]
+    firmware_version: Option<String>,
+    #[serde(default)]
+    hardware_version: Option<String>,
+    #[serde(default)]
+    headset_preset: Option<String>,
+    #[serde(default)]
+    battery_pct_end: Option<f64>,
+    #[serde(default)]
+    battery_pct: Option<f64>,
+    #[serde(default)]
+    total_samples: Option<u64>,
+    #[serde(default)]
+    sample_rate_hz: Option<u64>,
+}
+
+#[derive(Deserialize, Default)]
+struct SessionDeviceMeta {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    serial_number: Option<String>,
+    #[serde(default)]
+    mac_address: Option<String>,
+    #[serde(default)]
+    firmware_version: Option<String>,
+    #[serde(default)]
+    hardware_version: Option<String>,
+    #[serde(default)]
+    preset: Option<String>,
+}
+
 // ── SessionMetrics ────────────────────────────────────────────────────────────
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -303,10 +366,10 @@ pub fn list_sessions_for_day(
         let fname = jp.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if !is_session_json(fname) { continue; }
 
-        let json_str = match std::fs::read_to_string(&jp) { Ok(s) => s, Err(_) => continue };
-        let meta: serde_json::Value = match serde_json::from_str(&json_str) { Ok(v) => v, Err(_) => continue };
+        let json_bytes = match std::fs::read(&jp) { Ok(b) => b, Err(_) => continue };
+        let meta: SessionJsonMeta = match serde_json::from_slice(&json_bytes) { Ok(v) => v, Err(_) => continue };
 
-        let csv_file = meta["csv_file"].as_str().unwrap_or("").to_string();
+        let csv_file = meta.csv_file.unwrap_or_default();
         let csv_full = day_dir.join(&csv_file);
         // Check for both CSV and Parquet data files.
         let pq_full = csv_full.with_extension("parquet");
@@ -315,31 +378,29 @@ pub fn list_sessions_for_day(
         } else {
             std::fs::metadata(&csv_full).map(|m| m.len()).unwrap_or(0)
         };
-        let start = meta["session_start_utc"].as_u64();
-        let end   = meta["session_end_utc"].as_u64();
-        let dev   = meta.get("device");
-        let str_field = |obj: Option<&serde_json::Value>, nk: &str, fk: &str| -> Option<String> {
-            obj.and_then(|d| d.get(nk)).and_then(|v| v.as_str()).map(str::to_owned)
-                .or_else(|| meta.get(fk).and_then(|v| v.as_str()).map(str::to_owned))
+        let start = meta.session_start_utc;
+        let end   = meta.session_end_utc;
+        let dev   = &meta.device;
+        let str_field = |dev_field: &Option<String>, fallback: &Option<String>| -> Option<String> {
+            dev_field.clone().or_else(|| fallback.clone())
         };
         raw.push((SessionEntry {
             csv_file,
             csv_path:           csv_full.to_string_lossy().into_owned(),
             session_start_utc:  start,
             session_end_utc:    end,
-            session_duration_s: meta.get("session_duration_s").and_then(|v| v.as_u64())
+            session_duration_s: meta.session_duration_s
                                     .or_else(|| start.zip(end).map(|(s, e)| e.saturating_sub(s))),
-            device_name:        str_field(dev, "name", "device_name"),
-            device_id:          str_field(dev, "id", "device_id"),
-            serial_number:      str_field(dev, "serial_number", "serial_number"),
-            mac_address:        str_field(dev, "mac_address", "mac_address"),
-            firmware_version:   str_field(dev, "firmware_version", "firmware_version"),
-            hardware_version:   str_field(dev, "hardware_version", "hardware_version"),
-            headset_preset:     str_field(dev, "preset", "headset_preset"),
-            battery_pct:        meta.get("battery_pct_end").and_then(|v| v.as_f64())
-                                    .or_else(|| meta.get("battery_pct").and_then(|v| v.as_f64())),
-            total_samples:      meta["total_samples"].as_u64(),
-            sample_rate_hz:     meta["sample_rate_hz"].as_u64(),
+            device_name:        str_field(&dev.name, &meta.device_name),
+            device_id:          str_field(&dev.id, &meta.device_id),
+            serial_number:      str_field(&dev.serial_number, &meta.serial_number),
+            mac_address:        str_field(&dev.mac_address, &meta.mac_address),
+            firmware_version:   str_field(&dev.firmware_version, &meta.firmware_version),
+            hardware_version:   str_field(&dev.hardware_version, &meta.hardware_version),
+            headset_preset:     str_field(&dev.preset, &meta.headset_preset),
+            battery_pct:        meta.battery_pct_end.or(meta.battery_pct),
+            total_samples:      meta.total_samples,
+            sample_rate_hz:     meta.sample_rate_hz,
             labels:             vec![],
             file_size_bytes:    csv_size,
         }, start, end));
@@ -583,25 +644,83 @@ fn read_metrics_parquet_time_range(path: &Path) -> Option<(u64, u64)> {
 }
 
 fn read_metrics_csv_time_range(metrics_path: &Path) -> Option<(u64, u64)> {
+    use std::io::{Read, Seek, SeekFrom};
+
     if !metrics_path.exists() { return None; }
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true).flexible(true).from_path(metrics_path).ok()?;
-    let mut first: Option<u64> = None;
-    let mut last:  Option<u64> = None;
-    for result in rdr.records() {
-        let rec = match result { Ok(r) => r, Err(_) => continue };
-        let ts = match rec.get(0).and_then(|s| s.parse::<f64>().ok()) {
-            Some(t) if t > 1_000_000_000.0 => t as u64,
-            _ => continue,
-        };
-        if first.is_none() { first = Some(ts); }
-        last = Some(ts);
-    }
+
+    let mut file = std::fs::File::open(metrics_path).ok()?;
+    let file_len = file.metadata().ok()?.len();
+    if file_len == 0 { return None; }
+
+    // Read the first ~4 KB to get the header + first data record.
+    let head_size = (file_len as usize).min(4096);
+    let mut head_buf = vec![0u8; head_size];
+    file.read_exact(&mut head_buf).ok()?;
+    let first = parse_first_ts_from_bytes(&head_buf);
+
+    // Read the last ~4 KB to get the last data record.
+    let tail_size = (file_len as usize).min(4096);
+    let tail_offset = file_len.saturating_sub(tail_size as u64);
+    file.seek(SeekFrom::Start(tail_offset)).ok()?;
+    let mut tail_buf = vec![0u8; tail_size];
+    let n = file.read(&mut tail_buf).ok()?;
+    tail_buf.truncate(n);
+    let last = parse_last_ts_from_bytes(&tail_buf);
+
     Some((first?, last?))
+}
+
+/// Parse the first valid timestamp from raw CSV bytes (skipping the header).
+fn parse_first_ts_from_bytes(data: &[u8]) -> Option<u64> {
+    let mut lines = data.split(|&b| b == b'\n');
+    // Skip header.
+    lines.next()?;
+    for line in lines {
+        if let Some(ts) = parse_ts_from_line(line) {
+            return Some(ts);
+        }
+    }
+    None
+}
+
+/// Parse the last valid timestamp from raw CSV bytes by scanning backwards.
+fn parse_last_ts_from_bytes(data: &[u8]) -> Option<u64> {
+    // Walk backwards through the last few lines (skip trailing newlines).
+    let mut end = data.len();
+    while end > 0 && data[end - 1] == b'\n' {
+        end -= 1;
+    }
+    // Try up to 5 lines from the end to find a valid timestamp.
+    for _ in 0..5 {
+        if end == 0 { break; }
+        let line_start = data[..end].iter().rposition(|&b| b == b'\n')
+            .map(|p| p + 1)
+            .unwrap_or(0);
+        let line = &data[line_start..end];
+        if let Some(ts) = parse_ts_from_line(line) {
+            return Some(ts);
+        }
+        end = if line_start > 0 { line_start - 1 } else { 0 };
+    }
+    None
+}
+
+/// Extract the first CSV field from a raw line and parse it as a Unix timestamp.
+fn parse_ts_from_line(line: &[u8]) -> Option<u64> {
+    let line = line.strip_suffix(b"\r").unwrap_or(line);
+    if line.is_empty() { return None; }
+    let field_end = line.iter().position(|&b| b == b',').unwrap_or(line.len());
+    let field = std::str::from_utf8(&line[..field_end]).ok()?;
+    let t: f64 = field.parse().ok()?;
+    if t > 1_000_000_000.0 { Some(t as u64) } else { None }
 }
 
 fn patch_session_timestamps(raw: &mut [(SessionEntry, Option<u64>, Option<u64>)]) {
     for (session, start, end) in raw.iter_mut() {
+        // Skip sessions that already have valid timestamps from the JSON sidecar.
+        if start.is_some() && end.is_some() {
+            continue;
+        }
         let mp = find_metrics_path(Path::new(&session.csv_path));
         let mp = match mp { Some(p) => p, None => continue };
         if let Some((first_ts, last_ts)) = read_metrics_time_range(&mp) {
@@ -921,3 +1040,91 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
     Some(CsvMetricsResult { n_rows: count, summary: sum, timeseries: rows })
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_ts_from_csv_bytes() {
+        let csv = b"timestamp,col1,col2\n1700000000.123,1.0,2.0\n1700000005.456,3.0,4.0\n1700000010.789,5.0,6.0\n";
+        assert_eq!(parse_first_ts_from_bytes(csv), Some(1700000000));
+        assert_eq!(parse_last_ts_from_bytes(csv), Some(1700000010));
+    }
+
+    #[test]
+    fn parse_ts_handles_trailing_newlines() {
+        let csv = b"ts\n1700000001.0,x\n1700000002.0,y\n\n\n";
+        assert_eq!(parse_first_ts_from_bytes(csv), Some(1700000001));
+        assert_eq!(parse_last_ts_from_bytes(csv), Some(1700000002));
+    }
+
+    #[test]
+    fn parse_ts_handles_crlf() {
+        let csv = b"ts\r\n1700000001.0,x\r\n1700000002.0,y\r\n";
+        assert_eq!(parse_first_ts_from_bytes(csv), Some(1700000001));
+        assert_eq!(parse_last_ts_from_bytes(csv), Some(1700000002));
+    }
+
+    #[test]
+    fn parse_ts_single_data_row() {
+        let csv = b"ts\n1700000042.5,val\n";
+        assert_eq!(parse_first_ts_from_bytes(csv), Some(1700000042));
+        assert_eq!(parse_last_ts_from_bytes(csv), Some(1700000042));
+    }
+
+    #[test]
+    fn parse_ts_empty_file() {
+        assert_eq!(parse_first_ts_from_bytes(b""), None);
+        assert_eq!(parse_last_ts_from_bytes(b""), None);
+    }
+
+    #[test]
+    fn parse_ts_header_only() {
+        let csv = b"timestamp,col1\n";
+        assert_eq!(parse_first_ts_from_bytes(csv), None);
+        // last_ts sees the header line but it's not a valid timestamp
+        assert_eq!(parse_last_ts_from_bytes(csv), None);
+    }
+
+    #[test]
+    fn typed_session_json_deserializes() {
+        let json = r#"{
+            "csv_file": "exg_1700000000.csv",
+            "session_start_utc": 1700000000,
+            "session_end_utc": 1700000300,
+            "session_duration_s": 300,
+            "device": {
+                "name": "Muse 2",
+                "id": "AA:BB:CC:DD:EE:FF",
+                "serial_number": "SN123"
+            },
+            "total_samples": 76800,
+            "sample_rate_hz": 256,
+            "battery_pct_end": 85.0,
+            "extra_field_ignored": true
+        }"#;
+        let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.csv_file.as_deref(), Some("exg_1700000000.csv"));
+        assert_eq!(meta.session_start_utc, Some(1700000000));
+        assert_eq!(meta.session_end_utc, Some(1700000300));
+        assert_eq!(meta.device.name.as_deref(), Some("Muse 2"));
+        assert_eq!(meta.device.id.as_deref(), Some("AA:BB:CC:DD:EE:FF"));
+        assert_eq!(meta.total_samples, Some(76800));
+        assert_eq!(meta.battery_pct_end, Some(85.0));
+    }
+
+    #[test]
+    fn typed_session_json_legacy_flat_fields() {
+        let json = r#"{
+            "csv_file": "muse_1700000000.csv",
+            "device_name": "Muse S",
+            "device_id": "XX:YY",
+            "battery_pct": 42.0
+        }"#;
+        let meta: SessionJsonMeta = serde_json::from_str(json).unwrap();
+        assert_eq!(meta.device_name.as_deref(), Some("Muse S"));
+        assert_eq!(meta.device.name, None);
+        assert_eq!(meta.battery_pct, Some(42.0));
+    }
+}
