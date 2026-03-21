@@ -232,7 +232,7 @@ const settings: Record<string, string> = {
   "umapSettings.apply":               "Anwenden & Cache löschen",
 
   "settings.openbci": "OpenBCI",
-  "settings.openbciDesc": "Konfigurieren Sie eine OpenBCI-Karte für die Verbindung neben oder anstelle eines Muse-Headsets.",
+  "settings.openbciDesc": "Konfigurieren Sie eine OpenBCI-Karte für die Verbindung neben oder anstelle eines anderen BCI-Geräts.",
   "settings.openbciBoard": "Planke",
   "settings.openbciBoardGanglion": "Ganglion – 4ch · BLE",
   "settings.openbciBoardGanglionWifi": "Ganglion – 4ch · WiFi Shield",
@@ -369,7 +369,7 @@ const settings: Record<string, string> = {
   "settings.deviceApi.save": "Save",
   "settings.deviceApi.saved": "Saved",
   "settings.deviceApi.openbciTitle":   "OpenBCI",
-  "settings.deviceApi.openbciDesc":    "Konfigurieren Sie eine OpenBCI-Karte für die Verbindung neben oder anstelle eines Muse-Headsets.",
+  "settings.deviceApi.openbciDesc":    "Konfigurieren Sie eine OpenBCI-Karte für die Verbindung neben oder anstelle eines anderen BCI-Geräts.",
 
   // ── Aufnahmeformat ───────────────────────────────────────────────────────
   "settings.storageFormat":                      "Aufnahmeformat",

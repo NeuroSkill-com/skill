@@ -23,7 +23,7 @@ const perm: Record<string, string> = {
   "perm.accessStep4":                 "חזור לכאן — הסטטוס יתעדכן אוטומטית.",
   "perm.openAccessibilitySettings":   "פתח הגדרות נגישות",
   "perm.bluetooth":                   "בלוטות׳",
-  "perm.bluetoothDesc":               "בלוטות׳ משמש לחיבור למכשיר BCI שלך (Muse, OpenBCI Ganglion וכו׳). ב-macOS המערכת מציגה בקשת הרשאה חד-פעמית בסריקה הראשונה. ב-Linux וב-Windows לא נדרשת הרשאה נפרדת.",
+  "perm.bluetoothDesc":               "בלוטות׳ משמש לחיבור למכשיר BCI שלך (Muse, MW75 Neuro, OpenBCI Ganglion, IDUN Guardian וכו׳). ב-macOS המערכת מציגה בקשת הרשאה חד-פעמית בסריקה הראשונה. ב-Linux וב-Windows לא נדרשת הרשאה נפרדת.",
   "perm.openBluetoothSettings":       "פתח הגדרות בלוטות׳",
   "perm.notifications":               "התראות",
   "perm.notificationsDesc":           "התראות נשלחות כשמגיעים ליעד ההקלטה היומי וכשזמינה עדכון תוכנה. ב-macOS וב-Windows המערכת מבקשת הרשאה בפעם הראשונה שנשלחת התראה.",

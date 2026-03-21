@@ -214,7 +214,7 @@ const history: Record<string, string> = {
   "history.refresh": "רענון",
   "history.loading": "טוען הקלטות…",
   "history.noSessions": "אין הקלטות עדיין",
-  "history.noSessionsHint": "חברו מכשיר BCI (Muse או OpenBCI) והקליטו נתוני EEG. ההקלטות יופיעו כאן.",
+  "history.noSessionsHint": "חברו מכשיר BCI והקליטו נתוני EEG. ההקלטות יופיעו כאן.",
   "history.startTime": "התחלה",
   "history.endTime": "סיום",
   "history.duration": "משך",

@@ -73,7 +73,7 @@ const dashboard: Record<string, string> = {
   "dashboard.retryAttempt":         "ניסיון #{n}",
   "dashboard.retryNow":             "נסה עכשיו",
   "dashboard.noMuseNearbyTitle":   "לא נמצא מכשיר BCI בקרבת מקום.",
-  "dashboard.noMuseNearbyHint1":   "הפעילו את מכשיר ה-BCI (Muse או OpenBCI)",
+  "dashboard.noMuseNearbyHint1":   "הפעילו את מכשיר ה-BCI",
   "dashboard.noMuseNearbyHint2":   "הישארו בטווח של 5 מטר",
   "dashboard.noMuseNearbyHint3":   "macOS: העניקו הרשאת Bluetooth ב-\nהגדרות מערכת → פרטיות ואבטחה → Bluetooth",
   "dashboard.bluetoothIsOff":       "ה-Bluetooth כבוי",

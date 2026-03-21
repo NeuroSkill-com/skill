@@ -183,7 +183,7 @@ const history: Record<string, string> = {
   "history.refresh":        "Actualiser",
   "history.loading":        "Chargement des sessions...",
   "history.noSessions":     "Aucune session enregistrée",
-  "history.noSessionsHint": "Connectez un appareil BCI (Muse ou OpenBCI) et enregistrez des données EEG. Les sessions apparaîtront ici.",
+  "history.noSessionsHint": "Connectez un appareil BCI et enregistrez des données EEG. Les sessions apparaîtront ici.",
   "history.startTime":      "Début",
   "history.endTime":        "Fin",
   "history.duration":       "Durée",

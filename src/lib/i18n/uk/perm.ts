@@ -23,7 +23,7 @@ const perm: Record<string, string> = {
   "perm.accessStep4":                 "Поверніться сюди — статус оновиться автоматично.",
   "perm.openAccessibilitySettings":   "Відкрити налаштування доступності",
   "perm.bluetooth":                   "Bluetooth",
-  "perm.bluetoothDesc":               "Bluetooth використовується для підключення до BCI-гарнітури (Muse, OpenBCI Ganglion тощо). На macOS система показує одноразовий запит дозволу під час першого сканування. На Linux і Windows спеціальних дозволів не потрібно.",
+  "perm.bluetoothDesc":               "Bluetooth використовується для підключення до BCI-гарнітури (Muse, MW75 Neuro, OpenBCI Ganglion, IDUN Guardian тощо). На macOS система показує одноразовий запит дозволу під час першого сканування. На Linux і Windows спеціальних дозволів не потрібно.",
   "perm.openBluetoothSettings":       "Відкрити налаштування Bluetooth",
   "perm.notifications":               "Сповіщення",
   "perm.notificationsDesc":           "Сповіщення надсилаються, коли ви досягаєте щоденної мети запису і коли доступне оновлення програмного забезпечення. На macOS і Windows ОС запитує дозвіл під час першого надсилання сповіщення.",

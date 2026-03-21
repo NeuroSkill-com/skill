@@ -99,7 +99,7 @@ const dashboard: Record<string, string> = {
   "dashboard.retryAttempt":         "Tentative n°{n}",
   "dashboard.retryNow":             "Réessayer maintenant",
   "dashboard.noMuseNearbyTitle":   "Aucun appareil BCI trouvé à proximité.",
-  "dashboard.noMuseNearbyHint1":   "Allumez votre appareil BCI (Muse ou OpenBCI)",
+  "dashboard.noMuseNearbyHint1":   "Allumez votre appareil BCI",
   "dashboard.noMuseNearbyHint2":   "Restez à moins de 5 m",
   "dashboard.noMuseNearbyHint3":   "macOS : accordez l'autorisation Bluetooth dans\nRéglages système → Confidentialité et sécurité → Bluetooth",
   "dashboard.bluetoothIsOff":       "Bluetooth désactivé",
