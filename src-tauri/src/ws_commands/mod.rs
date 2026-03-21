@@ -122,14 +122,47 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
 
     let skill_dir = guard.skill_dir.clone();
 
-    // Label count and recent labels from the database.
+    // Label count, recent labels, and most frequent label texts from the database.
     let label_count  = guard.label_store.as_ref().map(|ls| ls.count()).unwrap_or(0);
+    let label_embedded_count = guard.label_store.as_ref().map(|ls| ls.count_embedded()).unwrap_or(0);
     let recent_labels: Vec<serde_json::Value> = guard.label_store.as_ref()
         .map(|ls| ls.recent(5).into_iter().map(|r| serde_json::json!({
             "id":         r.id,
             "text":       r.text,
             "created_at": r.created_at,
         })).collect())
+        .unwrap_or_default();
+    let now_for_labels = unix_secs();
+    let top_labels_all = guard.label_store.as_ref()
+        .map(|ls| ls.top_texts(10, None))
+        .unwrap_or_default();
+    let top_labels_24h = guard.label_store.as_ref()
+        .map(|ls| ls.top_texts(10, Some(now_for_labels.saturating_sub(24 * 3600))))
+        .unwrap_or_default();
+    let top_labels_7d = guard.label_store.as_ref()
+        .map(|ls| ls.top_texts(10, Some(now_for_labels.saturating_sub(7 * 24 * 3600))))
+        .unwrap_or_default();
+
+    // ── Most used apps ───────────────────────────────────────────────────────
+    let activity_store = guard.input.activity_store.clone();
+    let top_apps_all = activity_store.as_ref()
+        .map(|s| s.top_apps(10, None))
+        .unwrap_or_default();
+    let top_apps_24h = activity_store.as_ref()
+        .map(|s| s.top_apps(10, Some(now_for_labels.saturating_sub(24 * 3600))))
+        .unwrap_or_default();
+    let top_apps_7d = activity_store.as_ref()
+        .map(|s| s.top_apps(10, Some(now_for_labels.saturating_sub(7 * 24 * 3600))))
+        .unwrap_or_default();
+
+    // ── Screenshot / OCR summary ─────────────────────────────────────────────
+    let ss_store = guard.screenshot_store.clone();
+    let ss_summary = ss_store.as_ref().map(|s| s.summary_counts());
+    let ss_top_apps_all = ss_store.as_ref()
+        .map(|s| s.top_ocr_texts(10, None))
+        .unwrap_or_default();
+    let ss_top_apps_24h = ss_store.as_ref()
+        .map(|s| s.top_ocr_texts(10, Some(now_for_labels.saturating_sub(24 * 3600))))
         .unwrap_or_default();
 
     // ── Calibration ──────────────────────────────────────────────────────────
@@ -276,8 +309,25 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
             "overlap_secs":     embedding_overlap_secs,
         },
         "labels": {
-            "total":  label_count,
-            "recent": recent_labels,
+            "total":    label_count,
+            "embedded": label_embedded_count,
+            "recent":   recent_labels,
+            "top_all_time": top_labels_all,
+            "top_24h":      top_labels_24h,
+            "top_7d":       top_labels_7d,
+        },
+        "apps": {
+            "top_all_time": top_apps_all,
+            "top_24h":      top_apps_24h,
+            "top_7d":       top_apps_7d,
+        },
+        "screenshots": {
+            "total":              ss_summary.as_ref().map(|s| s.total).unwrap_or(0),
+            "with_embedding":     ss_summary.as_ref().map(|s| s.with_embedding).unwrap_or(0),
+            "with_ocr":           ss_summary.as_ref().map(|s| s.with_ocr).unwrap_or(0),
+            "with_ocr_embedding": ss_summary.as_ref().map(|s| s.with_ocr_embedding).unwrap_or(0),
+            "top_apps_all_time":  ss_top_apps_all,
+            "top_apps_24h":       ss_top_apps_24h,
         },
         "calibration": {
             "last_calibration_utc": last_calibration_utc,

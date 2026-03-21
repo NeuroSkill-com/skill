@@ -249,7 +249,7 @@ pub fn skill_api_tool() -> Tool {
                  Examples: {\"command\":\"status\"}, {\"command\":\"search_screenshots\",\"args\":{\"query\":\"browser\"}}, \
                  {\"command\":\"search_labels\",\"args\":{\"query\":\"focus\",\"k\":5}}.\n\n\
                  Commands (pass as \"command\" value, parameters go in \"args\"):\n\
-                 STATUS: status | sessions | session_metrics(start_utc,end_utc) | sleep(start_utc,end_utc)\n\
+                 STATUS: status (returns device, session, embeddings, labels with top texts, apps with top usage, screenshots with OCR counts, scores, hooks, history) | sessions | session_metrics(start_utc,end_utc) | sleep(start_utc,end_utc)\n\
                  ACTIONS: say(text) | notify(title,body?) | label(text,context?) | calibrate | timer\n\
                  SEARCH: search_labels(query,k?,mode?) | interactive_search(query) | search(start_utc,end_utc,k?) | compare(a_start_utc,a_end_utc,b_start_utc,b_end_utc)\n\
                  SCREENSHOTS: search_screenshots(query,k?,mode?) | screenshots_around(timestamp,window_secs?) | screenshots_for_eeg(start_utc?,end_utc?,window_secs?,limit?) | eeg_for_screenshots(query,k?,window_secs?,mode?)\n\

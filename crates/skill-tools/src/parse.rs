@@ -1771,6 +1771,18 @@ df -h
     }
 
     #[test]
+    fn redirect_search_images_with_args() {
+        // LLM emits {"name":"search-images","arguments":{"query":"browser"}}
+        let msg = r#"[TOOL_CALL]{"name":"search-images","arguments":{"query":"browser"}}[/TOOL_CALL]"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "skill");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "search_screenshots");
+        assert_eq!(args["args"]["query"].as_str().unwrap(), "browser");
+    }
+
+    #[test]
     fn redirect_multiple_subcmds_in_one_turn() {
         let msg = r#"[TOOL_CALL]{"name":"status","arguments":{}}[/TOOL_CALL]
 [TOOL_CALL]{"name":"sessions","arguments":{}}[/TOOL_CALL]"#;

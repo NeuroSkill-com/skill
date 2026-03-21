@@ -144,6 +144,23 @@ pub struct EmbeddingAndOcr {
     pub ocr_embedding: Option<Vec<f32>>,
 }
 
+/// Summary counts for the screenshot store.
+#[derive(Clone, Debug, Serialize)]
+pub struct ScreenshotSummary {
+    pub total:              u64,
+    pub with_embedding:     u64,
+    pub with_ocr:           u64,
+    pub with_ocr_embedding: u64,
+}
+
+/// Frequency row for OCR app grouping.
+#[derive(Clone, Debug, Serialize)]
+pub struct OcrFreqRow {
+    pub app_name:  String,
+    pub count:     u64,
+    pub last_seen: u64,
+}
+
 /// A row queried for re-embedding.
 pub struct EmbeddableRow {
     pub id:       i64,
@@ -519,6 +536,58 @@ impl ScreenshotStore {
         let conn = self.conn.lock_or_recover();
         conn.query_row("SELECT COUNT(*) FROM screenshots", [], |r| r.get::<_, i64>(0))
             .unwrap_or(0) as usize
+    }
+
+    /// Return counts for the screenshot store: total, with embeddings,
+    /// with OCR text, and with OCR embeddings.
+    pub fn summary_counts(&self) -> ScreenshotSummary {
+        let conn = self.conn.lock_or_recover();
+        let total = conn.query_row(
+            "SELECT COUNT(*) FROM screenshots", [], |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as u64;
+        let with_embedding = conn.query_row(
+            "SELECT COUNT(*) FROM screenshots WHERE embedding IS NOT NULL", [], |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as u64;
+        let with_ocr = conn.query_row(
+            "SELECT COUNT(*) FROM screenshots WHERE ocr_text != ''", [], |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as u64;
+        let with_ocr_embedding = conn.query_row(
+            "SELECT COUNT(*) FROM screenshots WHERE ocr_embedding IS NOT NULL", [], |r| r.get::<_, i64>(0),
+        ).unwrap_or(0) as u64;
+        ScreenshotSummary { total, with_embedding, with_ocr, with_ocr_embedding }
+    }
+
+    /// Return the top `limit` most frequent OCR texts (non-empty, grouped),
+    /// optionally filtered to screenshots taken at or after `since` (unix seconds).
+    pub fn top_ocr_texts(&self, limit: usize, since: Option<u64>) -> Vec<OcrFreqRow> {
+        let conn = self.conn.lock_or_recover();
+        let (sql, since_val): (&str, i64) = match since {
+            Some(ts) => (
+                "SELECT app_name, COUNT(*) AS cnt, MAX(unix_ts) AS last_seen
+                 FROM screenshots WHERE unix_ts >= ?1 AND app_name != ''
+                 GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
+                ts as i64,
+            ),
+            None => (
+                "SELECT app_name, COUNT(*) AS cnt, MAX(unix_ts) AS last_seen
+                 FROM screenshots WHERE app_name != '' AND (1=1 OR ?1=?1)
+                 GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
+                0i64,
+            ),
+        };
+        let mut stmt = match conn.prepare_cached(sql) {
+            Ok(s)  => s,
+            Err(e) => { eprintln!("[screenshots] top_ocr_texts: {e}"); return vec![]; }
+        };
+        stmt.query_map(params![since_val, limit as i64], |row| {
+            Ok(OcrFreqRow {
+                app_name:  row.get(0)?,
+                count:     row.get::<_, i64>(1)? as u64,
+                last_seen: row.get::<_, i64>(2)? as u64,
+            })
+        })
+        .map(|rows| rows.filter_map(|r| r.ok()).collect())
+        .unwrap_or_default()
     }
 
     /// Set the animated GIF filename for a screenshot row.
