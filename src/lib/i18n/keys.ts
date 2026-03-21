@@ -2481,6 +2481,7 @@ export type TranslationKey =
   | "settings.overlapNone"
   | "settings.pair"
   | "settings.pairToConnect"
+  | "settings.emotivLauncherHint"
   | "settings.paired"
   | "settings.passthrough"
   | "settings.pipeline"

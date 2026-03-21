@@ -1170,6 +1170,12 @@ the Free Software Foundation, version 3 only. -->
         </span>
       {/if}
 
+      {#if dev.transport === "cortex"}
+        <span class="text-[0.58rem] text-violet-600/80 dark:text-violet-400/70 leading-tight mt-0.5">
+          {t("settings.emotivLauncherHint")}
+        </span>
+      {/if}
+
       {#if dev.id === connected.device_id && (connected.serial_number || connected.mac_address)}
         <div class="flex items-center gap-3 flex-wrap">
           {#if connected.serial_number}

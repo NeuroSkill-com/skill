@@ -27,6 +27,7 @@ const settings: Record<string, string> = {
   "settings.newDeviceNotice":         "Знайдено новий пристрій поблизу",
   "settings.newDeviceNoticeHint":     "Спаруйте його нижче, якщо це ваша гарнітура.",
   "settings.pairToConnect":           "Спочатку спаруйте цей пристрій, щоб підключитися.",
+  "settings.emotivLauncherHint":      "Після з'єднання підтвердіть підключення у додатку EMOTIV Launcher.",
   "settings.signalProcessing":  "Обробка сигналу",
   "settings.powerlineNotch":    "Мережевий фільтр",
   "settings.us60Hz":            "US 60 Гц",
