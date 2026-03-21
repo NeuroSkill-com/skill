@@ -248,12 +248,22 @@ summary**. It is only visible with `--full` (colorized) or `--json` (plain).
 | `labels.recent[]` | array | Full label objects; summary only prints text + timestamp |
 | `hooks.latest_trigger` | object | Most recent hook trigger across all hooks: `{ hook, triggered_at_utc, distance, label_id, label_text }`. The summary shows hook name, timestamp, and distance; the JSON has the full object. |
 | `history.today_vs_avg` | object | Per-metric today-vs-7-day-avg comparison table (metric, today, avg_7d, delta_pct, direction) |
+| `apps` | object | Most-used apps by window-switch count. Contains `top_all_time`, `top_24h`, `top_7d` arrays. Each entry: `{ app_name, switches, last_seen }`. |
+| `labels.top_all_time` | array | Most frequent label texts (all time). Each: `{ text, count }`. |
+| `labels.top_24h` / `labels.top_7d` | array | Most frequent label texts in the last 24 h / 7 d. |
+| `labels.embedded` | number | Count of labels with text embeddings computed. |
+| `screenshots` | object | Screenshot/OCR summary counts: `total`, `with_embedding`, `with_ocr`, `with_ocr_embedding`. Also `top_apps_all_time` and `top_apps_24h` arrays (each: `{ app_name, count }`). |
 
 ```bash
 node cli.ts status --json | jq '.history.today_vs_avg'
 node cli.ts status --json | jq '.calibration.actions'
 node cli.ts status --json | jq '.labels.recent'
 node cli.ts status --json | jq '.hooks.latest_trigger'
+node cli.ts status --json | jq '.apps.top_all_time[:5]'
+node cli.ts status --json | jq '.apps.top_24h'
+node cli.ts status --json | jq '.labels.top_all_time'
+node cli.ts status --json | jq '.screenshots'
+node cli.ts status --json | jq '.screenshots.top_apps_24h'
 ```
 
 #### `session`
@@ -363,15 +373,26 @@ node cli.ts search-labels "meditation" --json | jq '.results[0].context'
 | `nodes[]` | array | All graph nodes — the summary prints each layer; `--json` gives the raw array with all fields |
 | `edges[]` | array | All graph edges with `from_id`, `to_id`, `distance`, `kind` |
 | `dot` | string | Complete Graphviz DOT source — only accessible via `--dot` or `--json` (never printed in default or `--full`) |
+| `svg` | string | Pre-rendered SVG — PCA-scatter layout for found_labels |
+| `svg_col` | string | Pre-rendered SVG — column-per-EEG-parent layout |
+| `svg_3d` | string | Pre-rendered SVG — 3-D perspective-projected view of all nodes including screenshots (dark theme with depth cues) |
 | `nodes[].eeg_metrics` | object | Full EEG metrics for `text_label` nodes — the summary shows 5 fields; JSON has all |
+| `nodes[].proj_x/y/z` | numbers | 3-D PCA coordinates (normalised [-1, 1]) for all nodes with text embeddings |
+| `nodes[].filename` | string | Screenshot image path (screenshot nodes only) |
+| `nodes[].app_name` | string | Application name at capture time (screenshot nodes only) |
+| `nodes[].window_title` | string | Window title at capture time (screenshot nodes only) |
+| `nodes[].ocr_text` | string | OCR-extracted text (screenshot nodes only) |
+| `nodes[].ocr_similarity` | number | Cosine similarity between query and OCR text (screenshot nodes only) |
 
 ```bash
 node cli.ts interactive "deep focus" --json | jq '.nodes | length'
 node cli.ts interactive "meditation" --json | jq '.edges | map(.kind) | unique'
 node cli.ts interactive "anxiety" --json | jq '[.nodes[] | select(.kind == "text_label") | .text]'
+node cli.ts interactive "coding" --json | jq '[.nodes[] | select(.kind == "screenshot") | {file: .filename, app: .app_name}]'
 node cli.ts interactive "focus" --dot | dot -Tsvg > graph.svg   # visualize with graphviz
 node cli.ts interactive "stress" --dot | dot -Tpng > graph.png
 node cli.ts interactive "relaxed" --json | jq '.dot' -r | dot -Tsvg > graph.svg  # same via --json
+node cli.ts interactive "work" --json | jq '.svg_3d' -r > graph_3d.svg          # 3D perspective SVG
 ```
 
 ---
@@ -723,9 +744,35 @@ done
   },
   "labels": {
     "total": 58,
+    "embedded": 42,
     "recent": [
       { "id": 42, "text": "meditation start", "created_at": 1740413100 }
-    ]
+    ],
+    "top_all_time": [
+      { "text": "deep focus", "count": 12 },
+      { "text": "meditation", "count": 8 }
+    ],
+    "top_24h": [ { "text": "deep focus", "count": 3 } ],
+    "top_7d":  [ { "text": "deep focus", "count": 7 } ]
+  },
+  "apps": {
+    "top_all_time": [
+      { "app_name": "VS Code", "switches": 342, "last_seen": 1740413000 },
+      { "app_name": "Firefox", "switches": 198, "last_seen": 1740412900 }
+    ],
+    "top_24h": [ { "app_name": "VS Code", "switches": 28, "last_seen": 1740413000 } ],
+    "top_7d":  [ { "app_name": "VS Code", "switches": 142, "last_seen": 1740413000 } ]
+  },
+  "screenshots": {
+    "total": 1842,
+    "with_embedding": 1840,
+    "with_ocr": 1780,
+    "with_ocr_embedding": 1756,
+    "top_apps_all_time": [
+      { "app_name": "VS Code", "count": 620 },
+      { "app_name": "Firefox", "count": 310 }
+    ],
+    "top_apps_24h": [ { "app_name": "VS Code", "count": 48 } ]
   },
   "sleep": {
     // Last 48 h sleep staging summary:
@@ -765,8 +812,9 @@ done
 
 ### `status`
 
-Full snapshot: device state, session, signal quality, scores, bands, embeddings, labels,
-hooks (with latest trigger), sleep summary, and recording history.
+Full snapshot: device state, session, signal quality, scores, bands, embeddings, labels
+(with most-frequent texts), hooks (with latest trigger), sleep summary, recording history,
+app usage analytics, and screenshot/OCR statistics.
 
 Use `--poll <n>` to re-poll every N seconds over the same open connection
 (keeps the socket open; press Ctrl+C to stop).
@@ -783,6 +831,11 @@ node cli.ts status --json | jq '.history.current_streak_days'
 node cli.ts status --json | jq '.hooks'                      # hook summary + latest trigger
 node cli.ts status --json | jq '.hooks.latest_trigger'       # most recent hook trigger
 node cli.ts status --json | jq '.hooks.latest_trigger.hook'  # which hook fired last
+node cli.ts status --json | jq '.apps.top_24h'               # most-used apps in last 24h
+node cli.ts status --json | jq '.apps.top_all_time[:5]'      # top 5 apps all-time
+node cli.ts status --json | jq '.labels.top_all_time'        # most frequent label texts
+node cli.ts status --json | jq '.screenshots'                # screenshot/OCR counts
+node cli.ts status --json | jq '.screenshots.top_apps_24h'   # top screenshot apps (24h)
 node cli.ts status --poll 5              # refresh every 5 seconds
 node cli.ts status --poll 10 --json      # JSON snapshot every 10 seconds
 ```
@@ -1347,8 +1400,8 @@ curl -s -X POST http://127.0.0.1:8375/ \
 
 ### `interactive`
 
-Cross-modal 4-layer graph search.  Combines semantic text search, EEG similarity search,
-and temporal label proximity into a single directed graph:
+Cross-modal 5-layer graph search.  Combines semantic text search, EEG similarity search,
+temporal label proximity, and screenshot discovery into a single directed graph:
 
 ```
 "deep focus"  →  text_label nodes       (semantically similar annotations)
@@ -1356,6 +1409,9 @@ and temporal label proximity into a single directed graph:
               eeg_point nodes           (raw EEG moments from label time windows)
                       ↓
               found_label nodes         (labels near those EEG moments in time)
+                      ↓
+              screenshot nodes          (screenshots near EEG timestamps, ranked by
+                                         window-title / OCR-text proximity to query)
 ```
 
 Four output formats — choose exactly one:
@@ -1385,6 +1441,9 @@ node cli.ts interactive "anxiety" --json | jq '[.nodes[] | select(.kind == "eeg_
 
 # Extract discovered nearby labels:
 node cli.ts interactive "stress" --json | jq '[.nodes[] | select(.kind == "found_label") | .text]'
+
+# Extract discovered screenshots:
+node cli.ts interactive "coding" --json | jq '[.nodes[] | select(.kind == "screenshot") | {file: .filename, app: .app_name, ocr_sim: .ocr_similarity}]'
 
 # Render graph as SVG (requires graphviz):
 node cli.ts interactive "deep focus" --dot | dot -Tsvg > graph.svg
@@ -1502,16 +1561,38 @@ curl -s -X POST http://127.0.0.1:8375/ \
       "distance":       0.133,     // fraction of reach window (0 = right at the EEG point)
       "eeg_metrics":    null,
       "parent_id":      "ep_1740413565"
+    },
+    {
+      "id":             "ss_20260224080530",
+      "kind":           "screenshot",
+      "text":           null,
+      "timestamp_unix": 1740413130,
+      "distance":       0.05,
+      "eeg_metrics":    null,
+      "parent_id":      "ep_1740413565",
+      "filename":       "20260224/20260224080530.webp",
+      "app_name":       "VS Code",
+      "window_title":   "main.rs",
+      "ocr_text":       "fn dispatch(app: &AppHandle, command: &str…",
+      "ocr_similarity": 0.42,
+      "proj_x":         0.31,
+      "proj_y":         -0.18,
+      "proj_z":         0.72
     }
     // ... more nodes
   ],
   "edges": [
     { "from_id": "query",        "to_id": "tl_0",          "distance": 0.1204, "kind": "text_sim" },
     { "from_id": "tl_0",        "to_id": "ep_1740413565",  "distance": 0.0231, "kind": "eeg_bridge" },
-    { "from_id": "ep_1740413565","to_id": "fl_42",          "distance": 0.133,  "kind": "label_prox" }
+    { "from_id": "ep_1740413565","to_id": "fl_42",          "distance": 0.133,  "kind": "label_prox" },
+    { "from_id": "ep_1740413565","to_id": "ss_20260224080530","distance": 2.0,  "kind": "screenshot_prox" },
+    { "from_id": "ep_1740413565","to_id": "ss_20260224080530","distance": 0.42, "kind": "ocr_sim" }
     // ...
   ],
-  "dot": "digraph interactive_search {\n  graph [rankdir=TB, ...];\n  \"query\" [...];\n  ..."
+  "dot": "digraph interactive_search {\n  graph [rankdir=TB, ...];\n  \"query\" [...];\n  ...",
+  "svg": "<svg ...>...</svg>",
+  "svg_col": "<svg ...>...</svg>",
+  "svg_3d": "<svg ...>...</svg>"
 }
 ```
 
@@ -1523,6 +1604,7 @@ curl -s -X POST http://127.0.0.1:8375/ \
 | `text_label` | 1 | blue | Annotations semantically similar to the query |
 | `eeg_point` | 2 | amber | Raw EEG moments from label time windows |
 | `found_label` | 3 | emerald | Annotations discovered near EEG moments in time |
+| `screenshot` | 4 | pink | Screenshots near EEG timestamps, ranked by window-title / OCR proximity |
 
 **Edge kinds:**
 
@@ -1532,6 +1614,26 @@ curl -s -X POST http://127.0.0.1:8375/ \
 | `eeg_bridge` | text_label → eeg_point | Cosine distance in EEG embedding space |
 | `eeg_sim` | eeg_point → eeg_point | Cosine distance (shared EEG point, cross-edge) |
 | `label_prox` | eeg_point → found_label | Temporal proximity (fraction of reach window) |
+| `screenshot_prox` | eeg_point → screenshot | Temporal proximity (seconds between EEG epoch and screenshot capture) |
+| `ocr_sim` | eeg_point → screenshot | Cosine similarity between query text and screenshot OCR text |
+
+**Screenshot node fields** (only present on `screenshot` kind nodes):
+
+| Field | Type | Description |
+|---|---|---|
+| `filename` | string | Relative path to the screenshot image file |
+| `app_name` | string | Application name at capture time |
+| `window_title` | string | Window title at capture time |
+| `ocr_text` | string | OCR-extracted text from the screenshot |
+| `ocr_similarity` | number | Cosine similarity (0–1) between query text and OCR text |
+
+**3-D projection fields** (present on all nodes when text embeddings are available):
+
+| Field | Type | Description |
+|---|---|---|
+| `proj_x` | number | PCA axis 1, normalised to [-1, 1] |
+| `proj_y` | number | PCA axis 2, normalised to [-1, 1] |
+| `proj_z` | number | PCA axis 3, normalised to [-1, 1] |
 
 > **Empty results:** If no labels have been embedded yet, only the query node is returned
 > (`nodes.length === 1`, `edges.length === 0`). Annotate moments with `label` first, then
@@ -2962,11 +3064,27 @@ conversation.  Tools are injected into the system prompt automatically when enab
 | `web_search` | Search the web (DuckDuckGo JSON + HTML fallback) |
 | `web_fetch` | Fetch a URL and return its content |
 | `search_output` | Navigate large tool outputs (paginated) |
+| `skill` | Query the NeuroSkill™ API — status, sessions, search, labels, screenshots, sleep, hooks, DND |
 
 Tool calls are detected in the model's output, executed server-side, and results are
 fed back into the conversation automatically.  The CLI's `llm chat` command handles
 this transparently — you'll see tool-call cards in the interactive REPL and results
 streamed back inline.
+
+**The `skill` tool** lets the LLM query and control NeuroSkill™ directly.  Commands
+are sent as `{ "command": "<ws_command>", "args": { ... } }` objects.  Supported
+commands include: `status`, `sessions`, `session_metrics`, `search`, `compare`,
+`sleep`, `sleep_schedule`, `sleep_schedule_set`, `label`, `search_labels`,
+`interactive_search`, `search_screenshots`, `screenshots_around`,
+`screenshots_for_eeg`, `eeg_for_screenshots`, `search_screenshots_vision`,
+`search_screenshots_by_image_b64`, `hooks_status`, `hooks_get`, `hooks_suggest`,
+`hooks_log`, `dnd`, `notify`, `say`, `health_summary`, `health_query`,
+`health_metric_types`, `health_sync`, and others.
+
+**Blocked commands:** For safety, the LLM cannot invoke self-management commands:
+`llm_start`, `llm_stop`, `llm_select_model`, `llm_select_mmproj`, `llm_add_model`,
+`llm_download`, `llm_cancel_download`, `llm_pause_download`, `llm_resume_download`,
+`llm_refresh_catalog`, `llm_logs`, `llm_delete`, `run_calibration`, `timer`.
 
 **Safety:** Dangerous operations (e.g. `rm -rf`, writing to system paths) trigger an
 approval dialog before execution.  The tool system also enforces output size limits
