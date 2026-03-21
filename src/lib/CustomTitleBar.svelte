@@ -64,6 +64,8 @@ the Free Software Foundation, version 3 only. -->
   let pickerBtnEl = $state<HTMLButtonElement | null>(null);
   let dropdownX = $state(0);
   let dropdownY = $state(0);
+  /** Set of repos that have at least one downloaded mmproj. */
+  let visionRepos = $state(new Set<string>());
 
   function prettyModelName(filename: string): string {
     return filename.replace(/\.gguf$/i, "").replace(/-(\d{5})-of-\d{5}$/, "");
@@ -79,9 +81,16 @@ the Free Software Foundation, version 3 only. -->
       const catalog = await invoke<LlmCatalog>("get_llm_catalog");
       downloadedModels = catalog.entries.filter(e => e.state === "downloaded" && !e.is_mmproj);
       activeFilename = catalog.active_model;
+      // Collect repos that have a downloaded vision projector
+      visionRepos = new Set(
+        catalog.entries
+          .filter(e => e.is_mmproj && e.state === "downloaded")
+          .map(e => e.repo),
+      );
     } catch (e) {
       console.warn("[titlebar] get_llm_catalog failed:", e);
       downloadedModels = [];
+      visionRepos = new Set();
     }
     if (downloadedModels.length === 0) return;
     // Position dropdown below the button
@@ -411,10 +420,19 @@ the Free Software Foundation, version 3 only. -->
       {/if}
       {#each group.entries as entry}
         {@const isActive = entry.filename === activeFilename}
+        {@const hasVision = visionRepos.has(entry.repo)}
         <button class="chat-model-item {isActive ? 'chat-model-item-active' : ''}"
                 onclick={() => switchToModel(entry.filename)}>
           <span class="chat-model-dot {isActive ? 'chat-model-dot-active' : ''}"></span>
           <span class="chat-model-item-name">{modelDisplayLabel(entry)}</span>
+          {#if hasVision}
+            <svg class="chat-model-vision-icon" viewBox="0 0 20 20" fill="none"
+                 stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                 stroke-linejoin="round">
+              <path d="M1 10s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z"/>
+              <circle cx="10" cy="10" r="3"/>
+            </svg>
+          {/if}
           <span class="chat-model-item-size">{entry.size_gb.toFixed(1)} GB</span>
         </button>
       {/each}
@@ -590,6 +608,11 @@ the Free Software Foundation, version 3 only. -->
   .chat-model-item-name {
     flex: 1; min-width: 0;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chat-model-vision-icon {
+    width: 12px; height: 12px; flex-shrink: 0;
+    color: var(--muted-foreground);
+    opacity: 0.7;
   }
   .chat-model-item-size {
     font-size: 0.52rem; flex-shrink: 0;
