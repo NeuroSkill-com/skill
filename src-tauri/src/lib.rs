@@ -1125,13 +1125,16 @@ pub fn run() {
     // ── Windows: install a vectored exception handler for crash diagnostics ──
     #[cfg(target_os = "windows")]
     {
-        use windows_sys::Win32::System::Diagnostics::Debug::*;
-        use windows_sys::Win32::Foundation::EXCEPTION_ACCESS_VIOLATION;
+        use windows_sys::Win32::System::Diagnostics::Debug::{
+            AddVectoredExceptionHandler, EXCEPTION_POINTERS,
+        };
+
+        const EXCEPTION_ACCESS_VIOLATION: u32 = 0xC0000005;
+        const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 
         unsafe extern "system" fn crash_handler(
             info: *mut EXCEPTION_POINTERS,
         ) -> i32 {
-            const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
             if info.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
             let record = (*info).ExceptionRecord;
             if record.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
