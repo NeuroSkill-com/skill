@@ -679,17 +679,17 @@ async fn e2e_download_start_and_chat() {
         let mut tools = server.allowed_tools.lock().expect("lock");
         tools.enabled = true;
         tools.date = true;
-        tools.max_rounds = 2; // limit rounds so small models don't loop
+        tools.max_rounds = 1; // limit rounds so small models don't loop on CPU
         tools.location = false; tools.web_search = false; tools.web_fetch = false;
         tools.bash = false; tools.read_file = false; tools.write_file = false;
         tools.edit_file = false; tools.skill_api = false;
     }
     let msgs = vec![
-        json!({"role": "system", "content": "You are a helpful assistant with tool access. When asked about the current date or time, you MUST call the date tool. After receiving the tool result, state the date clearly. Be concise."}),
+        json!({"role": "system", "content": "You are a helpful assistant with tool access. When asked about the current date or time, you MUST call the date tool. After receiving the tool result, state the date clearly. Be concise. Do NOT call any other tool."}),
         json!({"role": "user",   "content": "What is today's date? Call the date tool to check."}),
     ];
     let params = GenParams {
-        max_tokens: 512, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
+        max_tokens: 128, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
     };
     let (step, chat, date_ok) = run_tool_chat(&server, "Tool chat (date)", "Tool chat (date)", 7, msgs, params, "date").await;
     report.steps.push(step);
@@ -704,17 +704,17 @@ async fn e2e_download_start_and_chat() {
         tools.date = false;
         tools.skill_api = true;
         tools.skill_api_port = mock_port;
-        tools.max_rounds = 2;
+        tools.max_rounds = 1;
         tools.bash = false; tools.read_file = false; tools.write_file = false;
         tools.edit_file = false; tools.location = false;
         tools.web_search = false; tools.web_fetch = false;
     }
     let msgs = vec![
-        json!({"role": "system", "content": "You are a helpful assistant integrated with NeuroSkill, an EEG brain-computer interface app. You have access to the skill tool. When asked about the user's brain state or EEG status, call the skill tool with command \"status\". Summarize the result concisely."}),
+        json!({"role": "system", "content": "You are a helpful assistant integrated with NeuroSkill, an EEG brain-computer interface app. You have access to the skill tool. When asked about the user's brain state or EEG status, call the skill tool with command \"status\". Summarize the result concisely. Do NOT call any other tool."}),
         json!({"role": "user",   "content": "What is my current EEG status? Use the skill tool with the status command to check."}),
     ];
     let params = GenParams {
-        max_tokens: 512, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
+        max_tokens: 128, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
     };
     let (step, chat, skill_ok) = run_tool_chat(
         &server, "Tool chat (skill status)", "Tool chat (skill status)", 8, msgs, params, "skill",
