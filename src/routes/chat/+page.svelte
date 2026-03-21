@@ -967,58 +967,65 @@
       />
     {/if}
 
-    {#if showSettings}
-      <ChatSettingsPanel
-        bind:systemPrompt
-        bind:eegContext
-        {latestBands}
-        bind:thinkingLevel
-        bind:temperature
-        bind:maxTokens
-        bind:topK
-        bind:topP
+    <!-- Content area: panels overlay message list + input when open -->
+    <div class="relative flex-1 min-h-0 flex flex-col overflow-hidden">
+      {#if showSettings}
+        <div class="absolute inset-0 z-20 flex flex-col bg-white dark:bg-[#0f0f18]">
+          <ChatSettingsPanel
+            bind:systemPrompt
+            bind:eegContext
+            {latestBands}
+            bind:thinkingLevel
+            bind:temperature
+            bind:maxTokens
+            bind:topK
+            bind:topP
+          />
+        </div>
+      {/if}
+
+      {#if showTools}
+        <div class="absolute inset-0 z-20 flex flex-col bg-white dark:bg-[#0f0f18]">
+          <ChatToolsPanel
+            {toolConfig}
+            {enabledToolCount}
+            onUpdate={updateToolConfig}
+          />
+        </div>
+      {/if}
+
+      <ChatMessageList
+        bind:this={msgListRef}
+        {messages}
+        {status}
+        {generating}
+        {streamStartMs}
+        {streamTokens}
+        onUpdateMessage={updateMessage}
+        onUpdateToolUse={updateToolUse}
+        onCancelToolCall={cancelToolCall}
+        onEditAndResend={editAndResend}
+        onRegenerate={regenerate}
+        onStartServer={startServer}
       />
-    {/if}
 
-    {#if showTools}
-      <ChatToolsPanel
-        {toolConfig}
-        {enabledToolCount}
-        onUpdate={updateToolConfig}
+      <ChatInputBar
+        bind:this={inputBarRef}
+        bind:input
+        bind:attachments
+        {status}
+        {generating}
+        {aborting}
+        {canSend}
+        {supportsVision}
+        {nCtx}
+        {liveUsedTokens}
+        onSend={sendMessage}
+        onAbort={abort}
+        onInputKeydown={inputKeydown}
+        onBeforeInput={onChatBeforeInput}
       />
-    {/if}
-
-    <ChatMessageList
-      bind:this={msgListRef}
-      {messages}
-      {status}
-      {generating}
-      {streamStartMs}
-      {streamTokens}
-      onUpdateMessage={updateMessage}
-      onUpdateToolUse={updateToolUse}
-      onCancelToolCall={cancelToolCall}
-      onEditAndResend={editAndResend}
-      onRegenerate={regenerate}
-      onStartServer={startServer}
-    />
-
-    <ChatInputBar
-      bind:this={inputBarRef}
-      bind:input
-      bind:attachments
-      {status}
-      {generating}
-      {aborting}
-      {canSend}
-      {supportsVision}
-      {nCtx}
-      {liveUsedTokens}
-      onSend={sendMessage}
-      onAbort={abort}
-      onInputKeydown={inputKeydown}
-      onBeforeInput={onChatBeforeInput}
-    />
+    </div>
 
   </div>
 </div>

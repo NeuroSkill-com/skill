@@ -45,7 +45,7 @@
   const eegActive = $derived(eegContext && latestBands !== null);
 </script>
 
-<div class="min-h-0 max-h-[40vh] overflow-y-auto border-b border-border dark:border-white/[0.06]
+<div class="flex-1 min-h-0 overflow-y-auto
             bg-slate-50/60 dark:bg-[#111118] px-4 py-3 flex flex-col gap-3
             scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border">
 
