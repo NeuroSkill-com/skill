@@ -60,7 +60,10 @@
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(feature = "gpu")]
 use gpu_fft::{fft_batch, ifft_batch, psd::psd as one_sided_psd};
+#[cfg(not(feature = "gpu"))]
+use crate::cpu_fft::{fft_batch, ifft_batch, psd as one_sided_psd};
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
