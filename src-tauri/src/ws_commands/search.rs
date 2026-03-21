@@ -83,6 +83,7 @@ pub(super) fn search_labels(app: &AppHandle, msg: &Value) -> Result<Value, Strin
     );
 
     let query_vec: Vec<f32> = {
+        crate::label_cmds::ensure_embedder(&embedder_arc, &model_code, &skill_dir)?;
         let mut guard = embedder_arc.0.lock_or_recover();
         let te = guard.as_mut().ok_or("text embedder not initialised — model may still be downloading")?;
         let mut vecs = te.embed(vec![query.as_str()], None).map_err(|e| e.to_string())?;
@@ -346,7 +347,7 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
     let reach_minutes = msg.get("reach_minutes").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 60);
     let reach_seconds = reach_minutes * 60;
 
-    let (skill_dir, _model_code, eeg_model_backend) = crate::read_state(
+    let (skill_dir, model_code, eeg_model_backend) = crate::read_state(
         &app.app_state(),
         |s| (s.skill_dir.clone(), s.ui.text_embedding_model.clone(),
              s.embedding.model_config.model_backend.as_str().to_string()),
@@ -361,6 +362,7 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
 
     // Embed the query (ws_commands run inside spawn_blocking — safe to block)
     let query_vec: Vec<f32> = {
+        crate::label_cmds::ensure_embedder(&embedder_arc, &model_code, &skill_dir)?;
         let mut guard = embedder_arc.0.lock_or_recover();
         let te = guard.as_mut().ok_or("text embedder not initialised — model may still be downloading")?;
         let mut vecs = te.embed(vec![query.as_str()], None).map_err(|e| e.to_string())?;

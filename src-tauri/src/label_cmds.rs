@@ -232,6 +232,23 @@ pub fn init_embedder(embedder: &EmbedderState, model_code: &str, skill_dir: &std
     }
 }
 
+/// Ensure the embedder is initialised, retrying lazily if it was `None`
+/// (e.g. because the initial background init failed due to a missing model
+/// download or transient error).  Returns an error only when the retry also
+/// fails.
+pub fn ensure_embedder(
+    embedder:   &EmbedderState,
+    model_code: &str,
+    skill_dir:  &std::path::Path,
+) -> Result<(), String> {
+    let mut guard = embedder.0.lock_or_recover();
+    if guard.is_some() { return Ok(()); }
+    match build_embedder(model_code, skill_dir) {
+        Ok(te) => { *guard = Some(te); Ok(()) }
+        Err(e) => Err(format!("embedder not initialized — retry failed: {e}")),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn embed_and_store_label(
     label_id:    i64,
@@ -391,10 +408,12 @@ pub async fn search_labels_by_text(
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<Vec<crate::label_index::LabelNeighbor>, String> {
     let skill_dir = crate::skill_dir(&state);
+    let model_code = state.lock_or_recover().ui.text_embedding_model.clone();
     let embedder  = std::sync::Arc::clone(&embedder);
     let label_idx = std::sync::Arc::clone(&label_idx);
     let ef = (k * 4).max(64);
     tokio::task::spawn_blocking(move || {
+        ensure_embedder(&embedder, &model_code, &skill_dir)?;
         let mut guard = embedder.0.lock_or_recover();
         let te = guard.as_mut().ok_or("embedder not initialized")?;
         let mut vecs = te.embed(vec![query.as_str()], None).map_err(|e| e.to_string())?;
@@ -439,6 +458,7 @@ pub async fn reembed_all_labels(
         let total = rows.len();
         let _ = app.emit("embed-progress", serde_json::json!({ "done": 0, "total": total }));
 
+        ensure_embedder(&embedder, &model_code, &skill_dir)?;
         let mut guard = embedder.0.lock_or_recover();
         let te = guard.as_mut().ok_or("embedder not initialized")?;
 

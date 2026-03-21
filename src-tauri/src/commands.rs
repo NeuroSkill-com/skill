@@ -143,9 +143,10 @@ pub async fn interactive_search(
     embedder:  tauri::State<'_, std::sync::Arc<crate::label_cmds::EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<InteractiveSearchResult, String> {
-    let (skill_dir, eeg_model_backend) = {
+    let (skill_dir, eeg_model_backend, model_code) = {
         let s = state.lock_or_recover();
-        (s.skill_dir.clone(), s.embedding.model_config.model_backend.as_str().to_string())
+        (s.skill_dir.clone(), s.embedding.model_config.model_backend.as_str().to_string(),
+         s.ui.text_embedding_model.clone())
     };
     let embedder  = std::sync::Arc::clone(&embedder);
     let label_idx = std::sync::Arc::clone(&label_idx);
@@ -158,6 +159,7 @@ pub async fn interactive_search(
     tokio::task::spawn_blocking(move || {
         // ── Step 1: embed the query ────────────────────────────────────────
         let query_vec = {
+            crate::label_cmds::ensure_embedder(&embedder, &model_code, &skill_dir)?;
             let mut guard = embedder.0.lock_or_recover();
             let te = guard.as_mut().ok_or("embedder not initialized")?;
             let mut vecs = te.embed(vec![query.as_str()], None)
