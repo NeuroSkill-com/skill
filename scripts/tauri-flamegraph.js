@@ -277,16 +277,31 @@ if (hasMold) {
   console.log("→ mold + clang detected — enabling fast linker (-fuse-ld=mold)");
 }
 
+// ── Step 0: Clean build artifacts ────────────────────────────────────────────
+// Full cargo clean + SvelteKit clean so the flamegraph captures a fresh build.
+
+console.log("→ Cleaning cargo build artifacts …");
+try {
+  execSync("cargo clean", { cwd: srcTauri, stdio: "inherit" });
+} catch {
+  console.warn("→ cargo clean failed — continuing anyway");
+}
+
+console.log("→ Cleaning SvelteKit build artifacts …");
+for (const cache of [
+  resolve(root, ".svelte-kit"),
+  resolve(root, "node_modules", ".vite"),
+  resolve(root, "build"),
+]) {
+  forceRemove(cache);
+}
+
 // ── Step 1: Build the binary (normal user) ───────────────────────────────────
 
 // Locate the expected binary path
 const profileDir = useRelease ? "release" : "debug";
 const binaryName = isWin ? "skill.exe" : "skill";
 const binaryPath = resolve(srcTauri, "target", profileDir, binaryName);
-
-// Delete the old binary first so we're guaranteed a fresh build.
-// Previous runs under sudo may have left a root-owned stale binary.
-forceRemove(binaryPath);
 
 // Record the pre-build timestamp so we can verify the binary is truly fresh.
 const preBuildTs = Date.now();
@@ -342,14 +357,6 @@ process.on("exit", cleanup);
 process.on("SIGINT", () => { cleanup(); process.exit(130); });
 process.on("SIGTERM", () => { cleanup(); process.exit(143); });
 
-// Clean Vite / SvelteKit caches so the dev server serves fresh assets.
-for (const cache of [
-  resolve(root, "node_modules", ".vite"),
-  resolve(root, ".svelte-kit"),
-]) {
-  forceRemove(cache);
-}
-
 console.log("→ Starting Vite dev server …");
 
 const npmCmd = isWin ? "npm.cmd" : "npm";
@@ -403,7 +410,19 @@ const fgArgs = ["-o", svgPath, "--", binaryPath];
 // empty config/data from root's home instead of the user's ~/.skill, and
 // WebKit loads cached pages from root's ~/Library/WebKit/.
 const needsSudo = isMac || isLinux;
-const sudoEnvVars = "HOME,USER,ESPEAK_LIB_DIR,PATH,WEBKIT_DISABLE_DMABUF_RENDERER,XDG_DATA_HOME,XDG_CONFIG_HOME,XDG_CACHE_HOME";
+const sudoEnvVars = [
+  "HOME", "USER", "LOGNAME",
+  "ESPEAK_LIB_DIR", "PATH",
+  "WEBKIT_DISABLE_DMABUF_RENDERER",
+  // XDG dirs — ensures the app reads/writes the real user's config, data, and cache
+  "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR",
+  // Cargo / Rust toolchain — prevent sudo from using /root/.cargo
+  "CARGO_HOME", "RUSTUP_HOME",
+  // Display — needed so the GUI opens on the current user's session
+  "DISPLAY", "WAYLAND_DISPLAY",
+  // D-Bus — needed for desktop integration (tray, notifications, etc.)
+  "DBUS_SESSION_BUS_ADDRESS",
+].join(",");
 const fgCmd = needsSudo ? "sudo" : flamegraphBin;
 const fgFullArgs = needsSudo
   ? [`--preserve-env=${sudoEnvVars}`, flamegraphBin, ...fgArgs]
@@ -456,11 +475,20 @@ try {
 
 // ── Step 5: Fix ownership (sudo may have created root-owned SVG) ─────────────
 
-if (needsSudo && existsSync(svgPath)) {
-  try {
-    const whoami = execSync("whoami", { encoding: "utf8" }).trim();
-    execSync(`sudo chown ${whoami} ${JSON.stringify(svgPath)}`, { stdio: "ignore" });
-  } catch { /* best effort */ }
+if (needsSudo) {
+  // Use the real invoking user (not "root") to fix ownership of files
+  // created by the sudo-elevated profiler.
+  const realUser = process.env.USER || execSync("id -un", { encoding: "utf8" }).trim();
+  const filesToChown = [
+    svgPath,
+    resolve(srcTauri, "cargo-flamegraph.trace"),
+    resolve(root, "cargo-flamegraph.trace"),
+  ].filter(existsSync);
+  for (const f of filesToChown) {
+    try {
+      execSync(`sudo chown ${realUser} ${JSON.stringify(f)}`, { stdio: "ignore" });
+    } catch { /* best effort */ }
+  }
 }
 
 // ── Report ───────────────────────────────────────────────────────────────────
