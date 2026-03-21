@@ -27,6 +27,7 @@ const settings: Record<string, string> = {
   "settings.newDeviceNotice":         "Nouvel appareil détecté",
   "settings.newDeviceNoticeHint":     "Appairez-le ci-dessous si c'est votre casque.",
   "settings.pairToConnect":           "Appairez d'abord cet appareil pour vous y connecter.",
+  "settings.emotivLauncherHint":      "Après l'appairage, confirmez la connexion dans l'application EMOTIV Launcher.",
   "settings.signalProcessing":  "Traitement du signal",
   "settings.powerlineNotch":    "Filtre secteur",
   "settings.us60Hz":            "US 60 Hz",

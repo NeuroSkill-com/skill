@@ -27,6 +27,7 @@ const settings: Record<string, string> = {
   "settings.newDeviceNotice":         "נמצא מכשיר חדש בקרבת מקום",
   "settings.newDeviceNoticeHint":     "התאם אותו למטה אם זה האוזניות שלך.",
   "settings.pairToConnect":           "התאם מכשיר זה תחילה כדי להתחבר אליו.",
+  "settings.emotivLauncherHint":      "לאחר ההתאמה, אשר את החיבור באפליקציית EMOTIV Launcher.",
   "settings.signalProcessing":  "עיבוד אותות",
   "settings.powerlineNotch":    "מסנן רשת",
   "settings.us60Hz":            "US 60 Hz",

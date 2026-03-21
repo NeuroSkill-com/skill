@@ -27,6 +27,7 @@ const settings: Record<string, string> = {
   "settings.newDeviceNotice":         "Neues Gerät in der Nähe",
   "settings.newDeviceNoticeHint":     "Koppeln Sie es unten, wenn es Ihr Headset ist.",
   "settings.pairToConnect":           "Koppeln Sie dieses Gerät zuerst, um es zu verbinden.",
+  "settings.emotivLauncherHint":      "Bestätigen Sie nach dem Koppeln die Verbindung in der EMOTIV Launcher App.",
   "settings.signalProcessing":  "Signalverarbeitung",
   "settings.powerlineNotch":    "Netzfrequenzfilter",
   "settings.us60Hz":            "US 60 Hz",
