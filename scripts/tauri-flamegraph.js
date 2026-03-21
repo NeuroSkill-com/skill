@@ -31,7 +31,7 @@ import { execSync, spawn } from "child_process";
 import { platform, arch } from "os";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { existsSync, rmSync } from "fs";
+import { existsSync, rmSync, statSync } from "fs";
 import http from "http";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -107,7 +107,12 @@ function forceRemove(filePath) {
   } catch {
     try {
       execSync(`sudo rm -rf ${JSON.stringify(filePath)}`, { stdio: "inherit" });
-    } catch { /* best effort */ }
+    } catch { /* ignore — checked below */ }
+  }
+  if (existsSync(filePath)) {
+    console.error(`✖ Could not remove ${filePath} — the profiler would run a stale binary.`);
+    console.error("  Fix: sudo rm -f " + filePath);
+    process.exit(1);
   }
 }
 
@@ -232,6 +237,46 @@ if (useRelease && !process.env.CARGO_PROFILE_RELEASE_DEBUG) {
   console.log("→ Enabling debug symbols in release build (CARGO_PROFILE_RELEASE_DEBUG=true)");
 }
 
+// ── Build cache + fast linker detection ──────────────────────────────────────
+// Mirror the sccache / mold detection from tauri-build.js so the flamegraph
+// build uses the same compilation environment and cargo fingerprints match.
+// Without this, switching between `tauri dev` and `tauri:flamegraph` causes
+// full rebuilds because the env (RUSTC_WRAPPER, linker flags) differs.
+
+function detectSccache() {
+  if (process.env.SKILL_NO_SCCACHE === "1") return false;
+  if (process.env.RUSTC_WRAPPER) return false;
+  return commandExists("sccache");
+}
+
+function detectMold() {
+  if (!isLinux) return false;
+  if (process.env.SKILL_NO_MOLD === "1") return false;
+  return commandExists("mold") && commandExists("clang");
+}
+
+const hasSccache = detectSccache();
+const hasMold = detectMold();
+
+if (hasSccache) {
+  process.env.RUSTC_WRAPPER = "sccache";
+  console.log("→ sccache detected — enabling compilation cache (RUSTC_WRAPPER=sccache)");
+}
+
+if (hasMold) {
+  const hostArchMap = { x64: "x86_64", arm64: "aarch64" };
+  const hostArch = hostArchMap[arch()] || arch();
+  const target = `${hostArch}-unknown-linux-gnu`;
+  const envKey = target.toUpperCase().replace(/-/g, "_");
+  if (!process.env[`CARGO_TARGET_${envKey}_LINKER`]) {
+    process.env[`CARGO_TARGET_${envKey}_LINKER`] = "clang";
+    process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] =
+      (process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] || "") +
+      " -C link-arg=-fuse-ld=mold";
+  }
+  console.log("→ mold + clang detected — enabling fast linker (-fuse-ld=mold)");
+}
+
 // ── Step 1: Build the binary (normal user) ───────────────────────────────────
 
 // Locate the expected binary path
@@ -243,7 +288,10 @@ const binaryPath = resolve(srcTauri, "target", profileDir, binaryName);
 // Previous runs under sudo may have left a root-owned stale binary.
 forceRemove(binaryPath);
 
-const buildArgs = ["build"];
+// Record the pre-build timestamp so we can verify the binary is truly fresh.
+const preBuildTs = Date.now();
+
+const buildArgs = ["build", "-p", "skill"];
 if (useRelease) buildArgs.push("--release");
 if (features) buildArgs.push("--features", features);
 buildArgs.push(...extraCargoArgs);
@@ -251,7 +299,7 @@ buildArgs.push(...extraCargoArgs);
 const buildCmd = `cargo ${buildArgs.join(" ")}`;
 console.log(`→ Building: ${buildCmd}`);
 execSync(buildCmd, {
-  cwd: srcTauri,
+  cwd: root,
   stdio: "inherit",
   env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
 });
@@ -260,7 +308,18 @@ if (!existsSync(binaryPath)) {
   console.error(`✖ Built binary not found at: ${binaryPath}`);
   process.exit(1);
 }
-console.log(`→ Binary: ${binaryPath}`);
+
+// Verify the binary was actually rebuilt (not a stale leftover).
+const binaryMtime = statSync(binaryPath).mtimeMs;
+if (binaryMtime < preBuildTs) {
+  console.error(
+    `✖ Binary at ${binaryPath} is older than the build start time.` +
+    "\n  cargo may have skipped the build (stale fingerprints)." +
+    "\n  Try: cargo clean -p skill   (then re-run)"
+  );
+  process.exit(1);
+}
+console.log(`→ Binary: ${binaryPath} (freshly built)`);
 
 // ── Step 2: Start Vite dev server ────────────────────────────────────────────
 
@@ -366,7 +425,7 @@ const env = { ...process.env, ESPEAK_LIB_DIR: espeakLib };
 
 try {
   const fg = spawn(fgCmd, fgFullArgs, {
-    cwd: srcTauri,
+    cwd: root,
     stdio: "inherit",
     env,
   });
