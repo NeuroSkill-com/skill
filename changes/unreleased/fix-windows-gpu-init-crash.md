@@ -1,7 +1,3 @@
 ### Bugfixes
 
-- **Fix Windows STATUS_ACCESS_VIOLATION crash during GPU init**: Added a process-wide GPU initialisation mutex (`gpu_init_lock`) that serialises DirectML (ONNX, screenshot CLIP) and wgpu/Vulkan (cubecl, ZUNA/LUNA EEG encoder) framework startup. On Windows, simultaneously initialising both GPU backends could trigger a segfault in the Vulkan driver. The lock is held only during model load; once both frameworks are initialised they run concurrently without contention.
-
-### Refactor
-
-- **`ScreenshotContext::gpu_init_guard()`**: New optional trait method allowing the screenshot crate to acquire the app-level GPU init lock without depending on Tauri directly.
+- **Fix Windows STATUS_ACCESS_VIOLATION crash during ZUNA/LUNA encoder load**: On Windows, wgpu's `AutoGraphicsApi` selects Vulkan by default. Vulkan shader compilation on certain GPU drivers triggers a `STATUS_ACCESS_VIOLATION` segfault that `catch_unwind` cannot intercept. The EEG embedding worker and re-embed command now call `init_setup::<Dx12>()` on Windows to force the DirectX 12 backend, which is stable and matches the DirectML backend used by screenshot CLIP embeddings.

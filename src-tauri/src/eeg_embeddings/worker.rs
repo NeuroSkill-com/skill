@@ -544,6 +544,17 @@ pub(super) fn embed_worker(
 
     let device = WgpuDevice::DefaultDevice;
 
+    // On Windows, wgpu's AutoGraphicsApi selects Vulkan by default.  Vulkan
+    // shader compilation can trigger STATUS_ACCESS_VIOLATION (0xc0000005) on
+    // some GPU drivers.  Force DX12 which is stable on Windows and matches
+    // the DirectML backend used by screenshot CLIP embeddings.
+    #[cfg(target_os = "windows")]
+    {
+        use burn::backend::wgpu::{init_setup, RuntimeOptions, graphics::Dx12};
+        init_setup::<Dx12>(&device, RuntimeOptions::default());
+        skill_log!(logger, "embedder", "wgpu backend: DX12");
+    }
+
     // ── Encoder variants ──────────────────────────────────────────────────────
     enum LoadedEncoder {
         Zuna(Box<ZunaEncoder<Wgpu>>),
@@ -563,13 +574,9 @@ pub(super) fn embed_worker(
     // kill the entire thread.  If it panics we mark the device poisoned and
     // fall back to metrics-only mode.
     //
-    // The GPU init lock prevents simultaneous GPU framework initialisation
-    // (e.g. DirectML for screenshots and wgpu/Vulkan for EEG) which can
-    // trigger STATUS_ACCESS_VIOLATION on Windows.
     let mut encoder: Option<LoadedEncoder> = weights.and_then(|(w, c)| {
         skill_log!(logger, "embedder", "loading {} encoder from {}", active_backend, w.display());
         let backend = active_backend.clone();
-        let _gpu_guard = crate::gpu_init_lock();
         let load_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> Result<(LoadedEncoder, f64), String> {
             match backend {
                 ExgModelBackend::Zuna => {
@@ -588,7 +595,6 @@ pub(super) fn embed_worker(
                 }
             }
         }));
-        drop(_gpu_guard);
         match load_result {
             Ok(Ok((enc, ms))) => {
                 let desc = enc.describe();

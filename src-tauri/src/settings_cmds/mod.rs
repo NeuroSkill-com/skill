@@ -965,6 +965,13 @@ fn reembed_worker(
     skill_exg::configure_cubecl_cache(&skill_dir);
     let device = WgpuDevice::DefaultDevice;
 
+    // Force DX12 on Windows (Vulkan can crash — see embed worker).
+    #[cfg(target_os = "windows")]
+    {
+        use burn::backend::wgpu::{init_setup, RuntimeOptions, graphics::Dx12};
+        init_setup::<Dx12>(&device, RuntimeOptions::default());
+    }
+
     let backend = &config.model_backend;
     let backend_str = backend.as_str();
     let weights = match backend {
