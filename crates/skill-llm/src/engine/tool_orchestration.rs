@@ -590,7 +590,11 @@ where
         } else {
             match args_result {
                 Err(err_val) => (err_val, true),
-                Ok(_) => {
+                Ok(validated) => {
+                    // Write coerced/validated arguments back so exec sees them.
+                    if let Ok(s) = serde_json::to_string(&validated) {
+                        tc.function.arguments = s;
+                    }
                     let result = execute_builtin_tool_call(tc, allowed_tools, scripts_dir).await;
                     let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
                     (result, !ok)
@@ -663,6 +667,13 @@ where
         }
 
         let args_result = validate_and_prepare(tc, tool_defs, allowed_tools);
+
+        // Write coerced/validated arguments back so exec sees them.
+        if let Ok(ref validated) = args_result {
+            if let Ok(s) = serde_json::to_string(validated) {
+                tc.function.arguments = s;
+            }
+        }
 
         let args_for_event = match &args_result {
             Ok(v) => v.clone(),
