@@ -459,8 +459,10 @@ fn run_event_loop(
         .build(&window)
         .map_err(|e| HeadlessError::InitFailed(e.to_string()))?;
 
-    // We need to keep webview alive for the duration of the event loop.
-    // Wrap in Option so we can destroy it on Close.
+    // Keep the webview alive for the full event-loop lifetime.
+    // Wrapped in Arc<Mutex<Option>> so command handlers can borrow it;
+    // dropped naturally when `run_return` finishes and the closure is
+    // released — this avoids Win32 class-unregistration races (error 1412).
     #[allow(clippy::arc_with_non_send_sync)] // WebView is thread-confined; Arc used for move into closure
     let webview: Arc<Mutex<Option<WebView>>> = Arc::new(Mutex::new(Some(webview)));
 
@@ -485,9 +487,22 @@ fn run_event_loop(
                 }
                 drop(wv_guard);
 
-                // Handle Close — destroy the webview and exit.
+                // Handle Close — exit the event loop.
+                //
+                // Do NOT drop the WebView here.  On Windows, WebView2
+                // creates internal `Chrome_WidgetWin_*` child windows
+                // that are destroyed asynchronously.  Dropping the
+                // WebView while the event loop is still alive (and the
+                // parent tao Window still exists) causes a race:
+                // Chromium tries to `UnregisterClass` while child
+                // HWNDs are still registered → Win32 error 1412
+                // (`ERROR_CLASS_HAS_WINDOWS`).
+                //
+                // By only setting `ControlFlow::Exit` here, we let
+                // `run_return` finish its message pump.  The closure
+                // then drops naturally, destroying the WebView and the
+                // Window together after the loop has drained.
                 if matches!(command, Command::Close) {
-                    *webview.lock().expect("lock poisoned") = None;
                     *control_flow = ControlFlow::Exit;
                     closed.store(true, Ordering::Relaxed);
                 }
