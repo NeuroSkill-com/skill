@@ -4,9 +4,8 @@
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
-#!/usr/bin/env npx tsx
 /** Current CLI version — bump when breaking changes are made. */
-const CLI_VERSION = "1.1.0";
+const CLI_VERSION = "1.2.0";
 
 /**
  * cli.ts — Command-line interface for the Skill WebSocket API.
@@ -26,7 +25,10 @@ const CLI_VERSION = "1.1.0";
  *   label "text"                   Create a timestamped annotation on the current moment
  *   search-labels "query"          Search labels by free text (text/context/both modes)
  *   search-images "query"          Search screenshots by OCR text (semantic/substring modes)
+ *   search-images --by-image <path> Search screenshots by visual similarity (CLIP embeddings)
  *   screenshots-around --at <utc>  Find screenshots near a timestamp (±window)
+ *   screenshots-for-eeg            Find screenshots captured during an EEG session
+ *   eeg-for-screenshots "query"    Find EEG data & labels near screenshots matching OCR text
  *   interactive "keyword"          Cross-modal 4-layer graph search (labels → EEG → found labels)
  *   search                         ANN EEG-similarity search (auto: last session, k=5)
  *   compare                        Side-by-side A/B metrics (auto: last 2 sessions)
@@ -709,6 +711,18 @@ interface Args {
   /** Preset id for `sleep-schedule set --preset <id>`. */
   preset?: string;
   /**
+   * Image file path for `search-images --by-image <path>` (CLIP vision search).
+   * When set, the image is embedded via the CLIP model and searched against
+   * the screenshots HNSW index instead of OCR text.
+   */
+  byImage?: string;
+  /**
+   * EEG temporal window in seconds for cross-modal commands
+   * (`screenshots-for-eeg`, `eeg-for-screenshots`).
+   * Default: 30 for screenshots-for-eeg, 60 for eeg-for-screenshots.
+   */
+  windowSecs?: number;
+  /**
    * Vision projector filename for `llm add --mmproj <filename>`.
    * When specified alongside `llm add`, both the model and the mmproj are
    * added to the catalog and downloaded from the same repo.
@@ -784,7 +798,7 @@ function parseArgs(): Args {
     "--context", "--at", "--voice",
     "--system", "--max-tokens", "--temperature", "--image", "--mmproj",
     "--keywords", "--scenario", "--command", "--threshold", "--recent", "--hook-text",
-    "--actions", "--loops", "--break", "--auto-start", "--name",
+    "--actions", "--loops", "--break", "--auto-start", "--name", "--by-image", "--window",
     "--bedtime", "--wake", "--preset",
     "--metric-type",
   ]);
@@ -827,6 +841,8 @@ function parseArgs(): Args {
     else if (a === "--voice")       { args.voice       = argv[++i]; }
     else if (a === "--system")      { args.system      = argv[++i]; }
     else if (a === "--image")       { (args.images ??= []).push(argv[++i]); }
+    else if (a === "--by-image")    { args.byImage   = argv[++i]; }
+    else if (a === "--window")      { args.windowSecs = nextInt("--window"); }
     else if (a === "--mmproj")      { args.mmproj   = argv[++i]; }
     else if (a === "--keywords")    { args.hookKeywords  = argv[++i]; }
     else if (a === "--scenario")    { args.hookScenario  = argv[++i]; }
@@ -865,6 +881,7 @@ function parseArgs(): Args {
     else if (args.command === "label"         && !args.text)    { args.text    = a; }
     else if (args.command === "search-labels" && !args.text)    { args.text    = a; }
     else if (args.command === "search-images" && !args.text)    { args.text    = a; }
+    else if (args.command === "eeg-for-screenshots" && !args.text) { args.text = a; }
     else if (args.command === "interactive"   && !args.keyword) { args.keyword = a; }
     else if (args.command === "say"           && !args.text)    { args.text    = a; }
     else if (args.command === "notify"        && !args.text)    { args.text    = a; }
@@ -986,7 +1003,10 @@ ${m('notify "title" ["body"]',                       "show a native OS notificat
 ${m('label "my annotation" [--context "..."] [--at <utc>]', "create a timestamped text annotation")}
 ${m('search-labels "query" [--mode text|context|both] [--k <n>] [--ef <n>]', "search labels by free text")}
 ${m('search-images "query" [--mode semantic|substring] [--k <n>]', "search screenshots by OCR text")}
+${m("search-images --by-image <path> [--k <n>]", "search screenshots by visual similarity (CLIP)")}
 ${m("screenshots-around --at <utc> [--seconds <n>]", "find screenshots near a timestamp (±window)")}
+${m("screenshots-for-eeg [--start --end] [--window <n>]", "find screenshots near EEG epoch timestamps")}
+${m('eeg-for-screenshots "query" [--k <n>] [--window <n>]', "screenshots → EEG: find brain data near matching screenshots")}
 ${m('interactive "keyword" [--k-text <n>] [--k-eeg <n>] [--k-labels <n>] [--reach <n>]', "cross-modal 4-layer graph search")}
 ${m("search [--start <utc>] [--end <utc>] [--k <n>]", "ANN EEG-similarity search on embeddings")}
 ${m("compare --a-start .. --a-end .. --b-start .. --b-end ..", "side-by-side metrics + UMAP")}
@@ -1070,6 +1090,8 @@ ${BOLD}OPTIONS${RESET}
   ${YELLOW}--k-eeg <n>${RESET}       (interactive) k for EEG-similarity HNSW search (default: 5)
   ${YELLOW}--k-labels <n>${RESET}    (interactive) k for label-proximity step (default: 3)
   ${YELLOW}--reach <n>${RESET}       (interactive) temporal window in minutes around each EEG point (default: 10)
+  ${YELLOW}--by-image <path>${RESET} search-images: search by visual similarity (CLIP) instead of OCR text
+  ${YELLOW}--window <n>${RESET}      (screenshots-for-eeg / eeg-for-screenshots) temporal window in seconds (default 30/60)
   ${YELLOW}--voice <name>${RESET}    say: voice name to use (e.g. ${GREEN}Jasper${RESET}); omit to use the server default
   ${YELLOW}--profile <p>${RESET}     calibrate: profile name or UUID to run (default: active profile)
   ${YELLOW}--actions "L:s,…"${RESET} (calibrations create/update) actions as "Label:secs" pairs (e.g. ${GREEN}"Eyes Open:20,Eyes Closed:20"${RESET})
@@ -1215,6 +1237,53 @@ ${BOLD}EXAMPLES${RESET}
   ${DIM}#      app:        VS Code  window: skill — cli.ts${RESET}
   ${DIM}#      similarity: 87%${RESET}
   ${DIM}#      ocr:        error[E0308]: mismatched types expected…${RESET}
+
+  ${BOLD}search-images --by-image${RESET} — search screenshots by visual similarity (CLIP)
+  ${DIM}$${RESET} npx tsx cli.ts search-images --by-image screenshot.png
+  ${DIM}$${RESET} npx tsx cli.ts search-images --by-image photo.jpg --k 5
+  ${DIM}$${RESET} npx tsx cli.ts search-images --by-image ref.webp --json | jq '.results[].filename'
+  ${DIM}# Output:${RESET}
+  ${DIM}#   ⚡ search-images  (mode: vision, k: 20)${RESET}
+  ${DIM}#     image: screenshot.png${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#   mode:    vision (CLIP)${RESET}
+  ${DIM}#   k:       20   results: 5${RESET}
+
+  ${BOLD}screenshots-for-eeg${RESET} — find screenshots captured during an EEG session
+  ${DIM}$${RESET} npx tsx cli.ts screenshots-for-eeg                     ${DIM}# auto: last session${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts screenshots-for-eeg --start 1740412800 --end 1740415500
+  ${DIM}$${RESET} npx tsx cli.ts screenshots-for-eeg --window 60         ${DIM}# ±60s around each EEG epoch${RESET}
+  ${DIM}$${RESET} npx tsx cli.ts screenshots-for-eeg --json | jq '.results[].screenshot.filename'
+  ${DIM}# Output:${RESET}
+  ${DIM}#   ⚡ screenshots-for-eeg${RESET}
+  ${DIM}#     range: 1740412800–1740415500 (auto: 2/24/2026 8:00 AM → 8:45 AM)${RESET}
+  ${DIM}#     window: ±30s   limit: 50${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#     EEG epochs scanned: 541${RESET}
+  ${DIM}#     screenshots found:  12${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#     20260224/20260224080530.webp${RESET}
+  ${DIM}#        EEG at:     2/24/2026, 8:05:30 AM${RESET}
+  ${DIM}#        screenshot: 2/24/2026, 8:05:28 AM   app: VS Code  window: main.rs${RESET}
+
+  ${BOLD}eeg-for-screenshots${RESET} — find EEG data & labels near screenshots matching OCR text
+  ${DIM}$${RESET} npx tsx cli.ts eeg-for-screenshots "compiler error"
+  ${DIM}$${RESET} npx tsx cli.ts eeg-for-screenshots "TODO" --mode substring --k 5
+  ${DIM}$${RESET} npx tsx cli.ts eeg-for-screenshots "dashboard" --window 120
+  ${DIM}$${RESET} npx tsx cli.ts eeg-for-screenshots "login page" --json | jq '.results[].labels[].text'
+  ${DIM}# Output:${RESET}
+  ${DIM}#   ⚡ eeg-for-screenshots "compiler error"  (mode: semantic, k: 10, window: ±60s)${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#     screenshots matched: 3${RESET}
+  ${DIM}#     results with EEG:    3${RESET}
+  ${DIM}#${RESET}
+  ${DIM}#     20260315/20260315143025.webp${RESET}
+  ${DIM}#        time:       3/15/2026, 2:30:25 PM   app: VS Code  window: skill — cli.ts${RESET}
+  ${DIM}#        similarity: 87%${RESET}
+  ${DIM}#        EEG session: 3/15/2026, 2:00:00 PM → 3:00:00 PM  (1h 0m)  device: Muse-A1B2${RESET}
+  ${DIM}#        labels (2):${RESET}
+  ${DIM}#          "debugging session"  3/15/2026, 2:28:00 PM  id: 47${RESET}
+  ${DIM}#          "frustrated"         3/15/2026, 2:31:00 PM  id: 48${RESET}
 
   ${BOLD}screenshots-around${RESET} — find screenshots near a timestamp
   ${DIM}$${RESET} npx tsx cli.ts screenshots-around --at 1740412800
@@ -2752,7 +2821,52 @@ async function cmdSearchLabels(args: Args): Promise<void> {
  * @param args - Parsed CLI arguments. `text` is the query string (required).
  */
 async function cmdSearchImages(args: Args): Promise<void> {
-  if (!args.text) printError('usage: cli.ts search-images "your query text"');
+  // ── Vision search mode (--by-image) ─────────────────────────────────────
+  if (args.byImage) {
+    const k = args.k ?? 20;
+    print(`${BOLD}⚡ search-images${RESET} ${DIM}(mode: vision, k: ${k})${RESET}`);
+    print(`  ${DIM}image:${RESET} ${CYAN}${args.byImage}${RESET}`);
+
+    // Read image, embed via fastembed CLIP → send vector to server
+    let data: Buffer;
+    try { data = readFileSync(args.byImage); }
+    catch (e: any) { printError(`cannot read image file "${args.byImage}": ${e.message}`); }
+
+    // Base64-encode and send to the server for embedding + search
+    const b64 = data!.toString("base64");
+    const r = await send({
+      command: "search_screenshots_by_image_b64",
+      image_b64: b64,
+      k,
+    }, 60000);
+
+    // If the dedicated b64 command isn't available, fall back to search_screenshots_vision
+    // with a client-side note — the server may not have this endpoint yet.
+    if (r.error && r.error.includes("unknown command")) {
+      printError(
+        "server does not support image-based screenshot search over WebSocket.\n" +
+        "  Update the Skill app to the latest version for --by-image support."
+      );
+    }
+    if (!r.ok && r.error) printError(`server returned ok=false: ${r.error}`);
+
+    if (!jsonMode) {
+      const results = (r.results ?? []) as Array<{
+        timestamp: number; unix_ts: number; filename: string;
+        app_name: string; window_title: string; ocr_text: string;
+        similarity: number;
+      }>;
+
+      print(`\n  ${DIM}mode:${RESET}    ${CYAN}vision (CLIP)${RESET}`);
+      print(`  ${DIM}k:${RESET}       ${CYAN}${r.k ?? k}${RESET}   ${DIM}results:${RESET} ${GREEN}${r.count ?? results.length}${RESET}\n`);
+      printScreenshotResults(results, "vision");
+    }
+    printResult(r);
+    return;
+  }
+
+  // ── OCR text search modes ───────────────────────────────────────────────
+  if (!args.text) printError('usage: cli.ts search-images "your query text" [--mode semantic|substring] [--by-image <path>]');
   const query = args.text!;
   const k     = args.k    ?? 20;
   const mode  = args.mode ?? "semantic";
@@ -2776,28 +2890,231 @@ async function cmdSearchImages(args: Args): Promise<void> {
 
     print(`\n  ${DIM}mode:${RESET}    ${CYAN}${r.mode ?? mode}${RESET}`);
     print(`  ${DIM}k:${RESET}       ${CYAN}${r.k ?? k}${RESET}   ${DIM}results:${RESET} ${GREEN}${r.count ?? results.length}${RESET}\n`);
+    printScreenshotResults(results, mode);
+  }
+
+  printResult(r);
+}
+
+/**
+ * Shared renderer for screenshot search results (used by search-images,
+ * screenshots-for-eeg, eeg-for-screenshots).
+ */
+function printScreenshotResults(
+  results: Array<{
+    timestamp: number; unix_ts: number; filename: string;
+    app_name: string; window_title: string; ocr_text: string;
+    similarity: number;
+  }>,
+  mode: string,
+): void {
+  if (results.length === 0) {
+    print(`  ${DIM}no results — screenshots may not be captured or indexed yet${RESET}`);
+    print(`  ${DIM}(check Settings → Screenshots to enable capture)${RESET}`);
+    return;
+  }
+
+  for (const hit of results) {
+    const simPct  = ((hit.similarity ?? 0) * 100).toFixed(0);
+    const ts      = fmtTs(hit.unix_ts ?? hit.timestamp);
+    const appName = hit.app_name || "unknown";
+
+    print(`  ${BOLD}${hit.filename}${RESET}`);
+    print(`     ${DIM}time:${RESET}       ${ts}`);
+    print(`     ${DIM}app:${RESET}        ${CYAN}${appName}${RESET}  ${DIM}window:${RESET} ${hit.window_title || "—"}`);
+    if (mode === "semantic" || mode === "vision") {
+      print(`     ${DIM}similarity:${RESET} ${CYAN}${simPct}%${RESET}`);
+    }
+    if (hit.ocr_text) {
+      const preview = hit.ocr_text.length > 120
+        ? hit.ocr_text.slice(0, 120).replace(/\n/g, " ") + "…"
+        : hit.ocr_text.replace(/\n/g, " ");
+      print(`     ${DIM}ocr:${RESET}        ${preview}`);
+    }
+    print("");
+  }
+}
+
+/**
+ * `screenshots-for-eeg` — Find screenshots captured near EEG recording timestamps.
+ *
+ * Given an EEG time range (auto: latest session, or `--start`/`--end`), finds
+ * all EEG embedding timestamps in that range, then returns screenshots within
+ * `--window` seconds (default 30) of each EEG epoch.
+ *
+ * This is the "EEG → screenshots" cross-modal bridge: start from brain data,
+ * discover what was on screen at that moment.
+ *
+ * **WS equivalent**:
+ * ```json
+ * { "command": "screenshots_for_eeg", "start_utc": 1740412800, "end_utc": 1740415500, "window_secs": 30 }
+ * ```
+ */
+async function cmdScreenshotsForEeg(args: Args): Promise<void> {
+  const hasExplicitRange = args.start != null || args.end != null;
+  let start: number, end: number;
+  if (hasExplicitRange) {
+    const now = Math.floor(Date.now() / 1000);
+    start = args.start ?? now - 600;
+    end   = args.end   ?? now;
+  } else {
+    [start, end] = await autoRange(600);
+  }
+  const windowSecs = args.windowSecs ?? 30;
+  const limit      = args.limit ?? 50;
+
+  print(`${BOLD}⚡ screenshots-for-eeg${RESET}`);
+  printRange("range", start, end, !hasExplicitRange);
+  print(`  ${DIM}window:${RESET} ±${CYAN}${windowSecs}s${RESET}  ${DIM}limit:${RESET} ${CYAN}${limit}${RESET}`);
+  if (!hasExplicitRange) printRerun(`screenshots-for-eeg --start ${start} --end ${end} --window ${windowSecs}`);
+
+  const r = await send({
+    command: "screenshots_for_eeg",
+    start_utc: start,
+    end_utc: end,
+    window_secs: windowSecs,
+    limit,
+  }, 30000);
+
+  if (!r.ok && r.error) printError(`server returned ok=false: ${r.error}`);
+
+  if (!jsonMode) {
+    const results = (r.results ?? []) as Array<{
+      eeg_timestamp_utc: number;
+      screenshot: {
+        timestamp: number; unix_ts: number; filename: string;
+        app_name: string; window_title: string; ocr_text: string;
+        similarity: number;
+      };
+    }>;
+
+    print(`\n  ${DIM}EEG epochs scanned:${RESET} ${CYAN}${r.eeg_count ?? 0}${RESET}`);
+    print(`  ${DIM}screenshots found:${RESET}  ${GREEN}${r.count ?? results.length}${RESET}\n`);
+
+    if (results.length === 0) {
+      print(`  ${DIM}no screenshots found near EEG timestamps in this range${RESET}`);
+      print(`  ${DIM}(ensure screenshot capture is enabled in Settings → Screenshots)${RESET}`);
+    } else {
+      for (const hit of results) {
+        const ss      = hit.screenshot;
+        const eegTs   = fmtTs(hit.eeg_timestamp_utc);
+        const ssTs    = fmtTs(ss.unix_ts ?? ss.timestamp);
+        const appName = ss.app_name || "unknown";
+
+        print(`  ${BOLD}${ss.filename}${RESET}`);
+        print(`     ${DIM}EEG at:${RESET}     ${YELLOW}${eegTs}${RESET}`);
+        print(`     ${DIM}screenshot:${RESET} ${ssTs}   ${DIM}app:${RESET} ${CYAN}${appName}${RESET}  ${DIM}window:${RESET} ${ss.window_title || "—"}`);
+        if (ss.ocr_text) {
+          const preview = ss.ocr_text.length > 100
+            ? ss.ocr_text.slice(0, 100).replace(/\n/g, " ") + "…"
+            : ss.ocr_text.replace(/\n/g, " ");
+          print(`     ${DIM}ocr:${RESET}        ${preview}`);
+        }
+        print("");
+      }
+    }
+  }
+
+  printResult(r);
+}
+
+/**
+ * `eeg-for-screenshots "query"` — Find EEG data and labels near screenshots matching OCR text.
+ *
+ * This is the "screenshots → EEG" cross-modal bridge:
+ * 1. Search screenshots by OCR text (semantic or substring).
+ * 2. For each matched screenshot, find EEG labels within `--window` seconds.
+ * 3. Report the associated EEG session and labels alongside each screenshot.
+ *
+ * Use this to answer: "When I was looking at [X], what was my brain doing?"
+ *
+ * **WS equivalent**:
+ * ```json
+ * { "command": "eeg_for_screenshots", "query": "compiler error", "k": 10, "window_secs": 60 }
+ * ```
+ */
+async function cmdEegForScreenshots(args: Args): Promise<void> {
+  if (!args.text) printError('usage: cli.ts eeg-for-screenshots "your OCR query"');
+  const query      = args.text!;
+  const k          = args.k ?? 10;
+  const windowSecs = args.windowSecs ?? 60;
+  const mode       = args.mode ?? "semantic";
+
+  print(`${BOLD}⚡ eeg-for-screenshots${RESET} ${GREEN}"${query}"${RESET}  ${DIM}(mode: ${mode}, k: ${k}, window: ±${windowSecs}s)${RESET}`);
+
+  const r = await send({
+    command: "eeg_for_screenshots",
+    query,
+    k,
+    window_secs: windowSecs,
+    mode,
+  }, 30000);
+
+  if (!r.ok && r.error) printError(`server returned ok=false: ${r.error}`);
+
+  if (!jsonMode) {
+    const results = (r.results ?? []) as Array<{
+      screenshot: {
+        timestamp: number; unix_ts: number; filename: string;
+        app_name: string; window_title: string; ocr_text: string;
+        similarity: number;
+      };
+      labels: Array<{
+        id: number; text: string; eeg_start: number; eeg_end: number;
+        label_start: number; label_end: number;
+      }>;
+      session: {
+        csv_path: string; session_start_utc: number; session_end_utc: number;
+        device_name: string;
+      } | null;
+    }>;
+
+    print(`\n  ${DIM}screenshots matched:${RESET} ${GREEN}${r.screenshot_count ?? 0}${RESET}`);
+    print(`  ${DIM}results with EEG:${RESET}   ${CYAN}${r.count ?? results.length}${RESET}\n`);
 
     if (results.length === 0) {
       print(`  ${DIM}no results — screenshots may not be captured or OCR-indexed yet${RESET}`);
-      print(`  ${DIM}(check Settings → Screenshots to enable capture)${RESET}`);
     } else {
       for (const hit of results) {
-        const simPct  = ((hit.similarity ?? 0) * 100).toFixed(0);
-        const ts      = fmtTs(hit.unix_ts ?? hit.timestamp);
-        const appName = hit.app_name || "unknown";
+        const ss      = hit.screenshot;
+        const ssTs    = fmtTs(ss.unix_ts ?? ss.timestamp);
+        const appName = ss.app_name || "unknown";
+        const simPct  = ((ss.similarity ?? 0) * 100).toFixed(0);
 
-        print(`  ${BOLD}${hit.filename}${RESET}`);
-        print(`     ${DIM}time:${RESET}       ${ts}`);
-        print(`     ${DIM}app:${RESET}        ${CYAN}${appName}${RESET}  ${DIM}window:${RESET} ${hit.window_title || "—"}`);
+        print(`  ${BOLD}${ss.filename}${RESET}`);
+        print(`     ${DIM}time:${RESET}       ${ssTs}   ${DIM}app:${RESET} ${CYAN}${appName}${RESET}  ${DIM}window:${RESET} ${ss.window_title || "—"}`);
         if (mode === "semantic") {
           print(`     ${DIM}similarity:${RESET} ${CYAN}${simPct}%${RESET}`);
         }
-        if (hit.ocr_text) {
-          const preview = hit.ocr_text.length > 120
-            ? hit.ocr_text.slice(0, 120).replace(/\n/g, " ") + "…"
-            : hit.ocr_text.replace(/\n/g, " ");
+        if (ss.ocr_text) {
+          const preview = ss.ocr_text.length > 100
+            ? ss.ocr_text.slice(0, 100).replace(/\n/g, " ") + "…"
+            : ss.ocr_text.replace(/\n/g, " ");
           print(`     ${DIM}ocr:${RESET}        ${preview}`);
         }
+
+        // ── EEG session ──────────────────────────────────────────────────
+        if (hit.session) {
+          const sess = hit.session;
+          const sessStart = fmtTs(sess.session_start_utc);
+          const sessEnd   = new Date(sess.session_end_utc * 1000).toLocaleTimeString(undefined, { timeZoneName: "short" });
+          const dur       = fmtDur(sess.session_end_utc - sess.session_start_utc);
+          print(`     ${DIM}EEG session:${RESET} ${YELLOW}${sessStart} → ${sessEnd}${RESET}  ${DIM}(${dur})${RESET}  ${DIM}device:${RESET} ${CYAN}${sess.device_name || "?"}${RESET}`);
+        } else {
+          print(`     ${DIM}EEG session:${RESET} ${DIM}none found near this timestamp${RESET}`);
+        }
+
+        // ── Labels near this screenshot ──────────────────────────────────
+        if (hit.labels && hit.labels.length > 0) {
+          print(`     ${DIM}labels (${hit.labels.length}):${RESET}`);
+          for (const lbl of hit.labels) {
+            const lblTs = fmtTs(lbl.label_start);
+            print(`       ${GREEN}"${lbl.text}"${RESET}  ${DIM}${lblTs}${RESET}  ${DIM}id:${RESET} ${CYAN}${lbl.id}${RESET}`);
+          }
+        } else {
+          print(`     ${DIM}labels:${RESET} ${DIM}none within ±${windowSecs}s${RESET}`);
+        }
+
         print("");
       }
     }
@@ -5152,6 +5469,12 @@ async function main(): Promise<void> {
         break;
       case "screenshots-around":
         await cmdScreenshotsAround(args);
+        break;
+      case "screenshots-for-eeg":
+        await cmdScreenshotsForEeg(args);
+        break;
+      case "eeg-for-screenshots":
+        await cmdEegForScreenshots(args);
         break;
       case "interactive":
         await cmdInteractive(args);

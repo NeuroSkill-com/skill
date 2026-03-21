@@ -651,11 +651,12 @@ pub async fn dispatch(
         "sleep_schedule"      => dnd_sleep::sleep_schedule(app),
         "sleep_schedule_set"  => dnd_sleep::sleep_schedule_set(app, msg),
         // ── Screenshot search ─────────────────────────────────────────────
-        "search_screenshots"         => screenshots::search_screenshots(app, msg),
-        "screenshots_around"         => screenshots::screenshots_around(app, msg),
-        "search_screenshots_vision"  => screenshots::search_screenshots_vision(app, msg),
-        "screenshots_for_eeg"        => screenshots::screenshots_for_eeg(app, msg),
-        "eeg_for_screenshots"        => screenshots::eeg_for_screenshots(app, msg),
+        "search_screenshots"             => screenshots::search_screenshots(app, msg),
+        "screenshots_around"             => screenshots::screenshots_around(app, msg),
+        "search_screenshots_vision"      => screenshots::search_screenshots_vision(app, msg),
+        "search_screenshots_by_image_b64"=> screenshots::search_screenshots_by_image_b64(app, msg),
+        "screenshots_for_eeg"            => screenshots::screenshots_for_eeg(app, msg),
+        "eeg_for_screenshots"            => screenshots::eeg_for_screenshots(app, msg),
         // ── HealthKit ─────────────────────────────────────────────────────
         "health_sync"         => health::health_sync(app, msg),
         "health_query"        => health::health_query(app, msg),

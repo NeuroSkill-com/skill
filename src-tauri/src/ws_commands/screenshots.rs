@@ -83,6 +83,56 @@ pub fn screenshots_around(app: &AppHandle, msg: &Value) -> Result<Value, String>
     }))
 }
 
+/// `search_screenshots_by_image_b64` — search screenshots by image (base64-encoded).
+///
+/// The client sends a base64-encoded image; the server decodes it, embeds it
+/// via the CLIP vision model, then searches the `screenshots.hnsw` index.
+///
+/// **Required**: `image_b64` (base64-encoded image bytes).
+/// **Optional**: `k` (default 20).
+pub fn search_screenshots_by_image_b64(app: &AppHandle, msg: &Value) -> Result<Value, String> {
+    let b64 = msg.get("image_b64")
+        .and_then(|v| v.as_str())
+        .ok_or("missing \"image_b64\" field (base64-encoded image)")?;
+    let k = msg.get("k").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+
+    use base64::Engine;
+    let image_bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64)
+        .map_err(|e| format!("invalid base64: {e}"))?;
+
+    let (config, skill_dir, store) = {
+        let st = app.app_state();
+        let s  = st.lock_or_recover();
+        (s.screenshot_config.clone(), s.skill_dir.clone(), s.screenshot_store.clone())
+    };
+
+    let store = store
+        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))
+        .ok_or("screenshot store not available")?;
+
+    // Embed the image via CLIP
+    let mut encoder = crate::screenshot::load_fastembed_image_pub(&config, &skill_dir);
+    let query_emb = encoder.as_mut()
+        .and_then(|fe| crate::screenshot::fastembed_embed_pub(fe, &image_bytes))
+        .ok_or("CLIP vision model not available — check Settings → Screenshots")?;
+
+    // Search HNSW
+    let hnsw_path = skill_dir.join(skill_constants::SCREENSHOTS_HNSW);
+    let hnsw = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
+        &hnsw_path, fast_hnsw::distance::Cosine,
+    ).map_err(|e| format!("CLIP HNSW not available: {e}"))?;
+
+    let results = crate::screenshot::search_by_vector(&hnsw, &store, &query_emb, k);
+
+    Ok(serde_json::json!({
+        "mode":    "vision",
+        "k":       k,
+        "count":   results.len(),
+        "results": results,
+    }))
+}
+
 /// `search_screenshots_vision` — search screenshots by CLIP vision embedding vector.
 ///
 /// Searches the `screenshots.hnsw` index (CLIP vision embeddings) for the
