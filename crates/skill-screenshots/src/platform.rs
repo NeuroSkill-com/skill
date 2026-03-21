@@ -19,7 +19,11 @@ use std::time::Duration;
 
 #[allow(dead_code)]
 pub(crate) struct CapturedImage {
+    /// Raw encoded bytes (PNG on macOS from screencapture).
+    /// On Linux/Windows with xcap, this is empty — use `decoded` instead.
     pub(crate) raw_bytes: Vec<u8>,
+    /// Pre-decoded image (avoids encode→decode round-trip on Linux/Windows).
+    pub(crate) decoded: Option<image::DynamicImage>,
     pub(crate) width:     u32,
     pub(crate) height:    u32,
 }
@@ -168,7 +172,7 @@ fn read_captured_image(path: &Path) -> Option<CapturedImage> {
         .with_guessed_format().ok()?
         .decode().ok()?;
     let (w, h) = img.dimensions();
-    Some(CapturedImage { raw_bytes, width: w, height: h })
+    Some(CapturedImage { raw_bytes, decoded: Some(img), width: w, height: h })
 }
 
 /// Get the CGWindowID of the frontmost application's main window via
@@ -359,14 +363,9 @@ fn capture_xcap() -> Option<CapturedImage> {
                     let non_zero = sample.iter().take(4096).any(|&b| b > 5);
                     if !non_zero { continue; }
 
-                    // Encode as PNG bytes
-                    let mut png_bytes = Vec::new();
+                    // Keep decoded image directly — no PNG encode round-trip
                     let dyn_img = image::DynamicImage::ImageRgba8(rgba);
-                    dyn_img.write_to(
-                        &mut Cursor::new(&mut png_bytes),
-                        image::ImageFormat::Png,
-                    ).ok()?;
-                    return Some(CapturedImage { raw_bytes: png_bytes, width: w, height: h });
+                    return Some(CapturedImage { raw_bytes: Vec::new(), decoded: Some(dyn_img), width: w, height: h });
                 }
                 Err(e) => {
                     eprintln!("[screenshot] xcap window capture failed ({}): {e}", title);
@@ -386,13 +385,8 @@ fn capture_xcap() -> Option<CapturedImage> {
                     let w = rgba.width();
                     let h = rgba.height();
                     if w == 0 || h == 0 { return None; }
-                    let mut png_bytes = Vec::new();
                     let dyn_img = image::DynamicImage::ImageRgba8(rgba);
-                    dyn_img.write_to(
-                        &mut Cursor::new(&mut png_bytes),
-                        image::ImageFormat::Png,
-                    ).ok()?;
-                    return Some(CapturedImage { raw_bytes: png_bytes, width: w, height: h });
+                    return Some(CapturedImage { raw_bytes: Vec::new(), decoded: Some(dyn_img), width: w, height: h });
                 }
                 Err(e) => {
                     eprintln!("[screenshot] xcap monitor capture failed: {e}");

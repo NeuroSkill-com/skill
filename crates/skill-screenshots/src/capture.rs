@@ -39,14 +39,30 @@ use crate::platform::capture_active_window;
 
 // ── Image resize + pad ────────────────────────────────────────────────────────
 
-/// Resize with aspect-ratio-preserving fit (Lanczos3), then center-pad to
-/// `target × target` with black pixels.  Returns the resized RGB image as
-/// PNG bytes plus the final dimensions.
-fn resize_fit_pad(raw_bytes: &[u8], target: u32) -> Option<(Vec<u8>, u32, u32)> {
+/// Resize with aspect-ratio-preserving fit, then center-pad to
+/// `target × target` with black pixels.  Returns the padded `DynamicImage`
+/// directly — callers that need encoded bytes (PNG for the vision encoder)
+/// should use [`encode_png`] separately.
+fn resize_fit_pad_image(raw_bytes: &[u8], target: u32) -> Option<DynamicImage> {
     let img = ImageReader::new(Cursor::new(raw_bytes))
         .with_guessed_format().ok()?
         .decode().ok()?;
+    Some(resize_fit_pad_dyn(&img, target))
+}
 
+/// Resize + pad from a pre-decoded `CapturedImage`.  Uses the decoded image
+/// if available, otherwise decodes from `raw_bytes`.  Avoids the
+/// encode→decode round-trip on Linux/Windows where xcap gives us RGBA directly.
+fn resize_fit_pad_captured(captured: &crate::platform::CapturedImage, target: u32) -> Option<DynamicImage> {
+    if let Some(ref img) = captured.decoded {
+        Some(resize_fit_pad_dyn(img, target))
+    } else {
+        resize_fit_pad_image(&captured.raw_bytes, target)
+    }
+}
+
+/// Core resize + pad operating on an already-decoded `DynamicImage`.
+fn resize_fit_pad_dyn(img: &DynamicImage, target: u32) -> DynamicImage {
     let (w, h) = img.dimensions();
     let scale = (target as f64 / w as f64).min(target as f64 / h as f64);
     let nw = (w as f64 * scale).round() as u32;
@@ -61,20 +77,26 @@ fn resize_fit_pad(raw_bytes: &[u8], target: u32) -> Option<(Vec<u8>, u32, u32)> 
     let offset_x = (target - nw) / 2;
     let offset_y = (target - nh) / 2;
     image::imageops::overlay(&mut canvas, &resized, offset_x as i64, offset_y as i64);
-
-    // Encode as PNG for the vision encoder
-    let mut png_bytes = Vec::new();
-    canvas.write_to(&mut Cursor::new(&mut png_bytes), image::ImageFormat::Png).ok()?;
-
-    Some((png_bytes, target, target))
+    canvas
 }
 
-/// Encode an image as WebP with the given quality.
-fn encode_webp(raw_bytes: &[u8], _quality: u8, out_path: &Path) -> Option<u64> {
-    let img = ImageReader::new(Cursor::new(raw_bytes))
-        .with_guessed_format().ok()?
-        .decode().ok()?;
+/// Legacy wrapper: resize + pad → PNG bytes.  Used by backfill / re-embed
+/// paths that still pass encoded bytes around.
+fn resize_fit_pad(raw_bytes: &[u8], target: u32) -> Option<(Vec<u8>, u32, u32)> {
+    let canvas = resize_fit_pad_image(raw_bytes, target)?;
+    let png = encode_png(&canvas)?;
+    Some((png, target, target))
+}
 
+/// Encode a `DynamicImage` as PNG bytes (for the vision encoder).
+fn encode_png(img: &DynamicImage) -> Option<Vec<u8>> {
+    let mut buf = Vec::new();
+    img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::Png).ok()?;
+    Some(buf)
+}
+
+/// Encode an already-decoded image as WebP with the given quality.
+fn encode_webp(img: &DynamicImage, _quality: u8, out_path: &Path) -> Option<u64> {
     let mut buf = Vec::new();
     img.write_to(&mut Cursor::new(&mut buf), image::ImageFormat::WebP).ok()?;
     std::fs::write(out_path, &buf).ok()?;
@@ -587,19 +609,20 @@ pub fn run_screenshot_worker(
         };
         metrics.capture_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
-        // ── Resize + pad ──
+        // ── Resize + pad (no PNG encoding — just pixel ops) ──
         let t0 = Instant::now();
-        let (resized_png, w, h) = match resize_fit_pad(&captured.raw_bytes, config.image_size) {
+        let resized_img = match resize_fit_pad_captured(&captured, config.image_size) {
             Some(r) => r,
             None => continue,
         };
+        let (w, h) = (config.image_size, config.image_size);
         metrics.resize_us.store(t0.elapsed().as_micros() as u64, Ordering::Relaxed);
 
         drop(captured); // free full-res capture immediately
 
-        // ── Duplicate detection via fast hash ──
+        // ── Duplicate detection via fast hash on raw pixels ──
         let mut hasher = DefaultHasher::new();
-        resized_png.hash(&mut hasher);
+        resized_img.as_bytes().hash(&mut hasher);
         let current_hash = hasher.finish();
         let copy_from = if current_hash == prev_screenshot_hash && prev_row_id.is_some() {
             eprintln!("[screenshot] duplicate detected — will copy OCR + embeddings from previous row");
@@ -622,7 +645,7 @@ pub fn run_screenshot_worker(
         let _ = std::fs::create_dir_all(&date_dir);
         let webp_name = format!("{date_str}/{ts_str}.webp");
         let webp_path = screenshots_dir.join(&webp_name);
-        let file_size = match encode_webp(&resized_png, config.quality, &webp_path) {
+        let file_size = match encode_webp(&resized_img, config.quality, &webp_path) {
             Some(s) => s,
             None => continue,
         };
@@ -660,6 +683,19 @@ pub fn run_screenshot_worker(
         ctx.emit_event("screenshot-captured", serde_json::to_value(&ScreenshotCapturedEvent {
             ts: ts_str, filename: webp_name,
         }).unwrap_or_default());
+
+        // ── Encode PNG for the embed thread (vision encoder needs PNG) ──
+        // This is deferred to here so we skip it entirely on duplicate frames.
+        let resized_png = if copy_from.is_some() {
+            // Duplicate — embed thread will copy from previous row, no PNG needed.
+            Vec::new()
+        } else {
+            match encode_png(&resized_img) {
+                Some(png) => png,
+                None => continue,
+            }
+        };
+        drop(resized_img); // free decoded pixels
 
         // ── Send to embed thread (non-blocking if capacity available) ──
         if let Some(row_id) = row_id {
