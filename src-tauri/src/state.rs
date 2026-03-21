@@ -449,6 +449,7 @@ pub struct AppState {
 /// Do-Not-Disturb runtime state.  Lives behind its own `Arc<Mutex<>>` so the
 /// DND polling loop and session runner can access it without contending on the
 /// main `AppState` lock.
+#[derive(Default)]
 pub struct DndRuntimeState {
     pub config:         DoNotDisturbConfig,
     pub active:         bool,
@@ -457,20 +458,6 @@ pub struct DndRuntimeState {
     pub below_ticks:    u32,
     pub score_history:  std::collections::VecDeque<f64>,
     pub snr_low_ticks:  u32,
-}
-
-impl Default for DndRuntimeState {
-    fn default() -> Self {
-        Self {
-            config:         DoNotDisturbConfig::default(),
-            active:         false,
-            os_active:      None,
-            focus_samples:  std::collections::VecDeque::new(),
-            below_ticks:    0,
-            score_history:  std::collections::VecDeque::new(),
-            snr_low_ticks:  0,
-        }
-    }
 }
 
 // ── LLM sub-state (heap-allocated) ────────────────────────────────────────────
@@ -540,8 +527,10 @@ impl Default for AppState {
         crate::skill_log::tee_stderr_to_file(&log_path);
         let logger = std::sync::Arc::new(SkillLogger::new(log_config));
 
-        let mut input = InputTrackingState::default();
-        input.activity_store = ActivityStore::open(&skill_dir).map(std::sync::Arc::new);
+        let input = InputTrackingState {
+            activity_store: ActivityStore::open(&skill_dir).map(std::sync::Arc::new),
+            ..Default::default()
+        };
 
         Self {
             status:            DeviceStatus::default(),

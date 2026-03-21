@@ -1302,13 +1302,10 @@ pub(crate) fn luna_variant_config_path(base_config: &Path, variant: &str) -> Pat
 
     // Write to a sibling file so we don't overwrite the original.
     let variant_path = base_config.with_file_name(format!("config_{variant}.json"));
-    match serde_json::to_string_pretty(&val) {
-        Ok(json) => {
-            if std::fs::write(&variant_path, &json).is_ok() {
-                return variant_path;
-            }
+    if let Ok(json) = serde_json::to_string_pretty(&val) {
+        if std::fs::write(&variant_path, &json).is_ok() {
+            return variant_path;
         }
-        Err(_) => {}
     }
 
     base_config.to_path_buf()
