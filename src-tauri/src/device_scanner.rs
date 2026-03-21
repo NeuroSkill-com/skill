@@ -168,18 +168,40 @@ fn try_auto_connect(app: &AppHandle, id: &str, display_name: &str) {
     // Only auto-connect devices the user has explicitly paired.
     // Exception: legacy "cortex:emotiv" paired entries match any cortex
     // headset (migration compat from before individual IDs were tracked).
+    //
+    // Special case: when the paired devices list is completely empty (fresh
+    // install / all devices unpaired), automatically adopt the first
+    // discovered device so the user gets a seamless first-run experience
+    // without having to manually pair.
     let should_auto = {
         let r = app.app_state();
         let g = r.lock_or_recover();
         let is_idle = g.stream.is_none()
             && !g.pending_reconnect
             && matches!(g.status.state.as_str(), "disconnected");
+        let no_paired = g.status.paired_devices.is_empty();
         let is_paired = g.status.paired_devices.iter().any(|d| d.id == id);
         let legacy_cortex_paired = id.starts_with("cortex:")
             && g.status.paired_devices.iter().any(|d| d.id == "cortex:emotiv");
-        is_idle && (is_paired || legacy_cortex_paired)
+        is_idle && (is_paired || legacy_cortex_paired || no_paired)
     };
     if should_auto {
+        // If paired list was empty, adopt this device first so reconnect
+        // logic and the rest of the app treat it as a known device.
+        {
+            let r = app.app_state();
+            let g = r.lock_or_recover();
+            if g.status.paired_devices.is_empty() {
+                drop(g);
+                let msg = format!(
+                    "No paired devices — auto-pairing first discovered device {display_name}"
+                );
+                app_log!(app, "scanner", "{msg}");
+                device_log("session", &msg);
+                crate::upsert_paired(app, id, display_name);
+                crate::emit_devices(app);
+            }
+        }
         let msg = format!("Auto-connecting to paired device {display_name}");
         app_log!(app, "scanner", "{msg}");
         device_log("session", &msg);
