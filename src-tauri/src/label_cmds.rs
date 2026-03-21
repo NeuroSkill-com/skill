@@ -210,12 +210,28 @@ pub fn submit_label(
 /// Separate Tauri-managed state for the fastembed text embedder.
 pub struct EmbedderState(pub std::sync::Mutex<Option<fastembed::TextEmbedding>>);
 
+/// Resolve an `EmbeddingModel` from either its `model_code` (e.g.
+/// `"Xenova/bge-small-en-v1.5"`) or its debug variant name (e.g.
+/// `"BGESmallENV15"`).  The model_code lookup is tried first because that is
+/// what we persist in settings.
+fn resolve_embedding_model(code: &str) -> Result<fastembed::EmbeddingModel, String> {
+    // Primary: match against model_code from the supported-models list.
+    if let Some(info) = fastembed::TextEmbedding::list_supported_models()
+        .into_iter()
+        .find(|m| m.model_code == code)
+    {
+        return Ok(info.model);
+    }
+    // Fallback: try the Debug-variant-name parser (case-insensitive).
+    use std::str::FromStr;
+    fastembed::EmbeddingModel::from_str(code)
+        .map_err(|_| format!("unknown embedding model: {code}"))
+}
+
 fn build_embedder(model_code: &str, skill_dir: &std::path::Path)
     -> Result<fastembed::TextEmbedding, String>
 {
-    use std::str::FromStr;
-    let model = fastembed::EmbeddingModel::from_str(model_code)
-        .map_err(|e| format!("unknown model {model_code}: {e}"))?;
+    let model = resolve_embedding_model(model_code)?;
     let cache = skill_dir.join("fastembed_cache");
     fastembed::TextEmbedding::try_new(
         fastembed::InitOptions::new(model)
@@ -324,9 +340,7 @@ pub async fn set_embedding_model(
     embedder:   tauri::State<'_, std::sync::Arc<EmbedderState>>,
     app:        AppHandle,
 ) -> Result<(), String> {
-    use std::str::FromStr;
-    fastembed::EmbeddingModel::from_str(&model_code)
-        .map_err(|e| format!("unknown model: {e}"))?;
+    resolve_embedding_model(&model_code)?;
     {
         let mut s = state.lock_or_recover();
         s.ui.text_embedding_model = model_code.clone();
