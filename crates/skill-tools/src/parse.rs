@@ -130,13 +130,17 @@ fn coerce_value(value: &Value, schema: &Value) -> Value {
             if no_additional && has_args_prop {
                 let mut out = serde_json::Map::new();
                 let mut extra = serde_json::Map::new();
+
+                // Collect existing nested args — accept both "args" and
+                // "arguments" (common LLM alias).
                 let existing_args = obj.get("args")
+                    .or_else(|| obj.get("arguments"))
                     .and_then(|v| v.as_object())
                     .cloned()
                     .unwrap_or_default();
 
                 for (k, v) in obj {
-                    if k == "args" {
+                    if k == "args" || k == "arguments" {
                         // Will be merged below.
                         continue;
                     }
@@ -148,7 +152,7 @@ fn coerce_value(value: &Value, schema: &Value) -> Value {
                     }
                 }
 
-                // Merge: existing args take precedence, then extras.
+                // Merge: existing args take precedence over flattened extras.
                 if !extra.is_empty() || !existing_args.is_empty() {
                     let mut merged = extra;
                     for (k, v) in existing_args {
@@ -2049,6 +2053,32 @@ Your device is connected with 89% battery."#;
         let result = validate_tool_arguments(&tool, &args).unwrap();
         let inner_args = result.get("args").unwrap();
         assert_eq!(inner_args["query"], Value::String("nested_query".into()));
+    }
+
+    #[test]
+    fn coerce_skill_arguments_alias_for_args() {
+        // LLM sends "arguments" instead of "args" — should be treated as "args"
+        let tool = make_skill_tool();
+        let args = serde_json::json!({"command": "search_screenshots", "arguments": {"query": "browser"}});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["command"], Value::String("search_screenshots".into()));
+        let inner_args = result.get("args").expect("should have args");
+        assert_eq!(inner_args["query"], Value::String("browser".into()));
+        // "arguments" must NOT appear in the output
+        assert!(result.get("arguments").is_none());
+    }
+
+    #[test]
+    fn coerce_skill_arguments_alias_with_flat_extras() {
+        // LLM sends "arguments" + extra flat keys
+        let tool = make_skill_tool();
+        let args = serde_json::json!({"command": "search_screenshots", "arguments": {"query": "code"}, "k": 5});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        let inner_args = result.get("args").unwrap();
+        // "arguments" content takes precedence
+        assert_eq!(inner_args["query"], Value::String("code".into()));
+        // flat extra gets folded in
+        assert_eq!(inner_args["k"], serde_json::json!(5));
     }
 
     #[test]

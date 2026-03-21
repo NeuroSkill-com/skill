@@ -347,10 +347,11 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
     let reach_minutes = msg.get("reach_minutes").and_then(|v| v.as_u64()).unwrap_or(10).clamp(1, 60);
     let reach_seconds = reach_minutes * 60;
 
-    let (skill_dir, model_code, eeg_model_backend) = crate::read_state(
+    let (skill_dir, model_code, eeg_model_backend, screenshot_store) = crate::read_state(
         &app.app_state(),
         |s| (s.skill_dir.clone(), s.ui.text_embedding_model.clone(),
-             s.embedding.model_config.model_backend.as_str().to_string()),
+             s.embedding.model_config.model_backend.as_str().to_string(),
+             s.screenshot_store.clone()),
     );
 
     let embedder_arc = std::sync::Arc::clone(
@@ -381,8 +382,7 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
         distance:       0.0,
         eeg_metrics:    None,
         parent_id:      None,
-        proj_x:         None,
-        proj_y:         None,
+        ..InteractiveGraphNode::default()
     });
 
     // Step 2: search the label text-HNSW for semantically similar labels.
@@ -400,10 +400,15 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
     let ef_eeg    = (k_eeg * 4).max(64);
     let labels_db = skill_dir.join(LABELS_FILE);
 
+    // Open screenshot store for step 6
+    let ss_store = screenshot_store
+        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new));
+
     let mut seen_eeg: std::collections::HashSet<u64>  = std::collections::HashSet::new();
     let mut seen_labels: std::collections::HashSet<i64> = std::collections::HashSet::new();
+    let mut seen_screenshots: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    // Steps 3–5: per text label → EEG neighbors → nearby labels.
+    // Steps 3–6: per text label → EEG neighbors → nearby labels → screenshots.
     for (ti, tl) in text_labels.iter().enumerate() {
         let tl_id = format!("tl_{ti}");
 
@@ -415,8 +420,7 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
             distance:       tl.distance,
             eeg_metrics:    tl.eeg_metrics.clone(),
             parent_id:      Some("query".into()),
-            proj_x:         None,
-            proj_y:         None,
+            ..InteractiveGraphNode::default()
         });
         edges.push(InteractiveGraphEdge {
             from_id:  "query".into(),
@@ -445,7 +449,6 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
             let ep_id = format!("ep_{ep_unix}");
 
             if seen_eeg.contains(ep_unix) {
-                // Shared EEG point — just add a cross-edge (avoid duplicate).
                 let already = edges.iter().any(|e| e.from_id == tl_id && e.to_id == ep_id);
                 if !already {
                     edges.push(InteractiveGraphEdge {
@@ -467,8 +470,7 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
                 distance:       *ep_dist,
                 eeg_metrics:    None,
                 parent_id:      Some(tl_id.clone()),
-                proj_x:         None,
-                proj_y:         None,
+                ..InteractiveGraphNode::default()
             });
             edges.push(InteractiveGraphEdge {
                 from_id:  tl_id.clone(),
@@ -496,14 +498,87 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
                         distance:       t_dist,
                         eeg_metrics:    None,
                         parent_id:      Some(ep_id.clone()),
-                        proj_x:         None, // filled by PCA step in commands.rs
-                        proj_y:         None,
+                        ..InteractiveGraphNode::default()
                     });
                     edges.push(InteractiveGraphEdge {
                         from_id:  ep_id.clone(),
                         to_id:    fl_id,
                         distance: t_dist,
                         kind:     "label_prox".into(),
+                    });
+                }
+            }
+
+            // Step 6: find screenshots near this EEG timestamp.
+            if let Some(ref store) = ss_store {
+                let screenshots = store.around_timestamp(
+                    *ep_unix as i64,
+                    reach_seconds as i32,
+                );
+
+                let query_lower = query.to_lowercase();
+                let query_words: Vec<&str> = query_lower.split_whitespace().collect();
+
+                for ss in screenshots.iter().take(k_labels.max(3)) {
+                    if !seen_screenshots.insert(ss.filename.clone()) { continue; }
+
+                    let time_dist = (ss.unix_ts as f32 - *ep_unix as f32).abs()
+                        / (reach_seconds as f32);
+
+                    let title_lower = ss.window_title.to_lowercase();
+                    let app_lower   = ss.app_name.to_lowercase();
+                    let title_match = if !query_words.is_empty() {
+                        let hits = query_words.iter()
+                            .filter(|w| title_lower.contains(*w) || app_lower.contains(*w))
+                            .count();
+                        hits as f32 / query_words.len() as f32
+                    } else { 0.0 };
+
+                    let ocr_lower = ss.ocr_text.to_lowercase();
+                    let ocr_substr_match = if !query_words.is_empty() {
+                        let hits = query_words.iter()
+                            .filter(|w| ocr_lower.contains(*w))
+                            .count();
+                        hits as f32 / query_words.len() as f32
+                    } else { 0.0 };
+
+                    let relevance = title_match * 0.4
+                        + ocr_substr_match * 0.4
+                        + (1.0 - time_dist.min(1.0)) * 0.2;
+                    if relevance < 0.05 && time_dist > 0.5 { continue; }
+
+                    let ss_id = format!("ss_{}", ss.unix_ts);
+                    let (edge_kind, edge_dist) = if title_match > 0.3 || ocr_substr_match > 0.3 {
+                        ("ocr_sim", 1.0 - relevance)
+                    } else {
+                        ("screenshot_prox", time_dist)
+                    };
+
+                    nodes.push(InteractiveGraphNode {
+                        id:             ss_id.clone(),
+                        kind:           "screenshot".into(),
+                        text:           if !ss.ocr_text.is_empty() {
+                            Some(ss.ocr_text.chars().take(80).collect())
+                        } else { None },
+                        timestamp_unix: Some(ss.unix_ts),
+                        distance:       edge_dist,
+                        parent_id:      Some(ep_id.clone()),
+                        filename:       Some(ss.filename.clone()),
+                        app_name:       Some(ss.app_name.clone()),
+                        window_title:   Some(ss.window_title.clone()),
+                        ocr_text:       if !ss.ocr_text.is_empty() {
+                            Some(ss.ocr_text.clone())
+                        } else { None },
+                        ocr_similarity: if ocr_substr_match > 0.0 {
+                            Some(ocr_substr_match)
+                        } else { None },
+                        ..InteractiveGraphNode::default()
+                    });
+                    edges.push(InteractiveGraphEdge {
+                        from_id:  ep_id.clone(),
+                        to_id:    ss_id,
+                        distance: edge_dist,
+                        kind:     edge_kind.into(),
                     });
                 }
             }
@@ -520,6 +595,11 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
         "distance":       n.distance,
         "eeg_metrics":    n.eeg_metrics,
         "parent_id":      n.parent_id,
+        "filename":       n.filename,
+        "app_name":       n.app_name,
+        "window_title":   n.window_title,
+        "ocr_text":       n.ocr_text,
+        "ocr_similarity": n.ocr_similarity,
     })).collect();
 
     let edges_json: Vec<serde_json::Value> = edges.iter().map(|e| serde_json::json!({

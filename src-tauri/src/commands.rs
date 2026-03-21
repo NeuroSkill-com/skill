@@ -128,7 +128,10 @@ pub fn find_session_for_timestamp(
 /// 3. For each text label, compute the mean EEG embedding over its time window.
 /// 4. Search all daily EEG HNSW indices with that vector → `k_eeg` raw EEG neighbors.
 /// 5. For each EEG neighbor timestamp, find the nearest label(s) in time.
-/// 6. Return a graph: nodes (4 kinds) + typed edges (3 kinds).
+/// 6. For each EEG neighbor, find temporally-close screenshots with matching
+///    window titles or OCR text (cosine similarity to the query).
+/// 7. Compute 3-D PCA projection across all text embeddings and generate SVGs.
+/// 8. Return a graph: nodes (5 kinds) + typed edges (5 kinds) + DOT + SVGs.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn interactive_search(
@@ -143,10 +146,10 @@ pub async fn interactive_search(
     embedder:  tauri::State<'_, std::sync::Arc<crate::label_cmds::EmbedderState>>,
     label_idx: tauri::State<'_, std::sync::Arc<crate::label_index::LabelIndexState>>,
 ) -> Result<InteractiveSearchResult, String> {
-    let (skill_dir, eeg_model_backend, model_code) = {
+    let (skill_dir, eeg_model_backend, model_code, screenshot_store) = {
         let s = state.lock_or_recover();
         (s.skill_dir.clone(), s.embedding.model_config.model_backend.as_str().to_string(),
-         s.ui.text_embedding_model.clone())
+         s.ui.text_embedding_model.clone(), s.screenshot_store.clone())
     };
     let embedder  = std::sync::Arc::clone(&embedder);
     let label_idx = std::sync::Arc::clone(&label_idx);
@@ -181,6 +184,7 @@ pub async fn interactive_search(
             parent_id:      None,
             proj_x:         None,
             proj_y:         None,
+            ..InteractiveGraphNode::default()
         });
 
         // ── Step 2: search the label text-HNSW ────────────────────────────
@@ -198,9 +202,24 @@ pub async fn interactive_search(
         let ef_eeg    = (k_eeg * 4).max(64);
         let labels_db = skill_dir.join(skill_constants::LABELS_FILE);
 
+        // Open screenshot store for step 6
+        let ss_store = screenshot_store
+            .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(Arc::new));
+
+        // Load OCR HNSW for OCR-similarity ranking
+        let ocr_hnsw_path = skill_dir.join(skill_constants::SCREENSHOTS_OCR_HNSW);
+        let ocr_hnsw = if ocr_hnsw_path.exists() {
+            fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load_mmap(
+                &ocr_hnsw_path, fast_hnsw::distance::Cosine,
+            ).ok()
+        } else {
+            None
+        };
+
         // Deduplication sets
         let mut seen_eeg: std::collections::HashSet<u64> = std::collections::HashSet::new();
         let mut seen_labels: std::collections::HashSet<i64> = std::collections::HashSet::new();
+        let mut seen_screenshots: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         // ── Steps 3-5: per text label ──────────────────────────────────────
         for (ti, tl) in text_labels.iter().enumerate() {
@@ -216,6 +235,7 @@ pub async fn interactive_search(
                 parent_id:      Some("query".into()),
                 proj_x:         None,
                 proj_y:         None,
+                ..InteractiveGraphNode::default()
             });
             edges.push(InteractiveGraphEdge {
                 from_id:  "query".into(),
@@ -267,6 +287,7 @@ pub async fn interactive_search(
                     parent_id:      Some(tl_id.clone()),
                     proj_x:         None,
                     proj_y:         None,
+                    ..InteractiveGraphNode::default()
                 });
                 edges.push(InteractiveGraphEdge {
                     from_id:  tl_id.clone(),
@@ -296,6 +317,7 @@ pub async fn interactive_search(
                             parent_id:      Some(ep_id.clone()),
                             proj_x:         None,
                             proj_y:         None,
+                            ..InteractiveGraphNode::default()
                         });
                         edges.push(InteractiveGraphEdge {
                             from_id:  ep_id.clone(),
@@ -305,10 +327,106 @@ pub async fn interactive_search(
                         });
                     }
                 }
+
+                // ── Step 6: find screenshots near this EEG timestamp ──────
+                if let Some(ref store) = ss_store {
+                    let screenshots = store.around_timestamp(
+                        *ep_unix as i64,
+                        reach_seconds as i32,
+                    );
+
+                    // Normalise query for window-title matching
+                    let query_lower = query.to_lowercase();
+                    let query_words: Vec<&str> = query_lower.split_whitespace().collect();
+
+                    for ss in screenshots.iter().take(k_labels.max(3)) {
+                        if !seen_screenshots.insert(ss.filename.clone()) { continue; }
+
+                        // Score: temporal proximity + window title match + OCR match
+                        let time_dist = (ss.unix_ts as f32 - *ep_unix as f32).abs()
+                            / (reach_seconds as f32);
+
+                        // Window-title fuzzy match: fraction of query words found
+                        let title_lower = ss.window_title.to_lowercase();
+                        let app_lower   = ss.app_name.to_lowercase();
+                        let title_match = if !query_words.is_empty() {
+                            let hits = query_words.iter()
+                                .filter(|w| title_lower.contains(*w) || app_lower.contains(*w))
+                                .count();
+                            hits as f32 / query_words.len() as f32
+                        } else { 0.0 };
+
+                        // OCR-text match: search query against OCR text
+                        let ocr_lower = ss.ocr_text.to_lowercase();
+                        let ocr_substr_match = if !query_words.is_empty() {
+                            let hits = query_words.iter()
+                                .filter(|w| ocr_lower.contains(*w))
+                                .count();
+                            hits as f32 / query_words.len() as f32
+                        } else { 0.0 };
+
+                        // OCR embedding similarity via HNSW (if available)
+                        let ocr_emb_sim = ocr_hnsw.as_ref().map(|idx| {
+                            if idx.is_empty() { return 0.0f32; }
+                            let hits = idx.search(&query_vec, 1, 64);
+                            if let Some(hit) = hits.first() {
+                                if *hit.payload == ss.timestamp {
+                                    (1.0 - hit.distance).max(0.0)
+                                } else { 0.0 }
+                            } else { 0.0 }
+                        }).unwrap_or(0.0);
+
+                        // Combined relevance: skip if nothing matches
+                        let relevance = title_match * 0.4
+                            + ocr_substr_match * 0.3
+                            + ocr_emb_sim * 0.2
+                            + (1.0 - time_dist.min(1.0)) * 0.1;
+                        if relevance < 0.05 && time_dist > 0.5 { continue; }
+
+                        let ss_id = format!("ss_{}", ss.unix_ts);
+
+                        // Determine edge kind and label
+                        let (edge_kind, edge_dist) = if title_match > 0.3 || ocr_substr_match > 0.3 {
+                            ("ocr_sim", 1.0 - relevance)
+                        } else {
+                            ("screenshot_prox", time_dist)
+                        };
+
+                        nodes.push(InteractiveGraphNode {
+                            id:             ss_id.clone(),
+                            kind:           "screenshot".into(),
+                            text:           if !ss.ocr_text.is_empty() {
+                                Some(ss.ocr_text.chars().take(80).collect())
+                            } else { None },
+                            timestamp_unix: Some(ss.unix_ts),
+                            distance:       edge_dist,
+                            eeg_metrics:    None,
+                            parent_id:      Some(ep_id.clone()),
+                            proj_x:         None,
+                            proj_y:         None,
+                            proj_z:         None,
+                            filename:       Some(ss.filename.clone()),
+                            app_name:       Some(ss.app_name.clone()),
+                            window_title:   Some(ss.window_title.clone()),
+                            ocr_text:       if !ss.ocr_text.is_empty() {
+                                Some(ss.ocr_text.clone())
+                            } else { None },
+                            ocr_similarity: if ocr_emb_sim > 0.0 || ocr_substr_match > 0.0 {
+                                Some(ocr_emb_sim.max(ocr_substr_match))
+                            } else { None },
+                        });
+                        edges.push(InteractiveGraphEdge {
+                            from_id:  ep_id.clone(),
+                            to_id:    ss_id,
+                            distance: edge_dist,
+                            kind:     edge_kind.into(),
+                        });
+                    }
+                }
             }
         }
 
-        // ── Step 6: PCA projection for found_labels ───────────────────────
+        // ── Step 7a: 2-D PCA projection for found_labels ──────────────────
         if labels_db.exists() {
             let fl_info: Vec<(usize, i64)> = nodes.iter().enumerate()
                 .filter(|(_, n)| n.kind == "found_label")
@@ -340,10 +458,90 @@ pub async fn interactive_search(
             }
         }
 
+        // ── Step 7b: 3-D PCA across ALL embeddable nodes (labels + screenshots) ──
+        {
+            // Collect text embeddings for all text_label, found_label, and
+            // screenshot nodes (via query_vec as representative for screenshots
+            // since the query text was used to discover them).
+            let mut emb_3d_info: Vec<(usize, Vec<f32>)> = Vec::new();
+
+            // text_labels: use query_vec projected near them (distance-based jitter)
+            for (ni, nd) in nodes.iter().enumerate() {
+                match nd.kind.as_str() {
+                    "text_label" => {
+                        // Jitter the query_vec by the distance (crude but consistent)
+                        let mut v = query_vec.clone();
+                        let jitter = nd.distance * 0.15;
+                        if let Some(el) = v.get_mut(0) { *el += jitter; }
+                        if let Some(el) = v.get_mut(1) { *el -= jitter * 0.5; }
+                        emb_3d_info.push((ni, v));
+                    }
+                    "found_label" => {
+                        if let Some(lid) = nd.id.strip_prefix("fl_")
+                            .and_then(|s| s.parse::<i64>().ok())
+                        {
+                            if let Some(emb) = get_found_label_embedding(&labels_db, lid) {
+                                if !emb.is_empty() { emb_3d_info.push((ni, emb)); continue; }
+                            }
+                        }
+                        // Fallback: use query_vec with distance-based offset
+                        let mut v = query_vec.clone();
+                        let jitter = nd.distance * 0.2;
+                        if let Some(el) = v.get_mut(2) { *el += jitter; }
+                        emb_3d_info.push((ni, v));
+                    }
+                    "screenshot" => {
+                        // Use query_vec offset by OCR similarity
+                        let mut v = query_vec.clone();
+                        let sim = nd.ocr_similarity.unwrap_or(0.0);
+                        let offset = (1.0 - sim) * 0.3;
+                        if let Some(el) = v.get_mut(0) { *el += offset; }
+                        let idx3 = 3.min(v.len().saturating_sub(1));
+                        if let Some(el) = v.get_mut(idx3) { *el -= offset * 0.5; }
+                        emb_3d_info.push((ni, v));
+                    }
+                    _ => {}
+                }
+            }
+
+            if emb_3d_info.len() >= 2 {
+                let embs: Vec<Vec<f32>> = emb_3d_info.iter().map(|(_, e)| e.clone()).collect();
+                let projections = pca_3d(&embs);
+                for ((node_idx, _), (px, py, pz)) in emb_3d_info.iter().zip(projections.iter()) {
+                    nodes[*node_idx].proj_x = nodes[*node_idx].proj_x.or(Some(*px));
+                    nodes[*node_idx].proj_y = nodes[*node_idx].proj_y.or(Some(*py));
+                    nodes[*node_idx].proj_z = Some(*pz);
+                }
+            }
+
+            // Assign query and eeg_point nodes fixed 3D positions
+            for nd in nodes.iter_mut() {
+                match nd.kind.as_str() {
+                    "query" => {
+                        nd.proj_x = Some(0.0);
+                        nd.proj_y = Some(0.0);
+                        nd.proj_z = Some(0.0);
+                    }
+                    "eeg_point" => {
+                        if nd.proj_z.is_none() {
+                            // Spread EEG points along the Z axis by timestamp
+                            let t = nd.timestamp_unix.unwrap_or(0) as f32;
+                            let z = (t % 3600.0) / 3600.0 * 2.0 - 1.0;
+                            nd.proj_x = nd.proj_x.or(Some(nd.distance * 0.5));
+                            nd.proj_y = nd.proj_y.or(Some(-0.5));
+                            nd.proj_z = Some(z);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         let dot     = generate_dot(&nodes, &edges);
         let svg     = generate_svg(&nodes, &edges, &svg_labels, use_pca);
         let svg_col = generate_svg(&nodes, &edges, &svg_labels, false);
-        Ok(InteractiveSearchResult { nodes, edges, dot, svg, svg_col })
+        let svg_3d  = generate_svg_3d(&nodes, &edges, &svg_labels);
+        Ok(InteractiveSearchResult { nodes, edges, dot, svg, svg_col, svg_3d })
     }).await.map_err(|e| e.to_string())?
 }
 

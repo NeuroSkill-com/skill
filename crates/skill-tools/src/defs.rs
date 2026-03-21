@@ -275,7 +275,8 @@ pub fn skill_api_tool() -> Tool {
                             "umap", "umap_poll",
                             "llm_status", "llm_catalog", "llm_downloads", "llm_hardware_fit",
                             "search_screenshots", "screenshots_around",
-                            "screenshots_for_eeg", "eeg_for_screenshots"
+                            "screenshots_for_eeg", "eeg_for_screenshots",
+                            "search_screenshots_vision", "search_screenshots_by_image_b64"
                         ]
                     },
                     "args": {
