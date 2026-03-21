@@ -244,9 +244,11 @@ pub fn skill_api_tool() -> Tool {
             name: "skill".into(),
             description: Some(
                 "Query the NeuroSkill EEG/BCI application. \
-                 IMPORTANT: always call THIS tool (\"skill\") and pass a command name via the \"command\" argument. \
-                 Example: {\"command\":\"status\"} — never call \"status\" directly as a tool.\n\n\
-                 Commands (pass as \"command\" value):\n\
+                 IMPORTANT: always call THIS tool (\"skill\") and pass a command name via the \"command\" argument, \
+                 with command-specific parameters inside \"args\". \
+                 Examples: {\"command\":\"status\"}, {\"command\":\"search_screenshots\",\"args\":{\"query\":\"browser\"}}, \
+                 {\"command\":\"search_labels\",\"args\":{\"query\":\"focus\",\"k\":5}}.\n\n\
+                 Commands (pass as \"command\" value, parameters go in \"args\"):\n\
                  STATUS: status | sessions | session_metrics(start_utc,end_utc) | sleep(start_utc,end_utc)\n\
                  ACTIONS: say(text) | notify(title,body?) | label(text,context?) | calibrate | timer\n\
                  SEARCH: search_labels(query,k?,mode?) | interactive_search(query) | search(start_utc,end_utc,k?) | compare(a_start_utc,a_end_utc,b_start_utc,b_end_utc)\n\
@@ -278,7 +280,7 @@ pub fn skill_api_tool() -> Tool {
                     },
                     "args": {
                         "type": "object",
-                        "description": "Command-specific arguments as key-value pairs (omit for commands with no args)"
+                        "description": "Command-specific arguments as key-value pairs. Examples: {\"query\":\"focus\"} for search_labels, {\"query\":\"browser\",\"k\":10} for search_screenshots, {\"text\":\"meditation start\"} for label. Omit for commands with no args (e.g. status, sessions)."
                     }
                 },
                 "required": ["command"],
@@ -597,6 +599,31 @@ mod tests {
     #[test]
     fn hooks_folder_maps_to_hooks_status() {
         assert_eq!(resolve_skill_alias("neuroskill-hooks"), Some("hooks_status".into()));
+    }
+
+    #[test]
+    fn screenshot_commands_are_recognised() {
+        assert!(is_skill_api_command("search_screenshots"));
+        assert!(is_skill_api_command("screenshots_around"));
+        assert!(is_skill_api_command("screenshots_for_eeg"));
+        assert!(is_skill_api_command("eeg_for_screenshots"));
+    }
+
+    #[test]
+    fn search_images_alias_resolves() {
+        assert_eq!(resolve_skill_alias("search-images"), Some("search_screenshots".into()));
+    }
+
+    #[test]
+    fn screenshot_cli_aliases_resolve() {
+        assert_eq!(resolve_skill_alias("screenshots-around"), Some("screenshots_around".into()));
+        assert_eq!(resolve_skill_alias("screenshots-for-eeg"), Some("screenshots_for_eeg".into()));
+        assert_eq!(resolve_skill_alias("eeg-for-screenshots"), Some("eeg_for_screenshots".into()));
+    }
+
+    #[test]
+    fn neuroskill_screenshots_resolves_to_search() {
+        assert_eq!(resolve_skill_alias("neuroskill-screenshots"), Some("search_screenshots".into()));
     }
 
     #[test]
