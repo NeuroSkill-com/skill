@@ -124,9 +124,9 @@
                 stroke-dasharray="{circumference}"
                 stroke-dashoffset="{dashOffset}" />
       </svg>
-      <span class="text-[0.5rem] tabular-nums font-semibold text-right w-[2.2em]
+      <span class="text-[0.5rem] font-mono font-semibold
                     {ctxPct >= 90 ? 'text-red-500' : ctxPct >= 70 ? 'text-amber-500' : 'text-muted-foreground/60'}">
-        {ctxPct}%
+        {String(ctxPct).padStart(3, "\u2007")}%
       </span>
     </button>
   {/if}
@@ -147,7 +147,7 @@
       </svg>
       <span>{t("chat.eeg.label")}</span>
       {#if eegContext && latestBands}
-        <span class="tabular-nums opacity-70 text-right w-[3.2em]">{(latestBands.snr ?? 0).toFixed(1)}dB</span>
+        <span class="font-mono opacity-70">{String(Math.round(latestBands.snr ?? 0)).padStart(2, "\u2007")}dB</span>
       {/if}
     </button>
   {/if}
