@@ -8,6 +8,7 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.48] — 2026-03-21
 ## [0.0.47] — 2026-03-21
 
 ### Performance
