@@ -20,6 +20,10 @@ rten            = "0.24.0"
 chrono          = { version = "0.4", default-features = false, features = ["clock", "std"] }
 ureq            = { version = "2", features = ["native-tls"] }
 
+[[bin]]
+name = "image_encode_bench"
+path = "src/bin/image_encode_bench.rs"
+
 [target.'cfg(target_os = "macos")'.dependencies.ort]
 version = "=2.0.0-rc.11"
 default-features = false
