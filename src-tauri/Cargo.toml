@@ -281,7 +281,7 @@ pollster  = "0.4"
 
 # Windows crash diagnostics — vectored exception handler for STATUS_ACCESS_VIOLATION.
 [target.'cfg(target_os = "windows")'.dependencies]
-windows-sys = { version = "0.59", features = ["Win32_System_Diagnostics_Debug", "Win32_Foundation"] }
+windows-sys = { version = "0.59", features = ["Win32_System_Diagnostics_Debug", "Win32_Foundation", "Win32_System_Kernel"] }
 
 # Raw CubeBackend + WgpuRuntime needed for fast-umap's AutodiffBackend bound
 # (the Fusion<CubeBackend> wrapper from burn::backend::Wgpu is not supported).
