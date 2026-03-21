@@ -111,6 +111,7 @@ const search: Record<string, string> = {
   "search.interactiveKEeg":             "eeg-k",
   "search.interactiveKLabels":          "label-k",
   "search.interactiveDedupe":           "Deduplicate labels",
+  "search.interactiveScreenshots":      "Screenshots",
   "search.exportDotTitle":    "Save as Graphviz DOT source",
   "search.exportSvgTitle":    "Save as SVG",
   "search.exportSavedTitle":  "Saved: {path}",

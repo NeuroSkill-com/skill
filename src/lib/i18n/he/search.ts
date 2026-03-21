@@ -172,6 +172,7 @@ const search: Record<string, string> = {
   "search.interactiveKEeg":             "k-EEG",
   "search.interactiveKLabels":          "k-תווית",
   "search.interactiveDedupe":           "הסרת כפילויות בתוויות",
+  "search.interactiveScreenshots":      "צילומי מסך",
   "search.exportDotTitle":    "שמור כקובץ מקור Graphviz DOT",
   "search.exportSvgTitle":    "שמור כ-SVG",
   "search.exportSavedTitle":  "נשמר: {path}",
