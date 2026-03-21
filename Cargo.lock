@@ -10309,6 +10309,7 @@ dependencies = [
  "tower-http",
  "ureq 2.12.1",
  "wgpu",
+ "windows-sys 0.59.0",
  "zuna-rs",
 ]
 

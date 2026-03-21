@@ -1122,6 +1122,45 @@ fn setup_background_tasks(app: &mut tauri::App) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // ── Windows: install a vectored exception handler for crash diagnostics ──
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::System::Diagnostics::Debug::*;
+        use windows_sys::Win32::Foundation::EXCEPTION_ACCESS_VIOLATION;
+
+        unsafe extern "system" fn crash_handler(
+            info: *mut EXCEPTION_POINTERS,
+        ) -> i32 {
+            const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
+            if info.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
+            let record = (*info).ExceptionRecord;
+            if record.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
+            let code = (*record).ExceptionCode;
+            if code == EXCEPTION_ACCESS_VIOLATION {
+                let addr = (*record).ExceptionAddress as usize;
+                let info0 = (*record).ExceptionInformation[0]; // 0=read, 1=write, 8=DEP
+                let info1 = (*record).ExceptionInformation[1]; // target address
+                let op = match info0 {
+                    0 => "reading",
+                    1 => "writing",
+                    8 => "DEP violation at",
+                    _ => "accessing",
+                };
+                eprintln!("\n=== STATUS_ACCESS_VIOLATION ===");
+                eprintln!("Faulting instruction: 0x{addr:016x}");
+                eprintln!("Operation: {op} address 0x{info1:016x}");
+                eprintln!("Thread: {:?}", std::thread::current().name().unwrap_or("unnamed"));
+
+                // Print a Rust backtrace
+                eprintln!("\nBacktrace:");
+                eprintln!("{}", std::backtrace::Backtrace::force_capture());
+                eprintln!("=== END CRASH INFO ===\n");
+            }
+            EXCEPTION_CONTINUE_SEARCH // let the default handler terminate
+        }
+        unsafe { AddVectoredExceptionHandler(0, Some(crash_handler)); }
+    }
+
     // ── rustls CryptoProvider ─────────────────────────────────────────────
     // Multiple transitive deps activate both the `ring` and `aws-lc-rs`
     // features of rustls 0.23, so it cannot auto-select a provider.

@@ -279,6 +279,10 @@ burn      = { version = "0.20.1", default-features = false, features = ["wgpu"] 
 wgpu      = "26.0.1"
 pollster  = "0.4"
 
+# Windows crash diagnostics — vectored exception handler for STATUS_ACCESS_VIOLATION.
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_System_Diagnostics_Debug", "Win32_Foundation"] }
+
 # Raw CubeBackend + WgpuRuntime needed for fast-umap's AutodiffBackend bound
 # (the Fusion<CubeBackend> wrapper from burn::backend::Wgpu is not supported).
 burn-cubecl    = "0.20.1"
