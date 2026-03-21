@@ -553,7 +553,8 @@ the Free Software Foundation, version 3 only. -->
     overflow-y: auto; overscroll-behavior: contain;
     border-radius: 8px;
     border: 1px solid var(--color-border);
-    background: var(--color-surface);
+    background: var(--popover);
+    color: var(--popover-foreground);
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.10);
     padding: 4px 0;
     z-index: 10000;
@@ -563,36 +564,36 @@ the Free Software Foundation, version 3 only. -->
     padding: 6px 10px 2px;
     font-size: 0.5rem; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.06em;
-    color: color-mix(in oklab, var(--color-text) 40%, transparent);
+    color: var(--muted-foreground);
     user-select: none;
   }
   .chat-model-item {
     display: flex; align-items: center; gap: 6px;
     width: 100%; padding: 5px 10px;
     border: none; background: transparent;
-    color: color-mix(in oklab, var(--color-text) 80%, transparent);
+    color: var(--popover-foreground);
     font-size: 0.64rem; text-align: left;
     cursor: pointer; transition: background 0.12s;
     height: auto !important;
   }
-  .chat-model-item:hover { background: color-mix(in oklab, var(--color-text) 8%, transparent); }
+  .chat-model-item:hover { background: var(--accent); }
   .chat-model-item-active {
-    color: var(--color-primary);
+    color: var(--primary);
     font-weight: 600;
-    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+    background: oklch(from var(--primary) l c h / 10%);
   }
   .chat-model-dot {
     width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
     background: transparent;
   }
-  .chat-model-dot-active { background: var(--color-primary); }
+  .chat-model-dot-active { background: var(--primary); }
   .chat-model-item-name {
     flex: 1; min-width: 0;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .chat-model-item-size {
     font-size: 0.52rem; flex-shrink: 0;
-    color: color-mix(in oklab, var(--color-text) 40%, transparent);
+    color: var(--muted-foreground);
     font-variant-numeric: tabular-nums;
   }
 
