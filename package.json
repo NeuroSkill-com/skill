@@ -18,7 +18,7 @@
     "check": "npm run -s check:markdown-renderer && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "npm run -s dev:guard && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --ignore src-tauri --watch",
     "tauri": "node scripts/tauri-build.js",
-    "tauri:flamegraph": "bash scripts/tauri-flamegraph.sh",
+    "tauri:flamegraph": "node scripts/tauri-flamegraph.js",
     "tauri:build": "node scripts/tauri-build.js build",
     "tauri:build:linux:arm64": "node scripts/tauri-build.js build --target aarch64-unknown-linux-gnu --bundles appimage --features llm-vulkan",
     "tauri:build:linux:x64:native": "node scripts/tauri-build.js build --target x86_64-unknown-linux-gnu --bundles appimage --features llm-vulkan",
