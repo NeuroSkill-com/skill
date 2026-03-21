@@ -8,6 +8,120 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.51] — 2026-03-21
+
+### Features
+
+- **Cross-modal screenshot ↔ EEG search in CLI**: Added new CLI commands and WS endpoints for bridging screenshots and EEG data:
+  - `search-images --by-image <path>` — search screenshots by visual similarity using CLIP vision embeddings (base64 image sent over WS, server-side CLIP embedding + HNSW search).
+  - `screenshots-for-eeg [--start --end] [--window N]` — find screenshots captured near EEG recording timestamps ("EEG → screen" bridge). Auto-selects the latest session when no range is given.
+  - `eeg-for-screenshots "query" [--k N] [--window N]` — search screenshots by OCR text, then return EEG labels and session info near each match ("screen → EEG" bridge).
+  - New WS commands: `search_screenshots_by_image_b64`, `search_screenshots_vision`, `screenshots_for_eeg`, `eeg_for_screenshots`.
+  - All commands support `--json`, `--mode`, `--k`, `--window`, and `--limit` flags.
+
+- **Implicit evidence collection for protocols**: Every protocol execution now produces structured measurement data using a standardised `px:start:`/`px:end:` label schema with pipe-separated metrics (bar, stress_index, relaxation, focus, hr, mood, faa, rmssd, deltas, outcome). The LLM captures before/after snapshots automatically and silently for every protocol, determining outcome as positive (≥10% target improvement), neutral, or negative. No user action required — evidence collection is invisible infrastructure.
+
+- **Personal protocol effectiveness ranking**: After 5+ labeled protocol executions, the LLM aggregates outcomes via `search_labels "px:end"` to build a personal ranking by success rate and average metric delta. Surfaces time-of-day patterns, trigger-specific effectiveness, and modality preferences. Presents insights like "Cold water face splash is your most effective stress intervention — 92% success, average stress drop 31%."
+
+- **Evidence-driven protocol selection**: New matching guidance rule — "Evidence first." Before suggesting any protocol, the LLM checks past effectiveness data. Leads with proven personal winners over generic recommendations. Retires consistent failures after 4+ negative outcomes. Explores new protocols occasionally even with strong data. Tracks modality preferences across interventions.
+
+- **Implicit life-event labeling**: The LLM silently labels mentioned life events (caffeine intake, walks, meals, meetings, exercise, app switches, sleep quality) with EEG metric snapshots to build a complete personal effectiveness map beyond formal protocols. Privacy safeguards: full transparency if asked, user owns all local data, no inference of unmentioned events.
+
+- **Interactive graph screenshots**: Added screenshot nodes to the interactive 3D cross-modal search graph. When the "Screenshots" checkbox is enabled, screenshots are discovered via three strategies: semantic text search on the query (attached to the query node), semantic search on each text-label (attached to label nodes), and timestamp proximity ±30 min around EEG points. Screenshots are injected as proper connected graph nodes (cyan spheres with async-loaded thumbnail sprites), connected via `screenshot_link` edges, and fully participate in selection highlighting. Duplicates are suppressed by filename.
+- **SVG/DOT export includes screenshots**: When screenshots are visible in the interactive graph, the exported SVG and DOT files now include screenshot nodes. The frontend regenerates the SVG/DOT via new `regenerate_interactive_svg` / `regenerate_interactive_dot` Tauri commands, passing the full augmented graph (including client-side screenshot nodes) to the backend layout engine.
+
+- **Interactive search: screenshot discovery and 3D visualization**: The interactive cross-modal search now discovers screenshots near EEG neighbor timestamps, ranking them by window-title and OCR-text proximity to the query. Screenshot nodes appear as a new layer in the graph with dedicated styling (pink `#ec4899`). Two new edge kinds (`screenshot_prox` for temporal proximity and `ocr_sim` for text-based matches) connect EEG points to relevant screenshots. A new 3D perspective-projected SVG (`svg_3d`) is generated alongside the existing 2D layouts using 3-component PCA across all text embeddings. The `InteractiveGraphNode` struct gains `proj_z`, `filename`, `app_name`, `window_title`, `ocr_text`, and `ocr_similarity` fields. The `InteractiveSearchResult` includes the new `svg_3d` field. Both the Tauri command and WebSocket `interactive_search` handler are updated. DOT and flat SVG exports also render screenshot nodes.
+
+- **Modality Router**: Added a decision table mapping 12 EEG triggers to 7 intervention modalities (Breath, Tactile, Cognitive, Visual, Movement, Auditory, Passive Physiological) so the LLM selects the best modality for each person's circumstances before choosing a specific protocol. Breathing is presented as one equal option among many, never the default. Includes a modality selection guide by context and phrasing examples showing how to offer multi-modal choices.
+
+- **Multi-modal protocol restructuring**: Restructured ~30 protocols that previously defaulted to breathing to present non-breathing alternatives at equal priority using ", OR " choice points. Affected protocols include Focus Reset, Pre-Performance Activation, Extended Exhale, Physiological Sigh, Kapalabhati, 4-Count Energising, Wim Hof, Anger Processing, Grief Holding, Emotion Surfing, Joy Amplification, Emotional Boundaries, Excitement Regulation, all morning routines, all workout protocols, social media protocols, Pre-Meal Pause, Sleep Wind-Down, Co-Regulation, One-Handed Calm, Cortical Quieting, Coherence Building, Break Reset, and Post-Scroll Reset.
+
+- **Matching Guidance updated**: Added "Modality first, protocol second" as the top matching rule and "Always offer at least two modalities" as a new requirement, ensuring the LLM never prescribes breathing without presenting alternatives.
+
+- **neuroskill-evidence standalone skill**: New skill defining the implicit evidence collection and personal effectiveness engine used across all intervention-delivering skills. Includes the standardised `px:` label schema (`px:start`, `px:end`, `px:note`, `px:skip`, `px:auto`) with pipe-separated key=value context format, required fields (8 core EEG metrics), outcome determination rules by trigger type, mandatory before/after measurement flow, life-event implicit labeling (caffeine, meals, walks, meetings, sleep, exercise, app switches), hook trigger tracking, evidence aggregation by data maturity, personal protocol ranking algorithm (success_rate × avg_delta_target), 10 evidence-driven selection rules, evidence surfacing and tone guidelines, privacy safeguards, complete protocol name reference (100+ snake_case names), and a quick-reference integration pattern for other skills.
+
+- **Non-breathing protocol repertoire**: Added 30+ new protocols across 6 categories for users who find breathing exercises inconvenient — Cognitive Reset (micro-tasking, peripheral vision, mental arithmetic, internal narration silence, gratitude, mental time travel, worry parking, category switching), Tactile & Haptic Regulation (texture scanning, pressure points, temperature contrast, bilateral tapping, structured fidget, palm press, hand warming), Oculomotor & Visual (saccade reset, candle gaze, colour hunting, slow tracking, panoramic vision, near-far focus), Micro-Movement / Discreet (isometric squeeze-release, jaw release, micro-walk, seated spinal wave, wrist/ankle circles, shoulder blade pinch, single-leg floor press), Auditory / Non-Music (sound mapping, humming, toning, environmental sound bath, whisper reading, rhythmic tapping), and Passive Physiological (dive reflex, deliberate yawning, chewing, gargling, wrist cooling, ear massage, tongue press, postural gravity drop). Updated matching guidance to prioritise non-breathing protocols when user preference or context indicates.
+
+- **Protocol API Integration Guide**: Added a comprehensive guide teaching the LLM how to use the NeuroSkill API at every phase of protocol delivery — a 4-phase lifecycle (Before: validate trigger and baseline with `status`, `search_labels`, `label`; During: voice-guide with `say`, protect with `dnd_set`, monitor with `status` polling, time with `timer`; After: measure deltas, `label` outcomes, `notify` summaries, `say` results; Longitudinal: `search_labels` to find past protocol instances, `compare` protocol vs non-protocol sessions, `hooks_set` for auto-triggers, `umap` for visual separation, `sleep` for sleep protocol impact). Includes a 16-tool quick reference table, concrete JSON payload examples for each phase, and 10 integration principles.
+
+- **Protocol API annotations (🔧)**: Grounded 17 key protocols with specific API call sequences — Theta-Beta Neurofeedback (tbr live feedback), Box Breathing (full lifecycle with auto-hook setup after 5 sessions), Cardiac Coherence (rmssd as live biofeedback), Loving-Kindness (faa shift tracking), Alpha Induction (real-time alpha feedback loop), Sleep Wind-Down (sleep staging comparison next morning), NSDR/Yoga Nidra (full voice-guided delivery via `say`), Flow State (minimal interruption + neural signature hooks), Micro-Tasking Focus (quick measurement), Study Focus Sprint (Pomodoro + data-driven scheduling), Morning Clarity (sleep summary + streak), Caffeine Timing (personal sensitivity mapping via labels), Digital Sunset (sleep_schedule-driven auto-trigger), Sensory Overload (immediate DND + pattern recognition), Hyperfocus Exit (stillness-based proactive hook), Between-Patient Reset (shift stress trajectory), and Post-Doom-Scrolling (app correlation + proactive nudge hooks).
+
+- **Protocol personalisation engine**: Added a top-level Personalisation Engine to the protocol repertoire with 12 adaptation dimensions (age, physical ability, neurodivergence, emotional state, cultural background, gender/identity, professional context, social context, location/time, language, need urgency, intimacy level), 10 adaptation rules, and 12 concrete example adaptations showing the same EEG trigger delivered differently for an executive, new mother, teenager, construction worker, elder, autistic teen, night-shift nurse, grieving person, person with ADHD, pregnant woman, wheelchair user, and ESL speaker.
+
+- **Context-specific protocol collections**: Added 11 new protocol sections (77 protocols total) for underserved user groups — Parenting & Caregiving, Elderly & Aging, Teens & Students, Neurodivergent-Friendly (ADHD, autism, OCD, RSD), Commuters & Travellers, Manual & Physical Workers, Healthcare & Shift Workers, Intimate & Relational, Accessibility-Adapted (visual/hearing/mobility/cognitive impairment, chronic pain), Culturally Diverse Practices (Chinese Wuqinxi, Mesoamerican Temazcal, Japanese Shinrin-Yoku, Hawaiian Ho'oponopono, African Ubuntu, Indian Bhramari, Aboriginal Dadirri, Tai Chi, Islamic Dhikr, Christian Centering Prayer, Hindu/Buddhist Mala meditation), and Situational Micro-Protocols (11 ultra-short real-moment interventions).
+
+- **Diverse contextual variants across existing protocols**: Enhanced Attention, Stress, Emotional Regulation, Grounding, Sleep, Music, and Dietary protocols with persona-specific variant examples (marked with ◈) covering children, elders, wheelchair users, breath-averse users, public settings, non-English speakers, introverts, athletes, and more. Expanded music and food suggestions to span Western, South Asian, East Asian, Latin, African, K-pop, Arabic, and vegan cultures.
+
+- **Status command enriched with usage analytics**: The `status` command now returns most-used apps (all-time, 24h, 7d), most frequent label texts (all-time, 24h, 7d), screenshot/OCR summary counts (total, with embedding, with OCR, with OCR embedding), top screenshot apps (all-time, 24h), and label text-embedding count. New fields: `apps`, `screenshots`, and expanded `labels` section in the JSON response.
+
+### Performance
+
+- **Eliminate PNG encode/decode round-trip in screenshot embed pipeline**: The capture thread now sends the pre-decoded `DynamicImage` directly to the embed thread instead of encoding it to PNG first. The embed thread calls fastembed's `embed_images()` with the `DynamicImage` directly, avoiding the CPU-intensive PNG encode (capture thread) → PNG decode (fastembed) round-trip. For LLM vision and OCR paths that still need encoded bytes, JPEG is produced lazily (~10× faster than PNG). OCR via `ocrs` now also operates on the decoded image buffer directly (`run_ocr_from_image`) instead of encoding to PNG and decoding again.
+
+### Bugfixes
+
+- **LLM screenshot tool commands**: Added `search_screenshots`, `screenshots_around`, `screenshots_for_eeg`, and `eeg_for_screenshots` to the `skill` tool's command enum, description, and alias resolution. The LLM can now invoke screenshot search commands correctly instead of failing with validation errors. Also maps CLI names (`search-images`, `screenshots-around`, etc.) to their WebSocket API equivalents.
+
+- **CPU FFT fallback for CI**: Added `rustfft`-based CPU fallback in `skill-eeg` behind a feature gate. The `gpu` feature (opt-in) uses `gpu-fft` with wgpu; without it, tests and headless CI environments use pure-Rust `rustfft`. Fixes 33 test failures on GPU-less CI runners.
+
+- **Lazy embedder retry**: When the text embedding model fails to initialise at startup (e.g. missing download, network error), semantic label search, interactive search, and re-embed commands now retry initialisation on demand instead of permanently returning "embedder not initialized".
+
+- **Fix text embedder model resolution**: `build_embedder` used `EmbeddingModel::from_str` which only matches debug variant names (e.g. `BGESmallENV15`), not the `model_code` strings persisted in settings (e.g. `Xenova/bge-small-en-v1.5`). Added `resolve_embedding_model()` that first looks up by `model_code` from the supported-models list, falling back to the variant-name parser. Applied to both model init and `set_embedding_model` validation.
+
+- **LLM skill tool args coercion**: When an LLM flattens command arguments to the top level (e.g. `{"command":"search_screenshots","query":"today"}` instead of `{"command":"search_screenshots","args":{"query":"today"}}`), the coercion layer now automatically wraps stray properties into the `args` object before validation. Also handles the common `"arguments"` misspelling as an alias for `"args"`. This prevents validation errors for all `skill` tool commands.
+
+- **Missing skill commands in tool enum**: Added `sleep_schedule`, `sleep_schedule_set`, `health_summary`, `health_query`, `health_metric_types`, `health_sync`, `search_screenshots_vision`, and `search_screenshots_by_image_b64` to the skill tool command enum, description, and `is_skill_api_command()`. These WS commands were functional but invisible to the LLM.
+
+- **Coerced tool arguments now reach execution**: The tool orchestrator validated and coerced LLM arguments (e.g. wrapping flat `query` into `args`) but discarded the coerced value before calling `execute_builtin_tool_call`. The executor re-parsed the original un-coerced string, so flattened skill args like `{"command":"search_screenshots","query":"today"}` passed validation but still failed at runtime because `args.get("args")` found nothing. Fixed both sequential and parallel execution paths to write coerced arguments back to `tc.function.arguments` before execution.
+
+- **Generic hyphenated CLI name resolution**: Added a generic fallback in `resolve_skill_alias` that converts any hyphenated tool name to underscored form and checks if it's a valid skill API command. This catches LLMs copying CLI names from docs (e.g. `search-labels`, `session-metrics`, `sleep-schedule`, `dnd-set`) without needing to enumerate every variant.
+
+- **Block LLM download/management commands**: Added `llm_download`, `llm_cancel_download`, `llm_pause_download`, `llm_resume_download`, `llm_refresh_catalog`, and `llm_logs` to the BLOCKED list in skill tool execution. These LLM self-management commands should not be callable from the LLM itself.
+
+- **Fix missing description warnings for root skill files**: Added YAML frontmatter with `name` and `description` to `skills/SKILL.md`, `skills/README.md`, and `skills/METRICS.md` so the skill discovery scanner no longer emits "description is required in frontmatter" warnings.
+
+### Refactor
+
+- **3D PCA utility**: Added `pca_3d()` function to `skill-commands` for 3-component power-iteration PCA, complementing the existing `pca_2d()`.
+- **SVG 3D generator**: Added `generate_svg_3d()` to `skill-commands::graph` — renders a dark-themed perspective-projected SVG with depth cues (scale, opacity, drop shadows) and a grid floor.
+
+- **Extracted evidence collection from neuroskill-protocols**: Removed the ~190-line inline Evidence Collection section from the protocols skill and replaced it with a reference to the standalone neuroskill-evidence skill. The protocols skill now depends on the evidence skill for all measurement, labeling, and ranking rules, allowing any other skill to also follow the same evidence framework.
+
+- **Split neuroskill-protocols into 11 domain sub-skills**: The monolithic 1866-line protocols skill has been split into a slim 411-line hub (personalisation engine, API integration guide, modality router, matching guidance, sub-skill index) plus 11 contextually-loaded domain sub-skills: `neuroskill-protocols-focus` (136 lines), `neuroskill-protocols-stress` (101 lines), `neuroskill-protocols-emotions` (110 lines), `neuroskill-protocols-sleep` (54 lines), `neuroskill-protocols-body` (106 lines), `neuroskill-protocols-routines` (117 lines), `neuroskill-protocols-nutrition` (129 lines), `neuroskill-protocols-music` (79 lines), `neuroskill-protocols-digital` (71 lines), `neuroskill-protocols-breathfree` (279 lines), and `neuroskill-protocols-life` (537 lines). Each sub-skill loads independently based on the user's message domain, enabling efficient use with small-context-window LLMs. The hub always loads when protocol intent is detected, and sub-skills load contextually alongside the neuroskill-evidence skill.
+
+### Build
+
+- **Bump cleans Rust artifacts**: `npm run bump` now runs `npm run clean:rust` at the end to remove `src-tauri/target`, freeing disk space after the preflight checks.
+
+### CLI
+
+- **CLI v1.2.0**: Bumped version to reflect new cross-modal search capabilities.
+- Fixed misplaced shebang line that prevented `npx tsx cli.ts` from running.
+
+### LLM
+
+- **Cross-modal query guide in tool description**: Added a decision guide to the `skill` tool description that maps question patterns to the correct command and direction (e.g. "What was on screen during EEG?" → `screenshots_for_eeg`, "How was my brain when I saw X?" → `eeg_for_screenshots`). This helps the LLM pick the right cross-modal bridging command instead of guessing.
+
+- **Status tool results formatted as readable text**: When the internal LLM calls the `status` command, the result is now converted from raw JSON to a human-readable text block with clear section headers (Device, Session, EEG Embeddings, Labels, Most Used Apps, Screenshots, Signal Quality, Current Scores, Hooks, Sleep, Recording History). This makes status output in the Chat window much easier to read for both the user and the model.
+
+### Docs
+
+- **Cross-modal screenshot↔EEG documentation**: Updated SKILL.md, neuroskill-screenshots skill, and skills index with documentation for `search-images --by-image`, `screenshots-for-eeg`, `eeg-for-screenshots` commands, cross-modal workflows, and all new WS endpoints.
+
+- **SKILL.md updated for new and updated functionality**: Documented the enriched `status` command response with `apps` (top apps by window switches, all-time/24h/7d), `labels.top_all_time`/`top_24h`/`top_7d` (most frequent label texts), `labels.embedded` count, and `screenshots` summary (total, with_embedding, with_ocr, with_ocr_embedding, top_apps). Updated `interactive` search documentation to cover the new 5th screenshot layer, `screenshot` node kind with `filename`, `app_name`, `window_title`, `ocr_text`, `ocr_similarity` fields, `proj_z` 3-D PCA coordinate, new `screenshot_prox` and `ocr_sim` edge kinds, and `svg_3d` pre-rendered 3-D perspective SVG output. Added the `skill` built-in LLM tool to the tool-calling table with supported and blocked command lists.
+
+- **Skills synced with SKILL.md changes**: Updated `neuroskill-labels` skill to document the 5th screenshot layer in interactive search (screenshot nodes with `filename`, `app_name`, `window_title`, `ocr_text`, `ocr_similarity` fields), new `screenshot_prox` and `ocr_sim` edge kinds, 3-D PCA projection fields (`proj_x`/`proj_y`/`proj_z`), and three SVG outputs (`svg`, `svg_col`, `svg_3d`). Updated `neuroskill-llm` skill with full `skill` tool documentation including supported commands, argument coercion, blocked self-management commands, and status formatting. Updated skill index description from 4-layer to 5-layer graph search.
+
+- **Cross-modal workflow examples in skills**: Replaced the bash-only Cross-Modal Workflows section in the screenshots SKILL.md with a direction-based query guide table and multi-step LLM tool-call examples (JSON). Added Cross-Modal Follow-Ups sections to the search and labels SKILL.md files showing how to chain commands across modalities.
+
+- **Screenshot & skills search tests**: Added comprehensive smoke tests for all 6 screenshot WS commands (`search_screenshots`, `screenshots_around`, `search_screenshots_vision`, `search_screenshots_by_image_b64`, `screenshots_for_eeg`, `eeg_for_screenshots`) covering semantic/substring modes, cross-modal EEG↔screenshot bridging, CLIP vision search, base64 image upload, error handling for missing/invalid fields, and result structure validation. Also added skills command rejection tests confirming Tauri-only commands are correctly rejected over WS/HTTP.
+
+- **LLM tool call examples in skills**: Added `## LLM Tool Calls` sections with concrete JSON examples to all skill SKILL.md files (screenshots, labels, search, sessions, sleep, hooks, DND, streaming). This helps the LLM use the correct `{"command": "...", "args": {...}}` format.
+
+- **Improved skill tool description**: Updated the `skill` tool description and `args` field description with explicit examples showing the `command` + `args` nesting pattern. Added SLEEP SCHEDULE and HEALTH command groups to the description.
+
+- **Status SKILL.md**: Updated to document the new `apps` (top apps by window switches), `labels.top_*` (most frequent label texts), and `screenshots` (OCR counts, top apps) fields in the status response. Added LLM Tool Calls section with guidance on using `status` for app usage queries. Fixed JSON response example to show correct field names (`switches`, `last_seen`, `last_used`).
+
 ## [0.0.50] — 2026-03-21
 
 ### Features

@@ -348,9 +348,8 @@ pub fn resolve_skill_alias(name: &str) -> Option<String> {
     // Non-trivial CLI aliases where the hyphenated name differs from a
     // simple underscore conversion (e.g. CLI "search-images" maps to
     // the WS command "search_screenshots", not "search_images").
-    match name {
-        "search-images" => return Some("search_screenshots".to_string()),
-        _ => {}
+    if name == "search-images" {
+        return Some("search_screenshots".to_string());
     }
 
     // Generic hyphen-to-underscore: if the name contains hyphens, try the
