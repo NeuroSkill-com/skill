@@ -1,0 +1,3 @@
+### Docs
+
+- **Skills synced with SKILL.md changes**: Updated `neuroskill-labels` skill to document the 5th screenshot layer in interactive search (screenshot nodes with `filename`, `app_name`, `window_title`, `ocr_text`, `ocr_similarity` fields), new `screenshot_prox` and `ocr_sim` edge kinds, 3-D PCA projection fields (`proj_x`/`proj_y`/`proj_z`), and three SVG outputs (`svg`, `svg_col`, `svg_3d`). Updated `neuroskill-llm` skill with full `skill` tool documentation including supported commands, argument coercion, blocked self-management commands, and status formatting. Updated skill index description from 4-layer to 5-layer graph search.
