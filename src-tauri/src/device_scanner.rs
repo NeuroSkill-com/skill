@@ -12,6 +12,18 @@
 //! Each backend calls [`on_device_discovered`] when a device is found,
 //! which upserts it into the shared `discovered` list and triggers
 //! auto-connect if the device is paired and the app is idle.
+//!
+//! ## First-run auto-pairing
+//!
+//! When the `paired_devices` list is **completely empty** (fresh install or
+//! all devices have been unpaired), the scanner automatically adds the first
+//! discovered device to the paired list and starts a session to it.  This
+//! gives new users a seamless out-of-the-box experience — they power on their
+//! headset and it connects without any manual pairing step.
+//!
+//! The auto-pair only fires once: as soon as one device is added, the paired
+//! list is no longer empty and subsequent discoveries follow the normal
+//! "paired-only" auto-connect rule.  See [`try_auto_connect`] for details.
 
 use std::time::Duration;
 
@@ -156,10 +168,14 @@ pub(crate) async fn bluetooth_ok() -> Result<(), (String, bool)> {
 
 /// Check whether a discovered device should trigger an automatic session start.
 ///
-/// Conditions:
-/// * App is idle (`disconnected`, no active stream, no pending reconnect).
-/// * The device is paired, **OR** it was discovered via a trusted transport
-///   (Cortex WebSocket, USB serial) where the device identity is reliable.
+/// Auto-connect fires when **all** of these hold:
+///
+/// 1. The app is idle (`disconnected`, no active stream, no pending reconnect).
+/// 2. **At least one** of:
+///    - The device is already in `paired_devices`.
+///    - A legacy `cortex:emotiv` paired entry exists and this is a Cortex device.
+///    - `paired_devices` is **empty** (first-run auto-pair — the device is
+///      adopted into the paired list before the session starts, see module docs).
 ///
 /// `start_session()` immediately sets `stream + pending_reconnect`, so
 /// `is_idle` becomes false and this guard cannot fire again while a
