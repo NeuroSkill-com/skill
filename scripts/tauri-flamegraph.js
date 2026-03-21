@@ -25,7 +25,7 @@ import { execSync, spawn } from "child_process";
 import { platform, arch } from "os";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { existsSync, renameSync, unlinkSync } from "fs";
+import { existsSync, renameSync, unlinkSync, rmSync } from "fs";
 import http from "http";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -246,11 +246,12 @@ function forceRemove(filePath) {
   if (!existsSync(filePath)) return;
   console.log(`→ Removing stale file: ${filePath}`);
   try {
-    unlinkSync(filePath);
+    // rmSync with recursive handles both files and directories
+    rmSync(filePath, { recursive: true, force: true });
   } catch {
-    // Likely root-owned (macOS dtrace creates as root). Use sudo rm.
+    // Likely root-owned (macOS dtrace creates as root). Use sudo rm -rf.
     try {
-      execSync(`sudo rm -f ${JSON.stringify(filePath)}`, { stdio: "inherit" });
+      execSync(`sudo rm -rf ${JSON.stringify(filePath)}`, { stdio: "inherit" });
     } catch { /* best effort */ }
   }
 }
@@ -304,6 +305,13 @@ if (recordSecs > 0) {
 console.log(`  Output:     ${resolve(root, "flamegraph.svg")}`);
 console.log("================================================================");
 console.log("");
+
+// ── Refresh sudo before profiling (macOS) ────────────────────────────────────
+// The sudo cache from the preflight check may have expired during the compile
+// step.  Refresh it so dtrace doesn't fail or re-prompt mid-run.
+if (isMac) {
+  try { execSync("sudo -v", { stdio: "inherit" }); } catch { /* ignore */ }
+}
 
 // ── Run cargo flamegraph ─────────────────────────────────────────────────────
 
