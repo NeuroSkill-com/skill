@@ -49,7 +49,7 @@
     "bump": "node scripts/bump.js",
     "bench:screenshot": "cargo run --release -p skill-screenshots --bin image_encode_bench",
     "tag": "node scripts/tag.js",
-    "clean:rust": "node -e \"fs.rmSync('src-tauri/target',{recursive:true,force:true})\""
+    "clean:rust": "node scripts/clean-rust.js"
   },
   "license": "GPL-3.0-only",
   "dependencies": {
