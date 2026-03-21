@@ -1,3 +1,3 @@
 ### UI
 
-- **Pretty shortcut labels in tray menu**: Keyboard shortcuts in the system tray context menu now display with proper formatting — on macOS using native modifier symbols (⌘, ⇧, ⌥, ⌃) without `+` separators, and on Linux/Windows with clean human-readable text (`Ctrl+Shift+O`). Previously the raw accelerator strings like `CmdOrCtrl+Shift+O` were shown directly.
+- **Native shortcut rendering in tray menu**: Keyboard shortcuts in the system tray context menu now use the native accelerator parameter on `MenuItem` instead of being appended to the label text. The OS renders them right-aligned in the platform-native style (e.g. ⌘⇧L on macOS, Ctrl+Shift+L on Linux/Windows).
