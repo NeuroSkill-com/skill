@@ -337,9 +337,18 @@ const fgArgs = ["-o", svgPath, "--", binaryPath];
 
 // On macOS and Linux, use sudo for the profiler.
 // On Windows, run directly (dtrace/xperf need admin — user should run terminal as admin).
+//
+// We pass `--preserve-env=HOME,USER,ESPEAK_LIB_DIR,PATH,WEBKIT_DISABLE_DMABUF_RENDERER`
+// so the profiled binary runs with the real user's HOME.  Without this, sudo
+// sets HOME=/var/root (macOS) or /root (Linux) and the app reads stale or
+// empty config/data from root's home instead of the user's ~/.skill, and
+// WebKit loads cached pages from root's ~/Library/WebKit/.
 const needsSudo = isMac || isLinux;
+const sudoEnvVars = "HOME,USER,ESPEAK_LIB_DIR,PATH,WEBKIT_DISABLE_DMABUF_RENDERER,XDG_DATA_HOME,XDG_CONFIG_HOME,XDG_CACHE_HOME";
 const fgCmd = needsSudo ? "sudo" : flamegraphBin;
-const fgFullArgs = needsSudo ? [flamegraphBin, ...fgArgs] : fgArgs;
+const fgFullArgs = needsSudo
+  ? [`--preserve-env=${sudoEnvVars}`, flamegraphBin, ...fgArgs]
+  : fgArgs;
 
 console.log("");
 console.log("================================================================");
