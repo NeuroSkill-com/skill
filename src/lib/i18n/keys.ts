@@ -2256,6 +2256,7 @@ export type TranslationKey =
   | "search.imageResultsCount"
   | "search.interactiveCmdEnter"
   | "search.interactiveDedupe"
+  | "search.interactiveScreenshots"
   | "search.interactiveEmptyState"
   | "search.interactiveGraph"
   | "search.interactiveGraphHide"

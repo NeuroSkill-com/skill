@@ -52,6 +52,16 @@ the Free Software Foundation, version 3 only. -->
   type EdgeLine = THREE_NS.Line<THREE_NS.BufferGeometry, THREE_NS.LineBasicMaterial>;
 
   // Internal scene-object records ──────────────────────────────────────────
+  /** Screenshot record associated with an EEG-point node. */
+  export interface NodeScreenshot {
+    nodeId:   string;
+    url:      string;
+    filename: string;
+    appName?: string;
+    windowTitle?: string;
+    unixTs:   number;
+  }
+
   interface NodeEntry {
     mesh:         NodeMesh;
     sprite:       NodeSprite | null;
@@ -65,12 +75,26 @@ the Free Software Foundation, version 3 only. -->
     toId:        string;
     baseOpacity: number; // opacity at rest
   }
+  interface ScreenshotEntry {
+    sprite:  THREE_NS.Sprite;
+    border:  THREE_NS.Sprite;
+    nodeId:  string;
+    data:    NodeScreenshot;
+  }
 
   let {
     nodes,
     edges,
     usePca = true,
-  }: { nodes: GraphNode[]; edges: GraphEdge[]; usePca?: boolean } = $props();
+    showScreenshots = false,
+    screenshots = [],
+  }: {
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    usePca?: boolean;
+    showScreenshots?: boolean;
+    screenshots?: NodeScreenshot[];
+  } = $props();
 
   // ── Visual constants ─────────────────────────────────────────────────────
   const KIND_COLOR: Record<GraphNode["kind"], number> = {
@@ -159,6 +183,7 @@ the Free Software Foundation, version 3 only. -->
   // Richer scene-object records
   let nodeEntries: NodeEntry[] = [];
   let edgeEntries: EdgeEntry[] = [];
+  let screenshotEntries = $state<ScreenshotEntry[]>([]);
 
   // ── Layout helpers ────────────────────────────────────────────────────────
   function fibSphere(i: number, n: number): [number, number, number] {
@@ -337,6 +362,7 @@ the Free Software Foundation, version 3 only. -->
     for (const ee of edgeEntries) {
       ee.line.geometry.dispose(); ee.line.material.dispose(); scene.remove(ee.line);
     }
+    clearScreenshots();
     nodeEntries = []; edgeEntries = [];
     selectedNodeId = null;
 
@@ -477,6 +503,10 @@ the Free Software Foundation, version 3 only. -->
       for (const ee of edgeEntries) {
         ee.line.material.opacity = ee.baseOpacity;
       }
+      for (const se of screenshotEntries) {
+        se.sprite.material.opacity = 0.92;
+        se.border.material.opacity = 0.85;
+      }
       if (controls) controls.autoRotate = true;
       return;
     }
@@ -523,7 +553,106 @@ the Free Software Foundation, version 3 only. -->
       }
     }
 
+    // Apply to screenshots — show only those attached to connected nodes
+    for (const se of screenshotEntries) {
+      const visible = connectedNodeIds.has(se.nodeId);
+      se.sprite.material.opacity = visible ? 0.92 : DIM_OPACITY * 0.5;
+      se.border.material.opacity = visible ? 0.85 : DIM_OPACITY * 0.5;
+    }
+
     if (controls) controls.autoRotate = false;
+  }
+
+  // ── Screenshot sprites ────────────────────────────────────────────────────
+  function clearScreenshots() {
+    for (const se of screenshotEntries) {
+      se.sprite.material.map?.dispose();
+      se.sprite.material.dispose();
+      scene.remove(se.sprite);
+      se.border.material.map?.dispose();
+      se.border.material.dispose();
+      scene.remove(se.border);
+    }
+    screenshotEntries = [];
+  }
+
+  function buildScreenshots() {
+    if (!THREE || !scene) return;
+    clearScreenshots();
+    if (!showScreenshots || screenshots.length === 0) return;
+
+    // Group screenshots by node ID and pick only the first (closest in time)
+    const byNode = new Map<string, NodeScreenshot>();
+    for (const s of screenshots) {
+      if (!byNode.has(s.nodeId)) byNode.set(s.nodeId, s);
+    }
+
+    for (const ne of nodeEntries) {
+      const ss = byNode.get(ne.node.id);
+      if (!ss) continue;
+
+      const pos = ne.mesh.position;
+
+      // Create a bordered frame sprite first (shows immediately)
+      const FRAME_W = 4.0, FRAME_H = 3.0;
+      const frameCvs = document.createElement("canvas");
+      frameCvs.width = 256; frameCvs.height = 192;
+      const fctx = frameCvs.getContext("2d")!;
+      fctx.fillStyle = "rgba(255,255,255,0.06)";
+      fctx.beginPath(); fctx.roundRect(0, 0, 256, 192, 10); fctx.fill();
+      fctx.strokeStyle = "rgba(245,158,11,0.5)";
+      fctx.lineWidth = 3;
+      fctx.beginPath(); fctx.roundRect(2, 2, 252, 188, 10); fctx.stroke();
+      // Small label at bottom
+      fctx.font = "bold 16px system-ui, sans-serif";
+      fctx.fillStyle = "rgba(245,158,11,0.7)";
+      fctx.textAlign = "center";
+      fctx.textBaseline = "bottom";
+      const label = ss.appName || "Screenshot";
+      fctx.fillText(label.slice(0, 30), 128, 186);
+
+      const borderTex = new THREE.CanvasTexture(frameCvs);
+      borderTex.needsUpdate = true;
+      const borderMat = new THREE.SpriteMaterial({
+        map: borderTex, transparent: true, opacity: 0.85, depthTest: false,
+      });
+      const borderSprite = new THREE.Sprite(borderMat);
+      // Offset screenshot above + outward from the node
+      const offset = ne.node.kind === "eeg_point" ? 2.8 : 2.0;
+      borderSprite.position.set(pos.x, pos.y + offset, pos.z);
+      borderSprite.scale.set(FRAME_W, FRAME_H, 1);
+      scene.add(borderSprite);
+
+      // Load the actual screenshot image asynchronously
+      const imgSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({ transparent: true, opacity: 0, depthTest: false })
+      );
+      imgSprite.position.set(pos.x, pos.y + offset, pos.z + 0.01);
+      imgSprite.scale.set(FRAME_W * 0.92, FRAME_H * 0.82, 1);
+      scene.add(imgSprite);
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        const tex = new THREE.Texture(img);
+        tex.needsUpdate = true;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        const mat = new THREE.SpriteMaterial({
+          map: tex, transparent: true, opacity: 0.92, depthTest: false,
+        });
+        imgSprite.material.dispose();
+        imgSprite.material = mat;
+      };
+      img.src = ss.url;
+
+      screenshotEntries.push({
+        sprite: imgSprite,
+        border: borderSprite,
+        nodeId: ne.node.id,
+        data: ss,
+      });
+    }
   }
 
   // ── Raycasting helper ─────────────────────────────────────────────────────
@@ -595,6 +724,14 @@ the Free Software Foundation, version 3 only. -->
     buildGraph();
   });
 
+  // ── Reactivity on screenshot toggle / data ────────────────────────────────
+  $effect(() => {
+    const _show = showScreenshots;
+    const _len  = screenshots.length;
+    if (!loaded || !THREE) return;
+    buildScreenshots();
+  });
+
   // ── Theme ─────────────────────────────────────────────────────────────────
   $effect(() => {
     if (scene) scene.background = new THREE.Color(isDark ? BG_DARK : BG_LIGHT);
@@ -606,6 +743,7 @@ the Free Software Foundation, version 3 only. -->
     cancelAnimationFrame(animId);
     resizeObs?.disconnect();
     if (canvasClickHandler) renderer?.domElement?.removeEventListener("click", canvasClickHandler);
+    clearScreenshots();
     controls?.dispose();
     renderer?.dispose();
     if (renderer?.domElement?.parentNode === container) container?.removeChild(renderer.domElement);
@@ -715,6 +853,18 @@ the Free Software Foundation, version 3 only. -->
         <span>{l.label}</span>
       </div>
     {/each}
+    {#if showScreenshots && screenshotEntries.length > 0}
+      <span class="text-muted-foreground/15 select-none">·</span>
+      <div class="flex items-center gap-1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"
+             class="w-2.5 h-2.5 shrink-0 opacity-70">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="m21 15-5-5L5 21"/>
+        </svg>
+        <span>{screenshotEntries.length} screenshot{screenshotEntries.length !== 1 ? 's' : ''}</span>
+      </div>
+    {/if}
     <span class="ml-auto text-[0.38rem] italic opacity-40 select-none">
       hover · click to highlight · click again to clear
     </span>

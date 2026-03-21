@@ -291,11 +291,24 @@ the Free Software Foundation, version 3 only. -->
   let showIxCard     = $state(true);  // single collapsible card: query + pipeline + button
   let ixDedupeLabels = $state(true);  // deduplicate found_labels by text
   let ixUsePca       = $state(true);  // cluster found_labels by embedding similarity
+  let ixShowScreenshots = $state(false); // show screenshot thumbnails on EEG nodes
+  let ixScreenshots  = $state<import("$lib/InteractiveGraph3D.svelte").NodeScreenshot[]>([]);
 
   // ── Derived display graph (applies found-label deduplication) ────────────
   const ixDisplayGraph = $derived.by(() => {
     if (!ixDedupeLabels) return { nodes: ixNodes, edges: ixEdges };
     return dedupeFoundLabels(ixNodes, ixEdges);
+  });
+
+  // Fetch screenshots reactively when the toggle flips or new results arrive
+  $effect(() => {
+    const _show = ixShowScreenshots;
+    const _len  = ixNodes.length;
+    if (ixSearched && _len > 0) {
+      fetchIxScreenshots();
+    } else {
+      ixScreenshots = [];
+    }
   });
 
   async function searchInteractive() {
@@ -335,6 +348,45 @@ the Free Software Foundation, version 3 only. -->
       ixSearched = true;
     } catch (e) { error = String(e); }
     finally { ixSearching = false; ixStatus = ""; }
+  }
+
+  /** Fetch nearby screenshots for all EEG-point nodes. */
+  async function fetchIxScreenshots() {
+    if (!ixShowScreenshots) { ixScreenshots = []; return; }
+    const eegNodes = ixNodes.filter(n => n.kind === "eeg_point" && n.timestamp_unix != null);
+    if (eegNodes.length === 0) { ixScreenshots = []; return; }
+
+    type SsResult = { unix_ts: number; filename: string; app_name: string; window_title: string };
+    const results: import("$lib/InteractiveGraph3D.svelte").NodeScreenshot[] = [];
+
+    // Fetch screenshots in parallel for all EEG nodes (±120 sec window)
+    const promises = eegNodes.map(async (node) => {
+      try {
+        const around = await invoke<SsResult[]>("get_screenshots_around", {
+          timestamp: Math.floor(node.timestamp_unix!),
+          windowSecs: 120,
+        });
+        if (around.length > 0) {
+          // Pick the closest screenshot to the node timestamp
+          const sorted = [...around].sort((a, b) =>
+            Math.abs(a.unix_ts - node.timestamp_unix!) - Math.abs(b.unix_ts - node.timestamp_unix!)
+          );
+          const best = sorted[0];
+          results.push({
+            nodeId: node.id,
+            url: imgSrc(best.filename),
+            filename: best.filename,
+            appName: best.app_name,
+            windowTitle: best.window_title,
+            unixTs: best.unix_ts,
+          });
+        }
+      } catch {
+        // silently skip nodes without screenshots
+      }
+    });
+    await Promise.all(promises);
+    ixScreenshots = results;
   }
 
   function onIxKeydown(e: KeyboardEvent) {
@@ -1350,6 +1402,13 @@ the Free Software Foundation, version 3 only. -->
             <span class="text-[0.48rem] text-muted-foreground/50">PCA cluster</span>
           </label>
 
+          <!-- Screenshots toggle -->
+          <label class="flex items-center gap-1 cursor-pointer select-none shrink-0">
+            <input type="checkbox" bind:checked={ixShowScreenshots}
+                   class="rounded border-border h-2.5 w-2.5 accent-amber-500" />
+            <span class="text-[0.48rem] text-muted-foreground/50">{t("search.interactiveScreenshots")}</span>
+          </label>
+
           <!-- Export buttons (DOT + SVG) — shown once a search has been run -->
           {#if ixDot}
             <!-- .dot -->
@@ -1412,7 +1471,8 @@ the Free Software Foundation, version 3 only. -->
 
             {#if showIxGraph}
               <div style="width:100%; height:500px">
-                <InteractiveGraph3D nodes={dispNodes} edges={dispEdges} usePca={ixUsePca} />
+                <InteractiveGraph3D nodes={dispNodes} edges={dispEdges} usePca={ixUsePca}
+                                    showScreenshots={ixShowScreenshots} screenshots={ixScreenshots} />
               </div>
             {/if}
           </div>
