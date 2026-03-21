@@ -283,6 +283,14 @@ process.on("exit", cleanup);
 process.on("SIGINT", () => { cleanup(); process.exit(130); });
 process.on("SIGTERM", () => { cleanup(); process.exit(143); });
 
+// Clean Vite / SvelteKit caches so the dev server serves fresh assets.
+for (const cache of [
+  resolve(root, "node_modules", ".vite"),
+  resolve(root, ".svelte-kit"),
+]) {
+  forceRemove(cache);
+}
+
 console.log("→ Starting Vite dev server …");
 
 const npmCmd = isWin ? "npm.cmd" : "npm";
