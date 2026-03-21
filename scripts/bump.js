@@ -91,14 +91,81 @@ function ensureLinuxTauriDeps() {
   );
 }
 
+// Workspace crates that CI runs clippy + tests on (mirrors ci.yml).
+const WORKSPACE_CRATES = [
+  "skill-eeg",
+  "skill-data",
+  "skill-constants",
+  "skill-jobs",
+  "skill-tray",
+  "skill-autostart",
+  "skill-exg",
+  "skill-commands",
+  "skill-tools",
+  "skill-skills",
+  "skill-devices",
+  "skill-settings",
+  "skill-history",
+  "skill-label-index",
+  "skill-router",
+  "skill-tts",
+  "skill-headless",
+  "skill-vision",
+  "skill-health",
+  "skill-gpu",
+  "skill-screenshots",
+  "skill-llm",
+];
+
+// Subset of workspace crates that CI runs `cargo test --lib` on.
+const TEST_CRATES = [
+  "skill-eeg",
+  "skill-data",
+  "skill-constants",
+  "skill-tools",
+  "skill-devices",
+  "skill-settings",
+  "skill-history",
+  "skill-health",
+  "skill-router",
+  "skill-llm",
+  "skill-autostart",
+  "skill-tts",
+  "skill-gpu",
+];
+
 function runPreflightChecks() {
   console.log("Running preflight checks before bump...");
+
+  // ── Frontend checks ───────────────────────────────────────────────────────
   runCheckStep("npm run check", "npm run check");
+  runCheckStep("npm run sync:i18n:check", "npm run sync:i18n:check");
+  runCheckStep("npm test", "npm test");
+
+  // ── System deps ───────────────────────────────────────────────────────────
   console.log("\n[preflight] linux tauri deps (pkg-config)");
   ensureLinuxTauriDeps();
   console.log("[preflight] ✓ linux tauri deps (pkg-config)");
-  runCheckStep("cargo clippy (src-tauri)", "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings");
-  runCheckStep("npm run sync:i18n:check", "npm run sync:i18n:check");
+
+  // ── Rust clippy (workspace crates) ────────────────────────────────────────
+  const clippyCrates = WORKSPACE_CRATES.map((c) => `-p ${c}`).join(" ");
+  runCheckStep(
+    "cargo clippy (workspace crates)",
+    `cargo clippy ${clippyCrates} -- -D warnings`
+  );
+
+  // ── Rust clippy (app crate) ───────────────────────────────────────────────
+  runCheckStep(
+    "cargo clippy (src-tauri)",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings"
+  );
+
+  // ── Rust tests (workspace crates) ────────────────────────────────────────
+  const testCrates = TEST_CRATES.map((c) => `-p ${c}`).join(" ");
+  runCheckStep(
+    "cargo test (workspace crates)",
+    `cargo test ${testCrates} --lib`
+  );
 }
 
 function todayIsoDate() {
