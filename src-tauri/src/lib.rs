@@ -1124,25 +1124,40 @@ fn setup_background_tasks(app: &mut tauri::App) {
 pub fn run() {
     // ── Windows: install a vectored exception handler for crash diagnostics ──
     #[cfg(target_os = "windows")]
-    {
-        use windows_sys::Win32::System::Diagnostics::Debug::{
-            AddVectoredExceptionHandler, EXCEPTION_POINTERS,
-        };
+    unsafe {
+        // Raw Win32 FFI — no windows-sys dependency needed.
+        #[repr(C)]
+        struct ExceptionRecord {
+            exception_code: u32,
+            exception_flags: u32,
+            exception_record: *mut ExceptionRecord,
+            exception_address: *mut core::ffi::c_void,
+            number_parameters: u32,
+            exception_information: [usize; 15], // EXCEPTION_MAXIMUM_PARAMETERS
+        }
+        #[repr(C)]
+        struct ExceptionPointers {
+            exception_record: *mut ExceptionRecord,
+            context_record: *mut core::ffi::c_void,
+        }
+        type VectoredHandler = unsafe extern "system" fn(*mut ExceptionPointers) -> i32;
 
-        const EXCEPTION_ACCESS_VIOLATION: u32 = 0xC0000005;
+        extern "system" {
+            fn AddVectoredExceptionHandler(first: u32, handler: VectoredHandler) -> *mut core::ffi::c_void;
+        }
+
+        const EXCEPTION_ACCESS_VIOLATION: u32 = 0xC000_0005;
         const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
 
-        unsafe extern "system" fn crash_handler(
-            info: *mut EXCEPTION_POINTERS,
-        ) -> i32 {
+        unsafe extern "system" fn crash_handler(info: *mut ExceptionPointers) -> i32 {
             if info.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
-            let record = (*info).ExceptionRecord;
+            let record = (*info).exception_record;
             if record.is_null() { return EXCEPTION_CONTINUE_SEARCH; }
-            let code = (*record).ExceptionCode;
+            let code = (*record).exception_code;
             if code == EXCEPTION_ACCESS_VIOLATION {
-                let addr = (*record).ExceptionAddress as usize;
-                let info0 = (*record).ExceptionInformation[0]; // 0=read, 1=write, 8=DEP
-                let info1 = (*record).ExceptionInformation[1]; // target address
+                let addr = (*record).exception_address as usize;
+                let info0 = (*record).exception_information[0]; // 0=read, 1=write, 8=DEP
+                let info1 = (*record).exception_information[1]; // target address
                 let op = match info0 {
                     0 => "reading",
                     1 => "writing",
@@ -1153,15 +1168,14 @@ pub fn run() {
                 eprintln!("Faulting instruction: 0x{addr:016x}");
                 eprintln!("Operation: {op} address 0x{info1:016x}");
                 eprintln!("Thread: {:?}", std::thread::current().name().unwrap_or("unnamed"));
-
-                // Print a Rust backtrace
                 eprintln!("\nBacktrace:");
                 eprintln!("{}", std::backtrace::Backtrace::force_capture());
                 eprintln!("=== END CRASH INFO ===\n");
             }
-            EXCEPTION_CONTINUE_SEARCH // let the default handler terminate
+            EXCEPTION_CONTINUE_SEARCH
         }
-        unsafe { AddVectoredExceptionHandler(0, Some(crash_handler)); }
+
+        AddVectoredExceptionHandler(0, crash_handler);
     }
 
     // ── rustls CryptoProvider ─────────────────────────────────────────────
