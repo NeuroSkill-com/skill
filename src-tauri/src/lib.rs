@@ -1336,6 +1336,8 @@ pub fn run() {
             commands::stream_search_embeddings,
             commands::find_session_for_timestamp,
             commands::interactive_search,
+            commands::regenerate_interactive_svg,
+            commands::regenerate_interactive_dot,
             commands::save_dot_file,
             commands::save_svg_file,
             open_session_window,

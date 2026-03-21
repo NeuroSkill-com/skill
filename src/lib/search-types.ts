@@ -56,8 +56,17 @@ export interface GraphNode {
   id: string; kind: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot";
   text?: string; timestamp_unix?: number; distance: number;
   eeg_metrics?: Record<string, number | null> | null; parent_id?: string;
+  proj_x?: number; proj_y?: number;
   /** Screenshot image URL — only present on kind === "screenshot" nodes. */
   screenshot_url?: string;
+  /** Screenshot filename — for backend SVG re-generation. */
+  filename?: string;
+  /** App name at capture — for backend SVG re-generation. */
+  app_name?: string;
+  /** Window title at capture — for backend SVG re-generation. */
+  window_title?: string;
+  /** OCR similarity score. */
+  ocr_similarity?: number;
 }
 
 export interface GraphEdge {

@@ -593,3 +593,25 @@ pub fn save_svg_file(svg: String, query: String, app: tauri::AppHandle) -> Resul
     std::fs::write(&path, svg.as_bytes()).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
 }
+
+/// Re-generate SVG from an augmented node/edge graph (e.g. with screenshot
+/// nodes injected on the frontend).  Returns the SVG string.
+#[tauri::command]
+pub fn regenerate_interactive_svg(
+    nodes:      Vec<InteractiveGraphNode>,
+    edges:      Vec<InteractiveGraphEdge>,
+    svg_labels: SvgLabels,
+    use_pca:    bool,
+) -> String {
+    generate_svg(&nodes, &edges, &svg_labels, use_pca)
+}
+
+/// Re-generate DOT from an augmented node/edge graph (e.g. with screenshot
+/// nodes injected on the frontend).  Returns the DOT string.
+#[tauri::command]
+pub fn regenerate_interactive_dot(
+    nodes: Vec<InteractiveGraphNode>,
+    edges: Vec<InteractiveGraphEdge>,
+) -> String {
+    generate_dot(&nodes, &edges)
+}

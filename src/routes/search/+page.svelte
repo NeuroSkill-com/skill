@@ -328,6 +328,10 @@ the Free Software Foundation, version 3 only. -->
           distance:       ss.similarity,
           parent_id:      parentId,
           screenshot_url: imgSrc(ss.filename),
+          filename:       ss.filename,
+          app_name:       ss.appName,
+          window_title:   ss.windowTitle,
+          ocr_similarity: ss.similarity,
         });
         extraEdges.push({
           from_id:  parentId,
@@ -486,16 +490,90 @@ the Free Software Foundation, version 3 only. -->
     if (!ixDot || dotSaving) return;
     dotSaving = true; dotSavedPath = "";
     try {
-      dotSavedPath = await invoke<string>("save_dot_file", { dot: ixDot, query: ixQuery.trim() });
+      let dotData = ixDot;
+      const disp = ixDisplayGraph;
+      const hasScreenshots = disp.nodes.some(n => n.kind === "screenshot");
+      if (hasScreenshots) {
+        dotData = await invoke<string>("regenerate_interactive_dot", {
+          nodes: disp.nodes.map(n => ({
+            id:             n.id,
+            kind:           n.kind,
+            text:           n.text ?? null,
+            timestamp_unix: n.timestamp_unix != null ? Math.floor(n.timestamp_unix) : null,
+            distance:       n.distance,
+            eeg_metrics:    n.eeg_metrics ?? null,
+            parent_id:      n.parent_id ?? null,
+            proj_x:         n.proj_x ?? null,
+            proj_y:         n.proj_y ?? null,
+            filename:       n.filename ?? null,
+            app_name:       n.app_name ?? null,
+            window_title:   n.window_title ?? null,
+            ocr_text:       null,
+            ocr_similarity: n.ocr_similarity ?? null,
+          })),
+          edges: disp.edges.map(e => ({
+            from_id:  e.from_id,
+            to_id:    e.to_id,
+            distance: e.distance,
+            kind:     e.kind,
+          })),
+        });
+      }
+      dotSavedPath = await invoke<string>("save_dot_file", { dot: dotData, query: ixQuery.trim() });
     } catch (e) { error = String(e); }
     finally { dotSaving = false; }
   }
 
   async function downloadSvg() {
-    const svgData = ixUsePca ? ixSvg : ixSvgCol;
-    if (!svgData || svgSaving) return;
     svgSaving = true; svgSavedPath = ""; svgError = "";
     try {
+      let svgData: string;
+      const disp = ixDisplayGraph;
+      const hasScreenshots = disp.nodes.some(n => n.kind === "screenshot");
+
+      if (hasScreenshots) {
+        // Re-generate SVG on the backend with screenshot nodes included
+        svgData = await invoke<string>("regenerate_interactive_svg", {
+          nodes: disp.nodes.map(n => ({
+            id:             n.id,
+            kind:           n.kind,
+            text:           n.text ?? null,
+            timestamp_unix: n.timestamp_unix != null ? Math.floor(n.timestamp_unix) : null,
+            distance:       n.distance,
+            eeg_metrics:    n.eeg_metrics ?? null,
+            parent_id:      n.parent_id ?? null,
+            proj_x:         n.proj_x ?? null,
+            proj_y:         n.proj_y ?? null,
+            filename:       n.filename ?? null,
+            app_name:       n.app_name ?? null,
+            window_title:   n.window_title ?? null,
+            ocr_text:       null,
+            ocr_similarity: n.ocr_similarity ?? null,
+          })),
+          edges: disp.edges.map(e => ({
+            from_id:  e.from_id,
+            to_id:    e.to_id,
+            distance: e.distance,
+            kind:     e.kind,
+          })),
+          svgLabels: {
+            layerQuery:        t("svg.layerQuery"),
+            layerTextMatches:  t("svg.layerTextMatches"),
+            layerEegNeighbors: t("svg.layerEegNeighbors"),
+            layerFoundLabels:  t("svg.layerFoundLabels"),
+            legendQuery:       t("svg.legendQuery"),
+            legendText:        t("svg.legendText"),
+            legendEeg:         t("svg.legendEeg"),
+            legendFound:       t("svg.legendFound"),
+            generatedBy:       t("svg.generatedBy", { app: getAppName() }),
+          },
+          usePca: ixUsePca,
+        });
+      } else {
+        svgData = ixUsePca ? ixSvg : ixSvgCol;
+      }
+
+      if (!svgData) { svgError = "No SVG data"; return; }
       svgSavedPath = await invoke<string>("save_svg_file", { svg: svgData, query: ixQuery.trim() });
     } catch (e) { svgError = String(e); }
     finally { svgSaving = false; }

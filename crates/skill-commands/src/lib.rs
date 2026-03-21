@@ -30,7 +30,7 @@ use std::sync::{Arc, Mutex};
 
 use fast_hnsw::{distance::Cosine, labeled::LabeledIndex};
 use rusqlite::params;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
 use skill_constants::{HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE, hnsw_index_file_for};
 
@@ -70,7 +70,7 @@ pub struct LabelEntry {
 }
 
 /// Compact EEG metrics attached to a search neighbor.
-#[derive(Debug, Serialize, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct NeighborMetrics {
     #[serde(skip_serializing_if = "Option::is_none")] pub relaxation: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")] pub engagement: Option<f64>,
@@ -775,7 +775,7 @@ pub fn find_session_for_timestamp_in(
 // ── Interactive Cross-Modal Search ────────────────────────────────────────────
 
 /// A single node in the interactive search graph.
-#[derive(Debug, Serialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct InteractiveGraphNode {
     /// Stable identifier used for edge references.
     pub id:             String,
@@ -823,7 +823,7 @@ pub struct InteractiveGraphNode {
 }
 
 /// A directed edge in the interactive search graph.
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InteractiveGraphEdge {
     pub from_id:  String,
     pub to_id:    String,
