@@ -16,7 +16,7 @@ use crate::ws_server::WsBroadcaster;
 use crate::MutexExt;
 use crate::settings::{
     CalibrationConfig, UserSettings,
-    settings_path,
+    settings_path, save_secrets_from_settings,
 };
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
@@ -210,6 +210,10 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
+
+    // Persist secrets to the system keychain (encrypted, survives updates).
+    save_secrets_from_settings(&data);
+
     if let Ok(json) = serde_json::to_string_pretty(&data) {
         if let Err(e) = std::fs::write(&path, &json) {
             eprintln!("[settings] save error: {e}");

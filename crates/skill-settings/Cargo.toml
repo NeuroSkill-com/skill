@@ -15,6 +15,7 @@ skill-data         = { path = "../skill-data" }
 serde              = { version = "1", features = ["derive"] }
 serde_json         = "1"
 dirs               = "6"
+keyring            = "3.6"
 
 [features]
 default = []

@@ -38,6 +38,10 @@ pub use skill_llm::config::{LlmConfig, LlmToolConfig, ToolExecutionMode};
 pub mod screenshot_config;
 pub use screenshot_config::ScreenshotConfig;
 
+// System keychain helpers for storing secrets securely.
+pub mod keychain;
+pub use keychain::{Secrets, load_secrets, save_secrets};
+
 // ── OpenBCI board configuration ───────────────────────────────────────────────
 
 /// Which OpenBCI board the user wants to use (persisted in settings.json).
@@ -168,14 +172,22 @@ impl Default for ScannerConfig {
 // ── Device API configuration ─────────────────────────────────────────────────
 
 /// Credentials used by specific device integrations that require remote APIs.
+///
+/// Secrets are stored in the system keychain (macOS Keychain, Linux Secret
+/// Service, Windows Credential Manager) and are **not** written to
+/// `settings.json`.  Legacy plaintext values are still accepted on
+/// deserialization for one-time migration into the keychain.
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct DeviceApiConfig {
     /// Emotiv Cortex API application client id.
+    #[serde(default, skip_serializing)]
     pub emotiv_client_id: String,
     /// Emotiv Cortex API application client secret.
+    #[serde(default, skip_serializing)]
     pub emotiv_client_secret: String,
     /// IDUN Cloud API token used when cloud decoding is enabled.
+    #[serde(default, skip_serializing)]
     pub idun_api_token: String,
 }
 
@@ -579,7 +591,10 @@ pub struct UserSettings {
     /// When non-empty, every HTTP request and WebSocket upgrade must include
     /// `Authorization: Bearer <token>`.  When empty (default), the API is
     /// open — suitable for localhost-only (`127.0.0.1`) binds.
-    #[serde(default)]
+    ///
+    /// Stored in the system keychain; the JSON field is kept only for
+    /// one-time migration of existing plaintext values.
+    #[serde(default, skip_serializing)]
     pub api_token: String,
     /// Seconds between automatic background update checks (0 = disabled).
     #[serde(default = "default_update_check_interval")]
@@ -741,13 +756,52 @@ impl Default for UserSettings {
 }
 
 pub fn load_settings(skill_dir: &Path) -> UserSettings {
-    let mut s: UserSettings = skill_data::util::load_json_or_default(&settings_path(skill_dir));
+    let path = settings_path(skill_dir);
+    let mut s: UserSettings = skill_data::util::load_json_or_default(&path);
 
     // ── Shortcut migrations ──────────────────────────────────────────────
     if s.search_shortcut   == "CmdOrCtrl+Shift+F" { s.search_shortcut   = default_search_shortcut(); }
     if s.settings_shortcut == "CmdOrCtrl+Shift+S" { s.settings_shortcut = default_settings_shortcut(); }
 
+    // ── Secret migration: plaintext JSON → system keychain ───────────────
+    //
+    // If the JSON file still contains non-empty secret values (from a
+    // pre-keychain build), migrate them into the system keychain and
+    // re-save settings so the plaintext is stripped from disk.
+    let migrated = keychain::migrate_plaintext_secrets(
+        &s.api_token,
+        &s.device_api.emotiv_client_id,
+        &s.device_api.emotiv_client_secret,
+        &s.device_api.idun_api_token,
+    );
+    if migrated {
+        // Re-save without the secret fields (skip_serializing takes care of it).
+        if let Ok(json) = serde_json::to_string_pretty(&s) {
+            let _ = std::fs::write(&path, &json);
+        }
+    }
+
+    // ── Load secrets from keychain ───────────────────────────────────────
+    let secrets = keychain::load_secrets();
+    s.api_token                    = secrets.api_token;
+    s.device_api.emotiv_client_id  = secrets.emotiv_client_id;
+    s.device_api.emotiv_client_secret = secrets.emotiv_client_secret;
+    s.device_api.idun_api_token    = secrets.idun_api_token;
+
     s
+}
+
+/// Save only the secret fields to the system keychain.
+///
+/// Call this from the Tauri side whenever a secret is updated, instead of
+/// relying on the JSON settings file.
+pub fn save_secrets_from_settings(settings: &UserSettings) {
+    keychain::save_secrets(&Secrets {
+        api_token:            settings.api_token.clone(),
+        emotiv_client_id:     settings.device_api.emotiv_client_id.clone(),
+        emotiv_client_secret: settings.device_api.emotiv_client_secret.clone(),
+        idun_api_token:       settings.device_api.idun_api_token.clone(),
+    });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
