@@ -302,6 +302,7 @@ the Free Software Foundation, version 3 only. -->
       : { nodes: ixNodes, edges: ixEdges };
 
     // Inject screenshot nodes + edges when the toggle is on and we have data
+    console.log("[ss] displayGraph: show=", ixShowScreenshots, "mapSize=", ixScreenshotMap.size);
     if (ixShowScreenshots && ixScreenshotMap.size > 0) {
       const extraNodes: typeof n = [];
       const extraEdges: typeof e = [];
@@ -385,8 +386,10 @@ the Free Software Foundation, version 3 only. -->
 
   /** Fetch nearby screenshots for all EEG-point nodes. */
   async function fetchIxScreenshots() {
+    console.log("[ss] fetchIxScreenshots called, show=", ixShowScreenshots, "nodes=", ixNodes.length);
     if (!ixShowScreenshots) { ixScreenshotMap = new Map(); return; }
     const eegNodes = ixNodes.filter(n => n.kind === "eeg_point" && n.timestamp_unix != null);
+    console.log("[ss] EEG nodes with timestamps:", eegNodes.length, eegNodes.map(n => ({ id: n.id, ts: n.timestamp_unix })));
     if (eegNodes.length === 0) { ixScreenshotMap = new Map(); return; }
 
     type SsResult = { unix_ts: number; filename: string; app_name: string; window_title: string };
@@ -399,6 +402,7 @@ the Free Software Foundation, version 3 only. -->
           timestamp: Math.floor(node.timestamp_unix!),
           windowSecs: 120,
         });
+        console.log("[ss] node", node.id, "ts=", node.timestamp_unix, "=> around:", around.length, around.slice(0, 2));
         if (around.length > 0) {
           // Pick the closest screenshot to the node timestamp
           const sorted = [...around].sort((a, b) =>
@@ -412,11 +416,12 @@ the Free Software Foundation, version 3 only. -->
             unixTs:      best.unix_ts,
           });
         }
-      } catch {
-        // silently skip nodes without screenshots
+      } catch (e) {
+        console.warn("[ss] error fetching for node", node.id, e);
       }
     });
     await Promise.all(promises);
+    console.log("[ss] results map size:", results.size, [...results.entries()].slice(0, 3));
     ixScreenshotMap = results;
   }
 
