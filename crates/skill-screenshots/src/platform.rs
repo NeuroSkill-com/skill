@@ -2,10 +2,7 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Platform-specific window capture (macOS, Linux, Windows).
 
-#[cfg(any(
-    target_os = "macos",
-    all(any(target_os = "linux", target_os = "windows"), feature = "capture"),
-))]
+#[cfg(target_os = "macos")]
 use std::io::Cursor;
 #[cfg(target_os = "macos")]
 use std::path::Path;

@@ -79,6 +79,7 @@ fn now_secs_returns_plausible_timestamp() {
 // ── Muse adapter ──────────────────────────────────────────────────────────────
 
 mod muse_tests {
+    #[allow(unused_imports)]
     use super::*;
 
     /// Test the channel accumulation logic directly by simulating what

@@ -57,6 +57,7 @@ impl IdunAdapter {
 
     /// Test-only constructor without a real BLE handle.
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn new_for_test(rx: mpsc::Receiver<GuardianEvent>) -> Self {
         let channel_names: Vec<String> =
             IDUN_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();

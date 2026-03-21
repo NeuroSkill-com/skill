@@ -43,14 +43,21 @@ function runCheckStep(label, command) {
   }
   if (output) process.stdout.write(output);
 
-  // Detect warning lines in combined output — treat any warning as fatal
+  // Detect warning lines in combined output — treat any warning as fatal.
+  // Exclude:
+  //  - "0 warnings" summary lines
+  //  - config directives like `deny(warnings)` or `warnings =`
+  //  - cargo build-script `warning: <crate>@<ver>:` info messages (cargo:warning= from build.rs)
+  //  - "warning: build failed" (cargo's own message when a build error already occurred)
   const warningLines = output
     .split("\n")
     .filter(
       (line) =>
         /\bwarning\b/i.test(line) &&
         !/0 warnings/i.test(line) &&
-        !/warnings?\s*=|deny\(warnings\)/i.test(line)
+        !/warnings?\s*=|deny\(warnings\)/i.test(line) &&
+        !/^warning: \S+@\S+:/i.test(line.trim()) &&
+        !/^warning: build failed/i.test(line.trim())
     );
 
   if (warningLines.length > 0) {
