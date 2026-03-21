@@ -8,7 +8,16 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
-## [0.0.48] — 2026-03-21
+## [0.0.49] — 2026-03-21
+
+### Bugfixes
+
+- **Fix a11y warnings in HistoryCalendar**: Replaced clickable `<div>` with a `<button>` for session bars in the calendar view, resolving svelte-check warnings about missing keyboard handlers and ARIA roles.
+
+### Refactor
+
+- **Fix clippy warnings in main crate**: Replaced `match` with `if let` in `worker.rs`, derived `Default` for `DndRuntimeState`, and used struct initializer for `InputTrackingState` in `state.rs`.
+
 ## [0.0.47] — 2026-03-21
 
 ### Performance
