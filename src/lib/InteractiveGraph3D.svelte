@@ -27,7 +27,7 @@ the Free Software Foundation, version 3 only. -->
   // ── Types ─────────────────────────────────────────────────────────────────
   interface GraphNode {
     id:              string;
-    kind:            "query" | "text_label" | "eeg_point" | "found_label";
+    kind:            "query" | "text_label" | "eeg_point" | "found_label" | "screenshot";
     text?:           string;
     timestamp_unix?: number;
     distance:        number;
@@ -38,12 +38,14 @@ the Free Software Foundation, version 3 only. -->
      *  share nearby (proj_x, proj_y) values. */
     proj_x?:         number;
     proj_y?:         number;
+    /** Screenshot image URL — only present on kind === "screenshot" nodes. */
+    screenshot_url?: string;
   }
   interface GraphEdge {
     from_id:  string;
     to_id:    string;
     distance: number;
-    kind:     "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox";
+    kind:     "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_link";
   }
 
   type ThreeModule = typeof import("three");
@@ -52,16 +54,6 @@ the Free Software Foundation, version 3 only. -->
   type EdgeLine = THREE_NS.Line<THREE_NS.BufferGeometry, THREE_NS.LineBasicMaterial>;
 
   // Internal scene-object records ──────────────────────────────────────────
-  /** Screenshot record associated with an EEG-point node. */
-  export interface NodeScreenshot {
-    nodeId:   string;
-    url:      string;
-    filename: string;
-    appName?: string;
-    windowTitle?: string;
-    unixTs:   number;
-  }
-
   interface NodeEntry {
     mesh:         NodeMesh;
     sprite:       NodeSprite | null;
@@ -75,26 +67,12 @@ the Free Software Foundation, version 3 only. -->
     toId:        string;
     baseOpacity: number; // opacity at rest
   }
-  interface ScreenshotEntry {
-    sprite:  THREE_NS.Sprite;
-    border:  THREE_NS.Sprite;
-    nodeId:  string;
-    data:    NodeScreenshot;
-  }
 
   let {
     nodes,
     edges,
     usePca = true,
-    showScreenshots = false,
-    screenshots = [],
-  }: {
-    nodes: GraphNode[];
-    edges: GraphEdge[];
-    usePca?: boolean;
-    showScreenshots?: boolean;
-    screenshots?: NodeScreenshot[];
-  } = $props();
+  }: { nodes: GraphNode[]; edges: GraphEdge[]; usePca?: boolean } = $props();
 
   // ── Visual constants ─────────────────────────────────────────────────────
   const KIND_COLOR: Record<GraphNode["kind"], number> = {
@@ -102,27 +80,31 @@ the Free Software Foundation, version 3 only. -->
     text_label:  0x3b82f6,
     eeg_point:   0xf59e0b,
     found_label: 0x10b981,
+    screenshot:  0x06b6d4,
   };
   const KIND_RADIUS: Record<GraphNode["kind"], number> = {
     query:       1.2,
     text_label:  0.8,
     eeg_point:   0.55,
     found_label: 0.65,
+    screenshot:  0.45,
   };
   const EDGE_COLOR: Record<GraphEdge["kind"], number> = {
-    text_sim:   0x8b5cf6,
-    eeg_bridge: 0xf59e0b,
-    eeg_sim:    0xf59e0b,
-    label_prox: 0x10b981,
+    text_sim:        0x8b5cf6,
+    eeg_bridge:      0xf59e0b,
+    eeg_sim:         0xf59e0b,
+    label_prox:      0x10b981,
+    screenshot_link: 0x06b6d4,
   };
   const BASE_EMISSIVE: Record<GraphNode["kind"], number> = {
     query:       0.30,
     text_label:  0.18,
     eeg_point:   0.35,
     found_label: 0.18,
+    screenshot:  0.25,
   };
 
-  const LAYER_RADIUS = { query: 0, text_label: 6, eeg_point: 5, found_label: 4.5 };
+  const LAYER_RADIUS = { query: 0, text_label: 6, eeg_point: 5, found_label: 4.5, screenshot: 2.5 };
   const GOLDEN = Math.PI * (3 - Math.sqrt(5));
   const BG_DARK  = 0x13131f;
   const BG_LIGHT = 0xf1f5f9;
@@ -183,7 +165,6 @@ the Free Software Foundation, version 3 only. -->
   // Richer scene-object records
   let nodeEntries: NodeEntry[] = [];
   let edgeEntries: EdgeEntry[] = [];
-  let screenshotEntries = $state<ScreenshotEntry[]>([]);
 
   // ── Layout helpers ────────────────────────────────────────────────────────
   function fibSphere(i: number, n: number): [number, number, number] {
@@ -281,6 +262,32 @@ the Free Software Foundation, version 3 only. -->
       }
     }
 
+    // ── Screenshot nodes — clustered near their parent EEG-point ────────────
+    const ssMap = new Map<string, GraphNode[]>();
+    for (const n of ns) {
+      if (n.kind !== "screenshot") continue;
+      const pid = n.parent_id ?? "query";
+      if (!ssMap.has(pid)) ssMap.set(pid, []);
+      ssMap.get(pid)!.push(n);
+    }
+    for (const [pid, children] of ssMap) {
+      const parentPos = pos.get(pid) ?? [0, 0, 0];
+      const outDir = normalize3(
+        parentPos[0] === 0 && parentPos[1] === 0 && parentPos[2] === 0 ? [0, -1, 0] : parentPos
+      );
+      for (let j = 0; j < children.length; j++) {
+        const local = fibSphere(j, Math.max(children.length, 3));
+        pos.set(children[j].id,
+          add3(parentPos,
+            scale3(
+              normalize3(add3(scale3(outDir, 0.8), local)),
+              LAYER_RADIUS.screenshot
+            )
+          )
+        );
+      }
+    }
+
     return pos;
   }
 
@@ -362,7 +369,6 @@ the Free Software Foundation, version 3 only. -->
     for (const ee of edgeEntries) {
       ee.line.geometry.dispose(); ee.line.material.dispose(); scene.remove(ee.line);
     }
-    clearScreenshots();
     nodeEntries = []; edgeEntries = [];
     selectedNodeId = null;
 
@@ -437,9 +443,15 @@ the Free Software Foundation, version 3 only. -->
       mesh.position.set(pos[0], pos[1], pos[2]);
       scene.add(mesh);
 
-      // Label sprite
+      // Label sprite — text labels for most kinds, thumbnail for screenshots
       let sprite: NodeSprite | null = null;
-      if (node.kind === "query" || node.kind === "text_label" || node.kind === "found_label") {
+      if (node.kind === "screenshot" && node.screenshot_url) {
+        sprite = makeScreenshotSprite(node.screenshot_url, node.text ?? "");
+        if (sprite) {
+          sprite.position.set(pos[0], pos[1] + radius + 2.0, pos[2]);
+          scene.add(sprite);
+        }
+      } else if (node.kind === "query" || node.kind === "text_label" || node.kind === "found_label") {
         sprite = makeTextSprite(node.text ?? "", color, node.kind);
         if (sprite) {
           sprite.position.set(pos[0], pos[1] + radius + 1.2, pos[2]);
@@ -489,6 +501,86 @@ the Free Software Foundation, version 3 only. -->
     return spr;
   }
 
+  // ── Screenshot thumbnail sprite ─────────────────────────────────────────
+  function makeScreenshotSprite(url: string, label: string): NodeSprite | null {
+    if (!THREE) return null;
+    const W = 512, H = 384;
+    // Start with a placeholder frame; the image loads asynchronously.
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d")!;
+
+    // Rounded frame background
+    ctx.fillStyle = "rgba(6,182,212,0.08)";
+    ctx.beginPath(); ctx.roundRect(0, 0, W, H, 16); ctx.fill();
+    ctx.strokeStyle = "rgba(6,182,212,0.55)";
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.roundRect(2, 2, W - 4, H - 4, 16); ctx.stroke();
+    // Label at bottom
+    if (label) {
+      ctx.font = "bold 22px system-ui, sans-serif";
+      ctx.fillStyle = "rgba(6,182,212,0.85)";
+      ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+      let lbl = label;
+      while (ctx.measureText(lbl).width > W - 30 && lbl.length > 4) lbl = lbl.slice(0, -4) + "…";
+      ctx.fillText(lbl, W / 2, H - 12);
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.needsUpdate = true;
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 1.0, depthTest: false });
+    const spr = new THREE.Sprite(mat);
+    const sW = 5.5;
+    spr.scale.set(sW, sW * (H / W), 1);
+
+    // Load actual screenshot image asynchronously and repaint the canvas
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const PAD = 12;
+      const LABEL_H = label ? 32 : 0;
+      const imgW = W - PAD * 2;
+      const imgH = H - PAD * 2 - LABEL_H;
+
+      // Clear and redraw frame
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = "rgba(6,182,212,0.08)";
+      ctx.beginPath(); ctx.roundRect(0, 0, W, H, 16); ctx.fill();
+      ctx.strokeStyle = "rgba(6,182,212,0.55)";
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.roundRect(2, 2, W - 4, H - 4, 16); ctx.stroke();
+
+      // Clip inner area and draw the image
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(PAD, PAD, imgW, imgH, 8); ctx.clip();
+      ctx.drawImage(img, PAD, PAD, imgW, imgH);
+      ctx.restore();
+
+      // Re-draw label
+      if (label) {
+        ctx.font = "bold 22px system-ui, sans-serif";
+        ctx.fillStyle = "rgba(6,182,212,0.85)";
+        ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+        let lbl = label;
+        while (ctx.measureText(lbl).width > W - 30 && lbl.length > 4) lbl = lbl.slice(0, -4) + "…";
+        ctx.fillText(lbl, W / 2, H - 12);
+      }
+
+      tex.needsUpdate = true;
+    };
+    img.onerror = () => {
+      // On failure, draw a fallback "no image" indicator
+      ctx.font = "bold 28px system-ui, sans-serif";
+      ctx.fillStyle = "rgba(6,182,212,0.35)";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("(no image)", W / 2, H / 2);
+      tex.needsUpdate = true;
+    };
+    img.src = url;
+
+    return spr;
+  }
+
   // ── Selection / highlight ─────────────────────────────────────────────────
   function applySelection(nodeId: string | null) {
     selectedNodeId = nodeId;
@@ -502,10 +594,6 @@ the Free Software Foundation, version 3 only. -->
       }
       for (const ee of edgeEntries) {
         ee.line.material.opacity = ee.baseOpacity;
-      }
-      for (const se of screenshotEntries) {
-        se.sprite.material.opacity = 0.92;
-        se.border.material.opacity = 0.85;
       }
       if (controls) controls.autoRotate = true;
       return;
@@ -553,106 +641,7 @@ the Free Software Foundation, version 3 only. -->
       }
     }
 
-    // Apply to screenshots — show only those attached to connected nodes
-    for (const se of screenshotEntries) {
-      const visible = connectedNodeIds.has(se.nodeId);
-      se.sprite.material.opacity = visible ? 0.92 : DIM_OPACITY * 0.5;
-      se.border.material.opacity = visible ? 0.85 : DIM_OPACITY * 0.5;
-    }
-
     if (controls) controls.autoRotate = false;
-  }
-
-  // ── Screenshot sprites ────────────────────────────────────────────────────
-  function clearScreenshots() {
-    for (const se of screenshotEntries) {
-      se.sprite.material.map?.dispose();
-      se.sprite.material.dispose();
-      scene.remove(se.sprite);
-      se.border.material.map?.dispose();
-      se.border.material.dispose();
-      scene.remove(se.border);
-    }
-    screenshotEntries = [];
-  }
-
-  function buildScreenshots() {
-    if (!THREE || !scene) return;
-    clearScreenshots();
-    if (!showScreenshots || screenshots.length === 0) return;
-
-    // Group screenshots by node ID and pick only the first (closest in time)
-    const byNode = new Map<string, NodeScreenshot>();
-    for (const s of screenshots) {
-      if (!byNode.has(s.nodeId)) byNode.set(s.nodeId, s);
-    }
-
-    for (const ne of nodeEntries) {
-      const ss = byNode.get(ne.node.id);
-      if (!ss) continue;
-
-      const pos = ne.mesh.position;
-
-      // Create a bordered frame sprite first (shows immediately)
-      const FRAME_W = 4.0, FRAME_H = 3.0;
-      const frameCvs = document.createElement("canvas");
-      frameCvs.width = 256; frameCvs.height = 192;
-      const fctx = frameCvs.getContext("2d")!;
-      fctx.fillStyle = "rgba(255,255,255,0.06)";
-      fctx.beginPath(); fctx.roundRect(0, 0, 256, 192, 10); fctx.fill();
-      fctx.strokeStyle = "rgba(245,158,11,0.5)";
-      fctx.lineWidth = 3;
-      fctx.beginPath(); fctx.roundRect(2, 2, 252, 188, 10); fctx.stroke();
-      // Small label at bottom
-      fctx.font = "bold 16px system-ui, sans-serif";
-      fctx.fillStyle = "rgba(245,158,11,0.7)";
-      fctx.textAlign = "center";
-      fctx.textBaseline = "bottom";
-      const label = ss.appName || "Screenshot";
-      fctx.fillText(label.slice(0, 30), 128, 186);
-
-      const borderTex = new THREE.CanvasTexture(frameCvs);
-      borderTex.needsUpdate = true;
-      const borderMat = new THREE.SpriteMaterial({
-        map: borderTex, transparent: true, opacity: 0.85, depthTest: false,
-      });
-      const borderSprite = new THREE.Sprite(borderMat);
-      // Offset screenshot above + outward from the node
-      const offset = ne.node.kind === "eeg_point" ? 2.8 : 2.0;
-      borderSprite.position.set(pos.x, pos.y + offset, pos.z);
-      borderSprite.scale.set(FRAME_W, FRAME_H, 1);
-      scene.add(borderSprite);
-
-      // Load the actual screenshot image asynchronously
-      const imgSprite = new THREE.Sprite(
-        new THREE.SpriteMaterial({ transparent: true, opacity: 0, depthTest: false })
-      );
-      imgSprite.position.set(pos.x, pos.y + offset, pos.z + 0.01);
-      imgSprite.scale.set(FRAME_W * 0.92, FRAME_H * 0.82, 1);
-      scene.add(imgSprite);
-
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.onload = () => {
-        const tex = new THREE.Texture(img);
-        tex.needsUpdate = true;
-        tex.minFilter = THREE.LinearFilter;
-        tex.magFilter = THREE.LinearFilter;
-        const mat = new THREE.SpriteMaterial({
-          map: tex, transparent: true, opacity: 0.92, depthTest: false,
-        });
-        imgSprite.material.dispose();
-        imgSprite.material = mat;
-      };
-      img.src = ss.url;
-
-      screenshotEntries.push({
-        sprite: imgSprite,
-        border: borderSprite,
-        nodeId: ne.node.id,
-        data: ss,
-      });
-    }
   }
 
   // ── Raycasting helper ─────────────────────────────────────────────────────
@@ -674,13 +663,14 @@ the Free Software Foundation, version 3 only. -->
 
     if (hit) {
       const n = hit.node;
-      const kindLabel = {
+      const kindLabel: Record<string, string> = {
         query:       "Query",
         text_label:  "Text label",
         eeg_point:   "EEG point",
         found_label: (usePca && n.proj_x !== undefined)
           ? "Found label  (PCA-clustered)"
           : "Found label",
+        screenshot:  "Screenshot",
       };
       const lines: string[] = [`${kindLabel[n.kind] ?? n.kind}`];
       if (n.text)           lines.push(n.text.slice(0, 80));
@@ -724,14 +714,6 @@ the Free Software Foundation, version 3 only. -->
     buildGraph();
   });
 
-  // ── Reactivity on screenshot toggle / data ────────────────────────────────
-  $effect(() => {
-    const _show = showScreenshots;
-    const _len  = screenshots.length;
-    if (!loaded || !THREE) return;
-    buildScreenshots();
-  });
-
   // ── Theme ─────────────────────────────────────────────────────────────────
   $effect(() => {
     if (scene) scene.background = new THREE.Color(isDark ? BG_DARK : BG_LIGHT);
@@ -743,7 +725,6 @@ the Free Software Foundation, version 3 only. -->
     cancelAnimationFrame(animId);
     resizeObs?.disconnect();
     if (canvasClickHandler) renderer?.domElement?.removeEventListener("click", canvasClickHandler);
-    clearScreenshots();
     controls?.dispose();
     renderer?.dispose();
     if (renderer?.domElement?.parentNode === container) container?.removeChild(renderer.domElement);
@@ -846,6 +827,12 @@ the Free Software Foundation, version 3 only. -->
       <span class="inline-block w-2 h-2 rounded-full shrink-0" style="background:#10b981"></span>
       <span>{foundLabelLegend}</span>
     </div>
+    {#if nodes.some(n => n.kind === "screenshot")}
+      <div class="flex items-center gap-1">
+        <span class="inline-block w-2 h-2 rounded-full shrink-0" style="background:#06b6d4"></span>
+        <span>Screenshot</span>
+      </div>
+    {/if}
     <span class="text-muted-foreground/15 select-none">·</span>
     {#each EDGE_LEGEND as l}
       <div class="flex items-center gap-1">
@@ -853,16 +840,10 @@ the Free Software Foundation, version 3 only. -->
         <span>{l.label}</span>
       </div>
     {/each}
-    {#if showScreenshots && screenshotEntries.length > 0}
-      <span class="text-muted-foreground/15 select-none">·</span>
+    {#if nodes.some(n => n.kind === "screenshot")}
       <div class="flex items-center gap-1">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"
-             class="w-2.5 h-2.5 shrink-0 opacity-70">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <path d="m21 15-5-5L5 21"/>
-        </svg>
-        <span>{screenshotEntries.length} screenshot{screenshotEntries.length !== 1 ? 's' : ''}</span>
+        <span class="inline-block w-4 h-0.5 shrink-0 rounded" style="background:#06b6d4"></span>
+        <span>Screenshot link</span>
       </div>
     {/if}
     <span class="ml-auto text-[0.38rem] italic opacity-40 select-none">

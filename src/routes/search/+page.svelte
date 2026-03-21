@@ -292,22 +292,55 @@ the Free Software Foundation, version 3 only. -->
   let ixDedupeLabels = $state(true);  // deduplicate found_labels by text
   let ixUsePca       = $state(true);  // cluster found_labels by embedding similarity
   let ixShowScreenshots = $state(false); // show screenshot thumbnails on EEG nodes
-  let ixScreenshots  = $state<import("$lib/InteractiveGraph3D.svelte").NodeScreenshot[]>([]);
+  /** Raw screenshot results keyed by EEG node ID. */
+  let ixScreenshotMap = $state<Map<string, { filename: string; appName: string; windowTitle: string; unixTs: number }>>(new Map());
 
   // ── Derived display graph (applies found-label deduplication) ────────────
   const ixDisplayGraph = $derived.by(() => {
-    if (!ixDedupeLabels) return { nodes: ixNodes, edges: ixEdges };
-    return dedupeFoundLabels(ixNodes, ixEdges);
+    let { nodes: n, edges: e } = ixDedupeLabels
+      ? dedupeFoundLabels(ixNodes, ixEdges)
+      : { nodes: ixNodes, edges: ixEdges };
+
+    // Inject screenshot nodes + edges when the toggle is on and we have data
+    if (ixShowScreenshots && ixScreenshotMap.size > 0) {
+      const extraNodes: typeof n = [];
+      const extraEdges: typeof e = [];
+      for (const node of n) {
+        if (node.kind !== "eeg_point") continue;
+        const ss = ixScreenshotMap.get(node.id);
+        if (!ss) continue;
+        const ssId = `ss_${node.id}`;
+        extraNodes.push({
+          id:             ssId,
+          kind:           "screenshot",
+          text:           ss.appName || ss.windowTitle || "Screenshot",
+          timestamp_unix: ss.unixTs,
+          distance:       0,
+          parent_id:      node.id,
+          screenshot_url: imgSrc(ss.filename),
+        });
+        extraEdges.push({
+          from_id:  node.id,
+          to_id:    ssId,
+          distance: 0,
+          kind:     "screenshot_link",
+        });
+      }
+      n = [...n, ...extraNodes];
+      e = [...e, ...extraEdges];
+    }
+
+    return { nodes: n, edges: e };
   });
 
   // Fetch screenshots reactively when the toggle flips or new results arrive
   $effect(() => {
     const _show = ixShowScreenshots;
     const _len  = ixNodes.length;
-    if (ixSearched && _len > 0) {
+    if (ixSearched && _show && _len > 0) {
       fetchIxScreenshots();
-    } else {
-      ixScreenshots = [];
+    } else if (!_show) {
+      ixScreenshotMap = new Map();
     }
   });
 
@@ -352,12 +385,12 @@ the Free Software Foundation, version 3 only. -->
 
   /** Fetch nearby screenshots for all EEG-point nodes. */
   async function fetchIxScreenshots() {
-    if (!ixShowScreenshots) { ixScreenshots = []; return; }
+    if (!ixShowScreenshots) { ixScreenshotMap = new Map(); return; }
     const eegNodes = ixNodes.filter(n => n.kind === "eeg_point" && n.timestamp_unix != null);
-    if (eegNodes.length === 0) { ixScreenshots = []; return; }
+    if (eegNodes.length === 0) { ixScreenshotMap = new Map(); return; }
 
     type SsResult = { unix_ts: number; filename: string; app_name: string; window_title: string };
-    const results: import("$lib/InteractiveGraph3D.svelte").NodeScreenshot[] = [];
+    const results = new Map<string, { filename: string; appName: string; windowTitle: string; unixTs: number }>();
 
     // Fetch screenshots in parallel for all EEG nodes (±120 sec window)
     const promises = eegNodes.map(async (node) => {
@@ -372,13 +405,11 @@ the Free Software Foundation, version 3 only. -->
             Math.abs(a.unix_ts - node.timestamp_unix!) - Math.abs(b.unix_ts - node.timestamp_unix!)
           );
           const best = sorted[0];
-          results.push({
-            nodeId: node.id,
-            url: imgSrc(best.filename),
-            filename: best.filename,
-            appName: best.app_name,
+          results.set(node.id, {
+            filename:    best.filename,
+            appName:     best.app_name,
             windowTitle: best.window_title,
-            unixTs: best.unix_ts,
+            unixTs:      best.unix_ts,
           });
         }
       } catch {
@@ -386,7 +417,7 @@ the Free Software Foundation, version 3 only. -->
       }
     });
     await Promise.all(promises);
-    ixScreenshots = results;
+    ixScreenshotMap = results;
   }
 
   function onIxKeydown(e: KeyboardEvent) {
@@ -1365,6 +1396,7 @@ the Free Software Foundation, version 3 only. -->
         {@const epCount   = ixNodes.filter(n => n.kind === "eeg_point").length}
         {@const flRaw     = ixNodes.filter(n => n.kind === "found_label").length}
         {@const flDisp    = dispNodes.filter(n => n.kind === "found_label").length}
+        {@const ssCount   = dispNodes.filter(n => n.kind === "screenshot").length}
 
         <div class="flex items-center gap-2 px-4 py-1.5 border-b border-border dark:border-white/[0.05] shrink-0">
           <!-- Coloured node-kind dots + counts -->
@@ -1383,6 +1415,12 @@ the Free Software Foundation, version 3 only. -->
           <span class="flex items-center gap-0.5 text-[0.52rem] text-emerald-500/80 tabular-nums shrink-0">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>{flDisp}{#if ixDedupeLabels && flRaw > flDisp}<span class="opacity-40">/{flRaw}</span>{/if}
           </span>
+          {#if ssCount > 0}
+            <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
+            <span class="flex items-center gap-0.5 text-[0.52rem] text-cyan-500/80 tabular-nums shrink-0">
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 shrink-0"></span>{ssCount}
+            </span>
+          {/if}
           <span class="text-muted-foreground/20 select-none text-[0.5rem]">·</span>
           <span class="text-[0.48rem] text-muted-foreground/40 tabular-nums shrink-0">
             {dispEdges.length} edges
@@ -1471,8 +1509,7 @@ the Free Software Foundation, version 3 only. -->
 
             {#if showIxGraph}
               <div style="width:100%; height:500px">
-                <InteractiveGraph3D nodes={dispNodes} edges={dispEdges} usePca={ixUsePca}
-                                    showScreenshots={ixShowScreenshots} screenshots={ixScreenshots} />
+                <InteractiveGraph3D nodes={dispNodes} edges={dispEdges} usePca={ixUsePca} />
               </div>
             {/if}
           </div>

@@ -53,14 +53,16 @@ export interface SearchAnalysis {
 }
 
 export interface GraphNode {
-  id: string; kind: "query" | "text_label" | "eeg_point" | "found_label";
+  id: string; kind: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot";
   text?: string; timestamp_unix?: number; distance: number;
   eeg_metrics?: Record<string, number | null> | null; parent_id?: string;
+  /** Screenshot image URL — only present on kind === "screenshot" nodes. */
+  screenshot_url?: string;
 }
 
 export interface GraphEdge {
   from_id: string; to_id: string; distance: number;
-  kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox";
+  kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_link";
 }
 
 export interface JobTicket {
