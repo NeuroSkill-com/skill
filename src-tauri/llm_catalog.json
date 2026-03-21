@@ -7017,6 +7017,139 @@
       "max_context_length": 131072
     },
     {
+      "repo": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+      "filename": "LFM2.5-1.2B-Instruct-Q4_0.gguf",
+      "quant": "Q4_0",
+      "size_gb": 0.7,
+      "description": "Smallest quant — fastest, fits anywhere",
+      "family_id": "lfm25-1.2b-instruct",
+      "family_name": "LFM2.5 1.2B Instruct",
+      "family_desc": "Liquid Foundation Model 2.5 Instruct — 1.2B-parameter text model from LiquidAI. Ultra-compact and fast, fits in <2 GB VRAM — ideal for constrained devices.",
+      "tags": [
+        "chat",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": false,
+      "params_b": 1.2,
+      "max_context_length": 131072
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+      "filename": "LFM2.5-1.2B-Instruct-Q4_K_M.gguf",
+      "quant": "Q4_K_M",
+      "size_gb": 0.73,
+      "description": "Recommended — best quality/size tradeoff",
+      "family_id": "lfm25-1.2b-instruct",
+      "family_name": "LFM2.5 1.2B Instruct",
+      "family_desc": "Liquid Foundation Model 2.5 Instruct — 1.2B-parameter text model from LiquidAI. Ultra-compact and fast, fits in <2 GB VRAM — ideal for constrained devices.",
+      "tags": [
+        "chat",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": true,
+      "advanced": false,
+      "params_b": 1.2,
+      "max_context_length": 131072
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+      "filename": "LFM2.5-1.2B-Instruct-Q5_K_M.gguf",
+      "quant": "Q5_K_M",
+      "size_gb": 0.84,
+      "description": "Higher quality 5-bit quant",
+      "family_id": "lfm25-1.2b-instruct",
+      "family_name": "LFM2.5 1.2B Instruct",
+      "family_desc": "Liquid Foundation Model 2.5 Instruct — 1.2B-parameter text model from LiquidAI. Ultra-compact and fast, fits in <2 GB VRAM — ideal for constrained devices.",
+      "tags": [
+        "chat",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": false,
+      "params_b": 1.2,
+      "max_context_length": 131072
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+      "filename": "LFM2.5-1.2B-Instruct-Q6_K.gguf",
+      "quant": "Q6_K",
+      "size_gb": 0.96,
+      "description": "Near-lossless 6-bit quant",
+      "family_id": "lfm25-1.2b-instruct",
+      "family_name": "LFM2.5 1.2B Instruct",
+      "family_desc": "Liquid Foundation Model 2.5 Instruct — 1.2B-parameter text model from LiquidAI. Ultra-compact and fast, fits in <2 GB VRAM — ideal for constrained devices.",
+      "tags": [
+        "chat",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": false,
+      "params_b": 1.2,
+      "max_context_length": 131072
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+      "filename": "LFM2.5-1.2B-Instruct-Q8_0.gguf",
+      "quant": "Q8_0",
+      "size_gb": 1.25,
+      "description": "Highest practical quality 8-bit quant",
+      "family_id": "lfm25-1.2b-instruct",
+      "family_name": "LFM2.5 1.2B Instruct",
+      "family_desc": "Liquid Foundation Model 2.5 Instruct — 1.2B-parameter text model from LiquidAI. Ultra-compact and fast, fits in <2 GB VRAM — ideal for constrained devices.",
+      "tags": [
+        "chat",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": false,
+      "params_b": 1.2,
+      "max_context_length": 131072
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+      "filename": "LFM2.5-1.2B-Instruct-F16.gguf",
+      "quant": "F16",
+      "size_gb": 2.34,
+      "description": "Full FP16 precision",
+      "family_id": "lfm25-1.2b-instruct",
+      "family_name": "LFM2.5 1.2B Instruct",
+      "family_desc": "Liquid Foundation Model 2.5 Instruct — 1.2B-parameter text model from LiquidAI. Ultra-compact and fast, fits in <2 GB VRAM — ideal for constrained devices.",
+      "tags": [
+        "chat",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 1.2,
+      "max_context_length": 131072
+    },
+    {
+      "repo": "LiquidAI/LFM2.5-1.2B-Instruct-GGUF",
+      "filename": "LFM2.5-1.2B-Instruct-BF16.gguf",
+      "quant": "BF16",
+      "size_gb": 2.34,
+      "description": "Full BF16 precision",
+      "family_id": "lfm25-1.2b-instruct",
+      "family_name": "LFM2.5 1.2B Instruct",
+      "family_desc": "Liquid Foundation Model 2.5 Instruct — 1.2B-parameter text model from LiquidAI. Ultra-compact and fast, fits in <2 GB VRAM — ideal for constrained devices.",
+      "tags": [
+        "chat",
+        "small"
+      ],
+      "is_mmproj": false,
+      "recommended": false,
+      "advanced": true,
+      "params_b": 1.2,
+      "max_context_length": 131072
+    },
+    {
       "repo": "unsloth/MiniMax-M2.5-GGUF",
       "filename": "MiniMax-M2.5-UD-TQ1_0.gguf",
       "quant": "TQ1_0",
