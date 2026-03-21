@@ -15,7 +15,7 @@ skill-data         = { path = "../skill-data" }
 serde              = { version = "1", features = ["derive"] }
 serde_json         = "1"
 dirs               = "6"
-keyring            = "3.6"
+keyring            = { version = "3.6", features = ["apple-native", "windows-native", "linux-native-sync-persistent", "crypto-rust"] }
 
 [features]
 default = []

@@ -25,18 +25,34 @@ const KEY_IDUN_API_TOKEN: &str = "idun_api_token";
 // ── Low-level helpers ─────────────────────────────────────────────────────────
 
 fn get_secret(key: &str) -> String {
-    Entry::new(SERVICE, key)
-        .and_then(|e| e.get_password())
-        .unwrap_or_default()
+    match Entry::new(SERVICE, key).and_then(|e| e.get_password()) {
+        Ok(v) => v,
+        Err(keyring::Error::NoEntry) => String::new(),
+        Err(e) => {
+            eprintln!("[keychain] failed to read {key}: {e}");
+            String::new()
+        }
+    }
 }
 
 fn set_secret(key: &str, value: &str) {
-    let Ok(entry) = Entry::new(SERVICE, key) else { return };
+    let entry = match Entry::new(SERVICE, key) {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("[keychain] failed to create entry for {key}: {e}");
+            return;
+        }
+    };
     if value.is_empty() {
         // Remove the entry when the value is cleared.
-        let _ = entry.delete_credential();
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(e) => eprintln!("[keychain] failed to delete {key}: {e}"),
+        }
     } else {
-        let _ = entry.set_password(value);
+        if let Err(e) = entry.set_password(value) {
+            eprintln!("[keychain] failed to store {key}: {e}");
+        }
     }
 }
 
