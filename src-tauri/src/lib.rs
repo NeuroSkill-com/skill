@@ -125,7 +125,7 @@ mod settings;
 pub(crate) use settings::{
     CalibrationAction, CalibrationProfile, CalibrationConfig, new_profile_id,
     load_umap_config, load_settings,
-    default_skill_dir, save_secrets_from_settings,
+    default_skill_dir,
 };
 
 

@@ -8,6 +8,37 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.52] — 2026-03-21
+
+### Features
+
+- **System keychain for secrets**: API tokens and device credentials (`api_token`, Emotiv client ID/secret, IDUN API token) are now stored in the OS credential store (macOS Keychain, Linux Secret Service, Windows Credential Manager) instead of plaintext in `settings.json`. Secrets survive app reinstalls and build updates. Existing plaintext values are automatically migrated to the keychain on first launch and stripped from the JSON file.
+
+- **Skills sync on launch**: Added a "Sync on launch" toggle in the Skills auto-refresh settings. When enabled, the app forces a community skills sync every time it starts, regardless of the periodic refresh interval. The periodic schedule continues to run normally afterwards.
+
+- **Flamegraph profiling script**: Added `npm run tauri:flamegraph` to profile the Tauri app with `flamegraph` and produce an interactive SVG. Works on Linux (perf), macOS (dtrace), and Windows (dtrace/xperf). Supports optional duration argument (e.g. `npm run tauri:flamegraph -- 60`) and `--release` flag (default: dev profile to match `tauri dev`).
+
+### Performance
+
+- **Session listing 10x faster**: Replaced `serde_json::Value` (BTreeMap-backed) with a typed `SessionJsonMeta` struct for parsing session JSON sidecars, eliminating expensive BTreeMap construction and recursive drop overhead.
+- **Metrics timestamp lookup O(1) instead of O(n)**: `read_metrics_csv_time_range` now reads only the first and last 4 KB of the file (via seek) instead of parsing every CSV record. For a 100 MB metrics file this reduces I/O from ~100 MB to ~8 KB.
+- **Skip redundant timestamp patching**: `patch_session_timestamps` now skips sessions that already have valid start/end timestamps from their JSON sidecar, avoiding unnecessary metrics file reads on every session listing.
+- **ZUNA encoder loads ~60% faster**: Encoder-only weight filter skips all decoder tensors during deserialization (halves bf16-to-f32 conversion work and memory). Weight data is moved instead of cloned via new `WeightMap::take()`. HashMap pre-sized from safetensors tensor count.
+- **LUNA encoder loads faster**: Updated luna-rs to 0.0.3 with the same zero-copy weight loading, encoder-only filter, and HashMap pre-sizing optimizations.
+
+### Bugfixes
+
+- **Flamegraph permission errors on macOS**: Separated build (normal user) from profiling (`sudo flamegraph`) so dtrace runs as root and owns its trace files. Fixes "Trace file already exists" (exit 42) and "Permission denied" errors caused by root-owned artifacts from previous runs.
+- **Flamegraph builds dev profile by default**: Now matches `tauri dev` behavior. Pass `--release` explicitly for optimized profiling.
+
+- **Flamegraph script launching stale binaries**: Fixed `tauri:flamegraph` profiling old binaries instead of freshly-built ones. Added `-p skill` to target only the skill package, moved build cwd to workspace root, added sccache/mold detection to match `tauri-build.js` environment (prevents fingerprint mismatches), made `forceRemove` fail hard instead of silently continuing, and added post-build mtime verification to catch stale binaries before profiling.
+
+- **Skills sync discovers all community skills**: The skill discovery algorithm stopped recursing into subdirectories when the repository root contained a valid `SKILL.md` with a `description` in frontmatter, causing only one skill (the index) to be loaded. Added support for an `index: true` frontmatter flag that marks a `SKILL.md` as an index file — the skill is loaded but the scanner continues recursing into child directories. The community skills repo root `SKILL.md` now uses this flag. Also fixed Phase 2 to skip re-processing `SKILL.md` files already handled in Phase 1.
+
+### Build
+
+- **Flamegraph script: full clean + WebView cache purge + user directory fixes**: `npm run tauri:flamegraph` now performs a complete clean before profiling: `cargo clean`, SvelteKit/Vite cache removal (`.svelte-kit`, `node_modules/.vite`, `build`), and — critically — **WebKitGTK/WebKit per-app cache clearing** (`~/.local/share/com.neuroskill.skill/` on Linux, `~/Library/WebKit/` and `~/Library/Caches/` on macOS). The stale WebView cache was causing the profiled binary to show old HTML/CSS and the wrong icon even after a fresh build. The sudo `--preserve-env` list is also expanded to include `CARGO_HOME`, `RUSTUP_HOME`, `DISPLAY`, `WAYLAND_DISPLAY`, `DBUS_SESSION_BUS_ADDRESS`, `XDG_RUNTIME_DIR`, and `LOGNAME`, ensuring the profiled app uses current-user directories instead of root's.
+
 ## [0.0.51] — 2026-03-21
 
 ### Features
