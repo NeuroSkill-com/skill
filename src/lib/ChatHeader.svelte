@@ -1,11 +1,9 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
-<!-- Chat top bar — sidebar toggle, model picker, tools badge, EEG badge, server controls, settings. -->
+<!-- Chat top bar — sidebar toggle, tools badge, EEG badge, server controls, settings. -->
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { t } from "$lib/i18n/index.svelte";
   import type { ServerStatus, BandSnapshot } from "$lib/chat-types";
-  import type { LlmCatalog, LlmModelEntry } from "$lib/llm-helpers";
 
   interface Props {
     sidebarOpen: boolean;
@@ -56,90 +54,7 @@
     onToggleEeg,
     onToggleContextBreakdown,
   }: Props = $props();
-
-  // ── Model picker state ─────────────────────────────────────────────────────
-  let pickerOpen = $state(false);
-  let downloadedModels = $state<LlmModelEntry[]>([]);
-  let activeFilename = $state("");
-  let switching = $state(false);
-  let pickerEl = $state<HTMLDivElement | null>(null);
-
-  /** Pretty-print a model filename for display. */
-  function prettyName(filename: string): string {
-    return filename
-      .replace(/\.gguf$/i, "")
-      .replace(/-(\d{5})-of-\d{5}$/, "");  // strip shard suffix
-  }
-
-  /** Short display label: family name + quant if available, else prettified filename. */
-  function displayLabel(entry: LlmModelEntry): string {
-    if (entry.family_name) return `${entry.family_name} (${entry.quant})`;
-    return prettyName(entry.filename);
-  }
-
-  async function openPicker() {
-    if (switching) return;
-    try {
-      const catalog = await invoke<LlmCatalog>("get_llm_catalog");
-      downloadedModels = catalog.entries.filter(
-        (e) => e.state === "downloaded" && !e.is_mmproj,
-      );
-      activeFilename = catalog.active_model;
-    } catch (e) {
-      console.warn("[chat] get_llm_catalog failed:", e);
-      downloadedModels = [];
-    }
-    if (downloadedModels.length === 0) return;
-    pickerOpen = true;
-  }
-
-  function closePicker() {
-    pickerOpen = false;
-  }
-
-  async function selectModel(filename: string) {
-    if (filename === activeFilename || switching) return;
-    switching = true;
-    pickerOpen = false;
-    try {
-      await invoke("switch_llm_model", { filename });
-    } catch (e) {
-      console.warn("[chat] switch_llm_model failed:", e);
-    } finally {
-      switching = false;
-    }
-  }
-
-  /** Close picker on outside click. */
-  function onWindowClick(e: MouseEvent) {
-    if (pickerOpen && pickerEl && !pickerEl.contains(e.target as Node)) {
-      closePicker();
-    }
-  }
-
-  /** Derive the display name for the current model. */
-  const currentDisplayName = $derived.by(() => {
-    if (!modelName) return "";
-    return prettyName(modelName);
-  });
-
-  /** Group downloaded models by family for the picker dropdown. */
-  const groupedModels = $derived.by(() => {
-    const groups: { family: string; entries: LlmModelEntry[] }[] = [];
-    const map = new Map<string, LlmModelEntry[]>();
-    for (const e of downloadedModels) {
-      const key = e.family_name || e.family_id || "Other";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
-    }
-    for (const [family, entries] of map) {
-      groups.push({ family, entries });
-    }
-    return groups;
-  });
 </script>
-
-<svelte:window onclick={onWindowClick} />
 
 <header class="relative flex flex-nowrap items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]
                 bg-white dark:bg-[#0f0f18] shrink-0 overflow-hidden min-h-0"
@@ -160,75 +75,6 @@
       <line x1="3" y1="18" x2="21" y2="18"/>
     </svg>
   </button>
-
-  <!-- Model name / picker -->
-  <div class="relative min-w-0 shrink" bind:this={pickerEl}>
-    {#if modelName || switching}
-      <button
-        onclick={(e) => { e.stopPropagation(); pickerOpen ? closePicker() : openPicker(); }}
-        disabled={switching}
-        class="flex items-center gap-1 min-w-0 px-1.5 py-0.5 rounded-md transition-colors cursor-pointer
-               text-[0.65rem] font-medium truncate
-               {switching
-                 ? 'text-muted-foreground/50'
-                 : pickerOpen
-                   ? 'bg-primary/10 text-primary'
-                   : 'text-muted-foreground/70 hover:text-foreground hover:bg-muted/60'}">
-        <span class="truncate">
-          {#if switching}
-            {t("chat.status.loading")}
-          {:else}
-            {currentDisplayName}
-          {/if}
-        </span>
-        <!-- Chevron -->
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round"
-             class="w-2.5 h-2.5 shrink-0 opacity-50 transition-transform
-                    {pickerOpen ? 'rotate-180' : ''}">
-          <path d="M4 6l4 4 4-4"/>
-        </svg>
-      </button>
-
-      <!-- Dropdown -->
-      {#if pickerOpen && downloadedModels.length > 0}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <!-- svelte-ignore a11y_click_events_have_key_events -->
-        <div
-          class="absolute left-0 top-full mt-1 z-50 min-w-[220px] max-w-[340px] max-h-[360px]
-                 overflow-y-auto overscroll-contain rounded-lg border border-border
-                 dark:border-white/[0.08] bg-white dark:bg-[#161622] shadow-xl
-                 py-1 text-[0.7rem]"
-          onclick={(e) => e.stopPropagation()}>
-          {#each groupedModels as group}
-            {#if groupedModels.length > 1}
-              <div class="px-2.5 pt-1.5 pb-0.5 text-[0.55rem] font-semibold uppercase tracking-wider
-                          text-muted-foreground/50 select-none">
-                {group.family}
-              </div>
-            {/if}
-            {#each group.entries as entry}
-              {@const isActive = entry.filename === activeFilename}
-              <button
-                onclick={() => selectModel(entry.filename)}
-                class="w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors cursor-pointer
-                       {isActive
-                         ? 'bg-primary/10 text-primary font-semibold'
-                         : 'text-foreground/80 hover:bg-muted/70'}">
-                <!-- Active indicator dot -->
-                <span class="w-1.5 h-1.5 rounded-full shrink-0
-                             {isActive ? 'bg-primary' : 'bg-transparent'}"></span>
-                <span class="flex-1 min-w-0 truncate">{displayLabel(entry)}</span>
-                <span class="text-[0.55rem] text-muted-foreground/50 tabular-nums shrink-0">
-                  {entry.size_gb.toFixed(1)} GB
-                </span>
-              </button>
-            {/each}
-          {/each}
-        </div>
-      {/if}
-    {/if}
-  </div>
 
   <div class="flex-1 min-w-0" data-tauri-drag-region></div>
 

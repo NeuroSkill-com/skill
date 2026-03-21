@@ -17,6 +17,7 @@ the Free Software Foundation, version 3 only. -->
   import { chatTitlebarState } from "$lib/stores/titlebar.svelte";
   import { openLabel, openHistory, openHelp } from "$lib/navigation";
   import { isBtOff } from "$lib/stores/bt-status.svelte";
+  import type { LlmCatalog, LlmModelEntry } from "$lib/llm-helpers";
 
   // ── State ───────────────────────────────────────────────────────────────
   let osType: string | null = $state(null);
@@ -55,6 +56,62 @@ the Free Software Foundation, version 3 only. -->
   async function toggleMaximizeWindow() { await getCurrentWindow().toggleMaximize(); }
   async function closeWindow()          { await getCurrentWindow().close(); }
 
+  // ── Model picker (chat window) ──────────────────────────────────────────
+  let modelPickerOpen = $state(false);
+  let downloadedModels = $state<LlmModelEntry[]>([]);
+  let activeFilename = $state("");
+  let modelSwitching = $state(false);
+  let pickerWrapEl = $state<HTMLDivElement | null>(null);
+
+  function prettyModelName(filename: string): string {
+    return filename.replace(/\.gguf$/i, "").replace(/-(\d{5})-of-\d{5}$/, "");
+  }
+  function modelDisplayLabel(entry: LlmModelEntry): string {
+    if (entry.family_name) return `${entry.family_name} (${entry.quant})`;
+    return prettyModelName(entry.filename);
+  }
+
+  async function openModelPicker() {
+    if (modelSwitching) return;
+    try {
+      const catalog = await invoke<LlmCatalog>("get_llm_catalog");
+      downloadedModels = catalog.entries.filter(e => e.state === "downloaded" && !e.is_mmproj);
+      activeFilename = catalog.active_model;
+    } catch (e) {
+      console.warn("[titlebar] get_llm_catalog failed:", e);
+      downloadedModels = [];
+    }
+    if (downloadedModels.length === 0) return;
+    modelPickerOpen = true;
+  }
+
+  function closeModelPicker() { modelPickerOpen = false; }
+
+  async function switchToModel(filename: string) {
+    if (filename === activeFilename || modelSwitching) return;
+    modelSwitching = true;
+    modelPickerOpen = false;
+    try { await invoke("switch_llm_model", { filename }); }
+    catch (e) { console.warn("[titlebar] switch_llm_model failed:", e); }
+    finally { modelSwitching = false; }
+  }
+
+  function onPickerOutsideClick(e: MouseEvent) {
+    if (modelPickerOpen && pickerWrapEl && !pickerWrapEl.contains(e.target as Node)) {
+      closeModelPicker();
+    }
+  }
+
+  const pickerGroups = $derived.by(() => {
+    const map = new Map<string, LlmModelEntry[]>();
+    for (const e of downloadedModels) {
+      const key = e.family_name || e.family_id || "Other";
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(e);
+    }
+    return [...map.entries()].map(([family, entries]) => ({ family, entries }));
+  });
+
 
   // ── Lifecycle ───────────────────────────────────────────────────────────
   $effect(() => {
@@ -89,6 +146,8 @@ the Free Software Foundation, version 3 only. -->
 
   onDestroy(() => { titleObserver?.disconnect(); titleObserver = null; });
 </script>
+
+<svelte:window onclick={onPickerOutsideClick} />
 
 <!-- ─── Reusable SVG icons ─────────────────────────────────────────────── -->
 {#snippet iconChevronLeft()}
@@ -190,22 +249,55 @@ the Free Software Foundation, version 3 only. -->
       <span class="help-license-badge" title="GNU General Public License v3.0">{t("settings.license")}</span>
     </div>
   {:else if isChatWindow}
-    <div class="chat-window-head" data-tauri-drag-region>
+    <div class="chat-window-head" data-tauri-drag-region bind:this={pickerWrapEl}>
       <span class="chat-status-dot
         {chatTitlebarState.status === 'running'  ? 'chat-status-running'
         : chatTitlebarState.status === 'loading' ? 'chat-status-loading'
         :                                          'chat-status-stopped'}"></span>
-      <span class="chat-model-label" data-tauri-drag-region>
-        {#if chatTitlebarState.status === 'running' && chatTitlebarState.modelName}
-          {chatTitlebarState.modelName}
-        {:else if chatTitlebarState.status === 'loading'}
-          {t("chat.status.loading")}
-        {:else if chatTitlebarState.status === 'running'}
-          {t("chat.status.running")}
-        {:else}
-          {t("chat.status.stopped")}
-        {/if}
-      </span>
+      {#if chatTitlebarState.status === 'running' && chatTitlebarState.modelName}
+        <button class="chat-model-picker-btn"
+                onclick={(e) => { e.stopPropagation(); modelPickerOpen ? closeModelPicker() : openModelPicker(); }}
+                disabled={modelSwitching}>
+          <span class="chat-model-picker-text">
+            {modelSwitching ? t("chat.status.loading") : prettyModelName(chatTitlebarState.modelName)}
+          </span>
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"
+               class="chat-model-chevron {modelPickerOpen ? 'chat-model-chevron-open' : ''}">
+            <path d="M4 6l4 4 4-4"/>
+          </svg>
+        </button>
+      {:else}
+        <span class="chat-model-label" data-tauri-drag-region>
+          {#if chatTitlebarState.status === 'loading'}
+            {t("chat.status.loading")}
+          {:else if chatTitlebarState.status === 'running'}
+            {t("chat.status.running")}
+          {:else}
+            {t("chat.status.stopped")}
+          {/if}
+        </span>
+      {/if}
+
+      <!-- Model picker dropdown -->
+      {#if modelPickerOpen && downloadedModels.length > 0}
+        <div class="chat-model-dropdown">
+          {#each pickerGroups as group}
+            {#if pickerGroups.length > 1}
+              <div class="chat-model-group-label">{group.family}</div>
+            {/if}
+            {#each group.entries as entry}
+              {@const isActive = entry.filename === activeFilename}
+              <button class="chat-model-item {isActive ? 'chat-model-item-active' : ''}"
+                      onclick={() => switchToModel(entry.filename)}>
+                <span class="chat-model-dot {isActive ? 'chat-model-dot-active' : ''}"></span>
+                <span class="chat-model-item-name">{modelDisplayLabel(entry)}</span>
+                <span class="chat-model-item-size">{entry.size_gb.toFixed(1)} GB</span>
+              </button>
+            {/each}
+          {/each}
+        </div>
+      {/if}
     </div>
   {:else}
     <div class="titlebar-title" data-tauri-drag-region>
@@ -399,7 +491,7 @@ the Free Software Foundation, version 3 only. -->
     display: flex; align-items: center; justify-content: center; gap: 5px;
     max-width: min(400px, calc(100vw - 200px));
     min-width: 0; padding: 0 10px; height: 100%;
-    overflow: hidden; pointer-events: none; z-index: 1;
+    overflow: visible; pointer-events: none; z-index: 1;
   }
   .chat-status-dot {
     width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
@@ -412,6 +504,81 @@ the Free Software Foundation, version 3 only. -->
     color: var(--color-text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     user-select: none;
+  }
+
+  /* ── Model picker button ─────────────────────────────────────────────── */
+  .chat-model-picker-btn {
+    display: flex; align-items: center; gap: 3px;
+    padding: 0 6px; height: 20px; border-radius: 4px;
+    background: transparent; border: none;
+    color: var(--color-text); cursor: pointer;
+    transition: background-color 0.15s;
+    pointer-events: auto; min-width: 0; max-width: 100%;
+    width: auto !important;
+  }
+  .chat-model-picker-btn:hover { background: color-mix(in oklab, var(--color-text) 10%, transparent); }
+  .chat-model-picker-btn:disabled { opacity: 0.5; cursor: default; }
+  .chat-model-picker-text {
+    font-size: 0.66rem; font-weight: 600; letter-spacing: 0.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    user-select: none;
+  }
+  .chat-model-chevron {
+    width: 8px; height: 8px; flex-shrink: 0;
+    opacity: 0.45; transition: transform 0.15s ease;
+  }
+  .chat-model-chevron-open { transform: rotate(180deg); }
+
+  /* ── Model picker dropdown ───────────────────────────────────────────── */
+  .chat-model-dropdown {
+    position: absolute;
+    left: 50%; top: 100%; transform: translateX(-50%);
+    margin-top: 4px;
+    min-width: 220px; max-width: 340px; max-height: 360px;
+    overflow-y: auto; overscroll-behavior: contain;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-surface);
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18), 0 2px 8px rgba(0, 0, 0, 0.08);
+    padding: 4px 0;
+    z-index: 9999;
+    pointer-events: auto;
+  }
+  .chat-model-group-label {
+    padding: 6px 10px 2px;
+    font-size: 0.5rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    color: color-mix(in oklab, var(--color-text) 40%, transparent);
+    user-select: none;
+  }
+  .chat-model-item {
+    display: flex; align-items: center; gap: 6px;
+    width: 100%; padding: 5px 10px;
+    border: none; background: transparent;
+    color: color-mix(in oklab, var(--color-text) 80%, transparent);
+    font-size: 0.64rem; text-align: left;
+    cursor: pointer; transition: background 0.12s;
+    height: auto !important;
+  }
+  .chat-model-item:hover { background: color-mix(in oklab, var(--color-text) 8%, transparent); }
+  .chat-model-item-active {
+    color: var(--color-primary);
+    font-weight: 600;
+    background: color-mix(in oklab, var(--color-primary) 10%, transparent);
+  }
+  .chat-model-dot {
+    width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+    background: transparent;
+  }
+  .chat-model-dot-active { background: var(--color-primary); }
+  .chat-model-item-name {
+    flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .chat-model-item-size {
+    font-size: 0.52rem; flex-shrink: 0;
+    color: color-mix(in oklab, var(--color-text) 40%, transparent);
+    font-variant-numeric: tabular-nums;
   }
 
   /* ── Search window ───────────────────────────────────────────────────── */
