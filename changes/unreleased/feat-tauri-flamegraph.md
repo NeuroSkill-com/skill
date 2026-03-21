@@ -4,5 +4,6 @@
 
 ### Bugfixes
 
-- **Flamegraph stale trace file**: Auto-remove leftover `cargo-flamegraph.trace` files from previous runs that caused exit code 42 ("Trace file already exists").
+- **Flamegraph stale trace file**: Use `sudo rm` fallback to clean root-owned `cargo-flamegraph.trace` left by macOS dtrace from previous runs (exit code 42).
 - **Flamegraph missing symbols**: Automatically set `CARGO_PROFILE_RELEASE_DEBUG=true` so release flamegraphs contain resolved function names instead of hex addresses.
+- **Flamegraph sudo timing**: Warm the sudo credential cache before compilation on macOS so the password prompt appears upfront, not after a 5-minute build.

@@ -125,7 +125,15 @@ if (isLinux) {
 } else if (isMac) {
   // dtrace is built into macOS; cargo flamegraph uses it automatically.
   // It requires root/sudo — cargo flamegraph handles this via --root.
-  console.log("→ macOS: cargo flamegraph will use dtrace (may prompt for sudo)");
+  // Warm the sudo credential cache now so the password prompt happens before
+  // the long compilation, not awkwardly after it.
+  console.log("→ macOS: cargo flamegraph will use dtrace (requires sudo)");
+  try {
+    execSync("sudo -v", { stdio: "inherit" });
+  } catch {
+    console.error("✖ sudo authentication failed — dtrace requires root on macOS.");
+    process.exit(1);
+  }
 } else if (isWin) {
   // On Windows, cargo flamegraph can use dtrace (Windows 10+) or xperf.
   const hasDtrace = commandExists("dtrace");
@@ -230,17 +238,30 @@ try {
 // ── Clean stale trace files ──────────────────────────────────────────────────
 // cargo-flamegraph refuses to overwrite an existing trace file and exits with
 // code 42 ("Trace file already exists … Specify append-run option …").
-// Remove leftover traces from previous runs so the command succeeds cleanly.
+//
+// On macOS the trace file is created by `sudo dtrace` and is root-owned, so a
+// normal unlinkSync fails silently.  We use `sudo rm -f` as a fallback.
+
+function forceRemove(filePath) {
+  if (!existsSync(filePath)) return;
+  console.log(`→ Removing stale file: ${filePath}`);
+  try {
+    unlinkSync(filePath);
+  } catch {
+    // Likely root-owned (macOS dtrace creates as root). Use sudo rm.
+    try {
+      execSync(`sudo rm -f ${JSON.stringify(filePath)}`, { stdio: "inherit" });
+    } catch { /* best effort */ }
+  }
+}
 
 for (const stale of [
   resolve(root, "src-tauri", "cargo-flamegraph.trace"),
   resolve(root, "src-tauri", "flamegraph.svg"),
   resolve(root, "cargo-flamegraph.trace"),
+  resolve(root, "flamegraph.svg"),
 ]) {
-  if (existsSync(stale)) {
-    console.log(`→ Removing stale trace file: ${stale}`);
-    try { unlinkSync(stale); } catch { /* ignore */ }
-  }
+  forceRemove(stale);
 }
 
 // ── Enable debug symbols for useful flamegraphs ─────────────────────────────
