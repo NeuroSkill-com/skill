@@ -1097,7 +1097,7 @@ pub fn check_bash_safety(command: &str) -> Option<String> {
                 || lower[..abs_pos]
                     .chars()
                     .next_back()
-                    .map_or(true, |c| BOUNDARY_CHARS.contains(&c));
+                    .is_none_or(|c| BOUNDARY_CHARS.contains(&c));
             if at_boundary {
                 return Some(format!("Command contains `{}`", pat.trim()));
             }
