@@ -37,7 +37,7 @@ use skill_constants::{HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE, hnsw_index_file
 pub mod graph;
 pub use graph::{
     dot_esc, dot_node_label, dot_edge_label, generate_dot,
-    SvgLabels, generate_svg,
+    SvgLabels, generate_svg, generate_svg_3d,
 };
 
 // Re-export shared utilities so downstream crates keep compiling.
@@ -779,7 +779,7 @@ pub fn find_session_for_timestamp_in(
 pub struct InteractiveGraphNode {
     /// Stable identifier used for edge references.
     pub id:             String,
-    /// Node layer: "query" | "text_label" | "eeg_point" | "found_label"
+    /// Node layer: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot"
     pub kind:           String,
     /// Human-readable label text (query string / label annotation).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -794,12 +794,32 @@ pub struct InteractiveGraphNode {
     /// ID of the parent node that this node was discovered from.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id:      Option<String>,
-    /// 2-D PCA projection of the node's text embedding (found_label only).
-    /// Both axes are normalised to [-1, 1].  Similar labels are close together.
+    /// 2-D / 3-D PCA projection of the node's text embedding.
+    /// All axes are normalised to [-1, 1].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proj_x:         Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proj_y:         Option<f32>,
+    /// Third PCA axis for 3-D projection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proj_z:         Option<f32>,
+
+    // ── Screenshot-specific fields ────────────────────────────────────────
+    /// Relative path to the screenshot image file (screenshot nodes only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename:       Option<String>,
+    /// Application name at capture time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_name:       Option<String>,
+    /// Window title at capture time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window_title:   Option<String>,
+    /// OCR-extracted text from the screenshot.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ocr_text:       Option<String>,
+    /// Cosine similarity between the query text and the OCR text embedding.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ocr_similarity: Option<f32>,
 }
 
 /// A directed edge in the interactive search graph.
@@ -824,6 +844,8 @@ pub struct InteractiveSearchResult {
     pub svg: String,
     /// Pre-rendered SVG – traditional column-per-EEG-parent layout (always present).
     pub svg_col: String,
+    /// Pre-rendered SVG – 3-D perspective projection of all nodes including screenshots.
+    pub svg_3d: String,
 }
 
 pub fn get_labels_near(labels_db: &Path, ts_unix: u64, window_secs: u64) -> Vec<LabelEntry> {
@@ -940,6 +962,99 @@ pub fn pca_2d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32)> {
     coords.iter().map(|&(x, y)| (
         (x - x_min) / xr * 2.0 - 1.0,
         (y - y_min) / yr * 2.0 - 1.0,
+    )).collect()
+}
+
+/// 3-component PCA via covariance-free power iteration.
+///
+/// Returns one `(x, y, z)` per input, normalised so every axis spans [-1, 1].
+pub fn pca_3d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32, f32)> {
+    let n = embeddings.len();
+    if n == 0 { return vec![]; }
+    if n == 1 { return vec![(0.0, 0.0, 0.0)]; }
+    let d = embeddings[0].len();
+    if d < 3  { return vec![(0.0, 0.0, 0.0); n]; }
+
+    let inv_n = 1.0 / n as f32;
+    let mut mean = vec![0f32; d];
+    for emb in embeddings { for (j, &v) in emb.iter().enumerate() { mean[j] += v * inv_n; } }
+    let centered: Vec<Vec<f32>> = embeddings.iter()
+        .map(|emb| emb.iter().zip(&mean).map(|(&v, &m)| v - m).collect())
+        .collect();
+
+    fn dot(a: &[f32], b: &[f32]) -> f32 { a.iter().zip(b).map(|(&x, &y)| x * y).sum() }
+
+    fn cov_mul(c: &[Vec<f32>], v: &[f32]) -> Vec<f32> {
+        let xv: Vec<f32> = c.iter().map(|row| dot(row, v)).collect();
+        let mut res = vec![0f32; v.len()];
+        for (row, &coeff) in c.iter().zip(&xv) {
+            for (r, &x) in res.iter_mut().zip(row) { *r += x * coeff; }
+        }
+        let inv = 1.0 / c.len() as f32;
+        res.iter_mut().for_each(|x| *x *= inv);
+        res
+    }
+
+    fn power_iter(c: &[Vec<f32>], mut v: Vec<f32>) -> Vec<f32> {
+        for _ in 0..25 {
+            v = cov_mul(c, &v);
+            let norm = dot(&v, &v).sqrt().max(1e-12);
+            v.iter_mut().for_each(|x| *x /= norm);
+        }
+        v
+    }
+
+    fn deflate(centered: &[Vec<f32>], pc: &[f32]) -> Vec<Vec<f32>> {
+        centered.iter().map(|v| {
+            let p = dot(v, pc);
+            v.iter().zip(pc).map(|(&vi, &pi)| vi - p * pi).collect()
+        }).collect()
+    }
+
+    fn init_vec(centered: &[Vec<f32>], d: usize) -> Vec<f32> {
+        let norm = dot(&centered[0], &centered[0]).sqrt().max(1e-12);
+        centered[0].iter().map(|&v| v / norm).collect::<Vec<_>>()
+            .into_iter().chain(std::iter::repeat(0.0)).take(d).collect()
+    }
+
+    let pc1 = power_iter(&centered, init_vec(&centered, d));
+    let deflated1 = deflate(&centered, &pc1);
+
+    let norm2 = dot(&deflated1[0], &deflated1[0]).sqrt();
+    let init2 = if norm2 > 1e-12 {
+        deflated1[0].iter().map(|&v| v / norm2).collect::<Vec<_>>()
+    } else {
+        let mut perp = vec![0f32; d]; perp[1] = 1.0; perp
+    };
+    let pc2 = power_iter(&deflated1, init2);
+    let deflated2 = deflate(&deflated1, &pc2);
+
+    let norm3 = dot(&deflated2[0], &deflated2[0]).sqrt();
+    let init3 = if norm3 > 1e-12 {
+        deflated2[0].iter().map(|&v| v / norm3).collect::<Vec<_>>()
+    } else {
+        let mut perp = vec![0f32; d]; perp[2] = 1.0; perp
+    };
+    let pc3 = power_iter(&deflated2, init3);
+
+    let coords: Vec<(f32, f32, f32)> = centered.iter()
+        .map(|v| (dot(v, &pc1), dot(v, &pc2), dot(v, &pc3)))
+        .collect();
+
+    let x_min = coords.iter().map(|c| c.0).fold(f32::MAX, f32::min);
+    let x_max = coords.iter().map(|c| c.0).fold(f32::MIN, f32::max);
+    let y_min = coords.iter().map(|c| c.1).fold(f32::MAX, f32::min);
+    let y_max = coords.iter().map(|c| c.1).fold(f32::MIN, f32::max);
+    let z_min = coords.iter().map(|c| c.2).fold(f32::MAX, f32::min);
+    let z_max = coords.iter().map(|c| c.2).fold(f32::MIN, f32::max);
+    let xr = (x_max - x_min).max(1e-6);
+    let yr = (y_max - y_min).max(1e-6);
+    let zr = (z_max - z_min).max(1e-6);
+
+    coords.iter().map(|&(x, y, z)| (
+        (x - x_min) / xr * 2.0 - 1.0,
+        (y - y_min) / yr * 2.0 - 1.0,
+        (z - z_min) / zr * 2.0 - 1.0,
     )).collect()
 }
 

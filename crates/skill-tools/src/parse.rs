@@ -116,6 +116,53 @@ fn coerce_value(value: &Value, schema: &Value) -> Value {
 
         if let Some(obj) = value.as_object() {
             let props = schema_obj.get("properties").and_then(|p| p.as_object());
+            let no_additional = schema_obj.get("additionalProperties")
+                .and_then(|v| v.as_bool()) == Some(false);
+
+            // When the schema forbids additional properties and has an `args`
+            // property of type object, collect any unknown top-level keys
+            // into `args`.  This handles LLMs that flatten command arguments
+            // to the top level instead of nesting them under `args`.
+            let has_args_prop = props
+                .map(|p| p.contains_key("args"))
+                .unwrap_or(false);
+
+            if no_additional && has_args_prop {
+                let mut out = serde_json::Map::new();
+                let mut extra = serde_json::Map::new();
+                let existing_args = obj.get("args")
+                    .and_then(|v| v.as_object())
+                    .cloned()
+                    .unwrap_or_default();
+
+                for (k, v) in obj {
+                    if k == "args" {
+                        // Will be merged below.
+                        continue;
+                    }
+                    if props.map(|p| p.contains_key(k)).unwrap_or(false) {
+                        let prop_schema = props.and_then(|p| p.get(k)).unwrap();
+                        out.insert(k.clone(), coerce_value(v, prop_schema));
+                    } else {
+                        extra.insert(k.clone(), v.clone());
+                    }
+                }
+
+                // Merge: existing args take precedence, then extras.
+                if !extra.is_empty() || !existing_args.is_empty() {
+                    let mut merged = extra;
+                    for (k, v) in existing_args {
+                        merged.insert(k, v);
+                    }
+                    let args_schema = props.and_then(|p| p.get("args"))
+                        .cloned()
+                        .unwrap_or(Value::Bool(true));
+                    out.insert("args".to_string(), coerce_value(&Value::Object(merged), &args_schema));
+                }
+
+                return Value::Object(out);
+            }
+
             let mut out = serde_json::Map::new();
             for (k, v) in obj {
                 if let Some(prop_schema) = props.and_then(|p| p.get(k)) {
@@ -1945,6 +1992,63 @@ Your device is connected with 89% battery."#;
         assert_eq!(result["query"], Value::String("test".into()));
         assert_eq!(result["render"], Value::Bool(true));
         assert_eq!(result["render_count"], serde_json::json!(3));
+    }
+
+    fn make_skill_tool() -> Tool {
+        crate::defs::skill_api_tool()
+    }
+
+    #[test]
+    fn coerce_skill_flattened_args_into_args_object() {
+        // LLM sends {"command":"search_screenshots","query":"today"} instead of
+        // {"command":"search_screenshots","args":{"query":"today"}}
+        let tool = make_skill_tool();
+        let args = serde_json::json!({"command": "search_screenshots", "query": "today"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["command"], Value::String("search_screenshots".into()));
+        let inner_args = result.get("args").expect("args must be present");
+        assert_eq!(inner_args["query"], Value::String("today".into()));
+    }
+
+    #[test]
+    fn coerce_skill_flattened_args_multiple_keys() {
+        let tool = make_skill_tool();
+        let args = serde_json::json!({"command": "search_screenshots", "query": "browser", "k": 10, "mode": "substring"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["command"], Value::String("search_screenshots".into()));
+        let inner_args = result.get("args").unwrap();
+        assert_eq!(inner_args["query"], Value::String("browser".into()));
+        assert_eq!(inner_args["k"], serde_json::json!(10));
+        assert_eq!(inner_args["mode"], Value::String("substring".into()));
+    }
+
+    #[test]
+    fn coerce_skill_already_nested_args_unchanged() {
+        let tool = make_skill_tool();
+        let args = serde_json::json!({"command": "search_screenshots", "args": {"query": "today", "k": 5}});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["command"], Value::String("search_screenshots".into()));
+        let inner_args = result.get("args").unwrap();
+        assert_eq!(inner_args["query"], Value::String("today".into()));
+        assert_eq!(inner_args["k"], serde_json::json!(5));
+    }
+
+    #[test]
+    fn coerce_skill_no_extra_args() {
+        let tool = make_skill_tool();
+        let args = serde_json::json!({"command": "status"});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        assert_eq!(result["command"], Value::String("status".into()));
+    }
+
+    #[test]
+    fn coerce_skill_existing_args_take_precedence() {
+        // If both flattened and nested exist, nested args take precedence
+        let tool = make_skill_tool();
+        let args = serde_json::json!({"command": "search_labels", "query": "flat_query", "args": {"query": "nested_query"}});
+        let result = validate_tool_arguments(&tool, &args).unwrap();
+        let inner_args = result.get("args").unwrap();
+        assert_eq!(inner_args["query"], Value::String("nested_query".into()));
     }
 
     #[test]
