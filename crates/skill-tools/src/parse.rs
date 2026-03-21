@@ -655,6 +655,10 @@ pub fn extract_tool_calls(content: &str) -> Vec<ToolCall> {
         }
     }
 
+    // Parse Llama-family XML tool-call format:
+    //   <function=name><parameter=key>value</parameter></function>
+    extract_llama_xml_tool_calls(content, &mut calls, &mut dedup);
+
     extract_tool_calls_from_json_text(content, &mut calls, &mut dedup);
 
     // Post-process: if any bash call has empty arguments, try to fill from
@@ -732,6 +736,91 @@ fn extract_bash_fence_command(content: &str) -> Option<String> {
         cursor = body_end + 3;
     }
     None
+}
+
+/// Parse Llama-family XML tool-call format:
+///
+/// ```text
+/// <function=tool_name><parameter=key>value</parameter></function>
+/// ```
+///
+/// Multiple `<parameter=…>…</parameter>` pairs may appear inside a single
+/// `<function=…>…</function>` block.  Parameter values are parsed as JSON when
+/// possible (numbers, booleans, objects, arrays) and fall back to strings.
+///
+/// Also handles the variant with a JSON body (no `<parameter>` tags):
+/// ```text
+/// <function=tool_name>{"key":"value"}</function>
+/// ```
+fn extract_llama_xml_tool_calls(
+    content: &str,
+    calls: &mut Vec<ToolCall>,
+    dedup: &mut HashSet<(String, String)>,
+) {
+    let mut remaining = content;
+
+    while let Some(fn_start) = remaining.find("<function=") {
+        let after_eq = &remaining[fn_start + "<function=".len()..];
+
+        // Extract function name: everything up to the next `>`
+        let Some(gt_pos) = after_eq.find('>') else { break; };
+        let name = after_eq[..gt_pos].trim().to_string();
+        let inner_start = &after_eq[gt_pos + 1..];
+
+        // Find the closing </function> tag
+        let Some(fn_end) = inner_start.find("</function>") else { break; };
+        let body = &inner_start[..fn_end];
+
+        // Try to extract <parameter=key>value</parameter> pairs
+        let mut params = serde_json::Map::new();
+        let mut param_remaining = body;
+        let mut found_params = false;
+
+        while let Some(p_start) = param_remaining.find("<parameter=") {
+            found_params = true;
+            let after_p_eq = &param_remaining[p_start + "<parameter=".len()..];
+            let Some(p_gt) = after_p_eq.find('>') else { break; };
+            let param_name = after_p_eq[..p_gt].trim().to_string();
+            let val_start = &after_p_eq[p_gt + 1..];
+
+            let Some(p_end) = val_start.find("</parameter>") else { break; };
+            let raw_value = val_start[..p_end].trim();
+
+            // Try to parse as JSON value (number, bool, object, array, null).
+            // Fall back to string.
+            let value: Value = serde_json::from_str(raw_value)
+                .unwrap_or_else(|_| Value::String(raw_value.to_string()));
+
+            params.insert(param_name, value);
+            param_remaining = &val_start[p_end + "</parameter>".len()..];
+        }
+
+        // If no <parameter> tags found, try parsing body as JSON directly
+        if !found_params {
+            let trimmed = body.trim();
+            if !trimmed.is_empty() {
+                if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
+                    let args = if v.is_object() {
+                        v.to_string()
+                    } else {
+                        "{}".to_string()
+                    };
+                    push_tool_call(calls, dedup, name.clone(), args);
+                    remaining = &inner_start[fn_end + "</function>".len()..];
+                    continue;
+                }
+            }
+        }
+
+        let args = if params.is_empty() {
+            "{}".to_string()
+        } else {
+            Value::Object(params).to_string()
+        };
+
+        push_tool_call(calls, dedup, name, args);
+        remaining = &inner_start[fn_end + "</function>".len()..];
+    }
 }
 
 fn push_tool_call(
@@ -1033,6 +1122,9 @@ pub fn strip_tool_call_blocks_preserve(content: &str) -> String {
     // Also strip trailing partial prefix of [/TOOL_CALL]
     strip_trailing_tag_prefix(&mut out, END);
 
+    // Strip Llama-family XML tool-call blocks: <function=name>…</function>
+    let out = strip_llama_xml_tool_call_blocks(&out);
+
     strip_json_tool_call_payloads_preserve(&out)
 }
 
@@ -1046,6 +1138,36 @@ fn strip_trailing_tag_prefix(out: &mut String, tag: &str) {
             return;
         }
     }
+}
+
+/// Strip Llama-family XML tool-call blocks (`<function=…>…</function>`) from
+/// content, preserving surrounding text.  Also strips trailing partial
+/// `<function=` prefixes for streaming.
+fn strip_llama_xml_tool_call_blocks(content: &str) -> String {
+    let mut out = String::new();
+    let mut cursor = 0;
+
+    while let Some(fn_start) = content[cursor..].find("<function=") {
+        out.push_str(&content[cursor..cursor + fn_start]);
+        let after_eq = cursor + fn_start + "<function=".len();
+        // Find the closing </function> tag
+        if let Some(fn_close) = content[after_eq..].find("</function>") {
+            cursor = after_eq + fn_close + "</function>".len();
+        } else {
+            // No closing tag — strip the rest (incomplete block during streaming)
+            cursor = content.len();
+            break;
+        }
+    }
+
+    if cursor < content.len() {
+        out.push_str(&content[cursor..]);
+    }
+
+    // Strip trailing partial `<function=` prefix during streaming
+    strip_trailing_tag_prefix(&mut out, "<function=");
+
+    out
 }
 
 fn strip_json_tool_call_payloads_preserve(content: &str) -> String {
@@ -1289,6 +1411,91 @@ fn looks_like_tool_call_json_prefix(s: &str) -> bool {
 
 pub fn strip_tool_call_blocks(content: &str) -> String {
     strip_tool_call_blocks_preserve(content).trim().to_string()
+}
+
+/// Detect whether the assistant output contains a garbled / malformed tool-call
+/// attempt that `extract_tool_calls` could not parse.
+///
+/// Returns `Some(raw_fragment)` with the offending text when a failed attempt
+/// is detected, or `None` when the output is clean (either no tool-call
+/// attempt or all calls parsed successfully).
+///
+/// This is used by the self-healing loop in the orchestrator: when a garbled
+/// call is detected, the orchestrator injects a corrective message asking the
+/// model to re-emit the call in the correct format.
+pub fn detect_garbled_tool_call(content: &str) -> Option<String> {
+    let parsed = extract_tool_calls(content);
+
+    // Heuristic markers that suggest the model *tried* to emit a tool call.
+    let has_start_tag       = content.contains(TOOL_CALL_START);
+    let has_function_xml    = content.contains("<function=");
+    let has_tool_call_json  = {
+        let lower = content.to_ascii_lowercase();
+        (lower.contains("\"name\"") || lower.contains("\"tool\""))
+            && (lower.contains("\"arguments\"") || lower.contains("\"parameters\""))
+    };
+
+    // If we successfully parsed at least one call, no garble.
+    if !parsed.is_empty() {
+        return None;
+    }
+
+    // No parsed calls but markers are present → garbled attempt.
+    if has_start_tag {
+        // Extract the raw [TOOL_CALL]…  block (possibly unclosed / malformed)
+        if let Some(s) = content.find(TOOL_CALL_START) {
+            let fragment: String = content[s..].chars().take(500).collect();
+            return Some(fragment);
+        }
+    }
+
+    if has_function_xml {
+        if let Some(s) = content.find("<function=") {
+            let fragment: String = content[s..].chars().take(500).collect();
+            return Some(fragment);
+        }
+    }
+
+    if has_tool_call_json {
+        // Look for a JSON-like blob that mentions tool-call keys but wasn't parseable.
+        for (start, end) in find_balanced_json_objects(content) {
+            let blob = &content[start..end];
+            let lower = blob.to_ascii_lowercase();
+            if (lower.contains("\"name\"") || lower.contains("\"tool\""))
+                && (lower.contains("\"arguments\"") || lower.contains("\"parameters\""))
+            {
+                let fragment: String = blob.chars().take(500).collect();
+                return Some(fragment);
+            }
+        }
+        // Also check unbalanced (incomplete) JSON
+        if let Some(pos) = content.find('{') {
+            let tail = &content[pos..];
+            let lower = tail.to_ascii_lowercase();
+            if (lower.contains("\"name\"") || lower.contains("\"tool\""))
+                && (lower.contains("\"argument") || lower.contains("\"parameter"))
+            {
+                let fragment: String = tail.chars().take(500).collect();
+                return Some(fragment);
+            }
+        }
+    }
+
+    None
+}
+
+/// Build a corrective user message for the self-healing loop.
+///
+/// Includes the raw garbled output so the model can see its mistake, plus
+/// instructions to re-emit in the correct format.
+pub fn build_self_healing_message(garbled_fragment: &str) -> String {
+    format!(
+        "Your previous tool call could not be parsed. Here is what you emitted:\n\n\
+         ```\n{garbled_fragment}\n```\n\n\
+         Please re-emit the tool call in the correct format:\n\
+         [TOOL_CALL]{{\"name\":\"<tool_name>\",\"arguments\":{{...}}}}[/TOOL_CALL]\n\n\
+         Make sure the JSON is valid and on a single line. Do NOT add any explanation — just emit the corrected tool call."
+    )
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -1838,6 +2045,127 @@ Your device is connected with 89% battery."#;
             "tool call should produce no visible output, got: {:?}",
             all_visible,
         );
+    }
+
+    // ── Llama XML format tests ────────────────────────────────────────────
+
+    #[test]
+    fn extract_llama_xml_single_tool() {
+        let msg = r#"<function=date><parameter=dummy>ignored</parameter></function>"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "date");
+    }
+
+    #[test]
+    fn extract_llama_xml_with_parameters() {
+        let msg = r#"I'll search for that.
+<function=web_search><parameter=query>rust programming</parameter><parameter=render>true</parameter></function>"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "web_search");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["query"], Value::String("rust programming".into()));
+        // "true" is parsed as JSON bool
+        assert_eq!(args["render"], Value::Bool(true));
+    }
+
+    #[test]
+    fn extract_llama_xml_json_body() {
+        let msg = r#"<function=bash>{"command":"ls -la"}</function>"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "bash");
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["command"].as_str().unwrap(), "ls -la");
+    }
+
+    #[test]
+    fn extract_llama_xml_multiple_calls() {
+        let msg = r#"<function=date></function>
+<function=location></function>"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].function.name, "date");
+        assert_eq!(calls[1].function.name, "location");
+    }
+
+    #[test]
+    fn extract_llama_xml_no_params() {
+        let msg = r#"<function=date></function>"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name, "date");
+        assert_eq!(calls[0].function.arguments, "{}");
+    }
+
+    #[test]
+    fn strip_llama_xml_blocks() {
+        let msg = r#"Let me check. <function=date></function> Done."#;
+        let stripped = strip_tool_call_blocks(msg);
+        assert!(!stripped.contains("<function="));
+        assert!(stripped.contains("Done."));
+    }
+
+    #[test]
+    fn strip_llama_xml_incomplete_streaming() {
+        let msg = r#"Checking... <function=date"#;
+        let stripped = strip_tool_call_blocks_preserve(msg);
+        assert!(!stripped.contains("<function="));
+        assert!(stripped.contains("Checking..."));
+    }
+
+    #[test]
+    fn extract_llama_xml_numeric_param() {
+        let msg = r#"<function=read_file><parameter=path>/etc/hosts</parameter><parameter=offset>10</parameter></function>"#;
+        let calls = extract_tool_calls(msg);
+        assert_eq!(calls.len(), 1);
+        let args: Value = serde_json::from_str(&calls[0].function.arguments).unwrap();
+        assert_eq!(args["path"], Value::String("/etc/hosts".into()));
+        assert_eq!(args["offset"], serde_json::json!(10));
+    }
+
+    // ── Self-healing tests ────────────────────────────────────────────────
+
+    #[test]
+    fn detect_garbled_tool_call_tag() {
+        let msg = r#"[TOOL_CALL]{"name":"date", "arguments": {[/TOOL_CALL]"#;
+        let garbled = detect_garbled_tool_call(msg);
+        assert!(garbled.is_some(), "should detect garbled [TOOL_CALL] block");
+    }
+
+    #[test]
+    fn detect_garbled_incomplete_json() {
+        let msg = r#"I'll use a tool: {"name":"bash","arguments":{"command":"ls"#;
+        let garbled = detect_garbled_tool_call(msg);
+        assert!(garbled.is_some(), "should detect incomplete JSON tool call");
+    }
+
+    #[test]
+    fn detect_garbled_xml_format() {
+        let msg = r#"<function=date><parameter=foo>bar"#;
+        let garbled = detect_garbled_tool_call(msg);
+        assert!(garbled.is_some(), "should detect garbled XML tool call");
+    }
+
+    #[test]
+    fn no_garble_on_clean_output() {
+        let msg = "The weather today is sunny.";
+        assert!(detect_garbled_tool_call(msg).is_none());
+    }
+
+    #[test]
+    fn no_garble_when_parsed_ok() {
+        let msg = r#"[TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_CALL]"#;
+        assert!(detect_garbled_tool_call(msg).is_none());
+    }
+
+    #[test]
+    fn self_healing_message_format() {
+        let msg = build_self_healing_message("[TOOL_CALL]{bad json");
+        assert!(msg.contains("[TOOL_CALL]{bad json"));
+        assert!(msg.contains("[TOOL_CALL]"));
+        assert!(msg.contains("re-emit"));
     }
 
     // ── Argument coercion tests ───────────────────────────────────────────

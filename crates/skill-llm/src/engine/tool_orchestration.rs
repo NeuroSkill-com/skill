@@ -179,6 +179,8 @@ where
     // never produces a text response.
     let mut last_tool_result: Option<String> = None;
     let mut dedup_nudge_count = 0u32;
+    let mut self_heal_count = 0u32;
+    const MAX_SELF_HEAL_ATTEMPTS: u32 = 2;
 
     for _ in 0..=max_rounds {
         // ── Context-aware history trimming ──────────────────────────────
@@ -205,6 +207,31 @@ where
         }).await?;
         let tool_calls = tools::extract_tool_calls(&assistant_text);
         if tool_calls.is_empty() {
+            // ── Self-healing: detect garbled tool-call attempts ──────────
+            // If the model tried to emit a tool call but it was malformed,
+            // inject a corrective message and let the loop retry.
+            if self_heal_count < MAX_SELF_HEAL_ATTEMPTS {
+                if let Some(garbled) = tools::detect_garbled_tool_call(&assistant_text) {
+                    self_heal_count += 1;
+                    log::info!(
+                        "[tool-orchestration] garbled tool call detected (attempt {}/{}), requesting re-emit",
+                        self_heal_count, MAX_SELF_HEAL_ATTEMPTS
+                    );
+
+                    // Push the failed assistant message so the model sees what it emitted.
+                    messages.push(json!({
+                        "role": "assistant",
+                        "content": assistant_text,
+                    }));
+                    // Inject a corrective user message.
+                    messages.push(json!({
+                        "role": "user",
+                        "content": tools::build_self_healing_message(&garbled),
+                    }));
+                    continue;
+                }
+            }
+
             let cleaned = tools::strip_tool_call_blocks(&assistant_text);
             // If the model returned empty text after we already have tool
             // results, surface the raw result as a fallback.

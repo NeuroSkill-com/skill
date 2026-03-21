@@ -23,7 +23,7 @@ const perm: Record<string, string> = {
   "perm.accessStep4":                 "Return here — the status will update automatically.",
   "perm.openAccessibilitySettings":   "Open Accessibility Settings",
   "perm.bluetooth":                   "Bluetooth",
-  "perm.bluetoothDesc":               "Bluetooth is used to connect to your BCI headset (Muse, OpenBCI Ganglion, etc.). On macOS, the system will prompt for Bluetooth access the first time the app scans. On Linux and Windows no separate permission is needed.",
+  "perm.bluetoothDesc":               "Bluetooth is used to connect to your BCI headset (Muse, MW75 Neuro, OpenBCI Ganglion, IDUN Guardian, etc.). On macOS, the system will prompt for Bluetooth access the first time the app scans. On Linux and Windows no separate permission is needed.",
   "perm.openBluetoothSettings":       "Open Bluetooth Settings",
   "perm.notifications":               "Notifications",
   "perm.notificationsDesc":           "Notifications are used to alert you when you reach your daily recording goal, and when a software update is available. On macOS and Windows, the OS will prompt for permission the first time a notification is sent.",

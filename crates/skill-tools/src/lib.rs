@@ -46,6 +46,7 @@ pub use parse::{
     inject_tools_into_system_prompt,
     extract_tool_calls,
     strip_tool_call_blocks, strip_tool_call_blocks_preserve,
+    detect_garbled_tool_call, build_self_healing_message,
 };
 pub use defs::{
     builtin_llm_tools, skill_api_tool, is_builtin_tool_enabled,

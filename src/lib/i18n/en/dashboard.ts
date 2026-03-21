@@ -104,7 +104,7 @@ const dashboard: Record<string, string> = {
   "dashboard.retryAttempt":         "Attempt #{n}",
   "dashboard.retryNow":             "Retry Now",
   "dashboard.noMuseNearbyTitle":   "No BCI device found nearby.",
-  "dashboard.noMuseNearbyHint1":   "Power on your BCI device (Muse or OpenBCI)",
+  "dashboard.noMuseNearbyHint1":   "Power on your BCI device",
   "dashboard.noMuseNearbyHint2":   "Keep it within 5 m",
   "dashboard.noMuseNearbyHint3":   "macOS: grant Bluetooth permission in\nSystem Settings → Privacy & Security → Bluetooth",
   "dashboard.bluetoothIsOff":       "Bluetooth is Off",

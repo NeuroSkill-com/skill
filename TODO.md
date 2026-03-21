@@ -6,6 +6,6 @@
 
 - [ ] record SNR too, so we can filter out by it later.
 
-- [ ] tool-call self-healing: re-prompt the model when it emits a garbled tool call that cannot be parsed, injecting a corrective message with the raw output and asking it to re-emit in the correct format (use the existing multi-round loop).
+- [x] tool-call self-healing: re-prompt the model when it emits a garbled tool call that cannot be parsed, injecting a corrective message with the raw output and asking it to re-emit in the correct format (use the existing multi-round loop).
 
-- [ ] parse `<function=name><parameter=key>value</parameter></function>` XML tool-call format (Llama-family models) in `extract_tool_calls()`.
+- [x] parse `<function=name><parameter=key>value</parameter></function>` XML tool-call format (Llama-family models) in `extract_tool_calls()`.

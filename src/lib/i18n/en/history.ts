@@ -88,7 +88,7 @@ const history: Record<string, string> = {
   "history.refresh":        "Refresh",
   "history.loading":        "Loading sessions…",
   "history.noSessions":     "No recording sessions yet",
-  "history.noSessionsHint": "Connect a BCI device (Muse or OpenBCI) and record some EEG data. Sessions will appear here.",
+  "history.noSessionsHint": "Connect a BCI device and record some EEG data. Sessions will appear here.",
   "history.startTime":      "Start",
   "history.endTime":        "End",
   "history.duration":       "Duration",
