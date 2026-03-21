@@ -1186,14 +1186,30 @@ pub fn run() {
         .install_default()
         .expect("Failed to install rustls CryptoProvider");
 
-    // ── wgpu / Vulkan: disable validation layers in debug builds ────────
-    // In debug builds, wgpu enables Vulkan validation layers by default
-    // (InstanceFlags::debugging()).  On Windows, the validation layer can
-    // trigger STATUS_ACCESS_VIOLATION (0xc0000005) in certain GPU drivers
-    // during shader compilation.  Disable validation via env vars that
-    // wgpu's InstanceFlags::with_env() / from_build_config() respect.
-    // These must be set before any wgpu Instance is created.
+    // ── Vulkan: disable validation layers in debug builds ──────────────
+    //
+    // The VulkanSDK (installed by build.rs for shader compilation) registers
+    // VK_LAYER_KHRONOS_validation as an implicit Vulkan layer.  In debug
+    // builds this validation layer is loaded by every Vulkan client —
+    // including llama.cpp (ggml-vulkan) and wgpu/cubecl.
+    //
+    // The validation layer can trigger STATUS_ACCESS_VIOLATION (0xc0000005)
+    // on certain Windows GPU drivers during vkEnumeratePhysicalDevices /
+    // shader compilation.  Disable it via env vars that both the Vulkan
+    // loader and wgpu respect.
+    //
+    // Must be set before any Vulkan code runs (llm-actor, eeg-embed, etc.).
     if cfg!(debug_assertions) {
+        // Vulkan loader: disable the validation implicit layer.
+        // VK_LOADER_LAYERS_DISABLE is supported by Vulkan Loader ≥ 1.3.234.
+        if std::env::var("VK_LOADER_LAYERS_DISABLE").is_err() {
+            std::env::set_var("VK_LOADER_LAYERS_DISABLE", "VK_LAYER_KHRONOS_validation");
+        }
+        // Older Vulkan loaders: override the implicit layer list to empty.
+        if std::env::var("VK_INSTANCE_LAYERS").is_err() {
+            std::env::set_var("VK_INSTANCE_LAYERS", "");
+        }
+        // wgpu-specific: disable wgpu's own validation flags.
         if std::env::var("WGPU_VALIDATION").is_err() {
             std::env::set_var("WGPU_VALIDATION", "0");
         }

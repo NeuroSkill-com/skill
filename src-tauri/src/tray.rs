@@ -23,7 +23,7 @@ use crate::DeviceStatus;
 // ── Re-exports from skill-tray ────────────────────────────────────────────────
 pub use skill_tray::{
     progress_bucket, progress_percent,
-    ellipsize_middle, with_shortcut,
+    ellipsize_middle,
 };
 
 // ── Tray-update deduplication ─────────────────────────────────────────────────
@@ -194,7 +194,7 @@ fn menu_key(st: &DeviceStatus, app: &AppHandle) -> String {
     format!("{}|{}", structure_key(st, app), status_key(st))
 }
 
-// shortcut_suffix, with_shortcut — re-exported from skill_tray above.
+// shortcut_suffix — re-exported from skill_tray above (unused here; kept for external consumers).
 
 // ── Embedded icons ────────────────────────────────────────────────────────────
 
@@ -255,8 +255,7 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
     };
 
     let menu = Menu::new(app)?;
-    let open_skill_label = with_shortcut("Open NeuroSkill™", "CmdOrCtrl+Shift+O");
-    menu.append(&MenuItem::with_id(app, "open_skill", &open_skill_label, true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "open_skill", "Open NeuroSkill™", true, Some("CmdOrCtrl+Shift+O"))?)?;
     menu.append(&PredefinedMenuItem::separator(app)?)?;
 
     // ── Status info (always present — updated in-place by update_status_items) ──
@@ -363,19 +362,19 @@ pub(crate) fn build_menu(app: &AppHandle, st: &DeviceStatus) -> tauri::Result<Me
 
     let is_streaming = st.state == "connected";
     menu.append(&PredefinedMenuItem::separator(app)?)?;
-    menu.append(&MenuItem::with_id(app, "focus_timer", with_shortcut("Focus Timer…", &focus_timer_shortcut), true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "calibrate",   with_shortcut("Calibrate…", &calibration_shortcut), is_streaming, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "search",      with_shortcut("Search…", &search_shortcut), true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "label",       with_shortcut("Add Label…", &label_shortcut), true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "history",     with_shortcut("History…", &history_shortcut), true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "compare",     with_shortcut("Compare…", "CmdOrCtrl+Shift+M"), true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "settings",    with_shortcut("Settings…", &settings_shortcut), true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "help",        with_shortcut("Help…", &help_shortcut), true, None::<&str>)?)?;
-    menu.append(&MenuItem::with_id(app, "api",         with_shortcut("API Status…", &api_shortcut), true, None::<&str>)?)?;
+    menu.append(&MenuItem::with_id(app, "focus_timer", "Focus Timer…", true, Some(focus_timer_shortcut.as_str()))?)?;
+    menu.append(&MenuItem::with_id(app, "calibrate",   "Calibrate…",   is_streaming, Some(calibration_shortcut.as_str()))?)?;
+    menu.append(&MenuItem::with_id(app, "search",      "Search…",      true, Some(search_shortcut.as_str()))?)?;
+    menu.append(&MenuItem::with_id(app, "label",       "Add Label…",   true, Some(label_shortcut.as_str()))?)?;
+    menu.append(&MenuItem::with_id(app, "history",     "History…",     true, Some(history_shortcut.as_str()))?)?;
+    menu.append(&MenuItem::with_id(app, "compare",     "Compare…",     true, Some("CmdOrCtrl+Shift+M"))?)?;
+    menu.append(&MenuItem::with_id(app, "settings",    "Settings…",    true, Some(settings_shortcut.as_str()))?)?;
+    menu.append(&MenuItem::with_id(app, "help",        "Help…",        true, Some(help_shortcut.as_str()))?)?;
+    menu.append(&MenuItem::with_id(app, "api",         "API Status…",  true, Some(api_shortcut.as_str()))?)?;
     #[cfg(feature = "llm")]
     {
         menu.append(&MenuItem::with_id(app, "downloads", "Downloads…", true, None::<&str>)?)?;
-        menu.append(&MenuItem::with_id(app, "chat", with_shortcut("Chat…", &chat_shortcut), true, None::<&str>)?)?;
+        menu.append(&MenuItem::with_id(app, "chat", "Chat…", true, Some(chat_shortcut.as_str()))?)?;
     }
 
     {
