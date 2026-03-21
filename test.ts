@@ -102,9 +102,16 @@
  * 16. LLM                — LLM server management + streaming chat + image upload
  *                          (llm_status, llm_catalog, llm_download, llm_logs, llm_chat);
  *                          REST /llm/* endpoints; POST /llm/chat with base64 images
- * 17. UNKNOWN            — Verify error handling for bad commands
- * 18. BROADCASTS         — Listen for server-pushed real-time events
- * 19. HTTP API           — REST endpoints + universal tunnel on the same port
+ * 17. SCREENSHOT SEARCH  — 6 cross-modal screenshot commands:
+ *                          search_screenshots (OCR text, semantic/substring),
+ *                          screenshots_around (temporal), search_screenshots_vision (CLIP vector),
+ *                          search_screenshots_by_image_b64 (base64 image → CLIP → HNSW),
+ *                          screenshots_for_eeg (EEG → screenshots), eeg_for_screenshots (screenshots → EEG)
+ * 18. SKILLS (Tauri-only) — Verify WS correctly rejects Tauri-only skill commands
+ *                          (list_skills, get_disabled_skills, set_disabled_skills, sync_skills_now, etc.)
+ * 19. UNKNOWN            — Verify error handling for bad commands
+ * 20. BROADCASTS         — Listen for server-pushed real-time events
+ * 21. HTTP API           — REST endpoints + universal tunnel on the same port
  *
  * ═══════════════════════════════════════════════════════════════════════════════
  * USAGE
@@ -2936,6 +2943,394 @@ async function testLlm(): Promise<void> {
   } catch (e: any) { fail(`llm_stop structural test failed: ${e.message}`); }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 20. SCREENSHOT SEARCH COMMANDS
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Six WS commands for screenshot-based search and cross-modal bridging:
+//
+//   search_screenshots             — OCR text search (semantic or substring)
+//   screenshots_around             — screenshots near a unix timestamp
+//   search_screenshots_vision      — search by CLIP vision embedding vector
+//   search_screenshots_by_image_b64— search by base64-encoded image
+//   screenshots_for_eeg            — EEG time range → nearby screenshots
+//   eeg_for_screenshots            — screenshot OCR query → EEG + labels
+//
+// All commands return ok=true on success; some may return ok=false if the
+// screenshot store or embedding model is not available.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testScreenshotSearch(): Promise<void> {
+  heading("screenshot search commands");
+  info("Tests 6 screenshot-related WebSocket commands for OCR, vision, and cross-modal search.");
+
+  // ── search_screenshots — semantic mode (default) ──────────────────────────
+  heading("search_screenshots — semantic");
+  info("Request: { command: 'search_screenshots', query: '...', k?, mode? }");
+  info("Searches screenshot OCR text using a fastembed semantic embedding (default mode).");
+  try {
+    const r = await send({ command: "search_screenshots", query: "code editor", k: 5 });
+    if (r.ok === false) {
+      // Screenshot store or embedder may not be available — soft pass
+      ok(`search_screenshots (semantic) not available: "${r.error}" — soft pass`);
+    } else {
+      r.ok ? ok("search_screenshots (semantic) succeeded") : fail(`ok=${r.ok}`);
+      field("query", r.query, "echoed query string");
+      field("mode",  r.mode,  "search mode (default: 'semantic')");
+      field("k",     r.k,     "requested neighbors");
+      field("count", r.count, "results returned (≤ k)");
+      r.mode === "semantic"
+        ? ok("mode defaults to 'semantic'")
+        : fail(`expected mode='semantic', got '${r.mode}'`);
+
+      const results = r.results ?? [];
+      ok(`${results.length} result(s) returned`);
+      if (results.length > 0) {
+        const hit = results[0];
+        info("each result contains:");
+        field("  timestamp",    hit.timestamp,    "YYYYMMDDHHmmss timestamp of the screenshot");
+        field("  unix_ts",      hit.unix_ts,      "unix timestamp (seconds)");
+        field("  filename",     hit.filename,     "relative file path to the screenshot image");
+        field("  app_name",     hit.app_name,     "application that was active when captured");
+        field("  window_title", hit.window_title, "window title at capture time");
+        field("  ocr_text",     hit.ocr_text ? `"${hit.ocr_text.slice(0, 60)}…"` : '""', "OCR-extracted text");
+        field("  similarity",   hit.similarity,   "cosine similarity score (higher = more similar)");
+        field("  gif_filename", hit.gif_filename ?? '""', "animated GIF if motion was detected");
+
+        // Structural checks
+        typeof hit.unix_ts === "number"
+          ? ok("unix_ts is a number")
+          : fail(`unix_ts type: ${typeof hit.unix_ts}`);
+        typeof hit.filename === "string"
+          ? ok("filename is a string")
+          : fail(`filename type: ${typeof hit.filename}`);
+      }
+      if (results.length > 5) fail(`got ${results.length} results but k=5`);
+      else ok(`result count (${results.length}) ≤ k (5)`);
+    }
+  } catch (e: any) { fail(`search_screenshots (semantic) failed: ${e.message}`); }
+
+  // ── search_screenshots — substring mode ───────────────────────────────────
+  heading("search_screenshots — substring");
+  info("Request: { command: 'search_screenshots', query: '...', mode: 'substring' }");
+  info("Uses SQLite LIKE search on OCR text (no embedding model required).");
+  try {
+    const r = await send({ command: "search_screenshots", query: "test", k: 5, mode: "substring" });
+    if (r.ok === false) {
+      ok(`search_screenshots (substring) not available: "${r.error}" — soft pass`);
+    } else {
+      r.ok ? ok("search_screenshots (substring) succeeded") : fail(`ok=${r.ok}`);
+      field("mode",  r.mode,  "should be 'substring'");
+      field("count", r.count, "results found");
+      r.mode === "substring"
+        ? ok("mode echoed correctly")
+        : fail(`expected mode='substring', got '${r.mode}'`);
+      ok(`${(r.results ?? []).length} result(s) returned`);
+    }
+  } catch (e: any) { fail(`search_screenshots (substring) failed: ${e.message}`); }
+
+  // ── search_screenshots — missing query → error ────────────────────────────
+  try {
+    info("Testing missing query field (should return ok=false)…");
+    const r = await send({ command: "search_screenshots" });
+    r.ok === false
+      ? ok(`correctly rejected missing query: error="${r.error}"`)
+      : fail("expected ok=false for missing query");
+  } catch (e: any) { fail(`search_screenshots missing-query test failed: ${e.message}`); }
+
+  // ── screenshots_around ────────────────────────────────────────────────────
+  heading("screenshots_around");
+  info("Request: { command: 'screenshots_around', timestamp: <unix>, window_secs?: 60 }");
+  info("Finds screenshots captured near a given timestamp (±window_secs).");
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const r = await send({ command: "screenshots_around", timestamp: now - 300, window_secs: 120 });
+    if (r.ok === false) {
+      ok(`screenshots_around not available: "${r.error}" — soft pass`);
+    } else {
+      r.ok ? ok("screenshots_around succeeded") : fail(`ok=${r.ok}`);
+      field("timestamp",   r.timestamp,   "echoed target timestamp");
+      field("window_secs", r.window_secs, "echoed temporal window");
+      field("count",       r.count,       "screenshots found in window");
+      r.timestamp === now - 300
+        ? ok("timestamp echoed correctly")
+        : fail(`timestamp mismatch: ${r.timestamp}`);
+      r.window_secs === 120
+        ? ok("window_secs echoed correctly")
+        : fail(`window_secs mismatch: ${r.window_secs}`);
+      ok(`${(r.results ?? []).length} result(s) returned`);
+    }
+  } catch (e: any) { fail(`screenshots_around failed: ${e.message}`); }
+
+  // ── screenshots_around — missing timestamp → error ────────────────────────
+  try {
+    info("Testing missing timestamp field (should return ok=false)…");
+    const r = await send({ command: "screenshots_around" });
+    r.ok === false
+      ? ok(`correctly rejected missing timestamp: error="${r.error}"`)
+      : fail("expected ok=false for missing timestamp");
+  } catch (e: any) { fail(`screenshots_around missing-timestamp test failed: ${e.message}`); }
+
+  // ── search_screenshots_vision ─────────────────────────────────────────────
+  heading("search_screenshots_vision");
+  info("Request: { command: 'search_screenshots_vision', vector: [...], k? }");
+  info("Searches CLIP vision HNSW index by a pre-computed embedding vector.");
+  try {
+    // Use a dummy 512-dim vector (CLIP ViT-B/32 dimensionality)
+    const dummyVector = Array.from({ length: 512 }, () => Math.random() * 0.1);
+    const r = await send({ command: "search_screenshots_vision", vector: dummyVector, k: 3 });
+    if (r.ok === false) {
+      ok(`search_screenshots_vision not available: "${r.error}" — soft pass (HNSW or model not built)`);
+    } else {
+      r.ok ? ok("search_screenshots_vision succeeded") : fail(`ok=${r.ok}`);
+      field("mode",  r.mode,  "should be 'vision'");
+      field("k",     r.k,     "requested neighbors");
+      field("count", r.count, "results returned");
+      r.mode === "vision"
+        ? ok("mode is 'vision'")
+        : fail(`expected mode='vision', got '${r.mode}'`);
+      ok(`${(r.results ?? []).length} result(s) returned`);
+    }
+  } catch (e: any) { fail(`search_screenshots_vision failed: ${e.message}`); }
+
+  // ── search_screenshots_vision — missing vector → error ────────────────────
+  try {
+    info("Testing missing vector field (should return ok=false)…");
+    const r = await send({ command: "search_screenshots_vision" });
+    r.ok === false
+      ? ok(`correctly rejected missing vector: error="${r.error}"`)
+      : fail("expected ok=false for missing vector");
+  } catch (e: any) { fail(`search_screenshots_vision missing-vector test failed: ${e.message}`); }
+
+  // ── search_screenshots_vision — empty vector → error ──────────────────────
+  try {
+    info("Testing empty vector (should return ok=false)…");
+    const r = await send({ command: "search_screenshots_vision", vector: [] });
+    r.ok === false
+      ? ok(`correctly rejected empty vector: error="${r.error}"`)
+      : fail("expected ok=false for empty vector");
+  } catch (e: any) { fail(`search_screenshots_vision empty-vector test failed: ${e.message}`); }
+
+  // ── search_screenshots_by_image_b64 ───────────────────────────────────────
+  heading("search_screenshots_by_image_b64");
+  info("Request: { command: 'search_screenshots_by_image_b64', image_b64: '...', k? }");
+  info("Decodes a base64 image, embeds via CLIP vision, then searches HNSW.");
+  try {
+    // Tiny 1×1 red JPEG
+    const tinyJpeg =
+      "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRof" +
+      "Hh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFgAB" +
+      "AQAAAAAAAAAAAAAAAAAAAAf/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFBABAAAAAAAAAAAAAAAA" +
+      "AAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxBn/9k=";
+    const r = await send({ command: "search_screenshots_by_image_b64", image_b64: tinyJpeg, k: 3 });
+    if (r.ok === false) {
+      ok(`search_screenshots_by_image_b64 not available: "${r.error}" — soft pass (CLIP model or HNSW not built)`);
+    } else {
+      r.ok ? ok("search_screenshots_by_image_b64 succeeded") : fail(`ok=${r.ok}`);
+      field("mode",  r.mode,  "should be 'vision'");
+      field("k",     r.k,     "requested neighbors");
+      field("count", r.count, "results returned");
+      ok(`${(r.results ?? []).length} result(s) returned`);
+    }
+  } catch (e: any) { fail(`search_screenshots_by_image_b64 failed: ${e.message}`); }
+
+  // ── search_screenshots_by_image_b64 — missing image → error ───────────────
+  try {
+    info("Testing missing image_b64 field (should return ok=false)…");
+    const r = await send({ command: "search_screenshots_by_image_b64" });
+    r.ok === false
+      ? ok(`correctly rejected missing image_b64: error="${r.error}"`)
+      : fail("expected ok=false for missing image_b64");
+  } catch (e: any) { fail(`search_screenshots_by_image_b64 missing-image test failed: ${e.message}`); }
+
+  // ── search_screenshots_by_image_b64 — invalid base64 → error ──────────────
+  try {
+    info("Testing invalid base64 (should return ok=false)…");
+    const r = await send({ command: "search_screenshots_by_image_b64", image_b64: "!!!not-base64!!!" });
+    r.ok === false
+      ? ok(`correctly rejected invalid base64: error="${r.error}"`)
+      : fail("expected ok=false for invalid base64");
+  } catch (e: any) { fail(`search_screenshots_by_image_b64 invalid-base64 test failed: ${e.message}`); }
+
+  // ── screenshots_for_eeg ───────────────────────────────────────────────────
+  heading("screenshots_for_eeg");
+  info("Request: { command: 'screenshots_for_eeg', start_utc, end_utc, window_secs?, limit? }");
+  info("Cross-modal bridge: finds screenshots near EEG embedding timestamps in a time range.");
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const r = await send({
+      command: "screenshots_for_eeg",
+      start_utc: now - 3600,
+      end_utc: now,
+      window_secs: 30,
+      limit: 10,
+    });
+    if (r.ok === false) {
+      ok(`screenshots_for_eeg not available: "${r.error}" — soft pass`);
+    } else {
+      r.ok ? ok("screenshots_for_eeg succeeded") : fail(`ok=${r.ok}`);
+      field("start_utc",   r.start_utc,   "echoed range start");
+      field("end_utc",     r.end_utc,     "echoed range end");
+      field("window_secs", r.window_secs, "echoed temporal window around each EEG epoch");
+      field("eeg_count",   r.eeg_count,   "number of EEG embedding timestamps in range");
+      field("count",       r.count,       "total screenshot results (deduplicated)");
+      ok(`${(r.results ?? []).length} result(s) returned`);
+
+      // Validate result structure if results exist
+      const results = r.results ?? [];
+      if (results.length > 0) {
+        const hit = results[0];
+        typeof hit.eeg_timestamp_utc === "number"
+          ? ok("result has eeg_timestamp_utc (number)")
+          : fail(`eeg_timestamp_utc type: ${typeof hit.eeg_timestamp_utc}`);
+        hit.screenshot && typeof hit.screenshot === "object"
+          ? ok("result has screenshot object")
+          : fail("result missing screenshot object");
+        if (hit.screenshot) {
+          typeof hit.screenshot.filename === "string"
+            ? ok("screenshot.filename is a string")
+            : fail(`screenshot.filename type: ${typeof hit.screenshot.filename}`);
+        }
+      }
+      // Verify limit was respected
+      results.length <= 10
+        ? ok(`result count (${results.length}) ≤ limit (10)`)
+        : fail(`got ${results.length} results but limit=10`);
+    }
+  } catch (e: any) { fail(`screenshots_for_eeg failed: ${e.message}`); }
+
+  // ── screenshots_for_eeg — missing start_utc → error ───────────────────────
+  try {
+    info("Testing missing start_utc (should return ok=false)…");
+    const r = await send({ command: "screenshots_for_eeg", end_utc: Math.floor(Date.now() / 1000) });
+    r.ok === false
+      ? ok(`correctly rejected missing start_utc: error="${r.error}"`)
+      : fail("expected ok=false for missing start_utc");
+  } catch (e: any) { fail(`screenshots_for_eeg missing-start test failed: ${e.message}`); }
+
+  // ── eeg_for_screenshots ───────────────────────────────────────────────────
+  heading("eeg_for_screenshots");
+  info("Request: { command: 'eeg_for_screenshots', query: '...', k?, window_secs?, mode? }");
+  info("Cross-modal bridge: OCR query → matching screenshots → EEG embeddings + labels near each.");
+  try {
+    const r = await send({
+      command: "eeg_for_screenshots",
+      query: "browser",
+      k: 5,
+      window_secs: 60,
+      mode: "semantic",
+    });
+    if (r.ok === false) {
+      ok(`eeg_for_screenshots not available: "${r.error}" — soft pass`);
+    } else {
+      r.ok ? ok("eeg_for_screenshots succeeded") : fail(`ok=${r.ok}`);
+      field("query",            r.query,            "echoed query string");
+      field("mode",             r.mode,             "search mode (semantic/substring)");
+      field("k",                r.k,                "screenshot results requested");
+      field("window_secs",      r.window_secs,      "EEG temporal window around each screenshot");
+      field("screenshot_count", r.screenshot_count, "number of screenshots matched by OCR query");
+      field("count",            r.count,            "total results (screenshot + EEG + labels)");
+
+      r.query === "browser"
+        ? ok("query echoed correctly")
+        : fail(`query mismatch: '${r.query}'`);
+      r.mode === "semantic"
+        ? ok("mode echoed correctly")
+        : fail(`mode mismatch: '${r.mode}'`);
+
+      // Validate result structure if results exist
+      const results = r.results ?? [];
+      ok(`${results.length} result(s) returned`);
+      if (results.length > 0) {
+        const hit = results[0];
+        hit.screenshot && typeof hit.screenshot === "object"
+          ? ok("result has screenshot object")
+          : fail("result missing screenshot object");
+        Array.isArray(hit.labels)
+          ? ok(`result has labels array (${hit.labels.length} label(s))`)
+          : fail("result missing labels array");
+        // session can be null if no EEG data exists for the timestamp
+        if (hit.session !== null && hit.session !== undefined) {
+          ok("result has session reference");
+        } else {
+          ok("session = null (no EEG data near this screenshot — expected)");
+        }
+      }
+    }
+  } catch (e: any) { fail(`eeg_for_screenshots failed: ${e.message}`); }
+
+  // ── eeg_for_screenshots — substring mode ──────────────────────────────────
+  try {
+    info("Testing eeg_for_screenshots with mode='substring'…");
+    const r = await send({
+      command: "eeg_for_screenshots",
+      query: "test",
+      k: 3,
+      mode: "substring",
+    });
+    if (r.ok === false) {
+      ok(`eeg_for_screenshots (substring) not available: "${r.error}" — soft pass`);
+    } else {
+      r.ok ? ok("eeg_for_screenshots (substring) succeeded") : fail(`ok=${r.ok}`);
+      r.mode === "substring"
+        ? ok("mode echoed as 'substring'")
+        : fail(`mode mismatch: '${r.mode}'`);
+      ok(`${(r.results ?? []).length} result(s) returned`);
+    }
+  } catch (e: any) { fail(`eeg_for_screenshots (substring) failed: ${e.message}`); }
+
+  // ── eeg_for_screenshots — missing query → error ───────────────────────────
+  try {
+    info("Testing missing query field (should return ok=false)…");
+    const r = await send({ command: "eeg_for_screenshots" });
+    r.ok === false
+      ? ok(`correctly rejected missing query: error="${r.error}"`)
+      : fail("expected ok=false for missing query");
+  } catch (e: any) { fail(`eeg_for_screenshots missing-query test failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 21. SKILLS (Tauri-only — not WS/HTTP)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Community skills management (list, enable/disable, sync) is currently
+// exposed only as Tauri IPC commands, not via the WebSocket/HTTP API.
+// The commands are:
+//   list_skills, get_disabled_skills, set_disabled_skills,
+//   sync_skills_now, get_skills_refresh_interval, set_skills_refresh_interval,
+//   get_skills_last_sync, get_skills_license
+//
+// Since these are not reachable over WS/HTTP, this test verifies that the
+// server correctly rejects them as unknown commands.
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testSkillsCommands(): Promise<void> {
+  heading("skills commands (Tauri-only — WS rejection)");
+  info("Skills management is available via Tauri IPC only, not WS/HTTP.");
+  info("Verifying that the server correctly rejects these as unknown commands.");
+
+  const skillsCmds = [
+    "list_skills",
+    "get_disabled_skills",
+    "set_disabled_skills",
+    "sync_skills_now",
+    "get_skills_refresh_interval",
+    "get_skills_license",
+  ];
+
+  for (const cmd of skillsCmds) {
+    try {
+      const r = await send({ command: cmd });
+      r.ok === false
+        ? ok(`${cmd} correctly rejected as unknown command`)
+        : fail(`${cmd}: expected ok=false (Tauri-only), got ok=${r.ok}`);
+    } catch (e: any) { fail(`${cmd} test failed: ${e.message}`); }
+  }
+}
+
+
 async function testUnknownCommand(): Promise<void> {
   heading("unknown command");
   info("Request: { command: 'nonexistent_command_xyz' }");
@@ -3427,6 +3822,8 @@ async function main(): Promise<void> {
   await testUmap();
   await testDnd();
   await testLlm();
+  await testScreenshotSearch();
+  await testSkillsCommands();
   await testUnknownCommand();
   await testBroadcastEvents();   // skips gracefully when transport === "http"
   await testHttp(port);          // always runs — tests HTTP layer directly
