@@ -4,4 +4,4 @@
 
 ### LLM
 
-- **Status tool results formatted as readable text**: When the internal LLM calls the `status` command, the result is now converted from raw JSON to a human-readable text block with clear section headers (Device, Session, Embeddings, Labels, Apps, Screenshots, Signal Quality, Scores, Hooks, Sleep, History). This makes status output in the Chat window much easier to read for both the user and the model.
+- **Status tool results formatted as readable text**: When the internal LLM calls the `status` command, the result is now converted from raw JSON to a human-readable text block with clear section headers (Device, Session, EEG Embeddings, Labels, Most Used Apps, Screenshots, Signal Quality, Current Scores, Hooks, Sleep, Recording History). This makes status output in the Chat window much easier to read for both the user and the model.

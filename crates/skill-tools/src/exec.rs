@@ -1639,4 +1639,86 @@ mod tests {
     fn utc_offset_zero() {
         assert_eq!(format_utc_offset(0), "+00:00");
     }
+
+    // ── format_status_as_text ─────────────────────────────────────────
+
+    #[test]
+    fn status_text_disconnected_device() {
+        let v = json!({
+            "device": { "state": "disconnected", "connected": false, "streaming": false },
+            "session": {},
+            "embeddings": { "today": 10, "total": 500, "recording_days": 30, "encoder_loaded": true },
+            "labels": { "total": 42, "embedded": 38, "recent": [], "top_all_time": [], "top_7d": [], "top_24h": [] },
+            "apps": { "top_all_time": [], "top_7d": [], "top_24h": [] },
+            "screenshots": { "total": 0, "with_embedding": 0, "with_ocr": 0, "with_ocr_embedding": 0 },
+            "signal_quality": [],
+            "scores": null,
+            "hooks": { "total": 2, "enabled": 1, "latest_trigger": null },
+            "sleep": { "total_epochs": 0 },
+            "history": null,
+            "calibration": { "last_calibration_utc": null },
+        });
+        let text = format_status_as_text(&v);
+        assert!(text.contains("# Device"));
+        assert!(text.contains("disconnected"));
+        assert!(text.contains("# EEG Embeddings"));
+        assert!(text.contains("Today: 10"));
+        assert!(text.contains("Total: 42"));
+        assert!(text.contains("With text embeddings: 38"));
+        assert!(text.contains("# Hooks"));
+        // No screenshots section when total=0
+        assert!(!text.contains("# Screenshots"));
+    }
+
+    #[test]
+    fn status_text_connected_with_scores() {
+        let v = json!({
+            "device": {
+                "state": "connected", "connected": true, "streaming": true,
+                "name": "Muse 2", "battery": 85.0,
+                "sample_count": 12345, "ppg_sample_count": 500,
+            },
+            "session": { "duration_secs": 125 },
+            "embeddings": { "today": 5, "total": 100, "recording_days": 10, "encoder_loaded": true },
+            "labels": {
+                "total": 20, "embedded": 15,
+                "recent": [{"text": "focus"}, {"text": "relax"}],
+                "top_all_time": [{"text": "focus", "count": 8}, {"text": "relax", "count": 5}],
+                "top_7d": [], "top_24h": [],
+            },
+            "apps": {
+                "top_all_time": [{"app_name": "Firefox", "switches": 50}],
+                "top_7d": [], "top_24h": [],
+            },
+            "screenshots": {
+                "total": 200, "with_embedding": 180, "with_ocr": 150, "with_ocr_embedding": 140,
+                "top_apps_all_time": [{"app_name": "Firefox", "count": 80}],
+                "top_apps_24h": [],
+            },
+            "signal_quality": [],
+            "scores": {
+                "meditation": 72.5, "relaxation": 65.3, "engagement": 55.0,
+                "bands": { "rel_delta": 0.25, "rel_theta": 0.15, "rel_alpha": 0.30, "rel_beta": 0.20, "rel_gamma": 0.10 },
+            },
+            "hooks": { "total": 0, "enabled": 0, "latest_trigger": null },
+            "sleep": { "total_epochs": 0 },
+            "history": { "total_sessions": 15, "total_hours": 42.5, "streak_days": 7 },
+            "calibration": { "last_calibration_utc": null },
+        });
+        let text = format_status_as_text(&v);
+        assert!(text.contains("Muse 2"));
+        assert!(text.contains("Streaming: yes"));
+        assert!(text.contains("Battery: 85%"));
+        assert!(text.contains("PPG samples: 500"));
+        assert!(text.contains("Duration: 2m 5s"));
+        assert!(text.contains("Recent: focus, relax"));
+        assert!(text.contains("Top labels (all time): focus (8x), relax (5x)"));
+        assert!(text.contains("# Most Used Apps"));
+        assert!(text.contains("Firefox (50x)"));
+        assert!(text.contains("# Screenshots"));
+        assert!(text.contains("With OCR text: 150"));
+        assert!(text.contains("Meditation: 72.5"));
+        assert!(text.contains("Bands: Delta: 0.250"));
+        assert!(text.contains("Total sessions: 15"));
+    }
 }
