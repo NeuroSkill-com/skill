@@ -307,6 +307,7 @@ fn load_skills_from_dir_inner(
     entries_vec.sort_by_key(|e| e.file_name());
 
     // Phase 1: check for SKILL.md in this directory.
+    let mut _is_index = false;
     for entry in &entries_vec {
         let name = entry.file_name();
         if name.to_str() != Some(SKILL_MARKER) {
@@ -320,23 +321,46 @@ fn load_skills_from_dir_inner(
             continue;
         }
 
+        // Peek at the frontmatter to check for index: true before loading.
+        let index_flag = fs::read_to_string(&full_path)
+            .ok()
+            .map(|c| {
+                let (fm, _) = parse_frontmatter(&c);
+                fm.get("index")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false)
+            })
+            .unwrap_or(false);
+
         let (skill, diags) = load_skill_from_file(&full_path, source);
         diagnostics.extend(diags);
         if let Some(s) = skill {
             skills.push(s);
+            if index_flag {
+                // Index SKILL.md — load the skill but continue recursing
+                // into subdirectories to find child skills.
+                _is_index = true;
+                break;
+            }
             // Valid SKILL.md found — this dir is a skill root; do not recurse.
             return LoadSkillsResult { skills, diagnostics };
         }
         // SKILL.md exists but failed validation (e.g. missing description).
         // Continue to recurse into subdirectories — this supports index-style
         // SKILL.md files (e.g. a git submodule root) that contain child skills.
+        _is_index = true;
         break;
     }
 
-    // Phase 2: no SKILL.md — scan children.
+    // Phase 2: no valid SKILL.md (or index) — scan children.
     for entry in &entries_vec {
         let name_os = entry.file_name();
         let Some(name) = name_os.to_str() else { continue };
+
+        // Skip SKILL.md — already handled in Phase 1.
+        if name == SKILL_MARKER {
+            continue;
+        }
 
         if name.starts_with('.') || name == "node_modules" || name == "target" {
             continue;
@@ -698,6 +722,41 @@ description: A helpful skill
             "expected neuroskill-status skill, found: {:?}",
             result.skills.iter().map(|s| &s.name).collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn index_skill_md_allows_recursion() {
+        // When a directory has a SKILL.md with `index: true` and a valid
+        // description, the scanner should load it as a skill AND continue
+        // recursing into subdirectories to find child skills.
+        let root = std::env::temp_dir().join("skill_test_index_flag");
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::create_dir_all(&root);
+        // Root has a SKILL.md with description AND index: true
+        fs::write(
+            root.join("SKILL.md"),
+            "---\nname: my-index\ndescription: Skill index overview\nindex: true\n---\n# Index",
+        )
+        .unwrap();
+        // Sub-skill with valid SKILL.md
+        let sub = root.join("child-skill");
+        let _ = fs::create_dir_all(&sub);
+        fs::write(
+            sub.join("SKILL.md"),
+            "---\nname: child-skill\ndescription: A child skill\n---\n# Content",
+        )
+        .unwrap();
+
+        let result = load_skills_from_dir(&root, "test", true);
+        assert_eq!(
+            result.skills.len(),
+            2,
+            "expected 2 skills (index + child), got: {:?}",
+            result.skills.iter().map(|s| &s.name).collect::<Vec<_>>()
+        );
+        assert!(result.skills.iter().any(|s| s.name == "my-index"));
+        assert!(result.skills.iter().any(|s| s.name == "child-skill"));
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
