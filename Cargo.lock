@@ -10274,6 +10274,7 @@ name = "skill-eeg"
 version = "0.0.1"
 dependencies = [
  "gpu-fft",
+ "rustfft",
  "serde",
  "serde_json",
  "skill-constants",

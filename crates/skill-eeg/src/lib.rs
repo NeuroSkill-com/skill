@@ -15,6 +15,11 @@
 /// Re-export all constants from the canonical `skill-constants` crate so
 /// `crate::constants::*` keeps working throughout `skill-eeg`.
 pub mod constants { pub use skill_constants::*; }
+
+/// CPU-based FFT fallback (rustfft) used when the `gpu` feature is disabled.
+#[cfg(not(feature = "gpu"))]
+pub(crate) mod cpu_fft;
+
 pub(crate) mod band_metrics;
 pub mod eeg_bands;
 pub mod eeg_filter;
