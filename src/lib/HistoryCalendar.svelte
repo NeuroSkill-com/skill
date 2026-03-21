@@ -167,12 +167,13 @@
               {@const dur  = Math.max(60, sess.end_utc - sess.start_utc)}
               {@const left = (sOff / 86400 * 100).toFixed(2)}
               {@const width = Math.max(0.4, dur / 86400 * 100).toFixed(2)}
-              <div class="absolute top-0.5 bottom-0.5 rounded-sm bg-violet-500/60 dark:bg-violet-400/50
-                          hover:bg-violet-600 dark:hover:bg-violet-300/70 transition-colors cursor-pointer"
+              <button type="button"
+                   class="absolute top-0.5 bottom-0.5 rounded-sm bg-violet-500/60 dark:bg-violet-400/50
+                          hover:bg-violet-600 dark:hover:bg-violet-300/70 transition-colors cursor-pointer border-0 p-0"
                    style="left:{left}%; width:{width}%"
                    title="{new Date(sess.start_utc*1000).toLocaleTimeString()} – {new Date(sess.end_utc*1000).toLocaleTimeString()}"
                    onclick={() => navigateToDay(wgd.dayKey)}
-              ></div>
+              ></button>
             {/each}
           </div>
         </div>
