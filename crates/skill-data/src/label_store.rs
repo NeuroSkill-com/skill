@@ -235,33 +235,46 @@ impl LabelStore {
     /// Return the top `limit` most frequently used label texts, optionally
     /// filtered to labels created at or after `since` (unix seconds).
     pub fn top_texts(&self, limit: usize, since: Option<u64>) -> Vec<LabelFreqRow> {
-        let (sql, since_val): (&str, i64) = match since {
-            Some(ts) => (
-                "SELECT text, COUNT(*) AS cnt, MAX(created_at) AS last_used
-                 FROM labels WHERE created_at >= ?1
-                 GROUP BY text ORDER BY cnt DESC LIMIT ?2",
-                ts as i64,
-            ),
-            None => (
-                "SELECT text, COUNT(*) AS cnt, MAX(created_at) AS last_used
-                 FROM labels WHERE 1=1 OR ?1=?1
-                 GROUP BY text ORDER BY cnt DESC LIMIT ?2",
-                0i64,
-            ),
-        };
-        let mut stmt = match self.conn.prepare(sql) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[labels] top_texts: {e}"); return vec![]; }
-        };
-        stmt.query_map(params![since_val, limit as i64], |row| {
-            Ok(LabelFreqRow {
-                text:      row.get(0)?,
-                count:     row.get::<_, i64>(1)? as u64,
-                last_used: row.get::<_, i64>(2)? as u64,
-            })
-        })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-        .unwrap_or_default()
+        match since {
+            Some(ts) => {
+                let mut stmt = match self.conn.prepare(
+                    "SELECT text, COUNT(*) AS cnt, MAX(created_at) AS last_used
+                     FROM labels WHERE created_at >= ?1
+                     GROUP BY text ORDER BY cnt DESC LIMIT ?2",
+                ) {
+                    Ok(s)  => s,
+                    Err(e) => { eprintln!("[labels] top_texts: {e}"); return vec![]; }
+                };
+                stmt.query_map(params![ts as i64, limit as i64], |row| {
+                    Ok(LabelFreqRow {
+                        text:      row.get(0)?,
+                        count:     row.get::<_, i64>(1)? as u64,
+                        last_used: row.get::<_, i64>(2)? as u64,
+                    })
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .unwrap_or_default()
+            }
+            None => {
+                let mut stmt = match self.conn.prepare(
+                    "SELECT text, COUNT(*) AS cnt, MAX(created_at) AS last_used
+                     FROM labels
+                     GROUP BY text ORDER BY cnt DESC LIMIT ?1",
+                ) {
+                    Ok(s)  => s,
+                    Err(e) => { eprintln!("[labels] top_texts: {e}"); return vec![]; }
+                };
+                stmt.query_map(params![limit as i64], |row| {
+                    Ok(LabelFreqRow {
+                        text:      row.get(0)?,
+                        count:     row.get::<_, i64>(1)? as u64,
+                        last_used: row.get::<_, i64>(2)? as u64,
+                    })
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .unwrap_or_default()
+            }
+        }
     }
 
     /// Return the count of labels that have a text embedding.
@@ -393,5 +406,49 @@ mod tests {
         let rows = store.query_range(50, 250);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].text, "in_range");
+    }
+
+    #[test]
+    fn top_texts_all_time() {
+        let (store, _dir) = open_temp();
+        for i in 0..4u64 { store.insert(i, i+1, i, i+1, "focus", "", 1000 + i).unwrap(); }
+        for i in 0..2u64 { store.insert(i, i+1, i, i+1, "relax", "", 2000 + i).unwrap(); }
+        store.insert(0, 1, 0, 1, "sleep", "", 3000).unwrap();
+
+        let top = store.top_texts(10, None);
+        assert_eq!(top.len(), 3);
+        assert_eq!(top[0].text, "focus");
+        assert_eq!(top[0].count, 4);
+        assert_eq!(top[1].text, "relax");
+        assert_eq!(top[1].count, 2);
+        assert_eq!(top[2].text, "sleep");
+    }
+
+    #[test]
+    fn top_texts_with_since_filter() {
+        let (store, _dir) = open_temp();
+        for i in 0..5u64 { store.insert(i, i+1, i, i+1, "old", "", 100 + i).unwrap(); }
+        for i in 0..2u64 { store.insert(i, i+1, i, i+1, "new", "", 500 + i).unwrap(); }
+
+        let top = store.top_texts(10, Some(400));
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0].text, "new");
+        assert_eq!(top[0].count, 2);
+    }
+
+    #[test]
+    fn top_texts_respects_limit() {
+        let (store, _dir) = open_temp();
+        for i in 0..10u64 {
+            store.insert(i, i+1, i, i+1, &format!("label{}", i), "", i).unwrap();
+        }
+        assert_eq!(store.top_texts(3, None).len(), 3);
+    }
+
+    #[test]
+    fn count_embedded_initially_zero() {
+        let (store, _dir) = open_temp();
+        store.insert(0, 1, 0, 1, "test", "", 100).unwrap();
+        assert_eq!(store.count_embedded(), 0);
     }
 }

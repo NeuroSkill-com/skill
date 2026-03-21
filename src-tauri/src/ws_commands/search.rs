@@ -408,6 +408,10 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
     let mut seen_labels: std::collections::HashSet<i64> = std::collections::HashSet::new();
     let mut seen_screenshots: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+    // Pre-compute query word matching data (hoisted out of inner loop)
+    let query_lower = query.to_lowercase();
+    let query_words: Vec<&str> = query_lower.split_whitespace().collect();
+
     // Steps 3–6: per text label → EEG neighbors → nearby labels → screenshots.
     for (ti, tl) in text_labels.iter().enumerate() {
         let tl_id = format!("tl_{ti}");
@@ -516,9 +520,6 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
                     reach_seconds as i32,
                 );
 
-                let query_lower = query.to_lowercase();
-                let query_words: Vec<&str> = query_lower.split_whitespace().collect();
-
                 for ss in screenshots.iter().take(k_labels.max(3)) {
                     if !seen_screenshots.insert(ss.filename.clone()) { continue; }
 
@@ -547,7 +548,9 @@ pub(super) fn interactive_search(app: &AppHandle, msg: &Value) -> Result<Value, 
                         + (1.0 - time_dist.min(1.0)) * 0.2;
                     if relevance < 0.05 && time_dist > 0.5 { continue; }
 
-                    let ss_id = format!("ss_{}", ss.unix_ts);
+                    let ss_id = format!("ss_{}_{:x}",
+                        ss.unix_ts,
+                        ss.filename.len() as u32 ^ (ss.timestamp as u32));
                     let (edge_kind, edge_dist) = if title_match > 0.3 || ocr_substr_match > 0.3 {
                         ("ocr_sim", 1.0 - relevance)
                     } else {

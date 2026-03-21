@@ -208,33 +208,46 @@ impl ActivityStore {
     /// switches, optionally filtered to windows activated at or after `since`.
     pub fn top_apps(&self, limit: u32, since: Option<u64>) -> Vec<AppUsageRow> {
         let c = self.conn.lock_or_recover();
-        let (sql, since_val): (&str, i64) = match since {
-            Some(ts) => (
-                "SELECT app_name, COUNT(*) AS cnt, MAX(activated_at) AS last_seen
-                 FROM active_windows WHERE activated_at >= ?1
-                 GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
-                ts as i64,
-            ),
-            None => (
-                "SELECT app_name, COUNT(*) AS cnt, MAX(activated_at) AS last_seen
-                 FROM active_windows WHERE 1=1 OR ?1=?1
-                 GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
-                0i64,
-            ),
-        };
-        let mut stmt = match c.prepare_cached(sql) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[activity] top_apps: {e}"); return vec![]; }
-        };
-        stmt.query_map(params![since_val, limit as i64], |row| {
-            Ok(AppUsageRow {
-                app_name:  row.get(0)?,
-                switches:  row.get::<_, i64>(1)? as u64,
-                last_seen: row.get::<_, i64>(2)? as u64,
-            })
-        })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-        .unwrap_or_default()
+        match since {
+            Some(ts) => {
+                let mut stmt = match c.prepare_cached(
+                    "SELECT app_name, COUNT(*) AS cnt, MAX(activated_at) AS last_seen
+                     FROM active_windows WHERE activated_at >= ?1
+                     GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
+                ) {
+                    Ok(s)  => s,
+                    Err(e) => { eprintln!("[activity] top_apps: {e}"); return vec![]; }
+                };
+                stmt.query_map(params![ts as i64, limit as i64], |row| {
+                    Ok(AppUsageRow {
+                        app_name:  row.get(0)?,
+                        switches:  row.get::<_, i64>(1)? as u64,
+                        last_seen: row.get::<_, i64>(2)? as u64,
+                    })
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .unwrap_or_default()
+            }
+            None => {
+                let mut stmt = match c.prepare_cached(
+                    "SELECT app_name, COUNT(*) AS cnt, MAX(activated_at) AS last_seen
+                     FROM active_windows
+                     GROUP BY app_name ORDER BY cnt DESC LIMIT ?1",
+                ) {
+                    Ok(s)  => s,
+                    Err(e) => { eprintln!("[activity] top_apps: {e}"); return vec![]; }
+                };
+                stmt.query_map(params![limit as i64], |row| {
+                    Ok(AppUsageRow {
+                        app_name:  row.get(0)?,
+                        switches:  row.get::<_, i64>(1)? as u64,
+                        last_seen: row.get::<_, i64>(2)? as u64,
+                    })
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .unwrap_or_default()
+            }
+        }
     }
 
     /// Return all per-minute buckets whose `minute_ts` falls in `[from_ts, to_ts]`,
@@ -405,5 +418,52 @@ mod tests {
         let rows = store.get_input_buckets(0, 300);
         let ts: Vec<u64> = rows.iter().map(|r| r.minute_ts).collect();
         assert_eq!(ts, vec![0, 60, 120, 180, 300]);
+    }
+
+    #[test]
+    fn top_apps_all_time() {
+        let store = open_temp();
+        for _ in 0..5 { store.insert_active_window(&ActiveWindowInfo {
+            app_name: "Firefox".into(), app_path: "".into(), window_title: "".into(), activated_at: 100,
+        }); }
+        for _ in 0..3 { store.insert_active_window(&ActiveWindowInfo {
+            app_name: "Terminal".into(), app_path: "".into(), window_title: "".into(), activated_at: 200,
+        }); }
+        store.insert_active_window(&ActiveWindowInfo {
+            app_name: "Code".into(), app_path: "".into(), window_title: "".into(), activated_at: 300,
+        });
+        let top = store.top_apps(10, None);
+        assert_eq!(top.len(), 3);
+        assert_eq!(top[0].app_name, "Firefox");
+        assert_eq!(top[0].switches, 5);
+        assert_eq!(top[1].app_name, "Terminal");
+        assert_eq!(top[1].switches, 3);
+        assert_eq!(top[2].app_name, "Code");
+    }
+
+    #[test]
+    fn top_apps_with_since_filter() {
+        let store = open_temp();
+        for _ in 0..5 { store.insert_active_window(&ActiveWindowInfo {
+            app_name: "Old".into(), app_path: "".into(), window_title: "".into(), activated_at: 100,
+        }); }
+        for _ in 0..2 { store.insert_active_window(&ActiveWindowInfo {
+            app_name: "New".into(), app_path: "".into(), window_title: "".into(), activated_at: 500,
+        }); }
+        let top = store.top_apps(10, Some(400));
+        assert_eq!(top.len(), 1);
+        assert_eq!(top[0].app_name, "New");
+        assert_eq!(top[0].switches, 2);
+    }
+
+    #[test]
+    fn top_apps_respects_limit() {
+        let store = open_temp();
+        for i in 0..10u64 {
+            store.insert_active_window(&ActiveWindowInfo {
+                app_name: format!("App{}", i), app_path: "".into(), window_title: "".into(), activated_at: i,
+            });
+        }
+        assert_eq!(store.top_apps(3, None).len(), 3);
     }
 }

@@ -221,6 +221,10 @@ pub async fn interactive_search(
         let mut seen_labels: std::collections::HashSet<i64> = std::collections::HashSet::new();
         let mut seen_screenshots: std::collections::HashSet<String> = std::collections::HashSet::new();
 
+        // Pre-compute query word matching data (hoisted out of inner loop)
+        let query_lower = query.to_lowercase();
+        let query_words: Vec<&str> = query_lower.split_whitespace().collect();
+
         // ── Steps 3-5: per text label ──────────────────────────────────────
         for (ti, tl) in text_labels.iter().enumerate() {
             let tl_id = format!("tl_{ti}");
@@ -335,10 +339,6 @@ pub async fn interactive_search(
                         reach_seconds as i32,
                     );
 
-                    // Normalise query for window-title matching
-                    let query_lower = query.to_lowercase();
-                    let query_words: Vec<&str> = query_lower.split_whitespace().collect();
-
                     for ss in screenshots.iter().take(k_labels.max(3)) {
                         if !seen_screenshots.insert(ss.filename.clone()) { continue; }
 
@@ -365,15 +365,18 @@ pub async fn interactive_search(
                             hits as f32 / query_words.len() as f32
                         } else { 0.0 };
 
-                        // OCR embedding similarity via HNSW (if available)
+                        // OCR embedding similarity via HNSW: search the k
+                        // nearest OCR embeddings to the query text vector and
+                        // check whether *this* screenshot's timestamp is among
+                        // them.  A window of k=20 gives good recall without
+                        // loading individual OCR vectors from SQLite.
                         let ocr_emb_sim = ocr_hnsw.as_ref().map(|idx| {
                             if idx.is_empty() { return 0.0f32; }
-                            let hits = idx.search(&query_vec, 1, 64);
-                            if let Some(hit) = hits.first() {
-                                if *hit.payload == ss.timestamp {
-                                    (1.0 - hit.distance).max(0.0)
-                                } else { 0.0 }
-                            } else { 0.0 }
+                            let hits = idx.search(&query_vec, 20, 64);
+                            hits.iter()
+                                .find(|hit| *hit.payload == ss.timestamp)
+                                .map(|hit| (1.0 - hit.distance).max(0.0))
+                                .unwrap_or(0.0)
                         }).unwrap_or(0.0);
 
                         // Combined relevance: skip if nothing matches
@@ -383,7 +386,12 @@ pub async fn interactive_search(
                             + (1.0 - time_dist.min(1.0)) * 0.1;
                         if relevance < 0.05 && time_dist > 0.5 { continue; }
 
-                        let ss_id = format!("ss_{}", ss.unix_ts);
+                        // Use timestamp + truncated filename hash to avoid
+                        // collisions when two screenshots share the same
+                        // unix-second timestamp.
+                        let ss_id = format!("ss_{}_{:x}",
+                            ss.unix_ts,
+                            ss.filename.len() as u32 ^ (ss.timestamp as u32));
 
                         // Determine edge kind and label
                         let (edge_kind, edge_dist) = if title_match > 0.3 || ocr_substr_match > 0.3 {

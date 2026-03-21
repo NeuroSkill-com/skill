@@ -557,37 +557,50 @@ impl ScreenshotStore {
         ScreenshotSummary { total, with_embedding, with_ocr, with_ocr_embedding }
     }
 
-    /// Return the top `limit` most frequent OCR texts (non-empty, grouped),
+    /// Return the top `limit` most frequently screenshotted apps,
     /// optionally filtered to screenshots taken at or after `since` (unix seconds).
-    pub fn top_ocr_texts(&self, limit: usize, since: Option<u64>) -> Vec<OcrFreqRow> {
+    pub fn top_screenshot_apps(&self, limit: usize, since: Option<u64>) -> Vec<OcrFreqRow> {
         let conn = self.conn.lock_or_recover();
-        let (sql, since_val): (&str, i64) = match since {
-            Some(ts) => (
-                "SELECT app_name, COUNT(*) AS cnt, MAX(unix_ts) AS last_seen
-                 FROM screenshots WHERE unix_ts >= ?1 AND app_name != ''
-                 GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
-                ts as i64,
-            ),
-            None => (
-                "SELECT app_name, COUNT(*) AS cnt, MAX(unix_ts) AS last_seen
-                 FROM screenshots WHERE app_name != '' AND (1=1 OR ?1=?1)
-                 GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
-                0i64,
-            ),
-        };
-        let mut stmt = match conn.prepare_cached(sql) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[screenshots] top_ocr_texts: {e}"); return vec![]; }
-        };
-        stmt.query_map(params![since_val, limit as i64], |row| {
-            Ok(OcrFreqRow {
-                app_name:  row.get(0)?,
-                count:     row.get::<_, i64>(1)? as u64,
-                last_seen: row.get::<_, i64>(2)? as u64,
-            })
-        })
-        .map(|rows| rows.filter_map(|r| r.ok()).collect())
-        .unwrap_or_default()
+        match since {
+            Some(ts) => {
+                let mut stmt = match conn.prepare_cached(
+                    "SELECT app_name, COUNT(*) AS cnt, MAX(unix_ts) AS last_seen
+                     FROM screenshots WHERE unix_ts >= ?1 AND app_name != ''
+                     GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
+                ) {
+                    Ok(s)  => s,
+                    Err(e) => { eprintln!("[screenshots] top_screenshot_apps: {e}"); return vec![]; }
+                };
+                stmt.query_map(params![ts as i64, limit as i64], |row| {
+                    Ok(OcrFreqRow {
+                        app_name:  row.get(0)?,
+                        count:     row.get::<_, i64>(1)? as u64,
+                        last_seen: row.get::<_, i64>(2)? as u64,
+                    })
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .unwrap_or_default()
+            }
+            None => {
+                let mut stmt = match conn.prepare_cached(
+                    "SELECT app_name, COUNT(*) AS cnt, MAX(unix_ts) AS last_seen
+                     FROM screenshots WHERE app_name != ''
+                     GROUP BY app_name ORDER BY cnt DESC LIMIT ?1",
+                ) {
+                    Ok(s)  => s,
+                    Err(e) => { eprintln!("[screenshots] top_screenshot_apps: {e}"); return vec![]; }
+                };
+                stmt.query_map(params![limit as i64], |row| {
+                    Ok(OcrFreqRow {
+                        app_name:  row.get(0)?,
+                        count:     row.get::<_, i64>(1)? as u64,
+                        last_seen: row.get::<_, i64>(2)? as u64,
+                    })
+                })
+                .map(|rows| rows.filter_map(|r| r.ok()).collect())
+                .unwrap_or_default()
+            }
+        }
     }
 
     /// Set the animated GIF filename for a screenshot row.

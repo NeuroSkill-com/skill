@@ -159,10 +159,10 @@ pub fn status(app: &AppHandle) -> Result<Value, String> {
     let ss_store = guard.screenshot_store.clone();
     let ss_summary = ss_store.as_ref().map(|s| s.summary_counts());
     let ss_top_apps_all = ss_store.as_ref()
-        .map(|s| s.top_ocr_texts(10, None))
+        .map(|s| s.top_screenshot_apps(10, None))
         .unwrap_or_default();
     let ss_top_apps_24h = ss_store.as_ref()
-        .map(|s| s.top_ocr_texts(10, Some(now_for_labels.saturating_sub(24 * 3600))))
+        .map(|s| s.top_screenshot_apps(10, Some(now_for_labels.saturating_sub(24 * 3600))))
         .unwrap_or_default();
 
     // ── Calibration ──────────────────────────────────────────────────────────
