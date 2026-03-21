@@ -249,7 +249,7 @@ the Free Software Foundation, version 3 only. -->
       <span class="help-license-badge" title="GNU General Public License v3.0">{t("settings.license")}</span>
     </div>
   {:else if isChatWindow}
-    <div class="chat-window-head" data-tauri-drag-region bind:this={pickerWrapEl}>
+    <div class="chat-window-head" bind:this={pickerWrapEl}>
       <span class="chat-status-dot
         {chatTitlebarState.status === 'running'  ? 'chat-status-running'
         : chatTitlebarState.status === 'loading' ? 'chat-status-loading'
@@ -491,7 +491,7 @@ the Free Software Foundation, version 3 only. -->
     display: flex; align-items: center; justify-content: center; gap: 5px;
     max-width: min(400px, calc(100vw - 200px));
     min-width: 0; padding: 0 10px; height: 100%;
-    overflow: visible; pointer-events: none; z-index: 1;
+    overflow: visible; pointer-events: auto; z-index: 1;
   }
   .chat-status-dot {
     width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
