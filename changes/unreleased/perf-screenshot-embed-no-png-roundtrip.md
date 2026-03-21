@@ -1,0 +1,3 @@
+### Performance
+
+- **Eliminate PNG encode/decode round-trip in screenshot embed pipeline**: The capture thread now sends the pre-decoded `DynamicImage` directly to the embed thread instead of encoding it to PNG first. The embed thread calls fastembed's `embed_images()` with the `DynamicImage` directly, avoiding the CPU-intensive PNG encode (capture thread) → PNG decode (fastembed) round-trip. For LLM vision and OCR paths that still need encoded bytes, JPEG is produced lazily (~10× faster than PNG). OCR via `ocrs` now also operates on the decoded image buffer directly (`run_ocr_from_image`) instead of encoding to PNG and decoding again.

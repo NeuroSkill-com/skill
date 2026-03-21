@@ -268,6 +268,30 @@ fn fastembed_embed(encoder: &mut fastembed::ImageEmbedding, png_bytes: &[u8]) ->
     }
 }
 
+/// Embed a pre-decoded `DynamicImage` directly using fastembed — avoids the
+/// CPU-intensive PNG encode→decode round-trip that `embed_bytes` performs.
+fn fastembed_embed_image(encoder: &mut fastembed::ImageEmbedding, img: DynamicImage) -> Option<Vec<f32>> {
+    match encoder.embed_images(vec![img]) {
+        Ok(mut vecs) if !vecs.is_empty() => Some(vecs.remove(0)),
+        Ok(_) => None,
+        Err(e) => {
+            eprintln!("[screenshot] embed_images error: {e}");
+            None
+        }
+    }
+}
+
+/// Encode a `DynamicImage` as JPEG bytes.  JPEG encoding is ~10× faster than
+/// PNG and is used for paths that need encoded bytes (LLM vision, OCR) where
+/// lossless fidelity is unnecessary.
+fn encode_jpeg(img: &DynamicImage, quality: u8) -> Option<Vec<u8>> {
+    let rgb = img.to_rgb8();
+    let mut buf = Vec::new();
+    let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, quality);
+    rgb.write_with_encoder(encoder).ok()?;
+    Some(buf)
+}
+
 // ── OCR engine ────────────────────────────────────────────────────────────────
 
 /// Download an OCR model file if it doesn't exist yet. Public alias for Tauri commands.
@@ -343,6 +367,29 @@ fn run_ocr(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
 /// and as a fallback on macOS if Vision framework is unavailable.
 fn run_ocr_rten(engine: &ocrs::OcrEngine, png_bytes: &[u8]) -> Option<String> {
     let img = image::load_from_memory(png_bytes).ok()?.into_rgb8();
+    run_ocr_rten_rgb(engine, &img)
+}
+
+/// OCR from an already-decoded `DynamicImage` — avoids the encode→decode
+/// round-trip when the caller already has pixel data.
+fn run_ocr_from_image(engine: &ocrs::OcrEngine, img: &DynamicImage) -> Option<String> {
+    // Try Apple Vision first on macOS (GPU/ANE, <50ms)
+    #[cfg(target_os = "macos")]
+    {
+        // Apple Vision needs encoded bytes — JPEG is ~10× faster than PNG
+        if let Some(jpg) = encode_jpeg(img, 85) {
+            if let Some(text) = skill_vision::recognize_text_from_png(&jpg) {
+                return Some(text);
+            }
+        }
+    }
+
+    let rgb = img.to_rgb8();
+    run_ocr_rten_rgb(engine, &rgb)
+}
+
+/// Core OCR on an already-decoded RGB8 image buffer.
+fn run_ocr_rten_rgb(engine: &ocrs::OcrEngine, img: &image::RgbImage) -> Option<String> {
     let (w, h) = img.dimensions();
     let source = ocrs::ImageSource::from_bytes(img.as_raw(), (w, h)).ok()?;
     let input = engine.prepare_input(source).ok()?;
@@ -498,8 +545,12 @@ fn now_ms() -> u64 {
 struct EmbedJob {
     row_id:      i64,
     ts_i64:      i64,
-    resized_png: Vec<u8>,
-    /// Whether OCR should run on `resized_png` in the embed thread.
+    /// Pre-decoded resized image.  Passed directly to fastembed's
+    /// `embed_images()` to avoid the CPU-heavy PNG encode→decode
+    /// round-trip.  For LLM/OCR paths that need encoded bytes, JPEG
+    /// is produced lazily in the embed thread (~10× faster than PNG).
+    resized_img: Option<DynamicImage>,
+    /// Whether OCR should run on the resized image in the embed thread.
     run_ocr:     bool,
     config:      ScreenshotConfig,
     /// When set, the screenshot is identical to a previous one — copy
@@ -684,25 +735,26 @@ pub fn run_screenshot_worker(
             ts: ts_str, filename: webp_name,
         }).unwrap_or_default());
 
-        // ── Encode PNG for the embed thread (vision encoder needs PNG) ──
-        // This is deferred to here so we skip it entirely on duplicate frames.
-        let resized_png = if copy_from.is_some() {
-            // Duplicate — embed thread will copy from previous row, no PNG needed.
-            Vec::new()
+        // ── Prepare image for the embed thread ──
+        // Pass the decoded DynamicImage directly — the embed thread uses
+        // fastembed's `embed_images()` which accepts DynamicImage, avoiding
+        // the CPU-heavy PNG encode→decode round-trip.  For LLM/OCR paths
+        // that need encoded bytes, JPEG is produced lazily in the embed
+        // thread (~10× faster than PNG).
+        let resized_for_embed = if copy_from.is_some() {
+            // Duplicate — embed thread will copy from previous row, no image needed.
+            drop(resized_img);
+            None
         } else {
-            match encode_png(&resized_img) {
-                Some(png) => png,
-                None => continue,
-            }
+            Some(resized_img)
         };
-        drop(resized_img); // free decoded pixels
 
         // ── Send to embed thread (non-blocking if capacity available) ──
         if let Some(row_id) = row_id {
             match embed_tx.try_send(EmbedJob {
                 row_id,
                 ts_i64,
-                resized_png,
+                resized_img: resized_for_embed,
                 run_ocr: config.ocr_enabled,
                 config: config.clone(),
                 copy_from_row: copy_from,
@@ -938,12 +990,22 @@ fn run_embed_thread(
             last_model   = config.fastembed_model.clone();
         }
 
+        // ── Lazily encode JPEG for paths that need encoded bytes ──
+        // JPEG encoding is ~10× faster than PNG.  Only produced when the
+        // LLM vision or OCR paths actually need it.
+        let encoded_bytes_lazy = |img: &DynamicImage| -> Vec<u8> {
+            encode_jpeg(img, 85).unwrap_or_default()
+        };
+
         // ── Vision embedding ──
         let t0 = Instant::now();
         let (embedding, model_backend, model_id) = match config.embed_backend.as_str() {
             "fastembed" => {
                 if let Some(ref mut fe) = fe_encoder {
-                    let emb = fastembed_embed(fe, &job.resized_png);
+                    // Pass DynamicImage directly — no encode→decode round-trip.
+                    let emb = job.resized_img.as_ref().and_then(|img| {
+                        fastembed_embed_image(fe, img.clone())
+                    });
                     let mid = config.model_id();
                     (emb, "fastembed".to_string(), mid)
                 } else {
@@ -951,7 +1013,14 @@ fn run_embed_thread(
                 }
             }
             "mmproj" | "llm-vlm" => {
-                let result = ctx.embed_image_via_llm(&job.resized_png);
+                let encoded = job.resized_img.as_ref()
+                    .map(encoded_bytes_lazy)
+                    .unwrap_or_default();
+                let result = if !encoded.is_empty() {
+                    ctx.embed_image_via_llm(&encoded)
+                } else {
+                    None
+                };
                 let backend = config.embed_backend.clone();
                 let mid = config.model_id();
                 if result.is_some() {
@@ -995,14 +1064,27 @@ fn run_embed_thread(
             );
         }
 
-        // ── OCR extraction (on the already-resized PNG — typically 768px) ──
+        // ── OCR extraction (on the resized image — typically 768px) ──
         let t_ocr = Instant::now();
         let ocr_text = if job.run_ocr {
             if config.embed_backend == "llm-vlm" || config.ocr_engine == "llm-vlm" {
-                // VLM-based OCR — use the LLM vision model to extract text.
-                ctx.ocr_via_llm(&job.resized_png).unwrap_or_default()
+                // VLM-based OCR — encode to JPEG for the LLM vision endpoint.
+                let encoded = job.resized_img.as_ref()
+                    .map(encoded_bytes_lazy)
+                    .unwrap_or_default();
+                if !encoded.is_empty() {
+                    ctx.ocr_via_llm(&encoded).unwrap_or_default()
+                } else {
+                    String::new()
+                }
             } else if let Some(ref engine) = ocr_engine {
-                run_ocr(engine, &job.resized_png).unwrap_or_default()
+                // ocrs works on decoded pixel data — encode to PNG/JPEG for
+                // its image loading, or call run_ocr_rten with raw pixels.
+                if let Some(ref img) = job.resized_img {
+                    run_ocr_from_image(engine, img).unwrap_or_default()
+                } else {
+                    String::new()
+                }
             } else {
                 String::new()
             }
