@@ -234,6 +234,15 @@ if (useRelease && !process.env.CARGO_PROFILE_RELEASE_DEBUG) {
 
 // ── Step 1: Build the binary (normal user) ───────────────────────────────────
 
+// Locate the expected binary path
+const profileDir = useRelease ? "release" : "debug";
+const binaryName = isWin ? "skill.exe" : "skill";
+const binaryPath = resolve(srcTauri, "target", profileDir, binaryName);
+
+// Delete the old binary first so we're guaranteed a fresh build.
+// Previous runs under sudo may have left a root-owned stale binary.
+forceRemove(binaryPath);
+
 const buildArgs = ["build"];
 if (useRelease) buildArgs.push("--release");
 if (features) buildArgs.push("--features", features);
@@ -246,11 +255,6 @@ execSync(buildCmd, {
   stdio: "inherit",
   env: { ...process.env, ESPEAK_LIB_DIR: espeakLib },
 });
-
-// Locate the built binary
-const profileDir = useRelease ? "release" : "debug";
-const binaryName = isWin ? "skill.exe" : "skill";
-const binaryPath = resolve(srcTauri, "target", profileDir, binaryName);
 
 if (!existsSync(binaryPath)) {
   console.error(`✖ Built binary not found at: ${binaryPath}`);
