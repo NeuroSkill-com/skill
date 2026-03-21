@@ -108,9 +108,10 @@ the Free Software Foundation, version 3 only. -->
     aria-label={t("settings.language")}
     aria-haspopup="listbox"
     aria-expanded={open}
-    class="flex items-center justify-center w-6 h-6 rounded-md
+    class="flex items-center justify-center w-[30px] h-[30px] rounded-md
            text-muted-foreground hover:text-foreground hover:bg-accent
-           transition-colors select-none text-[0.95rem] leading-none">
+           transition-colors select-none text-[0.95rem] leading-none
+           px-1">
     {currentFlag}
   </button>
 </div>
