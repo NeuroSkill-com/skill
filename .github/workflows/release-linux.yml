@@ -66,10 +66,11 @@ jobs:
             pkg-config
             libasound2-dev
             libpipewire-0.3-dev
+            libgbm-dev
             cmake
             binutils
             rpm
-          version: tauri-release-linux-v2
+          version: tauri-release-linux-v3
 
       # ── Rust toolchain ────────────────────────────────────────────────────────
       - name: Install Rust stable

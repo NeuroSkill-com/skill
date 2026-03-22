@@ -41,9 +41,9 @@ jobs:
             librsvg2-dev patchelf libssl-dev
             libudev-dev libdbus-1-dev pkg-config
             libespeak-ng-dev libasound2-dev
-            libpipewire-0.3-dev
+            libpipewire-0.3-dev libgbm-dev
             cmake binutils
-          version: tauri-rust-check-v2
+          version: tauri-rust-check-v3
 
       # Vulkan SDK — required by the llm-vulkan feature (llama.cpp Vulkan backend).
       # We install directly from the LunarG apt repo (noble) so cargo check/clippy
