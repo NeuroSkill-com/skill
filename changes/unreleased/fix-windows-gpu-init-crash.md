@@ -1,3 +1,0 @@
-### Bugfixes
-
-- **Fix Windows Vulkan STATUS_ACCESS_VIOLATION crash**: The crash was in the Vulkan validation layer (`VK_LAYER_KHRONOS_validation`) loaded by the Vulkan SDK during llama.cpp model loading on the `llm-actor` thread. In debug builds, the validation layer's `ErrorObject` constructor crashes inside `vkEnumeratePhysicalDevices` on certain Windows GPU drivers. Now disable the validation layer at app startup via `VK_LOADER_LAYERS_DISABLE` and `VK_INSTANCE_LAYERS` env vars (affects llama.cpp / ggml-vulkan) plus `WGPU_VALIDATION=0` (affects wgpu/cubecl). Added a Windows vectored exception handler that prints faulting address, thread name, and full backtrace for any future access violations.

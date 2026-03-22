@@ -49,6 +49,12 @@ const bytes = dirSize(target);
 console.log(`  \x1b[33m>\x1b[0m   Found \x1b[1m${fmt(bytes)}\x1b[0m in build artifacts`);
 console.log("  \x1b[31m>\x1b[0m   Removing src-tauri/target ...");
 
-fs.rmSync(target, { recursive: true, force: true });
+try {
+  fs.rmSync(target, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 });
+} catch {
+  // Fallback: use system rm for very large trees where Node's rmSync hits ENOTEMPTY races
+  const { execSync } = await import("child_process");
+  execSync(`rm -rf ${JSON.stringify(target)}`, { stdio: "inherit" });
+}
 
 console.log(`  \x1b[32m✓\x1b[0m   Freed \x1b[1;32m${fmt(bytes)}\x1b[0m of disk space.\n`);
