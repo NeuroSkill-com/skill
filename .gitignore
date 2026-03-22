@@ -27,3 +27,5 @@ TODO.md
 # docs/screenshots/gifs/*.gif
 
 .gitrub_activity
+# Rust lock files
+Cargo.lock
