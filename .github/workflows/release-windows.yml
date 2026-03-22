@@ -428,7 +428,7 @@ jobs:
         run: |
           set -euo pipefail
           sccache --show-stats || true
-          cargo build -p skill --release --features custom-protocol,llm-vulkan
+          cargo build -p skill --release --features custom-protocol,llm-vulkan,screenshots
           sccache --show-stats || true
 
       # ── Package NSIS installer ───────────────────────────────────────────────

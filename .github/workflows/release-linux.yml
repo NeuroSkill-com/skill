@@ -175,7 +175,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo build -p skill --release --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan
+          cargo build -p skill --release --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan,screenshots
 
       - name: Build Linux deb/rpm via system tools
         env:
