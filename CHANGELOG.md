@@ -8,6 +8,22 @@ Past releases are archived in [`changes/releases/`](changes/releases/).
 
 ## [Unreleased]
 
+## [0.0.54] — 2026-03-23
+
+### Bugfixes
+
+- **Fix clean:rust ENOTEMPTY on large target dirs**: Added retry options and `rm -rf` fallback to `scripts/clean-rust.js` so the Rust build artifact cleanup no longer fails with ENOTEMPTY on very large directory trees.
+
+- **Windows app manifest for BLE access**: Added a custom Windows application manifest (`manifest.xml`) declaring Windows 10/11 compatibility via `supportedOS` and `maxversiontested`. Without this, Windows 11 may deny WinRT Bluetooth Low Energy API access to unpackaged desktop apps. Also includes Common Controls v6 and per-monitor DPI awareness v2.
+
+- **Windows 11 Bluetooth permissions guidance**: Updated BLE error messages and the "Bluetooth is off" UI state to include Windows 11-specific instructions (Settings → Privacy & Security → Bluetooth). The "Open Settings" button now opens both the Bluetooth devices page and the Bluetooth privacy page on Windows. Added a Windows-specific adapter state check in `bluetooth_ok()` to detect powered-off adapters. Updated all locales (en, de, fr, he, uk).
+
+### Build
+
+- **Stop tracking Cargo.lock**: Removed all `Cargo.lock` files from version control and added `Cargo.lock` to `.gitignore`.
+
+- **Add libgbm-dev to Linux CI**: Added missing `libgbm-dev` package to CI and release workflows to fix linker error (`library not found: gbm`).
+
 ## [0.0.53] — 2026-03-22
 
 ### Features
