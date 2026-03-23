@@ -103,7 +103,7 @@ const dashboard: Record<string, string> = {
   "dashboard.noMuseNearbyHint2":   "Bleiben Sie innerhalb von 5 m",
   "dashboard.noMuseNearbyHint3":   "macOS: Bluetooth-Berechtigung erteilen unter\nSystemeinstellungen → Datenschutz & Sicherheit → Bluetooth",
   "dashboard.bluetoothIsOff":       "Bluetooth ist ausgeschaltet",
-  "dashboard.turnOnBluetooth":      "Schalten Sie Bluetooth ein, um Ihr BCI-Gerät zu verbinden.",
+  "dashboard.turnOnBluetooth":      "Schalten Sie Bluetooth ein, um Ihr BCI-Gerät zu verbinden. Unter Windows 11 pr\u00fcfen Sie auch Datenschutz & Sicherheit \u2192 Bluetooth.",
   "dashboard.openSettings":         "Einstellungen öffnen",
   "dashboard.pairedDevices":        "Gekoppelte Geräte",
   "dashboard.trayConnect":          "Rechtsklick auf Symbol zum Verbinden",

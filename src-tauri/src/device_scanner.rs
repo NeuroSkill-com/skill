@@ -132,12 +132,18 @@ pub(crate) fn classify_device_error(raw: &str) -> (String, bool) {
     let is_bt = lo.contains("adapter")       || lo.contains("powered")
              || lo.contains("bluetooth")     || lo.contains("permission")
              || lo.contains("access denied") || lo.contains("org.bluez")
-             || lo.contains("dbus");
+             || lo.contains("dbus")          || lo.contains("denied")
+             || lo.contains("0x80070005")    // E_ACCESSDENIED (Windows)
+             || lo.contains("element not found")  // WinRT adapter missing
+             || lo.contains("radio");
     let msg = if is_bt {
         "Bluetooth is off or unavailable.\n\
          \n\
          • Enable Bluetooth in System Settings\n\
-         • macOS: System Settings → Privacy & Security → Bluetooth\n\
+         • Windows 11: Settings \u{2192} Privacy & Security \u{2192} Bluetooth \u{2014} \
+           make sure it is ON and NeuroSkill is allowed\n\
+         • Windows: also check Settings \u{2192} Bluetooth & devices \u{2192} toggle Bluetooth ON\n\
+         • macOS: System Settings \u{2192} Privacy & Security \u{2192} Bluetooth\n\
          • Linux: make sure bluetoothd is running"
     } else {
         "Connection failed. Make sure the headset is powered on and in range."
@@ -156,11 +162,43 @@ pub(crate) async fn bluetooth_ok() -> Result<(), (String, bool)> {
         return Err((
             "No Bluetooth adapter detected.\n\
              \n\
-             • Enable Bluetooth in System Settings\n\
-             • Linux: sudo systemctl start bluetooth".into(),
+             \u{2022} Enable Bluetooth in System Settings\n\
+             \u{2022} Windows 11: Settings \u{2192} Privacy & Security \u{2192} Bluetooth \
+               \u{2014} make sure it is ON and NeuroSkill is allowed\n\
+             \u{2022} Windows: Settings \u{2192} Bluetooth & devices \u{2192} toggle Bluetooth ON\n\
+             \u{2022} Linux: sudo systemctl start bluetooth".into(),
             true,
         ));
     }
+
+    // On Windows 11, even with an adapter present, BLE scanning can fail
+    // silently if Bluetooth privacy settings deny app access.  Verify the
+    // adapter is actually powered on by checking its state.
+    #[cfg(target_os = "windows")]
+    {
+        use btleplug::api::CentralState;
+        let adapter = &adapters[0];
+        match adapter.adapter_state().await {
+            Ok(CentralState::PoweredOn) => {}
+            Ok(_state) => {
+                return Err((
+                    "Bluetooth adapter is present but not powered on.\n\
+                     \n\
+                     \u{2022} Windows 11: Settings \u{2192} Bluetooth & devices \u{2192} \
+                       toggle Bluetooth ON\n\
+                     \u{2022} Windows 11: Settings \u{2192} Privacy & Security \u{2192} \
+                       Bluetooth \u{2014} make sure it is ON and NeuroSkill is allowed\n\
+                     \u{2022} If Bluetooth is on, try restarting the Bluetooth Support Service \
+                       (services.msc)".into(),
+                    true,
+                ));
+            }
+            Err(e) => {
+                return Err(classify_device_error(&e.to_string()));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -244,7 +282,8 @@ fn scanner_bt_off(app: &AppHandle, emitted: &mut bool) {
         if idle {
             g.status.state      = "bt_off".into();
             g.status.device_error   = Some(
-                "Bluetooth is off — turn it on to connect to your BCI device.".into()
+                "Bluetooth is off \u{2014} turn it on to connect to your BCI device.\n\
+                 On Windows 11: also check Settings \u{2192} Privacy & Security \u{2192} Bluetooth.".into()
             );
             g.pending_reconnect = false;
             true
