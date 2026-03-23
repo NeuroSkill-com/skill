@@ -313,8 +313,17 @@ pub fn open_bt_settings() {
     { let _ = std::process::Command::new("open")
         .arg("x-apple.systempreferences:com.apple.Bluetooth-Settings.extension").spawn(); }
     #[cfg(target_os = "windows")]
-    { let _ = std::process::Command::new("rundll32")
-        .args(["shell32.dll,Control_RunDLL","bthprops.cpl"]).spawn(); }
+    {
+        // Open the Windows 11 Bluetooth & devices settings page first,
+        // then also open the Privacy → Bluetooth page (which controls
+        // per-app BLE access).  Both open in the same Settings window.
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "ms-settings:bluetooth"])
+            .spawn();
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "ms-settings:privacy-bluetooth"])
+            .spawn();
+    }
     #[cfg(target_os = "linux")]
     { let _ = std::process::Command::new("sh").arg("-c")
         .arg("gnome-control-center bluetooth 2>/dev/null || blueman-manager 2>/dev/null").spawn(); }

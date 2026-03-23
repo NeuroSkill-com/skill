@@ -77,7 +77,7 @@ const dashboard: Record<string, string> = {
   "dashboard.noMuseNearbyHint2":   "הישארו בטווח של 5 מטר",
   "dashboard.noMuseNearbyHint3":   "macOS: העניקו הרשאת Bluetooth ב-\nהגדרות מערכת → פרטיות ואבטחה → Bluetooth",
   "dashboard.bluetoothIsOff":       "ה-Bluetooth כבוי",
-  "dashboard.turnOnBluetooth":      "הפעל את ה-Bluetooth כדי להתחבר למכשיר BCI.",
+  "dashboard.turnOnBluetooth":      "הפעל את ה-Bluetooth כדי להתחבר למכשיר BCI. ב-Windows 11, בדוק גם פרטיות ואבטחה \u2192 Bluetooth.",
   "dashboard.openSettings":         "פתח הגדרות",
   "dashboard.pairedDevices":        "מכשירים מותאמים",
   "dashboard.trayConnect":          "לחצן ימני על הסמל לחיבור",
