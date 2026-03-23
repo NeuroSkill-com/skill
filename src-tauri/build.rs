@@ -99,7 +99,31 @@ fn main() {
         println!("cargo:rustc-link-arg-bins=-Wl,-z,stacksize=33554432");
     }
 
-    tauri_build::build()
+    // ── Windows app manifest ─────────────────────────────────────────────────
+    //
+    // Embed a side-by-side application manifest that declares:
+    //   • Windows 10/11 compatibility (supportedOS + maxVersionTested)
+    //   • Common Controls v6
+    //   • Per-monitor DPI awareness v2
+    //
+    // The `maxversiontested` element is critical for WinRT API access:
+    // without it, Windows 11 may deny Bluetooth Low Energy (BLE) scanning
+    // and other modern device APIs to unpackaged desktop apps.
+    #[cfg(target_os = "windows")]
+    {
+        let manifest = include_str!("./manifest.xml");
+        let windows = tauri_build::WindowsAttributes::new()
+            .app_manifest(manifest);
+        let attrs = tauri_build::Attributes::new()
+            .windows_attributes(windows);
+        tauri_build::try_build(attrs)
+            .expect("failed to run tauri build script");
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        tauri_build::build();
+    }
 }
 
 // ── Target environment helpers ────────────────────────────────────────────────
