@@ -118,6 +118,7 @@ try {
         -DUSE_LIBPCAUDIO=OFF `
         -DUSE_ASYNC=OFF `
         -DUSE_MBROLA=OFF `
+        -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
         -DCMAKE_INSTALL_PREFIX="$StaticDir"
     if ($LASTEXITCODE -ne 0) { Die "cmake configure failed." }
 

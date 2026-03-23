@@ -172,11 +172,15 @@ CMAKE_OSX_DEPLOYMENT_TARGET = { value = "10.15", force = true }
 #
 # Install: winget install LLVM.LLVM
 
+# +crt-static: statically link the MSVC C/C++ runtime (ucrt + vcruntime) into
+# the binary so users don't need the Visual C++ Redistributable installed.
+# Without this, Windows shows "side-by-side configuration is incorrect" on
+# machines that lack the matching vcruntime140.dll / ucrtbase.dll.
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "link-args=/STACK:8388608"]
+rustflags = ["-C", "link-args=/STACK:8388608", "-C", "target-feature=+crt-static"]
 
 [target.aarch64-pc-windows-msvc]
-rustflags = ["-C", "link-args=/STACK:8388608"]
+rustflags = ["-C", "link-args=/STACK:8388608", "-C", "target-feature=+crt-static"]
 
 # ── Windows MinGW (x86_64-pc-windows-gnu): MinGW bash build script ────────────
 #
