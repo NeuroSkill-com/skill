@@ -433,11 +433,25 @@ $ZIP_PATH       = Join-Path $NSIS_DIR $ZIP_NAME
 $SIG_PATH       = "$ZIP_PATH.sig"
 
 if ($DryRun) {
-    Dry "Compress-Archive -Path $INSTALLER_PATH -DestinationPath $ZIP_PATH"
+    Dry "ZipFile::Create $ZIP_PATH (Deflate)"
     Dry "npx tauri signer sign $ZIP_PATH"
 } else {
-    Compress-Archive -Path $INSTALLER_PATH -DestinationPath $ZIP_PATH -Force
-    Ok "Updater ZIP created: $ZIP_PATH"
+    # Use .NET ZipFile with explicit Deflate (CompressionLevel.Optimal)
+    # instead of Compress-Archive, which may use Deflate64 on newer Windows.
+    # The Tauri updater's zip crate only supports standard Deflate (method 8).
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::Open(
+        $ZIP_PATH,
+        [System.IO.Compression.ZipArchiveMode]::Create
+    )
+    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+        $zip,
+        $INSTALLER_PATH,
+        $INSTALLER_NAME,
+        [System.IO.Compression.CompressionLevel]::Optimal
+    ) | Out-Null
+    $zip.Dispose()
+    Ok "Updater ZIP created (Deflate): $ZIP_PATH"
 
     # Sign with the Tauri Ed25519 key.
     # FILE is a positional argument — do NOT use -f (that flag is --private-key-path).

@@ -535,8 +535,24 @@ jobs:
           if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
           if (Test-Path $sigPath) { Remove-Item $sigPath -Force }
 
-          Compress-Archive -Path $installer.FullName -DestinationPath $zipPath -Force
-          Write-Host "[ok] created updater zip: $zipPath"
+          # Use .NET ZipFile with explicit Deflate (CompressionLevel.Optimal)
+          # instead of Compress-Archive, which may use Deflate64 on newer
+          # Windows versions.  The Tauri updater's zip crate only supports
+          # standard Deflate (method 8); Deflate64 (method 9) causes
+          # "unsupported compression method" at update time.
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::Open(
+            $zipPath,
+            [System.IO.Compression.ZipArchiveMode]::Create
+          )
+          [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+            $zip,
+            $installer.FullName,
+            $installer.Name,
+            [System.IO.Compression.CompressionLevel]::Optimal
+          ) | Out-Null
+          $zip.Dispose()
+          Write-Host "[ok] created updater zip (Deflate): $zipPath"
 
           & npx tauri signer sign $zipPath
           if ($LASTEXITCODE -ne 0) {
