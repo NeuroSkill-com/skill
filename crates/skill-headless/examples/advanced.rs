@@ -18,9 +18,7 @@ fn load_html(browser: &Browser, html: &str) {
         .replace('\n', "\\n");
     browser
         .send(Command::EvalJsNoReturn {
-            script: format!(
-                "document.open(); document.write('{escaped}'); document.close();"
-            ),
+            script: format!("document.open(); document.write('{escaped}'); document.close();"),
         })
         .expect("document.write failed");
     std::thread::sleep(Duration::from_millis(500));
@@ -219,8 +217,7 @@ fn main() {
                     .into(),
             })
             .unwrap();
-        let rect: serde_json::Value =
-            serde_json::from_str(resp.as_text().unwrap()).unwrap();
+        let rect: serde_json::Value = serde_json::from_str(resp.as_text().unwrap()).unwrap();
         let top = rect["top"].as_f64().unwrap();
         let left = rect["left"].as_f64().unwrap();
         assert!((top - 50.0).abs() < 1.0, "top={top}");
@@ -254,8 +251,7 @@ fn main() {
             "expected PNG data URL, got: {}",
             &text[..text.len().min(60)]
         );
-        let bytes =
-            base64_decode(text.strip_prefix("data:image/png;base64,").unwrap());
+        let bytes = base64_decode(text.strip_prefix("data:image/png;base64,").unwrap());
         assert!(bytes.len() > 100, "PNG too small: {} bytes", bytes.len());
         assert_eq!(&bytes[0..4], &[0x89, 0x50, 0x4E, 0x47], "invalid PNG");
         println!("  ({} bytes)", bytes.len());
@@ -288,8 +284,7 @@ fn main() {
         let resp = browser.send(Command::Screenshot).unwrap();
         let text = resp.as_text().unwrap_or("");
         assert!(text.starts_with("data:image/png;base64,"));
-        let bytes =
-            base64_decode(text.strip_prefix("data:image/png;base64,").unwrap());
+        let bytes = base64_decode(text.strip_prefix("data:image/png;base64,").unwrap());
         assert!(bytes.len() > 200, "too small: {} bytes", bytes.len());
     });
 
@@ -525,8 +520,7 @@ fn main() {
                 text.starts_with("data:image/png;base64,"),
                 "no PNG at {w}x{h}"
             );
-            let bytes =
-                base64_decode(text.strip_prefix("data:image/png;base64,").unwrap());
+            let bytes = base64_decode(text.strip_prefix("data:image/png;base64,").unwrap());
             assert!(bytes.len() > 100, "too small: {} bytes", bytes.len());
             assert_eq!(&bytes[0..4], &[0x89, 0x50, 0x4E, 0x47]);
             println!("  ({} bytes)", bytes.len());

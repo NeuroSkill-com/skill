@@ -13,22 +13,27 @@
  *   regionColors  — BrainRegion → hex colour map
  *   regionLabels  — BrainRegion → display-name map
  */
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
+  type BrainRegion,
+  type ElectrodeSystem,
   electrodes,
   getElectrodes,
   regionColors,
-  regionLabels,
   regionDescriptions,
-  type BrainRegion,
-  type ElectrodeSystem,
+  regionLabels,
 } from "../../src/lib/data/electrodes";
 
 // ── Known brain regions ───────────────────────────────────────────────────────
 
 const BRAIN_REGIONS: BrainRegion[] = [
-  "prefrontal", "frontal", "central",
-  "temporal",   "parietal", "occipital", "reference",
+  "prefrontal",
+  "frontal",
+  "central",
+  "temporal",
+  "parietal",
+  "occipital",
+  "reference",
 ];
 
 const SYSTEMS: ElectrodeSystem[] = ["10-20", "10-10", "10-5"];
@@ -53,7 +58,7 @@ describe("electrodes array", () => {
   });
 
   it("electrode names are unique", () => {
-    const names = electrodes.map(e => e.name);
+    const names = electrodes.map((e) => e.name);
     const unique = new Set(names);
     expect(unique.size).toBe(names.length);
   });
@@ -113,7 +118,7 @@ describe("Muse electrode metadata", () => {
   const MUSE_NAMES = ["TP9", "AF7", "AF8", "TP10"] as const;
 
   it("all 4 Muse channel electrodes exist in the array", () => {
-    const names = new Set(electrodes.map(e => e.name));
+    const names = new Set(electrodes.map((e) => e.name));
     for (const n of MUSE_NAMES) {
       expect(names.has(n), `Missing Muse electrode: ${n}`).toBe(true);
     }
@@ -121,25 +126,23 @@ describe("Muse electrode metadata", () => {
 
   it("each Muse electrode has muse: true", () => {
     for (const name of MUSE_NAMES) {
-      const e = electrodes.find(e => e.name === name)!;
+      const e = electrodes.find((e) => e.name === name)!;
       expect(e.muse, `${name}.muse should be true`).toBe(true);
     }
   });
 
   it("each Muse electrode has a non-empty museRole string", () => {
     for (const name of MUSE_NAMES) {
-      const e = electrodes.find(e => e.name === name)!;
+      const e = electrodes.find((e) => e.name === name)!;
       expect(typeof e.museRole).toBe("string");
-      expect(e.museRole!.length).toBeGreaterThan(0);
+      expect(e.museRole?.length).toBeGreaterThan(0);
     }
   });
 
   it("non-Muse electrodes do not have muse: true", () => {
     const museSet = new Set<string>(MUSE_NAMES);
-    const wronglyFlagged = electrodes.filter(
-      e => e.muse === true && !museSet.has(e.name)
-    );
-    expect(wronglyFlagged.map(e => e.name)).toHaveLength(0);
+    const wronglyFlagged = electrodes.filter((e) => e.muse === true && !museSet.has(e.name));
+    expect(wronglyFlagged.map((e) => e.name)).toHaveLength(0);
   });
 });
 
@@ -168,28 +171,28 @@ describe("getElectrodes(system)", () => {
   });
 
   it("10-20 includes the classic midline electrodes (Fz, Cz, Pz, Oz)", () => {
-    const names = new Set(getElectrodes("10-20").map(e => e.name));
+    const names = new Set(getElectrodes("10-20").map((e) => e.name));
     for (const n of ["Fz", "Cz", "Pz", "Oz"]) {
       expect(names.has(n), `10-20 missing ${n}`).toBe(true);
     }
   });
 
   it("10-10 includes all 4 Muse electrodes (TP9/AF7/AF8/TP10 are 10-10 sites)", () => {
-    const names = new Set(getElectrodes("10-10").map(e => e.name));
+    const names = new Set(getElectrodes("10-10").map((e) => e.name));
     for (const n of ["TP9", "AF7", "AF8", "TP10"]) {
       expect(names.has(n), `10-10 missing Muse electrode ${n}`).toBe(true);
     }
   });
 
   it("10-5 also includes all 4 Muse electrodes", () => {
-    const names = new Set(getElectrodes("10-5").map(e => e.name));
+    const names = new Set(getElectrodes("10-5").map((e) => e.name));
     for (const n of ["TP9", "AF7", "AF8", "TP10"]) {
       expect(names.has(n), `10-5 missing Muse electrode ${n}`).toBe(true);
     }
   });
 
   it("getElectrodes results are a subset of the full electrodes array", () => {
-    const allNames = new Set(electrodes.map(e => e.name));
+    const allNames = new Set(electrodes.map((e) => e.name));
     for (const sys of SYSTEMS) {
       for (const e of getElectrodes(sys)) {
         expect(allNames.has(e.name)).toBe(true);
@@ -266,14 +269,14 @@ describe("regionDescriptions", () => {
 
 describe("electrode region distribution", () => {
   it("every known BrainRegion is used by at least one electrode", () => {
-    const usedRegions = new Set(electrodes.map(e => e.region));
+    const usedRegions = new Set(electrodes.map((e) => e.region));
     for (const region of BRAIN_REGIONS) {
       expect(usedRegions.has(region), `No electrode assigned to region '${region}'`).toBe(true);
     }
   });
 
   it("occipital region contains O1, Oz, O2", () => {
-    const occipital = electrodes.filter(e => e.region === "occipital").map(e => e.name);
+    const occipital = electrodes.filter((e) => e.region === "occipital").map((e) => e.name);
     const occSet = new Set(occipital);
     for (const n of ["O1", "Oz", "O2"]) {
       expect(occSet.has(n), `Occipital region missing ${n}`).toBe(true);
@@ -281,7 +284,7 @@ describe("electrode region distribution", () => {
   });
 
   it("central region contains Cz", () => {
-    const central = electrodes.filter(e => e.region === "central").map(e => e.name);
+    const central = electrodes.filter((e) => e.region === "central").map((e) => e.name);
     expect(central).toContain("Cz");
   });
 });

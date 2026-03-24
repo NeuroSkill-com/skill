@@ -6,37 +6,38 @@
 // the Free Software Foundation, version 3 only.
 //! Window open/close commands and calibration profile CRUD.
 
-use std::sync::Mutex;
 use crate::MutexExt;
+use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::{
-    AppState, CalibrationProfile, CalibrationConfig,
-    mutate_and_save, unix_secs, send_toast, ToastLevel,
-    default_skill_dir,
-};
 use crate::settings::tilde_path;
 use crate::ws_server::WsBroadcaster;
 use crate::AppStateExt;
+use crate::{
+    default_skill_dir, mutate_and_save, send_toast, unix_secs, AppState, CalibrationConfig,
+    CalibrationProfile, ToastLevel,
+};
 
 // ── Window helper ─────────────────────────────────────────────────────────────
 
 /// Configuration for creating a secondary window.
 pub(crate) struct WindowSpec<'a> {
-    pub label:          &'a str,
-    pub route:          &'a str,
-    pub title:          &'a str,
-    pub inner_size:     (f64, f64),
+    pub label: &'a str,
+    pub route: &'a str,
+    pub title: &'a str,
+    pub inner_size: (f64, f64),
     pub min_inner_size: Option<(f64, f64)>,
-    pub resizable:      bool,
-    pub always_on_top:  bool,
-    pub maximized:      bool,
+    pub resizable: bool,
+    pub always_on_top: bool,
+    pub maximized: bool,
 }
 
 impl<'a> Default for WindowSpec<'a> {
     fn default() -> Self {
         Self {
-            label: "", route: "", title: "",
+            label: "",
+            route: "",
+            title: "",
             inner_size: (680.0, 720.0),
             min_inner_size: None,
             resizable: true,
@@ -58,7 +59,8 @@ pub(crate) fn focus_or_create(app: &AppHandle, spec: WindowSpec) -> Result<(), S
         return Ok(());
     }
     let mut builder = tauri::WebviewWindowBuilder::new(
-        app, spec.label,
+        app,
+        spec.label,
         tauri::WebviewUrl::App(spec.route.into()),
     )
     .title(spec.title)
@@ -78,15 +80,21 @@ pub(crate) fn focus_or_create(app: &AppHandle, spec: WindowSpec) -> Result<(), S
         builder = builder.maximized(true);
     }
 
-    builder.build()
-        .map(|w| { let _ = w.set_focus(); })
+    builder
+        .build()
+        .map(|w| {
+            let _ = w.set_focus();
+        })
         .map_err(|e| e.to_string())
 }
 
 /// Like `focus_or_create` but emits an event to the existing window when it is
 /// already open.  Used for settings sub-tabs (model, updates, etc.).
 pub(crate) fn focus_or_create_with_emit(
-    app: &AppHandle, spec: WindowSpec, event: &str, payload: &str,
+    app: &AppHandle,
+    spec: WindowSpec,
+    event: &str,
+    payload: &str,
 ) -> Result<(), String> {
     if let Some(win) = app.get_webview_window(spec.label) {
         let _ = win.unminimize();
@@ -97,7 +105,8 @@ pub(crate) fn focus_or_create_with_emit(
     }
     // Fall through to normal builder
     let mut builder = tauri::WebviewWindowBuilder::new(
-        app, spec.label,
+        app,
+        spec.label,
         tauri::WebviewUrl::App(spec.route.into()),
     )
     .title(spec.title)
@@ -111,8 +120,11 @@ pub(crate) fn focus_or_create_with_emit(
         builder = builder.min_inner_size(w, h);
     }
 
-    builder.build()
-        .map(|w| { let _ = w.set_focus(); })
+    builder
+        .build()
+        .map(|w| {
+            let _ = w.set_focus();
+        })
         .map_err(|e| e.to_string())
 }
 
@@ -125,22 +137,28 @@ pub fn check_accessibility_permission() -> bool {
     #[cfg(target_os = "macos")]
     {
         #[link(name = "ApplicationServices", kind = "framework")]
-        extern "C" { fn AXIsProcessTrusted() -> bool; }
+        extern "C" {
+            fn AXIsProcessTrusted() -> bool;
+        }
         // SAFETY: AXIsProcessTrusted is a plain C function that reads a process
         // flag; it is safe to call from any thread.
         unsafe { AXIsProcessTrusted() }
     }
     #[cfg(not(target_os = "macos"))]
-    { true }
+    {
+        true
+    }
 }
 
 /// Open the OS panel where the user can grant Accessibility permission.
 #[tauri::command]
 pub fn open_accessibility_settings() {
     #[cfg(target_os = "macos")]
-    { let _ = std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
-        .spawn(); }
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .spawn();
+    }
     #[cfg(target_os = "linux")]
     { /* no-op */ }
     #[cfg(target_os = "windows")]
@@ -177,7 +195,9 @@ pub fn check_screen_recording_permission() -> bool {
         // We only read the count and release it — no dangling pointers.
         unsafe {
             let list = CGWindowListCopyWindowInfo(OPTIONS, 0);
-            if list.is_null() { return false; }
+            if list.is_null() {
+                return false;
+            }
             // If the list is non-empty, the permission has been granted
             // (macOS returns an empty or heavily redacted list without
             // screen recording permission — but the count itself is
@@ -197,16 +217,20 @@ pub fn check_screen_recording_permission() -> bool {
         }
     }
     #[cfg(not(target_os = "macos"))]
-    { true }
+    {
+        true
+    }
 }
 
 /// Open the macOS Screen Recording permission panel.
 #[tauri::command]
 pub fn open_screen_recording_settings() {
     #[cfg(target_os = "macos")]
-    { let _ = std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-        .spawn(); }
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+            .spawn();
+    }
     #[cfg(not(target_os = "macos"))]
     { /* no-op — no special permission required */ }
 }
@@ -215,14 +239,22 @@ pub fn open_screen_recording_settings() {
 #[tauri::command]
 pub fn open_notifications_settings() {
     #[cfg(target_os = "macos")]
-    { let _ = std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.preference.notifications")
-        .spawn(); }
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.notifications")
+            .spawn();
+    }
     #[cfg(target_os = "linux")]
-    { let _ = std::process::Command::new("sh").arg("-c")
-        .arg("gnome-control-center notifications 2>/dev/null || true").spawn(); }
+    {
+        let _ = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("gnome-control-center notifications 2>/dev/null || true")
+            .spawn();
+    }
     #[cfg(target_os = "windows")]
-    { let _ = std::process::Command::new("ms-settings:notifications").spawn(); }
+    {
+        let _ = std::process::Command::new("ms-settings:notifications").spawn();
+    }
 }
 
 // ── First-launch window reveal ────────────────────────────────────────────────
@@ -245,12 +277,13 @@ pub fn open_notifications_settings() {
 /// Also skips the show when onboarding is incomplete: `complete_onboarding`
 /// will call `win.show()` itself once the user finishes onboarding.
 #[tauri::command]
-pub fn show_main_window(
-    win:   tauri::WebviewWindow,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) {
-    if win.label() != "main" { return; }
-    if !state.lock_or_recover().ui.onboarding_complete { return; }
+pub fn show_main_window(win: tauri::WebviewWindow, state: tauri::State<'_, Mutex<Box<AppState>>>) {
+    if win.label() != "main" {
+        return;
+    }
+    if !state.lock_or_recover().ui.onboarding_complete {
+        return;
+    }
     let _ = win.show();
     let _ = win.set_focus();
     crate::linux_fix_decorations(&win);
@@ -297,12 +330,19 @@ macro_rules! window_tab_cmd {
      event: $ev:expr, payload: $pl:expr) => {
         #[tauri::command]
         pub async fn $name(app: AppHandle) -> Result<(), String> {
-            focus_or_create_with_emit(&app, WindowSpec {
-                label: $label, route: $route, title: $title,
-                inner_size: ($w, $h),
-                min_inner_size: Some(($mw, $mh)),
-                ..Default::default()
-            }, $ev, $pl)
+            focus_or_create_with_emit(
+                &app,
+                WindowSpec {
+                    label: $label,
+                    route: $route,
+                    title: $title,
+                    inner_size: ($w, $h),
+                    min_inner_size: Some(($mw, $mh)),
+                    ..Default::default()
+                },
+                $ev,
+                $pl,
+            )
         }
     };
 }
@@ -312,8 +352,11 @@ macro_rules! window_tab_cmd {
 #[tauri::command]
 pub fn open_bt_settings() {
     #[cfg(target_os = "macos")]
-    { let _ = std::process::Command::new("open")
-        .arg("x-apple.systempreferences:com.apple.Bluetooth-Settings.extension").spawn(); }
+    {
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.Bluetooth-Settings.extension")
+            .spawn();
+    }
     #[cfg(target_os = "windows")]
     {
         // Open the Windows 11 Bluetooth & devices settings page first,
@@ -327,8 +370,12 @@ pub fn open_bt_settings() {
             .spawn();
     }
     #[cfg(target_os = "linux")]
-    { let _ = std::process::Command::new("sh").arg("-c")
-        .arg("gnome-control-center bluetooth 2>/dev/null || blueman-manager 2>/dev/null").spawn(); }
+    {
+        let _ = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("gnome-control-center bluetooth 2>/dev/null || blueman-manager 2>/dev/null")
+            .spawn();
+    }
 }
 
 window_cmd!(open_settings_window, "settings", "settings",
@@ -357,17 +404,37 @@ pub async fn open_session_window(app: AppHandle, csv_path: String) -> Result<(),
     csv_path.hash(&mut h);
     let label = format!("session-{:x}", h.finish());
     if let Some(win) = app.get_webview_window(&label) {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus(); return Ok(());
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+        return Ok(());
     }
-    let encoded: String = csv_path.bytes().map(|b| match b {
-        b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
-        _ => format!("%{:02X}", b),
-    }).collect();
-    tauri::WebviewWindowBuilder::new(&app, &label,
-        tauri::WebviewUrl::App(format!("session?csv_path={encoded}").into()))
-        .title("NeuroSkill™ – Session Detail")
-        .inner_size(680.0, 700.0).min_inner_size(480.0, 400.0)
-        .resizable(true).center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+    let encoded: String = csv_path
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{:02X}", b),
+        })
+        .collect();
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        &label,
+        tauri::WebviewUrl::App(format!("session?csv_path={encoded}").into()),
+    )
+    .title("NeuroSkill™ – Session Detail")
+    .inner_size(680.0, 700.0)
+    .min_inner_size(480.0, 400.0)
+    .resizable(true)
+    .center()
+    .decorations(false)
+    .transparent(true)
+    .build()
+    .map(|w| {
+        let _ = w.set_focus();
+    })
+    .map_err(|e| e.to_string())
 }
 
 window_cmd!(open_search_window, "search", "search",
@@ -376,7 +443,7 @@ window_cmd!(open_search_window, "search", "search",
 
 #[tauri::command]
 pub(crate) async fn open_focus_timer_window_inner(
-    app:       &AppHandle,
+    app: &AppHandle,
     autostart: bool,
 ) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("focus-timer") {
@@ -388,12 +455,24 @@ pub(crate) async fn open_focus_timer_window_inner(
         }
         return Ok(());
     }
-    let url = if autostart { "focus-timer?autostart=1" } else { "focus-timer" };
-    tauri::WebviewWindowBuilder::new(app, "focus-timer",
-        tauri::WebviewUrl::App(url.into()))
+    let url = if autostart {
+        "focus-timer?autostart=1"
+    } else {
+        "focus-timer"
+    };
+    tauri::WebviewWindowBuilder::new(app, "focus-timer", tauri::WebviewUrl::App(url.into()))
         .title("Focus Timer")
-        .inner_size(420.0, 660.0).resizable(false).always_on_top(false)
-        .center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+        .inner_size(420.0, 660.0)
+        .resizable(false)
+        .always_on_top(false)
+        .center()
+        .decorations(false)
+        .transparent(true)
+        .build()
+        .map(|w| {
+            let _ = w.set_focus();
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -411,7 +490,9 @@ window_cmd!(open_label_window, "label", "label",
 
 #[tauri::command]
 pub fn close_label_window(app: AppHandle) {
-    if let Some(win) = app.get_webview_window("label") { let _ = win.close(); }
+    if let Some(win) = app.get_webview_window("label") {
+        let _ = win.close();
+    }
 }
 
 window_cmd!(open_api_window, "api", "api",
@@ -423,7 +504,11 @@ window_cmd!(open_api_window, "api", "api",
 /// An empty string means the window has never been seen.
 #[tauri::command]
 pub fn get_whats_new_seen_version(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
-    state.lock_or_recover().ui.last_seen_whats_new_version.clone()
+    state
+        .lock_or_recover()
+        .ui
+        .last_seen_whats_new_version
+        .clone()
 }
 
 /// Persist the acknowledged version and close the What's New window.
@@ -451,20 +536,23 @@ window_cmd!(open_onboarding_window, "onboarding", "onboarding",
     "NeuroSkill™ – Welcome",
     size: (680.0, 760.0), min: (560.0, 620.0));
 
-    #[tauri::command]
-    pub fn get_onboarding_model_download_order() -> Vec<String> {
-        crate::constants::ONBOARDING_MODEL_DOWNLOAD_ORDER
+#[tauri::command]
+pub fn get_onboarding_model_download_order() -> Vec<String> {
+    crate::constants::ONBOARDING_MODEL_DOWNLOAD_ORDER
         .iter()
         .map(|item| (*item).to_string())
         .collect()
-    }
+}
 
 #[tauri::command]
 pub fn complete_onboarding(app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
     mutate_and_save(&app, |s| s.ui.onboarding_complete = true);
-    if let Some(win) = app.get_webview_window("onboarding") { let _ = win.close(); }
+    if let Some(win) = app.get_webview_window("onboarding") {
+        let _ = win.close();
+    }
     if let Some(win) = app.get_webview_window("main") {
-        let _ = win.show(); let _ = win.set_focus();
+        let _ = win.show();
+        let _ = win.set_focus();
         crate::linux_fix_decorations(&win);
     }
 
@@ -476,7 +564,8 @@ pub fn complete_onboarding(app: AppHandle, _state: tauri::State<'_, Mutex<Box<Ap
         let skill_dir = r.lock_or_recover().skill_dir.clone();
         let outcome = tokio::task::spawn_blocking(move || {
             skill_skills::sync::sync_skills(&skill_dir, 0, None)
-        }).await;
+        })
+        .await;
         match outcome {
             Ok(skill_skills::sync::SyncOutcome::Updated { elapsed_ms, .. }) => {
                 eprintln!("[onboarding] community skills downloaded in {elapsed_ms} ms");
@@ -504,37 +593,61 @@ pub fn get_onboarding_complete(state: tauri::State<'_, Mutex<Box<AppState>>>) ->
 
 /// Open (or focus) the calibration window.  Requires an active streaming session.
 pub(crate) async fn open_calibration_window_inner(
-    app:        &AppHandle,
+    app: &AppHandle,
     profile_id: Option<String>,
-    autostart:  bool,
+    autostart: bool,
 ) -> Result<(), String> {
     {
         let st = app.app_state();
         let guard = st.lock_or_recover();
         if guard.status.state != "connected" || guard.stream.is_none() {
-            return Err("Calibration requires a connected BLE device that is streaming data".into());
+            return Err(
+                "Calibration requires a connected BLE device that is streaming data".into(),
+            );
         }
     }
     let url = {
         let mut q = String::new();
-        if let Some(ref id) = profile_id { q.push_str(&format!("profile={id}")); }
+        if let Some(ref id) = profile_id {
+            q.push_str(&format!("profile={id}"));
+        }
         if autostart {
-            if !q.is_empty() { q.push('&'); }
+            if !q.is_empty() {
+                q.push('&');
+            }
             q.push_str("autostart=1");
         }
-        if q.is_empty() { "calibration".to_string() } else { format!("calibration?{q}") }
+        if q.is_empty() {
+            "calibration".to_string()
+        } else {
+            format!("calibration?{q}")
+        }
     };
     if let Some(win) = app.get_webview_window("calibration") {
-        let _ = win.unminimize(); let _ = win.show(); let _ = win.set_focus();
-        let _ = app.emit("calibration-run", serde_json::json!({
-            "profile_id": profile_id, "autostart": autostart,
-        }));
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+        let _ = app.emit(
+            "calibration-run",
+            serde_json::json!({
+                "profile_id": profile_id, "autostart": autostart,
+            }),
+        );
         return Ok(());
     }
     tauri::WebviewWindowBuilder::new(app, "calibration", tauri::WebviewUrl::App(url.into()))
         .title("NeuroSkill™ – Calibration")
-        .inner_size(600.0, 700.0).min_inner_size(520.0, 600.0)
-        .resizable(true).center().decorations(false).transparent(true).build().map(|w| { let _ = w.set_focus(); }).map_err(|e| e.to_string())
+        .inner_size(600.0, 700.0)
+        .min_inner_size(520.0, 600.0)
+        .resizable(true)
+        .center()
+        .decorations(false)
+        .transparent(true)
+        .build()
+        .map(|w| {
+            let _ = w.set_focus();
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -544,7 +657,7 @@ pub async fn open_calibration_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn open_and_start_calibration(
-    app:        AppHandle,
+    app: AppHandle,
     profile_id: Option<String>,
 ) -> Result<(), String> {
     open_calibration_window_inner(&app, profile_id, true).await
@@ -552,48 +665,69 @@ pub async fn open_and_start_calibration(
 
 #[tauri::command]
 pub fn close_calibration_window(app: AppHandle) {
-    if let Some(win) = app.get_webview_window("calibration") { let _ = win.close(); }
+    if let Some(win) = app.get_webview_window("calibration") {
+        let _ = win.close();
+    }
 }
 
 // ── Calibration profile CRUD ──────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_calibration_profiles(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<CalibrationProfile> {
+pub fn list_calibration_profiles(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Vec<CalibrationProfile> {
     state.lock_or_recover().calibration_profiles.clone()
 }
 
 #[tauri::command]
 pub fn get_calibration_profile(
-    id: String, state: tauri::State<'_, Mutex<Box<AppState>>>,
+    id: String,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Option<CalibrationProfile> {
-    state.lock_or_recover().calibration_profiles.iter().find(|p| p.id == id).cloned()
+    state
+        .lock_or_recover()
+        .calibration_profiles
+        .iter()
+        .find(|p| p.id == id)
+        .cloned()
 }
 
 #[tauri::command]
-pub fn get_active_calibration(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<CalibrationProfile> {
+pub fn get_active_calibration(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Option<CalibrationProfile> {
     let s = state.lock_or_recover();
     let id = s.active_calibration_id.clone();
-    s.calibration_profiles.iter().find(|p| p.id == id).cloned()
+    s.calibration_profiles
+        .iter()
+        .find(|p| p.id == id)
+        .cloned()
         .or_else(|| s.calibration_profiles.first().cloned())
 }
 
 #[tauri::command]
-pub fn set_active_calibration(id: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn set_active_calibration(
+    id: String,
+    app: AppHandle,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
     mutate_and_save(&app, |s| s.active_calibration_id = id);
 }
 
 #[tauri::command]
 pub fn create_calibration_profile(
     profile: CalibrationProfile,
-    app:     AppHandle,
-    _state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> CalibrationProfile {
     crate::calibration_service::create_profile(&app, profile)
 }
 
 #[tauri::command]
 pub fn update_calibration_profile(
-    profile: CalibrationProfile, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>,
+    profile: CalibrationProfile,
+    app: AppHandle,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     crate::calibration_service::update_profile(&app, profile)?;
     Ok(())
@@ -601,7 +735,9 @@ pub fn update_calibration_profile(
 
 #[tauri::command]
 pub fn delete_calibration_profile(
-    id: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>,
+    id: String,
+    app: AppHandle,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     crate::calibration_service::delete_profile(&app, &id)
 }
@@ -609,17 +745,25 @@ pub fn delete_calibration_profile(
 #[tauri::command]
 pub fn record_calibration_completed(
     profile_id: Option<String>,
-    app:        AppHandle,
-    _state:     tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     mutate_and_save(&app, |s| {
         let target_id = profile_id.unwrap_or_else(|| s.active_calibration_id.clone());
-        if let Some(p) = s.calibration_profiles.iter_mut().find(|p| p.id == target_id) {
+        if let Some(p) = s
+            .calibration_profiles
+            .iter_mut()
+            .find(|p| p.id == target_id)
+        {
             p.last_calibration_utc = Some(unix_secs());
         }
     });
-    send_toast(&app, ToastLevel::Success, "Calibration Complete",
-        "All calibration iterations finished successfully.");
+    send_toast(
+        &app,
+        ToastLevel::Success,
+        "Calibration Complete",
+        "All calibration iterations finished successfully.",
+    );
 }
 
 // ── Legacy calibration compat ──────────────────────────────────────────────────
@@ -628,16 +772,27 @@ pub fn record_calibration_completed(
 pub fn get_calibration_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> CalibrationConfig {
     let s = state.lock_or_recover();
     let id = s.active_calibration_id.clone();
-    let profile = s.calibration_profiles.iter().find(|p| p.id == id)
+    let profile = s
+        .calibration_profiles
+        .iter()
+        .find(|p| p.id == id)
         .or_else(|| s.calibration_profiles.first());
     match profile {
         Some(p) => CalibrationConfig {
-            action1_label:        p.actions.first().map(|a| a.label.clone()).unwrap_or_default(),
-            action2_label:        p.actions.get(1).map(|a| a.label.clone()).unwrap_or_default(),
+            action1_label: p
+                .actions
+                .first()
+                .map(|a| a.label.clone())
+                .unwrap_or_default(),
+            action2_label: p
+                .actions
+                .get(1)
+                .map(|a| a.label.clone())
+                .unwrap_or_default(),
             action_duration_secs: p.actions.first().map(|a| a.duration_secs).unwrap_or(10),
-            break_duration_secs:  p.break_duration_secs,
-            loop_count:           p.loop_count,
-            auto_start:           p.auto_start,
+            break_duration_secs: p.break_duration_secs,
+            loop_count: p.loop_count,
+            auto_start: p.auto_start,
             last_calibration_utc: p.last_calibration_utc,
         },
         None => CalibrationConfig::default(),
@@ -674,7 +829,10 @@ pub fn quit_app(app: AppHandle) {
 
 #[tauri::command]
 pub fn get_app_version(app: AppHandle) -> String {
-    app.config().version.clone().unwrap_or_else(|| "unknown".into())
+    app.config()
+        .version
+        .clone()
+        .unwrap_or_else(|| "unknown".into())
 }
 
 /// Returns `true` when an EEG session is currently being recorded.
@@ -697,7 +855,9 @@ pub fn set_update_ready(app: AppHandle, ready: bool) {
 
 #[tauri::command]
 pub fn get_app_name(app: AppHandle) -> String {
-    app.config().product_name.clone()
+    app.config()
+        .product_name
+        .clone()
         .unwrap_or_else(|| app.package_info().name.clone())
 }
 
@@ -718,30 +878,45 @@ pub fn set_data_dir(_path: String, _app: AppHandle) -> Result<(), String> {
 pub fn open_skill_dir() {
     let dir = default_skill_dir();
     #[cfg(target_os = "macos")]
-    { let _ = std::process::Command::new("open").arg(&dir).spawn(); }
+    {
+        let _ = std::process::Command::new("open").arg(&dir).spawn();
+    }
     #[cfg(target_os = "linux")]
     {
         let mut launched = false;
-        if std::process::Command::new("xdg-open").arg(&dir).spawn().is_ok() {
+        if std::process::Command::new("xdg-open")
+            .arg(&dir)
+            .spawn()
+            .is_ok()
+        {
             launched = true;
         }
         if !launched {
-            let _ = std::process::Command::new("gio").arg("open").arg(&dir).spawn();
+            let _ = std::process::Command::new("gio")
+                .arg("open")
+                .arg(&dir)
+                .spawn();
         }
     }
     #[cfg(target_os = "windows")]
-    { let _ = std::process::Command::new("explorer").arg(&dir).spawn(); }
+    {
+        let _ = std::process::Command::new("explorer").arg(&dir).spawn();
+    }
 }
 
 // ── WebSocket API status ───────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_ws_clients(broadcaster: tauri::State<'_, WsBroadcaster>) -> Vec<crate::ws_server::WsClient> {
+pub fn get_ws_clients(
+    broadcaster: tauri::State<'_, WsBroadcaster>,
+) -> Vec<crate::ws_server::WsClient> {
     broadcaster.tracker.lock_or_recover().clients.clone()
 }
 
 #[tauri::command]
-pub fn get_ws_request_log(broadcaster: tauri::State<'_, WsBroadcaster>) -> Vec<crate::ws_server::WsRequestLog> {
+pub fn get_ws_request_log(
+    broadcaster: tauri::State<'_, WsBroadcaster>,
+) -> Vec<crate::ws_server::WsRequestLog> {
     broadcaster.tracker.lock_or_recover().requests.clone()
 }
 

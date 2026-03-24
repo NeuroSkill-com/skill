@@ -26,5 +26,8 @@ rfd         = { version = "0.17", default-features = false, features = ["file-ha
 tokio       = { version = "1", features = ["full"] }
 sha2        = "0.10"
 
+[dev-dependencies]
+proptest = "1"
+
 [lints]
 workspace = true

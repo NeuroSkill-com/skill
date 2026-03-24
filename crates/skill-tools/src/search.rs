@@ -21,12 +21,16 @@ pub(crate) fn strip_html_tags(s: &str) -> String {
     // Order matters: strip <head> first (contains most scripts/styles),
     // then individual script/style tags that might be in the body.
     let mut cleaned = s.to_string();
-    for tag in &["head", "script", "style", "noscript", "svg", "nav", "footer"] {
+    for tag in &[
+        "head", "script", "style", "noscript", "svg", "nav", "footer",
+    ] {
         loop {
             let open = format!("<{}", tag);
             let close = format!("</{}>", tag);
             let lower = cleaned.to_ascii_lowercase();
-            let Some(start) = lower.find(&open) else { break };
+            let Some(start) = lower.find(&open) else {
+                break;
+            };
             if let Some(end_rel) = lower[start..].find(&close) {
                 let end = start + end_rel + close.len();
                 cleaned.replace_range(start..end, " ");
@@ -54,7 +58,10 @@ pub(crate) fn strip_html_tags(s: &str) -> String {
     for ch in cleaned.chars() {
         match ch {
             '<' => in_tag = true,
-            '>' => { in_tag = false; out.push(' '); }
+            '>' => {
+                in_tag = false;
+                out.push(' ');
+            }
             _ if !in_tag => out.push(ch),
             _ => {}
         }
@@ -62,19 +69,19 @@ pub(crate) fn strip_html_tags(s: &str) -> String {
 
     // Phase 3: Decode HTML entities.
     let decoded = out
-       .replace("&amp;", "&")
-       .replace("&lt;", "<")
-       .replace("&gt;", ">")
-       .replace("&quot;", "\"")
-       .replace("&#x27;", "'")
-       .replace("&#39;", "'")
-       .replace("&nbsp;", " ")
-       .replace("&#8211;", "-")
-       .replace("&#8212;", "-")
-       .replace("&#8217;", "'")
-       .replace("&#8220;", "\"")
-       .replace("&#8221;", "\"")
-       .replace("&#176;", "\u{00B0}");
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#x27;", "'")
+        .replace("&#39;", "'")
+        .replace("&nbsp;", " ")
+        .replace("&#8211;", "-")
+        .replace("&#8212;", "-")
+        .replace("&#8217;", "'")
+        .replace("&#8220;", "\"")
+        .replace("&#8221;", "\"")
+        .replace("&#176;", "\u{00B0}");
 
     // Phase 4: Remove inline JSON-LD / schema.org blocks that survived
     // (e.g. from SSR frameworks that embed JSON outside script tags).
@@ -100,9 +107,13 @@ fn strip_json_ld_blocks(s: &str) -> String {
 
             while j < bytes.len() && depth > 0 {
                 if in_str {
-                    if escaped { escaped = false; }
-                    else if bytes[j] == b'\\' { escaped = true; }
-                    else if bytes[j] == b'"' { in_str = false; }
+                    if escaped {
+                        escaped = false;
+                    } else if bytes[j] == b'\\' {
+                        escaped = true;
+                    } else if bytes[j] == b'"' {
+                        in_str = false;
+                    }
                 } else {
                     match bytes[j] {
                         b'"' => in_str = true,
@@ -121,8 +132,8 @@ fn strip_json_ld_blocks(s: &str) -> String {
                     || block.contains("@type")
                     || block.contains("schema.org")
                     || block.contains("\"url\":")
-                       && block.contains("\"name\":")
-                       && block.len() > 200;
+                        && block.contains("\"name\":")
+                        && block.len() > 200;
 
                 if is_json_ld {
                     result.push(' ');
@@ -187,12 +198,15 @@ pub(crate) fn browser_agent() -> ureq::Agent {
 /// browsers send.
 pub(crate) fn set_browser_headers(req: ureq::Request) -> ureq::Request {
     req.set("User-Agent", random_ua())
-       .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-       .set("Accept-Language", "en-US,en;q=0.5")
-       .set("Accept-Encoding", "identity")
-       .set("DNT", "1")
-       .set("Connection", "keep-alive")
-       .set("Upgrade-Insecure-Requests", "1")
+        .set(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
+        .set("Accept-Language", "en-US,en;q=0.5")
+        .set("Accept-Encoding", "identity")
+        .set("DNT", "1")
+        .set("Connection", "keep-alive")
+        .set("Upgrade-Insecure-Requests", "1")
 }
 
 /// Fallback search: scrape DuckDuckGo HTML lite page.
@@ -205,15 +219,22 @@ pub(crate) fn ddg_html_search(agent: &ureq::Agent, query: &str) -> Vec<Value> {
     let resp = agent
         .post("https://html.duckduckgo.com/html/")
         .set("User-Agent", ua)
-        .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+        .set(
+            "Accept",
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
         .set("Accept-Language", "en-US,en;q=0.5")
         .set("Origin", "https://html.duckduckgo.com")
         .set("Referer", "https://html.duckduckgo.com/html/")
         .set("Content-Type", "application/x-www-form-urlencoded")
         .send_string(&format!("q={}&b=", urlencoding::encode(query)));
 
-    let Ok(r) = resp else { return Vec::new(); };
-    let Ok(body) = r.into_string() else { return Vec::new() };
+    let Ok(r) = resp else {
+        return Vec::new();
+    };
+    let Ok(body) = r.into_string() else {
+        return Vec::new();
+    };
 
     parse_ddg_html(&body)
 }
@@ -285,7 +306,11 @@ pub(crate) fn extract_ddg_redirect_url(url: &str) -> Option<String> {
         let after = &url[pos + 5..];
         let end = after.find('&').unwrap_or(after.len());
         let encoded = &after[..end];
-        Some(urlencoding::decode(encoded).unwrap_or_else(|_| encoded.into()).into_owned())
+        Some(
+            urlencoding::decode(encoded)
+                .unwrap_or_else(|_| encoded.into())
+                .into_owned(),
+        )
     } else {
         None
     }
@@ -314,11 +339,25 @@ pub(crate) fn brave_search(agent: &ureq::Agent, api_key: &str, query: &str) -> V
 
     let mut results = Vec::new();
     for item in items.iter().take(10) {
-        let title   = item.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let url     = item.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let snippet = item.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let title = item
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let url = item
+            .get("url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let snippet = item
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
-        if url.is_empty() { continue; }
+        if url.is_empty() {
+            continue;
+        }
 
         results.push(json!({
             "title":   if title.is_empty() { url.clone() } else { strip_html_tags(&title) },
@@ -351,11 +390,25 @@ pub(crate) fn searxng_search(agent: &ureq::Agent, base_url: &str, query: &str) -
 
     let mut results = Vec::new();
     for item in items.iter().take(10) {
-        let title   = item.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let url     = item.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let snippet = item.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let title = item
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let url = item
+            .get("url")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let snippet = item
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
 
-        if url.is_empty() { continue; }
+        if url.is_empty() {
+            continue;
+        }
 
         results.push(json!({
             "title":   if title.is_empty() { url.clone() } else { title },
@@ -377,9 +430,7 @@ pub(crate) fn fetch_urls_parallel(urls: &[String]) -> Vec<String> {
     std::thread::scope(|scope| {
         let handles: Vec<_> = urls
             .iter()
-            .map(|url| {
-                scope.spawn(move || fetch_page_content(url, 2_000))
-            })
+            .map(|url| scope.spawn(move || fetch_page_content(url, 2_000)))
             .collect();
 
         handles
@@ -408,10 +459,19 @@ pub(crate) fn fetch_page_content(url: &str, max_chars: usize) -> String {
                     return truncate_text(&t, max_chars);
                 }
                 Some(Ok(_)) => {
-                    tool_log!("tool", "[fetch] external renderer empty for {}, trying HTTP", url);
+                    tool_log!(
+                        "tool",
+                        "[fetch] external renderer empty for {}, trying HTTP",
+                        url
+                    );
                 }
                 Some(Err(e)) => {
-                    tool_log!("tool", "[fetch] external renderer failed for {}: {}, trying HTTP", url, e);
+                    tool_log!(
+                        "tool",
+                        "[fetch] external renderer failed for {}: {}, trying HTTP",
+                        url,
+                        e
+                    );
                 }
                 None => {}
             }
@@ -430,9 +490,7 @@ pub(crate) fn fetch_page_content_http(url: &str, max_chars: usize) -> String {
         Ok(resp) => {
             let body = resp.into_string().unwrap_or_default();
             let stripped = strip_html_tags(&body);
-            let cleaned: String = stripped.split_whitespace()
-                .collect::<Vec<_>>()
-                .join(" ");
+            let cleaned: String = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
             truncate_text(&cleaned, max_chars)
         }
         Err(e) => {
@@ -448,13 +506,17 @@ pub(crate) fn fetch_page_content_http(url: &str, max_chars: usize) -> String {
 /// Scores based on: text length, word count, presence of numbers
 /// (temperatures, percentages), and absence of CSS/JS garbage.
 pub(crate) fn score_rendered_text(text: &str) -> u32 {
-    if text.is_empty() { return 0; }
+    if text.is_empty() {
+        return 0;
+    }
 
     let words: Vec<&str> = text.split_whitespace().collect();
     let word_count = words.len();
 
     // Very short text — score by word count alone.
-    if word_count < 5 { return word_count as u32; }
+    if word_count < 5 {
+        return word_count as u32;
+    }
 
     let mut score: u32 = 0;
 
@@ -543,88 +605,101 @@ pub(crate) fn headless_fetch_url(
 
     #[cfg(feature = "headless")]
     {
-    use skill_headless::{Browser, BrowserConfig, Command};
+        use skill_headless::{Browser, BrowserConfig, Command};
 
-    // If the standalone browser is unavailable, use the unified
-    // fetch_page_content which tries external renderer → HTTP fallback.
-    if Browser::is_unavailable() {
-        let text = fetch_page_content(url, 12_000);
-        if text.trim().is_empty() {
-            return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": "page returned no readable content" });
+        // If the standalone browser is unavailable, use the unified
+        // fetch_page_content which tries external renderer → HTTP fallback.
+        if Browser::is_unavailable() {
+            let text = fetch_page_content(url, 12_000);
+            if text.trim().is_empty() {
+                return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": "page returned no readable content" });
+            }
+            return json!({
+                "ok": true,
+                "tool": "web_fetch",
+                "url": url,
+                "mode": if Browser::has_external_renderer() { "external_renderer" } else { "http_fallback" },
+                "content": text,
+                "truncated": text.len() >= 12_000,
+            });
         }
-        return json!({
-            "ok": true,
-            "tool": "web_fetch",
-            "url": url,
-            "mode": if Browser::has_external_renderer() { "external_renderer" } else { "http_fallback" },
-            "content": text,
-            "truncated": text.len() >= 12_000,
-        });
-    }
 
-    let browser = match Browser::launch(BrowserConfig {
-        user_agent: Some(random_ua().to_string()),
-        timeout: std::time::Duration::from_secs(30),
-        ..Default::default()
-    }) {
-        Ok(b) => b,
-        Err(e) => return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("headless launch failed: {e}"), "fallback": true }),
-    };
+        let browser = match Browser::launch(BrowserConfig {
+            user_agent: Some(random_ua().to_string()),
+            timeout: std::time::Duration::from_secs(30),
+            ..Default::default()
+        }) {
+            Ok(b) => b,
+            Err(e) => {
+                return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("headless launch failed: {e}"), "fallback": true })
+            }
+        };
 
-    // Navigate to the URL.
-    if let Err(e) = browser.send(Command::Navigate { url: url.to_string() }) {
-        let _ = browser.send(Command::Close);
-        return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("navigate failed: {e}") });
-    }
+        // Navigate to the URL.
+        if let Err(e) = browser.send(Command::Navigate {
+            url: url.to_string(),
+        }) {
+            let _ = browser.send(Command::Close);
+            return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("navigate failed: {e}") });
+        }
 
-    // Wait for page to load — either a selector or a fixed delay.
-    if let Some(sel) = selector {
-        let resp = browser.send(Command::WaitForSelector {
-            selector: sel.to_string(),
-            timeout_ms: wait_ms.max(5000),
-        });
-        if let Ok(r) = &resp {
-            if let Some(text) = r.as_text() {
-                if text == "timeout" {
-                    tool_log!("tool:web_fetch", "selector '{}' not found within timeout on {}", sel, url);
+        // Wait for page to load — either a selector or a fixed delay.
+        if let Some(sel) = selector {
+            let resp = browser.send(Command::WaitForSelector {
+                selector: sel.to_string(),
+                timeout_ms: wait_ms.max(5000),
+            });
+            if let Ok(r) = &resp {
+                if let Some(text) = r.as_text() {
+                    if text == "timeout" {
+                        tool_log!(
+                            "tool:web_fetch",
+                            "selector '{}' not found within timeout on {}",
+                            sel,
+                            url
+                        );
+                    }
                 }
             }
+        } else {
+            std::thread::sleep(std::time::Duration::from_millis(wait_ms));
         }
-    } else {
-        std::thread::sleep(std::time::Duration::from_millis(wait_ms));
-    }
 
-    // If custom JS evaluation is requested, run it and return its result.
-    if let Some(js) = eval_js {
-        let js_result = match browser.send(Command::EvalJs { script: js.to_string() }) {
-            Ok(r) => r.as_text().unwrap_or("null").to_string(),
-            Err(e) => format!("eval error: {e}"),
-        };
-        let _ = browser.send(Command::Close);
-        return json!({
-            "ok": true,
-            "tool": "web_fetch",
-            "url": url,
-            "mode": "headless",
-            "eval_result": truncate_text(&js_result, 12_000),
-            "truncated": js_result.chars().count() > 12_000,
-        });
-    }
+        // If custom JS evaluation is requested, run it and return its result.
+        if let Some(js) = eval_js {
+            let js_result = match browser.send(Command::EvalJs {
+                script: js.to_string(),
+            }) {
+                Ok(r) => r.as_text().unwrap_or("null").to_string(),
+                Err(e) => format!("eval error: {e}"),
+            };
+            let _ = browser.send(Command::Close);
+            return json!({
+                "ok": true,
+                "tool": "web_fetch",
+                "url": url,
+                "mode": "headless",
+                "eval_result": truncate_text(&js_result, 12_000),
+                "truncated": js_result.chars().count() > 12_000,
+            });
+        }
 
-    // Get the page title.
-    let title = browser.send(Command::GetTitle)
-        .ok()
-        .and_then(|r| r.as_text().map(std::string::ToString::to_string))
-        .unwrap_or_default();
+        // Get the page title.
+        let title = browser
+            .send(Command::GetTitle)
+            .ok()
+            .and_then(|r| r.as_text().map(std::string::ToString::to_string))
+            .unwrap_or_default();
 
-    // Get the current URL (may differ after redirects).
-    let final_url = browser.send(Command::GetUrl)
-        .ok()
-        .and_then(|r| r.as_text().map(std::string::ToString::to_string))
-        .unwrap_or_else(|| url.to_string());
+        // Get the current URL (may differ after redirects).
+        let final_url = browser
+            .send(Command::GetUrl)
+            .ok()
+            .and_then(|r| r.as_text().map(std::string::ToString::to_string))
+            .unwrap_or_else(|| url.to_string());
 
-    // Extract visible text content via JS.
-    let text_script = r#"
+        // Extract visible text content via JS.
+        let text_script = r#"
         (function() {
             function extractText(node) {
                 if (!node) return '';
@@ -650,25 +725,27 @@ pub(crate) fn headless_fetch_url(
         })()
     "#;
 
-    let body = match browser.send(Command::EvalJs { script: text_script.to_string() }) {
-        Ok(r) => r.as_text().unwrap_or("").to_string(),
-        Err(e) => {
-            let _ = browser.send(Command::Close);
-            return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("content extraction failed: {e}") });
-        }
-    };
+        let body = match browser.send(Command::EvalJs {
+            script: text_script.to_string(),
+        }) {
+            Ok(r) => r.as_text().unwrap_or("").to_string(),
+            Err(e) => {
+                let _ = browser.send(Command::Close);
+                return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("content extraction failed: {e}") });
+            }
+        };
 
-    let _ = browser.send(Command::Close);
+        let _ = browser.send(Command::Close);
 
-    json!({
-        "ok": true,
-        "tool": "web_fetch",
-        "url": final_url,
-        "mode": "headless",
-        "title": title,
-        "content": truncate_text(&body, 12_000),
-        "truncated": body.chars().count() > 12_000,
-    })
+        json!({
+            "ok": true,
+            "tool": "web_fetch",
+            "url": final_url,
+            "mode": "headless",
+            "title": title,
+            "content": truncate_text(&body, 12_000),
+            "truncated": body.chars().count() > 12_000,
+        })
     } // #[cfg(feature = "headless")]
 }
 
@@ -686,28 +763,27 @@ pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
 
     #[cfg(feature = "headless")]
     {
-    use skill_headless::{Browser, BrowserConfig, Command};
+        use skill_headless::{Browser, BrowserConfig, Command};
 
-    // If the standalone browser is unavailable, use the unified parallel
-    // fetcher (external renderer → HTTP fallback per URL).
-    if Browser::is_unavailable() {
-        return Some(fetch_urls_parallel(urls));
-    }
-
-
-    let browser = match Browser::launch(BrowserConfig {
-        user_agent: Some(random_ua().to_string()),
-        timeout: std::time::Duration::from_secs(20),
-        ..Default::default()
-    }) {
-        Ok(b) => b,
-        Err(e) => {
-            tool_log!("tool:web_search", "[render] headless launch failed: {}", e);
-            return None;
+        // If the standalone browser is unavailable, use the unified parallel
+        // fetcher (external renderer → HTTP fallback per URL).
+        if Browser::is_unavailable() {
+            return Some(fetch_urls_parallel(urls));
         }
-    };
 
-    let text_script = r#"
+        let browser = match Browser::launch(BrowserConfig {
+            user_agent: Some(random_ua().to_string()),
+            timeout: std::time::Duration::from_secs(20),
+            ..Default::default()
+        }) {
+            Ok(b) => b,
+            Err(e) => {
+                tool_log!("tool:web_search", "[render] headless launch failed: {}", e);
+                return None;
+            }
+        };
+
+        let text_script = r#"
         (function() {
             function extractText(node) {
                 if (!node) return '';
@@ -733,32 +809,34 @@ pub(crate) fn headless_render_urls(urls: &[String]) -> Option<Vec<String>> {
         })()
     "#;
 
-    let mut results = Vec::with_capacity(urls.len());
+        let mut results = Vec::with_capacity(urls.len());
 
-    for url in urls {
-        tool_log!("tool:web_search", "[render] visiting {}", url);
+        for url in urls {
+            tool_log!("tool:web_search", "[render] visiting {}", url);
 
-        if let Err(e) = browser.send(Command::Navigate { url: url.clone() }) {
-            results.push(format!("[error: navigate failed: {e}]"));
-            continue;
+            if let Err(e) = browser.send(Command::Navigate { url: url.clone() }) {
+                results.push(format!("[error: navigate failed: {e}]"));
+                continue;
+            }
+
+            // Wait for the page to settle.
+            std::thread::sleep(std::time::Duration::from_millis(2500));
+
+            match browser.send(Command::EvalJs {
+                script: text_script.to_string(),
+            }) {
+                Ok(r) => {
+                    let text = r.as_text().unwrap_or("").to_string();
+                    results.push(truncate_text(&text, 2_000));
+                }
+                Err(e) => {
+                    results.push(format!("[error: content extraction failed: {e}]"));
+                }
+            }
         }
 
-        // Wait for the page to settle.
-        std::thread::sleep(std::time::Duration::from_millis(2500));
-
-        match browser.send(Command::EvalJs { script: text_script.to_string() }) {
-            Ok(r) => {
-                let text = r.as_text().unwrap_or("").to_string();
-                results.push(truncate_text(&text, 2_000));
-            }
-            Err(e) => {
-                results.push(format!("[error: content extraction failed: {e}]"));
-            }
-        }
-    }
-
-    let _ = browser.send(Command::Close);
-    Some(results)
+        let _ = browser.send(Command::Close);
+        Some(results)
     } // #[cfg(feature = "headless")]
 }
 
@@ -788,7 +866,10 @@ mod web_search_tests {
         let resp = agent
             .post("https://html.duckduckgo.com/html/")
             .set("User-Agent", ua)
-            .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .set(
+                "Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            )
             .set("Accept-Language", "en-US,en;q=0.5")
             .set("Origin", "https://html.duckduckgo.com")
             .set("Referer", "https://html.duckduckgo.com/html/")
@@ -834,7 +915,10 @@ mod web_search_tests {
         let resp = agent
             .post("https://lite.duckduckgo.com/lite/")
             .set("User-Agent", ua)
-            .set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .set(
+                "Accept",
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            )
             .set("Accept-Language", "en-US,en;q=0.5")
             .set("Origin", "https://lite.duckduckgo.com")
             .set("Referer", "https://lite.duckduckgo.com/lite/")
@@ -879,9 +963,11 @@ mod web_search_tests {
         let results = ddg_html_search(&agent, "rust programming language");
         println!("ddg_html_search returned {} results", results.len());
         for (i, r) in results.iter().enumerate() {
-            println!("  [{i}] title={} url={}",
+            println!(
+                "  [{i}] title={} url={}",
                 r.get("title").and_then(|v| v.as_str()).unwrap_or("?"),
-                r.get("url").and_then(|v| v.as_str()).unwrap_or("?"));
+                r.get("url").and_then(|v| v.as_str()).unwrap_or("?")
+            );
         }
         // Don't assert — DDG may captcha-block this environment.
     }
@@ -920,15 +1006,20 @@ mod web_search_tests {
         let results = parse_ddg_html(html);
         println!("Parsed {} results:", results.len());
         for (i, r) in results.iter().enumerate() {
-            println!("  [{i}] title={:?} url={:?} snippet={:?}",
+            println!(
+                "  [{i}] title={:?} url={:?} snippet={:?}",
                 r.get("title").and_then(|v| v.as_str()),
                 r.get("url").and_then(|v| v.as_str()),
-                r.get("snippet").and_then(|v| v.as_str()));
+                r.get("snippet").and_then(|v| v.as_str())
+            );
         }
         assert_eq!(results.len(), 3);
         assert_eq!(results[0]["url"], "https://rust-lang.org/");
         assert_eq!(results[0]["title"], "Rust Programming Language");
-        assert_eq!(results[1]["url"], "https://en.wikipedia.org/wiki/Rust_(programming_language)");
+        assert_eq!(
+            results[1]["url"],
+            "https://en.wikipedia.org/wiki/Rust_(programming_language)"
+        );
         assert_eq!(results[2]["url"], "https://www.w3schools.com/rust/");
     }
 
@@ -978,8 +1069,14 @@ mod web_search_tests {
         let clean: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
 
         // Must contain actual weather data.
-        assert!(clean.contains("45\u{00B0}F"), "missing temperature, got: {clean}");
-        assert!(clean.contains("Partly cloudy"), "missing conditions, got: {clean}");
+        assert!(
+            clean.contains("45\u{00B0}F"),
+            "missing temperature, got: {clean}"
+        );
+        assert!(
+            clean.contains("Partly cloudy"),
+            "missing conditions, got: {clean}"
+        );
         assert!(clean.contains("10 mph"), "missing wind, got: {clean}");
 
         // Must NOT contain JSON-LD, CSS, JS, nav, or footer.
@@ -1005,6 +1102,9 @@ mod web_search_tests {
         assert!(w_score > 100, "weather score too low: {w_score}");
         assert!(g_score < 30, "garbage score too high: {g_score}");
         assert!(c_score < 30, "css score too high: {c_score}");
-        assert!(w_score > g_score * 3, "weather ({w_score}) should be much higher than garbage ({g_score})");
+        assert!(
+            w_score > g_score * 3,
+            "weather ({w_score}) should be much higher than garbage ({g_score})"
+        );
     }
 }

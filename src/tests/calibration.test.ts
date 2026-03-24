@@ -12,11 +12,14 @@
  * assert timing accuracy and correct TTS call ordering without a running
  * Tauri backend.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Types (mirror the Svelte component) ──────────────────────────────────────
 
-interface CalibrationAction { label: string; duration_secs: number }
+interface CalibrationAction {
+  label: string;
+  duration_secs: number;
+}
 
 interface CalibrationProfile {
   id: string;
@@ -27,7 +30,11 @@ interface CalibrationProfile {
 }
 
 type PhaseKind = "idle" | "action" | "break" | "done";
-interface Phase { kind: PhaseKind; actionIndex: number; loop: number }
+interface Phase {
+  kind: PhaseKind;
+  actionIndex: number;
+  loop: number;
+}
 
 // ── Helpers (copied verbatim from the component) ─────────────────────────────
 
@@ -175,7 +182,7 @@ describe("calibration loop TTS ordering", () => {
     const calls: { text: string; awaited: boolean; phase: PhaseKind; timestamp: number }[] = [];
     const phases: Phase[] = [];
 
-    let running = true;
+    const _running = true;
     const state = { countdown: 0, totalSecs: 0, running: true };
     let phase: Phase = { kind: "idle", actionIndex: 0, loop: 1 };
 
@@ -189,9 +196,7 @@ describe("calibration loop TTS ordering", () => {
     }
 
     // ── Start ──
-    await ttsSpeakWait(
-      `Calibration starting. ${profile.actions.length} actions, ${profile.loop_count} loops.`,
-    );
+    await ttsSpeakWait(`Calibration starting. ${profile.actions.length} actions, ${profile.loop_count} loops.`);
 
     for (let loop = 1; loop <= profile.loop_count; loop++) {
       if (!state.running) break;
@@ -255,9 +260,7 @@ describe("calibration loop TTS ordering", () => {
     const { calls } = await simulateCalibration(PROFILE);
 
     // Every call during action or break phase must be awaited
-    const phaseCalls = calls.filter(
-      (c) => c.phase === "action" || c.phase === "break",
-    );
+    const phaseCalls = calls.filter((c) => c.phase === "action" || c.phase === "break");
     for (const c of phaseCalls) {
       expect(c.awaited).toBe(true);
     }
@@ -270,12 +273,7 @@ describe("calibration loop TTS ordering", () => {
     const labels = actionCalls.map((c) => c.text);
 
     // For 2 actions × 2 loops = 4 action announcements
-    expect(labels).toEqual([
-      "Eyes Open",
-      "Eyes Closed",
-      "Eyes Open",
-      "Eyes Closed",
-    ]);
+    expect(labels).toEqual(["Eyes Open", "Eyes Closed", "Eyes Open", "Eyes Closed"]);
   });
 
   it("break phase announces 'Break.' then 'Next: <action>.' in order", async () => {
@@ -290,10 +288,10 @@ describe("calibration loop TTS ordering", () => {
 
     // Verify ordering within each pair
     for (let i = 0; i < breakCalls.length; i += 2) {
-      expect(breakCalls[i]!.text).toBe("Break.");
-      expect(breakCalls[i + 1]!.text).toMatch(/^Next: /);
+      expect(breakCalls[i]?.text).toBe("Break.");
+      expect(breakCalls[i + 1]?.text).toMatch(/^Next: /);
       // "Break." comes before "Next:" in time
-      expect(breakCalls[i]!.timestamp).toBeLessThanOrEqual(breakCalls[i + 1]!.timestamp);
+      expect(breakCalls[i]?.timestamp).toBeLessThanOrEqual(breakCalls[i + 1]?.timestamp);
     }
   });
 
@@ -326,8 +324,8 @@ describe("calibration loop TTS ordering", () => {
 
   it("calibration starts with an awaited starting announcement", async () => {
     const { calls } = await simulateCalibration(PROFILE);
-    expect(calls[0]!.text).toContain("Calibration starting");
-    expect(calls[0]!.awaited).toBe(true);
+    expect(calls[0]?.text).toContain("Calibration starting");
+    expect(calls[0]?.awaited).toBe(true);
   });
 
   it("calibration ends with completion announcement", async () => {
@@ -397,7 +395,7 @@ describe("single-action profile", () => {
     // No fire-and-forget except the final completion
     const fireAndForget = calls.filter((c) => !c.awaited);
     expect(fireAndForget).toHaveLength(1);
-    expect(fireAndForget[0]!.text).toContain("Calibration complete");
+    expect(fireAndForget[0]?.text).toContain("Calibration complete");
   });
 });
 

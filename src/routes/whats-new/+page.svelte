@@ -5,85 +5,89 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { onMount }        from "svelte";
-  import { invoke }         from "@tauri-apps/api/core";
-  import { t }              from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import MarkdownRenderer   from "$lib/MarkdownRenderer.svelte";
-  import changelogRaw       from "../../../CHANGELOG.md?raw";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import { t } from "$lib/i18n/index.svelte";
+import MarkdownRenderer from "$lib/MarkdownRenderer.svelte";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import changelogRaw from "../../../CHANGELOG.md?raw";
 
-  useWindowTitle("whatsNew.title");
+useWindowTitle("whatsNew.title");
 
-  // ── Changelog parsing ─────────────────────────────────────────────────────
-  // Splits the raw CHANGELOG into one entry per ## [...] section and retains
-  // all sections that have a non-empty body (including [Unreleased]).
+// ── Changelog parsing ─────────────────────────────────────────────────────
+// Splits the raw CHANGELOG into one entry per ## [...] section and retains
+// all sections that have a non-empty body (including [Unreleased]).
 
-  interface VersionMeta {
-    version: string; // e.g. "0.0.24" or "Unreleased"
-    date:    string; // e.g. "2026-03-12", empty for Unreleased
-    body:    string; // trimmed markdown body of that section
+interface VersionMeta {
+  version: string; // e.g. "0.0.24" or "Unreleased"
+  date: string; // e.g. "2026-03-12", empty for Unreleased
+  body: string; // trimmed markdown body of that section
+}
+
+function extractAllVersions(raw: string): VersionMeta[] {
+  // Matches: ## [version]  or  ## [version] — date
+  const headerRe = /^## \[([^\]]+)\](?:[^\S\n]*[—–-]+[^\S\n]*(\S+))?[^\n]*/gm;
+  const headers: Array<{ hdrStart: number; bodyStart: number; version: string; date: string }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = headerRe.exec(raw)) !== null) {
+    headers.push({
+      hdrStart: m.index,
+      bodyStart: m.index + m[0].length,
+      version: m[1].trim(),
+      date: m[2]?.trim() ?? "",
+    });
   }
+  return headers
+    .map(({ hdrStart, bodyStart, version, date }, i) => {
+      const bodyEnd = i + 1 < headers.length ? headers[i + 1].hdrStart : raw.length;
+      return { version, date, body: raw.slice(bodyStart, bodyEnd).trim() };
+    })
+    .filter((v) => v.body.length > 0);
+}
 
-  function extractAllVersions(raw: string): VersionMeta[] {
-    // Matches: ## [version]  or  ## [version] — date
-    const headerRe = /^## \[([^\]]+)\](?:[^\S\n]*[—–\-]+[^\S\n]*(\S+))?[^\n]*/gm;
-    const headers: Array<{ hdrStart: number; bodyStart: number; version: string; date: string }> = [];
-    let m: RegExpExecArray | null;
-    while ((m = headerRe.exec(raw)) !== null) {
-      headers.push({
-        hdrStart:  m.index,
-        bodyStart: m.index + m[0].length,
-        version:   m[1].trim(),
-        date:      m[2]?.trim() ?? "",
-      });
-    }
-    return headers
-      .map(({ hdrStart, bodyStart, version, date }, i) => {
-        const bodyEnd = i + 1 < headers.length ? headers[i + 1].hdrStart : raw.length;
-        return { version, date, body: raw.slice(bodyStart, bodyEnd).trim() };
-      })
-      .filter(v => v.body.length > 0);
+const allVersions = extractAllVersions(changelogRaw);
+
+// Default to the first released version (skip [Unreleased] as the landing
+// view so users see actual shipped changes when the window opens).
+const firstRelIdx = allVersions.findIndex((v) => v.version.toLowerCase() !== "unreleased");
+const defaultIdx = firstRelIdx >= 0 ? firstRelIdx : 0;
+
+// ── State ──────────────────────────────────────────────────────────────────
+let currentIdx = $state(defaultIdx);
+let scrollEl = $state<HTMLDivElement | undefined>();
+// Seed appVersion from the changelog so dismiss_whats_new never persists "…"
+// in the rare race where the user clicks "Got it" before the IPC resolves.
+let appVersion = $state(allVersions[defaultIdx]?.version ?? "…");
+
+const current = $derived(allVersions[currentIdx]);
+
+// Reset scroll to top whenever the user navigates to a different section.
+$effect(() => {
+  currentIdx;
+  scrollEl?.scrollTo({ top: 0, behavior: "instant" });
+});
+
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+onMount(async () => {
+  try {
+    appVersion = await invoke<string>("get_app_version");
+  } catch {
+    appVersion = allVersions[defaultIdx]?.version ?? "?";
   }
+});
 
-  const allVersions = extractAllVersions(changelogRaw);
+// ── Navigation ─────────────────────────────────────────────────────────────
+function goNewer() {
+  if (currentIdx > 0) currentIdx--;
+}
+function goOlder() {
+  if (currentIdx < allVersions.length - 1) currentIdx++;
+}
 
-  // Default to the first released version (skip [Unreleased] as the landing
-  // view so users see actual shipped changes when the window opens).
-  const firstRelIdx = allVersions.findIndex(v => v.version.toLowerCase() !== "unreleased");
-  const defaultIdx  = firstRelIdx >= 0 ? firstRelIdx : 0;
-
-  // ── State ──────────────────────────────────────────────────────────────────
-  let currentIdx  = $state(defaultIdx);
-  let scrollEl    = $state<HTMLDivElement | undefined>();
-  // Seed appVersion from the changelog so dismiss_whats_new never persists "…"
-  // in the rare race where the user clicks "Got it" before the IPC resolves.
-  let appVersion  = $state(allVersions[defaultIdx]?.version ?? "…");
-
-  const current = $derived(allVersions[currentIdx]);
-
-  // Reset scroll to top whenever the user navigates to a different section.
-  $effect(() => {
-    currentIdx;
-    scrollEl?.scrollTo({ top: 0, behavior: "instant" });
-  });
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  onMount(async () => {
-    try {
-      appVersion = await invoke<string>("get_app_version");
-    } catch {
-      appVersion = allVersions[defaultIdx]?.version ?? "?";
-    }
-  });
-
-  // ── Navigation ─────────────────────────────────────────────────────────────
-  function goNewer() { if (currentIdx > 0) currentIdx--; }
-  function goOlder() { if (currentIdx < allVersions.length - 1) currentIdx++; }
-
-  // ── Dismiss — handled entirely in Rust (saves version + closes window) ────
-  async function dismiss() {
-    await invoke("dismiss_whats_new", { version: appVersion });
-  }
+// ── Dismiss — handled entirely in Rust (saves version + closes window) ────
+async function dismiss() {
+  await invoke("dismiss_whats_new", { version: appVersion });
+}
 </script>
 
 <main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden select-none">

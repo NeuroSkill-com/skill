@@ -2,20 +2,22 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! System tool handlers — `date`, `location`, `bash`, `skill`.
 
-use serde_json::{Value, json};
+use chrono::{Local, SecondsFormat, Utc};
+use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
-use chrono::{SecondsFormat, Utc, Local};
 
 use super::helpers::format_utc_offset;
-use super::safety::{check_bash_safety, request_tool_approval, request_bash_edit};
-use super::truncate::truncate_text;
+use super::safety::{check_bash_safety, request_bash_edit, request_tool_approval};
 use super::status::format_status_as_text;
+use super::truncate::truncate_text;
 use crate::types::LlmToolConfig;
 
 // ── date ──────────────────────────────────────────────────────────────────────
 
 pub(crate) fn exec_date() -> Value {
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default();
     let now_utc = Utc::now();
     let now_local = now_utc.with_timezone(&Local);
     let offset_seconds = now_local.offset().local_minus_utc();
@@ -85,12 +87,23 @@ pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Valu
 
 // ── bash ──────────────────────────────────────────────────────────────────────
 
-pub(crate) async fn exec_bash(args: &Value, scripts_dir: &std::path::Path, require_edit: bool) -> Value {
-    let mut command = args.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
+pub(crate) async fn exec_bash(
+    args: &Value,
+    scripts_dir: &std::path::Path,
+    require_edit: bool,
+) -> Value {
+    let mut command = args
+        .get("command")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if command.is_empty() {
         return json!({ "ok": false, "tool": "bash", "error": "missing command" });
     }
-    let timeout_secs = args.get("timeout").and_then(serde_json::Value::as_f64).map(|t| t as u64);
+    let timeout_secs = args
+        .get("timeout")
+        .and_then(serde_json::Value::as_f64)
+        .map(|t| t as u64);
 
     // User review/edit: when enabled, present every command for editing first.
     if require_edit {
@@ -267,7 +280,12 @@ pub(crate) async fn exec_bash(args: &Value, scripts_dir: &std::path::Path, requi
 // ── skill ─────────────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_skill(args: &Value, allowed_tools: &LlmToolConfig) -> Value {
-    let command = args.get("command").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+    let command = args
+        .get("command")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_string();
     if command.is_empty() {
         return json!({ "ok": false, "tool": "skill", "error": "missing command" });
     }
@@ -279,11 +297,20 @@ pub(crate) async fn exec_skill(args: &Value, allowed_tools: &LlmToolConfig) -> V
     // Dangerous commands that should not be callable from the LLM
     // (LLM management would be recursive / nonsensical).
     const BLOCKED: &[&str] = &[
-        "llm_start", "llm_stop", "llm_chat",
-        "llm_delete", "llm_select_model", "llm_select_mmproj",
-        "llm_set_autoload_mmproj", "llm_add_model",
-        "llm_download", "llm_cancel_download", "llm_pause_download",
-        "llm_resume_download", "llm_refresh_catalog", "llm_logs",
+        "llm_start",
+        "llm_stop",
+        "llm_chat",
+        "llm_delete",
+        "llm_select_model",
+        "llm_select_mmproj",
+        "llm_set_autoload_mmproj",
+        "llm_add_model",
+        "llm_download",
+        "llm_cancel_download",
+        "llm_pause_download",
+        "llm_resume_download",
+        "llm_refresh_catalog",
+        "llm_logs",
     ];
     if BLOCKED.contains(&command.as_str()) {
         return json!({ "ok": false, "tool": "skill", "error": format!("command \"{}\" is blocked from LLM tool use", command) });

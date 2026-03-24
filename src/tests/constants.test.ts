@@ -19,39 +19,69 @@
  * update the hard-coded expectations below.  Running `npm test` will catch
  * any drift between the two sides.
  */
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  // Hardware
-  EEG_CHANNELS, EEG_CH, EEG_COLOR, SAMPLE_RATE, EEG_RANGE_UV,
-  // Canvas layout
-  CHART_H, TIME_H, WAVE_H, ROW_PAD,
-  // Waveform ring buffer
-  N_EPOCHS, EPOCH_S, EPOCH_SAMP, BUF_SIZE,
-  // Signal processing
-  FILTER_HOP, SPEC_N_FREQ, SPEC_COLS,
-  // Spectrogram normalisation
-  SPEC_LOG_INIT, SPEC_LOG_DECAY, SPEC_LOG_RANGE, SPEC_LOG_FLOOR,
-  // Colormaps
-  SPEC_CMAP_STOPS_DARK, SPEC_CMAP_STOPS_LIGHT, SPEC_CMAP_STOPS,
-  // Waveform rendering
-  DC_BETA, SMOOTH_K, WP_TAU_MS,
+  BAND_CANVAS_H,
+  BAND_TILE_GAP,
   // BandChart layout
-  BAND_TILE_H, BAND_TILE_GAP, BAND_CANVAS_H,
-  // Band definitions
-  NUM_BANDS, BANDS,
-  // Embedding
-  EMBEDDING_EPOCH_SECS, EMBEDDING_OVERLAP_SECS,
-  EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS,
+  BAND_TILE_H,
+  BANDS,
+  BUF_SIZE,
   // Calibration
-  CALIBRATION_ACTION_DURATION_SECS, CALIBRATION_BREAK_DURATION_SECS,
-  CALIBRATION_LOOP_COUNT, CALIBRATION_AUTO_START,
-  CALIBRATION_ACTION1_LABEL, CALIBRATION_ACTION2_LABEL,
+  CALIBRATION_ACTION_DURATION_SECS,
+  CALIBRATION_ACTION1_LABEL,
+  CALIBRATION_ACTION2_LABEL,
+  CALIBRATION_AUTO_START,
+  CALIBRATION_BREAK_DURATION_SECS,
+  CALIBRATION_LOOP_COUNT,
+  // Canvas layout
+  CHART_H,
+  // Waveform rendering
+  DC_BETA,
   // Filter defaults
   DEFAULT_FILTER_CONFIG,
+  EEG_CH,
+  // Hardware
+  EEG_CHANNELS,
+  EEG_COLOR,
+  EEG_RANGE_UV,
+  // Embedding
+  EMBEDDING_EPOCH_SECS,
+  EMBEDDING_OVERLAP_MAX_SECS,
+  EMBEDDING_OVERLAP_MIN_SECS,
+  EMBEDDING_OVERLAP_SECS,
+  EPOCH_S,
+  EPOCH_SAMP,
+  // Signal processing
+  FILTER_HOP,
+  JOB_POLL_INTERVAL_MS,
+  // Waveform ring buffer
+  N_EPOCHS,
+  // Band definitions
+  NUM_BANDS,
+  ROW_PAD,
+  SAMPLE_RATE,
   // Search
-  SEARCH_PAGE_SIZE, JOB_POLL_INTERVAL_MS,
+  SEARCH_PAGE_SIZE,
+  SMOOTH_K,
+  SPEC_CMAP_STOPS,
+  // Colormaps
+  SPEC_CMAP_STOPS_DARK,
+  SPEC_CMAP_STOPS_LIGHT,
+  SPEC_COLS,
+  SPEC_LOG_DECAY,
+  SPEC_LOG_FLOOR,
+  // Spectrogram normalisation
+  SPEC_LOG_INIT,
+  SPEC_LOG_RANGE,
+  SPEC_N_FREQ,
+  TIME_H,
+  UMAP_POINT_SIZE,
+  UMAP_SCALE_MAX,
   // UMAP
-  UMAP_SCALE_MIN, UMAP_SCALE_MAX, UMAP_POINT_SIZE,
+  UMAP_SCALE_MIN,
+  WAVE_H,
+  WP_TAU_MS,
 } from "../../src/lib/constants";
 
 // ── Hardware / signal ─────────────────────────────────────────────────────────
@@ -186,13 +216,13 @@ describe("spectrogram colormap stops", () => {
   });
 
   it("dark colormap normalised positions span [0, 1]", () => {
-    const positions = SPEC_CMAP_STOPS_DARK.map(s => s[0]);
+    const positions = SPEC_CMAP_STOPS_DARK.map((s) => s[0]);
     expect(Math.min(...positions)).toBe(0);
     expect(Math.max(...positions)).toBe(1);
   });
 
   it("dark colormap positions are non-decreasing", () => {
-    const positions = SPEC_CMAP_STOPS_DARK.map(s => s[0]);
+    const positions = SPEC_CMAP_STOPS_DARK.map((s) => s[0]);
     for (let i = 1; i < positions.length; i++) {
       expect(positions[i]).toBeGreaterThanOrEqual(positions[i - 1]);
     }
@@ -200,15 +230,19 @@ describe("spectrogram colormap stops", () => {
 
   it("dark colormap RGB channels are in [0, 255]", () => {
     for (const [, r, g, b] of SPEC_CMAP_STOPS_DARK) {
-      expect(r).toBeGreaterThanOrEqual(0); expect(r).toBeLessThanOrEqual(255);
-      expect(g).toBeGreaterThanOrEqual(0); expect(g).toBeLessThanOrEqual(255);
-      expect(b).toBeGreaterThanOrEqual(0); expect(b).toBeLessThanOrEqual(255);
+      expect(r).toBeGreaterThanOrEqual(0);
+      expect(r).toBeLessThanOrEqual(255);
+      expect(g).toBeGreaterThanOrEqual(0);
+      expect(g).toBeLessThanOrEqual(255);
+      expect(b).toBeGreaterThanOrEqual(0);
+      expect(b).toBeLessThanOrEqual(255);
     }
   });
 
   it("dark colormap alpha channels are in [0, 255]", () => {
     for (const [, , , , a] of SPEC_CMAP_STOPS_DARK) {
-      expect(a).toBeGreaterThanOrEqual(0); expect(a).toBeLessThanOrEqual(255);
+      expect(a).toBeGreaterThanOrEqual(0);
+      expect(a).toBeLessThanOrEqual(255);
     }
   });
 
@@ -217,7 +251,7 @@ describe("spectrogram colormap stops", () => {
   });
 
   it("light colormap positions span [0, 1]", () => {
-    const positions = SPEC_CMAP_STOPS_LIGHT.map(s => s[0]);
+    const positions = SPEC_CMAP_STOPS_LIGHT.map((s) => s[0]);
     expect(Math.min(...positions)).toBe(0);
     expect(Math.max(...positions)).toBe(1);
   });
@@ -253,9 +287,7 @@ describe("waveform rendering constants", () => {
 
 describe("BandChart canvas layout", () => {
   it("BAND_CANVAS_H = EEG_CHANNELS × BAND_TILE_H + (EEG_CHANNELS−1) × BAND_TILE_GAP", () => {
-    expect(BAND_CANVAS_H).toBe(
-      EEG_CHANNELS * BAND_TILE_H + (EEG_CHANNELS - 1) * BAND_TILE_GAP
-    );
+    expect(BAND_CANVAS_H).toBe(EEG_CHANNELS * BAND_TILE_H + (EEG_CHANNELS - 1) * BAND_TILE_GAP);
   });
 
   it("BAND_CANVAS_H is 642 px (12 × 48 + 11 × 6)", () => {
@@ -414,9 +446,7 @@ describe("default filter config", () => {
   });
 
   it("low_pass_hz > high_pass_hz (valid bandpass range)", () => {
-    expect(DEFAULT_FILTER_CONFIG.low_pass_hz).toBeGreaterThan(
-      DEFAULT_FILTER_CONFIG.high_pass_hz
-    );
+    expect(DEFAULT_FILTER_CONFIG.low_pass_hz).toBeGreaterThan(DEFAULT_FILTER_CONFIG.high_pass_hz);
   });
 });
 

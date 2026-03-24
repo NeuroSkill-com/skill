@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
-import { resolve, dirname, relative } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -9,8 +9,7 @@ const root = resolve(__dirname, "..");
 const tauriDir = resolve(root, "src-tauri");
 const tauriConfPath = resolve(tauriDir, "tauri.conf.json");
 
-function fail(message) {
-  console.error(`✖ ${message}`);
+function fail(_message) {
   process.exit(1);
 }
 
@@ -32,9 +31,7 @@ function findFrontendDistPath(tauriConf) {
   const frontendDist = buildCfg.frontendDist ?? buildCfg.distDir;
 
   if (!frontendDist || typeof frontendDist !== "string") {
-    fail(
-      "src-tauri/tauri.conf.json must define build.frontendDist (or legacy build.distDir)."
-    );
+    fail("src-tauri/tauri.conf.json must define build.frontendDist (or legacy build.distDir).");
   }
 
   return resolve(tauriDir, frontendDist);
@@ -42,9 +39,7 @@ function findFrontendDistPath(tauriConf) {
 
 function verifyFrontendDistShape(frontendDistPath) {
   if (!existsSync(frontendDistPath)) {
-    fail(
-      `Configured frontendDist does not exist: ${frontendDistPath}. Run npm run build first.`
-    );
+    fail(`Configured frontendDist does not exist: ${frontendDistPath}. Run npm run build first.`);
   }
 
   if (!lstatSync(frontendDistPath).isDirectory()) {
@@ -53,16 +48,12 @@ function verifyFrontendDistShape(frontendDistPath) {
 
   const indexHtml = resolve(frontendDistPath, "index.html");
   if (!existsSync(indexHtml)) {
-    fail(
-      `Missing ${indexHtml}. Tauri expects built frontend assets, not raw src files.`
-    );
+    fail(`Missing ${indexHtml}. Tauri expects built frontend assets, not raw src files.`);
   }
 
   const appDir = resolve(frontendDistPath, "_app");
   if (!existsSync(appDir) || !lstatSync(appDir).isDirectory()) {
-    fail(
-      `Missing ${appDir}. Expected SvelteKit static output with bundled assets.`
-    );
+    fail(`Missing ${appDir}. Expected SvelteKit static output with bundled assets.`);
   }
 
   const immutableDir = resolve(appDir, "immutable");
@@ -75,9 +66,7 @@ function verifyFrontendDistShape(frontendDistPath) {
     .filter((name) => name.endsWith(".js") || name.endsWith(".css")).length;
 
   if (jsAndCssCount === 0) {
-    fail(
-      `No compiled .js/.css assets found under ${immutableDir}. Frontend build output looks incomplete.`
-    );
+    fail(`No compiled .js/.css assets found under ${immutableDir}. Frontend build output looks incomplete.`);
   }
 }
 
@@ -104,6 +93,3 @@ if (typeof buildScript !== "string" || !buildScript.includes("vite build")) {
 }
 
 verifyFrontendDistShape(frontendDistPath);
-
-console.log("✓ Tauri frontend bundle structure verified.");
-console.log(`  frontendDist: ${frontendDistPath}`);

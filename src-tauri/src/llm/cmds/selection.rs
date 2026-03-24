@@ -5,27 +5,28 @@
 use std::sync::Mutex;
 use tauri::AppHandle;
 
-use crate::MutexExt;
-use crate::AppState;
 use super::save_catalog_locked;
+use crate::AppState;
+use crate::MutexExt;
 
 /// Set the active LLM model (by filename).
 /// The selection is persisted to `llm_catalog.json` immediately.
 #[tauri::command]
 pub fn set_llm_active_model(
     filename: String,
-    app:      AppHandle,
-    state:    tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let s = state.lock_or_recover();
-    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let __llm_arc = s.llm.clone();
+    let mut llm = __llm_arc.lock_or_recover();
     llm.catalog.active_model = filename;
     if !llm.catalog.active_mmproj_matches_active_model() {
         llm.catalog.active_mmproj.clear();
     }
     // Mirror into LlmConfig so the server picks the updated pair up on restart.
     llm.config.model_path = llm.catalog.active_model_path();
-    llm.config.mmproj     = llm.catalog.active_mmproj_path();
+    llm.config.mmproj = llm.catalog.active_mmproj_path();
     save_catalog_locked(&app, &s.skill_dir, &llm);
     drop(llm);
     drop(s);
@@ -36,11 +37,12 @@ pub fn set_llm_active_model(
 #[tauri::command]
 pub fn set_llm_autoload_mmproj(
     enabled: bool,
-    app:     AppHandle,
-    state:   tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let s = state.lock_or_recover();
-    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let __llm_arc = s.llm.clone();
+    let mut llm = __llm_arc.lock_or_recover();
     llm.config.autoload_mmproj = enabled;
     drop(s);
     crate::save_settings_handle(&app);
@@ -50,20 +52,29 @@ pub fn set_llm_autoload_mmproj(
 #[tauri::command]
 pub fn set_llm_active_mmproj(
     filename: String,
-    app:      AppHandle,
-    state:    tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let s = state.lock_or_recover();
-    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let __llm_arc = s.llm.clone();
+    let mut llm = __llm_arc.lock_or_recover();
     if filename.is_empty() {
         llm.catalog.active_mmproj.clear();
     } else {
-        let current_matches = llm.catalog.active_model_entry()
-            .zip(llm.catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
+        let current_matches = llm
+            .catalog
+            .active_model_entry()
+            .zip(
+                llm.catalog
+                    .entries
+                    .iter()
+                    .find(|e| e.is_mmproj && e.filename == filename),
+            )
             .is_some_and(|(model, mmproj)| model.repo == mmproj.repo);
 
         if !current_matches {
-            if let Some(model_filename) = llm.catalog
+            if let Some(model_filename) = llm
+                .catalog
                 .best_model_for_mmproj(&filename)
                 .map(|entry| entry.filename.clone())
             {
@@ -71,8 +82,15 @@ pub fn set_llm_active_mmproj(
             }
         }
 
-        if llm.catalog.active_model_entry()
-            .zip(llm.catalog.entries.iter().find(|e| e.is_mmproj && e.filename == filename))
+        if llm
+            .catalog
+            .active_model_entry()
+            .zip(
+                llm.catalog
+                    .entries
+                    .iter()
+                    .find(|e| e.is_mmproj && e.filename == filename),
+            )
             .is_some_and(|(model, mmproj)| model.repo == mmproj.repo)
         {
             llm.catalog.active_mmproj = filename;
@@ -82,7 +100,7 @@ pub fn set_llm_active_mmproj(
     }
 
     llm.config.model_path = llm.catalog.active_model_path();
-    llm.config.mmproj     = llm.catalog.active_mmproj_path();
+    llm.config.mmproj = llm.catalog.active_mmproj_path();
     save_catalog_locked(&app, &s.skill_dir, &llm);
     drop(llm);
     drop(s);

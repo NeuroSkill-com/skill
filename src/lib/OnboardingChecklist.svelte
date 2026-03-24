@@ -2,22 +2,22 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Onboarding checklist widget for the dashboard. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface Step {
-    label: string;
-    done: boolean;
-  }
+interface Step {
+  label: string;
+  done: boolean;
+}
 
-  interface Props {
-    steps: Step[];
-    onDismiss: () => void;
-  }
+interface Props {
+  steps: Step[];
+  onDismiss: () => void;
+}
 
-  let { steps, onDismiss }: Props = $props();
+let { steps, onDismiss }: Props = $props();
 
-  const doneCount = $derived(steps.filter(s => s.done).length);
-  const progress  = $derived(steps.length > 0 ? (doneCount / steps.length) * 100 : 0);
+const doneCount = $derived(steps.filter((s) => s.done).length);
+const progress = $derived(steps.length > 0 ? (doneCount / steps.length) * 100 : 0);
 </script>
 
 <div class="rounded-xl border border-amber-400/20 bg-amber-50/60 dark:bg-amber-950/20 px-3.5 py-3 flex flex-col gap-2">

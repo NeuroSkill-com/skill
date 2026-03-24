@@ -12,27 +12,30 @@ use std::collections::VecDeque;
 use tokio::sync::mpsc;
 
 use hermes_ble::prelude::*;
-use skill_constants::{EEG_CHANNELS, HERMES_CHANNEL_NAMES, HERMES_EEG_CHANNELS, HERMES_SAMPLE_RATE};
+use skill_constants::{
+    EEG_CHANNELS, HERMES_CHANNEL_NAMES, HERMES_EEG_CHANNELS, HERMES_SAMPLE_RATE,
+};
 
 use super::{
-    DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
-    EegFrame, ImuFrame,
+    DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame,
 };
 
 // ── HermesAdapter ─────────────────────────────────────────────────────────────
 
 pub struct HermesAdapter {
-    rx:      mpsc::Receiver<HermesEvent>,
+    rx: mpsc::Receiver<HermesEvent>,
     /// `None` only in tests (no BLE hardware available).
-    handle:  Option<HermesHandle>,
-    desc:    DeviceDescriptor,
+    handle: Option<HermesHandle>,
+    desc: DeviceDescriptor,
     pending: VecDeque<DeviceEvent>,
 }
 
 impl HermesAdapter {
     pub fn new(rx: mpsc::Receiver<HermesEvent>, handle: HermesHandle) -> Self {
-        let channel_names: Vec<String> =
-            HERMES_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+        let channel_names: Vec<String> = HERMES_CHANNEL_NAMES
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
 
         Self {
             rx,
@@ -52,8 +55,10 @@ impl HermesAdapter {
     /// Test-only constructor without a real BLE handle.
     #[cfg(test)]
     pub(crate) fn new_for_test(rx: mpsc::Receiver<HermesEvent>) -> Self {
-        let channel_names: Vec<String> =
-            HERMES_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+        let channel_names: Vec<String> = HERMES_CHANNEL_NAMES
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect();
 
         Self {
             rx,

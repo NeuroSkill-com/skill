@@ -30,18 +30,17 @@ use std::sync::{Arc, Mutex};
 
 use fast_hnsw::{distance::Cosine, labeled::LabeledIndex};
 use rusqlite::params;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use skill_constants::{HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE, hnsw_index_file_for};
+use skill_constants::{hnsw_index_file_for, HNSW_INDEX_FILE, LABELS_FILE, SQLITE_FILE};
 
 pub mod graph;
 pub use graph::{
-    dot_esc, dot_node_label, dot_edge_label, generate_dot,
-    SvgLabels, generate_svg, generate_svg_3d,
+    dot_edge_label, dot_esc, dot_node_label, generate_dot, generate_svg, generate_svg_3d, SvgLabels,
 };
 
 // Re-export shared utilities so downstream crates keep compiling.
-pub use skill_data::util::{MutexExt, unix_to_ts, ts_to_unix, fmt_unix_utc};
+pub use skill_data::util::{fmt_unix_utc, ts_to_unix, unix_to_ts, MutexExt};
 
 /// Shared, optionally-ready global HNSW index.
 ///
@@ -58,91 +57,109 @@ pub type GlobalIndexHandle = Option<Arc<Mutex<Option<LabeledIndex<Cosine, i64>>>
 /// A user label whose EEG window overlaps a found embedding.
 #[derive(Debug, Serialize, Clone)]
 pub struct LabelEntry {
-    pub id:          i64,
+    pub id: i64,
     /// Unix-second start of the EEG window captured during labelling.
-    pub eeg_start:   u64,
+    pub eeg_start: u64,
     /// Unix-second end of the EEG window.
-    pub eeg_end:     u64,
+    pub eeg_end: u64,
     pub label_start: u64,
-    pub label_end:   u64,
+    pub label_end: u64,
     /// Free-text label entered by the user.
-    pub text:        String,
+    pub text: String,
 }
 
 /// Compact EEG metrics attached to a search neighbor.
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct NeighborMetrics {
-    #[serde(skip_serializing_if = "Option::is_none")] pub relaxation: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub engagement: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub faa:        Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub tar:        Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub mood:       Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub meditation: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub cognitive_load: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub drowsiness: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub hr:         Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub snr:        Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub rel_alpha:  Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub rel_beta:   Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub rel_theta:  Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relaxation: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engagement: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub faa: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tar: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mood: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meditation: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cognitive_load: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drowsiness: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snr: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rel_alpha: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rel_beta: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rel_theta: Option<f64>,
     // Headache / Migraine correlate indices
-    #[serde(skip_serializing_if = "Option::is_none")] pub headache_index:      Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub migraine_index:      Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headache_index: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub migraine_index: Option<f64>,
     // Consciousness metrics
-    #[serde(skip_serializing_if = "Option::is_none")] pub consciousness_lzc:          Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub consciousness_wakefulness:  Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub consciousness_integration:  Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consciousness_lzc: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consciousness_wakefulness: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consciousness_integration: Option<f64>,
 }
 
 /// One embedding found by the HNSW nearest-neighbour search.
 #[derive(Debug, Serialize, Clone)]
 pub struct NeighborEntry {
     /// Zero-based insertion id within the day's HNSW index.
-    pub hnsw_id:        usize,
+    pub hnsw_id: usize,
     /// `YYYYMMDDHHmmss` UTC timestamp stored in the index payload.
-    pub timestamp:      i64,
+    pub timestamp: i64,
     /// Same timestamp converted to Unix seconds (for JS `Date` construction).
     pub timestamp_unix: u64,
     /// Cosine distance from the query embedding (0 = identical).
-    pub distance:       f32,
+    pub distance: f32,
     /// Which YYYYMMDD index this neighbor came from.
-    pub date:           String,
-    pub device_id:      Option<String>,
-    pub device_name:    Option<String>,
+    pub date: String,
+    pub device_id: Option<String>,
+    pub device_name: Option<String>,
     /// Labels whose EEG window contains this embedding's timestamp.
-    pub labels:         Vec<LabelEntry>,
+    pub labels: Vec<LabelEntry>,
     /// Key EEG metrics for this epoch (if available in SQLite).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metrics:        Option<NeighborMetrics>,
+    pub metrics: Option<NeighborMetrics>,
 }
 
 /// Results for one query embedding.
 #[derive(Debug, Serialize, Clone)]
 pub struct QueryEntry {
-    pub timestamp:      i64,
+    pub timestamp: i64,
     pub timestamp_unix: u64,
-    pub neighbors:      Vec<NeighborEntry>,
+    pub neighbors: Vec<NeighborEntry>,
 }
 
 /// Top-level result returned by [`search_embeddings_in_range`].
 #[derive(Debug, Serialize)]
 pub struct SearchResult {
-    pub start_utc:    u64,
-    pub end_utc:      u64,
-    pub k:            usize,
-    pub ef:           usize,
+    pub start_utc: u64,
+    pub end_utc: u64,
+    pub k: usize,
+    pub ef: usize,
     /// Total query embeddings found in the input range.
-    pub query_count:  usize,
+    pub query_count: usize,
     /// YYYYMMDD strings of every day whose index was searched.
     pub searched_days: Vec<String>,
-    pub results:      Vec<QueryEntry>,
+    pub results: Vec<QueryEntry>,
 }
 
 /// Progress event streamed by streaming search.
 #[derive(Debug, Serialize, Clone)]
 pub struct SearchProgress {
     /// Kind: "started" | "result" | "done" | "error"
-    pub kind:        String,
+    pub kind: String,
     /// Filled for "started"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_count: Option<usize>,
@@ -150,23 +167,23 @@ pub struct SearchProgress {
     pub searched_days: Option<Vec<String>>,
     /// Filled for "result": one QueryEntry's worth of data
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub entry:       Option<QueryEntry>,
+    pub entry: Option<QueryEntry>,
     /// Filled for "done"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub total:       Option<usize>,
+    pub total: Option<usize>,
     /// Filled for "error"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error:       Option<String>,
+    pub error: Option<String>,
     /// How many results have been emitted so far (for progress bar)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub done_count:  Option<usize>,
+    pub done_count: Option<usize>,
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 pub struct DayIndex {
-    pub date:  String,
-    pub dir:   PathBuf,
+    pub date: String,
+    pub dir: PathBuf,
     pub index: LabeledIndex<Cosine, i64>,
 }
 
@@ -195,11 +212,22 @@ pub fn load_day_index_for(date: String, dir: PathBuf, model_backend: &str) -> Op
     } else {
         path
     };
-    if !path.exists() { return None; }
+    if !path.exists() {
+        return None;
+    }
     match LabeledIndex::load_mmap(&path, Cosine) {
         Ok(idx) => {
-            eprintln!("[search] loaded HNSW {} ({} vecs, model={})", date, idx.len(), model_backend);
-            Some(DayIndex { date, dir, index: idx })
+            eprintln!(
+                "[search] loaded HNSW {} ({} vecs, model={})",
+                date,
+                idx.len(),
+                model_backend
+            );
+            Some(DayIndex {
+                date,
+                dir,
+                index: idx,
+            })
         }
         Err(e) => {
             eprintln!("[search] HNSW load {}: {e}", path.display());
@@ -210,7 +238,7 @@ pub fn load_day_index_for(date: String, dir: PathBuf, model_backend: &str) -> Op
 
 #[allow(dead_code)]
 struct RawEmb {
-    hnsw_id:   i64,
+    hnsw_id: i64,
     timestamp: i64,
     embedding: Vec<f32>,
 }
@@ -218,8 +246,11 @@ struct RawEmb {
 /// Read every embedding in [start_ts, end_ts] from a single day's SQLite.
 fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<RawEmb> {
     let conn = match skill_data::util::open_readonly(db_path) {
-        Ok(c)  => c,
-        Err(e) => { eprintln!("[search] open {}: {e}", db_path.display()); return vec![]; }
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[search] open {}: {e}", db_path.display());
+            return vec![];
+        }
     };
 
     let mut stmt = match conn.prepare(
@@ -228,16 +259,23 @@ fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<R
          WHERE timestamp BETWEEN ?1 AND ?2
          ORDER BY timestamp",
     ) {
-        Ok(s)  => s,
-        Err(e) => { eprintln!("[search] prepare: {e}"); return vec![]; }
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("[search] prepare: {e}");
+            return vec![];
+        }
     };
 
     stmt.query_map(params![start_ts, end_ts], |row| {
-        let hnsw_id:   i64    = row.get(0)?;
-        let timestamp: i64    = row.get(1)?;
-        let blob:      Vec<u8> = row.get(2)?;
+        let hnsw_id: i64 = row.get(0)?;
+        let timestamp: i64 = row.get(1)?;
+        let blob: Vec<u8> = row.get(2)?;
         let embedding = skill_data::util::blob_to_f32(&blob);
-        Ok(RawEmb { hnsw_id, timestamp, embedding })
+        Ok(RawEmb {
+            hnsw_id,
+            timestamp,
+            embedding,
+        })
     })
     .map(|rows| rows.flatten().collect())
     .unwrap_or_default()
@@ -245,7 +283,9 @@ fn read_embeddings_in_range(db_path: &Path, start_ts: i64, end_ts: i64) -> Vec<R
 
 /// Look up `device_id` and `device_name` for a specific `hnsw_id` in a day's SQLite.
 fn get_embedding_meta(db_path: &Path, hnsw_id: i64) -> (Option<String>, Option<String>) {
-    let Ok(conn) = skill_data::util::open_readonly(db_path) else { return (None, None) };
+    let Ok(conn) = skill_data::util::open_readonly(db_path) else {
+        return (None, None);
+    };
 
     conn.query_row(
         "SELECT device_id, device_name FROM embeddings WHERE hnsw_id = ?1 LIMIT 1",
@@ -283,17 +323,28 @@ fn get_embedding_metrics(db_path: &Path, hnsw_id: i64) -> Option<NeighborMetrics
         |row| {
             let g = |i: usize| -> Option<f64> { row.get::<_, Option<f64>>(i).unwrap_or(None) };
             Ok(NeighborMetrics {
-                relaxation: g(0), engagement: g(1),
-                faa: g(2), tar: g(3), mood: g(4),
-                meditation: g(5), cognitive_load: g(6), drowsiness: g(7),
-                hr: g(8), snr: g(9),
-                rel_alpha: g(10), rel_beta: g(11), rel_theta: g(12),
-                headache_index: g(13), migraine_index: g(14),
-                consciousness_lzc: g(15), consciousness_wakefulness: g(16),
+                relaxation: g(0),
+                engagement: g(1),
+                faa: g(2),
+                tar: g(3),
+                mood: g(4),
+                meditation: g(5),
+                cognitive_load: g(6),
+                drowsiness: g(7),
+                hr: g(8),
+                snr: g(9),
+                rel_alpha: g(10),
+                rel_beta: g(11),
+                rel_theta: g(12),
+                headache_index: g(13),
+                migraine_index: g(14),
+                consciousness_lzc: g(15),
+                consciousness_wakefulness: g(16),
                 consciousness_integration: g(17),
             })
         },
-    ).ok()
+    )
+    .ok()
 }
 
 /// Derive the `YYYYMMDD` date string from a `YYYYMMDDHHmmss` timestamp integer.
@@ -303,21 +354,22 @@ fn date_from_ts(ts: i64) -> String {
 
 /// Look up a row in `db_path` by its `YYYYMMDDHHmmss` timestamp.
 /// Returns `(hnsw_id, device_id, device_name)`.
-fn get_embedding_by_ts(
-    db_path:   &Path,
-    timestamp: i64,
-) -> (i64, Option<String>, Option<String>) {
-    let Ok(conn) = skill_data::util::open_readonly(db_path) else { return (0, None, None) };
+fn get_embedding_by_ts(db_path: &Path, timestamp: i64) -> (i64, Option<String>, Option<String>) {
+    let Ok(conn) = skill_data::util::open_readonly(db_path) else {
+        return (0, None, None);
+    };
 
     conn.query_row(
         "SELECT hnsw_id, device_id, device_name \
          FROM embeddings WHERE timestamp = ?1 LIMIT 1",
         params![timestamp],
-        |row| Ok((
-            row.get::<_, i64>(0)?,
-            row.get::<_, Option<String>>(1)?,
-            row.get::<_, Option<String>>(2)?,
-        )),
+        |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        },
     )
     .unwrap_or((0, None, None))
 }
@@ -350,38 +402,53 @@ fn get_embedding_metrics_by_ts(db_path: &Path, timestamp: i64) -> Option<Neighbo
         |row| {
             let g = |i: usize| -> Option<f64> { row.get::<_, Option<f64>>(i).unwrap_or(None) };
             Ok(NeighborMetrics {
-                relaxation: g(0), engagement: g(1),
-                faa: g(2), tar: g(3), mood: g(4),
-                meditation: g(5), cognitive_load: g(6), drowsiness: g(7),
-                hr: g(8), snr: g(9),
-                rel_alpha: g(10), rel_beta: g(11), rel_theta: g(12),
-                headache_index: g(13), migraine_index: g(14),
-                consciousness_lzc: g(15), consciousness_wakefulness: g(16),
+                relaxation: g(0),
+                engagement: g(1),
+                faa: g(2),
+                tar: g(3),
+                mood: g(4),
+                meditation: g(5),
+                cognitive_load: g(6),
+                drowsiness: g(7),
+                hr: g(8),
+                snr: g(9),
+                rel_alpha: g(10),
+                rel_beta: g(11),
+                rel_theta: g(12),
+                headache_index: g(13),
+                migraine_index: g(14),
+                consciousness_lzc: g(15),
+                consciousness_wakefulness: g(16),
                 consciousness_integration: g(17),
             })
         },
-    ).ok()
+    )
+    .ok()
 }
 
 /// Fetch all labels from `labels.sqlite` whose EEG window contains `ts_unix`.
 pub fn get_labels_for(labels_db: &Path, ts_unix: u64) -> Vec<LabelEntry> {
-    let Ok(conn) = skill_data::util::open_readonly(labels_db) else { return vec![] };
+    let Ok(conn) = skill_data::util::open_readonly(labels_db) else {
+        return vec![];
+    };
 
     let Ok(mut stmt) = conn.prepare(
         "SELECT id, eeg_start, eeg_end, label_start, label_end, text
          FROM labels
          WHERE eeg_start <= ?1 AND eeg_end >= ?1
          ORDER BY eeg_start",
-    ) else { return vec![] };
+    ) else {
+        return vec![];
+    };
 
     stmt.query_map(params![ts_unix as i64], |row| {
         Ok(LabelEntry {
-            id:          row.get(0)?,
-            eeg_start:   row.get::<_, i64>(1)? as u64,
-            eeg_end:     row.get::<_, i64>(2)? as u64,
+            id: row.get(0)?,
+            eeg_start: row.get::<_, i64>(1)? as u64,
+            eeg_end: row.get::<_, i64>(2)? as u64,
             label_start: row.get::<_, i64>(3)? as u64,
-            label_end:   row.get::<_, i64>(4)? as u64,
-            text:        row.get(5)?,
+            label_end: row.get::<_, i64>(4)? as u64,
+            text: row.get(5)?,
         })
     })
     .map(|rows| rows.flatten().collect())
@@ -400,11 +467,11 @@ pub fn get_labels_for(labels_db: &Path, ts_unix: u64) -> Vec<LabelEntry> {
 /// used while the global index is still being built on startup).
 #[allow(clippy::needless_pass_by_value)] // GlobalIndexHandle is Option<Arc<…>> — cheap clone, shared with callers
 pub fn search_embeddings_in_range(
-    skill_dir:    &Path,
-    start_utc:    u64,
-    end_utc:      u64,
-    k:            usize,
-    ef:           usize,
+    skill_dir: &Path,
+    start_utc: u64,
+    end_utc: u64,
+    k: usize,
+    ef: usize,
     global_index: GlobalIndexHandle,
 ) -> SearchResult {
     search_embeddings_in_range_for(skill_dir, start_utc, end_utc, k, ef, global_index, "zuna")
@@ -413,16 +480,16 @@ pub fn search_embeddings_in_range(
 /// Model-aware variant of [`search_embeddings_in_range`].
 #[allow(clippy::needless_pass_by_value)]
 pub fn search_embeddings_in_range_for(
-    skill_dir:     &Path,
-    start_utc:     u64,
-    end_utc:       u64,
-    k:             usize,
-    ef:            usize,
-    global_index:  GlobalIndexHandle,
+    skill_dir: &Path,
+    start_utc: u64,
+    end_utc: u64,
+    k: usize,
+    ef: usize,
+    global_index: GlobalIndexHandle,
     model_backend: &str,
 ) -> SearchResult {
-    let start_ts  = unix_to_ts(start_utc);
-    let end_ts    = unix_to_ts(end_utc);
+    let start_ts = unix_to_ts(start_utc);
+    let end_ts = unix_to_ts(end_utc);
     let labels_db = skill_dir.join(LABELS_FILE);
     let date_dirs = list_date_dirs(skill_dir);
 
@@ -431,7 +498,9 @@ pub fn search_embeddings_in_range_for(
     let mut query_embs: Vec<(usize, RawEmb)> = Vec::new();
     for (dd_idx, (date, dir)) in date_dirs.iter().enumerate() {
         let db_path = dir.join(SQLITE_FILE);
-        if !db_path.exists() { continue; }
+        if !db_path.exists() {
+            continue;
+        }
         let embs = read_embeddings_in_range(&db_path, start_ts, end_ts);
         if !embs.is_empty() {
             eprintln!("[search] {} query embs from {}", embs.len(), date);
@@ -444,16 +513,18 @@ pub fn search_embeddings_in_range_for(
 
     // ── Decide search backend ─────────────────────────────────────────────
     let global_guard = global_index.as_ref().map(|arc| arc.lock_or_recover());
-    let global_idx: Option<&LabeledIndex<Cosine, i64>> = global_guard
-        .as_deref()
-        .and_then(|opt| opt.as_ref());
+    let global_idx: Option<&LabeledIndex<Cosine, i64>> =
+        global_guard.as_deref().and_then(|opt| opt.as_ref());
     let global_ready = global_idx.map(|idx| !idx.is_empty()).unwrap_or(false);
 
     // Per-day indices — only loaded when the global index is not ready.
     let day_indices: Vec<DayIndex> = if global_ready {
         Vec::new()
     } else {
-        eprintln!("[search] global index not ready — loading per-day HNSW files (model={})", model_backend);
+        eprintln!(
+            "[search] global index not ready — loading per-day HNSW files (model={})",
+            model_backend
+        );
         date_dirs
             .iter()
             .filter_map(|(date, dir)| load_day_index_for(date.clone(), dir.clone(), model_backend))
@@ -481,8 +552,8 @@ pub fn search_embeddings_in_range_for(
             let hits = gidx.search(&qemb.embedding, k, ef.max(k));
             for hit in hits {
                 let neighbor_ts = *hit.payload;
-                let date        = date_from_ts(neighbor_ts);
-                let dir         = skill_dir.join(&date);
+                let date = date_from_ts(neighbor_ts);
+                let dir = skill_dir.join(&date);
                 candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
             }
         } else {
@@ -490,17 +561,26 @@ pub fn search_embeddings_in_range_for(
             // Strings for the top-k candidates that survive truncation.
             let mut raw_candidates: Vec<(usize, usize, i64, f32)> = Vec::new();
             for (di, day) in day_indices.iter().enumerate() {
-                if day.index.is_empty() { continue; }
+                if day.index.is_empty() {
+                    continue;
+                }
                 let hits = day.index.search(&qemb.embedding, k, ef.max(k));
                 for hit in hits {
                     raw_candidates.push((di, hit.id, *hit.payload, hit.distance));
                 }
             }
-            raw_candidates.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
+            raw_candidates
+                .sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
             raw_candidates.truncate(k);
             candidates.reserve(raw_candidates.len());
             for (di, hid, ts, dist) in raw_candidates {
-                candidates.push((day_indices[di].date.clone(), day_indices[di].dir.clone(), hid, ts, dist));
+                candidates.push((
+                    day_indices[di].date.clone(),
+                    day_indices[di].dir.clone(),
+                    hid,
+                    ts,
+                    dist,
+                ));
             }
         }
 
@@ -532,7 +612,7 @@ pub fn search_embeddings_in_range_for(
 
             neighbors.push(NeighborEntry {
                 hnsw_id,
-                timestamp:      neighbor_ts,
+                timestamp: neighbor_ts,
                 timestamp_unix: neighbor_unix,
                 distance,
                 date,
@@ -544,7 +624,7 @@ pub fn search_embeddings_in_range_for(
         }
 
         results.push(QueryEntry {
-            timestamp:      qemb.timestamp,
+            timestamp: qemb.timestamp,
             timestamp_unix: ts_unix,
             neighbors,
         });
@@ -568,45 +648,54 @@ pub fn search_embeddings_in_range_for(
 /// blocking thread if needed.
 #[allow(clippy::needless_pass_by_value)]
 pub fn stream_search_inner(
-    skill_dir:    &Path,
-    start_utc:    u64,
-    end_utc:      u64,
-    k:            usize,
-    ef:           usize,
+    skill_dir: &Path,
+    start_utc: u64,
+    end_utc: u64,
+    k: usize,
+    ef: usize,
     global_index: GlobalIndexHandle,
-    emit:         &dyn Fn(SearchProgress),
+    emit: &dyn Fn(SearchProgress),
 ) {
-    stream_search_inner_for(skill_dir, start_utc, end_utc, k, ef, global_index, emit, "zuna");
+    stream_search_inner_for(
+        skill_dir,
+        start_utc,
+        end_utc,
+        k,
+        ef,
+        global_index,
+        emit,
+        "zuna",
+    );
 }
 
 /// Model-aware variant of [`stream_search_inner`].
 #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 pub fn stream_search_inner_for(
-    skill_dir:     &Path,
-    start_utc:     u64,
-    end_utc:       u64,
-    k:             usize,
-    ef:            usize,
-    global_index:  GlobalIndexHandle,
-    emit:          &dyn Fn(SearchProgress),
+    skill_dir: &Path,
+    start_utc: u64,
+    end_utc: u64,
+    k: usize,
+    ef: usize,
+    global_index: GlobalIndexHandle,
+    emit: &dyn Fn(SearchProgress),
     model_backend: &str,
 ) {
-    let start_ts  = unix_to_ts(start_utc);
-    let end_ts    = unix_to_ts(end_utc);
+    let start_ts = unix_to_ts(start_utc);
+    let end_ts = unix_to_ts(end_utc);
     let labels_db = skill_dir.join(LABELS_FILE);
     let date_dirs = list_date_dirs(skill_dir);
 
     // ── Decide backend ───────────────────────────────────────────────────
     let global_guard = global_index.as_ref().map(|arc| arc.lock_or_recover());
-    let global_idx: Option<&LabeledIndex<Cosine, i64>> = global_guard
-        .as_deref()
-        .and_then(|opt| opt.as_ref());
+    let global_idx: Option<&LabeledIndex<Cosine, i64>> =
+        global_guard.as_deref().and_then(|opt| opt.as_ref());
     let global_ready = global_idx.map(|i| !i.is_empty()).unwrap_or(false);
 
     let day_indices: Vec<DayIndex> = if global_ready {
         Vec::new()
     } else {
-        date_dirs.iter()
+        date_dirs
+            .iter()
             .filter_map(|(date, dir)| load_day_index_for(date.clone(), dir.clone(), model_backend))
             .collect()
     };
@@ -622,10 +711,14 @@ pub fn stream_search_inner_for(
     let mut query_embs: Vec<(usize, RawEmb)> = Vec::new();
     for (dd_idx, (date, dir)) in date_dirs.iter().enumerate() {
         let db_path = dir.join(SQLITE_FILE);
-        if !db_path.exists() { continue; }
+        if !db_path.exists() {
+            continue;
+        }
         let embs = read_embeddings_in_range(&db_path, start_ts, end_ts);
         let _ = date; // used only for db_path
-        for emb in embs { query_embs.push((dd_idx, emb)); }
+        for emb in embs {
+            query_embs.push((dd_idx, emb));
+        }
     }
     let query_count = query_embs.len();
 
@@ -633,7 +726,10 @@ pub fn stream_search_inner_for(
         kind: "started".into(),
         query_count: Some(query_count),
         searched_days: Some(searched_days),
-        entry: None, total: None, error: None, done_count: None,
+        entry: None,
+        total: None,
+        error: None,
+        done_count: None,
     });
 
     for (idx, (_dd_idx, qemb)) in query_embs.iter().enumerate() {
@@ -646,7 +742,7 @@ pub fn stream_search_inner_for(
             for hit in hits {
                 let neighbor_ts = *hit.payload;
                 let date = date_from_ts(neighbor_ts);
-                let dir  = skill_dir.join(&date);
+                let dir = skill_dir.join(&date);
                 candidates.push((date, dir, hit.id, neighbor_ts, hit.distance));
             }
         } else {
@@ -654,17 +750,26 @@ pub fn stream_search_inner_for(
             // Strings for the top-k candidates that survive truncation.
             let mut raw_candidates: Vec<(usize, usize, i64, f32)> = Vec::new();
             for (di, day) in day_indices.iter().enumerate() {
-                if day.index.is_empty() { continue; }
+                if day.index.is_empty() {
+                    continue;
+                }
                 let hits = day.index.search(&qemb.embedding, k, ef.max(k));
                 for hit in hits {
                     raw_candidates.push((di, hit.id, *hit.payload, hit.distance));
                 }
             }
-            raw_candidates.sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
+            raw_candidates
+                .sort_by(|a, b| a.3.partial_cmp(&b.3).unwrap_or(std::cmp::Ordering::Equal));
             raw_candidates.truncate(k);
             candidates.reserve(raw_candidates.len());
             for (di, hid, ts, dist) in raw_candidates {
-                candidates.push((day_indices[di].date.clone(), day_indices[di].dir.clone(), hid, ts, dist));
+                candidates.push((
+                    day_indices[di].date.clone(),
+                    day_indices[di].dir.clone(),
+                    hid,
+                    ts,
+                    dist,
+                ));
             }
         }
 
@@ -687,23 +792,48 @@ pub fn stream_search_inner_for(
                 (candidate_hnsw_id, None, None, None)
             };
 
-            let labels = if labels_db.exists() { get_labels_for(&labels_db, neighbor_unix) } else { vec![] };
-            neighbors.push(NeighborEntry { hnsw_id, timestamp: neighbor_ts, timestamp_unix: neighbor_unix, distance, date, device_id, device_name, labels, metrics });
+            let labels = if labels_db.exists() {
+                get_labels_for(&labels_db, neighbor_unix)
+            } else {
+                vec![]
+            };
+            neighbors.push(NeighborEntry {
+                hnsw_id,
+                timestamp: neighbor_ts,
+                timestamp_unix: neighbor_unix,
+                distance,
+                date,
+                device_id,
+                device_name,
+                labels,
+                metrics,
+            });
         }
 
-        let entry = QueryEntry { timestamp: qemb.timestamp, timestamp_unix: ts_unix, neighbors };
+        let entry = QueryEntry {
+            timestamp: qemb.timestamp,
+            timestamp_unix: ts_unix,
+            neighbors,
+        };
         emit(SearchProgress {
             kind: "result".into(),
             entry: Some(entry),
             done_count: Some(idx + 1),
-            query_count: None, searched_days: None, total: None, error: None,
+            query_count: None,
+            searched_days: None,
+            total: None,
+            error: None,
         });
     }
 
     emit(SearchProgress {
         kind: "done".into(),
         total: Some(query_count),
-        query_count: None, searched_days: None, entry: None, error: None, done_count: None,
+        query_count: None,
+        searched_days: None,
+        entry: None,
+        error: None,
+        done_count: None,
     });
 }
 
@@ -713,8 +843,8 @@ pub fn stream_search_inner_for(
 pub struct SessionRef {
     pub csv_path: String,
     pub session_start_utc: Option<u64>,
-    pub session_end_utc:   Option<u64>,
-    pub device_name:       Option<String>,
+    pub session_end_utc: Option<u64>,
+    pub device_name: Option<String>,
 }
 
 pub fn find_session_for_timestamp_in(
@@ -723,7 +853,9 @@ pub fn find_session_for_timestamp_in(
     date: &str,
 ) -> Option<SessionRef> {
     let day_dir = skill_dir.join(date);
-    if !day_dir.exists() { return None; }
+    if !day_dir.exists() {
+        return None;
+    }
 
     let rd = std::fs::read_dir(&day_dir).ok()?;
     let mut best: Option<SessionRef> = None;
@@ -732,21 +864,37 @@ pub fn find_session_for_timestamp_in(
     for entry in rd.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
-        if !name.ends_with(".json") || !(name.starts_with("exg_") || name.starts_with("muse_")) { continue; }
-        if name.contains("_ppg") || name.contains("_metrics") { continue; }
+        if !name.ends_with(".json") || !(name.starts_with("exg_") || name.starts_with("muse_")) {
+            continue;
+        }
+        if name.contains("_ppg") || name.contains("_metrics") {
+            continue;
+        }
 
         let json_path = entry.path();
-        let Ok(text) = std::fs::read_to_string(&json_path) else { continue };
-        let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
+        let Ok(text) = std::fs::read_to_string(&json_path) else {
+            continue;
+        };
+        let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else {
+            continue;
+        };
 
-        let start = meta.get("session_start_utc").and_then(serde_json::Value::as_u64);
-        let end   = meta.get("session_end_utc").and_then(serde_json::Value::as_u64);
+        let start = meta
+            .get("session_start_utc")
+            .and_then(serde_json::Value::as_u64);
+        let end = meta
+            .get("session_end_utc")
+            .and_then(serde_json::Value::as_u64);
 
         if let (Some(s), Some(e)) = (start, end) {
             // Resolve data file: try .parquet first, fall back to .csv.
             let resolve_data_path = |json_name: &str| -> std::path::PathBuf {
                 let pq = day_dir.join(json_name.replace(".json", ".parquet"));
-                if pq.exists() { pq } else { day_dir.join(json_name.replace(".json", ".csv")) }
+                if pq.exists() {
+                    pq
+                } else {
+                    day_dir.join(json_name.replace(".json", ".csv"))
+                }
             };
 
             if timestamp_unix >= s && timestamp_unix <= e {
@@ -755,10 +903,17 @@ pub fn find_session_for_timestamp_in(
                     csv_path: data_path.to_string_lossy().to_string(),
                     session_start_utc: start,
                     session_end_utc: end,
-                    device_name: meta.get("device_name").and_then(|v| v.as_str()).map(std::string::ToString::to_string),
+                    device_name: meta
+                        .get("device_name")
+                        .and_then(|v| v.as_str())
+                        .map(std::string::ToString::to_string),
                 });
             }
-            let dist = if timestamp_unix < s { s - timestamp_unix } else { timestamp_unix - e };
+            let dist = if timestamp_unix < s {
+                s - timestamp_unix
+            } else {
+                timestamp_unix - e
+            };
             if dist < best_dist {
                 best_dist = dist;
                 let data_path = resolve_data_path(&name);
@@ -766,13 +921,20 @@ pub fn find_session_for_timestamp_in(
                     csv_path: data_path.to_string_lossy().to_string(),
                     session_start_utc: start,
                     session_end_utc: end,
-                    device_name: meta.get("device_name").and_then(|v| v.as_str()).map(std::string::ToString::to_string),
+                    device_name: meta
+                        .get("device_name")
+                        .and_then(|v| v.as_str())
+                        .map(std::string::ToString::to_string),
                 });
             }
         }
     }
 
-    if best_dist <= 300 { best } else { None }
+    if best_dist <= 300 {
+        best
+    } else {
+        None
+    }
 }
 
 // ── Interactive Cross-Modal Search ────────────────────────────────────────────
@@ -781,45 +943,45 @@ pub fn find_session_for_timestamp_in(
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct InteractiveGraphNode {
     /// Stable identifier used for edge references.
-    pub id:             String,
+    pub id: String,
     /// Node layer: "query" | "text_label" | "eeg_point" | "found_label" | "screenshot"
-    pub kind:           String,
+    pub kind: String,
     /// Human-readable label text (query string / label annotation).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub text:           Option<String>,
+    pub text: Option<String>,
     /// Unix-second timestamp (for EEG points and found labels).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp_unix: Option<u64>,
     /// Cosine distance from the parent node (0 = identical, higher = farther).
-    pub distance:       f32,
+    pub distance: f32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub eeg_metrics:    Option<NeighborMetrics>,
+    pub eeg_metrics: Option<NeighborMetrics>,
     /// ID of the parent node that this node was discovered from.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent_id:      Option<String>,
+    pub parent_id: Option<String>,
     /// 2-D / 3-D PCA projection of the node's text embedding.
     /// All axes are normalised to [-1, 1].
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub proj_x:         Option<f32>,
+    pub proj_x: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub proj_y:         Option<f32>,
+    pub proj_y: Option<f32>,
     /// Third PCA axis for 3-D projection.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub proj_z:         Option<f32>,
+    pub proj_z: Option<f32>,
 
     // ── Screenshot-specific fields ────────────────────────────────────────
     /// Relative path to the screenshot image file (screenshot nodes only).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub filename:       Option<String>,
+    pub filename: Option<String>,
     /// Application name at capture time.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub app_name:       Option<String>,
+    pub app_name: Option<String>,
     /// Window title at capture time.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub window_title:   Option<String>,
+    pub window_title: Option<String>,
     /// OCR-extracted text from the screenshot.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ocr_text:       Option<String>,
+    pub ocr_text: Option<String>,
     /// Cosine similarity between the query text and the OCR text embedding.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ocr_similarity: Option<f32>,
@@ -828,12 +990,12 @@ pub struct InteractiveGraphNode {
 /// A directed edge in the interactive search graph.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InteractiveGraphEdge {
-    pub from_id:  String,
-    pub to_id:    String,
+    pub from_id: String,
+    pub to_id: String,
     /// Strength of connection — same scale as the corresponding distance.
     pub distance: f32,
     /// Edge kind: "text_sim" | "eeg_bridge" | "eeg_sim" | "label_prox" | "screenshot_prox" | "ocr_sim"
-    pub kind:     String,
+    pub kind: String,
 }
 
 /// Complete result returned by interactive search.
@@ -852,11 +1014,13 @@ pub struct InteractiveSearchResult {
 }
 
 pub fn get_labels_near(labels_db: &Path, ts_unix: u64, window_secs: u64) -> Vec<LabelEntry> {
-    let Ok(conn) = skill_data::util::open_readonly(labels_db) else { return vec![] };
+    let Ok(conn) = skill_data::util::open_readonly(labels_db) else {
+        return vec![];
+    };
 
-    let ts  = ts_unix as i64;
-    let lo  = ts_unix.saturating_sub(window_secs) as i64;
-    let hi  = (ts_unix.saturating_add(window_secs)) as i64;
+    let ts = ts_unix as i64;
+    let lo = ts_unix.saturating_sub(window_secs) as i64;
+    let hi = (ts_unix.saturating_add(window_secs)) as i64;
 
     let Ok(mut stmt) = conn.prepare(
         "SELECT id, eeg_start, eeg_end, label_start, label_end, text
@@ -865,16 +1029,18 @@ pub fn get_labels_near(labels_db: &Path, ts_unix: u64, window_secs: u64) -> Vec<
             OR (eeg_start BETWEEN ?2 AND ?3)
          ORDER BY ABS(CAST(eeg_start AS INTEGER) - ?4)
          LIMIT 5",
-    ) else { return vec![] };
+    ) else {
+        return vec![];
+    };
 
     stmt.query_map(params![ts, lo, hi, ts], |row| {
         Ok(LabelEntry {
-            id:          row.get(0)?,
-            eeg_start:   row.get::<_, i64>(1)? as u64,
-            eeg_end:     row.get::<_, i64>(2)? as u64,
+            id: row.get(0)?,
+            eeg_start: row.get::<_, i64>(1)? as u64,
+            eeg_end: row.get::<_, i64>(2)? as u64,
             label_start: row.get::<_, i64>(3)? as u64,
-            label_end:   row.get::<_, i64>(4)? as u64,
-            text:        row.get(5)?,
+            label_end: row.get::<_, i64>(4)? as u64,
+            text: row.get(5)?,
         })
     })
     .map(|rows| rows.flatten().collect())
@@ -886,13 +1052,17 @@ pub fn get_labels_near(labels_db: &Path, ts_unix: u64, window_secs: u64) -> Vec<
 /// Fetch the `text_embedding` BLOB for one label (read-only, no metrics).
 pub fn get_found_label_embedding(labels_db: &Path, label_id: i64) -> Option<Vec<f32>> {
     let conn = skill_data::util::open_readonly(labels_db).ok()?;
-    let blob: Option<Vec<u8>> = conn.query_row(
-        "SELECT text_embedding FROM labels WHERE id = ?1",
-        params![label_id],
-        |row| row.get(0),
-    ).ok()?;
+    let blob: Option<Vec<u8>> = conn
+        .query_row(
+            "SELECT text_embedding FROM labels WHERE id = ?1",
+            params![label_id],
+            |row| row.get(0),
+        )
+        .ok()?;
     let blob = blob?;
-    if blob.len() < 4 { return None; }
+    if blob.len() < 4 {
+        return None;
+    }
     Some(skill_data::util::blob_to_f32(&blob))
 }
 
@@ -901,25 +1071,40 @@ pub fn get_found_label_embedding(labels_db: &Path, label_id: i64) -> Option<Vec<
 /// Returns one `(x, y)` per input, normalised so every axis spans [-1, 1].
 pub fn pca_2d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32)> {
     let n = embeddings.len();
-    if n == 0 { return vec![]; }
-    if n == 1 { return vec![(0.0, 0.0)]; }
+    if n == 0 {
+        return vec![];
+    }
+    if n == 1 {
+        return vec![(0.0, 0.0)];
+    }
     let d = embeddings[0].len();
-    if d < 2  { return vec![(0.0, 0.0); n]; }
+    if d < 2 {
+        return vec![(0.0, 0.0); n];
+    }
 
     let inv_n = 1.0 / n as f32;
     let mut mean = vec![0f32; d];
-    for emb in embeddings { for (j, &v) in emb.iter().enumerate() { mean[j] += v * inv_n; } }
-    let centered: Vec<Vec<f32>> = embeddings.iter()
+    for emb in embeddings {
+        for (j, &v) in emb.iter().enumerate() {
+            mean[j] += v * inv_n;
+        }
+    }
+    let centered: Vec<Vec<f32>> = embeddings
+        .iter()
         .map(|emb| emb.iter().zip(&mean).map(|(&v, &m)| v - m).collect())
         .collect();
 
-    fn dot(a: &[f32], b: &[f32]) -> f32 { a.iter().zip(b).map(|(&x, &y)| x * y).sum() }
+    fn dot(a: &[f32], b: &[f32]) -> f32 {
+        a.iter().zip(b).map(|(&x, &y)| x * y).sum()
+    }
 
     fn cov_mul(c: &[Vec<f32>], v: &[f32]) -> Vec<f32> {
         let xv: Vec<f32> = c.iter().map(|row| dot(row, v)).collect();
         let mut res = vec![0f32; v.len()];
         for (row, &coeff) in c.iter().zip(&xv) {
-            for (r, &x) in res.iter_mut().zip(row) { *r += x * coeff; }
+            for (r, &x) in res.iter_mut().zip(row) {
+                *r += x * coeff;
+            }
         }
         let inv = 1.0 / c.len() as f32;
         res.iter_mut().for_each(|x| *x *= inv);
@@ -939,21 +1124,27 @@ pub fn pca_2d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32)> {
     let init1: Vec<f32> = centered[0].iter().map(|&v| v / norm0).collect();
     let pc1 = power_iter(&centered, init1);
 
-    let centered2: Vec<Vec<f32>> = centered.iter().map(|v| {
-        let p = dot(v, &pc1);
-        v.iter().zip(&pc1).map(|(&vi, &pi)| vi - p * pi).collect()
-    }).collect();
+    let centered2: Vec<Vec<f32>> = centered
+        .iter()
+        .map(|v| {
+            let p = dot(v, &pc1);
+            v.iter().zip(&pc1).map(|(&vi, &pi)| vi - p * pi).collect()
+        })
+        .collect();
     let norm2 = dot(&centered2[0], &centered2[0]).sqrt();
     let init2 = if norm2 > 1e-12 {
         centered2[0].iter().map(|&v| v / norm2).collect::<Vec<_>>()
     } else {
         let mut perp = vec![0f32; d];
-        if d > 1 { perp[1] = 1.0; }
+        if d > 1 {
+            perp[1] = 1.0;
+        }
         perp
     };
     let pc2 = power_iter(&centered2, init2);
 
-    let coords: Vec<(f32, f32)> = centered.iter()
+    let coords: Vec<(f32, f32)> = centered
+        .iter()
         .map(|v| (dot(v, &pc1), dot(v, &pc2)))
         .collect();
     let x_min = coords.iter().map(|&(x, _)| x).fold(f32::MAX, f32::min);
@@ -962,10 +1153,10 @@ pub fn pca_2d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32)> {
     let y_max = coords.iter().map(|&(_, y)| y).fold(f32::MIN, f32::max);
     let xr = (x_max - x_min).max(1e-6);
     let yr = (y_max - y_min).max(1e-6);
-    coords.iter().map(|&(x, y)| (
-        (x - x_min) / xr * 2.0 - 1.0,
-        (y - y_min) / yr * 2.0 - 1.0,
-    )).collect()
+    coords
+        .iter()
+        .map(|&(x, y)| ((x - x_min) / xr * 2.0 - 1.0, (y - y_min) / yr * 2.0 - 1.0))
+        .collect()
 }
 
 /// 3-component PCA via covariance-free power iteration.
@@ -973,25 +1164,40 @@ pub fn pca_2d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32)> {
 /// Returns one `(x, y, z)` per input, normalised so every axis spans [-1, 1].
 pub fn pca_3d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32, f32)> {
     let n = embeddings.len();
-    if n == 0 { return vec![]; }
-    if n == 1 { return vec![(0.0, 0.0, 0.0)]; }
+    if n == 0 {
+        return vec![];
+    }
+    if n == 1 {
+        return vec![(0.0, 0.0, 0.0)];
+    }
     let d = embeddings[0].len();
-    if d < 3  { return vec![(0.0, 0.0, 0.0); n]; }
+    if d < 3 {
+        return vec![(0.0, 0.0, 0.0); n];
+    }
 
     let inv_n = 1.0 / n as f32;
     let mut mean = vec![0f32; d];
-    for emb in embeddings { for (j, &v) in emb.iter().enumerate() { mean[j] += v * inv_n; } }
-    let centered: Vec<Vec<f32>> = embeddings.iter()
+    for emb in embeddings {
+        for (j, &v) in emb.iter().enumerate() {
+            mean[j] += v * inv_n;
+        }
+    }
+    let centered: Vec<Vec<f32>> = embeddings
+        .iter()
         .map(|emb| emb.iter().zip(&mean).map(|(&v, &m)| v - m).collect())
         .collect();
 
-    fn dot(a: &[f32], b: &[f32]) -> f32 { a.iter().zip(b).map(|(&x, &y)| x * y).sum() }
+    fn dot(a: &[f32], b: &[f32]) -> f32 {
+        a.iter().zip(b).map(|(&x, &y)| x * y).sum()
+    }
 
     fn cov_mul(c: &[Vec<f32>], v: &[f32]) -> Vec<f32> {
         let xv: Vec<f32> = c.iter().map(|row| dot(row, v)).collect();
         let mut res = vec![0f32; v.len()];
         for (row, &coeff) in c.iter().zip(&xv) {
-            for (r, &x) in res.iter_mut().zip(row) { *r += x * coeff; }
+            for (r, &x) in res.iter_mut().zip(row) {
+                *r += x * coeff;
+            }
         }
         let inv = 1.0 / c.len() as f32;
         res.iter_mut().for_each(|x| *x *= inv);
@@ -1008,16 +1214,25 @@ pub fn pca_3d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32, f32)> {
     }
 
     fn deflate(centered: &[Vec<f32>], pc: &[f32]) -> Vec<Vec<f32>> {
-        centered.iter().map(|v| {
-            let p = dot(v, pc);
-            v.iter().zip(pc).map(|(&vi, &pi)| vi - p * pi).collect()
-        }).collect()
+        centered
+            .iter()
+            .map(|v| {
+                let p = dot(v, pc);
+                v.iter().zip(pc).map(|(&vi, &pi)| vi - p * pi).collect()
+            })
+            .collect()
     }
 
     fn init_vec(centered: &[Vec<f32>], d: usize) -> Vec<f32> {
         let norm = dot(&centered[0], &centered[0]).sqrt().max(1e-12);
-        centered[0].iter().map(|&v| v / norm).collect::<Vec<_>>()
-            .into_iter().chain(std::iter::repeat(0.0)).take(d).collect()
+        centered[0]
+            .iter()
+            .map(|&v| v / norm)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .chain(std::iter::repeat(0.0))
+            .take(d)
+            .collect()
     }
 
     let pc1 = power_iter(&centered, init_vec(&centered, d));
@@ -1027,7 +1242,9 @@ pub fn pca_3d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32, f32)> {
     let init2 = if norm2 > 1e-12 {
         deflated1[0].iter().map(|&v| v / norm2).collect::<Vec<_>>()
     } else {
-        let mut perp = vec![0f32; d]; perp[1] = 1.0; perp
+        let mut perp = vec![0f32; d];
+        perp[1] = 1.0;
+        perp
     };
     let pc2 = power_iter(&deflated1, init2);
     let deflated2 = deflate(&deflated1, &pc2);
@@ -1036,11 +1253,14 @@ pub fn pca_3d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32, f32)> {
     let init3 = if norm3 > 1e-12 {
         deflated2[0].iter().map(|&v| v / norm3).collect::<Vec<_>>()
     } else {
-        let mut perp = vec![0f32; d]; perp[2] = 1.0; perp
+        let mut perp = vec![0f32; d];
+        perp[2] = 1.0;
+        perp
     };
     let pc3 = power_iter(&deflated2, init3);
 
-    let coords: Vec<(f32, f32, f32)> = centered.iter()
+    let coords: Vec<(f32, f32, f32)> = centered
+        .iter()
         .map(|v| (dot(v, &pc1), dot(v, &pc2), dot(v, &pc3)))
         .collect();
 
@@ -1054,11 +1274,16 @@ pub fn pca_3d(embeddings: &[Vec<f32>]) -> Vec<(f32, f32, f32)> {
     let yr = (y_max - y_min).max(1e-6);
     let zr = (z_max - z_min).max(1e-6);
 
-    coords.iter().map(|&(x, y, z)| (
-        (x - x_min) / xr * 2.0 - 1.0,
-        (y - y_min) / yr * 2.0 - 1.0,
-        (z - z_min) / zr * 2.0 - 1.0,
-    )).collect()
+    coords
+        .iter()
+        .map(|&(x, y, z)| {
+            (
+                (x - x_min) / xr * 2.0 - 1.0,
+                (y - y_min) / yr * 2.0 - 1.0,
+                (z - z_min) / zr * 2.0 - 1.0,
+            )
+        })
+        .collect()
 }
 
 // ── File save helpers ─────────────────────────────────────────────────────────
@@ -1077,20 +1302,20 @@ pub fn query_slug(query: &str, max: usize) -> String {
 
 /// `YYYYMMDD_HHMMSS` timestamp from a Unix second value (UTC).
 pub fn file_ts(secs: u64) -> String {
-    let tod  = secs % 86400;
-    let h    = tod / 3600;
-    let m    = (tod % 3600) / 60;
-    let s    = tod % 60;
-    let z    = (secs / 86400) as i64 + 719_468;
-    let era  = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe  = z - era * 146_097;
-    let yoe  = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y    = yoe + era * 400;
-    let doy  = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp   = (5 * doy + 2) / 153;
-    let d    = doy - (153 * mp + 2) / 5 + 1;
-    let mo   = if mp < 10 { mp + 3 } else { mp - 9 };
-    let yr   = if mo <= 2 { y + 1 } else { y };
+    let tod = secs % 86400;
+    let h = tod / 3600;
+    let m = (tod % 3600) / 60;
+    let s = tod % 60;
+    let z = (secs / 86400) as i64 + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
+    let yr = if mo <= 2 { y + 1 } else { y };
     format!("{yr:04}{mo:02}{d:02}_{h:02}{m:02}{s:02}")
 }
 

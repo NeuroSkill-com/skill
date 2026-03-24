@@ -2,8 +2,8 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Root error boundary — catches unhandled errors in any route. -->
 <script lang="ts">
-  import { page } from "$app/stores";
-  import { t } from "$lib/i18n/index.svelte";
+import { page } from "$app/stores";
+import { t } from "$lib/i18n/index.svelte";
 </script>
 
 <div class="flex flex-col items-center justify-center min-h-[60vh] gap-4 px-6 text-center">

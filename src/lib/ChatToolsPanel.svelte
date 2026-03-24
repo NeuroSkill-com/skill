@@ -2,17 +2,17 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Chat tools configuration panel — tool allow-list, execution mode, limits. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import type { ToolConfig, ToolExecutionMode, CompressionLevel } from "$lib/chat-types";
-  import { TOOL_THINKING_LEVELS, type ToolThinkingLevel } from "$lib/chat-types";
+import type { CompressionLevel, ToolConfig, ToolExecutionMode } from "$lib/chat-types";
+import { TOOL_THINKING_LEVELS, type ToolThinkingLevel } from "$lib/chat-types";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface Props {
-    toolConfig: ToolConfig;
-    enabledToolCount: number;
-    onUpdate: (patch: Partial<ToolConfig>) => void;
-  }
+interface Props {
+  toolConfig: ToolConfig;
+  enabledToolCount: number;
+  onUpdate: (patch: Partial<ToolConfig>) => void;
+}
 
-  let { toolConfig, enabledToolCount, onUpdate }: Props = $props();
+let { toolConfig, enabledToolCount, onUpdate }: Props = $props();
 </script>
 
 <div class="flex-1 min-h-0 overflow-y-auto

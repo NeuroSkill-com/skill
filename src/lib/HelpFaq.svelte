@@ -6,7 +6,7 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Help & FAQ content — mounted by the settings page's "Help & FAQ" tab. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
+import { t } from "$lib/i18n/index.svelte";
 </script>
 
 <div class="prose-skill flex flex-col gap-6 pb-6">

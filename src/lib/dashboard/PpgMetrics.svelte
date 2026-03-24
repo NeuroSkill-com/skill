@@ -5,15 +5,23 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import MetricTooltip from "./MetricTooltip.svelte";
-  import CollapsibleSection from "./CollapsibleSection.svelte";
-  import MetricBar from "./MetricBar.svelte";
-  interface Props {
-    hr: number; rmssd: number; sdnn: number; pnn50: number;
-    lfHf: number; respRate: number; spo2: number; perfIdx: number; stressIdx: number;
-  }
-  let { hr, rmssd, sdnn, pnn50, lfHf, respRate, spo2, perfIdx, stressIdx }: Props = $props();
+import { t } from "$lib/i18n/index.svelte";
+import CollapsibleSection from "./CollapsibleSection.svelte";
+import MetricBar from "./MetricBar.svelte";
+import MetricTooltip from "./MetricTooltip.svelte";
+
+interface Props {
+  hr: number;
+  rmssd: number;
+  sdnn: number;
+  pnn50: number;
+  lfHf: number;
+  respRate: number;
+  spo2: number;
+  perfIdx: number;
+  stressIdx: number;
+}
+let { hr, rmssd, sdnn, pnn50, lfHf, respRate, spo2, perfIdx, stressIdx }: Props = $props();
 </script>
 
 <CollapsibleSection title={t("dashboard.ppgMetrics")} dotColor="text-red-500">

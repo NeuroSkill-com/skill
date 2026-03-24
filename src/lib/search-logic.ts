@@ -7,13 +7,9 @@
  * Keep UI state management in the Svelte component; keep data transformations here.
  */
 
-import type { UmapResult, UmapPoint } from "$lib/types";
-import type { SearchResult, QueryEntry, SearchAnalysis } from "$lib/search-types";
-import { computeSearchAnalysis, computeTemporalHeatmap } from "$lib/search-types";
-import {
-  fmtDateTimeLocalInput, parseDateTimeLocalInput,
-  fmtDuration as fmtDurationSecs,
-} from "$lib/format";
+import { fmtDateTimeLocalInput, fmtDuration as fmtDurationSecs, parseDateTimeLocalInput } from "$lib/format";
+import type { SearchAnalysis, SearchResult } from "$lib/search-types";
+import type { UmapPoint, UmapResult } from "$lib/types";
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
@@ -59,7 +55,7 @@ export function buildNeighborLabelMap(result: SearchResult | null): Map<number, 
 export function enrichUmapLabels(raw: UmapResult, labelMap: Map<number, string>): UmapResult {
   if (labelMap.size === 0) return raw;
   const points = raw.points.map((pt: UmapPoint) =>
-    (!pt.label && labelMap.has(pt.utc)) ? { ...pt, label: labelMap.get(pt.utc)! } : pt
+    !pt.label && labelMap.has(pt.utc) ? { ...pt, label: labelMap.get(pt.utc)! } : pt,
   );
   return { ...raw, points };
 }
@@ -72,9 +68,7 @@ export const SEARCH_MODE_EVENT = "skill:search-mode";
 export const SEARCH_SET_MODE_EVENT = "skill:search-set-mode";
 
 export function normalizeSearchMode(value: unknown): SearchMode {
-  return value === "eeg" || value === "text" || value === "interactive" || value === "images"
-    ? value
-    : "interactive";
+  return value === "eeg" || value === "text" || value === "interactive" || value === "images" ? value : "interactive";
 }
 
 export function emitSearchMode(value: SearchMode): void {
@@ -83,10 +77,7 @@ export function emitSearchMode(value: SearchMode): void {
 
 // ── Analysis chips ────────────────────────────────────────────────────────────
 
-export function analysisChips(
-  sa: SearchAnalysis,
-  tFn: (key: string) => string,
-): Array<[string, string, string]> {
+export function analysisChips(sa: SearchAnalysis, tFn: (key: string) => string): Array<[string, string, string]> {
   return [
     [tFn("search.analysisNeighbors"), sa.totalNeighbors.toString(), ""],
     [tFn("search.analysisDistMin"), sa.distMin.toFixed(4), "text-emerald-500"],

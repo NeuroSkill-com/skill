@@ -5,15 +5,15 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-	import { Separator as SeparatorPrimitive } from "bits-ui";
-	import { cn } from "$lib/utils.js";
+import type { Separator as SeparatorPrimitive } from "bits-ui";
+import { cn } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		"data-slot": dataSlot = "separator",
-		...restProps
-	}: SeparatorPrimitive.RootProps = $props();
+let {
+  ref = $bindable(null),
+  class: className,
+  "data-slot": dataSlot = "separator",
+  ...restProps
+}: SeparatorPrimitive.RootProps = $props();
 </script>
 
 <SeparatorPrimitive.Root

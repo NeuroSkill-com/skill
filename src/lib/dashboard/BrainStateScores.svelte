@@ -5,18 +5,37 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import MetricTooltip from "./MetricTooltip.svelte";
-  import CollapsibleSection from "./CollapsibleSection.svelte";
-  import MetricBar from "./MetricBar.svelte";
+import { t } from "$lib/i18n/index.svelte";
+import CollapsibleSection from "./CollapsibleSection.svelte";
+import MetricBar from "./MetricBar.svelte";
+import MetricTooltip from "./MetricTooltip.svelte";
 
-  interface Props { relaxation: number; engagement: number; }
-  let { relaxation, engagement }: Props = $props();
+interface Props {
+  relaxation: number;
+  engagement: number;
+}
+let { relaxation, engagement }: Props = $props();
 
-  const items = $derived([
-    { key: "relaxation", score: relaxation,  color: "#10b981", gradFrom: "#6ee7b7", gradTo: "#10b981", blink: "text-emerald-500",  formula: "α/(β+θ)" },
-    { key: "engagement", score: engagement, color: "#f59e0b", gradFrom: "#fcd34d", gradTo: "#f59e0b", blink: "text-amber-500",    formula: "β/(α+θ)" },
-  ]);
+const items = $derived([
+  {
+    key: "relaxation",
+    score: relaxation,
+    color: "#10b981",
+    gradFrom: "#6ee7b7",
+    gradTo: "#10b981",
+    blink: "text-emerald-500",
+    formula: "α/(β+θ)",
+  },
+  {
+    key: "engagement",
+    score: engagement,
+    color: "#f59e0b",
+    gradFrom: "#fcd34d",
+    gradTo: "#f59e0b",
+    blink: "text-amber-500",
+    formula: "β/(α+θ)",
+  },
+]);
 </script>
 
 <CollapsibleSection title={t("dashboard.brainState")} dotColor="text-emerald-500"

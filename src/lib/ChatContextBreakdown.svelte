@@ -2,50 +2,48 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Context breakdown popover — shows proportional usage of each context component. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
+import { t } from "$lib/i18n/index.svelte";
 
-  export interface ContextSegment {
-    key: string;
-    labelKey: string;
-    tokens: number;
-    color: string;
-  }
+export interface ContextSegment {
+  key: string;
+  labelKey: string;
+  tokens: number;
+  color: string;
+}
 
-  interface Props {
-    segments: ContextSegment[];
-    totalUsed: number;
-    nCtx: number;
-    isEstimate: boolean;
-    onClose: () => void;
-    onViewFull?: () => void;
-  }
+interface Props {
+  segments: ContextSegment[];
+  totalUsed: number;
+  nCtx: number;
+  isEstimate: boolean;
+  onClose: () => void;
+  onViewFull?: () => void;
+}
 
-  let { segments, totalUsed, nCtx, isEstimate, onClose, onViewFull }: Props = $props();
+let { segments, totalUsed, nCtx, isEstimate, onClose, onViewFull }: Props = $props();
 
-  const sortedSegments = $derived(
-    [...segments].filter(s => s.tokens > 0).sort((a, b) => b.tokens - a.tokens)
-  );
+const sortedSegments = $derived([...segments].filter((s) => s.tokens > 0).sort((a, b) => b.tokens - a.tokens));
 
-  /** Sum of all segment tokens — this is the authoritative total for proportions. */
-  const segmentSum = $derived(sortedSegments.reduce((a, s) => a + s.tokens, 0));
-  const freeTokens = $derived(Math.max(0, nCtx - totalUsed));
+/** Sum of all segment tokens — this is the authoritative total for proportions. */
+const segmentSum = $derived(sortedSegments.reduce((a, s) => a + s.tokens, 0));
+const freeTokens = $derived(Math.max(0, nCtx - totalUsed));
 
-  /** Percentage of the total context window (nCtx). Used for bar widths + free row. */
-  const pctOfCtx = (n: number) => nCtx > 0 ? (n / nCtx) * 100 : 0;
+/** Percentage of the total context window (nCtx). Used for bar widths + free row. */
+const pctOfCtx = (n: number) => (nCtx > 0 ? (n / nCtx) * 100 : 0);
 
-  /** Percentage of used tokens. Used for legend rows so proportions sum to 100%. */
-  const pctOfUsed = (n: number) => segmentSum > 0 ? (n / segmentSum) * 100 : 0;
+/** Percentage of used tokens. Used for legend rows so proportions sum to 100%. */
+const pctOfUsed = (n: number) => (segmentSum > 0 ? (n / segmentSum) * 100 : 0);
 
-  /** Bar segment widths as % of nCtx, with a small floor so tiny slices stay visible. */
-  const barWidths = $derived.by(() => {
-    if (nCtx <= 0) return [] as number[];
-    const MIN = 0.5;
-    const raw = sortedSegments.map(s => pctOfCtx(s.tokens));
-    return raw.map(v => Math.max(v, MIN));
-  });
+/** Bar segment widths as % of nCtx, with a small floor so tiny slices stay visible. */
+const barWidths = $derived.by(() => {
+  if (nCtx <= 0) return [] as number[];
+  const MIN = 0.5;
+  const raw = sortedSegments.map((s) => pctOfCtx(s.tokens));
+  return raw.map((v) => Math.max(v, MIN));
+});
 
-  const fmtNum = (n: number) => n.toLocaleString();
-  const fmtPct1 = (v: number) => v.toFixed(1);
+const fmtNum = (n: number) => n.toLocaleString();
+const fmtPct1 = (v: number) => v.toFixed(1);
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->

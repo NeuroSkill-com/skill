@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  stripToolCallFences,
   cleanAssistantLeadIn,
   cleanLeadInForDisplay,
   detectToolDanger,
   parseAssistantOutput,
+  stripToolCallFences,
 } from "$lib/chat-utils";
 
 // ── stripToolCallFences ─────────────────────────────────────────────────────

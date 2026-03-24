@@ -27,14 +27,18 @@ use crate::{
 fn detect_device_kind(id: Option<&str>, name_lower: Option<&str>) -> &'static str {
     // Check ID prefix first — Cortex and USB scanner prefix device IDs.
     if let Some(id) = id {
-        if id.starts_with("cortex:") { return "emotiv"; }
-        if id.starts_with("usb:")    { return "ganglion"; } // OpenBCI serial
+        if id.starts_with("cortex:") {
+            return "emotiv";
+        }
+        if id.starts_with("usb:") {
+            return "ganglion";
+        } // OpenBCI serial
     }
     use skill_data::device::DeviceKind;
     match DeviceKind::from_name(name_lower) {
-        DeviceKind::OpenBci  => "muse", // serial/WiFi boards use connect_openbci command
-        DeviceKind::Unknown  => "muse",
-        other                => other.as_str(),
+        DeviceKind::OpenBci => "muse", // serial/WiFi boards use connect_openbci command
+        DeviceKind::Unknown => "muse",
+        other => other.as_str(),
     }
 }
 
@@ -51,7 +55,12 @@ pub(crate) const MAX_RETRY_ATTEMPTS: u32 = 12;
 
 /// Reconnect backoff: 1 s → 2 s → 3 s → 5 s, then stays at 5 s indefinitely.
 pub(crate) fn retry_delay_secs(attempt: u32) -> u32 {
-    match attempt { 0 => 1, 1 => 2, 2 => 3, _ => 5 }
+    match attempt {
+        0 => 1,
+        1 => 2,
+        2 => 3,
+        _ => 5,
+    }
 }
 
 // ── Disconnect / retry ────────────────────────────────────────────────────────
@@ -65,10 +74,17 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
 
     // Give up after MAX_RETRY_ATTEMPTS consecutive failures.
     if retry && attempt >= MAX_RETRY_ATTEMPTS {
-        app_log!(app, "bluetooth",
-            "[reconnect] giving up after {attempt} consecutive attempts");
-        crate::send_toast(app, crate::ToastLevel::Error, "Reconnect Failed",
-            "Could not reconnect after multiple attempts. Please reconnect manually.");
+        app_log!(
+            app,
+            "bluetooth",
+            "[reconnect] giving up after {attempt} consecutive attempts"
+        );
+        crate::send_toast(
+            app,
+            crate::ToastLevel::Error,
+            "Reconnect Failed",
+            "Could not reconnect after multiple attempts. Please reconnect manually.",
+        );
         retry = false;
     }
 
@@ -79,25 +95,31 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
         let mut s = r.lock_or_recover();
         if is_bt {
             s.pending_reconnect = false;
-            s.retry_attempt     = 0;
+            s.retry_attempt = 0;
         } else if !retry {
             s.retry_attempt = 0;
         }
 
         // Reset all device identity / telemetry fields in one call.
-        let new_state = if retry { "scanning" }
-                        else if is_bt { "bt_off" }
-                        else { "disconnected" };
+        let new_state = if retry {
+            "scanning"
+        } else if is_bt {
+            "bt_off"
+        } else {
+            "disconnected"
+        };
         s.status.reset_disconnected(new_state);
 
         // Override the defaults set by reset_disconnected for retry-specific values.
-        if !retry { s.status.device_error = error; }
-        s.status.retry_attempt        = if retry { attempt + 1 } else { 0 };
+        if !retry {
+            s.status.device_error = error;
+        }
+        s.status.retry_attempt = if retry { attempt + 1 } else { 0 };
         s.status.retry_countdown_secs = delay;
         s.status.channel_quality = Vec::new();
 
-        s.stream       = None;
-        s.battery_ema  = None;
+        s.stream = None;
+        s.battery_ema = None;
         s.latest_bands = None;
         // Reset session timestamp so screenshot "sessions only" gate works.
         // Even during auto-reconnect the device is not streaming data,
@@ -113,30 +135,45 @@ pub(crate) fn go_disconnected(app: &AppHandle, error: Option<String>, is_bt: boo
     if retry {
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
-            app_log!(app, "bluetooth",
+            app_log!(
+                app,
+                "bluetooth",
                 "[reconnect] scheduling attempt #{} in {}s (backoff schedule: 1→2→3→5s)",
-                attempt + 1, delay);
+                attempt + 1,
+                delay
+            );
             for remaining in (1..=delay).rev() {
                 {
                     let r = app.app_state();
-                    if !r.lock_or_recover().pending_reconnect { return; }
+                    if !r.lock_or_recover().pending_reconnect {
+                        return;
+                    }
                 }
-                app.app_state().lock_or_recover()
-                    .status.retry_countdown_secs = remaining;
+                app.app_state()
+                    .lock_or_recover()
+                    .status
+                    .retry_countdown_secs = remaining;
                 emit_status(&app);
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
             let preferred = {
                 let r = app.app_state();
                 let mut s = r.lock_or_recover();
-                if !s.pending_reconnect { return; }
+                if !s.pending_reconnect {
+                    return;
+                }
                 s.retry_attempt += 1;
                 s.status.retry_countdown_secs = 0;
-                s.preferred_id.clone()
+                s.preferred_id
+                    .clone()
                     .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
             };
-            app_log!(app, "bluetooth",
-                "[reconnect] attempt #{} — waited {delay}s — target={preferred:?}", attempt + 1);
+            app_log!(
+                app,
+                "bluetooth",
+                "[reconnect] attempt #{} — waited {delay}s — target={preferred:?}",
+                attempt + 1
+            );
             start_session(&app, preferred);
         });
     }
@@ -148,7 +185,9 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
-        if s.stream.is_some() { return; }
+        if s.stream.is_some() {
+            return;
+        }
         s.pending_reconnect = true;
     }
     let (tx, rx) = tokio::sync::oneshot::channel();
@@ -156,16 +195,25 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     let target = preferred_id.or_else(|| {
         let r = app.app_state();
         let s = r.lock_or_recover();
-        s.preferred_id.clone()
+        s.preferred_id
+            .clone()
             .or_else(|| s.status.paired_devices.first().map(|d| d.id.clone()))
     });
 
     let target_name: Option<String> = target.as_ref().and_then(|id| {
         let r = app.app_state();
         let s = r.lock_or_recover();
-        s.status.paired_devices.iter()
-            .find(|d| &d.id == id).map(|d| d.name.clone())
-            .or_else(|| s.discovered.iter().find(|d| &d.id == id).map(|d| d.name.clone()))
+        s.status
+            .paired_devices
+            .iter()
+            .find(|d| &d.id == id)
+            .map(|d| d.name.clone())
+            .or_else(|| {
+                s.discovered
+                    .iter()
+                    .find(|d| &d.id == id)
+                    .map(|d| d.name.clone())
+            })
     });
     let target_lower = target_name.as_deref().map(str::to_lowercase);
     let device_kind = detect_device_kind(target.as_deref(), target_lower.as_deref());
@@ -173,25 +221,32 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
     // For Cortex devices without a resolved name, set a user-visible name
     // so the UI shows something meaningful during the scanning/connecting phase.
     let target_name = target_name.or_else(|| {
-        if device_kind == "emotiv" { Some("Emotiv Headset".into()) }
-        else { None }
+        if device_kind == "emotiv" {
+            Some("Emotiv Headset".into())
+        } else {
+            None
+        }
     });
 
     app.app_state().lock_or_recover().stream = Some(StreamHandle { cancel_tx: tx });
-    let csv  = new_csv_path(app);
+    let csv = new_csv_path(app);
     let app2 = app.clone();
 
-    app_log!(app, "bluetooth",
-        "[session] routing: target={target:?} name={target_name:?} kind={device_kind}");
+    app_log!(
+        app,
+        "bluetooth",
+        "[session] routing: target={target:?} name={target_name:?} kind={device_kind}"
+    );
 
     // Set scanning state with the correct device_kind.
     {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
         s.session_start_utc = Some(unix_secs());
-        s.snr_sum   = 0.0;
+        s.snr_sum = 0.0;
         s.snr_count = 0;
-        s.status.reset_for_scanning(device_kind, &csv, target.as_deref());
+        s.status
+            .reset_for_scanning(device_kind, &csv, target.as_deref());
         // Pin the scanner-level device ID so on_connected can use it
         // for pairing (instead of the adapter's internal session ID).
         if let Some(ref id) = target {
@@ -220,11 +275,11 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
 
         let connect_result = match device_kind {
             "ganglion" => crate::session_connect::connect_ganglion(&app2, &cancel, target).await,
-            "mw75"     => crate::session_connect::connect_mw75(&app2, &cancel, target).await,
-            "hermes"   => crate::session_connect::connect_hermes(&app2, &cancel, target).await,
-            "emotiv"   => crate::session_connect::connect_emotiv(&app2, &cancel, target).await,
-            "idun"     => crate::session_connect::connect_idun(&app2, &cancel).await,
-            _          => crate::session_connect::connect_muse(&app2, &cancel, target).await,
+            "mw75" => crate::session_connect::connect_mw75(&app2, &cancel, target).await,
+            "hermes" => crate::session_connect::connect_hermes(&app2, &cancel, target).await,
+            "emotiv" => crate::session_connect::connect_emotiv(&app2, &cancel, target).await,
+            "idun" => crate::session_connect::connect_idun(&app2, &cancel).await,
+            _ => crate::session_connect::connect_muse(&app2, &cancel, target).await,
         };
 
         match connect_result {
@@ -245,8 +300,15 @@ pub(crate) fn start_session(app: &AppHandle, preferred_id: Option<String>) {
 }
 
 pub(crate) fn cancel_session(app: &AppHandle) {
-    let tx = app.app_state().lock_or_recover().stream.take().map(|sh| sh.cancel_tx);
-    if let Some(tx) = tx { let _ = tx.send(()); }
+    let tx = app
+        .app_state()
+        .lock_or_recover()
+        .stream
+        .take()
+        .map(|sh| sh.cancel_tx);
+    if let Some(tx) = tx {
+        let _ = tx.send(());
+    }
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────
@@ -266,8 +328,11 @@ mod tests {
     #[test]
     fn backoff_capped_at_5s() {
         for attempt in 3u32..=100 {
-            assert_eq!(retry_delay_secs(attempt), 5,
-                "attempt {attempt} should be capped at 5 s");
+            assert_eq!(
+                retry_delay_secs(attempt),
+                5,
+                "attempt {attempt} should be capped at 5 s"
+            );
         }
     }
 
@@ -314,10 +379,19 @@ mod tests {
     #[test]
     fn detect_device_kind_by_id_prefix() {
         // Cortex prefix → emotiv regardless of name.
-        assert_eq!(detect_device_kind(Some("cortex:EPOCX-1234"), None), "emotiv");
-        assert_eq!(detect_device_kind(Some("cortex:EPOCX-1234"), Some("unknown")), "emotiv");
+        assert_eq!(
+            detect_device_kind(Some("cortex:EPOCX-1234"), None),
+            "emotiv"
+        );
+        assert_eq!(
+            detect_device_kind(Some("cortex:EPOCX-1234"), Some("unknown")),
+            "emotiv"
+        );
         // USB prefix → ganglion (OpenBCI serial).
-        assert_eq!(detect_device_kind(Some("usb:/dev/ttyUSB0"), None), "ganglion");
+        assert_eq!(
+            detect_device_kind(Some("usb:/dev/ttyUSB0"), None),
+            "ganglion"
+        );
     }
 
     #[test]

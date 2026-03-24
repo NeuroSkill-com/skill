@@ -4,20 +4,15 @@
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
-import Root, {
-	type ButtonProps,
-	type ButtonSize,
-	type ButtonVariant,
-	buttonVariants,
-} from "./button.svelte";
+import Root, { type ButtonProps, type ButtonSize, type ButtonVariant, buttonVariants } from "./button.svelte";
 
 export {
-	Root,
-	type ButtonProps as Props,
-	//
-	Root as Button,
-	buttonVariants,
-	type ButtonProps,
-	type ButtonSize,
-	type ButtonVariant,
+  type ButtonProps as Props,
+  type ButtonProps,
+  type ButtonSize,
+  type ButtonVariant,
+  buttonVariants,
+  Root,
+  //
+  Root as Button,
 };

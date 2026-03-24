@@ -2,12 +2,12 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Do Not Disturb automation Tauri commands.
 
-use std::sync::Mutex;
 use crate::MutexExt;
+use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::AppState;
 use crate::settings::DoNotDisturbConfig;
+use crate::AppState;
 
 // ── Do Not Disturb automation ─────────────────────────────────────────────────
 
@@ -35,11 +35,13 @@ pub fn list_focus_modes() -> Vec<skill_data::dnd::FocusModeOption> {
 #[tauri::command]
 pub fn test_dnd(
     enabled: bool,
-    app:     AppHandle,
-    state:   tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> bool {
     // Guard: only allow disabling, never enabling.
-    if enabled { return false; }
+    if enabled {
+        return false;
+    }
 
     let ok = skill_data::dnd::set_dnd(false, "");
     if ok {
@@ -70,18 +72,18 @@ pub fn get_dnd_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DoNotDis
 #[tauri::command]
 pub fn set_dnd_config(
     config: DoNotDisturbConfig,
-    app:    AppHandle,
-    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     let was_active = {
         let s = state.lock_or_recover();
         let mut dnd = s.dnd.lock_or_recover();
         let active = dnd.active;
-        dnd.config             = config.clone();
+        dnd.config = config.clone();
         dnd.focus_samples.clear();
-        dnd.below_ticks        = 0;
+        dnd.below_ticks = 0;
         dnd.score_history.clear();
-        dnd.snr_low_ticks      = 0;
+        dnd.snr_low_ticks = 0;
         if !config.enabled && dnd.active {
             dnd.active = false;
         }
@@ -152,39 +154,51 @@ pub struct DndStatus {
 /// Return a snapshot of the DND automation pipeline state.
 #[tauri::command]
 pub fn get_dnd_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> DndStatus {
-    let s                    = state.lock_or_recover();
-    let dnd                  = s.dnd.lock_or_recover();
-    let enabled              = dnd.config.enabled;
-    let threshold            = dnd.config.focus_threshold as f64;
-    let duration_secs        = dnd.config.duration_secs;
-    let exit_duration_secs   = dnd.config.exit_duration_secs;
-    let focus_lookback_secs  = dnd.config.focus_lookback_secs;
-    let window_size          = (duration_secs as usize * 4).max(8);
-    let exit_window_size     = (exit_duration_secs as usize * 4).max(4);
-    let sample_count         = dnd.focus_samples.len();
-    let avg_score            = if sample_count > 0 {
+    let s = state.lock_or_recover();
+    let dnd = s.dnd.lock_or_recover();
+    let enabled = dnd.config.enabled;
+    let threshold = dnd.config.focus_threshold as f64;
+    let duration_secs = dnd.config.duration_secs;
+    let exit_duration_secs = dnd.config.exit_duration_secs;
+    let focus_lookback_secs = dnd.config.focus_lookback_secs;
+    let window_size = (duration_secs as usize * 4).max(8);
+    let exit_window_size = (exit_duration_secs as usize * 4).max(4);
+    let sample_count = dnd.focus_samples.len();
+    let avg_score = if sample_count > 0 {
         dnd.focus_samples.iter().sum::<f64>() / sample_count as f64
-    } else { 0.0 };
-    let dnd_active           = dnd.active;
-    let below_ticks          = dnd.below_ticks;
-    let exit_held_by_lookback = dnd_active
-        && avg_score < threshold
-        && dnd.score_history.iter().any(|&v| v >= threshold);
-    let os_active            = dnd.os_active;
+    } else {
+        0.0
+    };
+    let dnd_active = dnd.active;
+    let below_ticks = dnd.below_ticks;
+    let exit_held_by_lookback =
+        dnd_active && avg_score < threshold && dnd.score_history.iter().any(|&v| v >= threshold);
+    let os_active = dnd.os_active;
     drop(dnd);
     drop(s);
 
-    let exit_secs_remaining =
-        if dnd_active && avg_score < threshold && !exit_held_by_lookback {
-            let remaining = exit_window_size.saturating_sub(below_ticks as usize);
-            remaining as f64 / 4.0
-        } else { 0.0 };
+    let exit_secs_remaining = if dnd_active && avg_score < threshold && !exit_held_by_lookback {
+        let remaining = exit_window_size.saturating_sub(below_ticks as usize);
+        remaining as f64 / 4.0
+    } else {
+        0.0
+    };
 
     DndStatus {
-        enabled, avg_score, threshold, sample_count, window_size,
-        duration_secs, dnd_active, os_active,
-        exit_duration_secs, below_ticks, exit_window_size, exit_secs_remaining,
-        focus_lookback_secs, exit_held_by_lookback,
+        enabled,
+        avg_score,
+        threshold,
+        sample_count,
+        window_size,
+        duration_secs,
+        dnd_active,
+        os_active,
+        exit_duration_secs,
+        below_ticks,
+        exit_window_size,
+        exit_secs_remaining,
+        focus_lookback_secs,
+        exit_held_by_lookback,
     }
 }
 
@@ -205,4 +219,3 @@ pub async fn pick_ref_wav_file() -> Option<String> {
     .ok()
     .flatten()
 }
-

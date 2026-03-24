@@ -2,15 +2,18 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Shared server state, state cell, and status types.
 
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 use skill_constants::MutexExt;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 
 use serde::Serialize;
 use serde_json::Value;
 use tokio::sync::mpsc;
 
+use super::protocol::{GenParams, InferRequest, InferToken};
 use crate::config::LlmToolConfig;
-use super::protocol::{InferRequest, InferToken, GenParams};
 use anyhow::Context;
 
 // ── Shared state (held in axum Router via `.with_state()`) ────────────────────
@@ -19,17 +22,17 @@ pub struct LlmServerState {
     /// Channel to the inference actor.
     pub req_tx: mpsc::UnboundedSender<InferRequest>,
     /// Display name shown in `/v1/models`.
-    pub model_name:       String,
+    pub model_name: String,
     /// Optional Bearer token required on every request.
-    pub api_key:      Option<String>,
+    pub api_key: Option<String>,
     /// Built-in tools currently allowed for chat requests.
     #[cfg(feature = "llm")]
     pub allowed_tools: Arc<Mutex<LlmToolConfig>>,
 
     /// Set to `true` by the actor once the model + context are fully loaded.
-    pub ready:        Arc<AtomicBool>,
+    pub ready: Arc<AtomicBool>,
     /// Context window size in tokens; set by the actor after context creation.
-    pub n_ctx:        Arc<std::sync::atomic::AtomicUsize>,
+    pub n_ctx: Arc<std::sync::atomic::AtomicUsize>,
     /// Whether a vision projector (mmproj) was loaded — enables image input.
     pub vision_ready: Arc<AtomicBool>,
     /// Set of tool_call_ids that the user has cancelled from the UI.
@@ -50,14 +53,16 @@ pub struct LlmServerState {
     /// `abort_tx.send_modify(|v| *v = v.wrapping_add(1))`.
     /// The streaming command subscribes via `abort_tx.subscribe()` and
     /// breaks out of its token loop as soon as the value changes.
-    pub abort_tx:     tokio::sync::watch::Sender<u64>,
+    pub abort_tx: tokio::sync::watch::Sender<u64>,
     /// OS thread handle for the actor.  Taken (set to `None`) by `shutdown()`.
     pub(super) join_handle: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 
 impl LlmServerState {
     /// Whether the actor has finished loading the model.
-    pub fn is_ready(&self) -> bool { self.ready.load(Ordering::Relaxed) }
+    pub fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::Relaxed)
+    }
 
     pub fn set_allowed_tools(&self, tools: LlmToolConfig) {
         *self.allowed_tools.lock_or_recover() = tools;
@@ -91,15 +96,20 @@ impl LlmServerState {
     pub fn chat(
         &self,
         messages: Vec<Value>,
-        images:   Vec<Vec<u8>>,
-        params:   GenParams,
+        images: Vec<Vec<u8>>,
+        params: GenParams,
     ) -> anyhow::Result<mpsc::UnboundedReceiver<InferToken>> {
         if !self.is_ready() {
             anyhow::bail!("LLM model still loading — retry in a few seconds")
         }
         let (tok_tx, tok_rx) = mpsc::unbounded_channel();
         self.req_tx
-            .send(InferRequest::Generate { messages, images, params, token_tx: tok_tx })
+            .send(InferRequest::Generate {
+                messages,
+                images,
+                params,
+                token_tx: tok_tx,
+            })
             .context("LLM actor has exited")?;
         Ok(tok_rx)
     }
@@ -124,7 +134,7 @@ pub fn shutdown_cell(cell: &LlmStateCell) {
     if let Some(server_state) = cell.lock_or_recover().take() {
         match Arc::try_unwrap(server_state) {
             Ok(owned) => owned.shutdown(),
-            Err(arc)  => drop(arc),   // in-flight axum handler; actor exits when arc drops
+            Err(arc) => drop(arc), // in-flight axum handler; actor exits when arc drops
         }
     }
 }
@@ -133,14 +143,22 @@ pub fn shutdown_cell(cell: &LlmStateCell) {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum LlmStatus { Stopped, Loading, Running }
+pub enum LlmStatus {
+    Stopped,
+    Loading,
+    Running,
+}
 
 /// Query the current server status from the cell.
 pub fn cell_status(cell: &LlmStateCell) -> (LlmStatus, String) {
     match &*cell.lock_or_recover() {
-        None    => (LlmStatus::Stopped, String::new()),
+        None => (LlmStatus::Stopped, String::new()),
         Some(s) => (
-            if s.is_ready() { LlmStatus::Running } else { LlmStatus::Loading },
+            if s.is_ready() {
+                LlmStatus::Running
+            } else {
+                LlmStatus::Loading
+            },
             s.model_name.clone(),
         ),
     }

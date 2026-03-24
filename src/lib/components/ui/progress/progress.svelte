@@ -5,16 +5,16 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-	import { Progress as ProgressPrimitive } from "bits-ui";
-	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+import type { Progress as ProgressPrimitive } from "bits-ui";
+import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 
-	let {
-		ref = $bindable(null),
-		class: className,
-		max = 100,
-		value,
-		...restProps
-	}: WithoutChildrenOrChild<ProgressPrimitive.RootProps> = $props();
+let {
+  ref = $bindable(null),
+  class: className,
+  max = 100,
+  value,
+  ...restProps
+}: WithoutChildrenOrChild<ProgressPrimitive.RootProps> = $props();
 </script>
 
 <ProgressPrimitive.Root

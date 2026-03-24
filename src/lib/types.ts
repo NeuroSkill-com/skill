@@ -20,29 +20,29 @@ export interface DiscoveredDevice {
 export type PowerlineFreq = "Hz60" | "Hz50";
 
 export interface FilterConfig {
-  sample_rate:        number;
-  low_pass_hz:        number | null;
-  high_pass_hz:       number | null;
-  notch:              PowerlineFreq | null;
+  sample_rate: number;
+  low_pass_hz: number | null;
+  high_pass_hz: number | null;
+  notch: PowerlineFreq | null;
   notch_bandwidth_hz: number;
 }
 
 export interface DeviceStatus {
-  state:          "disconnected" | "scanning" | "connected" | "bt_off";
-  device_name:    string | null;
-  device_id:      string | null;
+  state: "disconnected" | "scanning" | "connected" | "bt_off";
+  device_name: string | null;
+  device_id: string | null;
   /** Factory serial number from the headset ("sn" field), e.g. "AAAA-BBBB-CCCC". Arrives a few seconds after connect. */
-  serial_number:  string | null;
+  serial_number: string | null;
   /** Hardware MAC address from the headset ("ma" field), e.g. "AA-BB-CC-DD-EE-FF". */
-  mac_address:    string | null;
-  csv_path:       string | null;
-  sample_count:   number;
-  battery:        number;
-  eeg:            number[];
+  mac_address: string | null;
+  csv_path: string | null;
+  sample_count: number;
+  battery: number;
+  eeg: number[];
   paired_devices: PairedDevice[];
-  device_error:       string | null;
-  target_name:    string | null;
-  filter_config:   FilterConfig;
+  device_error: string | null;
+  target_name: string | null;
+  filter_config: FilterConfig;
   /** Per-channel quality in electrode order [TP9, AF7, AF8, TP10].
    *  Values: "good" | "fair" | "poor" | "no_signal" */
   channel_quality: string[];
@@ -86,40 +86,44 @@ export interface DeviceStatus {
 
 // ── Muse electrode constants ─────────────────────────────────────────────────
 
-export const MUSE_CHANNELS  = ["TP9", "AF7", "AF8", "TP10"] as const;
+export const MUSE_CHANNELS = ["TP9", "AF7", "AF8", "TP10"] as const;
 export const MUSE_POSITIONS = ["Left ear", "Left forehead", "Right forehead", "Right ear"] as const;
 
 // ── Sleep types ──────────────────────────────────────────────────────────────
 
 export interface SleepEpoch {
-  utc:       number;
-  stage:     number;   // 0=Wake, 1=N1, 2=N2, 3=N3, 5=REM
+  utc: number;
+  stage: number; // 0=Wake, 1=N1, 2=N2, 3=N3, 5=REM
   rel_delta: number;
   rel_theta: number;
   rel_alpha: number;
-  rel_beta:  number;
+  rel_beta: number;
 }
 
 export interface SleepSummary {
-  total_epochs:  number;
-  wake_epochs:   number;
-  n1_epochs:     number;
-  n2_epochs:     number;
-  n3_epochs:     number;
-  rem_epochs:    number;
-  epoch_secs:    number;
+  total_epochs: number;
+  wake_epochs: number;
+  n1_epochs: number;
+  n2_epochs: number;
+  n3_epochs: number;
+  rem_epochs: number;
+  epoch_secs: number;
 }
 
 export interface SleepStages {
-  epochs:  SleepEpoch[];
+  epochs: SleepEpoch[];
   summary: SleepSummary;
 }
 
 // ── UMAP types ───────────────────────────────────────────────────────────────
 
 export interface UmapPoint {
-  x: number; y: number; z: number;
-  session: number; utc: number; label?: string;
+  x: number;
+  y: number;
+  z: number;
+  session: number;
+  utc: number;
+  label?: string;
   /** Semantic distance from the query anchor (used in kNN graph tooltips). */
   dist?: number;
 }
@@ -144,12 +148,12 @@ export interface UmapProgress {
 // ── Label types ──────────────────────────────────────────────────────────────
 
 export interface LabelRow {
-  id:          number;
-  eeg_start:   number;
-  eeg_end:     number;
+  id: number;
+  eeg_start: number;
+  eeg_end: number;
   label_start: number;
-  label_end:   number;
-  text:        string;
-  context:     string;
-  created_at:  number;
+  label_end: number;
+  text: string;
+  context: string;
+  created_at: number;
 }

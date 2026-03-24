@@ -2,30 +2,30 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Catalog query and external-model registration commands.
 
-use std::sync::Mutex;
 use serde::Serialize;
+use std::sync::Mutex;
 use tauri::AppHandle;
 
-use crate::MutexExt;
-use crate::AppState;
-use super::{save_catalog, ensure_catalog_entry};
+use super::{ensure_catalog_entry, save_catalog};
 use crate::llm::catalog::{DownloadState, LlmCatalog};
+use crate::AppState;
+use crate::MutexExt;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LlmDownloadItem {
-    pub repo:              String,
-    pub filename:          String,
-    pub quant:             String,
-    pub size_gb:           f32,
-    pub description:       String,
-    pub is_mmproj:         bool,
-    pub state:             DownloadState,
-    pub status_msg:        Option<String>,
-    pub progress:          f32,
+    pub repo: String,
+    pub filename: String,
+    pub quant: String,
+    pub size_gb: f32,
+    pub description: String,
+    pub is_mmproj: bool,
+    pub state: DownloadState,
+    pub status_msg: Option<String>,
+    pub progress: f32,
     pub initiated_at_unix: Option<u64>,
-    pub local_path:        Option<std::path::PathBuf>,
-    pub shard_count:       u16,
-    pub current_shard:     u16,
+    pub local_path: Option<std::path::PathBuf>,
+    pub shard_count: u16,
+    pub current_shard: u16,
 }
 
 // ── Catalog query ──────────────────────────────────────────────────────────────
@@ -35,23 +35,27 @@ pub struct LlmDownloadItem {
 ///
 /// The frontend polls this every ~2 s while the LLM tab is visible.
 #[tauri::command]
-pub fn get_llm_catalog(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> LlmCatalog {
+pub fn get_llm_catalog(state: tauri::State<'_, Mutex<Box<AppState>>>) -> LlmCatalog {
     let mut s = state.lock_or_recover();
     sync_download_progress(&mut s);
-    { let __a = s.llm.clone(); let __r = __a.lock_or_recover().catalog.clone(); __r }
+    {
+        let __a = s.llm.clone();
+        let __r = __a.lock_or_recover().catalog.clone();
+        __r
+    }
 }
 
 #[tauri::command]
-pub fn get_llm_downloads(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> Vec<LlmDownloadItem> {
+pub fn get_llm_downloads(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Vec<LlmDownloadItem> {
     let mut s = state.lock_or_recover();
     sync_download_progress(&mut s);
-    let __llm_arc = s.llm.clone(); let llm = __llm_arc.lock_or_recover();
+    let __llm_arc = s.llm.clone();
+    let llm = __llm_arc.lock_or_recover();
 
-    let mut items: Vec<LlmDownloadItem> = llm.catalog.entries.iter()
+    let mut items: Vec<LlmDownloadItem> = llm
+        .catalog
+        .entries
+        .iter()
         .filter(|e| {
             e.state == DownloadState::Downloading
                 || e.state == DownloadState::Paused
@@ -61,7 +65,9 @@ pub fn get_llm_downloads(
         })
         .map(|e| {
             // Read shard progress from the in-flight download if available.
-            let (current_shard, _total_shards) = llm.downloads.get(&e.filename)
+            let (current_shard, _total_shards) = llm
+                .downloads
+                .get(&e.filename)
                 .and_then(|prog| prog.lock().ok().map(|p| (p.current_shard, p.total_shards)))
                 .unwrap_or((0, 0));
             LlmDownloadItem {
@@ -82,24 +88,31 @@ pub fn get_llm_downloads(
         })
         .collect();
 
-    items.sort_by(|a, b| b.initiated_at_unix.unwrap_or(0).cmp(&a.initiated_at_unix.unwrap_or(0)));
+    items.sort_by(|a, b| {
+        b.initiated_at_unix
+            .unwrap_or(0)
+            .cmp(&a.initiated_at_unix.unwrap_or(0))
+    });
     items
 }
 
 /// Sync in-flight download progress into the catalog entries so the UI sees
 /// the latest state.
 fn sync_download_progress(s: &mut AppState) {
-    let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+    let __llm_arc = s.llm.clone();
+    let mut llm = __llm_arc.lock_or_recover();
     let downloads = llm.downloads.clone();
     for (filename, prog_arc) in &downloads {
         if let Ok(prog) = prog_arc.lock() {
-            if let Some(entry) = llm.catalog.entries
+            if let Some(entry) = llm
+                .catalog
+                .entries
                 .iter_mut()
                 .find(|e| &e.filename == filename)
             {
-                entry.state      = prog.state.clone();
+                entry.state = prog.state.clone();
                 entry.status_msg = prog.status_msg.clone();
-                entry.progress   = prog.progress;
+                entry.progress = prog.progress;
                 if prog.state == DownloadState::Downloaded {
                     entry.local_path = entry.resolve_cached();
                 }
@@ -120,13 +133,13 @@ fn sync_download_progress(s: &mut AppState) {
 /// Returns the created (or existing) entry's filename.
 #[tauri::command]
 pub fn add_llm_model(
-    repo:       String,
-    filename:   String,
-    size_gb:    Option<f32>,
-    mmproj:     Option<String>,
-    download:   Option<bool>,
-    app:        AppHandle,
-    state:      tauri::State<'_, Mutex<Box<AppState>>>,
+    repo: String,
+    filename: String,
+    size_gb: Option<f32>,
+    mmproj: Option<String>,
+    download: Option<bool>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<String, String> {
     let should_download = download.unwrap_or(true);
 
@@ -154,19 +167,17 @@ pub fn add_llm_model(
 /// Force-refresh the catalog by re-probing the HuggingFace Hub disk cache.
 /// Useful after the user downloads a file externally.
 #[tauri::command]
-pub fn refresh_llm_catalog(
-    app:   AppHandle,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) {
+pub fn refresh_llm_catalog(app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     let s = state.lock_or_recover();
     {
-        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        let __llm_arc = s.llm.clone();
+        let mut llm = __llm_arc.lock_or_recover();
         llm.catalog.refresh_cache();
         llm.catalog.auto_select();
-        let model_path  = llm.catalog.active_model_path();
+        let model_path = llm.catalog.active_model_path();
         let mmproj_path = llm.catalog.active_mmproj_path();
         llm.config.model_path = model_path;
-        llm.config.mmproj     = mmproj_path;
+        llm.config.mmproj = mmproj_path;
     }
     save_catalog(&app, &s);
     drop(s);

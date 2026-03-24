@@ -10,8 +10,8 @@ use crate::MutexExt;
 
 /// `health_sync` — upsert Apple HealthKit data from the iOS companion app.
 pub fn health_sync(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let payload: skill_data::health_store::HealthSyncPayload =
-        serde_json::from_value(msg.clone()).map_err(|e| format!("invalid health_sync payload: {e}"))?;
+    let payload: skill_data::health_store::HealthSyncPayload = serde_json::from_value(msg.clone())
+        .map_err(|e| format!("invalid health_sync payload: {e}"))?;
 
     let st = app.app_state();
     let store = {
@@ -22,21 +22,39 @@ pub fn health_sync(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let result = store.sync(&payload);
     eprintln!(
         "[health] sync: sleep={} workouts={} hr={} steps={} mindful={} metrics={}",
-        result.sleep_upserted, result.workouts_upserted, result.heart_rate_upserted,
-        result.steps_upserted, result.mindfulness_upserted, result.metrics_upserted,
+        result.sleep_upserted,
+        result.workouts_upserted,
+        result.heart_rate_upserted,
+        result.steps_upserted,
+        result.mindfulness_upserted,
+        result.metrics_upserted,
     );
     serde_json::to_value(&result).map_err(|e| e.to_string())
 }
 
 /// `health_query` — query stored HealthKit data by type and time range.
 pub fn health_query(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let data_type = msg.get("type").and_then(|v| v.as_str())
-        .ok_or_else(|| "missing required field: \"type\" (sleep|workouts|heart_rate|steps|metrics)".to_string())?;
-    let start_utc = msg.get("start_utc").and_then(serde_json::Value::as_i64).unwrap_or(0);
-    let end_utc   = msg.get("end_utc").and_then(serde_json::Value::as_i64)
-        .unwrap_or_else(|| std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
-    let limit     = msg.get("limit").and_then(serde_json::Value::as_i64).unwrap_or(500).clamp(1, 10_000);
+    let data_type = msg.get("type").and_then(|v| v.as_str()).ok_or_else(|| {
+        "missing required field: \"type\" (sleep|workouts|heart_rate|steps|metrics)".to_string()
+    })?;
+    let start_utc = msg
+        .get("start_utc")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    let end_utc = msg
+        .get("end_utc")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+        });
+    let limit = msg
+        .get("limit")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(500)
+        .clamp(1, 10_000);
 
     let st = app.app_state();
     let store = {
@@ -74,10 +92,19 @@ pub fn health_query(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
 /// `health_summary` — aggregate counts for a time range.
 pub fn health_summary(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let start_utc = msg.get("start_utc").and_then(serde_json::Value::as_i64).unwrap_or(0);
-    let end_utc   = msg.get("end_utc").and_then(serde_json::Value::as_i64)
-        .unwrap_or_else(|| std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
+    let start_utc = msg
+        .get("start_utc")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
+    let end_utc = msg
+        .get("end_utc")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+        });
 
     let st = app.app_state();
     let store = {

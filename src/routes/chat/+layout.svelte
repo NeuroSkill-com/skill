@@ -2,8 +2,9 @@
      This file exists so SvelteKit treats /chat as its own route group.
      Text selection is enabled here because users need to copy model responses. -->
 <script lang="ts">
-  import type { Snippet } from "svelte";
-  let { children }: { children: Snippet } = $props();
+import type { Snippet } from "svelte";
+
+let { children }: { children: Snippet } = $props();
 </script>
 
 <style>

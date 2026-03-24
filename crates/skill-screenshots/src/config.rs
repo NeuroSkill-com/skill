@@ -15,8 +15,8 @@ pub use skill_settings::ScreenshotConfig;
 /// `fastembed` crate which is only available in `skill-screenshots`.
 pub fn fastembed_model_enum(config: &ScreenshotConfig) -> Option<fastembed::ImageEmbeddingModel> {
     match config.fastembed_model.as_str() {
-        "clip-vit-b-32"           => Some(fastembed::ImageEmbeddingModel::ClipVitB32),
+        "clip-vit-b-32" => Some(fastembed::ImageEmbeddingModel::ClipVitB32),
         "nomic-embed-vision-v1.5" => Some(fastembed::ImageEmbeddingModel::NomicEmbedVisionV15),
-        _                         => None,
+        _ => None,
     }
 }

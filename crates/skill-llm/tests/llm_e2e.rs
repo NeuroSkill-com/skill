@@ -17,7 +17,7 @@
 
 #![cfg(feature = "llm")]
 
-use std::sync::{Arc, Mutex, atomic::Ordering};
+use std::sync::{atomic::Ordering, Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::json;
@@ -25,74 +25,78 @@ use serde_json::json;
 use skill_llm::catalog::{DownloadProgress, DownloadState, LlmCatalog, LlmModelEntry};
 use skill_llm::config::LlmConfig;
 use skill_llm::engine::protocol::GenParams;
-use skill_llm::{
-    LlmEventEmitter, NoopEmitter,
-    init, new_log_buffer, run_chat_with_builtin_tools,
-};
+use skill_llm::{init, new_log_buffer, run_chat_with_builtin_tools, LlmEventEmitter, NoopEmitter};
 
 // ── Report types ─────────────────────────────────────────────────────────────
 
 struct Step {
-    name:     &'static str,
+    name: &'static str,
     duration: Duration,
-    status:   StepStatus,
-    detail:   String,
+    status: StepStatus,
+    detail: String,
 }
 
-enum StepStatus { Ok, Warn(String), Fail(String) }
+enum StepStatus {
+    Ok,
+    Warn(String),
+    Fail(String),
+}
 
 impl Step {
     fn icon(&self) -> &str {
         match &self.status {
-            StepStatus::Ok      => "✅",
+            StepStatus::Ok => "✅",
             StepStatus::Warn(_) => "⚠️ ",
             StepStatus::Fail(_) => "❌",
         }
     }
     fn text(&self) -> String {
         match &self.status {
-            StepStatus::Ok       => "OK".into(),
-            StepStatus::Warn(w)  => format!("WARN: {w}"),
-            StepStatus::Fail(e)  => format!("FAIL: {e}"),
+            StepStatus::Ok => "OK".into(),
+            StepStatus::Warn(w) => format!("WARN: {w}"),
+            StepStatus::Fail(e) => format!("FAIL: {e}"),
         }
     }
 }
 
 #[allow(dead_code)]
 struct ChatRecord {
-    label:             &'static str,
-    messages_in:       Vec<serde_json::Value>,
-    response_text:     String,
-    visible_text:      String,
-    finish_reason:     String,
-    prompt_tokens:     usize,
+    label: &'static str,
+    messages_in: Vec<serde_json::Value>,
+    response_text: String,
+    visible_text: String,
+    finish_reason: String,
+    prompt_tokens: usize,
     completion_tokens: usize,
-    n_ctx:             usize,
-    duration:          Duration,
-    tok_per_sec:       f64,
-    tool_events:       Vec<ToolEvt>,
+    n_ctx: usize,
+    duration: Duration,
+    tok_per_sec: f64,
+    tool_events: Vec<ToolEvt>,
 }
 
 struct ToolEvt {
-    kind:      String,
+    kind: String,
     tool_name: String,
-    detail:    String,
-    is_error:  bool,
+    detail: String,
+    is_error: bool,
 }
 
 struct Report {
-    model_name:  String,
-    model_size:  f32,
+    model_name: String,
+    model_size: f32,
     model_quant: String,
-    steps:       Vec<Step>,
-    chats:       Vec<ChatRecord>,
+    steps: Vec<Step>,
+    chats: Vec<ChatRecord>,
 }
 
 impl Report {
     fn new() -> Self {
         Self {
-            model_name: String::new(), model_size: 0.0, model_quant: String::new(),
-            steps: vec![], chats: vec![],
+            model_name: String::new(),
+            model_size: 0.0,
+            model_quant: String::new(),
+            steps: vec![],
+            chats: vec![],
         }
     }
 
@@ -105,19 +109,30 @@ impl Report {
         eprintln!("╔{bar}╗");
         eprintln!("║{:^width$}║", "E2E INTEGRATION TEST REPORT", width = w - 2);
         eprintln!("╠{bar}╣");
-        self.p(w, &format!(
-            "Model: {} ({:.2} GB, {})", self.model_name, self.model_size, self.model_quant));
+        self.p(
+            w,
+            &format!(
+                "Model: {} ({:.2} GB, {})",
+                self.model_name, self.model_size, self.model_quant
+            ),
+        );
         self.p(w, &format!("Total: {:.2}s", total.as_secs_f64()));
         eprintln!("╠{bar}╣");
         eprintln!("║{:^width$}║", "PIPELINE STEPS", width = w - 2);
         self.sep(w);
 
         for (i, step) in self.steps.iter().enumerate() {
-            self.p(w, &format!(
-                "{} {}. {:<32} {:>8.2}s  {}",
-                step.icon(), i + 1, step.name,
-                step.duration.as_secs_f64(), step.text(),
-            ));
+            self.p(
+                w,
+                &format!(
+                    "{} {}. {:<32} {:>8.2}s  {}",
+                    step.icon(),
+                    i + 1,
+                    step.name,
+                    step.duration.as_secs_f64(),
+                    step.text(),
+                ),
+            );
             for line in step.detail.lines() {
                 self.pi(w, line);
             }
@@ -128,20 +143,34 @@ impl Report {
             eprintln!("║{:^width$}║", "CHAT EXCHANGES", width = w - 2);
             for (i, chat) in self.chats.iter().enumerate() {
                 self.sep(w);
-                self.p(w, &format!(
-                    "Chat #{}: {} ({:.2}s, {:.1} tok/s)",
-                    i + 1, chat.label, chat.duration.as_secs_f64(), chat.tok_per_sec,
-                ));
-                self.pi(w, &format!(
-                    "prompt={} completion={} n_ctx={} finish={}",
-                    chat.prompt_tokens, chat.completion_tokens, chat.n_ctx, chat.finish_reason,
-                ));
+                self.p(
+                    w,
+                    &format!(
+                        "Chat #{}: {} ({:.2}s, {:.1} tok/s)",
+                        i + 1,
+                        chat.label,
+                        chat.duration.as_secs_f64(),
+                        chat.tok_per_sec,
+                    ),
+                );
+                self.pi(
+                    w,
+                    &format!(
+                        "prompt={} completion={} n_ctx={} finish={}",
+                        chat.prompt_tokens, chat.completion_tokens, chat.n_ctx, chat.finish_reason,
+                    ),
+                );
                 for msg in &chat.messages_in {
                     let role = msg["role"].as_str().unwrap_or("?");
                     let content = msg["content"].as_str().unwrap_or("");
                     let abbr: String = content.chars().take(64).collect();
-                    self.pi(w, &format!(
-                        "[{role}] {abbr}{}", if content.len() > 64 { "…" } else { "" }));
+                    self.pi(
+                        w,
+                        &format!(
+                            "[{role}] {abbr}{}",
+                            if content.len() > 64 { "…" } else { "" }
+                        ),
+                    );
                 }
                 let resp: String = chat.response_text.replace('\n', " ⏎ ");
                 let resp_abbr: String = resp.chars().take(w - 10).collect();
@@ -150,19 +179,35 @@ impl Report {
                     self.pi(w, "Tools:");
                     for te in &chat.tool_events {
                         let err = if te.is_error { " [ERR]" } else { "" };
-                        self.pi(w, &format!(
-                            "  {} {}{}{}", te.kind, te.tool_name, err,
-                            if te.detail.is_empty() { String::new() }
-                            else { format!(": {}", &te.detail) },
-                        ));
+                        self.pi(
+                            w,
+                            &format!(
+                                "  {} {}{}{}",
+                                te.kind,
+                                te.tool_name,
+                                err,
+                                if te.detail.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!(": {}", &te.detail)
+                                },
+                            ),
+                        );
                     }
                 }
             }
         }
 
-        let all_ok = self.steps.iter().all(|s| matches!(s.status, StepStatus::Ok | StepStatus::Warn(_)));
+        let all_ok = self
+            .steps
+            .iter()
+            .all(|s| matches!(s.status, StepStatus::Ok | StepStatus::Warn(_)));
         eprintln!("╠{bar}╣");
-        let v = if all_ok { "ALL CHECKS PASSED ✅" } else { "SOME CHECKS FAILED ❌" };
+        let v = if all_ok {
+            "ALL CHECKS PASSED ✅"
+        } else {
+            "SOME CHECKS FAILED ❌"
+        };
         eprintln!("║{:^width$}║", v, width = w - 2);
         eprintln!("╚{bar}╝");
         eprintln!();
@@ -190,7 +235,9 @@ impl Report {
 
 fn mock_eeg_status() -> serde_json::Value {
     let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     json!({
         "ok": true,
         "command": "status",
@@ -256,7 +303,7 @@ fn mock_eeg_status() -> serde_json::Value {
 
 /// Start a mock NeuroSkill API server.  Returns `(port, shutdown_sender)`.
 async fn start_mock_skill_api() -> (u16, tokio::sync::oneshot::Sender<()>) {
-    use axum::{Router, Json, routing::post};
+    use axum::{routing::post, Json, Router};
     use serde_json::Value;
 
     async fn handle(Json(body): Json<Value>) -> Json<Value> {
@@ -282,7 +329,10 @@ async fn start_mock_skill_api() -> (u16, tokio::sync::oneshot::Sender<()>) {
                 "error": format!("unknown command: {other}"),
             }),
         };
-        eprintln!("[mock-api] → {}", resp.to_string().chars().take(120).collect::<String>());
+        eprintln!(
+            "[mock-api] → {}",
+            resp.to_string().chars().take(120).collect::<String>()
+        );
         Json(resp)
     }
 
@@ -293,7 +343,9 @@ async fn start_mock_skill_api() -> (u16, tokio::sync::oneshot::Sender<()>) {
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     tokio::spawn(async move {
         axum::serve(listener, app)
-            .with_graceful_shutdown(async { let _ = rx.await; })
+            .with_graceful_shutdown(async {
+                let _ = rx.await;
+            })
             .await
             .unwrap();
     });
@@ -306,22 +358,28 @@ async fn start_mock_skill_api() -> (u16, tokio::sync::oneshot::Sender<()>) {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fn best_test_model(catalog: &LlmCatalog) -> Option<&LlmModelEntry> {
-    let non_mmproj: Vec<&LlmModelEntry> = catalog.entries.iter()
-        .filter(|e| !e.is_mmproj)
-        .collect();
+    let non_mmproj: Vec<&LlmModelEntry> = catalog.entries.iter().filter(|e| !e.is_mmproj).collect();
     // Smallest recommended model with params >= 1.5B — needs to be large
     // enough for reliable tool-call generation.  Models below 1.5B (e.g.
     // 1.2B) fail to produce tool calls consistently on CPU.
-    let mut capable: Vec<&&LlmModelEntry> = non_mmproj.iter()
+    let mut capable: Vec<&&LlmModelEntry> = non_mmproj
+        .iter()
         .filter(|e| e.recommended && e.params_b >= 1.5)
         .collect();
     capable.sort_by(|a, b| a.size_gb.total_cmp(&b.size_gb));
-    if let Some(e) = capable.first() { return Some(e); }
+    if let Some(e) = capable.first() {
+        return Some(e);
+    }
     // Fallback: smallest recommended
     let mut rec: Vec<&&LlmModelEntry> = non_mmproj.iter().filter(|e| e.recommended).collect();
     rec.sort_by(|a, b| a.size_gb.total_cmp(&b.size_gb));
-    if let Some(e) = rec.first() { return Some(e); }
-    non_mmproj.iter().min_by(|a, b| a.size_gb.total_cmp(&b.size_gb)).copied()
+    if let Some(e) = rec.first() {
+        return Some(e);
+    }
+    non_mmproj
+        .iter()
+        .min_by(|a, b| a.size_gb.total_cmp(&b.size_gb))
+        .copied()
 }
 
 fn wait_ready(state: &skill_llm::LlmServerState, timeout: Duration) {
@@ -343,8 +401,16 @@ async fn collect_tokens(
     while let Some(tok) = rx.recv().await {
         match tok {
             skill_llm::InferToken::Delta(t) => text.push_str(&t),
-            skill_llm::InferToken::Done { finish_reason, prompt_tokens, completion_tokens, n_ctx } => {
-                fr = finish_reason; pt = prompt_tokens; ct = completion_tokens; nc = n_ctx;
+            skill_llm::InferToken::Done {
+                finish_reason,
+                prompt_tokens,
+                completion_tokens,
+                n_ctx,
+            } => {
+                fr = finish_reason;
+                pt = prompt_tokens;
+                ct = completion_tokens;
+                nc = n_ctx;
                 break;
             }
             skill_llm::InferToken::Error(e) => return Err(e),
@@ -364,18 +430,18 @@ fn create_test_png() -> Vec<u8> {
     png.extend_from_slice(&[137, 80, 78, 71, 13, 10, 26, 10]);
     // IHDR chunk: 2x2, 8-bit RGB
     let ihdr_data: [u8; 13] = [
-        0, 0, 0, 2,  // width = 2
-        0, 0, 0, 2,  // height = 2
-        8,           // bit depth = 8
-        2,           // color type = RGB
-        0, 0, 0,     // compression, filter, interlace
+        0, 0, 0, 2, // width = 2
+        0, 0, 0, 2, // height = 2
+        8, // bit depth = 8
+        2, // color type = RGB
+        0, 0, 0, // compression, filter, interlace
     ];
     write_png_chunk(&mut png, b"IHDR", &ihdr_data);
     // IDAT chunk: 2 rows, each with filter byte (0) + 6 bytes RGB
     // Row 1: white white, Row 2: black white (simple pattern)
     let raw_rows: [u8; 14] = [
         0, 255, 255, 255, 255, 255, 255, // filter=0, white, white
-        0, 0, 0, 0, 255, 255, 255,       // filter=0, black, white
+        0, 0, 0, 0, 255, 255, 255, // filter=0, black, white
     ];
     // Compress with deflate (use miniz_oxide or manual zlib)
     let compressed = zlib_compress(&raw_rows);
@@ -415,7 +481,7 @@ fn zlib_compress(data: &[u8]) -> Vec<u8> {
     let mut out = Vec::new();
     out.push(0x78); // CMF: deflate, window size 32K
     out.push(0x01); // FLG: no dict, check bits
-    // Stored block: final=1, type=00 (stored)
+                    // Stored block: final=1, type=00 (stored)
     out.push(0x01);
     let len = data.len() as u16;
     out.extend_from_slice(&len.to_le_bytes());
@@ -435,7 +501,11 @@ fn zlib_compress(data: &[u8]) -> Vec<u8> {
 
 fn tps(ct: usize, dur: Duration) -> f64 {
     let s = dur.as_secs_f64();
-    if s > 0.0 { ct as f64 / s } else { 0.0 }
+    if s > 0.0 {
+        ct as f64 / s
+    } else {
+        0.0
+    }
 }
 
 /// Run a tool-calling chat step.  Returns the step + chat record.
@@ -459,26 +529,51 @@ async fn run_tool_chat(
         messages.clone(),
         params,
         vec![],
-        |delta| { visible.push_str(delta); },
+        |delta| {
+            visible.push_str(delta);
+        },
         |event| match event {
-            skill_llm::ToolEvent::ExecutionStart { tool_name, tool_call_id, args } => {
+            skill_llm::ToolEvent::ExecutionStart {
+                tool_name,
+                tool_call_id,
+                args,
+            } => {
                 let d = format!("id={tool_call_id} args={args}");
                 eprintln!("[step {step_num}]   ▶ {tool_name}: {d}");
-                evts.push(ToolEvt { kind: "start".into(), tool_name, detail: d, is_error: false });
+                evts.push(ToolEvt {
+                    kind: "start".into(),
+                    tool_name,
+                    detail: d,
+                    is_error: false,
+                });
             }
-            skill_llm::ToolEvent::ExecutionEnd { tool_name, tool_call_id, result, is_error } => {
+            skill_llm::ToolEvent::ExecutionEnd {
+                tool_name,
+                tool_call_id,
+                result,
+                is_error,
+            } => {
                 let r: String = result.to_string().chars().take(200).collect();
                 eprintln!("[step {step_num}]   ■ {tool_name} (err={is_error}): {r}");
                 evts.push(ToolEvt {
-                    kind: "end".into(), tool_name,
-                    detail: format!("id={tool_call_id} result={r}"), is_error,
+                    kind: "end".into(),
+                    tool_name,
+                    detail: format!("id={tool_call_id} result={r}"),
+                    is_error,
                 });
             }
-            skill_llm::ToolEvent::Status { tool_name, status, detail } => {
+            skill_llm::ToolEvent::Status {
+                tool_name,
+                status,
+                detail,
+            } => {
                 let d = detail.unwrap_or_default();
                 eprintln!("[step {step_num}]   ○ {tool_name}: {status} {d}");
                 evts.push(ToolEvt {
-                    kind: "status".into(), tool_name, detail: format!("{status} {d}"), is_error: false,
+                    kind: "status".into(),
+                    tool_name,
+                    detail: format!("{status} {d}"),
+                    is_error: false,
                 });
             }
         },
@@ -490,25 +585,50 @@ async fn run_tool_chat(
         Ok(t) => t,
         Err(e) => {
             eprintln!("[step {step_num}] ❌ {e}");
-            let step = Step { name: step_name, duration: dur,
-                status: StepStatus::Fail(e.to_string()), detail: String::new() };
-            let chat = ChatRecord { label, messages_in: messages,
-                response_text: String::new(), visible_text: visible,
-                finish_reason: "error".into(), prompt_tokens: 0, completion_tokens: 0,
-                n_ctx: 0, duration: dur, tok_per_sec: 0.0, tool_events: evts };
+            let step = Step {
+                name: step_name,
+                duration: dur,
+                status: StepStatus::Fail(e.to_string()),
+                detail: String::new(),
+            };
+            let chat = ChatRecord {
+                label,
+                messages_in: messages,
+                response_text: String::new(),
+                visible_text: visible,
+                finish_reason: "error".into(),
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                n_ctx: 0,
+                duration: dur,
+                tok_per_sec: 0.0,
+                tool_events: evts,
+            };
             return (step, chat, false);
         }
     };
 
     let t_s = tps(ct, dur);
-    eprintln!("[step {step_num}] response ({:.2}s, {:.1} tok/s, finish={fr}):", dur.as_secs_f64(), t_s);
-    for line in resp.lines() { eprintln!("[step {step_num}]   | {line}"); }
+    eprintln!(
+        "[step {step_num}] response ({:.2}s, {:.1} tok/s, finish={fr}):",
+        dur.as_secs_f64(),
+        t_s
+    );
+    for line in resp.lines() {
+        eprintln!("[step {step_num}]   | {line}");
+    }
 
-    let started = evts.iter().any(|e| e.kind == "start" && e.tool_name == expect);
-    let ok = evts.iter().any(|e| e.kind == "end" && e.tool_name == expect && !e.is_error);
-    let bogus: Vec<String> = evts.iter()
+    let started = evts
+        .iter()
+        .any(|e| e.kind == "start" && e.tool_name == expect);
+    let ok = evts
+        .iter()
+        .any(|e| e.kind == "end" && e.tool_name == expect && !e.is_error);
+    let bogus: Vec<String> = evts
+        .iter()
         .filter(|e| e.kind == "end" && e.is_error && e.tool_name != expect)
-        .map(|e| e.tool_name.clone()).collect();
+        .map(|e| e.tool_name.clone())
+        .collect();
 
     let status = if started && ok && bogus.is_empty() {
         eprintln!("[step {step_num}] ✅ {expect} tool called and succeeded");
@@ -527,17 +647,31 @@ async fn run_tool_chat(
         StepStatus::Fail(msg)
     };
 
-    let tools_called: Vec<String> = evts.iter()
-        .filter(|e| e.kind == "start").map(|e| e.tool_name.clone()).collect();
+    let tools_called: Vec<String> = evts
+        .iter()
+        .filter(|e| e.kind == "start")
+        .map(|e| e.tool_name.clone())
+        .collect();
     let step = Step {
-        name: step_name, duration: dur, status,
-        detail: format!("{t_s:.1} tok/s, prompt={pt}, completion={ct}, finish={fr}, tools={tools_called:?}"),
+        name: step_name,
+        duration: dur,
+        status,
+        detail: format!(
+            "{t_s:.1} tok/s, prompt={pt}, completion={ct}, finish={fr}, tools={tools_called:?}"
+        ),
     };
     let chat = ChatRecord {
-        label, messages_in: messages,
-        response_text: resp, visible_text: visible,
-        finish_reason: fr, prompt_tokens: pt, completion_tokens: ct,
-        n_ctx: nc, duration: dur, tok_per_sec: t_s, tool_events: evts,
+        label,
+        messages_in: messages,
+        response_text: resp,
+        visible_text: visible,
+        finish_reason: fr,
+        prompt_tokens: pt,
+        completion_tokens: ct,
+        n_ctx: nc,
+        duration: dur,
+        tok_per_sec: t_s,
+        tool_events: evts,
     };
     (step, chat, started && ok)
 }
@@ -561,7 +695,9 @@ async fn e2e_download_start_and_chat() {
     let _ = std::fs::create_dir_all(&skill_dir);
     eprintln!("[step 1] skill_dir = {}", skill_dir.display());
     report.steps.push(Step {
-        name: "Create temp skill_dir", duration: t.elapsed(), status: StepStatus::Ok,
+        name: "Create temp skill_dir",
+        duration: t.elapsed(),
+        status: StepStatus::Ok,
         detail: format!("path: {}", skill_dir.display()),
     });
 
@@ -570,7 +706,9 @@ async fn e2e_download_start_and_chat() {
     let (mock_port, mock_shutdown) = start_mock_skill_api().await;
     eprintln!("[step 2] mock NeuroSkill API on port {mock_port}");
     report.steps.push(Step {
-        name: "Start mock Skill API", duration: t.elapsed(), status: StepStatus::Ok,
+        name: "Start mock Skill API",
+        duration: t.elapsed(),
+        status: StepStatus::Ok,
         detail: format!("port={mock_port}"),
     });
 
@@ -585,35 +723,64 @@ async fn e2e_download_start_and_chat() {
     report.model_quant = entry.quant.clone();
     let detail = format!(
         "{} ({:.2} GB, quant={}, params={:.1}B, family={}, max_ctx={})",
-        entry.filename, entry.size_gb, entry.quant, entry.params_b,
-        entry.family_name, entry.max_context_length,
+        entry.filename,
+        entry.size_gb,
+        entry.quant,
+        entry.params_b,
+        entry.family_name,
+        entry.max_context_length,
     );
     eprintln!("[step 3] selected: {detail}");
     report.steps.push(Step {
-        name: "Load catalog + select model", duration: t.elapsed(), status: StepStatus::Ok, detail,
+        name: "Load catalog + select model",
+        duration: t.elapsed(),
+        status: StepStatus::Ok,
+        detail,
     });
 
     // ── 4. Download the model ────────────────────────────────────────────────
     let t = Instant::now();
     let progress = Arc::new(Mutex::new(DownloadProgress {
-        filename: entry.filename.clone(), state: DownloadState::Downloading,
-        status_msg: None, progress: 0.0, cancelled: false, pause_requested: false,
-        current_shard: 0, total_shards: entry.shard_count() as u16,
+        filename: entry.filename.clone(),
+        state: DownloadState::Downloading,
+        status_msg: None,
+        progress: 0.0,
+        cancelled: false,
+        pause_requested: false,
+        current_shard: 0,
+        total_shards: entry.shard_count() as u16,
     }));
-    eprintln!("[step 4] downloading {} ({:.2} GB) …", entry.filename, entry.size_gb);
-    let local_path = skill_llm::catalog::download_model(&entry, &progress)
-        .expect("download should succeed");
+    eprintln!(
+        "[step 4] downloading {} ({:.2} GB) …",
+        entry.filename, entry.size_gb
+    );
+    let local_path =
+        skill_llm::catalog::download_model(&entry, &progress).expect("download should succeed");
     let dl_dur = t.elapsed();
     let dl_speed = if dl_dur.as_secs_f64() > 0.0 {
         (entry.size_gb as f64 * 1024.0) / dl_dur.as_secs_f64()
-    } else { 0.0 };
-    let detail = format!("{:.1}s ({:.1} MB/s) → {}", dl_dur.as_secs_f64(), dl_speed, local_path.display());
+    } else {
+        0.0
+    };
+    let detail = format!(
+        "{:.1}s ({:.1} MB/s) → {}",
+        dl_dur.as_secs_f64(),
+        dl_speed,
+        local_path.display()
+    );
     eprintln!("[step 4] done: {detail}");
     report.steps.push(Step {
-        name: "Download model", duration: dl_dur, status: StepStatus::Ok, detail,
+        name: "Download model",
+        duration: dl_dur,
+        status: StepStatus::Ok,
+        detail,
     });
 
-    if let Some(e) = catalog.entries.iter_mut().find(|e| e.filename == entry.filename) {
+    if let Some(e) = catalog
+        .entries
+        .iter_mut()
+        .find(|e| e.filename == entry.filename)
+    {
         e.state = DownloadState::Downloaded;
         e.local_path = Some(local_path.clone());
     }
@@ -641,7 +808,10 @@ async fn e2e_download_start_and_chat() {
     let detail = format!("n_ctx={n_ctx}, load={:.2}s", load_dur.as_secs_f64());
     eprintln!("[step 5] ready: {detail}");
     report.steps.push(Step {
-        name: "Start LLM server", duration: load_dur, status: StepStatus::Ok, detail,
+        name: "Start LLM server",
+        duration: load_dur,
+        status: StepStatus::Ok,
+        detail,
     });
 
     // ── 6. Simple chat (no tools) ────────────────────────────────────────────
@@ -652,28 +822,50 @@ async fn e2e_download_start_and_chat() {
         json!({"role": "user",   "content": "What is 2+2? Answer with just the number."}),
     ];
     let params = GenParams {
-        max_tokens: 32, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
+        max_tokens: 32,
+        temperature: 0.0,
+        thinking_budget: Some(0),
+        ..GenParams::default()
     };
     let rx = server.chat(msgs.clone(), vec![], params).expect("accepted");
     let (text, fr, pt, ct, nc) = collect_tokens(rx).await.expect("generation ok");
     let dur = t.elapsed();
     let t_s = tps(ct, dur);
-    eprintln!("[step 6] response ({:.2}s, {:.1} tok/s, finish={}): {:?}", dur.as_secs_f64(), t_s, fr, text.trim());
+    eprintln!(
+        "[step 6] response ({:.2}s, {:.1} tok/s, finish={}): {:?}",
+        dur.as_secs_f64(),
+        t_s,
+        fr,
+        text.trim()
+    );
 
     let ok = !text.trim().is_empty();
     let has_4 = text.contains('4');
-    let status = if ok && has_4 { StepStatus::Ok }
-        else if ok { StepStatus::Warn(format!("no '4' in response: {:?}", text.trim())) }
-        else { StepStatus::Fail("empty response".into()) };
+    let status = if ok && has_4 {
+        StepStatus::Ok
+    } else if ok {
+        StepStatus::Warn(format!("no '4' in response: {:?}", text.trim()))
+    } else {
+        StepStatus::Fail("empty response".into())
+    };
     report.steps.push(Step {
-        name: "Simple chat (no tools)", duration: dur, status,
+        name: "Simple chat (no tools)",
+        duration: dur,
+        status,
         detail: format!("{t_s:.1} tok/s, prompt={pt}, completion={ct}, finish={fr}"),
     });
     report.chats.push(ChatRecord {
-        label: "Simple chat", messages_in: msgs,
-        response_text: text, visible_text: String::new(),
-        finish_reason: fr, prompt_tokens: pt, completion_tokens: ct,
-        n_ctx: nc, duration: dur, tok_per_sec: t_s, tool_events: vec![],
+        label: "Simple chat",
+        messages_in: msgs,
+        response_text: text,
+        visible_text: String::new(),
+        finish_reason: fr,
+        prompt_tokens: pt,
+        completion_tokens: ct,
+        n_ctx: nc,
+        duration: dur,
+        tok_per_sec: t_s,
+        tool_events: vec![],
     });
     assert!(ok, "simple chat response must not be empty");
 
@@ -684,9 +876,14 @@ async fn e2e_download_start_and_chat() {
         tools.enabled = true;
         tools.date = true;
         tools.max_rounds = 1; // limit rounds so small models don't loop on CPU
-        tools.location = false; tools.web_search = false; tools.web_fetch = false;
-        tools.bash = false; tools.read_file = false; tools.write_file = false;
-        tools.edit_file = false; tools.skill_api = false;
+        tools.location = false;
+        tools.web_search = false;
+        tools.web_fetch = false;
+        tools.bash = false;
+        tools.read_file = false;
+        tools.write_file = false;
+        tools.edit_file = false;
+        tools.skill_api = false;
     }
     let msgs = vec![
         json!({"role": "system", "content": "You are a helpful assistant with tool access. When asked about the current date or time, you MUST call the date tool. After receiving the tool result, state the date clearly. Be concise. Do NOT call any other tool."}),
@@ -696,9 +893,21 @@ async fn e2e_download_start_and_chat() {
         // 64 tokens is enough for the tool-call XML (~25 tok) and the
         // post-tool summary.  Prevents the model from echoing the entire
         // JSON result verbatim, saving ~60 tokens of wasted inference.
-        max_tokens: 64, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
+        max_tokens: 64,
+        temperature: 0.0,
+        thinking_budget: Some(0),
+        ..GenParams::default()
     };
-    let (step, chat, date_ok) = run_tool_chat(&server, "Tool chat (date)", "Tool chat (date)", 7, msgs, params, "date").await;
+    let (step, chat, date_ok) = run_tool_chat(
+        &server,
+        "Tool chat (date)",
+        "Tool chat (date)",
+        7,
+        msgs,
+        params,
+        "date",
+    )
+    .await;
     report.steps.push(step);
     report.chats.push(chat);
     assert!(date_ok, "date tool must be called and succeed");
@@ -712,25 +921,43 @@ async fn e2e_download_start_and_chat() {
         tools.skill_api = true;
         tools.skill_api_port = mock_port;
         tools.max_rounds = 1;
-        tools.bash = false; tools.read_file = false; tools.write_file = false;
-        tools.edit_file = false; tools.location = false;
-        tools.web_search = false; tools.web_fetch = false;
+        tools.bash = false;
+        tools.read_file = false;
+        tools.write_file = false;
+        tools.edit_file = false;
+        tools.location = false;
+        tools.web_search = false;
+        tools.web_fetch = false;
     }
     let msgs = vec![
         json!({"role": "system", "content": "You are a helpful assistant integrated with NeuroSkill, an EEG brain-computer interface app. You have access to the skill tool. When asked about the user's brain state or EEG status, call the skill tool with command \"status\". Summarize the result concisely. Do NOT call any other tool."}),
         json!({"role": "user",   "content": "What is my current EEG status? Use the skill tool with the status command to check."}),
     ];
     let params = GenParams {
-        max_tokens: 64, temperature: 0.0, thinking_budget: Some(0), ..GenParams::default()
+        max_tokens: 64,
+        temperature: 0.0,
+        thinking_budget: Some(0),
+        ..GenParams::default()
     };
     let (step, chat, skill_ok) = run_tool_chat(
-        &server, "Tool chat (skill status)", "Tool chat (skill status)", 8, msgs, params, "skill",
-    ).await;
+        &server,
+        "Tool chat (skill status)",
+        "Tool chat (skill status)",
+        8,
+        msgs,
+        params,
+        "skill",
+    )
+    .await;
 
     // Check the mock API was actually hit — look for the tool result containing mock data.
     let got_mock_data = chat.tool_events.iter().any(|e| {
-        e.kind == "end" && e.tool_name == "skill" && !e.is_error
-            && (e.detail.contains("Muse-2") || e.detail.contains("connected") || e.detail.contains("1337"))
+        e.kind == "end"
+            && e.tool_name == "skill"
+            && !e.is_error
+            && (e.detail.contains("Muse-2")
+                || e.detail.contains("connected")
+                || e.detail.contains("1337"))
     });
     if got_mock_data {
         eprintln!("[step 8] ✅ mock EEG data received in tool result");
@@ -741,7 +968,10 @@ async fn e2e_download_start_and_chat() {
     report.steps.push(step);
     report.chats.push(chat);
     assert!(skill_ok, "skill tool must be called and succeed");
-    assert!(got_mock_data, "mock EEG data must appear in skill tool result");
+    assert!(
+        got_mock_data,
+        "mock EEG data must appear in skill tool result"
+    );
 
     // ── 9. VLM image embedding benchmark ────────────────────────────────────
     //
@@ -755,17 +985,26 @@ async fn e2e_download_start_and_chat() {
         // Create a simple test image: 100x100 white PNG with "Hello World" text
         let test_png = create_test_png();
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let send_ok = server.req_tx.send(skill_llm::InferRequest::EmbedImage {
-            bytes: test_png.clone(),
-            result_tx: tx,
-        }).is_ok();
+        let send_ok = server
+            .req_tx
+            .send(skill_llm::InferRequest::EmbedImage {
+                bytes: test_png.clone(),
+                result_tx: tx,
+            })
+            .is_ok();
         if send_ok {
             match rx.await {
                 Ok(Some(emb)) => {
                     let dur = t.elapsed();
-                    eprintln!("[step 9] ✅ image embedding: {} dims in {:.2}s", emb.len(), dur.as_secs_f64());
+                    eprintln!(
+                        "[step 9] ✅ image embedding: {} dims in {:.2}s",
+                        emb.len(),
+                        dur.as_secs_f64()
+                    );
                     report.steps.push(Step {
-                        name: "VLM image embed", duration: dur, status: StepStatus::Ok,
+                        name: "VLM image embed",
+                        duration: dur,
+                        status: StepStatus::Ok,
                         detail: format!("dims={}, time={:.2}s", emb.len(), dur.as_secs_f64()),
                     });
                 }
@@ -773,7 +1012,8 @@ async fn e2e_download_start_and_chat() {
                     let dur = t.elapsed();
                     eprintln!("[step 9] ⚠️  EmbedImage returned None");
                     report.steps.push(Step {
-                        name: "VLM image embed", duration: dur,
+                        name: "VLM image embed",
+                        duration: dur,
                         status: StepStatus::Warn("EmbedImage returned None".into()),
                         detail: String::new(),
                     });
@@ -782,7 +1022,8 @@ async fn e2e_download_start_and_chat() {
                     let dur = t.elapsed();
                     eprintln!("[step 9] ⚠️  EmbedImage channel error: {e}");
                     report.steps.push(Step {
-                        name: "VLM image embed", duration: dur,
+                        name: "VLM image embed",
+                        duration: dur,
                         status: StepStatus::Warn(format!("channel error: {e}")),
                         detail: String::new(),
                     });
@@ -790,7 +1031,8 @@ async fn e2e_download_start_and_chat() {
             }
         } else {
             report.steps.push(Step {
-                name: "VLM image embed", duration: t.elapsed(),
+                name: "VLM image embed",
+                duration: t.elapsed(),
                 status: StepStatus::Warn("failed to send EmbedImage request".into()),
                 detail: String::new(),
             });
@@ -798,7 +1040,8 @@ async fn e2e_download_start_and_chat() {
     } else {
         eprintln!("[step 9] ⚠️  vision not available (no mmproj) — skipping image embed benchmark");
         report.steps.push(Step {
-            name: "VLM image embed", duration: t.elapsed(),
+            name: "VLM image embed",
+            duration: t.elapsed(),
             status: StepStatus::Warn("vision not available (no mmproj loaded)".into()),
             detail: String::new(),
         });
@@ -815,14 +1058,18 @@ async fn e2e_download_start_and_chat() {
     let dur = t.elapsed();
     eprintln!("[step 10] LLM shutdown ({:.2}s)", dur.as_secs_f64());
     report.steps.push(Step {
-        name: "Shutdown LLM", duration: dur, status: StepStatus::Ok,
+        name: "Shutdown LLM",
+        duration: dur,
+        status: StepStatus::Ok,
         detail: format!("n_ctx={n_ctx_final}"),
     });
 
     // Stop mock API
     let _ = mock_shutdown.send(());
     report.steps.push(Step {
-        name: "Stop mock Skill API", duration: Duration::ZERO, status: StepStatus::Ok,
+        name: "Stop mock Skill API",
+        duration: Duration::ZERO,
+        status: StepStatus::Ok,
         detail: String::new(),
     });
 
@@ -830,17 +1077,30 @@ async fn e2e_download_start_and_chat() {
     let t = Instant::now();
     let _ = std::fs::remove_dir_all(&skill_dir);
     report.steps.push(Step {
-        name: "Cleanup", duration: t.elapsed(), status: StepStatus::Ok, detail: String::new(),
+        name: "Cleanup",
+        duration: t.elapsed(),
+        status: StepStatus::Ok,
+        detail: String::new(),
     });
 
     // ── TOTAL ────────────────────────────────────────────────────────────────
     report.steps.push(Step {
-        name: "TOTAL", duration: test_start.elapsed(), status: StepStatus::Ok, detail: String::new(),
+        name: "TOTAL",
+        duration: test_start.elapsed(),
+        status: StepStatus::Ok,
+        detail: String::new(),
     });
 
     report.print_final();
 
-    let failures: Vec<&Step> = report.steps.iter()
-        .filter(|s| matches!(s.status, StepStatus::Fail(_))).collect();
-    assert!(failures.is_empty(), "E2E test had {} failed step(s)", failures.len());
+    let failures: Vec<&Step> = report
+        .steps
+        .iter()
+        .filter(|s| matches!(s.status, StepStatus::Fail(_)))
+        .collect();
+    assert!(
+        failures.is_empty(),
+        "E2E test had {} failed step(s)",
+        failures.len()
+    );
 }

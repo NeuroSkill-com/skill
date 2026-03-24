@@ -12,7 +12,8 @@ const screenshots: Record<string, string> = {
   "screenshots.sessionOnlyToggle": "Screenshots",
   "screenshots.sessionOnlyDesc": "Screenshots",
   "screenshots.interval": "Intervalle de capture",
-  "screenshots.intervalDesc": "Aligné sur les époques d'embedding EEG (5 s chacune). 1× = chaque époque, 2× = une sur deux, jusqu'à 12× (60 s).",
+  "screenshots.intervalDesc":
+    "Aligné sur les époques d'embedding EEG (5 s chacune). 1× = chaque époque, 2× = une sur deux, jusqu'à 12× (60 s).",
   "screenshots.intervalUnit": "s",
   "screenshots.intervalEpoch": "époque",
   "screenshots.imageSize": "Screenshots",
@@ -25,7 +26,7 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddingModelDesc": "Screenshots",
   "screenshots.backendFastembed": "fastembed (ONNX)",
   "screenshots.backendMmproj": "mmproj",
-  "screenshots.backendLlmVlm":                   "LLM VLM (embed + OCR via vision model)",
+  "screenshots.backendLlmVlm": "LLM VLM (embed + OCR via vision model)",
   "screenshots.modelClip": "CLIP ViT-B/32 - 512d",
   "screenshots.modelNomic": "Nomic Embed Vision v1.5 - 768d",
   "screenshots.reembed": "Screenshots",
@@ -46,22 +47,27 @@ const screenshots: Record<string, string> = {
   "screenshots.unembeddedCount": "Screenshots",
   "screenshots.staleCount": "Screenshots",
   "screenshots.permissionRequired": "Autorisation d'enregistrement d'écran requise",
-  "screenshots.permissionDesc": "macOS nécessite l'autorisation d'enregistrement d'écran et audio système pour capturer les fenêtres d'autres applications. Sans elle, les captures peuvent être vides ou n'afficher que votre propre application.",
+  "screenshots.permissionDesc":
+    "macOS nécessite l'autorisation d'enregistrement d'écran et audio système pour capturer les fenêtres d'autres applications. Sans elle, les captures peuvent être vides ou n'afficher que votre propre application.",
   "screenshots.permissionGranted": "Autorisation d'enregistrement d'écran accordée.",
   "screenshots.openPermissionSettings": "Ouvrir les réglages d'enregistrement d'écran",
   "screenshots.ocrToggle": "Extraction de texte OCR",
-  "screenshots.ocrToggleDesc": "Extraire le texte des captures d'écran pour la recherche textuelle. S'exécute sur l'image pleine résolution avant le redimensionnement.",
+  "screenshots.ocrToggleDesc":
+    "Extraire le texte des captures d'écran pour la recherche textuelle. S'exécute sur l'image pleine résolution avant le redimensionnement.",
   "screenshots.gpuToggle": "Accélération GPU",
-  "screenshots.gpuToggleDesc": "Utiliser le GPU pour les embeddings d'images et l'OCR. Désactiver pour forcer l'inférence CPU (libère le GPU pour le LLM/EEG).",
+  "screenshots.gpuToggleDesc":
+    "Utiliser le GPU pour les embeddings d'images et l'OCR. Désactiver pour forcer l'inférence CPU (libère le GPU pour le LLM/EEG).",
   "screenshots.ocrEngineSelect": "Moteur OCR",
   "screenshots.ocrEngineAppleVision": "Apple Vision — GPU / Neural Engine (recommandé sur macOS)",
   "screenshots.ocrEngineOcrs": "ocrs — CPU local basé sur rten (multiplateforme)",
-  "screenshots.ocrAppleVisionHint": "⚡ Apple Vision utilise le GPU/ANE et est environ 10× plus rapide que ocrs sur macOS",
+  "screenshots.ocrAppleVisionHint":
+    "⚡ Apple Vision utilise le GPU/ANE et est environ 10× plus rapide que ocrs sur macOS",
   "screenshots.ocrActiveModels": "Modèles actifs",
   "screenshots.ocrInference": "Inférence",
   "screenshots.ocrTitle": "Extraction de texte OCR",
   "screenshots.ocrEngine": "OCR sur l'appareil",
-  "screenshots.ocrDesc": "Le texte est extrait de chaque capture d'écran en pleine résolution avant le redimensionnement via le moteur ocrs. Le texte extrait est intégré avec BGE-Small-EN-v1.5 et indexé dans un index HNSW séparé pour la recherche sémantique textuelle. Les modèles OCR (~10 Mo chacun) sont téléchargés automatiquement à la première utilisation.",
+  "screenshots.ocrDesc":
+    "Le texte est extrait de chaque capture d'écran en pleine résolution avant le redimensionnement via le moteur ocrs. Le texte extrait est intégré avec BGE-Small-EN-v1.5 et indexé dans un index HNSW séparé pour la recherche sémantique textuelle. Les modèles OCR (~10 Mo chacun) sont téléchargés automatiquement à la première utilisation.",
   "screenshots.ocrDetModel": "Modèle de détection",
   "screenshots.ocrRecModel": "Modèle de reconnaissance",
   "screenshots.ocrTextEmbed": "Embedding textuel",
@@ -87,7 +93,8 @@ const screenshots: Record<string, string> = {
   "screenshots.perfQueue": "Profondeur file",
   "screenshots.perfDrops": "Abandonnés",
   "screenshots.perfBackoff": "Temporisation",
-  "screenshots.perfDropsHint": "thread d'embedding trop lent — intervalle augmenté automatiquement, récupération quand la file se vide",
+  "screenshots.perfDropsHint":
+    "thread d'embedding trop lent — intervalle augmenté automatiquement, récupération quand la file se vide",
   "screenshots.perfErrors": "erreurs",
 };
 

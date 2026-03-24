@@ -34,29 +34,29 @@
 
 use tauri::{AppHandle, Manager};
 
+use crate::eeg_embeddings::EegAccumulator;
+use crate::AppStateExt;
 use crate::MutexExt;
 use skill_eeg::artifact_detection::ArtifactDetector;
 use skill_eeg::eeg_bands::BandAnalyzer;
-use crate::eeg_embeddings::EegAccumulator;
 use skill_eeg::eeg_filter::{EegFilter, FilterConfig};
 use skill_eeg::eeg_quality::QualityMonitor;
 use skill_eeg::head_pose::HeadPoseTracker;
-use crate::AppStateExt;
 
 // ── SessionDsp ────────────────────────────────────────────────────────────────
 
 pub(crate) struct SessionDsp {
     // ── DSP pipeline ─────────────────────────────────────────────────────────
-    pub filter:            EegFilter,
-    pub band_analyzer:     BandAnalyzer,
-    pub quality:           QualityMonitor,
+    pub filter: EegFilter,
+    pub band_analyzer: BandAnalyzer,
+    pub quality: QualityMonitor,
     pub artifact_detector: ArtifactDetector,
-    pub head_pose:         HeadPoseTracker,
-    pub accumulator:       EegAccumulator,
+    pub head_pose: HeadPoseTracker,
+    pub accumulator: EegAccumulator,
 
     // ── Cached config — compared each frame to detect Tauri-command changes ──
     last_filter_config: FilterConfig,
-    last_overlap_secs:  f32,
+    last_overlap_secs: f32,
     last_hooks: Vec<crate::settings::HookRule>,
 }
 
@@ -67,8 +67,18 @@ impl SessionDsp {
     /// and releases it before building any DSP object.
     pub(crate) fn new(app: &AppHandle, channel_names: &[&str]) -> Self {
         let num_channels = channel_names.len();
-        let (filter_cfg, overlap_secs, hooks, skill_dir, model_config,
-             model_status, download_cancel, encoder_reload_requested, logger, hook_runtime) = {
+        let (
+            filter_cfg,
+            overlap_secs,
+            hooks,
+            skill_dir,
+            model_config,
+            model_status,
+            download_cancel,
+            encoder_reload_requested,
+            logger,
+            hook_runtime,
+        ) = {
             let r = app.app_state();
             let g = r.lock_or_recover();
             (
@@ -87,9 +97,8 @@ impl SessionDsp {
 
         // Shared text embedder — reuse the app-wide instance instead of
         // creating a separate ~130 MB copy per EEG session.
-        let shared_embedder = std::sync::Arc::clone(
-            &*app.state::<std::sync::Arc<crate::EmbedderState>>()
-        );
+        let shared_embedder =
+            std::sync::Arc::clone(&*app.state::<std::sync::Arc<crate::EmbedderState>>());
 
         // Obtain a cloned Arc to the global cross-day HNSW index so the embed
         // worker can insert into it without going through Tauri's state system.
@@ -107,26 +116,34 @@ impl SessionDsp {
             .clone();
 
         let mut accumulator = EegAccumulator::new(
-            skill_dir, model_config, model_status, download_cancel,
-            encoder_reload_requested, logger, global_index,
-            hooks.clone(), shared_embedder, label_idx, ws_broadcaster,
-            hook_runtime, app.clone(),
+            skill_dir,
+            model_config,
+            model_status,
+            download_cancel,
+            encoder_reload_requested,
+            logger,
+            global_index,
+            hooks.clone(),
+            shared_embedder,
+            label_idx,
+            ws_broadcaster,
+            hook_runtime,
+            app.clone(),
         );
         accumulator.set_overlap_secs(overlap_secs);
 
         Self {
-            filter:            EegFilter::new(filter_cfg),
-            band_analyzer:     BandAnalyzer::new_with_rate(filter_cfg.sample_rate),
-            quality:           QualityMonitor::with_window(
-                num_channels, filter_cfg.sample_rate as usize,
-            ),
+            filter: EegFilter::new(filter_cfg),
+            band_analyzer: BandAnalyzer::new_with_rate(filter_cfg.sample_rate),
+            quality: QualityMonitor::with_window(num_channels, filter_cfg.sample_rate as usize),
             artifact_detector: ArtifactDetector::with_channels(
-                filter_cfg.sample_rate as f64, channel_names,
+                filter_cfg.sample_rate as f64,
+                channel_names,
             ),
-            head_pose:         HeadPoseTracker::new(), // default 52 Hz; future: pass device IMU rate
+            head_pose: HeadPoseTracker::new(), // default 52 Hz; future: pass device IMU rate
             accumulator,
             last_filter_config: filter_cfg,
-            last_overlap_secs:  overlap_secs,
+            last_overlap_secs: overlap_secs,
             last_hooks: hooks,
         }
     }
@@ -141,7 +158,11 @@ impl SessionDsp {
         let (filter_cfg, overlap_secs, hooks) = {
             let r = app.app_state();
             let g = r.lock_or_recover();
-            (g.status.filter_config, g.status.embedding_overlap_secs, g.hooks.clone())
+            (
+                g.status.filter_config,
+                g.status.embedding_overlap_secs,
+                g.hooks.clone(),
+            )
         };
 
         if filter_cfg != self.last_filter_config {

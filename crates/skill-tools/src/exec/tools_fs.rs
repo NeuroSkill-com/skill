@@ -2,7 +2,7 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Filesystem tool handlers — `read_file`, `write_file`, `edit_file`, `search_output`.
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use super::helpers::resolve_tool_path;
 use super::safety::{check_path_safety, request_tool_approval};
@@ -11,12 +11,22 @@ use super::truncate::truncate_tool_output_head;
 // ── read_file ─────────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_read_file(args: &Value) -> Value {
-    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "read_file", "error": "missing path" });
     }
-    let offset = args.get("offset").and_then(serde_json::Value::as_u64).map(|v| v as usize);
-    let limit = args.get("limit").and_then(serde_json::Value::as_u64).map(|v| v as usize);
+    let offset = args
+        .get("offset")
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| v as usize);
+    let limit = args
+        .get("limit")
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| v as usize);
 
     tokio::task::spawn_blocking(move || {
         let resolved = resolve_tool_path(&path);
@@ -78,8 +88,16 @@ pub(crate) async fn exec_read_file(args: &Value) -> Value {
 // ── write_file ────────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_write_file(args: &Value) -> Value {
-    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let content = args.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let content = args
+        .get("content")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "write_file", "error": "missing path" });
     }
@@ -122,9 +140,21 @@ pub(crate) async fn exec_write_file(args: &Value) -> Value {
 // ── edit_file ─────────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_edit_file(args: &Value) -> Value {
-    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let old_text = args.get("old_text").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let new_text = args.get("new_text").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let old_text = args
+        .get("old_text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let new_text = args
+        .get("new_text")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "edit_file", "error": "missing path" });
     }
@@ -206,17 +236,42 @@ pub(crate) async fn exec_edit_file(args: &Value) -> Value {
 // ── search_output ─────────────────────────────────────────────────────────────
 
 pub(crate) async fn exec_search_output(args: &Value) -> Value {
-    let path = args.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let path = args
+        .get("path")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     if path.is_empty() {
         return json!({ "ok": false, "tool": "search_output", "error": "missing path" });
     }
-    let pattern = args.get("pattern").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
-    let context_lines = args.get("context_lines").and_then(serde_json::Value::as_u64).unwrap_or(2) as usize;
-    let head_n = args.get("head").and_then(serde_json::Value::as_u64).map(|v| v as usize);
-    let tail_n = args.get("tail").and_then(serde_json::Value::as_u64).map(|v| v as usize);
-    let line_start = args.get("line_start").and_then(serde_json::Value::as_u64).map(|v| v as usize);
-    let line_end = args.get("line_end").and_then(serde_json::Value::as_u64).map(|v| v as usize);
-    let max_matches = args.get("max_matches").and_then(serde_json::Value::as_u64).unwrap_or(50) as usize;
+    let pattern = args
+        .get("pattern")
+        .and_then(|v| v.as_str())
+        .map(std::string::ToString::to_string);
+    let context_lines = args
+        .get("context_lines")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(2) as usize;
+    let head_n = args
+        .get("head")
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| v as usize);
+    let tail_n = args
+        .get("tail")
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| v as usize);
+    let line_start = args
+        .get("line_start")
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| v as usize);
+    let line_end = args
+        .get("line_end")
+        .and_then(serde_json::Value::as_u64)
+        .map(|v| v as usize);
+    let max_matches = args
+        .get("max_matches")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(50) as usize;
 
     tokio::task::spawn_blocking(move || {
         let resolved = resolve_tool_path(&path);
@@ -297,12 +352,11 @@ fn exec_search_output_regex(
     context_lines: usize,
     max_matches: usize,
 ) -> Value {
-    let re = match regex::RegexBuilder::new(pat)
-        .case_insensitive(true)
-        .build()
-    {
+    let re = match regex::RegexBuilder::new(pat).case_insensitive(true).build() {
         Ok(r) => r,
-        Err(e) => return json!({ "ok": false, "tool": "search_output", "error": format!("invalid regex: {}", e) }),
+        Err(e) => {
+            return json!({ "ok": false, "tool": "search_output", "error": format!("invalid regex: {}", e) })
+        }
     };
 
     let mut matches: Vec<String> = Vec::new();
@@ -312,7 +366,9 @@ fn exec_search_output_regex(
     for (i, line) in all_lines.iter().enumerate() {
         if re.is_match(line) {
             match_count += 1;
-            if match_count > max_matches { break; }
+            if match_count > max_matches {
+                break;
+            }
 
             let ctx_start = i.saturating_sub(context_lines).max(last_printed);
             let ctx_end = (i + context_lines + 1).min(total_lines);

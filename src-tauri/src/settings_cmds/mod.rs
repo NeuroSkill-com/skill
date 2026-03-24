@@ -6,85 +6,85 @@
 // the Free Software Foundation, version 3 only.
 //! Device, filter, EEG model, app-settings, autostart, and update-interval Tauri commands.
 
+pub mod activity_cmds;
+pub mod device_cmds;
 pub mod dnd_cmds;
 pub mod hook_cmds;
-pub mod device_cmds;
-pub mod activity_cmds;
 pub mod screenshot_cmds;
 pub mod skills_cmds;
 
 // Re-export extracted commands so `use settings_cmds::X` keeps working in lib.rs.
-pub use dnd_cmds::{
-    get_dnd_config, set_dnd_config, get_dnd_active, get_dnd_status,
-    test_dnd, list_focus_modes,
-    pick_ref_wav_file,
-};
-pub use hook_cmds::{
-    HookDistanceSuggestion,
-    suggest_hook_distances, suggest_hook_keywords,
-    get_hooks, set_hooks, get_hook_statuses,
-    get_hook_log, get_hook_log_count,
-    sanitize_hook,
+pub use activity_cmds::{
+    get_active_window, get_active_window_tracking, get_input_activity_tracking, get_input_buckets,
+    get_last_input_activity, get_recent_active_windows, get_recent_input_activity,
+    set_active_window_tracking, set_input_activity_tracking,
 };
 pub use device_cmds::{
-    get_status, get_devices, get_supported_companies, get_device_capabilities,
-    set_preferred_device, pair_device, forget_device, cancel_retry, retry_connect,
+    cancel_retry, forget_device, get_device_capabilities, get_devices, get_status,
+    get_supported_companies, pair_device, retry_connect, set_preferred_device,
 };
-pub use activity_cmds::{
-    get_active_window_tracking, set_active_window_tracking, get_active_window,
-    get_input_activity_tracking, set_input_activity_tracking,
-    get_last_input_activity,
-    get_recent_active_windows, get_recent_input_activity,
-    get_input_buckets,
+pub use dnd_cmds::{
+    get_dnd_active, get_dnd_config, get_dnd_status, list_focus_modes, pick_ref_wav_file,
+    set_dnd_config, test_dnd,
+};
+pub use hook_cmds::{
+    get_hook_log, get_hook_log_count, get_hook_statuses, get_hooks, sanitize_hook, set_hooks,
+    suggest_hook_distances, suggest_hook_keywords, HookDistanceSuggestion,
 };
 pub use screenshot_cmds::{
-    get_screenshot_config, set_screenshot_config,
-    estimate_screenshot_reembed, rebuild_screenshot_embeddings,
-    get_screenshots_around, search_screenshots_by_vector, search_screenshots_by_image,
-    search_screenshots_by_text,
-    check_ocr_models_ready, download_ocr_models,
-    get_screenshot_metrics, get_screenshots_dir,
+    check_ocr_models_ready, download_ocr_models, estimate_screenshot_reembed,
+    get_screenshot_config, get_screenshot_metrics, get_screenshots_around, get_screenshots_dir,
+    rebuild_screenshot_embeddings, search_screenshots_by_image, search_screenshots_by_text,
+    search_screenshots_by_vector, set_screenshot_config,
 };
 pub use skills_cmds::{
-    get_skills_refresh_interval, set_skills_refresh_interval,
-    get_skills_sync_on_launch, set_skills_sync_on_launch,
-    get_skills_last_sync, sync_skills_now,
-    list_skills, get_disabled_skills, set_disabled_skills, get_skills_license,
+    get_disabled_skills, get_skills_last_sync, get_skills_license, get_skills_refresh_interval,
+    get_skills_sync_on_launch, list_skills, set_disabled_skills, set_skills_refresh_interval,
+    set_skills_sync_on_launch, sync_skills_now,
 };
 
-use std::sync::Mutex;
 use crate::MutexExt;
+use std::sync::Mutex;
 use tauri::{AppHandle, Emitter};
 
-use crate::{
-    AppState, EegPacket, PpgPacket, ImuPacket,
-    emit_status, save_settings, skill_dir, mutate_and_save,
-    constants::{EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS, LOG_CONFIG_FILE},
-};
-use skill_eeg::eeg_filter::{FilterConfig, PowerlineFreq};
-use crate::settings::{OpenBciConfig, DeviceApiConfig, NeuttsConfig};
-use skill_eeg::eeg_bands::BandSnapshot;
-use skill_eeg::eeg_model_config::{EegModelConfig, EegModelStatus, save_model_config};
-use crate::eeg_embeddings::download_hf_weights;
-use crate::settings::{UmapUserConfig, save_umap_config};
 use crate::autostart;
+use crate::eeg_embeddings::download_hf_weights;
+use crate::settings::{save_umap_config, UmapUserConfig};
+use crate::settings::{DeviceApiConfig, NeuttsConfig, OpenBciConfig};
 use crate::AppStateExt;
+use crate::{
+    constants::{EMBEDDING_OVERLAP_MAX_SECS, EMBEDDING_OVERLAP_MIN_SECS, LOG_CONFIG_FILE},
+    emit_status, mutate_and_save, save_settings, skill_dir, AppState, EegPacket, ImuPacket,
+    PpgPacket,
+};
+use skill_eeg::eeg_bands::BandSnapshot;
+use skill_eeg::eeg_filter::{FilterConfig, PowerlineFreq};
+use skill_eeg::eeg_model_config::{save_model_config, EegModelConfig, EegModelStatus};
 // Hook keyword suggestions — moved to hook_cmds.rs
 
 // ── EEG / PPG / IMU subscriptions ────────────────────────────────────────────
 
 #[tauri::command]
-pub fn subscribe_eeg(on_event: tauri::ipc::Channel<EegPacket>, state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn subscribe_eeg(
+    on_event: tauri::ipc::Channel<EegPacket>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
     state.lock_or_recover().eeg_channel = Some(on_event);
 }
 
 #[tauri::command]
-pub fn subscribe_ppg(on_event: tauri::ipc::Channel<PpgPacket>, state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn subscribe_ppg(
+    on_event: tauri::ipc::Channel<PpgPacket>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
     state.lock_or_recover().ppg_channel = Some(on_event);
 }
 
 #[tauri::command]
-pub fn subscribe_imu(on_event: tauri::ipc::Channel<ImuPacket>, state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn subscribe_imu(
+    on_event: tauri::ipc::Channel<ImuPacket>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
     state.lock_or_recover().imu_channel = Some(on_event);
 }
 
@@ -129,8 +129,8 @@ pub fn get_storage_format(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Stri
 pub fn set_storage_format(format: String, app: AppHandle) {
     let fmt = match format.to_ascii_lowercase().as_str() {
         "parquet" => "parquet",
-        "both"    => "both",
-        _         => "csv",
+        "both" => "both",
+        _ => "csv",
     };
     {
         let r = app.app_state();
@@ -184,12 +184,17 @@ pub fn get_gpu_stats() -> Option<skill_data::gpu_stats::GpuStats> {
 // ── Logging config ────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_log_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> crate::skill_log::LogConfig {
+pub fn get_log_config(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> crate::skill_log::LogConfig {
     state.lock_or_recover().logger.get_config()
 }
 
 #[tauri::command]
-pub fn set_log_config(config: crate::skill_log::LogConfig, state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn set_log_config(
+    config: crate::skill_log::LogConfig,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
     let s = state.lock_or_recover();
     let config_path = s.skill_dir.join(LOG_CONFIG_FILE);
     // Propagate TTS, LLM, and tool logging flags to their crate-level runtime atomics.
@@ -217,7 +222,9 @@ pub fn set_eeg_model_config(config: EegModelConfig, state: tauri::State<'_, Mute
         // When the model backend or variant changes, signal the embed worker to
         // reload so it picks up the new encoder without an app restart.
         if changed {
-            s.embedding.encoder_reload_requested.store(true, std::sync::atomic::Ordering::Relaxed);
+            s.embedding
+                .encoder_reload_requested
+                .store(true, std::sync::atomic::Ordering::Relaxed);
         }
         (dir, changed)
     };
@@ -228,7 +235,12 @@ pub fn set_eeg_model_config(config: EegModelConfig, state: tauri::State<'_, Mute
 
 #[tauri::command]
 pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> EegModelStatus {
-    state.lock_or_recover().embedding.model_status.lock_or_recover().clone()
+    state
+        .lock_or_recover()
+        .embedding
+        .model_status
+        .lock_or_recover()
+        .clone()
 }
 
 /// Spawn a background thread that downloads EEG model weights from HuggingFace Hub.
@@ -242,15 +254,15 @@ pub fn get_eeg_model_status(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Ee
 /// requiring an app restart.
 #[tauri::command]
 pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    use std::sync::atomic::Ordering;
     use skill_eeg::eeg_model_config::ExgModelBackend;
+    use std::sync::atomic::Ordering;
 
     let s = state.lock_or_recover();
-    let config           = s.embedding.model_config.clone();
-    let model_status     = s.embedding.model_status.clone();
-    let cancel           = s.embedding.download_cancel.clone();
+    let config = s.embedding.model_config.clone();
+    let model_status = s.embedding.model_status.clone();
+    let cancel = s.embedding.download_cancel.clone();
     let reload_requested = s.embedding.encoder_reload_requested.clone();
-    let logger           = s.logger.clone();
+    let logger = s.logger.clone();
     drop(s); // release AppState lock before spawning
 
     let (hf_repo, weights_file, config_file) = match config.model_backend {
@@ -274,12 +286,25 @@ pub fn trigger_weights_download(state: tauri::State<'_, Mutex<Box<AppState>>>) {
         .spawn(move || {
             // mark_needs_restart=false: instead of prompting restart we signal
             // the embed worker to reload in-place via encoder_reload_requested.
-            if download_hf_weights(&hf_repo, &weights_file, &config_file, &model_status, &cancel, false, &logger).is_some() {
+            if download_hf_weights(
+                &hf_repo,
+                &weights_file,
+                &config_file,
+                &model_status,
+                &cancel,
+                false,
+                &logger,
+            )
+            .is_some()
+            {
                 // Signal the running embed worker (if any) to exit and respawn
                 // so it picks up the freshly downloaded encoder immediately.
                 reload_requested.store(true, Ordering::Relaxed);
-                skill_log!(logger, "embedder",
-                    "weights downloaded — signalling embed worker for in-place reload");
+                skill_log!(
+                    logger,
+                    "embedder",
+                    "weights downloaded — signalling embed worker for in-place reload"
+                );
             }
         })
         .expect("[hf-download] failed to spawn download thread");
@@ -336,7 +361,11 @@ pub fn set_theme(theme: String, app: AppHandle, _state: tauri::State<'_, Mutex<B
 }
 
 #[tauri::command]
-pub fn set_language(language: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn set_language(
+    language: String,
+    app: AppHandle,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
     mutate_and_save(&app, |s| s.ui.language = language);
 }
 
@@ -348,7 +377,7 @@ pub fn get_accent_color(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String
 #[tauri::command]
 pub fn set_accent_color(
     accent: String,
-    app:    AppHandle,
+    app: AppHandle,
     _state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     mutate_and_save(&app, |s| s.ui.accent_color = accent);
@@ -375,12 +404,15 @@ pub fn get_goal_notified_date(state: tauri::State<'_, Mutex<Box<AppState>>>) -> 
 }
 
 #[tauri::command]
-pub fn set_goal_notified_date(date: String, app: AppHandle, _state: tauri::State<'_, Mutex<Box<AppState>>>) {
+pub fn set_goal_notified_date(
+    date: String,
+    app: AppHandle,
+    _state: tauri::State<'_, Mutex<Box<AppState>>>,
+) {
     mutate_and_save(&app, |s| s.ui.goal_notified_date = date);
 }
 
 // Hooks CRUD + keyword suggestions — moved to hook_cmds.rs
-
 
 #[tauri::command]
 pub async fn open_session_for_timestamp(
@@ -389,7 +421,9 @@ pub async fn open_session_for_timestamp(
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     let skill_dir = skill_dir(&state);
-    let Some(csv_path) = crate::history_cmds::find_session_csv_for_timestamp(&skill_dir, timestamp_utc) else {
+    let Some(csv_path) =
+        crate::history_cmds::find_session_csv_for_timestamp(&skill_dir, timestamp_utc)
+    else {
         return Err("no session found for timestamp".to_owned());
     };
     crate::window_cmds::open_session_window(app, csv_path).await
@@ -401,15 +435,13 @@ pub async fn open_session_for_timestamp(
 /// JSON sidecar files, which can be slow on spinning disks or large histories.
 #[tauri::command]
 pub async fn get_daily_recording_mins(
-    days:  Option<u32>,
+    days: Option<u32>,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<Vec<(String, u32)>, String> {
     let skill_dir = skill_dir(&state);
-    tokio::task::spawn_blocking(move || {
-        get_daily_recording_mins_sync(&skill_dir, days)
-    })
-    .await
-    .map_err(|e| e.to_string())
+    tokio::task::spawn_blocking(move || get_daily_recording_mins_sync(&skill_dir, days))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Synchronous implementation extracted for `spawn_blocking`.
@@ -433,38 +465,51 @@ fn get_daily_recording_mins_sync(
 
     for (dir_date, total) in results.iter_mut() {
         let dir = skill_dir.join(dir_date.as_str());
-        if !dir.is_dir() { continue; }
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        if !dir.is_dir() {
+            continue;
+        }
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
         for entry in entries.filter_map(std::result::Result::ok) {
             let p = entry.path();
             let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if !((fname.starts_with("exg_") || fname.starts_with("muse_")) && fname.ends_with(".json")) { continue; }
-            let Ok(text) = std::fs::read_to_string(&p) else { continue };
-            let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
+            if !((fname.starts_with("exg_") || fname.starts_with("muse_"))
+                && fname.ends_with(".json"))
+            {
+                continue;
+            }
+            let Ok(text) = std::fs::read_to_string(&p) else {
+                continue;
+            };
+            let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else {
+                continue;
+            };
             let start = meta["session_start_utc"].as_u64().unwrap_or(0);
-            let end   = meta["session_end_utc"].as_u64().unwrap_or(start);
+            let end = meta["session_end_utc"].as_u64().unwrap_or(start);
             *total += (end.saturating_sub(start) / 60) as u32;
         }
     }
 
     results.reverse();
-    results.into_iter()
+    results
+        .into_iter()
         .map(|(d, m)| (format!("{}-{}-{}", &d[0..4], &d[4..6], &d[6..8]), m))
         .collect()
 }
 
 pub(crate) fn unix_to_ymd(ts: u64) -> (u32, u32, u32) {
     let days = ts / 86400;
-    let z    = days + 719468;
-    let era  = z / 146097;
-    let doe  = z - era * 146097;
-    let yoe  = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y    = yoe + era * 400;
-    let doy  = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp   = (5 * doy + 2) / 153;
-    let d    = doy - (153 * mp + 2) / 5 + 1;
-    let m    = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y    = if m <= 2 { y + 1 } else { y };
+    let z = days + 719468;
+    let era = z / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
     (y as u32, m as u32, d as u32)
 }
 
@@ -483,13 +528,15 @@ pub fn get_ws_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> (String, 
 /// the next app restart (the server binds once at startup).
 #[tauri::command]
 pub fn set_ws_config(
-    host:  String,
-    port:  u16,
-    app:   AppHandle,
+    host: String,
+    port: u16,
+    app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
     if host != "127.0.0.1" && host != "0.0.0.0" {
-        return Err(format!("invalid host '{host}': must be '127.0.0.1' or '0.0.0.0'"));
+        return Err(format!(
+            "invalid host '{host}': must be '127.0.0.1' or '0.0.0.0'"
+        ));
     }
     if port < 1024 {
         return Err(format!("port {port} is reserved; use 1024–65535"));
@@ -515,11 +562,7 @@ pub fn get_api_token(state: tauri::State<'_, Mutex<Box<AppState>>>) -> String {
 /// The change takes effect immediately for new HTTP requests; existing
 /// WebSocket connections are not disconnected.
 #[tauri::command]
-pub fn set_api_token(
-    token: String,
-    app:   AppHandle,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) {
+pub fn set_api_token(token: String, app: AppHandle, state: tauri::State<'_, Mutex<Box<AppState>>>) {
     state.lock_or_recover().api_token = token;
     crate::save_settings(&app);
 }
@@ -531,7 +574,8 @@ pub fn set_api_token(
 /// Reads the OS-level registration directly (plist / .desktop / registry).
 #[tauri::command]
 pub fn get_autostart_enabled(app: AppHandle) -> bool {
-    let name = app.config()
+    let name = app
+        .config()
         .product_name
         .as_deref()
         .unwrap_or("skill")
@@ -545,11 +589,9 @@ pub fn get_autostart_enabled(app: AppHandle) -> bool {
 /// On Linux this writes / removes an XDG `.desktop` file.
 /// On Windows this writes / deletes the `HKCU\...\Run` registry value.
 #[tauri::command]
-pub fn set_autostart_enabled(
-    app:     AppHandle,
-    enabled: bool,
-) -> Result<(), String> {
-    let name = app.config()
+pub fn set_autostart_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let name = app
+        .config()
         .product_name
         .as_deref()
         .unwrap_or("skill")
@@ -572,8 +614,8 @@ pub fn get_update_check_interval(state: tauri::State<'_, Mutex<Box<AppState>>>) 
 /// effect without a restart.
 #[tauri::command]
 pub fn set_update_check_interval(
-    secs:  u64,
-    app:   AppHandle,
+    secs: u64,
+    app: AppHandle,
     state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().update_check_interval_secs = secs;
@@ -595,8 +637,8 @@ pub fn get_openbci_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Open
 #[tauri::command]
 pub fn set_openbci_config(
     config: OpenBciConfig,
-    app:    AppHandle,
-    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().openbci_config = config;
     crate::save_settings(&app);
@@ -623,8 +665,8 @@ pub fn get_device_api_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> s
 #[tauri::command]
 pub fn set_device_api_config(
     config: DeviceApiConfig,
-    app:    AppHandle,
-    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().device_api_config = config;
     crate::save_settings(&app);
@@ -632,7 +674,9 @@ pub fn set_device_api_config(
 
 /// Return the current scanner backend configuration.
 #[tauri::command]
-pub fn get_scanner_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> skill_settings::ScannerConfig {
+pub fn get_scanner_config(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> skill_settings::ScannerConfig {
     state.lock_or_recover().scanner_config.clone()
 }
 
@@ -655,8 +699,8 @@ pub fn get_device_log() -> Vec<crate::device_scanner::DeviceLogEntry> {
 #[tauri::command]
 pub fn set_scanner_config(
     config: skill_settings::ScannerConfig,
-    app:    AppHandle,
-    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().scanner_config = config;
     crate::save_settings(&app);
@@ -697,8 +741,8 @@ pub fn get_tts_preload(state: tauri::State<'_, Mutex<Box<AppState>>>) -> bool {
 #[tauri::command]
 pub fn set_tts_preload(
     preload: bool,
-    app:     AppHandle,
-    state:   tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().tts_preload = preload;
     crate::save_settings(&app);
@@ -711,8 +755,8 @@ pub fn set_tts_preload(
 #[tauri::command]
 pub fn set_neutts_config(
     config: NeuttsConfig,
-    app:    AppHandle,
-    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     crate::tts::neutts_apply_config(&config);
     state.lock_or_recover().neutts_config = config;
@@ -729,15 +773,17 @@ pub fn set_neutts_config(
 // ── Sleep schedule ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_sleep_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> crate::settings::SleepConfig {
+pub fn get_sleep_config(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> crate::settings::SleepConfig {
     state.lock_or_recover().sleep_config.clone()
 }
 
 #[tauri::command]
 pub fn set_sleep_config(
     config: crate::settings::SleepConfig,
-    app:    AppHandle,
-    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().sleep_config = config;
     crate::save_settings(&app);
@@ -746,10 +792,12 @@ pub fn set_sleep_config(
 // ── LLM ───────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_llm_config(
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) -> crate::settings::LlmConfig {
-    { let __a = state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().config.clone(); __r }
+pub fn get_llm_config(state: tauri::State<'_, Mutex<Box<AppState>>>) -> crate::settings::LlmConfig {
+    {
+        let __a = state.lock_or_recover().llm.clone();
+        let __r = __a.lock_or_recover().config.clone();
+        __r
+    }
 }
 
 /// Update the LLM server configuration and persist it to `settings.json`.
@@ -759,20 +807,24 @@ pub fn get_llm_config(
 #[tauri::command]
 pub fn set_llm_config(
     config: crate::settings::LlmConfig,
-    app:    AppHandle,
-    state:  tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     #[cfg(feature = "llm")]
     let cell = {
         let s = state.lock_or_recover();
-        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        let __llm_arc = s.llm.clone();
+        let mut llm = __llm_arc.lock_or_recover();
         llm.config = config.clone();
         llm.state_cell.clone()
     };
     #[cfg(not(feature = "llm"))]
     {
         let s = state.lock_or_recover();
-        { let __a = s.llm.clone(); __a.lock_or_recover().config = config.clone(); }
+        {
+            let __a = s.llm.clone();
+            __a.lock_or_recover().config = config.clone();
+        }
     }
 
     #[cfg(feature = "llm")]
@@ -803,7 +855,8 @@ pub fn web_cache_stats() -> serde_json::Value {
 #[tauri::command]
 pub fn web_cache_list() -> Vec<serde_json::Value> {
     match skill_tools::web_cache::global() {
-        Some(cache) => cache.list_entries()
+        Some(cache) => cache
+            .list_entries()
             .into_iter()
             .filter_map(|e| serde_json::to_value(e).ok())
             .collect(),
@@ -867,10 +920,11 @@ pub fn estimate_reembed(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Reembe
 
     let is_session_data = |fname: &str| -> bool {
         let has_prefix = fname.starts_with("exg_") || fname.starts_with("muse_");
-        if !has_prefix { return false; }
-        let is_primary = !fname.contains("_ppg")
-            && !fname.contains("_metrics")
-            && !fname.contains("_imu");
+        if !has_prefix {
+            return false;
+        }
+        let is_primary =
+            !fname.contains("_ppg") && !fname.contains("_metrics") && !fname.contains("_imu");
         is_primary && (fname.ends_with(".csv") || fname.ends_with(".parquet"))
     };
 
@@ -888,7 +942,9 @@ pub fn estimate_reembed(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Reembe
                     for f in rd.flatten() {
                         let fname = f.file_name().to_string_lossy().to_string();
                         if is_session_data(&fname) {
-                            let stem = f.path().file_stem()
+                            let stem = f
+                                .path()
+                                .file_stem()
                                 .and_then(|s| s.to_str())
                                 .unwrap_or("")
                                 .to_string();
@@ -904,13 +960,16 @@ pub fn estimate_reembed(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Reembe
         }
     }
 
-    ReembedEstimate { date_dirs, total_sessions }
+    ReembedEstimate {
+        date_dirs,
+        total_sessions,
+    }
 }
 
 /// Lightweight estimate for the re-embed UI.
 #[derive(serde::Serialize, Clone)]
 pub struct ReembedEstimate {
-    pub date_dirs:      usize,
+    pub date_dirs: usize,
     pub total_sessions: usize,
 }
 
@@ -929,9 +988,9 @@ pub struct ReembedEstimate {
 #[tauri::command]
 pub fn trigger_reembed(state: tauri::State<'_, Mutex<Box<AppState>>>, app: AppHandle) {
     let s = state.lock_or_recover();
-    let skill_dir    = s.skill_dir.clone();
-    let config       = s.embedding.model_config.clone();
-    let logger       = s.logger.clone();
+    let skill_dir = s.skill_dir.clone();
+    let config = s.embedding.model_config.clone();
+    let logger = s.logger.clone();
     drop(s);
 
     std::thread::Builder::new()
@@ -944,9 +1003,9 @@ pub fn trigger_reembed(state: tauri::State<'_, Mutex<Box<AppState>>>, app: AppHa
 
 #[derive(serde::Serialize, Clone)]
 struct ReembedProgress {
-    done:   usize,
-    total:  usize,
-    date:   String,
+    done: usize,
+    total: usize,
+    date: String,
     status: String,
 }
 
@@ -958,14 +1017,14 @@ fn read_eeg_parquet(
     path: &std::path::Path,
     n_ch: usize,
 ) -> Result<(Vec<f64>, Vec<Vec<f32>>), String> {
-    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use arrow_array::cast::AsArray;
+    use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
-    let file = std::fs::File::open(path)
-        .map_err(|e| format!("open {}: {e}", path.display()))?;
+    let file = std::fs::File::open(path).map_err(|e| format!("open {}: {e}", path.display()))?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(file)
         .map_err(|e| format!("parquet reader {}: {e}", path.display()))?;
-    let reader = builder.build()
+    let reader = builder
+        .build()
         .map_err(|e| format!("parquet build {}: {e}", path.display()))?;
 
     let mut timestamps: Vec<f64> = Vec::new();
@@ -977,7 +1036,10 @@ fn read_eeg_parquet(
         let n_cols = batch.num_columns();
 
         // Column 0 = timestamp_s.
-        if let Some(ts_col) = batch.column(0).as_primitive_opt::<arrow_array::types::Float64Type>() {
+        if let Some(ts_col) = batch
+            .column(0)
+            .as_primitive_opt::<arrow_array::types::Float64Type>()
+        {
             for i in 0..n_rows {
                 timestamps.push(ts_col.value(i));
             }
@@ -986,8 +1048,13 @@ fn read_eeg_parquet(
         // Columns 1..=n_ch = EEG channels.
         for (ch, buf) in ch_bufs.iter_mut().enumerate() {
             let col_idx = ch + 1;
-            if col_idx >= n_cols { break; }
-            if let Some(col) = batch.column(col_idx).as_primitive_opt::<arrow_array::types::Float64Type>() {
+            if col_idx >= n_cols {
+                break;
+            }
+            if let Some(col) = batch
+                .column(col_idx)
+                .as_primitive_opt::<arrow_array::types::Float64Type>()
+            {
                 for i in 0..n_rows {
                     buf.push(col.value(i) as f32);
                 }
@@ -1000,28 +1067,34 @@ fn read_eeg_parquet(
 
 fn reembed_worker(
     skill_dir: std::path::PathBuf,
-    config:    EegModelConfig,
-    logger:    std::sync::Arc<crate::skill_log::SkillLogger>,
-    app:       AppHandle,
+    config: EegModelConfig,
+    logger: std::sync::Arc<crate::skill_log::SkillLogger>,
+    app: AppHandle,
 ) {
     use burn::backend::Wgpu;
-    use fast_hnsw::{Builder, distance::Cosine, labeled::LabeledIndex};
+    use fast_hnsw::{distance::Cosine, labeled::LabeledIndex, Builder};
     use std::time::Instant;
 
-    let emit = |p: &ReembedProgress| { let _ = app.emit("reembed-progress", p); };
+    let emit = |p: &ReembedProgress| {
+        let _ = app.emit("reembed-progress", p);
+    };
 
-    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "loading_encoder".into() });
+    emit(&ReembedProgress {
+        done: 0,
+        total: 0,
+        date: String::new(),
+        status: "loading_encoder".into(),
+    });
 
     // ── Load encoder ──────────────────────────────────────────────────────
     skill_exg::configure_cubecl_cache(&skill_dir);
 
     // Manual wgpu init with env-controlled validation (same as embed worker).
     let device = {
-        use burn::backend::wgpu::{
-            RuntimeOptions, WgpuSetup, init_device,
-            graphics::AutoGraphicsApi,
-        };
         use burn::backend::wgpu::graphics::GraphicsApi;
+        use burn::backend::wgpu::{
+            graphics::AutoGraphicsApi, init_device, RuntimeOptions, WgpuSetup,
+        };
 
         let backend = AutoGraphicsApi::backend();
         let setup = pollster::block_on(async {
@@ -1047,7 +1120,13 @@ fn reembed_worker(
                 })
                 .await
                 .expect("[reembed] failed to create wgpu device");
-            WgpuSetup { instance, adapter, device, queue, backend }
+            WgpuSetup {
+                instance,
+                adapter,
+                device,
+                queue,
+                backend,
+            }
         });
         init_device(setup, RuntimeOptions::default())
     };
@@ -1055,15 +1134,27 @@ fn reembed_worker(
     let backend = &config.model_backend;
     let backend_str = backend.as_str();
     let weights = match backend {
-        skill_eeg::eeg_model_config::ExgModelBackend::Zuna =>
-            skill_exg::resolve_hf_weights(&config.hf_repo),
-        skill_eeg::eeg_model_config::ExgModelBackend::Luna =>
-            skill_exg::resolve_luna_weights(&config.luna_hf_repo, config.luna_weights_file()),
+        skill_eeg::eeg_model_config::ExgModelBackend::Zuna => {
+            skill_exg::resolve_hf_weights(&config.hf_repo)
+        }
+        skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
+            skill_exg::resolve_luna_weights(&config.luna_hf_repo, config.luna_weights_file())
+        }
     };
 
     let Some((w_path, c_path)) = weights else {
-        skill_log!(logger, "reembed", "weights not found for {} — aborting", backend);
-        emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_no_weights".into() });
+        skill_log!(
+            logger,
+            "reembed",
+            "weights not found for {} — aborting",
+            backend
+        );
+        emit(&ReembedProgress {
+            done: 0,
+            total: 0,
+            date: String::new(),
+            status: "error_no_weights".into(),
+        });
         return;
     };
 
@@ -1075,21 +1166,38 @@ fn reembed_worker(
     let encoder = match backend {
         skill_eeg::eeg_model_config::ExgModelBackend::Zuna => {
             match zuna_rs::ZunaEncoder::<Wgpu>::load(&c_path, &w_path, device.clone()) {
-                Ok((e, ms)) => { skill_log!(logger, "reembed", "ZUNA encoder loaded ({ms:.0}ms)"); Enc::Zuna(Box::new(e)) }
+                Ok((e, ms)) => {
+                    skill_log!(logger, "reembed", "ZUNA encoder loaded ({ms:.0}ms)");
+                    Enc::Zuna(Box::new(e))
+                }
                 Err(e) => {
                     skill_log!(logger, "reembed", "ZUNA load failed: {e:#}");
-                    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_load".into() });
+                    emit(&ReembedProgress {
+                        done: 0,
+                        total: 0,
+                        date: String::new(),
+                        status: "error_load".into(),
+                    });
                     return;
                 }
             }
         }
         skill_eeg::eeg_model_config::ExgModelBackend::Luna => {
-            let cfg_path = crate::eeg_embeddings::luna_variant_config_path(&c_path, &config.luna_variant);
+            let cfg_path =
+                crate::eeg_embeddings::luna_variant_config_path(&c_path, &config.luna_variant);
             match luna_rs::LunaEncoder::<Wgpu>::load(&cfg_path, &w_path, device.clone()) {
-                Ok((e, ms)) => { skill_log!(logger, "reembed", "LUNA encoder loaded ({ms:.0}ms)"); Enc::Luna(Box::new(e)) }
+                Ok((e, ms)) => {
+                    skill_log!(logger, "reembed", "LUNA encoder loaded ({ms:.0}ms)");
+                    Enc::Luna(Box::new(e))
+                }
                 Err(e) => {
                     skill_log!(logger, "reembed", "LUNA load failed: {e:#}");
-                    emit(&ReembedProgress { done: 0, total: 0, date: String::new(), status: "error_load".into() });
+                    emit(&ReembedProgress {
+                        done: 0,
+                        total: 0,
+                        date: String::new(),
+                        status: "error_load".into(),
+                    });
                     return;
                 }
             }
@@ -1116,14 +1224,16 @@ fn reembed_worker(
         if let Ok(rd) = std::fs::read_dir(&day_dir) {
             // Collect all EEG data files in this day.
             let mut csv_files: Vec<std::path::PathBuf> = Vec::new();
-            let mut pq_files:  Vec<std::path::PathBuf> = Vec::new();
+            let mut pq_files: Vec<std::path::PathBuf> = Vec::new();
             for entry in rd.flatten() {
                 let fname = entry.file_name().to_string_lossy().to_string();
                 let is_primary = (fname.starts_with("exg_") || fname.starts_with("muse_"))
                     && !fname.contains("_ppg")
                     && !fname.contains("_metrics")
                     && !fname.contains("_imu");
-                if !is_primary { continue; }
+                if !is_primary {
+                    continue;
+                }
                 if fname.ends_with(".parquet") {
                     pq_files.push(entry.path());
                 } else if fname.ends_with(".csv") {
@@ -1132,14 +1242,23 @@ fn reembed_worker(
             }
             // For each session, prefer parquet if it exists, else CSV.
             // Match by stem: exg_12345.parquet vs exg_12345.csv.
-            let mut used_stems: std::collections::HashSet<String> = std::collections::HashSet::new();
+            let mut used_stems: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
             for pq in &pq_files {
-                let stem = pq.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                let stem = pq
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
                 used_stems.insert(stem);
                 session_files.push((date.clone(), pq.clone()));
             }
             for csv in &csv_files {
-                let stem = csv.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_string();
+                let stem = csv
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_string();
                 if !used_stems.contains(&stem) {
                     session_files.push((date.clone(), csv.clone()));
                 }
@@ -1152,36 +1271,60 @@ fn reembed_worker(
     let mut done = 0usize;
     let mut total_embeddings = 0usize;
 
-    skill_log!(logger, "reembed", "starting re-embed: {} sessions across {} dates with model={}",
-        total, dates.len(), backend);
+    skill_log!(
+        logger,
+        "reembed",
+        "starting re-embed: {} sessions across {} dates with model={}",
+        total,
+        dates.len(),
+        backend
+    );
 
     let epoch_samples = crate::constants::EMBEDDING_EPOCH_SAMPLES;
-    let epoch_secs    = crate::constants::EMBEDDING_EPOCH_SECS;
-    let data_cfg      = zuna_rs::config::DataConfig::default();
+    let epoch_secs = crate::constants::EMBEDDING_EPOCH_SECS;
+    let data_cfg = zuna_rs::config::DataConfig::default();
     let pos_overrides = std::collections::HashMap::<String, [f32; 3]>::new();
 
     // ── Process each session CSV ──────────────────────────────────────────
     for (date, csv_path) in &session_files {
-        emit(&ReembedProgress { done, total, date: date.clone(), status: "processing".into() });
+        emit(&ReembedProgress {
+            done,
+            total,
+            date: date.clone(),
+            status: "processing".into(),
+        });
 
         // Read session metadata (channel names, sample rate).
         let meta_path = csv_path.with_extension("json");
         let (channel_names, sample_rate): (Vec<String>, f64) = if meta_path.exists() {
-            match std::fs::read_to_string(&meta_path).ok()
+            match std::fs::read_to_string(&meta_path)
+                .ok()
                 .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
             {
                 Some(meta) => {
                     let names: Vec<String> = meta["channels"]
                         .as_array()
-                        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                        .unwrap_or_else(|| vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()]);
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|v| v.as_str().map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_else(|| {
+                            vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()]
+                        });
                     let sr = meta["sample_rate_hz"].as_f64().unwrap_or(256.0);
                     (names, sr)
                 }
-                None => (vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()], 256.0),
+                None => (
+                    vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()],
+                    256.0,
+                ),
             }
         } else {
-            (vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()], 256.0)
+            (
+                vec!["TP9".into(), "AF7".into(), "AF8".into(), "TP10".into()],
+                256.0,
+            )
         };
 
         let n_ch = channel_names.len();
@@ -1203,7 +1346,12 @@ fn reembed_worker(
                     ch_bufs = bufs;
                 }
                 Err(e) => {
-                    skill_log!(logger, "reembed", "cannot read parquet {}: {e}", csv_path.display());
+                    skill_log!(
+                        logger,
+                        "reembed",
+                        "cannot read parquet {}: {e}",
+                        csv_path.display()
+                    );
                     done += 1;
                     continue;
                 }
@@ -1223,7 +1371,10 @@ fn reembed_worker(
                 let ts: f64 = record.get(0).and_then(|s| s.parse().ok()).unwrap_or(0.0);
                 timestamps.push(ts);
                 for (ch, buf) in ch_bufs.iter_mut().enumerate() {
-                    let v: f32 = record.get(ch + 1).and_then(|s| s.parse().ok()).unwrap_or(0.0);
+                    let v: f32 = record
+                        .get(ch + 1)
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0.0);
                     buf.push(v);
                 }
             }
@@ -1231,9 +1382,15 @@ fn reembed_worker(
 
         let total_samples = ch_bufs.first().map(std::vec::Vec::len).unwrap_or(0);
         if total_samples < native_epoch || n_ch == 0 {
-            skill_log!(logger, "reembed", "{}: skipping {} — only {} samples (need {})",
-                date, csv_path.file_name().unwrap_or_default().to_string_lossy(),
-                total_samples, native_epoch);
+            skill_log!(
+                logger,
+                "reembed",
+                "{}: skipping {} — only {} samples (need {})",
+                date,
+                csv_path.file_name().unwrap_or_default().to_string_lossy(),
+                total_samples,
+                native_epoch
+            );
             done += 1;
             continue;
         }
@@ -1279,10 +1436,9 @@ fn reembed_worker(
             // Convert to YYYYMMDDHHmmss.
             let epoch_ts = skill_exg::yyyymmddhhmmss_utc(); // fallback
             let _ = epoch_ts; // suppress unused
-            // Approximate timestamp from the CSV timestamp_s column.
+                              // Approximate timestamp from the CSV timestamp_s column.
             let ts_i64 = {
-                let dt = chrono::DateTime::from_timestamp(ts_secs as i64, 0)
-                    .unwrap_or_default();
+                let dt = chrono::DateTime::from_timestamp(ts_secs as i64, 0).unwrap_or_default();
                 use chrono::Datelike;
                 use chrono::Timelike;
                 let d = dt;
@@ -1295,10 +1451,16 @@ fn reembed_worker(
             };
 
             // Resample to EMBEDDING_EPOCH_SAMPLES if needed.
-            let epoch_resampled: Vec<Vec<f32>> = epoch_raw.iter().map(|ch| {
-                if ch.len() == epoch_samples { ch.clone() }
-                else { crate::eeg_embeddings::resample_linear(ch, epoch_samples) }
-            }).collect();
+            let epoch_resampled: Vec<Vec<f32>> = epoch_raw
+                .iter()
+                .map(|ch| {
+                    if ch.len() == epoch_samples {
+                        ch.clone()
+                    } else {
+                        crate::eeg_embeddings::resample_linear(ch, epoch_samples)
+                    }
+                })
+                .collect();
 
             // Run inference.
             let infer_start = Instant::now();
@@ -1312,65 +1474,98 @@ fn reembed_worker(
                         }
                         let flat: Vec<f32> = padded.iter().flatten().copied().collect();
                         let array = ndarray::Array2::from_shape_vec(
-                            (crate::constants::EEG_CHANNELS, epoch_samples), flat,
-                        ).map_err(|e| format!("array: {e}"))?;
+                            (crate::constants::EEG_CHANNELS, epoch_samples),
+                            flat,
+                        )
+                        .map_err(|e| format!("array: {e}"))?;
 
                         let mut pad_names: Vec<String> = channel_names.clone();
                         while pad_names.len() < crate::constants::EEG_CHANNELS {
                             pad_names.push(format!("_pad{}", pad_names.len()));
                         }
-                        let ch_refs: Vec<&str> = pad_names.iter().map(std::string::String::as_str).collect();
+                        let ch_refs: Vec<&str> =
+                            pad_names.iter().map(std::string::String::as_str).collect();
 
                         let mut batches = zuna_rs::load_from_named_tensor::<Wgpu>(
-                            array, &ch_refs, sample_rate as f32, config.data_norm,
-                            &pos_overrides, &data_cfg, &device,
-                        ).map_err(|e| format!("preprocess: {e:#}"))?;
-                        if batches.is_empty() { return Err("empty batch".into()); }
+                            array,
+                            &ch_refs,
+                            sample_rate as f32,
+                            config.data_norm,
+                            &pos_overrides,
+                            &data_cfg,
+                            &device,
+                        )
+                        .map_err(|e| format!("preprocess: {e:#}"))?;
+                        if batches.is_empty() {
+                            return Err("empty batch".into());
+                        }
 
-                        let mut epochs = zuna_enc.encode_batches(batches.drain(..1).collect())
+                        let mut epochs = zuna_enc
+                            .encode_batches(batches.drain(..1).collect())
                             .map_err(|e| format!("encode: {e:#}"))?;
                         let ep = epochs.pop().ok_or("no epoch")?;
                         let dim = ep.output_dim();
                         let n_tok = ep.n_tokens();
-                        if dim == 0 || n_tok == 0 { return Err("zero dim".into()); }
+                        if dim == 0 || n_tok == 0 {
+                            return Err("zero dim".into());
+                        }
 
                         let mut mean = vec![0f32; dim];
                         for tok in ep.embeddings.chunks(dim) {
-                            for (i, &v) in tok.iter().enumerate() { mean[i] += v; }
+                            for (i, &v) in tok.iter().enumerate() {
+                                mean[i] += v;
+                            }
                         }
                         let s = 1.0 / n_tok as f32;
-                        for v in &mut mean { *v *= s; }
+                        for v in &mut mean {
+                            *v *= s;
+                        }
                         Ok(mean)
                     }
                     Enc::Luna(luna_enc) => {
                         let flat: Vec<f32> = epoch_resampled.iter().flatten().copied().collect();
-                        let ch_refs: Vec<&str> = channel_names.iter().map(std::string::String::as_str).collect();
+                        let ch_refs: Vec<&str> = channel_names
+                            .iter()
+                            .map(std::string::String::as_str)
+                            .collect();
                         let batch = luna_rs::build_batch_named::<Wgpu>(
-                            flat, &ch_refs, epoch_samples, &device,
+                            flat,
+                            &ch_refs,
+                            epoch_samples,
+                            &device,
                         );
-                        let result = luna_enc.run_batch(&batch)
+                        let result = luna_enc
+                            .run_batch(&batch)
                             .map_err(|e| format!("luna: {e:#}"))?;
                         let out = &result.output;
                         let shape = &result.shape;
-                        if out.is_empty() { return Err("empty luna output".into()); }
+                        if out.is_empty() {
+                            return Err("empty luna output".into());
+                        }
 
                         if shape.len() == 2 {
                             let c = shape[0];
                             let t = shape[1];
                             let ps = luna_enc.model_cfg.patch_size;
                             let np = t / ps.max(1);
-                            if np == 0 || c == 0 { return Err("zero patches".into()); }
-                            let patch_means: Vec<f32> = (0..np).map(|p| {
-                                let mut sum = 0f64;
-                                let count = (c * ps) as f64;
-                                for ch_idx in 0..c {
-                                    for si in 0..ps {
-                                        let idx = ch_idx * t + p * ps + si;
-                                        if idx < out.len() { sum += out[idx] as f64; }
+                            if np == 0 || c == 0 {
+                                return Err("zero patches".into());
+                            }
+                            let patch_means: Vec<f32> = (0..np)
+                                .map(|p| {
+                                    let mut sum = 0f64;
+                                    let count = (c * ps) as f64;
+                                    for ch_idx in 0..c {
+                                        for si in 0..ps {
+                                            let idx = ch_idx * t + p * ps + si;
+                                            if idx < out.len() {
+                                                sum += out[idx] as f64;
+                                            }
+                                        }
                                     }
-                                }
-                                (sum / count) as f32
-                            }).collect();
+                                    (sum / count) as f32
+                                })
+                                .collect();
                             Ok(patch_means)
                         } else {
                             Ok(out.clone())
@@ -1404,8 +1599,15 @@ fn reembed_worker(
         if let Err(e) = idx.save(&hnsw_path) {
             skill_log!(logger, "reembed", "{}: HNSW save error: {e}", date);
         } else if day_embeddings > 0 {
-            skill_log!(logger, "reembed", "{}: {} embeddings → {} (model={})",
-                date, day_embeddings, hnsw_file, backend_str);
+            skill_log!(
+                logger,
+                "reembed",
+                "{}: {} embeddings → {} (model={})",
+                date,
+                day_embeddings,
+                hnsw_file,
+                backend_str
+            );
         }
 
         // Also tag any remaining legacy NULL rows in this day as 'zuna'.
@@ -1418,11 +1620,25 @@ fn reembed_worker(
     }
 
     // ── Rebuild global HNSW for the target model ──────────────────────────
-    skill_log!(logger, "reembed", "rebuilding global HNSW for model={backend_str}…");
+    skill_log!(
+        logger,
+        "reembed",
+        "rebuilding global HNSW for model={backend_str}…"
+    );
     crate::global_eeg_index::rebuild_from_scratch_for(&skill_dir, backend_str);
 
-    emit(&ReembedProgress { done: total, total, date: String::new(), status: "complete".into() });
-    skill_log!(logger, "reembed", "re-embed complete: {} embeddings from {} sessions (model={})",
-        total_embeddings, total, backend_str);
+    emit(&ReembedProgress {
+        done: total,
+        total,
+        date: String::new(),
+        status: "complete".into(),
+    });
+    skill_log!(
+        logger,
+        "reembed",
+        "re-embed complete: {} embeddings from {} sessions (model={})",
+        total_embeddings,
+        total,
+        backend_str
+    );
 }
-

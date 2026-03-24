@@ -52,10 +52,10 @@ use serde::{Deserialize, Serialize};
 pub struct GpuStats {
     /// Render engine utilisation, 0.0–1.0 (Apple Silicon `Renderer Utilization %`).
     /// Always 0.0 on Linux / Windows (IOKit not available).
-    pub render:  f32,
+    pub render: f32,
     /// Tiler / geometry engine utilisation, 0.0–1.0 (Apple Silicon `Tiler Utilization %`).
     /// Always 0.0 on Linux / Windows.
-    pub tiler:   f32,
+    pub tiler: f32,
     /// Best-effort overall utilisation, 0.0–1.0.
     /// Always 0.0 on Linux / Windows.
     pub overall: f32,
@@ -109,22 +109,22 @@ mod macos {
     use std::ffi::{c_char, c_void, CString};
 
     // ── Type aliases matching IOKit / CoreFoundation C headers ─────────────
-    type IORegistryEntryT  = u32;
-    type IOIteratorT       = u32;
-    type KernReturnT       = i32;
-    type CFTypeRef         = *const c_void;
-    type CFDictionaryRef   = *const c_void;
-    type CFMutableDictRef  = *mut c_void;
-    type CFStringRef       = *const c_void;
-    type CFAllocatorRef    = *const c_void;
-    type CFNumberType      = i32;
+    type IORegistryEntryT = u32;
+    type IOIteratorT = u32;
+    type KernReturnT = i32;
+    type CFTypeRef = *const c_void;
+    type CFDictionaryRef = *const c_void;
+    type CFMutableDictRef = *mut c_void;
+    type CFStringRef = *const c_void;
+    type CFAllocatorRef = *const c_void;
+    type CFNumberType = i32;
 
-    const KERN_SUCCESS:              KernReturnT  = 0;
-    const K_IO_MASTER_PORT_DEFAULT:  u32          = 0;
-    const CF_NUMBER_SI32_TYPE:       CFNumberType = 3;   // kCFNumberSInt32Type
-    const CF_NUMBER_SI64_TYPE:       CFNumberType = 4;   // kCFNumberSInt64Type
-    const CF_NUMBER_FLOAT64_TYPE:    CFNumberType = 6;   // kCFNumberFloat64Type
-    const K_CF_STRING_ENCODING_UTF8: u32          = 0x0800_0100;
+    const KERN_SUCCESS: KernReturnT = 0;
+    const K_IO_MASTER_PORT_DEFAULT: u32 = 0;
+    const CF_NUMBER_SI32_TYPE: CFNumberType = 3; // kCFNumberSInt32Type
+    const CF_NUMBER_SI64_TYPE: CFNumberType = 4; // kCFNumberSInt64Type
+    const CF_NUMBER_FLOAT64_TYPE: CFNumberType = 6; // kCFNumberFloat64Type
+    const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 
     // ── IOKit framework ───────────────────────────────────────────────────
     #[link(name = "IOKit", kind = "framework")]
@@ -132,16 +132,16 @@ mod macos {
         fn IOServiceMatching(name: *const c_char) -> CFMutableDictRef;
         fn IOServiceGetMatchingServices(
             master_port: u32,
-            matching:    CFMutableDictRef,
-            existing:    *mut IOIteratorT,
+            matching: CFMutableDictRef,
+            existing: *mut IOIteratorT,
         ) -> KernReturnT;
         fn IOIteratorNext(iterator: IOIteratorT) -> IORegistryEntryT;
         fn IOObjectRelease(object: u32) -> KernReturnT;
         fn IORegistryEntryCreateCFProperties(
-            entry:       IORegistryEntryT,
-            properties:  *mut CFMutableDictRef,
-            allocator:   CFAllocatorRef,
-            options:     u32,
+            entry: IORegistryEntryT,
+            properties: *mut CFMutableDictRef,
+            allocator: CFAllocatorRef,
+            options: u32,
         ) -> KernReturnT;
     }
 
@@ -150,25 +150,26 @@ mod macos {
     extern "C" {
         fn CFDictionaryGetValue(dict: CFDictionaryRef, key: CFStringRef) -> CFTypeRef;
         fn CFStringCreateWithCString(
-            alloc:    CFAllocatorRef,
-            c_str:    *const c_char,
+            alloc: CFAllocatorRef,
+            c_str: *const c_char,
             encoding: u32,
         ) -> CFStringRef;
-        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64) -> bool;
+        fn CFNumberGetValue(number: CFTypeRef, the_type: CFNumberType, value_ptr: *mut i64)
+            -> bool;
         fn CFRelease(cf: CFTypeRef);
     }
 
     // ── Mach (for unified-memory free page count) ─────────────────────────
     // These types and constants come from <mach/mach.h>.
-    type MachPortT   = u32;
-    type KernReturn  = i32;
+    type MachPortT = u32;
+    type KernReturn = i32;
     type HostFlavorT = i32;
     type MachMsgTypeNumberT = u32;
 
-    const HOST_VM_INFO64:        HostFlavorT = 4;
+    const HOST_VM_INFO64: HostFlavorT = 4;
     // sizeof(vm_statistics64_data_t) / sizeof(integer_t)
     // = 160 bytes / 4 bytes = 40
-    const HOST_VM_INFO64_COUNT:  u32         = 40;
+    const HOST_VM_INFO64_COUNT: u32 = 40;
 
     // vm_statistics64_data_t — exact layout from <mach/vm_statistics.h>.
     //
@@ -185,29 +186,29 @@ mod macos {
     //  u64: total_uncompressed_pages_in_compressor
     #[repr(C)]
     struct VmStatistics64 {
-        free_count:             u32,   // uint32_t
-        active_count:           u32,   // uint32_t
-        inactive_count:         u32,   // uint32_t
-        wire_count:             u32,   // uint32_t
-        zero_fill_count:        u64,
-        reactivations:          u64,
-        pageins:                u64,
-        pageouts:               u64,
-        faults:                 u64,
-        cow_faults:             u64,
-        lookups:                u64,
-        hits:                   u64,
-        purges:                 u64,
-        purgeable_count:        u32,   // uint32_t
-        speculative_count:      u32,   // uint32_t
-        decompressions:         u64,
-        compressions:           u64,
-        swapins:                u64,
-        swapouts:               u64,
-        compressor_page_count:  u32,   // uint32_t
-        throttled_count:        u32,   // uint32_t
-        external_page_count:    u32,   // uint32_t
-        internal_page_count:    u32,   // uint32_t
+        free_count: u32,     // uint32_t
+        active_count: u32,   // uint32_t
+        inactive_count: u32, // uint32_t
+        wire_count: u32,     // uint32_t
+        zero_fill_count: u64,
+        reactivations: u64,
+        pageins: u64,
+        pageouts: u64,
+        faults: u64,
+        cow_faults: u64,
+        lookups: u64,
+        hits: u64,
+        purges: u64,
+        purgeable_count: u32,   // uint32_t
+        speculative_count: u32, // uint32_t
+        decompressions: u64,
+        compressions: u64,
+        swapins: u64,
+        swapouts: u64,
+        compressor_page_count: u32, // uint32_t
+        throttled_count: u32,       // uint32_t
+        external_page_count: u32,   // uint32_t
+        internal_page_count: u32,   // uint32_t
         total_uncompressed_pages_in_compressor: u64,
     }
 
@@ -215,8 +216,8 @@ mod macos {
     extern "C" {
         fn mach_host_self() -> MachPortT;
         fn host_statistics64(
-            host:         MachPortT,
-            flavor:       HostFlavorT,
+            host: MachPortT,
+            flavor: HostFlavorT,
             host_info_out: *mut VmStatistics64,
             host_info_outCnt: *mut MachMsgTypeNumberT,
         ) -> KernReturn;
@@ -240,7 +241,11 @@ mod macos {
                 0,
             )
         };
-        if ret == 0 { Some(val) } else { None }
+        if ret == 0 {
+            Some(val)
+        } else {
+            None
+        }
     }
 
     /// Read a `i32` value from `sysctlbyname`.
@@ -258,7 +263,11 @@ mod macos {
                 0,
             )
         };
-        if ret == 0 { Some(val) } else { None }
+        if ret == 0 {
+            Some(val)
+        } else {
+            None
+        }
     }
 
     /// `true` when running natively on Apple Silicon (arm64).
@@ -288,7 +297,9 @@ mod macos {
                 &mut count,
             )
         };
-        if kr != 0 { return None; }
+        if kr != 0 {
+            return None;
+        }
         // SAFETY: `host_statistics64` returned success (kr == 0), so the
         // MaybeUninit buffer has been fully initialised with vm_statistics64.
         let s = unsafe { stats.assume_init() };
@@ -307,7 +318,9 @@ mod macos {
         };
         let result = f(cf);
         // SAFETY: `cf` was created by CFStringCreateWithCString; we own it.
-        if !cf.is_null() { unsafe { CFRelease(cf as _) }; }
+        if !cf.is_null() {
+            unsafe { CFRelease(cf as _) };
+        }
         result
     }
 
@@ -316,7 +329,9 @@ mod macos {
             // SAFETY: `dict` is a valid CFDictionaryRef obtained from
             // IORegistryEntryCreateCFProperties; `k` is a valid CFStringRef.
             let v = unsafe { CFDictionaryGetValue(dict, k) };
-            if v.is_null() { return None; }
+            if v.is_null() {
+                return None;
+            }
             let mut out: i64 = 0;
             // SAFETY: `v` is a non-null CFNumberRef from the dictionary.
             // CFNumberGetValue writes into `out` only on success.
@@ -344,18 +359,16 @@ mod macos {
         with_cf_str(key, |k| {
             // SAFETY: `dict` is a valid CFDictionaryRef; `k` is a valid CFStringRef.
             let v = unsafe { CFDictionaryGetValue(dict, k) };
-            if v.is_null() { return None; }
+            if v.is_null() {
+                return None;
+            }
             let mut out: f64 = 0.0;
             // SAFETY: `v` is a non-null CFNumberRef. kCFNumberFloat64Type
             // converts from any stored numeric type. The pointer cast is safe
             // because both f64 and i64 are 8 bytes and CFNumberGetValue
             // writes exactly that many bytes on success.
             if unsafe {
-                CFNumberGetValue(
-                    v,
-                    CF_NUMBER_FLOAT64_TYPE,
-                    &mut out as *mut f64 as *mut i64,
-                )
+                CFNumberGetValue(v, CF_NUMBER_FLOAT64_TYPE, &mut out as *mut f64 as *mut i64)
             } {
                 Some(out)
             } else {
@@ -382,14 +395,20 @@ mod macos {
         }
         // Fallback: float (some discrete AMD/Nvidia drivers).
         // Values > 1.0 are already percentage-style (0–100); ≤ 1.0 are fractional.
-        dict_f64(dict, key).map(|f| if f > 1.0 { (f / 100.0) as f32 } else { f as f32 })
+        dict_f64(dict, key).map(|f| {
+            if f > 1.0 {
+                (f / 100.0) as f32
+            } else {
+                f as f32
+            }
+        })
     }
 
     // ── IOAccelerator loop ────────────────────────────────────────────────
 
     struct AcceleratorInfo {
-        render:  f32,
-        tiler:   f32,
+        render: f32,
+        tiler: f32,
         overall: f32,
         vram_free_bytes: Option<u64>,
         vram_used_bytes: Option<u64>,
@@ -400,11 +419,15 @@ mod macos {
         // C string immediately, but the pointer must remain valid until the
         // function returns.  Using a match-arm temporary drops it before the
         // outer call, causing a use-after-free and an empty service list.
-        let Ok(name) = CString::new("IOAccelerator") else { return vec![] };
+        let Ok(name) = CString::new("IOAccelerator") else {
+            return vec![];
+        };
         // SAFETY: `name.as_ptr()` is a valid NUL-terminated C string.
         // IOServiceMatching copies the string internally.
         let matching = unsafe { IOServiceMatching(name.as_ptr()) };
-        if matching.is_null() { return vec![]; }
+        if matching.is_null() {
+            return vec![];
+        }
 
         let mut iter: IOIteratorT = 0;
         // SAFETY: `matching` is a valid CFMutableDictionaryRef from
@@ -420,7 +443,9 @@ mod macos {
         loop {
             // SAFETY: `iter` is a valid IO iterator from IOServiceGetMatchingServices.
             let entry = unsafe { IOIteratorNext(iter) };
-            if entry == 0 { break; }
+            if entry == 0 {
+                break;
+            }
 
             let mut props: CFMutableDictRef = std::ptr::null_mut();
             // SAFETY: `entry` is a valid IO object from IOIteratorNext.
@@ -439,20 +464,18 @@ mod macos {
 
                     // dict_pct handles both the pre-Ventura integer (0–100)
                     // and the post-Ventura float (0.0–1.0) storage formats.
-                    let render_f  = dict_pct(d, "Renderer Utilization %").unwrap_or(0.0);
-                    let tiler_f   = dict_pct(d, "Tiler Utilization %").unwrap_or(0.0);
+                    let render_f = dict_pct(d, "Renderer Utilization %").unwrap_or(0.0);
+                    let tiler_f = dict_pct(d, "Tiler Utilization %").unwrap_or(0.0);
                     let overall_f = dict_pct(d, "Device Utilization %")
                         .or_else(|| dict_pct(d, "GPU Activity(%)"))
                         .unwrap_or_else(|| (render_f + tiler_f) / 2.0);
 
-                    let vram_free = dict_i64(d, "vramFreeBytes")
-                        .map(|v| v.max(0) as u64);
-                    let vram_used = dict_i64(d, "vramUsedBytesCurrent")
-                        .map(|v| v.max(0) as u64);
+                    let vram_free = dict_i64(d, "vramFreeBytes").map(|v| v.max(0) as u64);
+                    let vram_used = dict_i64(d, "vramUsedBytesCurrent").map(|v| v.max(0) as u64);
 
                     results.push(AcceleratorInfo {
-                        render:  render_f,
-                        tiler:   tiler_f,
+                        render: render_f,
+                        tiler: tiler_f,
                         overall: overall_f,
                         vram_free_bytes: vram_free,
                         vram_used_bytes: vram_used,
@@ -494,46 +517,51 @@ mod macos {
 
     #[allow(clippy::expect_used)] // thread spawn only fails under extreme resource exhaustion
     fn ensure_poller() -> Arc<Mutex<Option<super::GpuStats>>> {
-        GPU_CACHE.get_or_init(|| {
-            let cache: Arc<Mutex<Option<super::GpuStats>>> = Arc::new(Mutex::new(None));
-            let shared = cache.clone();
+        GPU_CACHE
+            .get_or_init(|| {
+                let cache: Arc<Mutex<Option<super::GpuStats>>> = Arc::new(Mutex::new(None));
+                let shared = cache.clone();
 
-            std::thread::Builder::new()
-                .name("gpu-sampler".into())
-                .spawn(move || {
-                    // Exponentially-weighted moving-average state per metric.
-                    let mut ewma_render:  Option<f32> = None;
-                    let mut ewma_tiler:   Option<f32> = None;
-                    let mut ewma_overall: Option<f32> = None;
+                std::thread::Builder::new()
+                    .name("gpu-sampler".into())
+                    .spawn(move || {
+                        // Exponentially-weighted moving-average state per metric.
+                        let mut ewma_render: Option<f32> = None;
+                        let mut ewma_tiler: Option<f32> = None;
+                        let mut ewma_overall: Option<f32> = None;
 
-                    loop {
-                        if let Some(raw) = raw_read() {
-                            let alpha = EWMA_ALPHA;
+                        loop {
+                            if let Some(raw) = raw_read() {
+                                let alpha = EWMA_ALPHA;
 
-                            let r = *ewma_render.get_or_insert(raw.render);
-                            let t = *ewma_tiler.get_or_insert(raw.tiler);
-                            let o = *ewma_overall.get_or_insert(raw.overall);
+                                let r = *ewma_render.get_or_insert(raw.render);
+                                let t = *ewma_tiler.get_or_insert(raw.tiler);
+                                let o = *ewma_overall.get_or_insert(raw.overall);
 
-                            ewma_render  = Some(r + alpha * (raw.render  - r));
-                            ewma_tiler   = Some(t + alpha * (raw.tiler   - t));
-                            ewma_overall = Some(o + alpha * (raw.overall - o));
+                                ewma_render = Some(r + alpha * (raw.render - r));
+                                ewma_tiler = Some(t + alpha * (raw.tiler - t));
+                                ewma_overall = Some(o + alpha * (raw.overall - o));
 
-                            let smoothed = super::GpuStats {
-                                render:  ewma_render.unwrap_or(raw.render),
-                                tiler:   ewma_tiler.unwrap_or(raw.tiler),
-                                overall: ewma_overall.unwrap_or(raw.overall),
-                                ..raw
-                            };
-                            *shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(smoothed);
+                                let smoothed = super::GpuStats {
+                                    render: ewma_render.unwrap_or(raw.render),
+                                    tiler: ewma_tiler.unwrap_or(raw.tiler),
+                                    overall: ewma_overall.unwrap_or(raw.overall),
+                                    ..raw
+                                };
+                                *shared
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                                    Some(smoothed);
+                            }
+
+                            std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
                         }
+                    })
+                    .expect("gpu-sampler thread spawn");
 
-                        std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
-                    }
-                })
-                .expect("gpu-sampler thread spawn");
-
-            cache
-        }).clone()
+                cache
+            })
+            .clone()
     }
 
     /// Return the latest smoothed GPU stats from the shared cache.
@@ -551,7 +579,9 @@ mod macos {
 
         // Pick the most active accelerator (highest overall utilisation).
         let best = accs.iter().max_by(|a, b| {
-            a.overall.partial_cmp(&b.overall).unwrap_or(std::cmp::Ordering::Equal)
+            a.overall
+                .partial_cmp(&b.overall)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         let (render, tiler, overall) = best
@@ -561,13 +591,15 @@ mod macos {
         if is_apple_silicon() {
             // Unified memory — GPU and CPU share system RAM.
             let total = system_ram_bytes();
-            let free  = unified_free_bytes();
+            let free = unified_free_bytes();
 
             Some(super::GpuStats {
-                render, tiler, overall,
-                is_unified_memory:  true,
+                render,
+                tiler,
+                overall,
+                is_unified_memory: true,
                 total_memory_bytes: total,
-                free_memory_bytes:  free,
+                free_memory_bytes: free,
             })
         } else {
             // Discrete / integrated GPU — report VRAM from IOAccelerator.
@@ -581,10 +613,12 @@ mod macos {
             };
 
             Some(super::GpuStats {
-                render, tiler, overall,
-                is_unified_memory:  false,
+                render,
+                tiler,
+                overall,
+                is_unified_memory: false,
                 total_memory_bytes: total,
-                free_memory_bytes:  vram_free,
+                free_memory_bytes: vram_free,
             })
         }
     }
@@ -619,7 +653,7 @@ mod non_macos {
 
     struct StaticGpuInfo {
         /// VRAM or unified memory pool size in bytes (`None` if unknown).
-        total_bytes:    Option<u64>,
+        total_bytes: Option<u64>,
         /// True for Apple Silicon, AMD Ryzen AI APUs, NVIDIA Grace, etc.
         unified_memory: bool,
     }
@@ -646,39 +680,42 @@ mod non_macos {
     // ── Dynamic free-RAM cache for unified-memory platforms ───────────────
 
     struct FreeRamCache {
-        bytes:       Option<u64>,
-        refreshed:   Instant,
+        bytes: Option<u64>,
+        refreshed: Instant,
     }
 
     static FREE_RAM: OnceLock<Arc<Mutex<FreeRamCache>>> = OnceLock::new();
 
     fn ensure_free_ram_poller(is_unified: bool) -> Arc<Mutex<FreeRamCache>> {
-        FREE_RAM.get_or_init(|| {
-            let initial = if is_unified { sample_free_ram() } else { None };
-            let cache = Arc::new(Mutex::new(FreeRamCache {
-                bytes:     initial,
-                refreshed: Instant::now(),
-            }));
+        FREE_RAM
+            .get_or_init(|| {
+                let initial = if is_unified { sample_free_ram() } else { None };
+                let cache = Arc::new(Mutex::new(FreeRamCache {
+                    bytes: initial,
+                    refreshed: Instant::now(),
+                }));
 
-            // Only bother with a background thread on unified-memory platforms
-            // where free RAM is meaningful.
-            if is_unified {
-                let shared = cache.clone();
-                std::thread::Builder::new()
-                    .name("gpu-free-ram".into())
-                    .spawn(move || loop {
-                        std::thread::sleep(FREE_RAM_INTERVAL);
-                        let bytes = sample_free_ram();
-                        let mut guard = shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-                        guard.bytes     = bytes;
-                        guard.refreshed = Instant::now();
-                    })
-                    .ok(); // non-fatal if thread spawn fails
-            }
+                // Only bother with a background thread on unified-memory platforms
+                // where free RAM is meaningful.
+                if is_unified {
+                    let shared = cache.clone();
+                    std::thread::Builder::new()
+                        .name("gpu-free-ram".into())
+                        .spawn(move || loop {
+                            std::thread::sleep(FREE_RAM_INTERVAL);
+                            let bytes = sample_free_ram();
+                            let mut guard = shared
+                                .lock()
+                                .unwrap_or_else(std::sync::PoisonError::into_inner);
+                            guard.bytes = bytes;
+                            guard.refreshed = Instant::now();
+                        })
+                        .ok(); // non-fatal if thread spawn fails
+                }
 
-            cache
-        })
-        .clone()
+                cache
+            })
+            .clone()
     }
 
     /// Cheaply read available system RAM via `sysinfo`.
@@ -693,7 +730,11 @@ mod non_macos {
         );
         sys.refresh_memory();
         let available = sys.available_memory();
-        if available > 0 { Some(available) } else { None }
+        if available > 0 {
+            Some(available)
+        } else {
+            None
+        }
     }
 
     // ── Public entry point ────────────────────────────────────────────────
@@ -706,7 +747,9 @@ mod non_macos {
         // the current available-RAM figure.
         let free_bytes = if static_info.unified_memory {
             let cache = ensure_free_ram_poller(true);
-            let guard = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let guard = cache
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             guard.bytes
         } else {
             // Discrete GPU: we have no live free-VRAM source without NVML/ADL.
@@ -715,12 +758,12 @@ mod non_macos {
 
         Some(super::GpuStats {
             // Utilisation is not available outside macOS IOKit.
-            render:  0.0,
-            tiler:   0.0,
+            render: 0.0,
+            tiler: 0.0,
             overall: 0.0,
-            is_unified_memory:  static_info.unified_memory,
+            is_unified_memory: static_info.unified_memory,
             total_memory_bytes: static_info.total_bytes,
-            free_memory_bytes:  free_bytes,
+            free_memory_bytes: free_bytes,
         })
     }
 }

@@ -6,7 +6,4 @@
 // the Free Software Foundation, version 3 only.
 import Root from "./textarea.svelte";
 
-export {
-	Root,
-	Root as Textarea,
-};
+export { Root, Root as Textarea };

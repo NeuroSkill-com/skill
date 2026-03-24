@@ -8,11 +8,7 @@ export function normalizeMarkdown(raw: string): string {
     // Preserve inline code spans so emphasis repair does not rewrite examples.
     .replace(/`[^`\n]*`/g, (code) => stash(code, slots));
 
-  const normalized = normalizeEmphasisRuns(
-    normalizeEmphasisRuns(protectedText, "**", "strong"),
-    "*",
-    "em",
-  );
+  const normalized = normalizeEmphasisRuns(normalizeEmphasisRuns(protectedText, "**", "strong"), "*", "em");
 
   return normalized.replace(/\uE000(\d+)\uE001/g, (_, index) => slots[Number(index)] ?? "");
 }
@@ -39,7 +35,7 @@ function stripLeadingOrphanJsonFence(raw: string): string {
     if (!line) {
       idx += 1;
       if (sawJsonish) {
-        const next = lines.slice(idx).find(candidate => candidate.trim());
+        const next = lines.slice(idx).find((candidate) => candidate.trim());
         if (next && !looksLikeJsonFragmentLine(next.trim())) break;
       }
       continue;
@@ -56,21 +52,20 @@ function stripLeadingOrphanJsonFence(raw: string): string {
 }
 
 function looksLikeJsonFragmentLine(line: string): boolean {
-  return /^[{}\[\],]+$/.test(line)
-    || /^"[^\n]*$/.test(line)
-    || /^[A-Za-z0-9_.$-]+"?\s*:\s*/.test(line)
-    || /^(true|false|null),?$/.test(line)
-    || /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?,?$/.test(line);
+  return (
+    /^[{}[\],]+$/.test(line) ||
+    /^"[^\n]*$/.test(line) ||
+    /^[A-Za-z0-9_.$-]+"?\s*:\s*/.test(line) ||
+    /^(true|false|null),?$/.test(line) ||
+    /^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?,?$/.test(line)
+  );
 }
 
-function normalizeEmphasisRuns(
-  text: string,
-  delimiter: "**" | "*",
-  tag: "strong" | "em",
-): string {
-  const pattern = delimiter === "**"
-    ? /(?<!\*)\*\*([^*\n][\s\S]*?[^*\n]|[^*\n])\*\*(?!\*)/g
-    : /(?<!\*)\*([^*\n][\s\S]*?[^*\n]|[^*\n])\*(?!\*)/g;
+function normalizeEmphasisRuns(text: string, delimiter: "**" | "*", tag: "strong" | "em"): string {
+  const pattern =
+    delimiter === "**"
+      ? /(?<!\*)\*\*([^*\n][\s\S]*?[^*\n]|[^*\n])\*\*(?!\*)/g
+      : /(?<!\*)\*([^*\n][\s\S]*?[^*\n]|[^*\n])\*(?!\*)/g;
 
   return text.replace(pattern, (match, inner: string, offset: number, source: string) => {
     const trimmed = inner.trim();

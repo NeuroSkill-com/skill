@@ -27,12 +27,12 @@
  *     and owns the trace file it creates, avoiding permission mismatches
  */
 
-import { execSync, spawn } from "child_process";
-import { platform, arch } from "os";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
-import { existsSync, rmSync, statSync } from "fs";
-import http from "http";
+import { execSync, spawn } from "node:child_process";
+import { existsSync, rmSync, statSync } from "node:fs";
+import http from "node:http";
+import { arch, platform } from "node:os";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
@@ -45,9 +45,9 @@ const isLinux = platform() === "linux";
 // ── Parse arguments ──────────────────────────────────────────────────────────
 
 const userArgs = process.argv.slice(2);
-let recordSecs = 0;        // 0 = until exit
+let recordSecs = 0; // 0 = until exit
 let useRelease = false;
-let extraCargoArgs = [];
+const extraCargoArgs = [];
 
 for (const arg of userArgs) {
   if (/^\d+$/.test(arg)) {
@@ -59,7 +59,7 @@ for (const arg of userArgs) {
   }
 }
 
-const profile = useRelease ? "release" : "dev";
+const _profile = useRelease ? "release" : "dev";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,7 +74,6 @@ function commandExists(cmd) {
 }
 
 function run(cmd, opts = {}) {
-  console.log(`→ ${cmd}`);
   execSync(cmd, { cwd: root, stdio: "inherit", ...opts });
 }
 
@@ -101,17 +100,16 @@ function waitForPort(port, timeoutMs = 60_000) {
 
 function forceRemove(filePath) {
   if (!existsSync(filePath)) return;
-  console.log(`→ Removing stale file: ${filePath}`);
   try {
     rmSync(filePath, { recursive: true, force: true });
   } catch {
     try {
       execSync(`sudo rm -rf ${JSON.stringify(filePath)}`, { stdio: "inherit" });
-    } catch { /* ignore — checked below */ }
+    } catch {
+      /* ignore — checked below */
+    }
   }
   if (existsSync(filePath)) {
-    console.error(`✖ Could not remove ${filePath} — the profiler would run a stale binary.`);
-    console.error("  Fix: sudo rm -f " + filePath);
     process.exit(1);
   }
 }
@@ -119,7 +117,6 @@ function forceRemove(filePath) {
 // ── Preflight: flamegraph tool ───────────────────────────────────────────────
 
 if (!commandExists("flamegraph")) {
-  console.log("→ Installing cargo-flamegraph …");
   run("cargo install flamegraph");
 }
 
@@ -128,64 +125,37 @@ let flamegraphBin;
 try {
   flamegraphBin = execSync(isWin ? "where flamegraph" : "which flamegraph", {
     encoding: "utf8",
-  }).trim().split("\n")[0];
+  })
+    .trim()
+    .split("\n")[0];
 } catch {
-  console.error("✖ Could not find `flamegraph` binary after install.");
   process.exit(1);
 }
-console.log(`→ Using flamegraph binary: ${flamegraphBin}`);
 
 // ── Preflight: platform profiler ─────────────────────────────────────────────
 
 if (isLinux) {
   if (!commandExists("perf")) {
-    console.error(
-      [
-        "✖ 'perf' not found. Install it:",
-        "  Ubuntu/Debian: sudo apt install linux-tools-$(uname -r) linux-perf",
-        "  Fedora:        sudo dnf install perf",
-        "  Arch:          sudo pacman -S perf",
-      ].join("\n")
-    );
     process.exit(1);
   }
 
   // Allow perf for non-root
   try {
-    const paranoid = parseInt(
-      execSync("cat /proc/sys/kernel/perf_event_paranoid", { encoding: "utf8" }).trim(),
-      10
-    );
+    const paranoid = parseInt(execSync("cat /proc/sys/kernel/perf_event_paranoid", { encoding: "utf8" }).trim(), 10);
     if (paranoid > -1) {
-      console.log("→ Setting kernel.perf_event_paranoid=-1 (may require sudo password) …");
       execSync("sudo sysctl -w kernel.perf_event_paranoid=-1", { stdio: "inherit" });
     }
-  } catch {
-    console.warn("→ Could not check/set perf_event_paranoid — flamegraph may need sudo");
-  }
+  } catch {}
 } else if (isMac) {
-  // dtrace requires root on macOS. Warm sudo now, before the long build.
-  console.log("→ macOS: dtrace requires sudo — authenticating now …");
   try {
     execSync("sudo -v", { stdio: "inherit" });
   } catch {
-    console.error("✖ sudo authentication failed — dtrace requires root on macOS.");
     process.exit(1);
   }
 } else if (isWin) {
   const hasDtrace = commandExists("dtrace");
   const hasXperf = commandExists("xperf");
   if (!hasDtrace && !hasXperf) {
-    console.error(
-      [
-        "✖ No supported profiler found on Windows.",
-        "  Options:",
-        "  1. dtrace — built into Windows 10 2004+ (requires admin + BCD flag)",
-        "     bcdedit /set dtrace ON   (run as admin, then reboot)",
-        "  2. xperf — part of Windows Performance Toolkit (WPT)",
-        "     Install via Windows ADK or the Windows SDK",
-      ].join("\n")
-    );
     process.exit(1);
   }
 }
@@ -195,17 +165,13 @@ if (isLinux) {
 let espeakLib;
 
 if (isMac) {
-  console.log("→ Building espeak-ng static library …");
   run("bash scripts/build-espeak-static.sh");
   espeakLib = resolve(root, "src-tauri/espeak-static/lib");
 } else if (isWin) {
-  console.log("→ Building espeak-ng static library (MSVC) …");
   run("powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\build-espeak-static.ps1");
   espeakLib = resolve(root, "src-tauri\\espeak-static\\lib");
 } else {
-  console.log("→ Ensuring Vulkan SDK …");
   run("bash scripts/install-vulkan-sdk.sh");
-  console.log("→ Building espeak-ng static library …");
   run("bash scripts/build-espeak-static.sh");
   espeakLib = resolve(root, "src-tauri/espeak-static/lib");
 }
@@ -234,7 +200,6 @@ if (!extraCargoArgs.includes("--features") && !extraCargoArgs.includes("--no-def
 
 if (useRelease && !process.env.CARGO_PROFILE_RELEASE_DEBUG) {
   process.env.CARGO_PROFILE_RELEASE_DEBUG = "true";
-  console.log("→ Enabling debug symbols in release build (CARGO_PROFILE_RELEASE_DEBUG=true)");
 }
 
 // ── Build cache + fast linker detection ──────────────────────────────────────
@@ -260,7 +225,6 @@ const hasMold = detectMold();
 
 if (hasSccache) {
   process.env.RUSTC_WRAPPER = "sccache";
-  console.log("→ sccache detected — enabling compilation cache (RUSTC_WRAPPER=sccache)");
 }
 
 if (hasMold) {
@@ -271,28 +235,13 @@ if (hasMold) {
   if (!process.env[`CARGO_TARGET_${envKey}_LINKER`]) {
     process.env[`CARGO_TARGET_${envKey}_LINKER`] = "clang";
     process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] =
-      (process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] || "") +
-      " -C link-arg=-fuse-ld=mold";
+      `${process.env[`CARGO_TARGET_${envKey}_RUSTFLAGS`] || ""} -C link-arg=-fuse-ld=mold`;
   }
-  console.log("→ mold + clang detected — enabling fast linker (-fuse-ld=mold)");
 }
-
-// ── Step 0: Clean build artifacts ────────────────────────────────────────────
-// Full cargo clean + SvelteKit clean so the flamegraph captures a fresh build.
-
-console.log("→ Cleaning cargo build artifacts …");
 try {
   execSync("cargo clean", { cwd: srcTauri, stdio: "inherit" });
-} catch {
-  console.warn("→ cargo clean failed — continuing anyway");
-}
-
-console.log("→ Cleaning SvelteKit build artifacts …");
-for (const cache of [
-  resolve(root, ".svelte-kit"),
-  resolve(root, "node_modules", ".vite"),
-  resolve(root, "build"),
-]) {
+} catch {}
+for (const cache of [resolve(root, ".svelte-kit"), resolve(root, "node_modules", ".vite"), resolve(root, "build")]) {
   forceRemove(cache);
 }
 
@@ -312,7 +261,6 @@ if (features) buildArgs.push("--features", features);
 buildArgs.push(...extraCargoArgs);
 
 const buildCmd = `cargo ${buildArgs.join(" ")}`;
-console.log(`→ Building: ${buildCmd}`);
 execSync(buildCmd, {
   cwd: root,
   stdio: "inherit",
@@ -320,21 +268,14 @@ execSync(buildCmd, {
 });
 
 if (!existsSync(binaryPath)) {
-  console.error(`✖ Built binary not found at: ${binaryPath}`);
   process.exit(1);
 }
 
 // Verify the binary was actually rebuilt (not a stale leftover).
 const binaryMtime = statSync(binaryPath).mtimeMs;
 if (binaryMtime < preBuildTs) {
-  console.error(
-    `✖ Binary at ${binaryPath} is older than the build start time.` +
-    "\n  cargo may have skipped the build (stale fingerprints)." +
-    "\n  Try: cargo clean -p skill   (then re-run)"
-  );
   process.exit(1);
 }
-console.log(`→ Binary: ${binaryPath} (freshly built)`);
 
 // ── Step 2: Start Vite dev server ────────────────────────────────────────────
 
@@ -342,22 +283,35 @@ let viteProc = null;
 
 function cleanup() {
   if (viteProc && !viteProc.killed) {
-    console.log(`→ Stopping Vite dev server (PID ${viteProc.pid}) …`);
     if (isWin) {
-      try { execSync(`taskkill /PID ${viteProc.pid} /T /F`, { stdio: "ignore" }); } catch { /* ignore */ }
+      try {
+        execSync(`taskkill /PID ${viteProc.pid} /T /F`, { stdio: "ignore" });
+      } catch {
+        /* ignore */
+      }
     } else {
-      try { process.kill(-viteProc.pid, "SIGTERM"); } catch {
-        try { viteProc.kill("SIGTERM"); } catch { /* ignore */ }
+      try {
+        process.kill(-viteProc.pid, "SIGTERM");
+      } catch {
+        try {
+          viteProc.kill("SIGTERM");
+        } catch {
+          /* ignore */
+        }
       }
     }
   }
 }
 
 process.on("exit", cleanup);
-process.on("SIGINT", () => { cleanup(); process.exit(130); });
-process.on("SIGTERM", () => { cleanup(); process.exit(143); });
-
-console.log("→ Starting Vite dev server …");
+process.on("SIGINT", () => {
+  cleanup();
+  process.exit(130);
+});
+process.on("SIGTERM", () => {
+  cleanup();
+  process.exit(143);
+});
 
 const npmCmd = isWin ? "npm.cmd" : "npm";
 viteProc = spawn(npmCmd, ["run", "dev"], {
@@ -365,13 +319,9 @@ viteProc = spawn(npmCmd, ["run", "dev"], {
   stdio: "ignore",
   detached: !isWin,
 });
-
-console.log("→ Waiting for Vite on http://localhost:1420 …");
 try {
   await waitForPort(1420, 90_000);
-  console.log("→ Vite is ready.");
-} catch (e) {
-  console.error(`✖ ${e.message}`);
+} catch (_e) {
   process.exit(1);
 }
 
@@ -400,20 +350,16 @@ for (const stale of [
     const dataHome = process.env.XDG_DATA_HOME || resolve(home, ".local", "share");
     const cacheHome = process.env.XDG_CACHE_HOME || resolve(home, ".cache");
     webviewCaches.push(
-      resolve(dataHome, appId),              // CacheStorage, WebKitCache, localstorage, etc.
-      resolve(cacheHome, appId),             // additional cache
+      resolve(dataHome, appId), // CacheStorage, WebKitCache, localstorage, etc.
+      resolve(cacheHome, appId), // additional cache
     );
   } else if (isMac) {
     // macOS WebKit caches per-app under ~/Library/
-    webviewCaches.push(
-      resolve(home, "Library", "WebKit", appId),
-      resolve(home, "Library", "Caches", appId),
-    );
+    webviewCaches.push(resolve(home, "Library", "WebKit", appId), resolve(home, "Library", "Caches", appId));
   }
 
   for (const dir of webviewCaches) {
     if (existsSync(dir)) {
-      console.log(`→ Clearing WebView cache: ${dir}`);
       forceRemove(dir);
     }
   }
@@ -429,7 +375,11 @@ const svgPath = resolve(root, "flamegraph.svg");
 // Refresh sudo right before profiling (macOS) so the cache hasn't expired
 // during the build step.
 if (isMac) {
-  try { execSync("sudo -v", { stdio: "inherit" }); } catch { /* ignore */ }
+  try {
+    execSync("sudo -v", { stdio: "inherit" });
+  } catch {
+    /* ignore */
+  }
 }
 
 // Build the flamegraph invocation
@@ -445,34 +395,31 @@ const fgArgs = ["-o", svgPath, "--", binaryPath];
 // WebKit loads cached pages from root's ~/Library/WebKit/.
 const needsSudo = isMac || isLinux;
 const sudoEnvVars = [
-  "HOME", "USER", "LOGNAME",
-  "ESPEAK_LIB_DIR", "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "ESPEAK_LIB_DIR",
+  "PATH",
   "WEBKIT_DISABLE_DMABUF_RENDERER",
   // XDG dirs — ensures the app reads/writes the real user's config, data, and cache
-  "XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR",
+  "XDG_DATA_HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_RUNTIME_DIR",
   // Cargo / Rust toolchain — prevent sudo from using /root/.cargo
-  "CARGO_HOME", "RUSTUP_HOME",
+  "CARGO_HOME",
+  "RUSTUP_HOME",
   // Display — needed so the GUI opens on the current user's session
-  "DISPLAY", "WAYLAND_DISPLAY",
+  "DISPLAY",
+  "WAYLAND_DISPLAY",
   // D-Bus — needed for desktop integration (tray, notifications, etc.)
   "DBUS_SESSION_BUS_ADDRESS",
 ].join(",");
 const fgCmd = needsSudo ? "sudo" : flamegraphBin;
-const fgFullArgs = needsSudo
-  ? [`--preserve-env=${sudoEnvVars}`, flamegraphBin, ...fgArgs]
-  : fgArgs;
-
-console.log("");
-console.log("================================================================");
-console.log(`  Profile:    ${profile} (${useRelease ? "optimized + debuginfo" : "debug"})`);
+const fgFullArgs = needsSudo ? [`--preserve-env=${sudoEnvVars}`, flamegraphBin, ...fgArgs] : fgArgs;
 if (recordSecs > 0) {
-  console.log(`  Flamegraph: recording for ${recordSecs}s (app will be killed after)`);
 } else {
-  console.log("  Flamegraph: recording until you close the app or press Ctrl+C");
 }
-console.log(`  Output:     ${svgPath}`);
-console.log("================================================================");
-console.log("");
 
 const env = { ...process.env, ESPEAK_LIB_DIR: espeakLib };
 
@@ -486,9 +433,12 @@ try {
   let timer;
   if (recordSecs > 0) {
     timer = setTimeout(() => {
-      console.log(`\n→ ${recordSecs}s elapsed — stopping profiled app …`);
       if (isWin) {
-        try { execSync(`taskkill /PID ${fg.pid} /T /F`, { stdio: "ignore" }); } catch { /* ignore */ }
+        try {
+          execSync(`taskkill /PID ${fg.pid} /T /F`, { stdio: "ignore" });
+        } catch {
+          /* ignore */
+        }
       } else {
         // Send SIGINT to the sudo/flamegraph process group to trigger SVG generation
         fg.kill("SIGINT");
@@ -521,17 +471,11 @@ if (needsSudo) {
   for (const f of filesToChown) {
     try {
       execSync(`sudo chown ${realUser} ${JSON.stringify(f)}`, { stdio: "ignore" });
-    } catch { /* best effort */ }
+    } catch {
+      /* best effort */
+    }
   }
 }
-
-// ── Report ───────────────────────────────────────────────────────────────────
-
-console.log("");
 if (existsSync(svgPath)) {
-  console.log(`✓ Flamegraph written to: ${svgPath}`);
-  console.log("  Open it in a browser for interactive zoom/search.");
 } else {
-  console.log("⚠ No flamegraph.svg produced — the profiler may not have captured enough samples.");
-  console.log("  Try running longer or check profiler permissions.");
 }

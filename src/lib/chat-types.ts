@@ -14,45 +14,49 @@ export type ServerStatus = "stopped" | "loading" | "running";
 
 export interface ToolUseEvent {
   tool: string;
-  status: string;           // "calling" | "done" | "error" | "approval_required" | "cancelled"
+  status: string; // "calling" | "done" | "error" | "approval_required" | "cancelled"
   detail?: string;
   toolCallId?: string;
-  args?: Record<string, unknown>;  // structured arguments from tool_execution_start
-  result?: unknown;                // structured result from tool_execution_end
-  expanded?: boolean;              // UI toggle
+  args?: Record<string, unknown>; // structured arguments from tool_execution_start
+  result?: unknown; // structured result from tool_execution_end
+  expanded?: boolean; // UI toggle
 }
 
-export interface Attachment { dataUrl: string; mimeType: string; name: string; }
+export interface Attachment {
+  dataUrl: string;
+  mimeType: string;
+  name: string;
+}
 
 export interface UsageInfo {
-  prompt_tokens:     number;
+  prompt_tokens: number;
   completion_tokens: number;
-  total_tokens:      number;
-  n_ctx:             number;
+  total_tokens: number;
+  n_ctx: number;
 }
 
 export interface Message {
-  id:           number;
-  role:         Role;
-  content:      string;
+  id: number;
+  role: Role;
+  content: string;
   /** Assistant text emitted before a <think> block, shown as its own bubble */
-  leadIn?:      string;
+  leadIn?: string;
   /** Images attached to a user message */
   attachments?: Attachment[];
   /** Chain-of-thought text between <think>…</think> (stripped from content) */
-  thinking?:    string;
+  thinking?: string;
   /** Whether the thinking block is expanded in the UI */
-  thinkOpen?:   boolean;
+  thinkOpen?: boolean;
   /** True while we're streaming tokens in */
-  pending?:     boolean;
+  pending?: boolean;
   /** ms taken for first token */
-  ttft?:        number;
+  ttft?: number;
   /** ms for full response */
-  elapsed?:     number;
+  elapsed?: number;
   /** Token usage from the final SSE chunk */
-  usage?:       UsageInfo;
+  usage?: UsageInfo;
   /** Tool calls made during this response */
-  toolUses?:    ToolUseEvent[];
+  toolUses?: ToolUseEvent[];
 }
 
 // ── Server status payload ───────────────────────────────────────────────────
@@ -66,32 +70,63 @@ export interface ServerStatusPayload {
 
 // ── IPC streaming types (mirror Rust ChatChunk) ─────────────────────────────
 
-export interface ChatChunkDelta         { type: "delta"; content: string; }
-export interface ChatChunkToolUse       { type: "tool_use"; tool: string; status: string; detail?: string; }
-export interface ChatChunkToolExecStart { type: "tool_execution_start"; tool_call_id: string; tool_name: string; args: Record<string, unknown>; }
-export interface ChatChunkToolExecEnd   { type: "tool_execution_end";   tool_call_id: string; tool_name: string; result: unknown; is_error: boolean; }
-export interface ChatChunkToolCancelled { type: "tool_cancelled"; tool_call_id: string; tool_name: string; }
-export interface ChatChunkDone {
-  type:              "done";
-  finish_reason:     string;
-  prompt_tokens:     number;
-  completion_tokens: number;
-  n_ctx:             number;
+export interface ChatChunkDelta {
+  type: "delta";
+  content: string;
 }
-export interface ChatChunkError { type: "error"; message: string; }
+export interface ChatChunkToolUse {
+  type: "tool_use";
+  tool: string;
+  status: string;
+  detail?: string;
+}
+export interface ChatChunkToolExecStart {
+  type: "tool_execution_start";
+  tool_call_id: string;
+  tool_name: string;
+  args: Record<string, unknown>;
+}
+export interface ChatChunkToolExecEnd {
+  type: "tool_execution_end";
+  tool_call_id: string;
+  tool_name: string;
+  result: unknown;
+  is_error: boolean;
+}
+export interface ChatChunkToolCancelled {
+  type: "tool_cancelled";
+  tool_call_id: string;
+  tool_name: string;
+}
+export interface ChatChunkDone {
+  type: "done";
+  finish_reason: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  n_ctx: number;
+}
+export interface ChatChunkError {
+  type: "error";
+  message: string;
+}
 export type ChatChunk =
-  | ChatChunkDelta | ChatChunkToolUse | ChatChunkToolExecStart
-  | ChatChunkToolExecEnd | ChatChunkToolCancelled | ChatChunkDone | ChatChunkError;
+  | ChatChunkDelta
+  | ChatChunkToolUse
+  | ChatChunkToolExecStart
+  | ChatChunkToolExecEnd
+  | ChatChunkToolCancelled
+  | ChatChunkDone
+  | ChatChunkError;
 
 // ── Thinking budget ─────────────────────────────────────────────────────────
 
 export type ThinkingLevel = "minimal" | "normal" | "extended" | "unlimited";
 
 export const THINKING_LEVELS: { labelKey: string; key: ThinkingLevel; budget: number | null }[] = [
-  { labelKey: "chat.think.minimal",   key: "minimal",   budget: 512   },
-  { labelKey: "chat.think.normal",    key: "normal",    budget: 2048  },
-  { labelKey: "chat.think.extended",  key: "extended",  budget: 8192  },
-  { labelKey: "chat.think.unlimited", key: "unlimited", budget: null  },
+  { labelKey: "chat.think.minimal", key: "minimal", budget: 512 },
+  { labelKey: "chat.think.normal", key: "normal", budget: 2048 },
+  { labelKey: "chat.think.extended", key: "extended", budget: 8192 },
+  { labelKey: "chat.think.unlimited", key: "unlimited", budget: null },
 ];
 
 // ── Tool configuration ──────────────────────────────────────────────────────
@@ -113,9 +148,15 @@ export const DEFAULT_TOOL_CONTEXT_COMPRESSION: ToolContextCompression = {
 
 export interface ToolConfig {
   enabled: boolean;
-  date: boolean; location: boolean; web_search: boolean; web_fetch: boolean;
-  bash: boolean; require_bash_edit: boolean;
-  read_file: boolean; write_file: boolean; edit_file: boolean;
+  date: boolean;
+  location: boolean;
+  web_search: boolean;
+  web_fetch: boolean;
+  bash: boolean;
+  require_bash_edit: boolean;
+  read_file: boolean;
+  write_file: boolean;
+  edit_file: boolean;
   skill_api: boolean;
   execution_mode: ToolExecutionMode;
   max_rounds: number;
@@ -127,19 +168,28 @@ export interface ToolConfig {
 export type ToolThinkingLevel = "chat" | "none" | "minimal" | "normal" | "extended";
 
 export const TOOL_THINKING_LEVELS: { labelKey: string; key: ToolThinkingLevel; budget: number | null }[] = [
-  { labelKey: "chat.tools.thinkChat",     key: "chat",     budget: null },
-  { labelKey: "chat.tools.thinkNone",     key: "none",     budget: 0    },
-  { labelKey: "chat.tools.thinkMinimal",  key: "minimal",  budget: 256  },
-  { labelKey: "chat.tools.thinkNormal",   key: "normal",   budget: 1024 },
-  { labelKey: "chat.tools.thinkExtended", key: "extended",  budget: 4096 },
+  { labelKey: "chat.tools.thinkChat", key: "chat", budget: null },
+  { labelKey: "chat.tools.thinkNone", key: "none", budget: 0 },
+  { labelKey: "chat.tools.thinkMinimal", key: "minimal", budget: 256 },
+  { labelKey: "chat.tools.thinkNormal", key: "normal", budget: 1024 },
+  { labelKey: "chat.tools.thinkExtended", key: "extended", budget: 4096 },
 ];
 
 export const DEFAULT_TOOL_CONFIG: ToolConfig = {
   enabled: true,
-  date: true, location: true, web_search: true, web_fetch: true,
-  bash: false, require_bash_edit: false, read_file: false, write_file: false, edit_file: false,
+  date: true,
+  location: true,
+  web_search: true,
+  web_fetch: true,
+  bash: false,
+  require_bash_edit: false,
+  read_file: false,
+  write_file: false,
+  edit_file: false,
   skill_api: true,
-  execution_mode: "parallel", max_rounds: 3, max_calls_per_round: 4,
+  execution_mode: "parallel",
+  max_rounds: 3,
+  max_calls_per_round: 4,
   thinking_budget: null,
   context_compression: { ...DEFAULT_TOOL_CONTEXT_COMPRESSION },
 };
@@ -147,78 +197,78 @@ export const DEFAULT_TOOL_CONFIG: ToolConfig = {
 // ── Stored-message type (mirrors Rust StoredMessage) ────────────────────────
 
 export interface StoredToolCallRow {
-  id:           number;
-  message_id:   number;
-  tool:         string;
-  status:       string;
-  detail?:      string | null;
+  id: number;
+  message_id: number;
+  tool: string;
+  status: string;
+  detail?: string | null;
   tool_call_id?: string | null;
-  args?:        Record<string, unknown>;
-  result?:      unknown;
-  created_at:   number;
+  args?: Record<string, unknown>;
+  result?: unknown;
+  created_at: number;
 }
 
 export interface StoredMessage {
-  id:         number;
+  id: number;
   session_id: number;
-  role:       string;
-  content:    string;
-  thinking:   string | null;
+  role: string;
+  content: string;
+  thinking: string | null;
   created_at: number;
   tool_calls: StoredToolCallRow[];
 }
 
 export interface ChatSessionResponse {
   session_id: number;
-  messages:   StoredMessage[];
+  messages: StoredMessage[];
 }
 
 // ── System prompt presets ───────────────────────────────────────────────────
 
 export const SYSTEM_PROMPT_DEFAULT = "You are a helpful assistant.";
-export const SYSTEM_PROMPT_KEY     = "chat.systemPrompt";
+export const SYSTEM_PROMPT_KEY = "chat.systemPrompt";
 
 export const SYSTEM_PROMPT_PRESETS: { key: string; icon: string; prompt: string }[] = [
   {
-    key:    "default",
-    icon:   "🤖",
+    key: "default",
+    icon: "🤖",
     prompt: "You are a helpful assistant.",
   },
   {
-    key:    "coach",
-    icon:   "🧘",
+    key: "coach",
+    icon: "🧘",
     prompt:
       "You are a neurofeedback coach specialising in relaxation and stress reduction. " +
       "Give practical, evidence-based advice grounded in the user's live EEG data. " +
       "Be encouraging, clear, and concise.",
   },
   {
-    key:    "focus",
-    icon:   "🎯",
+    key: "focus",
+    icon: "🎯",
     prompt:
       "You are a focus and cognitive-performance coach. " +
       "Help the user optimise their attention, working memory, and mental endurance " +
       "using insights from their EEG readings. Offer actionable protocols.",
   },
   {
-    key:    "educator",
-    icon:   "📚",
+    key: "educator",
+    icon: "📚",
     prompt:
       "You are a neuroscience educator. " +
       "Explain brain-wave patterns and EEG metrics in plain, accessible language. " +
       "Use analogies freely and avoid unnecessary jargon.",
   },
   {
-    key:    "sleep",
-    icon:   "😴",
+    key: "sleep",
+    icon: "😴",
     prompt:
       "You are a sleep and recovery specialist. " +
       "Interpret the user's EEG data to provide personalised guidance on improving " +
       "sleep quality, recovery, and circadian regulation.",
   },
   {
-    key:    "mindfulness",
-    icon:   "🌿",
+    key: "mindfulness",
+    icon: "🌿",
     prompt:
       "You are a mindfulness and meditation guide. " +
       "Use the user's real-time brainwave data to suggest meditation techniques, " +
@@ -235,31 +285,39 @@ export type { BandPowers, BandSnapshot } from "$lib/BandChart.svelte";
 
 export function storedToMessage(sm: StoredMessage, idCounter: { value: number }): Message {
   const msg: Message = {
-    id:        ++idCounter.value,
-    role:      sm.role as Role,
-    content:   sm.content,
-    thinking:  sm.thinking ?? undefined,
+    id: ++idCounter.value,
+    role: sm.role as Role,
+    content: sm.content,
+    thinking: sm.thinking ?? undefined,
     thinkOpen: false,
-    pending:   false,
+    pending: false,
   };
   if (sm.tool_calls && sm.tool_calls.length > 0) {
-    msg.toolUses = sm.tool_calls.map((tc: StoredToolCallRow): ToolUseEvent => ({
-      tool:       tc.tool,
-      status:     tc.status,
-      detail:     tc.detail ?? undefined,
-      toolCallId: tc.tool_call_id ?? undefined,
-      args:       tc.args ?? undefined,
-      result:     tc.result ?? undefined,
-      expanded:   false,
-    }));
+    msg.toolUses = sm.tool_calls.map(
+      (tc: StoredToolCallRow): ToolUseEvent => ({
+        tool: tc.tool,
+        status: tc.status,
+        detail: tc.detail ?? undefined,
+        toolCallId: tc.tool_call_id ?? undefined,
+        args: tc.args ?? undefined,
+        result: tc.result ?? undefined,
+        expanded: false,
+      }),
+    );
   }
   return msg;
 }
 
 /** A text segment in a multi-part user message. */
-export interface TextContentPart   { type: "text"; text: string; }
+export interface TextContentPart {
+  type: "text";
+  text: string;
+}
 /** An image segment in a multi-part user message. */
-export interface ImageContentPart  { type: "image_url"; image_url: { url: string }; }
+export interface ImageContentPart {
+  type: "image_url";
+  image_url: { url: string };
+}
 /** Union of all multi-part content segments. */
 export type ContentPart = TextContentPart | ImageContentPart;
 

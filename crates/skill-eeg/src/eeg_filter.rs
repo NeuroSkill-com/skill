@@ -60,22 +60,21 @@
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(feature = "gpu")]
-use gpu_fft::{fft_batch, ifft_batch, psd::psd as one_sided_psd};
 #[cfg(not(feature = "gpu"))]
 use crate::cpu_fft::{fft_batch, ifft_batch, psd as one_sided_psd};
+#[cfg(feature = "gpu")]
+use gpu_fft::{fft_batch, ifft_batch, psd::psd as one_sided_psd};
 use serde::{Deserialize, Serialize};
 
 use crate::constants::{
-    DEFAULT_HP_HZ, DEFAULT_LP_HZ, DEFAULT_NOTCH_BW_HZ,
-    EEG_CHANNELS, MUSE_SAMPLE_RATE, SPEC_N_FREQ,
+    DEFAULT_HP_HZ, DEFAULT_LP_HZ, DEFAULT_NOTCH_BW_HZ, EEG_CHANNELS, MUSE_SAMPLE_RATE, SPEC_N_FREQ,
 };
 
 // Re-export filter-window aliases so internal code (and test modules that do
 // `use super::*`) can reference WINDOW / HOP / OVERLAP without the FILTER_ prefix.
-pub use crate::constants::FILTER_HOP     as HOP;
-pub use crate::constants::FILTER_OVERLAP  as OVERLAP;
-pub use crate::constants::FILTER_WINDOW   as WINDOW;
+pub use crate::constants::FILTER_HOP as HOP;
+pub use crate::constants::FILTER_OVERLAP as OVERLAP;
+pub use crate::constants::FILTER_WINDOW as WINDOW;
 
 /// One spectrogram time-slice: raw PSD for all 4 channels at one hop.
 ///
@@ -206,11 +205,11 @@ fn default_notch_bw() -> f32 {
 impl Default for FilterConfig {
     fn default() -> Self {
         Self {
-            sample_rate:        MUSE_SAMPLE_RATE,
-            low_pass_hz:        Some(DEFAULT_LP_HZ),       // remove EMG / alias noise
-            high_pass_hz:       Some(DEFAULT_HP_HZ),       // remove DC drift
-            notch:              Some(PowerlineFreq::Hz60), // US 60 Hz default
-            notch_bandwidth_hz: DEFAULT_NOTCH_BW_HZ,       // ±BW Hz around each harmonic
+            sample_rate: MUSE_SAMPLE_RATE,
+            low_pass_hz: Some(DEFAULT_LP_HZ), // remove EMG / alias noise
+            high_pass_hz: Some(DEFAULT_HP_HZ), // remove DC drift
+            notch: Some(PowerlineFreq::Hz60), // US 60 Hz default
+            notch_bandwidth_hz: DEFAULT_NOTCH_BW_HZ, // ±BW Hz around each harmonic
         }
     }
 }
@@ -221,9 +220,7 @@ impl FilterConfig {
     /// When `false`, the filter is a passthrough and no GPU work is done.
     #[inline]
     pub fn is_active(&self) -> bool {
-        self.low_pass_hz.is_some()
-            || self.high_pass_hz.is_some()
-            || self.notch.is_some()
+        self.low_pass_hz.is_some() || self.high_pass_hz.is_some() || self.notch.is_some()
     }
 
     /// Convenience constructor for a full-band pass (0.5 – 50 Hz) + US notch.
@@ -233,7 +230,10 @@ impl FilterConfig {
 
     /// Convenience constructor for a full-band pass (0.5 – 50 Hz) + EU notch.
     pub fn full_band_eu() -> Self {
-        Self { notch: Some(PowerlineFreq::Hz50), ..Self::default() }
+        Self {
+            notch: Some(PowerlineFreq::Hz50),
+            ..Self::default()
+        }
     }
 
     /// Passthrough: no filtering, raw samples are forwarded as-is.
@@ -248,9 +248,9 @@ impl FilterConfig {
     pub fn passthrough_with_rate(sample_rate: f32) -> Self {
         Self {
             sample_rate,
-            low_pass_hz:        None,
-            high_pass_hz:       None,
-            notch:              None,
+            low_pass_hz: None,
+            high_pass_hz: None,
+            notch: None,
             notch_bandwidth_hz: DEFAULT_NOTCH_BW_HZ,
         }
     }
@@ -304,10 +304,10 @@ impl EegFilter {
     pub fn new(config: FilterConfig) -> Self {
         Self {
             config,
-            overlap:         [[0.0f32; OVERLAP]; EEG_CHANNELS],
-            queued:          std::array::from_fn(|_| VecDeque::new()),
-            pending:         std::array::from_fn(|_| VecDeque::new()),
-            active:          [false; EEG_CHANNELS],
+            overlap: [[0.0f32; OVERLAP]; EEG_CHANNELS],
+            queued: std::array::from_fn(|_| VecDeque::new()),
+            pending: std::array::from_fn(|_| VecDeque::new()),
+            active: [false; EEG_CHANNELS],
             latest_spec_col: None,
         }
     }
@@ -352,10 +352,15 @@ impl EegFilter {
         // Fire one or more GPU hops while every *active* channel holds ≥ HOP
         // samples.  Inactive channels (never pushed to) are skipped.
         let mut fired = false;
-        while self.active.iter().enumerate().all(|(ch, &on)| {
-            !on || self.queued[ch].len() >= HOP
-        }) {
-            if !self.active.iter().any(|&on| on) { break; }
+        while self
+            .active
+            .iter()
+            .enumerate()
+            .all(|(ch, &on)| !on || self.queued[ch].len() >= HOP)
+        {
+            if !self.active.iter().any(|&on| on) {
+                break;
+            }
             self.process_one_hop();
             fired = true;
         }
@@ -365,7 +370,9 @@ impl EegFilter {
     /// Returns the number of pending filtered samples for `channel`.
     #[allow(dead_code)]
     pub fn pending_len(&self, channel: usize) -> usize {
-        if channel >= EEG_CHANNELS { return 0; }
+        if channel >= EEG_CHANNELS {
+            return 0;
+        }
         self.pending[channel].len()
     }
 
@@ -373,10 +380,7 @@ impl EegFilter {
     ///
     /// Call immediately after [`push`][Self::push] returns `true`.
     pub fn drain(&mut self, channel: usize) -> Vec<f64> {
-        self.pending[channel]
-            .drain(..)
-            .map(|v| v as f64)
-            .collect()
+        self.pending[channel].drain(..).map(|v| v as f64).collect()
     }
 
     /// Replace the filter configuration.
@@ -430,7 +434,12 @@ impl EegFilter {
         //
         // The next hop's overlap = the last OVERLAP samples of this window.
         // signals[ch][HOP..] has exactly OVERLAP = 224 elements.
-        for (ov, sig) in self.overlap.iter_mut().zip(signals.iter()).take(EEG_CHANNELS) {
+        for (ov, sig) in self
+            .overlap
+            .iter_mut()
+            .zip(signals.iter())
+            .take(EEG_CHANNELS)
+        {
             ov.copy_from_slice(&sig[HOP..]);
         }
 
@@ -467,7 +476,10 @@ impl EegFilter {
                 })
                 .collect();
 
-            self.latest_spec_col = Some(SpectrogramColumn { timestamp_ms: now_ms, power });
+            self.latest_spec_col = Some(SpectrogramColumn {
+                timestamp_ms: now_ms,
+                power,
+            });
         }
 
         // ── 4. Combined frequency mask ────────────────────────────────────────
@@ -479,14 +491,14 @@ impl EegFilter {
         // We apply the same boolean keep/discard to both a bin and its mirror
         // (which happens automatically because we compute freq symmetrically).
         // This guarantees the IFFT output remains real-valued.
-        let bin_hz   = self.config.sample_rate / n as f32;
-        let nyquist  = self.config.sample_rate / 2.0;
+        let bin_hz = self.config.sample_rate / n as f32;
+        let nyquist = self.config.sample_rate / 2.0;
 
         // Pre-compute notch harmonic bounds once (outside the k loop).
         // harmonics: Vec<(lo, hi)> in Hz — one entry per harmonic within Nyquist.
         let notch_bands: Vec<(f32, f32)> = if let Some(preset) = self.config.notch {
             let fund = preset.hz();
-            let bw   = self.config.notch_bandwidth_hz;
+            let bw = self.config.notch_bandwidth_hz;
             let mut bands = Vec::new();
             let mut h = fund;
             while h <= nyquist + bw {
@@ -590,7 +602,7 @@ mod tests {
         // Push interleaved so all channels accumulate equally.
         for i in 0..signal.len() {
             for ch in 0..EEG_CHANNELS {
-                f.push(ch, &signal[i..i+1]);
+                f.push(ch, &signal[i..i + 1]);
             }
         }
         f.drain(0)
@@ -632,16 +644,19 @@ mod tests {
 
     #[test]
     fn full_band_eu_has_eu_notch() {
-        assert_eq!(FilterConfig::full_band_eu().notch, Some(PowerlineFreq::Hz50));
+        assert_eq!(
+            FilterConfig::full_band_eu().notch,
+            Some(PowerlineFreq::Hz50)
+        );
     }
 
     #[test]
     fn config_with_notch_only_is_active() {
         let cfg = FilterConfig {
-            sample_rate:        256.0,
-            low_pass_hz:        None,
-            high_pass_hz:       None,
-            notch:              Some(PowerlineFreq::Hz60),
+            sample_rate: 256.0,
+            low_pass_hz: None,
+            high_pass_hz: None,
+            notch: Some(PowerlineFreq::Hz60),
             notch_bandwidth_hz: 1.0,
         };
         assert!(cfg.is_active());
@@ -664,7 +679,11 @@ mod tests {
             f.push(ch, &[0.5; 4]);
         }
         for ch in 0..EEG_CHANNELS {
-            assert_eq!(f.queued[ch].len(), 0, "queued[{ch}] should be empty in passthrough");
+            assert_eq!(
+                f.queued[ch].len(),
+                0,
+                "queued[{ch}] should be empty in passthrough"
+            );
         }
     }
 
@@ -684,7 +703,11 @@ mod tests {
         assert_eq!(f.pending_len(0), 0, "partial push should not fire");
         // Push the rest of channel 0 → batch fires (only channel 0 is active).
         f.push(0, &[0.0]);
-        assert_eq!(f.pending_len(0), HOP, "full push to only active ch should fire");
+        assert_eq!(
+            f.pending_len(0),
+            HOP,
+            "full push to only active ch should fire"
+        );
     }
 
     #[test]
@@ -720,8 +743,10 @@ mod tests {
         }
         for ch in 0..EEG_CHANNELS {
             assert_eq!(
-                f.pending_len(ch), HOP * hops,
-                "ch {ch}: expected {}", HOP * hops
+                f.pending_len(ch),
+                HOP * hops,
+                "ch {ch}: expected {}",
+                HOP * hops
             );
         }
     }
@@ -747,9 +772,12 @@ mod tests {
         }
         f.reset();
         for ch in 0..EEG_CHANNELS {
-            assert_eq!(f.queued[ch].len(),  0, "queued[{ch}] not cleared");
-            assert_eq!(f.pending_len(ch),   0, "pending[{ch}] not cleared");
-            assert!(f.overlap[ch].iter().all(|&v| v == 0.0), "overlap[{ch}] not cleared");
+            assert_eq!(f.queued[ch].len(), 0, "queued[{ch}] not cleared");
+            assert_eq!(f.pending_len(ch), 0, "pending[{ch}] not cleared");
+            assert!(
+                f.overlap[ch].iter().all(|&v| v == 0.0),
+                "overlap[{ch}] not cleared"
+            );
         }
     }
 
@@ -759,7 +787,10 @@ mod tests {
         for ch in 0..EEG_CHANNELS {
             f.push(ch, &vec![1.0; HOP]);
         }
-        let new_cfg = FilterConfig { notch: Some(PowerlineFreq::Hz50), ..FilterConfig::default() };
+        let new_cfg = FilterConfig {
+            notch: Some(PowerlineFreq::Hz50),
+            ..FilterConfig::default()
+        };
         f.set_config(new_cfg);
         assert_eq!(f.config.notch, Some(PowerlineFreq::Hz50));
         for ch in 0..EEG_CHANNELS {
@@ -790,12 +821,19 @@ mod tests {
     fn low_pass_attenuates_out_of_band_signal() {
         let cfg = FilterConfig {
             notch: None, // isolate LP stage
-            ..FilterConfig { low_pass_hz: Some(50.0), high_pass_hz: None, ..FilterConfig::default() }
+            ..FilterConfig {
+                low_pass_hz: Some(50.0),
+                high_pass_hz: None,
+                ..FilterConfig::default()
+            }
         };
         let tone = sine(100.0, WINDOW * 4);
-        let out  = run_filter(cfg, &tone);
+        let out = run_filter(cfg, &tone);
         let power = rms(&out[HOP..]); // skip first hop (settling)
-        assert!(power < 0.155, "100 Hz should be nearly zeroed by 50 Hz LP; RMS = {power:.4}");
+        assert!(
+            power < 0.155,
+            "100 Hz should be nearly zeroed by 50 Hz LP; RMS = {power:.4}"
+        );
     }
 
     // ── Spectral correctness — high-pass ─────────────────────────────────────
@@ -804,10 +842,14 @@ mod tests {
     #[test]
     fn high_pass_removes_dc_offset() {
         let cfg = FilterConfig {
-            low_pass_hz: None, notch: None,
-            ..FilterConfig { high_pass_hz: Some(0.5), ..FilterConfig::default() }
+            low_pass_hz: None,
+            notch: None,
+            ..FilterConfig {
+                high_pass_hz: Some(0.5),
+                ..FilterConfig::default()
+            }
         };
-        let dc  = vec![1.0_f64; WINDOW * 4];
+        let dc = vec![1.0_f64; WINDOW * 4];
         let out = run_filter(cfg, &dc);
         let power = rms(&out[HOP..]);
         assert!(power < 0.25, "DC should be nearly zeroed; RMS = {power:.4}");
@@ -821,10 +863,14 @@ mod tests {
     fn band_pass_preserves_in_band_signal() {
         let cfg = FilterConfig {
             notch: None, // isolate LP+HP stages
-            ..FilterConfig { low_pass_hz: Some(50.0), high_pass_hz: Some(0.5), ..FilterConfig::default() }
+            ..FilterConfig {
+                low_pass_hz: Some(50.0),
+                high_pass_hz: Some(0.5),
+                ..FilterConfig::default()
+            }
         };
         let tone = sine(10.0, WINDOW * 6);
-        let out  = run_filter(cfg, &tone);
+        let out = run_filter(cfg, &tone);
         let power = rms(&out[2 * HOP..]); // skip first two hops for warm-up
         assert!(
             power > 0.5 && power < 0.9,
@@ -838,32 +884,38 @@ mod tests {
     #[test]
     fn us_notch_attenuates_60hz() {
         let cfg = FilterConfig {
-            low_pass_hz:  None,
+            low_pass_hz: None,
             high_pass_hz: None,
-            notch:        Some(PowerlineFreq::Hz60),
+            notch: Some(PowerlineFreq::Hz60),
             notch_bandwidth_hz: 1.0,
-            sample_rate:  MUSE_SAMPLE_RATE,
+            sample_rate: MUSE_SAMPLE_RATE,
         };
         let tone = sine(60.0, WINDOW * 4);
-        let out  = run_filter(cfg, &tone);
+        let out = run_filter(cfg, &tone);
         let power = rms(&out[HOP..]);
-        assert!(power < 0.155, "60 Hz should be nearly zeroed by US notch; RMS = {power:.4}");
+        assert!(
+            power < 0.155,
+            "60 Hz should be nearly zeroed by US notch; RMS = {power:.4}"
+        );
     }
 
     /// The 2nd US harmonic (120 Hz) must also be attenuated.
     #[test]
     fn us_notch_attenuates_120hz_harmonic() {
         let cfg = FilterConfig {
-            low_pass_hz:  None,
+            low_pass_hz: None,
             high_pass_hz: None,
-            notch:        Some(PowerlineFreq::Hz60),
+            notch: Some(PowerlineFreq::Hz60),
             notch_bandwidth_hz: 1.0,
-            sample_rate:  MUSE_SAMPLE_RATE,
+            sample_rate: MUSE_SAMPLE_RATE,
         };
         let tone = sine(120.0, WINDOW * 4);
-        let out  = run_filter(cfg, &tone);
+        let out = run_filter(cfg, &tone);
         let power = rms(&out[HOP..]);
-        assert!(power < 0.155, "120 Hz should be zeroed by 2nd US harmonic; RMS = {power:.4}");
+        assert!(
+            power < 0.155,
+            "120 Hz should be zeroed by 2nd US harmonic; RMS = {power:.4}"
+        );
     }
 
     // ── Spectral correctness — EU notch (50 Hz) ───────────────────────────────
@@ -872,32 +924,38 @@ mod tests {
     #[test]
     fn eu_notch_attenuates_50hz() {
         let cfg = FilterConfig {
-            low_pass_hz:  None,
+            low_pass_hz: None,
             high_pass_hz: None,
-            notch:        Some(PowerlineFreq::Hz50),
+            notch: Some(PowerlineFreq::Hz50),
             notch_bandwidth_hz: 1.0,
-            sample_rate:  MUSE_SAMPLE_RATE,
+            sample_rate: MUSE_SAMPLE_RATE,
         };
         let tone = sine(50.0, WINDOW * 4);
-        let out  = run_filter(cfg, &tone);
+        let out = run_filter(cfg, &tone);
         let power = rms(&out[HOP..]);
-        assert!(power < 0.155, "50 Hz should be nearly zeroed by EU notch; RMS = {power:.4}");
+        assert!(
+            power < 0.155,
+            "50 Hz should be nearly zeroed by EU notch; RMS = {power:.4}"
+        );
     }
 
     /// The 2nd EU harmonic (100 Hz) must also be attenuated.
     #[test]
     fn eu_notch_attenuates_100hz_harmonic() {
         let cfg = FilterConfig {
-            low_pass_hz:  None,
+            low_pass_hz: None,
             high_pass_hz: None,
-            notch:        Some(PowerlineFreq::Hz50),
+            notch: Some(PowerlineFreq::Hz50),
             notch_bandwidth_hz: 1.0,
-            sample_rate:  MUSE_SAMPLE_RATE,
+            sample_rate: MUSE_SAMPLE_RATE,
         };
         let tone = sine(100.0, WINDOW * 4);
-        let out  = run_filter(cfg, &tone);
+        let out = run_filter(cfg, &tone);
         let power = rms(&out[HOP..]);
-        assert!(power < 0.155, "100 Hz should be zeroed by 2nd EU harmonic; RMS = {power:.4}");
+        assert!(
+            power < 0.155,
+            "100 Hz should be zeroed by 2nd EU harmonic; RMS = {power:.4}"
+        );
     }
 
     // ── Notch does not affect in-band signal ──────────────────────────────────
@@ -907,14 +965,14 @@ mod tests {
     fn notch_does_not_affect_alpha_band() {
         for preset in [PowerlineFreq::Hz60, PowerlineFreq::Hz50] {
             let cfg = FilterConfig {
-                low_pass_hz:  None,
+                low_pass_hz: None,
                 high_pass_hz: None,
-                notch:        Some(preset),
+                notch: Some(preset),
                 notch_bandwidth_hz: 1.0,
-                sample_rate:  MUSE_SAMPLE_RATE,
+                sample_rate: MUSE_SAMPLE_RATE,
             };
             let tone = sine(10.0, WINDOW * 6);
-            let out  = run_filter(cfg, &tone);
+            let out = run_filter(cfg, &tone);
             let power = rms(&out[2 * HOP..]);
             assert!(
                 power > 0.5,
@@ -938,7 +996,11 @@ mod tests {
         f.set_config(FilterConfig::full_band_eu());
         assert_eq!(f.config.notch, Some(PowerlineFreq::Hz50));
         for ch in 0..EEG_CHANNELS {
-            assert_eq!(f.pending_len(ch), 0, "pending[{ch}] must be cleared on preset switch");
+            assert_eq!(
+                f.pending_len(ch),
+                0,
+                "pending[{ch}] must be cleared on preset switch"
+            );
         }
     }
 }

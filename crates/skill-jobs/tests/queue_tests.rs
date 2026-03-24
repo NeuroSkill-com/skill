@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Integration tests for the JobQueue.
 
-use skill_jobs::{JobQueue, JobPollResult};
+use skill_jobs::{JobPollResult, JobQueue};
 use std::time::Duration;
 
 #[test]
@@ -102,5 +102,9 @@ fn ticket_has_queue_position() {
 
     // t2's queue_position should be >= 0
     // (it might be 0 if t1 already started and t2 is next, or 1 if both are pending)
-    assert!(t2.queue_position <= 1, "queue position should be 0 or 1, got {}", t2.queue_position);
+    assert!(
+        t2.queue_position <= 1,
+        "queue position should be 0 or 1, got {}",
+        t2.queue_position
+    );
 }

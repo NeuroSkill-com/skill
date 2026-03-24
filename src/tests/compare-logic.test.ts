@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  localMidnight,
-  utcToTimeStr,
-  timeStrToUtc,
-  sessionsInRange,
-  sessionLabel,
-  sortedSessionDays,
   autoSelectRange,
-  snapToMinute,
+  localMidnight,
   pointerToUtc,
+  sessionLabel,
+  sessionsInRange,
+  snapToMinute,
+  sortedSessionDays,
+  timeStrToUtc,
+  utcToTimeStr,
 } from "$lib/compare-logic";
 import type { EmbeddingSession } from "$lib/compare-types";
 
@@ -47,11 +47,7 @@ describe("timeStrToUtc", () => {
 });
 
 describe("sessionsInRange", () => {
-  const sessions = [
-    sess(1000, 2000),
-    sess(3000, 4000),
-    sess(5000, 6000),
-  ];
+  const sessions = [sess(1000, 2000), sess(3000, 4000), sess(5000, 6000)];
 
   it("returns sessions overlapping the range", () => {
     const result = sessionsInRange(sessions, 1500, 3500);
@@ -80,10 +76,7 @@ describe("sortedSessionDays", () => {
   it("returns unique days newest first", () => {
     const now = Math.floor(Date.now() / 1000);
     const yesterday = now - 86400;
-    const sessions = [
-      sess(yesterday, yesterday + 3600),
-      sess(now, now + 3600),
-    ];
+    const sessions = [sess(yesterday, yesterday + 3600), sess(now, now + 3600)];
     const days = sortedSessionDays(sessions);
     expect(days.length).toBeGreaterThanOrEqual(2);
     // Newest first
@@ -94,10 +87,7 @@ describe("sortedSessionDays", () => {
 describe("autoSelectRange", () => {
   it("selects range covering sessions in the 48h window", () => {
     const anchor = 10000;
-    const sessions = [
-      sess(10500, 11000),
-      sess(12000, 13000),
-    ];
+    const sessions = [sess(10500, 11000), sess(12000, 13000)];
     const { start, end } = autoSelectRange(sessions, anchor);
     expect(start).toBe(10500);
     expect(end).toBe(13000);

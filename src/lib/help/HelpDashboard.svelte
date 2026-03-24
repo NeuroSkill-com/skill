@@ -7,30 +7,30 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Main Window / Dashboard -->
 
 <script lang="ts">
-  import HelpSection from "./HelpSection.svelte";
-  import HelpItem    from "./HelpItem.svelte";
-  import { Separator } from "$lib/components/ui/separator";
-  import { t } from "$lib/i18n/index.svelte";
+import { Separator } from "$lib/components/ui/separator";
+import { t } from "$lib/i18n/index.svelte";
+import HelpItem from "./HelpItem.svelte";
+import HelpSection from "./HelpSection.svelte";
 
-  const sectionKeys = [
-    ["helpDash.statusHero",      "helpDash.statusHeroBody"],
-    ["helpDash.battery",         "helpDash.batteryBody"],
-    ["helpDash.signalQuality",   "helpDash.signalQualityBody"],
-    ["helpDash.eegChannelGrid",  "helpDash.eegChannelGridBody"],
-    ["helpDash.uptimeSamples",   "helpDash.uptimeSamplesBody"],
-    ["helpDash.csvRecording",    "helpDash.csvRecordingBody"],
-    ["helpDash.bandPowers",      "helpDash.bandPowersBody"],
-    ["helpDash.faa",             "helpDash.faaBody"],
-    ["helpDash.eegWaveforms",    "helpDash.eegWaveformsBody"],
-    ["helpDash.gpuUtilisation",  "helpDash.gpuUtilisationBody"],
-  ] as const;
+const sectionKeys = [
+  ["helpDash.statusHero", "helpDash.statusHeroBody"],
+  ["helpDash.battery", "helpDash.batteryBody"],
+  ["helpDash.signalQuality", "helpDash.signalQualityBody"],
+  ["helpDash.eegChannelGrid", "helpDash.eegChannelGridBody"],
+  ["helpDash.uptimeSamples", "helpDash.uptimeSamplesBody"],
+  ["helpDash.csvRecording", "helpDash.csvRecordingBody"],
+  ["helpDash.bandPowers", "helpDash.bandPowersBody"],
+  ["helpDash.faa", "helpDash.faaBody"],
+  ["helpDash.eegWaveforms", "helpDash.eegWaveformsBody"],
+  ["helpDash.gpuUtilisation", "helpDash.gpuUtilisationBody"],
+] as const;
 
-  const trayStates = [
-    { dot: "bg-slate-400",  labelKey: "helpDash.trayGrey",  descKey: "helpDash.trayGreyDesc" },
-    { dot: "bg-yellow-400", labelKey: "helpDash.trayAmber", descKey: "helpDash.trayAmberDesc" },
-    { dot: "bg-green-500",  labelKey: "helpDash.trayGreen", descKey: "helpDash.trayGreenDesc" },
-    { dot: "bg-red-500",    labelKey: "helpDash.trayRed",   descKey: "helpDash.trayRedDesc" },
-  ] as const;
+const trayStates = [
+  { dot: "bg-slate-400", labelKey: "helpDash.trayGrey", descKey: "helpDash.trayGreyDesc" },
+  { dot: "bg-yellow-400", labelKey: "helpDash.trayAmber", descKey: "helpDash.trayAmberDesc" },
+  { dot: "bg-green-500", labelKey: "helpDash.trayGreen", descKey: "helpDash.trayGreenDesc" },
+  { dot: "bg-red-500", labelKey: "helpDash.trayRed", descKey: "helpDash.trayRedDesc" },
+] as const;
 </script>
 
 <div class="flex flex-col gap-6 pb-6">

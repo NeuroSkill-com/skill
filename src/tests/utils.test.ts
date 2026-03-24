@@ -7,7 +7,7 @@
 /**
  * Unit tests for pure utility functions used across the frontend.
  */
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 
 // ── Reconnect backoff (mirrors the Rust schedule) ──────────────────────────────
 // The Rust function retry_delay_secs() is tested in Rust, but we duplicate
@@ -36,8 +36,8 @@ function estSecsCeil(totalMs: number): number {
 }
 
 describe("job queue est_secs ceiling", () => {
-  it("0 ms → 0 s",    () => expect(estSecsCeil(0)).toBe(0));
-  it("1 ms → 1 s",    () => expect(estSecsCeil(1)).toBe(1));
+  it("0 ms → 0 s", () => expect(estSecsCeil(0)).toBe(0));
+  it("1 ms → 1 s", () => expect(estSecsCeil(1)).toBe(1));
   it("1000 ms → 1 s", () => expect(estSecsCeil(1000)).toBe(1));
   it("1001 ms → 2 s", () => expect(estSecsCeil(1001)).toBe(2));
   it("5000 ms → 5 s", () => expect(estSecsCeil(5000)).toBe(5));
@@ -45,9 +45,9 @@ describe("job queue est_secs ceiling", () => {
 
 // ── Focus Timer preset defaults ─────────────────────────────────────────────────
 const PRESETS = {
-  pomodoro:   { workMins: 25, breakMins: 5,  longBreakMins: 15, longBreakEvery: 4 },
-  deepWork:   { workMins: 50, breakMins: 10, longBreakMins: 30, longBreakEvery: 2 },
-  shortFocus: { workMins: 15, breakMins: 5,  longBreakMins: 15, longBreakEvery: 4 },
+  pomodoro: { workMins: 25, breakMins: 5, longBreakMins: 15, longBreakEvery: 4 },
+  deepWork: { workMins: 50, breakMins: 10, longBreakMins: 30, longBreakEvery: 2 },
+  shortFocus: { workMins: 15, breakMins: 5, longBreakMins: 15, longBreakEvery: 4 },
 } as const;
 
 describe("focus timer preset values", () => {

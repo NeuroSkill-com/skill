@@ -25,15 +25,7 @@ import { invoke } from "@tauri-apps/api/core";
  * Known EEG device families.
  * `"unknown"` is used for unrecognised device names or while disconnected.
  */
-export type DeviceKind =
-  | "muse"
-  | "ganglion"
-  | "open_bci"
-  | "mw75"
-  | "hermes"
-  | "emotiv"
-  | "idun"
-  | "unknown";
+export type DeviceKind = "muse" | "ganglion" | "open_bci" | "mw75" | "hermes" | "emotiv" | "idun" | "unknown";
 
 // ── Capability flags ──────────────────────────────────────────────────────────
 

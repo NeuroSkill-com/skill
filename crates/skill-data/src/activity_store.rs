@@ -24,7 +24,7 @@
 //! All writes come from background threads, so the connection is wrapped in a
 //! `Mutex`.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::Mutex;
@@ -76,15 +76,20 @@ impl ActivityStore {
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let path = skill_dir.join(skill_constants::ACTIVITY_FILE);
         let conn = match Connection::open(&path) {
-            Ok(c)  => c,
-            Err(e) => { eprintln!("[activity] open {}: {e}", path.display()); return None; }
+            Ok(c) => c,
+            Err(e) => {
+                eprintln!("[activity] open {}: {e}", path.display());
+                return None;
+            }
         };
         crate::util::init_wal_pragmas(&conn);
         if let Err(e) = conn.execute_batch(DDL) {
             eprintln!("[activity] DDL: {e}");
             return None;
         }
-        Some(Self { conn: Mutex::new(conn) })
+        Some(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     // ── Writers ───────────────────────────────────────────────────────────────
@@ -111,8 +116,8 @@ impl ActivityStore {
     pub fn insert_input_activity(
         &self,
         last_keyboard: Option<u64>,
-        last_mouse:    Option<u64>,
-        sampled_at:    u64,
+        last_mouse: Option<u64>,
+        sampled_at: u64,
     ) {
         let c = self.conn.lock_or_recover();
         if let Err(e) = c.execute(
@@ -131,12 +136,7 @@ impl ActivityStore {
     /// Increment (or create) the per-minute bucket for `minute_ts`.
     /// `minute_ts` must already be rounded to a 60-second boundary.
     /// `key_delta` / `mouse_delta` are the number of events since the last flush.
-    pub fn upsert_input_bucket(
-        &self,
-        minute_ts:   u64,
-        key_delta:   u64,
-        mouse_delta: u64,
-    ) {
+    pub fn upsert_input_bucket(&self, minute_ts: u64, key_delta: u64, mouse_delta: u64) {
         if key_delta == 0 && mouse_delta == 0 {
             return;
         }
@@ -147,11 +147,7 @@ impl ActivityStore {
              ON CONFLICT(minute_ts) DO UPDATE SET
                  key_count   = key_count   + excluded.key_count,
                  mouse_count = mouse_count + excluded.mouse_count",
-            params![
-                minute_ts   as i64,
-                key_delta   as i64,
-                mouse_delta as i64,
-            ],
+            params![minute_ts as i64, key_delta as i64, mouse_delta as i64,],
         ) {
             eprintln!("[activity] upsert_input_bucket: {e}");
         }
@@ -166,14 +162,17 @@ impl ActivityStore {
             "SELECT id, app_name, app_path, window_title, activated_at
              FROM active_windows ORDER BY activated_at DESC LIMIT ?1",
         ) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[activity] prepare recent_windows: {e}"); return vec![]; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] prepare recent_windows: {e}");
+                return vec![];
+            }
         };
         stmt.query_map([limit as i64], |row| {
             Ok(ActiveWindowRow {
-                id:           row.get(0)?,
-                app_name:     row.get(1)?,
-                app_path:     row.get(2)?,
+                id: row.get(0)?,
+                app_name: row.get(1)?,
+                app_path: row.get(2)?,
                 window_title: row.get(3)?,
                 activated_at: row.get::<_, i64>(4)? as u64,
             })
@@ -189,15 +188,18 @@ impl ActivityStore {
             "SELECT id, last_keyboard, last_mouse, sampled_at
              FROM input_activity ORDER BY sampled_at DESC LIMIT ?1",
         ) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[activity] prepare recent_input: {e}"); return vec![]; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] prepare recent_input: {e}");
+                return vec![];
+            }
         };
         stmt.query_map([limit as i64], |row| {
             Ok(InputActivityRow {
-                id:            row.get(0)?,
+                id: row.get(0)?,
                 last_keyboard: row.get::<_, Option<i64>>(1)?.map(|t| t as u64),
-                last_mouse:    row.get::<_, Option<i64>>(2)?.map(|t| t as u64),
-                sampled_at:    row.get::<_, i64>(3)? as u64,
+                last_mouse: row.get::<_, Option<i64>>(2)?.map(|t| t as u64),
+                sampled_at: row.get::<_, i64>(3)? as u64,
             })
         })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
@@ -215,13 +217,16 @@ impl ActivityStore {
                      FROM active_windows WHERE activated_at >= ?1
                      GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
                 ) {
-                    Ok(s)  => s,
-                    Err(e) => { eprintln!("[activity] top_apps: {e}"); return vec![]; }
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[activity] top_apps: {e}");
+                        return vec![];
+                    }
                 };
                 stmt.query_map(params![ts as i64, limit as i64], |row| {
                     Ok(AppUsageRow {
-                        app_name:  row.get(0)?,
-                        switches:  row.get::<_, i64>(1)? as u64,
+                        app_name: row.get(0)?,
+                        switches: row.get::<_, i64>(1)? as u64,
                         last_seen: row.get::<_, i64>(2)? as u64,
                     })
                 })
@@ -234,13 +239,16 @@ impl ActivityStore {
                      FROM active_windows
                      GROUP BY app_name ORDER BY cnt DESC LIMIT ?1",
                 ) {
-                    Ok(s)  => s,
-                    Err(e) => { eprintln!("[activity] top_apps: {e}"); return vec![]; }
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[activity] top_apps: {e}");
+                        return vec![];
+                    }
                 };
                 stmt.query_map(params![limit as i64], |row| {
                     Ok(AppUsageRow {
-                        app_name:  row.get(0)?,
-                        switches:  row.get::<_, i64>(1)? as u64,
+                        app_name: row.get(0)?,
+                        switches: row.get::<_, i64>(1)? as u64,
                         last_seen: row.get::<_, i64>(2)? as u64,
                     })
                 })
@@ -260,17 +268,19 @@ impl ActivityStore {
              WHERE minute_ts >= ?1 AND minute_ts <= ?2
              ORDER BY minute_ts ASC",
         ) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[activity] prepare get_input_buckets: {e}"); return vec![]; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[activity] prepare get_input_buckets: {e}");
+                return vec![];
+            }
         };
-        stmt.query_map(
-            params![from_ts as i64, to_ts as i64],
-            |row| Ok(InputBucketRow {
-                minute_ts:   row.get::<_, i64>(0)? as u64,
-                key_count:   row.get::<_, i64>(1)? as u64,
+        stmt.query_map(params![from_ts as i64, to_ts as i64], |row| {
+            Ok(InputBucketRow {
+                minute_ts: row.get::<_, i64>(0)? as u64,
+                key_count: row.get::<_, i64>(1)? as u64,
                 mouse_count: row.get::<_, i64>(2)? as u64,
-            }),
-        )
+            })
+        })
         .map(|rows| rows.filter_map(std::result::Result::ok).collect())
         .unwrap_or_default()
     }
@@ -280,29 +290,29 @@ impl ActivityStore {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActiveWindowRow {
-    pub id:           i64,
-    pub app_name:     String,
-    pub app_path:     String,
+    pub id: i64,
+    pub app_name: String,
+    pub app_path: String,
     pub window_title: String,
     pub activated_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputActivityRow {
-    pub id:            i64,
+    pub id: i64,
     /// Unix seconds of the last keyboard event in this sampling window; `None` if absent.
     pub last_keyboard: Option<u64>,
     /// Unix seconds of the last mouse event in this sampling window; `None` if absent.
-    pub last_mouse:    Option<u64>,
+    pub last_mouse: Option<u64>,
     /// Unix seconds when this row was written (flush time).
-    pub sampled_at:    u64,
+    pub sampled_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppUsageRow {
-    pub app_name:  String,
+    pub app_name: String,
     /// Number of window-activation switches to this app.
-    pub switches:  u64,
+    pub switches: u64,
     /// Most recent activation timestamp (unix seconds).
     pub last_seen: u64,
 }
@@ -310,9 +320,9 @@ pub struct AppUsageRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputBucketRow {
     /// Unix timestamp of the start of this minute (always divisible by 60).
-    pub minute_ts:   u64,
+    pub minute_ts: u64,
     /// Total keyboard events recorded in this minute.
-    pub key_count:   u64,
+    pub key_count: u64,
     /// Total mouse / scroll / click events recorded in this minute.
     pub mouse_count: u64,
 }
@@ -330,8 +340,8 @@ mod tests {
 
     fn dummy_window(ts: u64) -> ActiveWindowInfo {
         ActiveWindowInfo {
-            app_name:     "TestApp".into(),
-            app_path:     "/usr/bin/test".into(),
+            app_name: "TestApp".into(),
+            app_path: "/usr/bin/test".into(),
             window_title: "Test Window".into(),
             activated_at: ts,
         }
@@ -352,7 +362,9 @@ mod tests {
     #[test]
     fn window_limit_respected() {
         let store = open_temp();
-        for i in 0..10u64 { store.insert_active_window(&dummy_window(i)); }
+        for i in 0..10u64 {
+            store.insert_active_window(&dummy_window(i));
+        }
         assert_eq!(store.get_recent_windows(3).len(), 3);
     }
 
@@ -372,7 +384,9 @@ mod tests {
     #[test]
     fn input_limit_respected() {
         let store = open_temp();
-        for i in 0..10u64 { store.insert_input_activity(Some(i), Some(i), i); }
+        for i in 0..10u64 {
+            store.insert_input_activity(Some(i), Some(i), i);
+        }
         assert_eq!(store.get_recent_input(4).len(), 4);
     }
 
@@ -381,7 +395,7 @@ mod tests {
         let store = open_temp();
         let min = 1_000 * 60; // a round minute timestamp
         store.upsert_input_bucket(min, 10, 5);
-        store.upsert_input_bucket(min, 3, 2);  // second flush in same minute
+        store.upsert_input_bucket(min, 3, 2); // second flush in same minute
         let rows = store.get_input_buckets(min, min);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].key_count, 13);
@@ -423,14 +437,27 @@ mod tests {
     #[test]
     fn top_apps_all_time() {
         let store = open_temp();
-        for _ in 0..5 { store.insert_active_window(&ActiveWindowInfo {
-            app_name: "Firefox".into(), app_path: "".into(), window_title: "".into(), activated_at: 100,
-        }); }
-        for _ in 0..3 { store.insert_active_window(&ActiveWindowInfo {
-            app_name: "Terminal".into(), app_path: "".into(), window_title: "".into(), activated_at: 200,
-        }); }
+        for _ in 0..5 {
+            store.insert_active_window(&ActiveWindowInfo {
+                app_name: "Firefox".into(),
+                app_path: "".into(),
+                window_title: "".into(),
+                activated_at: 100,
+            });
+        }
+        for _ in 0..3 {
+            store.insert_active_window(&ActiveWindowInfo {
+                app_name: "Terminal".into(),
+                app_path: "".into(),
+                window_title: "".into(),
+                activated_at: 200,
+            });
+        }
         store.insert_active_window(&ActiveWindowInfo {
-            app_name: "Code".into(), app_path: "".into(), window_title: "".into(), activated_at: 300,
+            app_name: "Code".into(),
+            app_path: "".into(),
+            window_title: "".into(),
+            activated_at: 300,
         });
         let top = store.top_apps(10, None);
         assert_eq!(top.len(), 3);
@@ -444,12 +471,22 @@ mod tests {
     #[test]
     fn top_apps_with_since_filter() {
         let store = open_temp();
-        for _ in 0..5 { store.insert_active_window(&ActiveWindowInfo {
-            app_name: "Old".into(), app_path: "".into(), window_title: "".into(), activated_at: 100,
-        }); }
-        for _ in 0..2 { store.insert_active_window(&ActiveWindowInfo {
-            app_name: "New".into(), app_path: "".into(), window_title: "".into(), activated_at: 500,
-        }); }
+        for _ in 0..5 {
+            store.insert_active_window(&ActiveWindowInfo {
+                app_name: "Old".into(),
+                app_path: "".into(),
+                window_title: "".into(),
+                activated_at: 100,
+            });
+        }
+        for _ in 0..2 {
+            store.insert_active_window(&ActiveWindowInfo {
+                app_name: "New".into(),
+                app_path: "".into(),
+                window_title: "".into(),
+                activated_at: 500,
+            });
+        }
         let top = store.top_apps(10, Some(400));
         assert_eq!(top.len(), 1);
         assert_eq!(top[0].app_name, "New");
@@ -461,7 +498,10 @@ mod tests {
         let store = open_temp();
         for i in 0..10u64 {
             store.insert_active_window(&ActiveWindowInfo {
-                app_name: format!("App{}", i), app_path: "".into(), window_title: "".into(), activated_at: i,
+                app_name: format!("App{}", i),
+                app_path: "".into(),
+                window_title: "".into(),
+                activated_at: i,
             });
         }
         assert_eq!(store.top_apps(3, None).len(), 3);

@@ -6,12 +6,12 @@
 // the Free Software Foundation, version 3 only.
 //! Active-window and input-activity tracking Tauri commands.
 
-use std::sync::Mutex;
 use crate::MutexExt;
+use std::sync::Mutex;
 use tauri::AppHandle;
 
-use crate::AppState;
 use crate::active_window::ActiveWindowInfo;
+use crate::AppState;
 use skill_data::activity_store::{ActiveWindowRow, InputActivityRow, InputBucketRow};
 
 // ── Activity tracking ──────────────────────────────────────────────────────────
@@ -26,8 +26,8 @@ pub fn get_active_window_tracking(state: tauri::State<'_, Mutex<Box<AppState>>>)
 #[tauri::command]
 pub fn set_active_window_tracking(
     enabled: bool,
-    app:     AppHandle,
-    state:   tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     state.lock_or_recover().input.track_active_window = enabled;
     crate::save_settings(&app);
@@ -36,7 +36,9 @@ pub fn set_active_window_tracking(
 /// Return the most recently detected active window, or `None` when tracking
 /// is disabled or no window has been observed yet.
 #[tauri::command]
-pub fn get_active_window(state: tauri::State<'_, Mutex<Box<AppState>>>) -> Option<ActiveWindowInfo> {
+pub fn get_active_window(
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
+) -> Option<ActiveWindowInfo> {
     state.lock_or_recover().input.current_active_window.clone()
 }
 
@@ -52,12 +54,14 @@ pub fn get_input_activity_tracking(state: tauri::State<'_, Mutex<Box<AppState>>>
 #[tauri::command]
 pub fn set_input_activity_tracking(
     enabled: bool,
-    app:     AppHandle,
-    state:   tauri::State<'_, Mutex<Box<AppState>>>,
+    app: AppHandle,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) {
     use std::sync::atomic::Ordering;
     let s = state.lock_or_recover();
-    s.input.input_activity_enabled.store(enabled, Ordering::Relaxed);
+    s.input
+        .input_activity_enabled
+        .store(enabled, Ordering::Relaxed);
     drop(s);
     state.lock_or_recover().input.track_input_activity = enabled;
     crate::save_settings(&app);
@@ -120,11 +124,11 @@ pub fn get_recent_input_activity(
 #[tauri::command]
 pub fn get_input_buckets(
     from_ts: Option<u64>,
-    to_ts:   Option<u64>,
-    state:   tauri::State<'_, Mutex<Box<AppState>>>,
+    to_ts: Option<u64>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Vec<InputBucketRow> {
-    let now   = crate::unix_secs();
-    let end   = to_ts.unwrap_or(now);
+    let now = crate::unix_secs();
+    let end = to_ts.unwrap_or(now);
     let start = from_ts.unwrap_or_else(|| end.saturating_sub(24 * 3600));
     state
         .lock_or_recover()

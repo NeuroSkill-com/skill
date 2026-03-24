@@ -9,28 +9,28 @@ the Free Software Foundation, version 3 only. -->
   Extracts the repeated header + wrapper pattern used across all dashboard metric cards.
 -->
 <script lang="ts">
-  import type { Snippet } from "svelte";
+import type { Snippet } from "svelte";
 
-  interface Props {
-    /** Section title (already translated). */
-    title: string;
-    /** Tailwind text-color class for the live-blink dot, e.g. "text-emerald-500". */
-    dotColor?: string;
-    /** Whether the section is initially expanded. */
-    expanded?: boolean;
-    /** Optional extra attributes forwarded to the root div (e.g. role, aria-*). */
-    rootAttrs?: Record<string, unknown>;
-    /** Slot content rendered when expanded. */
-    children: Snippet;
-  }
+interface Props {
+  /** Section title (already translated). */
+  title: string;
+  /** Tailwind text-color class for the live-blink dot, e.g. "text-emerald-500". */
+  dotColor?: string;
+  /** Whether the section is initially expanded. */
+  expanded?: boolean;
+  /** Optional extra attributes forwarded to the root div (e.g. role, aria-*). */
+  rootAttrs?: Record<string, unknown>;
+  /** Slot content rendered when expanded. */
+  children: Snippet;
+}
 
-  let {
-    title,
-    dotColor = "text-muted-foreground",
-    expanded = $bindable(true),
-    rootAttrs = {},
-    children,
-  }: Props = $props();
+let {
+  title,
+  dotColor = "text-muted-foreground",
+  expanded = $bindable(true),
+  rootAttrs = {},
+  children,
+}: Props = $props();
 </script>
 
 <div

@@ -76,7 +76,14 @@ function patchTailwindForSvelte() {
 }
 
 // https://vite.dev/config/
-export default defineConfig(() => ({
+export default defineConfig(({ mode }) => ({
+  // Strip console.log / console.debug in production builds.
+  // console.warn and console.error are preserved for diagnostics.
+  esbuild: {
+    drop: mode === "production" ? ["debugger"] : [],
+    pure: mode === "production" ? ["console.log", "console.debug"] : [],
+  },
+
   plugins: [
     sveltekit(),
     ...patchTailwindForSvelte(),

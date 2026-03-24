@@ -8,8 +8,8 @@ use std::path::Path;
 use crate::ppg_analysis::PpgMetrics;
 use crate::session_csv::CsvState;
 use crate::session_parquet::ParquetState;
-use skill_eeg::eeg_bands::BandSnapshot;
 use anyhow::Context;
+use skill_eeg::eeg_bands::BandSnapshot;
 
 /// Storage format for EEG recordings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,16 +23,16 @@ impl StorageFormat {
     pub fn parse(s: &str) -> Self {
         match s.to_ascii_lowercase().as_str() {
             "parquet" => Self::Parquet,
-            "both"    => Self::Both,
-            _         => Self::Csv,
+            "both" => Self::Both,
+            _ => Self::Csv,
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Csv     => "csv",
+            Self::Csv => "csv",
             Self::Parquet => "parquet",
-            Self::Both    => "both",
+            Self::Both => "both",
         }
     }
 }
@@ -49,28 +49,30 @@ impl SessionWriter {
     /// Open a new session file with the given channel labels.
     pub fn open(csv_path: &Path, labels: &[&str], format: StorageFormat) -> anyhow::Result<Self> {
         match format {
-            StorageFormat::Csv => {
-                CsvState::open_with_labels(csv_path, labels)
-                    .map(SessionWriter::Csv)
-                    .context("CSV open error")
-            }
+            StorageFormat::Csv => CsvState::open_with_labels(csv_path, labels)
+                .map(SessionWriter::Csv)
+                .context("CSV open error"),
             StorageFormat::Parquet => {
-                ParquetState::open_with_labels(csv_path, labels)
-                    .map(SessionWriter::Parquet)
+                ParquetState::open_with_labels(csv_path, labels).map(SessionWriter::Parquet)
             }
             StorageFormat::Both => {
-                let csv = CsvState::open_with_labels(csv_path, labels)
-                    .context("CSV open error")?;
+                let csv = CsvState::open_with_labels(csv_path, labels).context("CSV open error")?;
                 let pq = ParquetState::open_with_labels(csv_path, labels)?;
                 Ok(SessionWriter::Both(csv, pq))
             }
         }
     }
 
-    pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
+    pub fn push_eeg(
+        &mut self,
+        electrode: usize,
+        samples: &[f64],
+        packet_ts: f64,
+        sample_rate: f64,
+    ) {
         match self {
-            Self::Csv(c)            => c.push_eeg(electrode, samples, packet_ts, sample_rate),
-            Self::Parquet(p)        => p.push_eeg(electrode, samples, packet_ts, sample_rate),
+            Self::Csv(c) => c.push_eeg(electrode, samples, packet_ts, sample_rate),
+            Self::Parquet(p) => p.push_eeg(electrode, samples, packet_ts, sample_rate),
             Self::Both(c, p) => {
                 c.push_eeg(electrode, samples, packet_ts, sample_rate);
                 p.push_eeg(electrode, samples, packet_ts, sample_rate);
@@ -87,7 +89,7 @@ impl SessionWriter {
         ppg_vitals: Option<&PpgMetrics>,
     ) {
         match self {
-            Self::Csv(c)     => c.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals),
+            Self::Csv(c) => c.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals),
             Self::Parquet(p) => p.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals),
             Self::Both(c, p) => {
                 c.push_ppg(eeg_csv_path, channel, samples, packet_ts, ppg_vitals);
@@ -98,7 +100,7 @@ impl SessionWriter {
 
     pub fn push_metrics(&mut self, eeg_csv_path: &Path, snap: &BandSnapshot) {
         match self {
-            Self::Csv(c)     => c.push_metrics(eeg_csv_path, snap),
+            Self::Csv(c) => c.push_metrics(eeg_csv_path, snap),
             Self::Parquet(p) => p.push_metrics(eeg_csv_path, snap),
             Self::Both(c, p) => {
                 c.push_metrics(eeg_csv_path, snap);
@@ -110,13 +112,13 @@ impl SessionWriter {
     pub fn push_imu(
         &mut self,
         eeg_csv_path: &Path,
-        timestamp_s:  f64,
-        accel:        [f32; 3],
-        gyro:         Option<[f32; 3]>,
-        mag:          Option<[f32; 3]>,
+        timestamp_s: f64,
+        accel: [f32; 3],
+        gyro: Option<[f32; 3]>,
+        mag: Option<[f32; 3]>,
     ) {
         match self {
-            Self::Csv(c)     => c.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag),
+            Self::Csv(c) => c.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag),
             Self::Parquet(p) => p.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag),
             Self::Both(c, p) => {
                 c.push_imu(eeg_csv_path, timestamp_s, accel, gyro, mag);
@@ -127,9 +129,12 @@ impl SessionWriter {
 
     pub fn flush(&mut self) {
         match self {
-            Self::Csv(c)     => c.flush(),
+            Self::Csv(c) => c.flush(),
             Self::Parquet(p) => p.flush(),
-            Self::Both(c, p) => { c.flush(); p.flush(); }
+            Self::Both(c, p) => {
+                c.flush();
+                p.flush();
+            }
         }
     }
 }

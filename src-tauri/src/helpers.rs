@@ -11,18 +11,18 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_notification::NotificationExt;
 
+use crate::settings::{save_secrets_from_settings, settings_path, CalibrationConfig, UserSettings};
 use crate::state::*;
 use crate::ws_server::WsBroadcaster;
 use crate::MutexExt;
-use crate::settings::{
-    CalibrationConfig, UserSettings,
-    settings_path, save_secrets_from_settings,
-};
 
 // ── Time helpers ──────────────────────────────────────────────────────────────
 
 pub(crate) fn unix_secs() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 /// Returns today's date as `YYYYMMDD` (UTC).
@@ -35,7 +35,10 @@ pub(crate) fn yyyymmdd_utc() -> String {
 
 pub(crate) fn emit_status(app: &AppHandle) {
     let s_ref = app.app_state();
-    let st = { let g = s_ref.lock_or_recover(); g.status.clone() };
+    let st = {
+        let g = s_ref.lock_or_recover();
+        g.status.clone()
+    };
     // Renamed from "muse-status" to "status" — device-agnostic.
     let _ = app.emit("status", &st);
     app.state::<WsBroadcaster>().send("status", &st);
@@ -43,7 +46,10 @@ pub(crate) fn emit_status(app: &AppHandle) {
 
 pub(crate) fn emit_devices(app: &AppHandle) {
     let s_ref = app.app_state();
-    let d = { let g = s_ref.lock_or_recover(); g.discovered.clone() };
+    let d = {
+        let g = s_ref.lock_or_recover();
+        g.discovered.clone()
+    };
     let _ = app.emit("devices-updated", &d);
 }
 
@@ -62,7 +68,9 @@ pub(crate) fn set_cortex_ws_state(app: &AppHandle, state: &str) {
     {
         let s_ref = app.app_state();
         let mut g = s_ref.lock_or_recover();
-        if g.cortex_ws_state == state { return; }
+        if g.cortex_ws_state == state {
+            return;
+        }
         g.cortex_ws_state = state.to_owned();
     }
     emit_cortex_ws_state(app);
@@ -82,17 +90,26 @@ pub(crate) enum ToastLevel {
 
 #[derive(Clone, Serialize)]
 struct ToastPayload {
-    level:   ToastLevel,
-    title:   String,
+    level: ToastLevel,
+    title: String,
     message: String,
 }
 
 /// Send an in-app toast event AND a native OS notification.
 pub(crate) fn send_toast(app: &AppHandle, level: ToastLevel, title: &str, message: &str) {
-    let payload = ToastPayload { level, title: title.to_owned(), message: message.to_owned() };
+    let payload = ToastPayload {
+        level,
+        title: title.to_owned(),
+        message: message.to_owned(),
+    };
     let _ = app.emit("toast", &payload);
     app.state::<WsBroadcaster>().send("toast", &payload);
-    let _ = app.notification().builder().title(title).body(message).show();
+    let _ = app
+        .notification()
+        .builder()
+        .title(title)
+        .body(message)
+        .show();
 }
 
 // ── State access helpers ──────────────────────────────────────────────────────
@@ -117,29 +134,20 @@ pub(crate) fn skill_dir(state: &Mutex<Box<AppState>>) -> std::path::PathBuf {
 }
 
 /// Read a value from `AppState` via a short-lived lock.
-pub(crate) fn read_state<T>(
-    state: &Mutex<Box<AppState>>,
-    f: impl FnOnce(&AppState) -> T,
-) -> T {
+pub(crate) fn read_state<T>(state: &Mutex<Box<AppState>>, f: impl FnOnce(&AppState) -> T) -> T {
     let g = state.lock_or_recover();
     f(&g)
 }
 
 /// Mutate `AppState` via a short-lived lock.
 #[allow(dead_code)]
-pub(crate) fn mutate_state(
-    state: &Mutex<Box<AppState>>,
-    f: impl FnOnce(&mut AppState),
-) {
+pub(crate) fn mutate_state(state: &Mutex<Box<AppState>>, f: impl FnOnce(&mut AppState)) {
     let mut g = state.lock_or_recover();
     f(&mut g);
 }
 
 /// Mutate `AppState` and auto-persist settings afterwards.
-pub(crate) fn mutate_and_save(
-    app: &AppHandle,
-    f: impl FnOnce(&mut AppState),
-) {
+pub(crate) fn mutate_and_save(app: &AppHandle, f: impl FnOnce(&mut AppState)) {
     {
         let r = app.app_state();
         let mut g = r.lock_or_recover();
@@ -155,10 +163,11 @@ pub(crate) fn mutate_and_save(
 const SETTINGS_DEBOUNCE_MS: u64 = 500;
 
 /// Atomic flag: `true` while a debounce timer is already pending.
-static SAVE_PENDING: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
+static SAVE_PENDING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-pub fn save_settings_handle(app: &AppHandle) { save_settings(app); }
+pub fn save_settings_handle(app: &AppHandle) {
+    save_settings(app);
+}
 
 /// Schedule a settings save.  The actual disk write is debounced: if another
 /// `save_settings` call arrives within [`SETTINGS_DEBOUNCE_MS`], only one
@@ -184,50 +193,54 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
     let s_ref = app.app_state();
     let s = s_ref.lock_or_recover();
     let data = UserSettings {
-        paired:                 s.status.paired_devices.clone(),
-        preferred_id:           s.preferred_id.clone(),
-        filter_config:          s.status.filter_config,
+        paired: s.status.paired_devices.clone(),
+        preferred_id: s.preferred_id.clone(),
+        filter_config: s.status.filter_config,
         embedding_overlap_secs: s.status.embedding_overlap_secs,
         data_dir: None,
-        label_shortcut:         s.shortcuts.label_shortcut.clone(),
-        search_shortcut:        s.shortcuts.search_shortcut.clone(),
-        settings_shortcut:      s.shortcuts.settings_shortcut.clone(),
-        calibration_shortcut:   s.shortcuts.calibration_shortcut.clone(),
-        help_shortcut:          s.shortcuts.help_shortcut.clone(),
-        history_shortcut:       s.shortcuts.history_shortcut.clone(),
-        api_shortcut:           s.shortcuts.api_shortcut.clone(),
-        theme_shortcut:         s.shortcuts.theme_shortcut.clone(),
-        focus_timer_shortcut:   s.shortcuts.focus_timer_shortcut.clone(),
+        label_shortcut: s.shortcuts.label_shortcut.clone(),
+        search_shortcut: s.shortcuts.search_shortcut.clone(),
+        settings_shortcut: s.shortcuts.settings_shortcut.clone(),
+        calibration_shortcut: s.shortcuts.calibration_shortcut.clone(),
+        help_shortcut: s.shortcuts.help_shortcut.clone(),
+        history_shortcut: s.shortcuts.history_shortcut.clone(),
+        api_shortcut: s.shortcuts.api_shortcut.clone(),
+        theme_shortcut: s.shortcuts.theme_shortcut.clone(),
+        focus_timer_shortcut: s.shortcuts.focus_timer_shortcut.clone(),
         #[cfg(feature = "llm")]
-        chat_shortcut:          s.shortcuts.chat_shortcut.clone(),
-        calibration:            CalibrationConfig::default(),
-        calibration_profiles:   s.calibration_profiles.clone(),
-        active_calibration_id:  s.active_calibration_id.clone(),
-        onboarding_complete:                s.ui.onboarding_complete,
-        last_seen_whats_new_version:        s.ui.last_seen_whats_new_version.clone(),
-        theme:                  s.ui.theme.clone(),
-        language:               s.ui.language.clone(),
-        accent_color:           s.ui.accent_color.clone(),
-        daily_goal_min:         s.ui.daily_goal_min,
-        goal_notified_date:     s.ui.goal_notified_date.clone(),
-        text_embedding_model:   s.ui.text_embedding_model.clone(),
-        hooks:                  s.hooks.clone(),
-        ws_host:                s.ws_host.clone(),
-        ws_port:                s.ws_port,
-        api_token:              s.api_token.clone(),
+        chat_shortcut: s.shortcuts.chat_shortcut.clone(),
+        calibration: CalibrationConfig::default(),
+        calibration_profiles: s.calibration_profiles.clone(),
+        active_calibration_id: s.active_calibration_id.clone(),
+        onboarding_complete: s.ui.onboarding_complete,
+        last_seen_whats_new_version: s.ui.last_seen_whats_new_version.clone(),
+        theme: s.ui.theme.clone(),
+        language: s.ui.language.clone(),
+        accent_color: s.ui.accent_color.clone(),
+        daily_goal_min: s.ui.daily_goal_min,
+        goal_notified_date: s.ui.goal_notified_date.clone(),
+        text_embedding_model: s.ui.text_embedding_model.clone(),
+        hooks: s.hooks.clone(),
+        ws_host: s.ws_host.clone(),
+        ws_port: s.ws_port,
+        api_token: s.api_token.clone(),
         update_check_interval_secs: s.update_check_interval_secs,
-        openbci:                s.openbci_config.clone(),
-        device_api:             s.device_api_config.clone(),
-        neutts:                 s.neutts_config.clone(),
-        tts_preload:            s.tts_preload,
-        track_active_window:    s.input.track_active_window,
-        track_input_activity:   s.input.track_input_activity,
-        do_not_disturb:         s.dnd.lock_or_recover().config.clone(),
-        llm:                    { let __a = s.llm.clone(); let __r = __a.lock_or_recover().config.clone(); __r },
-        screenshot:             s.screenshot_config.clone(),
-        sleep:                  s.sleep_config.clone(),
-        storage_format:         s.settings_storage_format.clone(),
-        scanner:                s.scanner_config.clone(),
+        openbci: s.openbci_config.clone(),
+        device_api: s.device_api_config.clone(),
+        neutts: s.neutts_config.clone(),
+        tts_preload: s.tts_preload,
+        track_active_window: s.input.track_active_window,
+        track_input_activity: s.input.track_input_activity,
+        do_not_disturb: s.dnd.lock_or_recover().config.clone(),
+        llm: {
+            let __a = s.llm.clone();
+            let __r = __a.lock_or_recover().config.clone();
+            __r
+        },
+        screenshot: s.screenshot_config.clone(),
+        sleep: s.sleep_config.clone(),
+        storage_format: s.settings_storage_format.clone(),
+        scanner: s.scanner_config.clone(),
     };
     let path = settings_path(&s.skill_dir);
     drop(s);
@@ -252,9 +265,13 @@ pub(crate) fn save_settings_now(app: &AppHandle) {
 /// * anything else  → BLE (the default / legacy format)
 pub(crate) fn transport_from_id(id: &str) -> crate::device_scanner::Transport {
     use crate::device_scanner::Transport;
-    if id.starts_with("usb:")    { Transport::UsbSerial }
-    else if id.starts_with("cortex:") { Transport::Cortex }
-    else                               { Transport::Ble }
+    if id.starts_with("usb:") {
+        Transport::UsbSerial
+    } else if id.starts_with("cortex:") {
+        Transport::Cortex
+    } else {
+        Transport::Ble
+    }
 }
 
 // ── Paired device upsert ──────────────────────────────────────────────────────
@@ -265,21 +282,31 @@ pub(crate) fn upsert_paired(app: &AppHandle, id: &str, name: &str) {
     let s_ref = app.app_state();
     let mut s = s_ref.lock_or_recover();
     if let Some(d) = s.status.paired_devices.iter_mut().find(|d| d.id == id) {
-        d.last_seen = now; d.name = name.to_owned();
+        d.last_seen = now;
+        d.name = name.to_owned();
     } else {
         s.status.paired_devices.push(PairedDevice {
-            id: id.to_owned(), name: name.to_owned(), last_seen: now,
+            id: id.to_owned(),
+            name: name.to_owned(),
+            last_seen: now,
         });
     }
     let pref = s.preferred_id.clone();
     for d in s.discovered.iter_mut() {
-        if d.id == id { d.is_paired = true; d.last_seen = now; d.name = name.to_owned(); }
+        if d.id == id {
+            d.is_paired = true;
+            d.last_seen = now;
+            d.name = name.to_owned();
+        }
         d.is_preferred = pref.as_deref() == Some(&d.id);
     }
     if !s.discovered.iter().any(|d| d.id == id) {
         s.discovered.push(DiscoveredDevice {
-            id: id.to_owned(), name: name.to_owned(),
-            last_seen: now, last_rssi: 0, is_paired: true,
+            id: id.to_owned(),
+            name: name.to_owned(),
+            last_seen: now,
+            last_rssi: 0,
+            is_paired: true,
             is_preferred: pref.as_deref() == Some(id),
             transport,
         });
@@ -300,19 +327,29 @@ pub(crate) fn upsert_discovered(app: &AppHandle, id: &str, name: &str, rssi: i16
     // discovered device (the legacy entry was created before individual
     // headset IDs were tracked).
     let is_paired = s.status.paired_devices.iter().any(|d| d.id == id)
-        || (id.starts_with("cortex:") && id != "cortex:emotiv"
-            && s.status.paired_devices.iter().any(|d| d.id == "cortex:emotiv"));
+        || (id.starts_with("cortex:")
+            && id != "cortex:emotiv"
+            && s.status
+                .paired_devices
+                .iter()
+                .any(|d| d.id == "cortex:emotiv"));
     let is_preferred = s.preferred_id.as_deref() == Some(id)
         || (id.starts_with("cortex:") && s.preferred_id.as_deref() == Some("cortex:emotiv"));
     if let Some(d) = s.discovered.iter_mut().find(|d| d.id == id) {
-        d.last_seen = now; d.last_rssi = rssi;
-        d.is_paired = is_paired; d.is_preferred = is_preferred;
+        d.last_seen = now;
+        d.last_rssi = rssi;
+        d.is_paired = is_paired;
+        d.is_preferred = is_preferred;
         d.name = name.to_owned();
         d.transport = transport;
     } else {
         s.discovered.push(DiscoveredDevice {
-            id: id.to_owned(), name: name.to_owned(),
-            last_seen: now, last_rssi: rssi, is_paired, is_preferred,
+            id: id.to_owned(),
+            name: name.to_owned(),
+            last_seen: now,
+            last_rssi: rssi,
+            is_paired,
+            is_preferred,
             transport,
         });
     }

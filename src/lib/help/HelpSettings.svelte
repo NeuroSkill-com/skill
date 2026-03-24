@@ -7,49 +7,49 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Settings & EEG Model -->
 
 <script lang="ts">
-  import HelpSection from "./HelpSection.svelte";
-  import HelpItem    from "./HelpItem.svelte";
-  import { Separator } from "$lib/components/ui/separator";
-  import { t }         from "$lib/i18n/index.svelte";
+import { Separator } from "$lib/components/ui/separator";
+import { t } from "$lib/i18n/index.svelte";
+import HelpItem from "./HelpItem.svelte";
+import HelpSection from "./HelpSection.svelte";
 
-  const settingsKeys = [
-    ["helpSettings.pairedDevices",    "helpSettings.pairedDevicesBody"],
-    ["helpSettings.signalProcessing", "helpSettings.signalProcessingBody"],
-    ["helpSettings.eegEmbedding",     "helpSettings.eegEmbeddingBody"],
-    ["helpSettings.calibration",      "helpSettings.calibrationBody"],
-    ["helpSettings.globalShortcuts",  "helpSettings.globalShortcutsBody"],
-    ["helpSettings.debugLogging",     "helpSettings.debugLoggingBody"],
-    ["helpSettings.updates",          "helpSettings.updatesBody"],
-    ["helpSettings.appearanceTab",    "helpSettings.appearanceTabBody"],
-    ["helpSettings.goalsTab",         "helpSettings.goalsTabBody"],
-    ["helpSettings.embeddingsTab",    "helpSettings.embeddingsTabBody"],
-    ["helpSettings.shortcutsTab",     "helpSettings.shortcutsTabBody"],
-    ["helpSettings.umapTab",          "helpSettings.umapTabBody"],
-  ] as const;
+const settingsKeys = [
+  ["helpSettings.pairedDevices", "helpSettings.pairedDevicesBody"],
+  ["helpSettings.signalProcessing", "helpSettings.signalProcessingBody"],
+  ["helpSettings.eegEmbedding", "helpSettings.eegEmbeddingBody"],
+  ["helpSettings.calibration", "helpSettings.calibrationBody"],
+  ["helpSettings.globalShortcuts", "helpSettings.globalShortcutsBody"],
+  ["helpSettings.debugLogging", "helpSettings.debugLoggingBody"],
+  ["helpSettings.updates", "helpSettings.updatesBody"],
+  ["helpSettings.appearanceTab", "helpSettings.appearanceTabBody"],
+  ["helpSettings.goalsTab", "helpSettings.goalsTabBody"],
+  ["helpSettings.embeddingsTab", "helpSettings.embeddingsTabBody"],
+  ["helpSettings.shortcutsTab", "helpSettings.shortcutsTabBody"],
+  ["helpSettings.umapTab", "helpSettings.umapTabBody"],
+] as const;
 
-  const activityKeys = [
-    ["helpSettings.activeWindowHelp",       "helpSettings.activeWindowHelpBody"],
-    ["helpSettings.inputActivityHelp",      "helpSettings.inputActivityHelpBody"],
-    ["helpSettings.activityStorageHelp",    "helpSettings.activityStorageHelpBody"],
-    ["helpSettings.activityPermissionsHelp","helpSettings.activityPermissionsHelpBody"],
-    ["helpSettings.activityDisablingHelp",  "helpSettings.activityDisablingHelpBody"],
-  ] as const;
+const activityKeys = [
+  ["helpSettings.activeWindowHelp", "helpSettings.activeWindowHelpBody"],
+  ["helpSettings.inputActivityHelp", "helpSettings.inputActivityHelpBody"],
+  ["helpSettings.activityStorageHelp", "helpSettings.activityStorageHelpBody"],
+  ["helpSettings.activityPermissionsHelp", "helpSettings.activityPermissionsHelpBody"],
+  ["helpSettings.activityDisablingHelp", "helpSettings.activityDisablingHelpBody"],
+] as const;
 
-  const openbciKeys = [
-    ["helpSettings.openbciBoard",    "helpSettings.openbciBoardBody"],
-    ["helpSettings.openbciGanglion", "helpSettings.openbciGanglionBody"],
-    ["helpSettings.openbciSerial",   "helpSettings.openbciSerialBody"],
-    ["helpSettings.openbciWifi",     "helpSettings.openbciWifiBody"],
-    ["helpSettings.openbciGalea",    "helpSettings.openbciGaleaBody"],
-    ["helpSettings.openbciChannels", "helpSettings.openbciChannelsBody"],
-  ] as const;
+const openbciKeys = [
+  ["helpSettings.openbciBoard", "helpSettings.openbciBoardBody"],
+  ["helpSettings.openbciGanglion", "helpSettings.openbciGanglionBody"],
+  ["helpSettings.openbciSerial", "helpSettings.openbciSerialBody"],
+  ["helpSettings.openbciWifi", "helpSettings.openbciWifiBody"],
+  ["helpSettings.openbciGalea", "helpSettings.openbciGaleaBody"],
+  ["helpSettings.openbciChannels", "helpSettings.openbciChannelsBody"],
+] as const;
 
-  const eegModelKeys = [
-    ["helpSettings.encoderStatus",   "helpSettings.encoderStatusBody"],
-    ["helpSettings.embeddingsToday", "helpSettings.embeddingsTodayBody"],
-    ["helpSettings.hnswParams",      "helpSettings.hnswParamsBody"],
-    ["helpSettings.dataNorm",        "helpSettings.dataNormBody"],
-  ] as const;
+const eegModelKeys = [
+  ["helpSettings.encoderStatus", "helpSettings.encoderStatusBody"],
+  ["helpSettings.embeddingsToday", "helpSettings.embeddingsTodayBody"],
+  ["helpSettings.hnswParams", "helpSettings.hnswParamsBody"],
+  ["helpSettings.dataNorm", "helpSettings.dataNormBody"],
+] as const;
 </script>
 
 <div class="flex flex-col gap-6 pb-6">

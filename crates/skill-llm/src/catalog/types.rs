@@ -2,8 +2,8 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! LLM catalog data types — model entries, catalog structure, download state.
 
-use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 // Re-export from skill-constants.
 pub use skill_constants::LLM_CATALOG_FILE as CATALOG_FILE;
@@ -41,28 +41,28 @@ pub enum DownloadState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmModelEntry {
     // ── Static (from llm_catalog.json) ───────────────────────────────────────
-    pub repo:        String,
+    pub repo: String,
     /// Primary filename — for single-file models this is the only GGUF file.
     /// For split models this is the **first shard** (passed to llama.cpp).
-    pub filename:    String,
-    pub quant:       String,
+    pub filename: String,
+    pub quant: String,
     /// Total size across all shard files (GB).
-    pub size_gb:     f32,
+    pub size_gb: f32,
     pub description: String,
-    pub family_id:   String,
+    pub family_id: String,
     pub family_name: String,
     pub family_desc: String,
     /// e.g. `["chat","reasoning","small"]`
-    pub tags:        Vec<String>,
-    pub is_mmproj:   bool,
+    pub tags: Vec<String>,
+    pub is_mmproj: bool,
     pub recommended: bool,
     /// Hidden in simple view; shown under "Show all quants".
-    pub advanced:    bool,
+    pub advanced: bool,
     /// Model parameter count in billions (e.g. 7.0 for a 7B model).
     /// Used together with `max_context_length` to estimate memory needs and
     /// recommend a context size that fits the user's hardware.
     #[serde(default)]
-    pub params_b:    f64,
+    pub params_b: f64,
     /// Maximum context length the model was trained on (in tokens).
     /// The runtime context size is capped to this value.
     #[serde(default)]
@@ -75,13 +75,13 @@ pub struct LlmModelEntry {
 
     // ── Runtime (persisted in skill_dir/llm_catalog.json) ────────────────────
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub local_path:  Option<PathBuf>,
+    pub local_path: Option<PathBuf>,
     #[serde(default)]
-    pub state:       DownloadState,
+    pub state: DownloadState,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status_msg:  Option<String>,
+    pub status_msg: Option<String>,
     #[serde(default)]
-    pub progress:    f32,
+    pub progress: f32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initiated_at_unix: Option<u64>,
 }
@@ -94,7 +94,11 @@ impl LlmModelEntry {
 
     /// Total number of shards (1 for single-file models).
     pub fn shard_count(&self) -> usize {
-        if self.shard_files.is_empty() { 1 } else { self.shard_files.len() }
+        if self.shard_files.is_empty() {
+            1
+        } else {
+            self.shard_files.len()
+        }
     }
 
     /// Iterator over all filenames that need to be downloaded / present.
@@ -117,7 +121,7 @@ impl LlmModelEntry {
     pub fn resolve_cached(&self) -> Option<PathBuf> {
         use hf_hub::{Cache, Repo};
         let cache = Cache::from_env();
-        let repo  = cache.repo(Repo::model(self.repo.clone()));
+        let repo = cache.repo(Repo::model(self.repo.clone()));
 
         let first = repo.get(&self.filename)?;
 
@@ -136,7 +140,7 @@ impl LlmModelEntry {
     pub fn resolve_cached_shards(&self) -> (Vec<PathBuf>, usize) {
         use hf_hub::{Cache, Repo};
         let cache = Cache::from_env();
-        let repo  = cache.repo(Repo::model(self.repo.clone()));
+        let repo = cache.repo(Repo::model(self.repo.clone()));
         let mut paths = Vec::new();
         let names: Vec<&str> = self.all_filenames().collect();
         for name in &names {
@@ -151,9 +155,9 @@ impl LlmModelEntry {
 /// The full model catalog.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmCatalog {
-    pub entries:       Vec<LlmModelEntry>,
+    pub entries: Vec<LlmModelEntry>,
     #[serde(default)]
-    pub active_model:  String,
+    pub active_model: String,
     #[serde(default)]
     pub active_mmproj: String,
 }
@@ -161,14 +165,14 @@ pub struct LlmCatalog {
 /// Shared download progress state.
 #[derive(Debug, Clone, Default)]
 pub struct DownloadProgress {
-    pub filename:   String,
-    pub state:      DownloadState,
+    pub filename: String,
+    pub state: DownloadState,
     pub status_msg: Option<String>,
-    pub progress:   f32,
-    pub cancelled:  bool,
+    pub progress: f32,
+    pub cancelled: bool,
     pub pause_requested: bool,
     /// 1-based index of the shard currently being downloaded (0 = single file).
     pub current_shard: u16,
     /// Total number of shards (0 or 1 = single file).
-    pub total_shards:  u16,
+    pub total_shards: u16,
 }

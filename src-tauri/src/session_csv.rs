@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager};
 
-use crate::{MutexExt, unix_secs, yyyymmdd_utc};
 use crate::AppStateExt;
+use crate::{unix_secs, yyyymmdd_utc, MutexExt};
 
 // Re-export everything from the crate so `crate::session_csv::*` keeps working.
 pub use skill_data::session_csv::*;
@@ -44,9 +44,9 @@ pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
     let s_ref = app.app_state();
     let s = s_ref.lock_or_recover();
 
-    let session_end_utc   = unix_secs();
+    let session_end_utc = unix_secs();
     let session_start_utc = s.session_start_utc;
-    let duration_secs     = session_start_utc.map(|st| session_end_utc.saturating_sub(st));
+    let duration_secs = session_start_utc.map(|st| session_end_utc.saturating_sub(st));
 
     let meta = serde_json::json!({
         // ── Recording ────────────────────────────────────────────────────
@@ -97,12 +97,13 @@ pub(crate) fn write_session_meta(app: &AppHandle, csv_path: &Path) {
 
     let meta_path = csv_path.with_extension("json");
     match serde_json::to_string_pretty(&meta) {
-        Ok(json) => {
-            match std::fs::write(&meta_path, &json) {
-                Ok(_)  => eprintln!("[session] wrote metadata → {}", meta_path.display()),
-                Err(e) => eprintln!("[session] ERROR writing metadata {}: {e}", meta_path.display()),
-            }
-        }
+        Ok(json) => match std::fs::write(&meta_path, &json) {
+            Ok(_) => eprintln!("[session] wrote metadata → {}", meta_path.display()),
+            Err(e) => eprintln!(
+                "[session] ERROR writing metadata {}: {e}",
+                meta_path.display()
+            ),
+        },
         Err(e) => eprintln!("[session] ERROR serialising metadata: {e}"),
     }
 }

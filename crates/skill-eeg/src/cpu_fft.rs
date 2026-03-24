@@ -18,10 +18,7 @@ fn fft_single(input: &[f32]) -> (Vec<f32>, Vec<f32>) {
     let mut planner = FftPlanner::<f32>::new();
     let fft = planner.plan_fft_forward(n);
 
-    let mut buf: Vec<Complex<f32>> = input
-        .iter()
-        .map(|&v| Complex::new(v, 0.0))
-        .collect();
+    let mut buf: Vec<Complex<f32>> = input.iter().map(|&v| Complex::new(v, 0.0)).collect();
     buf.resize(n, Complex::new(0.0, 0.0));
 
     fft.process(&mut buf);

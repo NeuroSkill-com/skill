@@ -5,8 +5,8 @@
 use std::sync::Mutex;
 use tauri::AppHandle;
 
-use crate::MutexExt;
 use crate::AppState;
+use crate::MutexExt;
 
 // ── Chat chunk types ──────────────────────────────────────────────────────────
 
@@ -24,16 +24,41 @@ use crate::AppState;
 #[derive(serde::Serialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatChunk {
-    Delta    { content: String },
+    Delta {
+        content: String,
+    },
     /// Legacy event — still emitted for backwards compatibility.
-    ToolUse  { tool: String, status: String, detail: Option<String> },
+    ToolUse {
+        tool: String,
+        status: String,
+        detail: Option<String>,
+    },
     /// Rich tool-execution lifecycle events (pi-mono style).
-    ToolExecutionStart  { tool_call_id: String, tool_name: String, args: serde_json::Value },
-    ToolExecutionEnd    { tool_call_id: String, tool_name: String, result: serde_json::Value, is_error: bool },
+    ToolExecutionStart {
+        tool_call_id: String,
+        tool_name: String,
+        args: serde_json::Value,
+    },
+    ToolExecutionEnd {
+        tool_call_id: String,
+        tool_name: String,
+        result: serde_json::Value,
+        is_error: bool,
+    },
     /// A tool call was cancelled by the user.
-    ToolCancelled       { tool_call_id: String, tool_name: String },
-    Done     { finish_reason: String, prompt_tokens: usize, completion_tokens: usize, n_ctx: usize },
-    Error    { message: String },
+    ToolCancelled {
+        tool_call_id: String,
+        tool_name: String,
+    },
+    Done {
+        finish_reason: String,
+        prompt_tokens: usize,
+        completion_tokens: usize,
+        n_ctx: usize,
+    },
+    Error {
+        message: String,
+    },
 }
 
 // ── Streaming command ─────────────────────────────────────────────────────────
@@ -50,12 +75,18 @@ pub enum ChatChunk {
 #[tauri::command]
 pub async fn chat_completions_ipc(
     messages: Vec<serde_json::Value>,
-    params:   crate::llm::GenParams,
-    channel:  tauri::ipc::Channel<ChatChunk>,
-    state:    tauri::State<'_, Mutex<Box<AppState>>>,
+    params: crate::llm::GenParams,
+    channel: tauri::ipc::Channel<ChatChunk>,
+    state: tauri::State<'_, Mutex<Box<AppState>>>,
 ) -> Result<(), String> {
-    let cell = { let __a = state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r };
-    let srv  = cell.lock_or_recover().clone()
+    let cell = {
+        let __a = state.lock_or_recover().llm.clone();
+        let __r = __a.lock_or_recover().state_cell.clone();
+        __r
+    };
+    let srv = cell
+        .lock_or_recover()
+        .clone()
         .ok_or_else(|| "LLM server not running — start it in Settings → LLM".to_string())?;
 
     // Subscribe to the abort watch and mark the current value as "seen" so
@@ -64,43 +95,65 @@ pub async fn chat_completions_ipc(
     abort_rx.borrow_and_update();
 
     let tool_channel = channel.clone();
-    let gen_fut = crate::llm::run_chat_with_builtin_tools(&srv, messages, params, Vec::new(), |delta| {
-        let _ = channel.send(ChatChunk::Delta { content: delta.to_string() });
-    }, move |event: crate::llm::ToolEvent| {
-        match event {
-            crate::llm::ToolEvent::Status { tool_name, status, detail } => {
-                if status.as_str() == "cancelled" {
-                    let _ = tool_channel.send(ChatChunk::ToolCancelled {
-                        tool_call_id: String::new(),
-                        tool_name: tool_name.clone(),
-                    });
-                }
-                let _ = tool_channel.send(ChatChunk::ToolUse {
-                    tool:   tool_name,
+    let gen_fut = crate::llm::run_chat_with_builtin_tools(
+        &srv,
+        messages,
+        params,
+        Vec::new(),
+        |delta| {
+            let _ = channel.send(ChatChunk::Delta {
+                content: delta.to_string(),
+            });
+        },
+        move |event: crate::llm::ToolEvent| {
+            match event {
+                crate::llm::ToolEvent::Status {
+                    tool_name,
                     status,
                     detail,
-                });
-            }
-            crate::llm::ToolEvent::ExecutionStart { tool_call_id, tool_name, args } => {
-                let _ = tool_channel.send(ChatChunk::ToolExecutionStart {
+                } => {
+                    if status.as_str() == "cancelled" {
+                        let _ = tool_channel.send(ChatChunk::ToolCancelled {
+                            tool_call_id: String::new(),
+                            tool_name: tool_name.clone(),
+                        });
+                    }
+                    let _ = tool_channel.send(ChatChunk::ToolUse {
+                        tool: tool_name,
+                        status,
+                        detail,
+                    });
+                }
+                crate::llm::ToolEvent::ExecutionStart {
                     tool_call_id,
                     tool_name,
                     args,
-                });
-            }
-            crate::llm::ToolEvent::ExecutionEnd { tool_call_id, tool_name, result, is_error } => {
-                let _ = tool_channel.send(ChatChunk::ToolExecutionEnd {
+                } => {
+                    let _ = tool_channel.send(ChatChunk::ToolExecutionStart {
+                        tool_call_id,
+                        tool_name,
+                        args,
+                    });
+                }
+                crate::llm::ToolEvent::ExecutionEnd {
                     tool_call_id,
                     tool_name,
                     result,
                     is_error,
-                });
+                } => {
+                    let _ = tool_channel.send(ChatChunk::ToolExecutionEnd {
+                        tool_call_id,
+                        tool_name,
+                        result,
+                        is_error,
+                    });
+                }
+                crate::llm::ToolEvent::RoundComplete { .. } => {
+                    // Per-round usage tracking — logged at the orchestration layer.
+                }
             }
-            crate::llm::ToolEvent::RoundComplete { .. } => {
-                // Per-round usage tracking — logged at the orchestration layer.
-            }
-        }
-    });
+        },
+    );
     tokio::pin!(gen_fut);
 
     tokio::select! {
@@ -143,7 +196,11 @@ pub async fn chat_completions_ipc(
 /// the server is stopped or idle.
 #[tauri::command]
 pub fn abort_llm_stream(state: tauri::State<'_, Mutex<Box<AppState>>>) {
-    let cell = { let __a = state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r };
+    let cell = {
+        let __a = state.lock_or_recover().llm.clone();
+        let __r = __a.lock_or_recover().state_cell.clone();
+        __r
+    };
     let guard = cell.lock_or_recover();
     if let Some(srv) = guard.as_ref() {
         srv.abort_tx.send_modify(|v| *v = v.wrapping_add(1));
@@ -163,14 +220,17 @@ pub fn abort_llm_stream(state: tauri::State<'_, Mutex<Box<AppState>>>) {
 /// Safe to call even when no generation is in progress — it is a no-op if
 /// the server is stopped or the ID doesn't match any pending call.
 #[tauri::command]
-pub fn cancel_tool_call(
-    tool_call_id: String,
-    state: tauri::State<'_, Mutex<Box<AppState>>>,
-) {
-    let cell = { let __a = state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r };
+pub fn cancel_tool_call(tool_call_id: String, state: tauri::State<'_, Mutex<Box<AppState>>>) {
+    let cell = {
+        let __a = state.lock_or_recover().llm.clone();
+        let __r = __a.lock_or_recover().state_cell.clone();
+        __r
+    };
     let guard = cell.lock_or_recover();
     if let Some(srv) = guard.as_ref() {
-        srv.cancelled_tool_calls.lock_or_recover().insert(tool_call_id);
+        srv.cancelled_tool_calls
+            .lock_or_recover()
+            .insert(tool_call_id);
     }
     // Also cancel any in-progress external page fetch (headless webview).
     skill_headless::cancel_current_fetch();
@@ -181,9 +241,15 @@ pub fn cancel_tool_call(
 /// Open (or focus) the floating Chat window.
 #[tauri::command]
 pub async fn open_chat_window(app: AppHandle) -> Result<(), String> {
-    crate::window_cmds::focus_or_create(&app, crate::window_cmds::WindowSpec {
-        label: "chat", route: "chat", title: "NeuroSkill™ – Chat",
-        inner_size: (760.0, 680.0), min_inner_size: Some((480.0, 400.0)),
-        ..Default::default()
-    })
+    crate::window_cmds::focus_or_create(
+        &app,
+        crate::window_cmds::WindowSpec {
+            label: "chat",
+            route: "chat",
+            title: "NeuroSkill™ – Chat",
+            inner_size: (760.0, 680.0),
+            min_inner_size: Some((480.0, 400.0)),
+            ..Default::default()
+        },
+    )
 }

@@ -4,14 +4,19 @@
 //!
 //! Compiled only when the `tts-kitten` Cargo feature is enabled.
 
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    OnceLock,
+};
 
-use std::sync::{OnceLock, atomic::{AtomicBool, Ordering}};
-
-use kittentts::{KittenTTS, download::{self, LoadProgress}};
+use kittentts::{
+    download::{self, LoadProgress},
+    KittenTTS,
+};
 use rodio::{DeviceSinkBuilder, MixerDeviceSink};
 use tokio::sync::oneshot;
 
-use crate::{play_f32_audio, init_espeak_data_path};
+use crate::{init_espeak_data_path, play_f32_audio};
 use anyhow::Context;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -19,13 +24,13 @@ use anyhow::Context;
 pub use skill_constants::KITTEN_TTS_HF_REPO as HF_REPO;
 pub use skill_constants::KITTEN_TTS_VOICE_DEFAULT as VOICE_DEFAULT;
 const SPEED: f32 = skill_constants::KITTEN_TTS_SPEED;
-pub const SAMPLE_RATE:   u32  = kittentts::SAMPLE_RATE;
+pub const SAMPLE_RATE: u32 = kittentts::SAMPLE_RATE;
 
 // ─── Statics ──────────────────────────────────────────────────────────────────
 
-pub static AVAILABLE_VOICES: OnceLock<Vec<String>>               = OnceLock::new();
-pub static LOADED:           AtomicBool                          = AtomicBool::new(false);
-           static ACTIVE_VOICE:     OnceLock<std::sync::RwLock<String>> = OnceLock::new();
+pub static AVAILABLE_VOICES: OnceLock<Vec<String>> = OnceLock::new();
+pub static LOADED: AtomicBool = AtomicBool::new(false);
+static ACTIVE_VOICE: OnceLock<std::sync::RwLock<String>> = OnceLock::new();
 
 // ─── Voice accessors ──────────────────────────────────────────────────────────
 
@@ -34,20 +39,36 @@ fn voice_lock() -> &'static std::sync::RwLock<String> {
 }
 
 pub fn get_voice() -> String {
-    voice_lock().read().map(|g| g.clone()).unwrap_or_else(|_| VOICE_DEFAULT.to_string())
+    voice_lock()
+        .read()
+        .map(|g| g.clone())
+        .unwrap_or_else(|_| VOICE_DEFAULT.to_string())
 }
 
 pub fn set_voice(voice: String) {
-    if let Ok(mut g) = voice_lock().write() { *g = voice; }
+    if let Ok(mut g) = voice_lock().write() {
+        *g = voice;
+    }
 }
 
 // ─── Worker channel ───────────────────────────────────────────────────────────
 
 pub enum Cmd {
-    Init  { cb: Box<dyn FnMut(LoadProgress) + Send + 'static>, done: oneshot::Sender<anyhow::Result<()>> },
-    Speak { text: String, voice: String, done: oneshot::Sender<()> },
-    Unload { done: oneshot::Sender<()> },
-    Shutdown { done: std::sync::mpsc::SyncSender<()> },
+    Init {
+        cb: Box<dyn FnMut(LoadProgress) + Send + 'static>,
+        done: oneshot::Sender<anyhow::Result<()>>,
+    },
+    Speak {
+        text: String,
+        voice: String,
+        done: oneshot::Sender<()>,
+    },
+    Unload {
+        done: oneshot::Sender<()>,
+    },
+    Shutdown {
+        done: std::sync::mpsc::SyncSender<()>,
+    },
 }
 
 static TX: OnceLock<std::sync::mpsc::SyncSender<Cmd>> = OnceLock::new();
@@ -55,7 +76,9 @@ static TX: OnceLock<std::sync::mpsc::SyncSender<Cmd>> = OnceLock::new();
 /// Send a blocking `Shutdown` command to the worker if it has been started.
 /// Returns `true` if the channel send succeeded (worker is running).
 pub fn try_shutdown(done: std::sync::mpsc::SyncSender<()>) -> bool {
-    TX.get().map(|ch| ch.send(Cmd::Shutdown { done }).is_ok()).unwrap_or(false)
+    TX.get()
+        .map(|ch| ch.send(Cmd::Shutdown { done }).is_ok())
+        .unwrap_or(false)
 }
 
 pub fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
@@ -97,7 +120,8 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         done.send(Ok(())).ok();
                     }
                     Err(e) => {
-                        done.send(Err(anyhow::anyhow!("kittentts load failed: {e}"))).ok();
+                        done.send(Err(anyhow::anyhow!("kittentts load failed: {e}")))
+                            .ok();
                     }
                 }
             }
@@ -127,7 +151,8 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 //
                 // Re-opening is cheap (~1 ms) relative to synthesis time.
                 stream = DeviceSinkBuilder::open_default_sink()
-                    .map_err(|e| tts_log!("tts", "could not open audio: {e}")).ok();
+                    .map_err(|e| tts_log!("tts", "could not open audio: {e}"))
+                    .ok();
                 if let (Some(m), Some(s)) = (&model, &stream) {
                     if let Err(e) = speak_inner(m, s, &text, &voice) {
                         tts_log!("tts", "synthesis error: {e}");
@@ -161,9 +186,12 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 // ─── Synthesis ────────────────────────────────────────────────────────────────
 
 fn speak_inner(
-    model: &KittenTTS, stream: &MixerDeviceSink, text: &str, voice: &str,
+    model: &KittenTTS,
+    stream: &MixerDeviceSink,
+    text: &str,
+    voice: &str,
 ) -> anyhow::Result<()> {
-    let t0      = std::time::Instant::now();
+    let t0 = std::time::Instant::now();
     let samples = model
         .generate(text, voice, SPEED, true)
         .with_context(|| format!("synthesis failed for {text:?}"))?;
@@ -171,9 +199,11 @@ fn speak_inner(
         tts_log!("tts", "no samples for {text:?} voice={voice:?}");
         return Ok(());
     }
-    tts_log!("tts",
+    tts_log!(
+        "tts",
         "synthesised {} samples ({:.2} s) in {} ms — text={text:?} voice={voice:?}",
-        samples.len(), samples.len() as f32 / SAMPLE_RATE as f32,
+        samples.len(),
+        samples.len() as f32 / SAMPLE_RATE as f32,
         t0.elapsed().as_millis(),
     );
     play_f32_audio(stream, samples, SAMPLE_RATE);

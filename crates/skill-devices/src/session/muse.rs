@@ -17,8 +17,8 @@ use muse_rs::prelude::*;
 use skill_constants::{CHANNEL_NAMES, EEG_CHANNELS, MUSE_SAMPLE_RATE};
 
 use super::{
-    BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
-    EegFrame, ImuFrame, PpgFrame, now_secs,
+    now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
+    EegFrame, ImuFrame, PpgFrame,
 };
 
 // ── MuseAdapter ───────────────────────────────────────────────────────────────
@@ -27,9 +27,9 @@ use super::{
 const MUSE_EEG_CHANNELS: usize = 4;
 
 pub struct MuseAdapter {
-    rx:     mpsc::Receiver<MuseEvent>,
+    rx: mpsc::Receiver<MuseEvent>,
     handle: MuseHandle,
-    desc:   DeviceDescriptor,
+    desc: DeviceDescriptor,
 
     /// Per-electrode sample queues for aligning Muse's one-electrode-at-a-time
     /// delivery into multi-channel frames.
@@ -46,8 +46,7 @@ pub struct MuseAdapter {
 
 impl MuseAdapter {
     pub fn new(rx: mpsc::Receiver<MuseEvent>, handle: MuseHandle) -> Self {
-        let channel_names: Vec<String> =
-            CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+        let channel_names: Vec<String> = CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
 
         Self {
             rx,

@@ -4,31 +4,32 @@
 //!
 //! Mounted by `super::engine::router` under `/v1/*` paths.
 
-use std::time::{SystemTime, UNIX_EPOCH};
 use skill_constants::MutexExt;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::{
     extract::State,
     http::StatusCode,
     response::{sse, IntoResponse, Response},
-    Json, Router,
     routing::{get, post},
+    Json, Router,
 };
 use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use super::engine::{
-    ChatRequest, CompletionRequest, EmbeddingsRequest,
-    InferRequest, InferToken, ToolEvent,
-    LlmServerState, LlmStateCell,
-    cell_status, run_chat_with_builtin_tools,
+    cell_status, run_chat_with_builtin_tools, ChatRequest, CompletionRequest, EmbeddingsRequest,
+    InferRequest, InferToken, LlmServerState, LlmStateCell, ToolEvent,
 };
 
 // ── Auth + cell-extraction helpers ────────────────────────────────────────────
 
 fn check_auth(state: &LlmServerState, headers: &axum::http::HeaderMap) -> bool {
-    let Some(ref key) = state.api_key else { return true; };
-    headers.get("Authorization")
+    let Some(ref key) = state.api_key else {
+        return true;
+    };
+    headers
+        .get("Authorization")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.strip_prefix("Bearer "))
         .map(|token| token == key.as_str())
@@ -64,7 +65,11 @@ macro_rules! require_auth {
 
 async fn health(State(cell): State<LlmStateCell>) -> Response {
     match &*cell.lock_or_recover() {
-        None    => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"status":"stopped"}))).into_response(),
+        None => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"status":"stopped"})),
+        )
+            .into_response(),
         Some(s) => {
             let status = if s.is_ready() { "ok" } else { "loading" };
             Json(json!({"status": status, "model": s.model_name})).into_response()
@@ -78,36 +83,46 @@ async fn server_status(State(cell): State<LlmStateCell>) -> Response {
     Json(json!({"status": status, "model": model})).into_response()
 }
 
-async fn list_models(
-    State(cell): State<LlmStateCell>,
-    headers:     axum::http::HeaderMap,
-) -> Response {
+async fn list_models(State(cell): State<LlmStateCell>, headers: axum::http::HeaderMap) -> Response {
     let state = get_state!(cell);
     require_auth!(state, headers);
     let ts = unix_ts();
     Json(json!({
         "object": "list",
         "data": [{"id": state.model_name, "object": "model", "created": ts, "owned_by": "skill"}]
-    })).into_response()
+    }))
+    .into_response()
 }
 
 // ── /v1/chat/completions ──────────────────────────────────────────────────────
 
 async fn chat_completions(
     State(cell): State<LlmStateCell>,
-    headers:     axum::http::HeaderMap,
-    Json(req):   Json<ChatRequest>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<ChatRequest>,
 ) -> Response {
     let state = get_state!(cell);
     require_auth!(state, headers);
     let _ = &req.tool_choice;
 
     if !state.is_ready() {
-        return (StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error":{"message":"Model is still loading","code":"loading"}})),
+        )
+            .into_response();
     }
 
-    match run_chat_with_builtin_tools(&state, req.messages.clone(), req.gen.clone(), req.tools.clone(), |_| {}, |_: ToolEvent| {}).await {
+    match run_chat_with_builtin_tools(
+        &state,
+        req.messages.clone(),
+        req.gen.clone(),
+        req.tools.clone(),
+        |_| {},
+        |_: ToolEvent| {},
+    )
+    .await
+    {
         Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx)) => {
             if req.stream {
                 let model_name = state.model_name.clone();
@@ -164,10 +179,15 @@ async fn chat_completions(
                         "total_tokens": prompt_tokens + completion_tokens,
                         "n_ctx": n_ctx,
                     },
-                })).into_response()
+                }))
+                .into_response()
             }
         }
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
     }
 }
 
@@ -175,25 +195,34 @@ async fn chat_completions(
 
 async fn completions(
     State(cell): State<LlmStateCell>,
-    headers:     axum::http::HeaderMap,
-    Json(req):   Json<CompletionRequest>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<CompletionRequest>,
 ) -> Response {
     let state = get_state!(cell);
     require_auth!(state, headers);
 
     if !state.is_ready() {
-        return (StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error":{"message":"Model is still loading","code":"loading"}})),
+        )
+            .into_response();
     }
 
     let prompt = match &req.prompt {
         Value::String(s) => s.clone(),
-        Value::Array(arr) => arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join("\n"),
+        Value::Array(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>()
+            .join("\n"),
         _ => String::new(),
     };
     let (tok_tx, tok_rx) = mpsc::unbounded_channel();
     let _ = state.req_tx.send(InferRequest::Complete {
-        prompt, params: req.gen.clone(), token_tx: tok_tx,
+        prompt,
+        params: req.gen.clone(),
+        token_tx: tok_tx,
     });
 
     if req.stream {
@@ -207,21 +236,33 @@ async fn completions(
 
 async fn embeddings(
     State(cell): State<LlmStateCell>,
-    headers:     axum::http::HeaderMap,
-    Json(req):   Json<EmbeddingsRequest>,
+    headers: axum::http::HeaderMap,
+    Json(req): Json<EmbeddingsRequest>,
 ) -> Response {
     let state = get_state!(cell);
     require_auth!(state, headers);
 
     let inputs: Vec<String> = match &req.input {
         Value::String(s) => vec![s.clone()],
-        Value::Array(arr) => arr.iter().filter_map(|v| v.as_str().map(String::from)).collect(),
-        _ => return (StatusCode::BAD_REQUEST, Json(json!({"error":"invalid input"}))).into_response(),
+        Value::Array(arr) => arr
+            .iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error":"invalid input"})),
+            )
+                .into_response()
+        }
     };
 
     if !state.is_ready() {
-        return (StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({"error":{"message":"Model is still loading","code":"loading"}}))).into_response();
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error":{"message":"Model is still loading","code":"loading"}})),
+        )
+            .into_response();
     }
 
     let (result_tx, result_rx) = tokio::sync::oneshot::channel();
@@ -229,13 +270,27 @@ async fn embeddings(
 
     match result_rx.await {
         Ok(Ok(vecs)) => {
-            let data: Vec<Value> = vecs.into_iter().enumerate().map(|(i, vec)| json!({
-                "object": "embedding", "index": i, "embedding": vec,
-            })).collect();
+            let data: Vec<Value> = vecs
+                .into_iter()
+                .enumerate()
+                .map(|(i, vec)| {
+                    json!({
+                        "object": "embedding", "index": i, "embedding": vec,
+                    })
+                })
+                .collect();
             Json(json!({"object":"list","data":data,"model":state.model_name})).into_response()
         }
-        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
-        Err(_)     => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":"actor died"}))).into_response(),
+        Ok(Err(e)) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": e.to_string()})),
+        )
+            .into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error":"actor died"})),
+        )
+            .into_response(),
     }
 }
 
@@ -298,21 +353,33 @@ async fn collect_chat_response(
 ) -> Response {
     let id = format!("chatcmpl-{}", short_id());
     let ts = unix_ts();
-    let mut text              = String::new();
-    let mut finish_reason     = "stop".to_string();
-    let mut prompt_tokens     = 0usize;
+    let mut text = String::new();
+    let mut finish_reason = "stop".to_string();
+    let mut prompt_tokens = 0usize;
     let mut completion_tokens = 0usize;
-    let mut n_ctx             = 0usize;
+    let mut n_ctx = 0usize;
 
     while let Some(tok) = tok_rx.recv().await {
         match tok {
             InferToken::Delta(t) => text.push_str(&t),
-            InferToken::Done { finish_reason: fr, prompt_tokens: pt, completion_tokens: ct, n_ctx: nc } => {
-                finish_reason = fr; prompt_tokens = pt; completion_tokens = ct; n_ctx = nc;
+            InferToken::Done {
+                finish_reason: fr,
+                prompt_tokens: pt,
+                completion_tokens: ct,
+                n_ctx: nc,
+            } => {
+                finish_reason = fr;
+                prompt_tokens = pt;
+                completion_tokens = ct;
+                n_ctx = nc;
                 break;
             }
             InferToken::Error(e) => {
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response();
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response();
             }
         }
     }
@@ -330,7 +397,8 @@ async fn collect_chat_response(
             "total_tokens":      prompt_tokens + completion_tokens,
             "n_ctx":             n_ctx,
         },
-    })).into_response()
+    }))
+    .into_response()
 }
 
 async fn stream_completion_response(
@@ -383,15 +451,24 @@ async fn collect_completion_response(
 ) -> Response {
     let id = format!("cmpl-{}", short_id());
     let ts = unix_ts();
-    let mut text          = String::new();
+    let mut text = String::new();
     let mut finish_reason = "stop".to_string();
 
     while let Some(tok) = tok_rx.recv().await {
         match tok {
-            InferToken::Delta(t)                   => text.push_str(&t),
-            InferToken::Done { finish_reason: fr, .. } => { finish_reason = fr; break; }
-            InferToken::Error(e)                   => {
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response();
+            InferToken::Delta(t) => text.push_str(&t),
+            InferToken::Done {
+                finish_reason: fr, ..
+            } => {
+                finish_reason = fr;
+                break;
+            }
+            InferToken::Error(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": e.to_string()})),
+                )
+                    .into_response();
             }
         }
     }
@@ -400,21 +477,9 @@ async fn collect_completion_response(
         "id": id, "object": "text_completion", "created": ts, "model": model_name,
         "choices": [{"text": text, "index": 0, "finish_reason": finish_reason}],
         "usage": {"prompt_tokens":0,"completion_tokens":0,"total_tokens":0},
-    })).into_response()
+    }))
+    .into_response()
 }
-
-// ── Chat-template helper ──────────────────────────────────────────────────────
-
-// Format a list of OpenAI chat messages into a plain-text prompt.
-//
-// Ideally we would call `model.apply_chat_template()` here, but that requires
-// a reference to the model which lives only in the actor thread.  We use the
-// simple `<|role|>\ncontent\n` format that most modern chat models support
-// (Qwen3, Llama-3, Mistral, etc.).  The actor applies the template in the
-// `Generate` handler when the model is available.
-//
-// TODO: send raw messages to the actor and let it apply the model's built-in
-// chat template via `model.apply_chat_template()`.
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -440,11 +505,11 @@ fn short_id() -> String {
 /// (server stopped).  Merge into the main axum router with `.merge(llm::router(cell))`.
 pub fn router(cell: LlmStateCell) -> Router {
     Router::new()
-        .route("/health",                       get(health))
-        .route("/llm/status",                   get(server_status))
-        .route("/v1/models",                    get(list_models))
-        .route("/v1/chat/completions",          post(chat_completions))
-        .route("/v1/completions",               post(completions))
-        .route("/v1/embeddings",                post(embeddings))
+        .route("/health", get(health))
+        .route("/llm/status", get(server_status))
+        .route("/v1/models", get(list_models))
+        .route("/v1/chat/completions", post(chat_completions))
+        .route("/v1/completions", post(completions))
+        .route("/v1/embeddings", post(embeddings))
         .with_state(cell)
 }

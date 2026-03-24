@@ -20,8 +20,7 @@ pub use skill_constants::MutexExt;
 pub fn open_readonly(path: &Path) -> Result<rusqlite::Connection, rusqlite::Error> {
     rusqlite::Connection::open_with_flags(
         path,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-            | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
 }
 
@@ -105,12 +104,16 @@ pub fn hf_cache_root() -> PathBuf {
 fn home_dir_or_tmp() -> PathBuf {
     #[cfg(unix)]
     {
-        std::env::var("HOME").ok().map(PathBuf::from)
+        std::env::var("HOME")
+            .ok()
+            .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir)
     }
     #[cfg(windows)]
     {
-        std::env::var("USERPROFILE").ok().map(PathBuf::from)
+        std::env::var("USERPROFILE")
+            .ok()
+            .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir)
     }
 }
@@ -128,7 +131,7 @@ pub fn hf_model_dir(repo_id: &str) -> PathBuf {
 pub fn hf_ensure_dirs(repo_id: &str) -> std::io::Result<(PathBuf, PathBuf, PathBuf)> {
     let model_dir = hf_model_dir(repo_id);
     let blobs_dir = model_dir.join("blobs");
-    let refs_dir  = model_dir.join("refs");
+    let refs_dir = model_dir.join("refs");
     std::fs::create_dir_all(&blobs_dir)?;
     std::fs::create_dir_all(&refs_dir)?;
     Ok((model_dir, blobs_dir, refs_dir))
@@ -142,7 +145,9 @@ pub fn hf_ensure_dirs(repo_id: &str) -> std::io::Result<(PathBuf, PathBuf, PathB
 /// and `date_dirs` (skill-label-index).
 pub fn date_dirs(skill_dir: &Path) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir(skill_dir) else { return out };
+    let Ok(rd) = std::fs::read_dir(skill_dir) else {
+        return out;
+    };
     for entry in rd.flatten() {
         let name = entry.file_name();
         let name = name.to_string_lossy();
@@ -173,7 +178,9 @@ pub fn civil_from_unix(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
     let mut y = 1970u32;
     loop {
         let in_yr = if is_leap(y) { 366u64 } else { 365 };
-        if days < in_yr { break; }
+        if days < in_yr {
+            break;
+        }
         days -= in_yr;
         y += 1;
     }
@@ -185,7 +192,9 @@ pub fn civil_from_unix(secs: u64) -> (u32, u32, u32, u32, u32, u32) {
     };
     let mut mo = 1u32;
     for &l in &ml {
-        if days < l { break; }
+        if days < l {
+            break;
+        }
         days -= l;
         mo += 1;
     }
@@ -242,12 +251,12 @@ pub fn unix_to_ts(secs: u64) -> i64 {
 
 /// Convert `YYYYMMDDHHmmss` integer → Unix seconds (UTC).
 pub fn ts_to_unix(ts: i64) -> u64 {
-    let s  = (ts                   % 100) as u64;
-    let m  = (ts /         100     % 100) as u64;
-    let h  = (ts /      10_000     % 100) as u64;
-    let d  = (ts /   1_000_000     % 100) as u64;
-    let mo = (ts / 100_000_000     % 100) as u64;
-    let y  = (ts / 10_000_000_000)        as u32;
+    let s = (ts % 100) as u64;
+    let m = (ts / 100 % 100) as u64;
+    let h = (ts / 10_000 % 100) as u64;
+    let d = (ts / 1_000_000 % 100) as u64;
+    let mo = (ts / 100_000_000 % 100) as u64;
+    let y = (ts / 10_000_000_000) as u32;
 
     let mut days = 0u64;
     for yr in 1970..y {
@@ -255,8 +264,18 @@ pub fn ts_to_unix(ts: i64) -> u64 {
     }
 
     let month_days: [u64; 12] = [
-        31, if is_leap(y) { 29 } else { 28 }, 31, 30, 31, 30,
-        31, 31, 30, 31, 30, 31,
+        31,
+        if is_leap(y) { 29 } else { 28 },
+        31,
+        30,
+        31,
+        30,
+        31,
+        31,
+        30,
+        31,
+        30,
+        31,
     ];
     for &md in month_days.iter().take(mo as usize - 1) {
         days += md;

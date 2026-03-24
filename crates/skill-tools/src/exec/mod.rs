@@ -12,32 +12,38 @@
 //! - **safety** — dangerous-operation detection and user-approval dialogs
 //! - **helpers** — path resolution, UTC offset formatting
 
+pub(crate) mod helpers;
+pub(crate) mod safety;
+mod status;
+mod tools_fs;
 mod tools_system;
 mod tools_web;
-mod tools_fs;
-mod status;
 pub(crate) mod truncate;
-pub(crate) mod safety;
-pub(crate) mod helpers;
 
 #[cfg(test)]
 mod tests;
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
+use crate::defs::is_builtin_tool_enabled;
 use crate::parse::ToolCall;
 use crate::types::LlmToolConfig;
-use crate::defs::is_builtin_tool_enabled;
 
 // Re-export public API items that were previously accessible from `exec`.
-pub use truncate::truncate_text;
 pub use helpers::{resolve_tool_path, retry_with_backoff};
-pub use safety::{check_bash_safety, check_path_safety, request_tool_approval, set_bash_edit_hook, BashEditHook};
+pub use safety::{
+    check_bash_safety, check_path_safety, request_tool_approval, set_bash_edit_hook, BashEditHook,
+};
+pub use truncate::truncate_text;
 
 // ── Public execution entry point ──────────────────────────────────────────────
 
 /// Execute a single built-in tool call and return the JSON result.
-pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolConfig, scripts_dir: &std::path::Path) -> Value {
+pub async fn execute_builtin_tool_call(
+    call: &ToolCall,
+    allowed_tools: &LlmToolConfig,
+    scripts_dir: &std::path::Path,
+) -> Value {
     let args: Value = serde_json::from_str(&call.function.arguments).unwrap_or_else(|_| json!({}));
     let tool_name = &call.function.name;
 
@@ -46,7 +52,12 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
     // give a precise hint so the model self-corrects in one step.
     if !crate::defs::is_known_builtin_tool(tool_name) {
         if let Some(cmd) = crate::defs::resolve_skill_alias(tool_name) {
-            tool_log!("tool", "[blocked] tool={} reason=skill alias, should be skill({})", tool_name, cmd);
+            tool_log!(
+                "tool",
+                "[blocked] tool={} reason=skill alias, should be skill({})",
+                tool_name,
+                cmd
+            );
             return json!({
                 "ok": false,
                 "tool": call.function.name,
@@ -57,11 +68,19 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 )
             });
         }
-        tool_log!("tool", "[blocked] tool={} reason=unsupported tool", tool_name);
+        tool_log!(
+            "tool",
+            "[blocked] tool={} reason=unsupported tool",
+            tool_name
+        );
         return json!({ "ok": false, "tool": call.function.name, "error": format!("unsupported tool \"{}\". Use one of the available tools listed in the system prompt.", tool_name) });
     }
     if !is_builtin_tool_enabled(allowed_tools, tool_name) {
-        tool_log!("tool", "[blocked] tool={} reason=disabled in settings", tool_name);
+        tool_log!(
+            "tool",
+            "[blocked] tool={} reason=disabled in settings",
+            tool_name
+        );
         return json!({ "ok": false, "tool": call.function.name, "error": "tool disabled in settings" });
     }
 
@@ -69,15 +88,17 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
     let start = std::time::Instant::now();
 
     let result = match call.function.name.as_str() {
-        "date"          => tools_system::exec_date(),
-        "location"      => tools_system::exec_location(&allowed_tools.retry).await,
-        "bash"          => tools_system::exec_bash(&args, scripts_dir, allowed_tools.require_bash_edit).await,
-        "skill"         => tools_system::exec_skill(&args, allowed_tools).await,
-        "web_search"    => tools_web::exec_web_search(&args, allowed_tools).await,
-        "web_fetch"     => tools_web::exec_web_fetch(&args, allowed_tools).await,
-        "read_file"     => tools_fs::exec_read_file(&args).await,
-        "write_file"    => tools_fs::exec_write_file(&args).await,
-        "edit_file"     => tools_fs::exec_edit_file(&args).await,
+        "date" => tools_system::exec_date(),
+        "location" => tools_system::exec_location(&allowed_tools.retry).await,
+        "bash" => {
+            tools_system::exec_bash(&args, scripts_dir, allowed_tools.require_bash_edit).await
+        }
+        "skill" => tools_system::exec_skill(&args, allowed_tools).await,
+        "web_search" => tools_web::exec_web_search(&args, allowed_tools).await,
+        "web_fetch" => tools_web::exec_web_fetch(&args, allowed_tools).await,
+        "read_file" => tools_fs::exec_read_file(&args).await,
+        "write_file" => tools_fs::exec_write_file(&args).await,
+        "edit_file" => tools_fs::exec_edit_file(&args).await,
         "search_output" => tools_fs::exec_search_output(&args).await,
         other => {
             tool_log!("tool", "[error] tool={} unsupported", other);
@@ -86,12 +107,24 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
     };
 
     let elapsed = start.elapsed();
-    let ok = result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    let ok = result
+        .get("ok")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
     if ok {
         tool_log!("tool", "[done] tool={} elapsed={:.1?}", tool_name, elapsed);
     } else {
-        let err = result.get("error").and_then(|v| v.as_str()).unwrap_or("unknown");
-        tool_log!("tool", "[fail] tool={} elapsed={:.1?} error={}", tool_name, elapsed, err);
+        let err = result
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        tool_log!(
+            "tool",
+            "[fail] tool={} elapsed={:.1?} error={}",
+            tool_name,
+            elapsed,
+            err
+        );
     }
     result
 }

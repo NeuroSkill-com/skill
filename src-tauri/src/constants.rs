@@ -35,13 +35,19 @@ mod tests {
     #[test]
     fn embedding_overlap_samples_correct() {
         // EMBEDDING_OVERLAP_SECS is 0.0 → overlap = 0 samples
-        assert_eq!(EMBEDDING_OVERLAP_SAMPLES, (EMBEDDING_OVERLAP_SECS * MUSE_SAMPLE_RATE) as usize);
+        assert_eq!(
+            EMBEDDING_OVERLAP_SAMPLES,
+            (EMBEDDING_OVERLAP_SECS * MUSE_SAMPLE_RATE) as usize
+        );
     }
 
     #[test]
     fn embedding_hop_samples_correct() {
         // hop = epoch - overlap
-        assert_eq!(EMBEDDING_HOP_SAMPLES, EMBEDDING_EPOCH_SAMPLES - EMBEDDING_OVERLAP_SAMPLES);
+        assert_eq!(
+            EMBEDDING_HOP_SAMPLES,
+            EMBEDDING_EPOCH_SAMPLES - EMBEDDING_OVERLAP_SAMPLES
+        );
     }
 
     #[test]

@@ -12,7 +12,6 @@ use crate::session::Cookie;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Command {
     // ── Page ──────────────────────────────────────────────────────────────
-
     /// Navigate the webview to a URL (Page.navigate).
     Navigate { url: String },
 
@@ -44,7 +43,6 @@ pub enum Command {
     PrintToPdf,
 
     // ── Runtime ──────────────────────────────────────────────────────────
-
     /// Evaluate a JavaScript expression and return the result (Runtime.evaluate).
     EvalJs { script: String },
 
@@ -55,7 +53,6 @@ pub enum Command {
     CallFunction { function: String, args: Vec<String> },
 
     // ── DOM ──────────────────────────────────────────────────────────────
-
     /// Inject CSS into the page (CSS.addRule / insertStyleSheet).
     InjectCss { css: String },
 
@@ -72,10 +69,7 @@ pub enum Command {
     QuerySelectorText { selector: String },
 
     /// Query a CSS selector and return an attribute value.
-    GetAttribute {
-        selector: String,
-        attribute: String,
-    },
+    GetAttribute { selector: String, attribute: String },
 
     /// Click on the element matching a CSS selector.
     Click { selector: String },
@@ -96,7 +90,6 @@ pub enum Command {
     ScrollTo { x: f64, y: f64 },
 
     // ── Network / Storage ────────────────────────────────────────────────
-
     /// Set a cookie.
     SetCookie { cookie: Cookie },
 
@@ -131,7 +124,6 @@ pub enum Command {
     SetSessionStorage { key: String, value: String },
 
     // ── Emulation ────────────────────────────────────────────────────────
-
     /// Set the User-Agent string for subsequent navigations.
     SetUserAgent { user_agent: String },
 
@@ -142,7 +134,6 @@ pub enum Command {
     SetJsEnabled { enabled: bool },
 
     // ── Cache ────────────────────────────────────────────────────────────
-
     /// Clear the webview's HTTP cache (if supported by backend).
     ClearCache,
 
@@ -150,18 +141,13 @@ pub enum Command {
     ClearBrowsingData,
 
     // ── Session ──────────────────────────────────────────────────────────
-
     /// Wait for a CSS selector to appear in the DOM (polls with timeout).
-    WaitForSelector {
-        selector: String,
-        timeout_ms: u64,
-    },
+    WaitForSelector { selector: String, timeout_ms: u64 },
 
     /// Wait for navigation to complete (waits for `load` event).
     WaitForNavigation { timeout_ms: u64 },
 
     // ── Network Interception ─────────────────────────────────────────────
-
     /// Enable request/response interception.
     ///
     /// Once enabled, `fetch()` and `XMLHttpRequest` calls are monkey-patched

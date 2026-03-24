@@ -67,7 +67,9 @@ fn main() {
 
     // ── GetContent ───────────────────────────────────────────────────────
     println!("\n[5] GetContent...");
-    let resp = browser.send(Command::GetContent).expect("GetContent failed");
+    let resp = browser
+        .send(Command::GetContent)
+        .expect("GetContent failed");
     let html = resp.as_text().unwrap_or("");
     println!("    HTML length: {} chars", html.len());
     assert!(html.contains("Hello Headless"), "expected heading in HTML");
@@ -372,7 +374,9 @@ fn main() {
 
     // ── Screenshot ─────────────────────────────────────────────────────
     println!("\n[27] Screenshot...");
-    let resp = browser.send(Command::Screenshot).expect("Screenshot panicked");
+    let resp = browser
+        .send(Command::Screenshot)
+        .expect("Screenshot panicked");
     let text = resp.as_text().unwrap_or("");
     let is_png = text.starts_with("data:image/png;base64,");
     println!("    Got PNG data URL: {is_png} ({} chars)", text.len());

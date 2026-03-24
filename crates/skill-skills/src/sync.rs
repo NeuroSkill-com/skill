@@ -42,7 +42,10 @@ struct SyncMeta {
 #[derive(Debug, Clone)]
 pub enum SyncOutcome {
     /// Skills were downloaded and extracted successfully.
-    Updated { skills_dir: PathBuf, elapsed_ms: u64 },
+    Updated {
+        skills_dir: PathBuf,
+        elapsed_ms: u64,
+    },
     /// Skipped because the last sync is still fresh.
     Fresh { next_sync_in_secs: u64 },
     /// An error occurred.
@@ -102,9 +105,7 @@ pub fn sync_skills(skill_dir: &Path, interval_secs: u64, url: Option<&str>) -> S
     // Move its contents into the target.
     let Some(inner) = find_single_child_dir(&tmp_dir) else {
         let _ = fs::remove_dir_all(&tmp_dir);
-        return SyncOutcome::Failed(
-            "tarball does not contain a single top-level directory".into(),
-        );
+        return SyncOutcome::Failed("tarball does not contain a single top-level directory".into());
     };
 
     // Atomic-ish swap: remove old, rename new.
@@ -164,13 +165,10 @@ fn download(url: &str) -> anyhow::Result<Vec<u8>> {
         .redirects(5)
         .build()
         .get(url)
-        .call()
-        ?;
+        .call()?;
 
     let mut buf = Vec::new();
-    resp.into_reader()
-        .read_to_end(&mut buf)
-        ?;
+    resp.into_reader().read_to_end(&mut buf)?;
     Ok(buf)
 }
 
@@ -222,7 +220,10 @@ mod tests {
 
         assert!(load_meta(&path).is_none());
 
-        let meta = SyncMeta { last_sync_ts: 1234567890, url: "https://example.com".into() };
+        let meta = SyncMeta {
+            last_sync_ts: 1234567890,
+            url: "https://example.com".into(),
+        };
         save_meta(&path, &meta);
 
         let loaded = load_meta(&path).unwrap();

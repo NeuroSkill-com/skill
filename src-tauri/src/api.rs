@@ -112,7 +112,7 @@ use std::net::SocketAddr;
 
 use axum::{
     extract::{ConnectInfo, FromRequestParts, Path, Request, State, WebSocketUpgrade},
-    http::{StatusCode},
+    http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -124,8 +124,8 @@ use tokio::sync::broadcast;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::ws_server::SharedTracker;
-use crate::MutexExt;
 use crate::AppStateExt;
+use crate::MutexExt;
 
 // ── Bearer token middleware ───────────────────────────────────────────────────
 
@@ -136,8 +136,8 @@ use crate::AppStateExt;
 /// When `api_token` is empty (the default), all requests pass through.
 async fn bearer_auth(
     State(state): State<SharedState>,
-    req:          Request,
-    next:         axum::middleware::Next,
+    req: Request,
+    next: axum::middleware::Next,
 ) -> Response {
     let expected = {
         let r = state.app.app_state();
@@ -164,7 +164,8 @@ async fn bearer_auth(
         (
             StatusCode::UNAUTHORIZED,
             Json(json!({ "ok": false, "error": "invalid or missing Bearer token" })),
-        ).into_response()
+        )
+            .into_response()
     }
 }
 
@@ -174,9 +175,9 @@ async fn bearer_auth(
 #[derive(Clone)]
 pub struct SharedState {
     /// Tauri app handle — used to call `ws_commands::dispatch`.
-    pub app:     AppHandle,
+    pub app: AppHandle,
     /// Broadcast sender — WS handler subscribes to this for push events.
-    pub tx:      broadcast::Sender<String>,
+    pub tx: broadcast::Sender<String>,
     /// Connected-client list and request log — shared with the Tauri UI.
     pub tracker: SharedTracker,
 }
@@ -277,20 +278,18 @@ pub fn router(state: SharedState) -> Router {
 
 /// Run one command via [`crate::ws_commands::dispatch`], log it in the tracker,
 /// and return an HTTP [`Response`] with the standard envelope JSON.
-async fn cmd(
-    state:   &SharedState,
-    peer:    &str,
-    command: &str,
-    msg:     Value,
-) -> Response {
+async fn cmd(state: &SharedState, peer: &str, command: &str, msg: Value) -> Response {
     eprintln!("[http] {peer} → {command}");
     let result = crate::ws_commands::dispatch(&state.app, command, &msg).await;
     let ok = result.is_ok();
-    state.tracker.lock_or_recover().log_request(peer, command, ok);
+    state
+        .tracker
+        .lock_or_recover()
+        .log_request(peer, command, ok);
     match result {
         Ok(mut payload) => {
             payload["command"] = command.into();
-            payload["ok"]      = true.into();
+            payload["ok"] = true.into();
             (StatusCode::OK, Json(payload)).into_response()
         }
         Err(e) => {
@@ -328,13 +327,14 @@ fn merge(base: Value, body: Option<Json<Value>>) -> Value {
 /// otherwise a JSON API info/health document.
 async fn root_get(
     State(state): State<SharedState>,
-    addr:  ConnectInfo<SocketAddr>,
-    req:   Request,
+    addr: ConnectInfo<SocketAddr>,
+    req: Request,
 ) -> Response {
     // axum 0.8: Option<WebSocketUpgrade> no longer works as an extractor
     // (requires OptionalFromRequestParts which WebSocketUpgrade does not impl).
     // Instead inspect the Upgrade header ourselves, then extract manually.
-    let is_ws = req.headers()
+    let is_ws = req
+        .headers()
         .get(axum::http::header::UPGRADE)
         .and_then(|v| v.to_str().ok())
         .map(|v| v.eq_ignore_ascii_case("websocket"))
@@ -343,7 +343,7 @@ async fn root_get(
     if is_ws {
         let (mut parts, _body) = req.into_parts();
         let ws = match WebSocketUpgrade::from_request_parts(&mut parts, &state).await {
-            Ok(ws)   => ws,
+            Ok(ws) => ws,
             Err(rej) => return rej.into_response(),
         };
         let peer = addr.0.to_string();
@@ -415,10 +415,10 @@ async fn root_get(
 /// `POST /` — Universal command tunnel: body must be `{ "command": "…", …params }`.
 async fn command_post(
     State(state): State<SharedState>,
-    addr:  ConnectInfo<SocketAddr>,
-    body:  Option<Json<Value>>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
 ) -> Response {
-    let msg     = body.map(|b| b.0).unwrap_or_else(|| json!({}));
+    let msg = body.map(|b| b.0).unwrap_or_else(|| json!({}));
     let command = match msg.get("command").and_then(|v| v.as_str()) {
         Some(c) if !c.is_empty() => c.to_owned(),
         _ => {
@@ -431,27 +431,25 @@ async fn command_post(
 
 // ── REST shortcut handlers ────────────────────────────────────────────────────
 
-async fn status_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
-) -> Response {
+async fn status_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
     cmd(&s, &peer_str(addr), "status", json!({})).await
 }
 
-async fn sessions_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
-) -> Response {
+async fn sessions_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
     cmd(&s, &peer_str(addr), "sessions", json!({})).await
 }
 
 async fn label_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "label", merge(json!({}), body)).await
 }
 
 async fn notify_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "notify", merge(json!({}), body)).await
@@ -460,7 +458,8 @@ async fn notify_post(
 /// `POST /say` — speak text via on-device TTS (fire-and-forget).
 /// Body: `{ "text": "Eyes closed. Relax." }`
 async fn say_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "say", merge(json!({}), body)).await
@@ -469,84 +468,111 @@ async fn say_post(
 /// `POST /calibrate` — open the calibration window and auto-start.
 /// Optional body: `{ "id": "<profile-uuid>" }`.
 async fn calibrate_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "run_calibration", merge(json!({}), body)).await
+    cmd(
+        &s,
+        &peer_str(addr),
+        "run_calibration",
+        merge(json!({}), body),
+    )
+    .await
 }
 
-async fn timer_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
-) -> Response {
+async fn timer_post(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
     cmd(&s, &peer_str(addr), "timer", json!({})).await
 }
 
 async fn search_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "search", merge(json!({}), body)).await
 }
 
 async fn search_labels_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "search_labels", merge(json!({}), body)).await
 }
 
 async fn compare_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "compare", merge(json!({}), body)).await
 }
 
 async fn sleep_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "sleep", merge(json!({}), body)).await
 }
 
 async fn umap_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "umap", merge(json!({}), body)).await
 }
 
 async fn umap_poll_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     Path(job_id): Path<u64>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "umap_poll", json!({ "job_id": job_id })).await
+    cmd(
+        &s,
+        &peer_str(addr),
+        "umap_poll",
+        json!({ "job_id": job_id }),
+    )
+    .await
 }
 
 // ── Calibration profile CRUD ─────────────────────────────────────────────────
 
 async fn list_calibrations_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "list_calibrations", json!({})).await
 }
 
 async fn create_calibration_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "create_calibration", merge(json!({}), body)).await
+    cmd(
+        &s,
+        &peer_str(addr),
+        "create_calibration",
+        merge(json!({}), body),
+    )
+    .await
 }
 
 async fn get_calibration_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     Path(id): Path<String>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "get_calibration", json!({ "id": id })).await
 }
 
 async fn update_calibration_patch(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     Path(id): Path<String>,
     body: Option<Json<Value>>,
 ) -> Response {
@@ -560,9 +586,7 @@ async fn update_calibration_patch(
 /// Equivalent to `{ "command": "dnd" }` via WebSocket or the universal tunnel.
 /// Returns config (enabled, threshold, duration, mode), live timer progress
 /// (`elapsed_secs`), app-side `dnd_active`, and the real OS Focus state.
-async fn dnd_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
-) -> Response {
+async fn dnd_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
     cmd(&s, &peer_str(addr), "dnd", json!({})).await
 }
 
@@ -574,63 +598,72 @@ async fn dnd_get(
 /// Useful for automation scripts, shell scripts, and CI/CD pipelines that need
 /// to control Focus mode without waiting for the EEG threshold to be met.
 async fn dnd_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "dnd_set", merge(json!({}), body)).await
 }
 
 async fn delete_calibration_delete(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     Path(id): Path<String>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "delete_calibration", json!({ "id": id })).await
+    cmd(
+        &s,
+        &peer_str(addr),
+        "delete_calibration",
+        json!({ "id": id }),
+    )
+    .await
 }
 
 // ── LLM REST shortcut handlers ────────────────────────────────────────────────
 
-async fn llm_start_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
-) -> Response {
+async fn llm_start_post(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
     cmd(&s, &peer_str(addr), "llm_start", json!({})).await
 }
 
-async fn llm_stop_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
-) -> Response {
+async fn llm_stop_post(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
     cmd(&s, &peer_str(addr), "llm_stop", json!({})).await
 }
 
-async fn llm_catalog_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
-) -> Response {
+async fn llm_catalog_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
     cmd(&s, &peer_str(addr), "llm_catalog", json!({})).await
 }
 
 async fn llm_download_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "llm_download", merge(json!({}), body)).await
 }
 
 async fn llm_cancel_download_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "llm_cancel_download", merge(json!({}), body)).await
+    cmd(
+        &s,
+        &peer_str(addr),
+        "llm_cancel_download",
+        merge(json!({}), body),
+    )
+    .await
 }
 
 async fn llm_delete_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "llm_delete", merge(json!({}), body)).await
 }
 
-async fn llm_logs_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
-) -> Response {
+async fn llm_logs_get(State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>) -> Response {
     cmd(&s, &peer_str(addr), "llm_logs", json!({})).await
 }
 
@@ -678,12 +711,11 @@ async fn llm_logs_get(
 #[cfg(feature = "llm")]
 async fn llm_chat_post(
     State(state): State<SharedState>,
-    addr:  ConnectInfo<SocketAddr>,
-    body:  Option<Json<Value>>,
+    addr: ConnectInfo<SocketAddr>,
+    body: Option<Json<Value>>,
 ) -> Response {
-
     let peer = peer_str(addr);
-    let msg  = body.map(|b| b.0).unwrap_or_else(|| json!({}));
+    let msg = body.map(|b| b.0).unwrap_or_else(|| json!({}));
 
     // ── Build messages array ──────────────────────────────────────────────────
     let messages: Vec<Value> = if let Some(arr) = msg.get("messages").and_then(|v| v.as_array()) {
@@ -732,29 +764,43 @@ async fn llm_chat_post(
     };
 
     // ── GenParams ─────────────────────────────────────────────────────────────
-    let params = serde_json::from_value::<crate::llm::GenParams>(msg.clone())
-        .unwrap_or_default();
+    let params = serde_json::from_value::<crate::llm::GenParams>(msg.clone()).unwrap_or_default();
 
     // ── Get server ────────────────────────────────────────────────────────────
     let app_state = state.app.app_state();
-    let cell = { let __a = app_state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r };
+    let cell = {
+        let __a = app_state.lock_or_recover().llm.clone();
+        let __r = __a.lock_or_recover().state_cell.clone();
+        __r
+    };
     let server = { cell.lock_or_recover().as_ref().cloned() };
 
     let Some(server) = server else {
         let body = json!({ "command": "llm_chat", "ok": false,
             "error": "LLM server not running — POST /llm/start first" });
-        state.tracker.lock_or_recover().log_request(&peer, "llm_chat", false);
+        state
+            .tracker
+            .lock_or_recover()
+            .log_request(&peer, "llm_chat", false);
         return (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response();
     };
 
     // ── Persist: resolve or create a chat session ─────────────────────────────
-    let req_sid = msg.get("session_id").and_then(serde_json::Value::as_i64).unwrap_or(0);
+    let req_sid = msg
+        .get("session_id")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
     let is_new_session = req_sid <= 0;
     let session_id: i64 = {
         let s = app_state.lock_or_recover();
-        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        let __llm_arc = s.llm.clone();
+        let mut llm = __llm_arc.lock_or_recover();
         if let Some(store) = llm.chat_store.as_mut() {
-            if req_sid > 0 { req_sid } else { store.new_session() }
+            if req_sid > 0 {
+                req_sid
+            } else {
+                store.new_session()
+            }
         } else {
             0
         }
@@ -762,17 +808,23 @@ async fn llm_chat_post(
 
     // ── Persist: save the last user message ───────────────────────────────────
     if session_id > 0 {
-        let last_user = messages.iter().rev()
+        let last_user = messages
+            .iter()
+            .rev()
             .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"));
         if let Some(um) = last_user {
             let content = um.get("content").and_then(|c| c.as_str()).unwrap_or("");
             if !content.is_empty() {
                 let s = app_state.lock_or_recover();
-                let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+                let __llm_arc = s.llm.clone();
+                let mut llm = __llm_arc.lock_or_recover();
                 if let Some(store) = llm.chat_store.as_mut() {
                     store.save_message(session_id, "user", content, None);
                     if is_new_session {
-                        let title: String = content.chars().take(60).collect::<String>()
+                        let title: String = content
+                            .chars()
+                            .take(60)
+                            .collect::<String>()
                             .replace('\n', " ");
                         store.rename_session(session_id, title.trim());
                     }
@@ -784,31 +836,44 @@ async fn llm_chat_post(
     // ── Collect response ──────────────────────────────────────────────────────
     let images = crate::llm::extract_images_from_messages(&messages);
     let mut tok_rx = match server.chat(messages, images, params) {
-        Ok(rx)  => rx,
-        Err(e)  => {
+        Ok(rx) => rx,
+        Err(e) => {
             let body = json!({ "command": "llm_chat", "ok": false, "error": e.to_string() });
-            state.tracker.lock_or_recover().log_request(&peer, "llm_chat", false);
+            state
+                .tracker
+                .lock_or_recover()
+                .log_request(&peer, "llm_chat", false);
             return (StatusCode::SERVICE_UNAVAILABLE, Json(body)).into_response();
         }
     };
 
-    let mut text              = String::new();
-    let mut finish_reason     = "stop".to_string();
-    let mut prompt_tokens     = 0usize;
+    let mut text = String::new();
+    let mut finish_reason = "stop".to_string();
+    let mut prompt_tokens = 0usize;
     let mut completion_tokens = 0usize;
-    let mut n_ctx             = 0usize;
+    let mut n_ctx = 0usize;
 
     while let Some(tok) = tok_rx.recv().await {
         match tok {
             crate::llm::InferToken::Delta(t) => text.push_str(&t),
-            crate::llm::InferToken::Done { finish_reason: fr, prompt_tokens: pt,
-                                           completion_tokens: ct, n_ctx: nc } => {
-                finish_reason = fr; prompt_tokens = pt; completion_tokens = ct; n_ctx = nc;
+            crate::llm::InferToken::Done {
+                finish_reason: fr,
+                prompt_tokens: pt,
+                completion_tokens: ct,
+                n_ctx: nc,
+            } => {
+                finish_reason = fr;
+                prompt_tokens = pt;
+                completion_tokens = ct;
+                n_ctx = nc;
                 break;
             }
             crate::llm::InferToken::Error(e) => {
                 let body = json!({ "command": "llm_chat", "ok": false, "error": e });
-                state.tracker.lock_or_recover().log_request(&peer, "llm_chat", false);
+                state
+                    .tracker
+                    .lock_or_recover()
+                    .log_request(&peer, "llm_chat", false);
                 return (StatusCode::INTERNAL_SERVER_ERROR, Json(body)).into_response();
             }
         }
@@ -817,14 +882,21 @@ async fn llm_chat_post(
     // ── Persist the assistant response ────────────────────────────────────────
     if session_id > 0 && !text.is_empty() {
         let s = app_state.lock_or_recover();
-        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        let __llm_arc = s.llm.clone();
+        let mut llm = __llm_arc.lock_or_recover();
         if let Some(store) = llm.chat_store.as_mut() {
             let msg_id = store.save_message(session_id, "assistant", &text, None);
-            eprintln!("[http] persisted assistant message id={msg_id} session={session_id} len={}", text.len());
+            eprintln!(
+                "[http] persisted assistant message id={msg_id} session={session_id} len={}",
+                text.len()
+            );
         }
     }
 
-    state.tracker.lock_or_recover().log_request(&peer, "llm_chat", true);
+    state
+        .tracker
+        .lock_or_recover()
+        .log_request(&peer, "llm_chat", true);
     let body = json!({
         "command":           "llm_chat",
         "ok":                true,
@@ -841,7 +913,8 @@ async fn llm_chat_post(
 // Stub when llm feature is disabled.
 #[cfg(not(feature = "llm"))]
 async fn llm_chat_post(
-    State(_): State<SharedState>, _addr: ConnectInfo<SocketAddr>,
+    State(_): State<SharedState>,
+    _addr: ConnectInfo<SocketAddr>,
     _body: Option<Json<Value>>,
 ) -> Response {
     let body = json!({ "command": "llm_chat", "ok": false,
@@ -889,9 +962,9 @@ async fn llm_chat_post(
 #[cfg(feature = "llm")]
 async fn handle_llm_chat_ws(
     state: &SharedState,
-    peer:  &str,
-    text:  &str,
-    sink:  &mut futures_util::stream::SplitSink<
+    peer: &str,
+    text: &str,
+    sink: &mut futures_util::stream::SplitSink<
         axum::extract::ws::WebSocket,
         axum::extract::ws::Message,
     >,
@@ -907,10 +980,16 @@ async fn handle_llm_chat_ws(
     }
 
     let msg: Value = match serde_json::from_str(text) {
-        Ok(v)  => v,
+        Ok(v) => v,
         Err(_) => {
-            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":"invalid JSON"}));
-            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+            ws_send!(
+                sink,
+                json!({"command":"llm_chat","ok":false,"type":"error","error":"invalid JSON"})
+            );
+            state
+                .tracker
+                .lock_or_recover()
+                .log_request(peer, "llm_chat", false);
             return Ok(());
         }
     };
@@ -923,17 +1002,22 @@ async fn handle_llm_chat_ws(
     } else if let Some(s) = msg.get("message").and_then(|v| v.as_str()) {
         vec![json!({"role":"user","content":s})]
     } else {
-        ws_send!(sink, json!({
-            "command":"llm_chat","ok":false,"type":"error",
-            "error":"'messages' array required (or 'message' shorthand string)"
-        }));
-        state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+        ws_send!(
+            sink,
+            json!({
+                "command":"llm_chat","ok":false,"type":"error",
+                "error":"'messages' array required (or 'message' shorthand string)"
+            })
+        );
+        state
+            .tracker
+            .lock_or_recover()
+            .log_request(peer, "llm_chat", false);
         return Ok(());
     };
 
     // ── Resolve GenParams ─────────────────────────────────────────────────────
-    let params = serde_json::from_value::<crate::llm::GenParams>(msg.clone())
-        .unwrap_or_default();
+    let params = serde_json::from_value::<crate::llm::GenParams>(msg.clone()).unwrap_or_default();
 
     // ── Get the running server ────────────────────────────────────────────────
     let app_state = state.app.app_state();
@@ -941,13 +1025,21 @@ async fn handle_llm_chat_ws(
     // ── Persist: resolve or create a chat session ─────────────────────────────
     // Callers may pass `"session_id": <i64>` to continue an existing session;
     // otherwise a new session is created automatically.
-    let req_sid = msg.get("session_id").and_then(serde_json::Value::as_i64).unwrap_or(0);
+    let req_sid = msg
+        .get("session_id")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(0);
     let is_new_session = req_sid <= 0;
     let session_id: i64 = {
         let s = app_state.lock_or_recover();
-        let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+        let __llm_arc = s.llm.clone();
+        let mut llm = __llm_arc.lock_or_recover();
         if let Some(store) = llm.chat_store.as_mut() {
-            if req_sid > 0 { req_sid } else { store.new_session() }
+            if req_sid > 0 {
+                req_sid
+            } else {
+                store.new_session()
+            }
         } else {
             0
         }
@@ -955,18 +1047,24 @@ async fn handle_llm_chat_ws(
 
     // ── Persist: save the last user message (the new turn) ────────────────────
     if session_id > 0 {
-        let last_user = messages.iter().rev()
+        let last_user = messages
+            .iter()
+            .rev()
             .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"));
         if let Some(um) = last_user {
             let content = um.get("content").and_then(|c| c.as_str()).unwrap_or("");
             if !content.is_empty() {
                 let s = app_state.lock_or_recover();
-                let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
+                let __llm_arc = s.llm.clone();
+                let mut llm = __llm_arc.lock_or_recover();
                 if let Some(store) = llm.chat_store.as_mut() {
                     store.save_message(session_id, "user", content, None);
                     // Auto-title new sessions with the first user message (up to 60 chars).
                     if is_new_session {
-                        let title: String = content.chars().take(60).collect::<String>()
+                        let title: String = content
+                            .chars()
+                            .take(60)
+                            .collect::<String>()
                             .replace('\n', " ");
                         store.rename_session(session_id, title.trim());
                     }
@@ -976,19 +1074,32 @@ async fn handle_llm_chat_ws(
     }
 
     // Send session_id to client so it can reference this session later.
-    ws_send!(sink, json!({
-        "command": "llm_chat", "type": "session", "session_id": session_id
-    }));
+    ws_send!(
+        sink,
+        json!({
+            "command": "llm_chat", "type": "session", "session_id": session_id
+        })
+    );
 
-    let cell = { let __a = app_state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r };
+    let cell = {
+        let __a = app_state.lock_or_recover().llm.clone();
+        let __r = __a.lock_or_recover().state_cell.clone();
+        __r
+    };
     let server = { cell.lock_or_recover().as_ref().cloned() };
 
     let Some(server) = server else {
-        ws_send!(sink, json!({
-            "command":"llm_chat","ok":false,"type":"error",
-            "error":"LLM server not running — send { \"command\": \"llm_start\" } first"
-        }));
-        state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+        ws_send!(
+            sink,
+            json!({
+                "command":"llm_chat","ok":false,"type":"error",
+                "error":"LLM server not running — send { \"command\": \"llm_start\" } first"
+            })
+        );
+        state
+            .tracker
+            .lock_or_recover()
+            .log_request(peer, "llm_chat", false);
         return Ok(());
     };
 
@@ -1003,13 +1114,13 @@ async fn handle_llm_chat_ws(
     let (frame_tx, mut frame_rx) = tokio::sync::mpsc::unbounded_channel::<Value>();
 
     let delta_tx = frame_tx.clone();
-    let tool_tx  = frame_tx.clone();
+    let tool_tx = frame_tx.clone();
     drop(frame_tx); // drop original so channel closes when both clones are done
 
     // Collect tool events for persistence after generation completes.
-    let tool_calls_collected = std::sync::Arc::new(std::sync::Mutex::new(
-        Vec::<crate::llm::chat_store::NewToolCall>::new(),
-    ));
+    let tool_calls_collected = std::sync::Arc::new(std::sync::Mutex::new(Vec::<
+        crate::llm::chat_store::NewToolCall,
+    >::new()));
     let tool_calls_for_cb = tool_calls_collected.clone();
 
     // Spawn the orchestration on a task so we can concurrently drain the frame channel.
@@ -1082,7 +1193,10 @@ async fn handle_llm_chat_ws(
         if sink.send(Message::Text(s.into())).await.is_err() {
             // Client disconnected — abort generation.
             gen_handle.abort();
-            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+            state
+                .tracker
+                .lock_or_recover()
+                .log_request(peer, "llm_chat", false);
             return Err(());
         }
     }
@@ -1094,35 +1208,61 @@ async fn handle_llm_chat_ws(
             if session_id > 0 && !text.is_empty() {
                 let tool_calls = tool_calls_collected.lock_or_recover().clone();
                 let s = app_state.lock_or_recover();
-                let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
-        if let Some(store) = llm.chat_store.as_mut() {
+                let __llm_arc = s.llm.clone();
+                let mut llm = __llm_arc.lock_or_recover();
+                if let Some(store) = llm.chat_store.as_mut() {
                     let msg_id = store.save_message_with_tools(
-                        session_id, "assistant", &text, None, &tool_calls,
+                        session_id,
+                        "assistant",
+                        &text,
+                        None,
+                        &tool_calls,
                     );
-                    eprintln!("[ws] persisted assistant message id={msg_id} session={session_id} len={}", text.len());
+                    eprintln!(
+                        "[ws] persisted assistant message id={msg_id} session={session_id} len={}",
+                        text.len()
+                    );
                 }
             }
 
-            ws_send!(sink, json!({
-                "command":           "llm_chat",
-                "ok":                true,
-                "type":              "done",
-                "finish_reason":     finish_reason,
-                "prompt_tokens":     prompt_tokens,
-                "completion_tokens": completion_tokens,
-                "n_ctx":             n_ctx,
-                "text":              text,
-                "session_id":        session_id,
-            }));
-            state.tracker.lock_or_recover().log_request(peer, "llm_chat", true);
+            ws_send!(
+                sink,
+                json!({
+                    "command":           "llm_chat",
+                    "ok":                true,
+                    "type":              "done",
+                    "finish_reason":     finish_reason,
+                    "prompt_tokens":     prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "n_ctx":             n_ctx,
+                    "text":              text,
+                    "session_id":        session_id,
+                })
+            );
+            state
+                .tracker
+                .lock_or_recover()
+                .log_request(peer, "llm_chat", true);
         }
         Ok(Err(e)) => {
-            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":e.to_string()}));
-            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+            ws_send!(
+                sink,
+                json!({"command":"llm_chat","ok":false,"type":"error","error":e.to_string()})
+            );
+            state
+                .tracker
+                .lock_or_recover()
+                .log_request(peer, "llm_chat", false);
         }
         Err(e) => {
-            ws_send!(sink, json!({"command":"llm_chat","ok":false,"type":"error","error":format!("generation task panicked: {e}")}));
-            state.tracker.lock_or_recover().log_request(peer, "llm_chat", false);
+            ws_send!(
+                sink,
+                json!({"command":"llm_chat","ok":false,"type":"error","error":format!("generation task panicked: {e}")})
+            );
+            state
+                .tracker
+                .lock_or_recover()
+                .log_request(peer, "llm_chat", false);
         }
     }
     Ok(())
@@ -1132,11 +1272,7 @@ async fn handle_llm_chat_ws(
 
 /// One connected WebSocket client.
 /// Fans out broadcast messages and handles inbound command frames.
-async fn ws_client_task(
-    socket: axum::extract::ws::WebSocket,
-    peer:   String,
-    state:  SharedState,
-) {
+async fn ws_client_task(socket: axum::extract::ws::WebSocket, peer: String, state: SharedState) {
     use axum::extract::ws::Message;
 
     state.tracker.lock_or_recover().add_client(&peer);
@@ -1201,17 +1337,20 @@ async fn ws_client_task(
 /// Returns `None` for unparseable frames (no reply sent).
 async fn handle_ws_text(state: &SharedState, peer: &str, text: &str) -> Option<String> {
     let msg: Value = serde_json::from_str(text).ok()?;
-    let command    = msg.get("command")?.as_str()?;
+    let command = msg.get("command")?.as_str()?;
     eprintln!("[ws] {peer} → {command}");
 
     let result = crate::ws_commands::dispatch(&state.app, command, &msg).await;
     let ok = result.is_ok();
-    state.tracker.lock_or_recover().log_request(peer, command, ok);
+    state
+        .tracker
+        .lock_or_recover()
+        .log_request(peer, command, ok);
 
     let response = match result {
         Ok(mut payload) => {
             payload["command"] = command.into();
-            payload["ok"]      = true.into();
+            payload["ok"] = true.into();
             payload
         }
         Err(e) => json!({ "command": command, "ok": false, "error": e }),
@@ -1242,7 +1381,8 @@ async fn handle_ws_text(state: &SharedState, peer: &str, text: &str) -> Option<S
 /// All arrays are optional.  Duplicates are ignored (idempotent upsert by
 /// source_id + timestamps).
 async fn health_sync_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "health_sync", merge(json!({}), body)).await
@@ -1257,7 +1397,8 @@ async fn health_sync_post(
 /// Valid types: `sleep`, `workouts`, `heart_rate`, `steps`, `metrics`.
 /// For `metrics`, also provide `"metric_type": "restingHeartRate"`.
 async fn health_query_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "health_query", merge(json!({}), body)).await
@@ -1265,22 +1406,31 @@ async fn health_query_post(
 
 /// `GET /v1/health/summary` — aggregate counts (default: last 24h).
 async fn health_summary_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "health_summary", json!({})).await
 }
 
 /// `POST /v1/health/summary` — aggregate counts for a custom range.
 async fn health_summary_post(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
     body: Option<Json<Value>>,
 ) -> Response {
-    cmd(&s, &peer_str(addr), "health_summary", merge(json!({}), body)).await
+    cmd(
+        &s,
+        &peer_str(addr),
+        "health_summary",
+        merge(json!({}), body),
+    )
+    .await
 }
 
 /// `GET /v1/health/metric_types` — list all distinct metric types.
 async fn health_metric_types_get(
-    State(s): State<SharedState>, addr: ConnectInfo<SocketAddr>,
+    State(s): State<SharedState>,
+    addr: ConnectInfo<SocketAddr>,
 ) -> Response {
     cmd(&s, &peer_str(addr), "health_metric_types", json!({})).await
 }
@@ -1304,13 +1454,19 @@ async fn screenshot_file_get(
 
     // Security: ensure the resolved path is still under the screenshots dir
     let screenshots_dir = skill_dir.join(crate::constants::SCREENSHOTS_DIR);
-    let Ok(canonical) = file_path.canonicalize() else { return StatusCode::NOT_FOUND.into_response() };
-    let Ok(canonical_base) = screenshots_dir.canonicalize() else { return StatusCode::NOT_FOUND.into_response() };
+    let Ok(canonical) = file_path.canonicalize() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let Ok(canonical_base) = screenshots_dir.canonicalize() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
     if !canonical.starts_with(&canonical_base) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let Ok(bytes) = tokio::fs::read(&canonical).await else { return StatusCode::NOT_FOUND.into_response() };
+    let Ok(bytes) = tokio::fs::read(&canonical).await else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
 
     let content_type = if path.ends_with(".webp") {
         "image/webp"
@@ -1324,8 +1480,14 @@ async fn screenshot_file_get(
 
     (
         StatusCode::OK,
-        [(axum::http::header::CONTENT_TYPE, content_type),
-         (axum::http::header::CACHE_CONTROL, "public, max-age=31536000, immutable")],
+        [
+            (axum::http::header::CONTENT_TYPE, content_type),
+            (
+                axum::http::header::CACHE_CONTROL,
+                "public, max-age=31536000, immutable",
+            ),
+        ],
         bytes,
-    ).into_response()
+    )
+        .into_response()
 }

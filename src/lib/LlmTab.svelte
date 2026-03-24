@@ -9,377 +9,433 @@
   • Server log viewer with auto-scroll
 -->
 <script lang="ts">
-  import { onMount, onDestroy, tick } from "svelte";
-  import { invoke }                   from "@tauri-apps/api/core";
-  import { listen }                   from "@tauri-apps/api/event";
-  import { Badge }                    from "$lib/components/ui/badge";
-  import { Button }                   from "$lib/components/ui/button";
-  import { Card, CardContent }        from "$lib/components/ui/card";
-  import { t }                        from "$lib/i18n/index.svelte";
-  import { fmtGB }                    from "$lib/format";
-  import {
-    type DownloadState,
-    type LlmModelEntry,
-    type LlmCatalog,
-    type ModelFamily,
-    vendorLabel,
-    compareModelEntries,
-    runModeLabel,
-    tagLabel,
-    tagColor,
-    buildFamilies,
-    splitEntryGroups,
-    familyOptionLabel,
-    autoSelectFamily,
-  } from "$lib/llm-helpers";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { onDestroy, onMount, tick } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { fmtGB } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
+import {
+  autoSelectFamily,
+  buildFamilies,
+  compareModelEntries,
+  type DownloadState,
+  familyOptionLabel,
+  type LlmCatalog,
+  type LlmModelEntry,
+  type ModelFamily,
+  runModeLabel,
+  splitEntryGroups,
+  tagColor,
+  tagLabel,
+  vendorLabel,
+} from "$lib/llm-helpers";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────
 
-  interface LlmLogEntry { ts: number; level: string; message: string; }
+interface LlmLogEntry {
+  ts: number;
+  level: string;
+  message: string;
+}
 
-  type ToolExecutionMode = "sequential" | "parallel";
-  interface WebSearchProvider {
-    backend: "duckduckgo" | "brave" | "searxng";
-    brave_api_key: string;
-    searxng_url: string;
+type ToolExecutionMode = "sequential" | "parallel";
+interface WebSearchProvider {
+  backend: "duckduckgo" | "brave" | "searxng";
+  brave_api_key: string;
+  searxng_url: string;
+}
+
+interface LlmToolsConfig {
+  enabled: boolean;
+  date: boolean;
+  location: boolean;
+  web_search: boolean;
+  web_fetch: boolean;
+  web_search_provider: WebSearchProvider;
+  bash: boolean;
+  read_file: boolean;
+  write_file: boolean;
+  edit_file: boolean;
+  execution_mode: ToolExecutionMode;
+  max_rounds: number;
+  max_calls_per_round: number;
+  retry: { max_retries: number; base_delay_ms: number };
+}
+
+interface LlmConfig {
+  enabled: boolean;
+  autostart: boolean;
+  model_path: string | null;
+  n_gpu_layers: number;
+  ctx_size: number | null;
+  parallel: number;
+  api_key: string | null;
+  tools: LlmToolsConfig;
+  mmproj: string | null;
+  mmproj_n_threads: number;
+  no_mmproj_gpu: boolean;
+  autoload_mmproj: boolean;
+  verbose: boolean;
+  gpu_memory_threshold: number;
+  gpu_memory_gen_threshold: number;
+}
+
+interface ModelFamily {
+  id: string;
+  name: string;
+  desc: string;
+  tags: string[];
+  vendors: string[];
+  entries: LlmModelEntry[]; // non-mmproj, in catalog order
+  mmproj: LlmModelEntry[];
+  recommended: LlmModelEntry | undefined;
+  downloaded: LlmModelEntry[];
+}
+
+interface ModelHardwareFit {
+  filename: string;
+  fitLevel: "perfect" | "good" | "marginal" | "too_tight";
+  runMode: "gpu" | "moe" | "cpu_gpu" | "cpu";
+  memoryRequiredGb: number;
+  memoryAvailableGb: number;
+  estimatedTps: number;
+  score: number;
+  notes: string[];
+}
+
+// Re-export fmtGB as fmtSize for template use
+const fmtSize = fmtGB;
+
+// ── State ──────────────────────────────────────────────────────────────────
+
+let hardwareFits = $state<Map<string, ModelHardwareFit>>(new Map());
+
+let catalog = $state<LlmCatalog>({ entries: [], active_model: "", active_mmproj: "" });
+let config = $state<LlmConfig>({
+  enabled: false,
+  autostart: false,
+  model_path: null,
+  n_gpu_layers: 4294967295,
+  ctx_size: null,
+  parallel: 1,
+  api_key: null,
+  tools: {
+    enabled: true,
+    date: true,
+    location: true,
+    web_search: true,
+    web_fetch: true,
+    web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" },
+    bash: false,
+    read_file: false,
+    write_file: false,
+    edit_file: false,
+    execution_mode: "parallel" as ToolExecutionMode,
+    max_rounds: 15,
+    max_calls_per_round: 4,
+    retry: { max_retries: 2, base_delay_ms: 1000 },
+  },
+  mmproj: null,
+  mmproj_n_threads: 4,
+  no_mmproj_gpu: false,
+  autoload_mmproj: true,
+  verbose: false,
+  gpu_memory_threshold: 0.5,
+  gpu_memory_gen_threshold: 0.3,
+});
+
+let configSaving = $state(false);
+let wsPort = $state(8375);
+let apiKeyVisible = $state(false);
+let ctxSizeInput = $state("");
+let serverStatus = $state<"stopped" | "loading" | "running">("stopped");
+let startError = $state("");
+let showAdvanced = $state(false);
+let showAllQuants = $state(false);
+
+/** The family currently shown in the detail panel. */
+let selectedFamilyId = $state<string>("");
+let previousFamilyId = $state<string>("");
+
+let logs = $state<LlmLogEntry[]>([]);
+let logAutoScroll = $state(true);
+let logEl = $state<HTMLElement | null>(null);
+let logFilter = $state<"all" | "info" | "warn" | "error">("all");
+let logSearch = $state("");
+
+const filteredLogs = $derived.by(() => {
+  let filtered = logs;
+  if (logFilter !== "all") filtered = filtered.filter((e) => e.level === logFilter);
+  if (logSearch.trim()) {
+    const q = logSearch.trim().toLowerCase();
+    filtered = filtered.filter((e) => e.message.toLowerCase().includes(q));
   }
+  return filtered;
+});
 
-  interface LlmToolsConfig {
-    enabled: boolean;
-    date: boolean;
-    location: boolean;
-    web_search: boolean;
-    web_fetch: boolean;
-    web_search_provider: WebSearchProvider;
-    bash: boolean;
-    read_file: boolean;
-    write_file: boolean;
-    edit_file: boolean;
-    execution_mode: ToolExecutionMode;
-    max_rounds: number;
-    max_calls_per_round: number;
-    retry: { max_retries: number; base_delay_ms: number };
+let pollTimer: ReturnType<typeof setInterval> | undefined;
+let unlistenLog: (() => void) | undefined;
+let unlistenStatus: (() => void) | undefined;
+
+// ── Derived ────────────────────────────────────────────────────────────────
+
+const families = $derived.by<ModelFamily[]>(() => buildFamilies(catalog.entries));
+
+/** Auto-select a family when the list first loads or active model changes. */
+$effect(() => {
+  const next = autoSelectFamily(families, catalog, selectedFamilyId);
+  if (next && next !== selectedFamilyId) selectedFamilyId = next;
+});
+
+const selectedFamily = $derived(families.find((f) => f.id === selectedFamilyId) ?? families[0] ?? null);
+
+const selectedFamilyHasMultipleVendors = $derived((selectedFamily?.vendors.length ?? 0) > 1);
+
+const orderedSelectedEntries = $derived.by<LlmModelEntry[]>(() => {
+  if (!selectedFamily) return [];
+  const active = catalog.active_model;
+  return [...selectedFamily.entries].sort((a, b) => compareModelEntries(a, b, active));
+});
+
+const selectedEntryGroups = $derived.by(() => splitEntryGroups(orderedSelectedEntries, catalog.active_model));
+
+const orderedSelectedMmproj = $derived.by<LlmModelEntry[]>(() => {
+  if (!selectedFamily) return [];
+  const active = catalog.active_model;
+  return [...selectedFamily.mmproj].sort((a, b) => compareModelEntries(a, b, active));
+});
+
+const hasActive = $derived(
+  catalog.entries.some((e) => !e.is_mmproj && e.filename === catalog.active_model && e.state === "downloaded"),
+);
+
+const activeEntry = $derived(catalog.entries.find((e) => !e.is_mmproj && e.filename === catalog.active_model) ?? null);
+
+$effect(() => {
+  if (selectedFamilyId !== previousFamilyId) {
+    showAllQuants = false;
+    previousFamilyId = selectedFamilyId;
   }
+});
 
-  interface LlmConfig {
-    enabled: boolean; autostart: boolean; model_path: string | null; n_gpu_layers: number;
-    ctx_size: number | null; parallel: number; api_key: string | null;
-    tools: LlmToolsConfig;
-    mmproj: string | null; mmproj_n_threads: number; no_mmproj_gpu: boolean;
-    autoload_mmproj: boolean; verbose: boolean;
-    gpu_memory_threshold: number; gpu_memory_gen_threshold: number;
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function fitBadgeClass(level: string): string {
+  switch (level) {
+    case "perfect":
+      return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
+    case "good":
+      return "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30";
+    case "marginal":
+      return "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30";
+    case "too_tight":
+      return "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
+    default:
+      return "bg-slate-500/10 text-slate-500 border-slate-500/20";
   }
+}
 
-  interface ModelFamily {
-    id:          string;
-    name:        string;
-    desc:        string;
-    tags:        string[];
-    vendors:     string[];
-    entries:     LlmModelEntry[];   // non-mmproj, in catalog order
-    mmproj:      LlmModelEntry[];
-    recommended: LlmModelEntry | undefined;
-    downloaded:  LlmModelEntry[];
+function fitBadgeIcon(level: string): string {
+  switch (level) {
+    case "perfect":
+      return "🟢";
+    case "good":
+      return "🟡";
+    case "marginal":
+      return "🟠";
+    case "too_tight":
+      return "🔴";
+    default:
+      return "⚪";
   }
+}
 
-  interface ModelHardwareFit {
-    filename:          string;
-    fitLevel:          "perfect"|"good"|"marginal"|"too_tight";
-    runMode:           "gpu"|"moe"|"cpu_gpu"|"cpu";
-    memoryRequiredGb:  number;
-    memoryAvailableGb: number;
-    estimatedTps:      number;
-    score:             number;
-    notes:             string[];
+function fitBadgeLabel(level: string): string {
+  switch (level) {
+    case "perfect":
+      return t("llm.fit.perfect");
+    case "good":
+      return t("llm.fit.good");
+    case "marginal":
+      return t("llm.fit.marginal");
+    case "too_tight":
+      return t("llm.fit.tooTight");
+    default:
+      return "";
   }
+}
+// ── Data loading ───────────────────────────────────────────────────────────
 
-  // Re-export fmtGB as fmtSize for template use
-  const fmtSize = fmtGB;
+async function loadCatalog() {
+  try {
+    catalog = await invoke<LlmCatalog>("get_llm_catalog");
+  } catch (e) {}
+}
 
-  // ── State ──────────────────────────────────────────────────────────────────
+async function loadHardwareFit() {
+  try {
+    const fits = await invoke<ModelHardwareFit[]>("get_model_hardware_fit");
+    const map = new Map<string, ModelHardwareFit>();
+    for (const f of fits) map.set(f.filename, f);
+    hardwareFits = map;
+  } catch (e) {}
+}
 
-  let hardwareFits = $state<Map<string, ModelHardwareFit>>(new Map());
+async function loadConfig() {
+  try {
+    config = await invoke<LlmConfig>("get_llm_config");
+    ctxSizeInput = config.ctx_size !== null ? String(config.ctx_size) : "";
+  } catch (e) {}
+  try {
+    const [, port] = await invoke<[string, number]>("get_ws_config");
+    wsPort = port;
+  } catch (e) {}
+}
 
-  let catalog = $state<LlmCatalog>({ entries: [], active_model: "", active_mmproj: "" });
-  let config  = $state<LlmConfig>({
-    enabled: false, autostart: false, model_path: null, n_gpu_layers: 4294967295,
-    ctx_size: null, parallel: 1, api_key: null,
-    tools: { enabled: true, date: true, location: true, web_search: true, web_fetch: true, web_search_provider: { backend: "duckduckgo", brave_api_key: "", searxng_url: "" }, bash: false, read_file: false, write_file: false, edit_file: false, execution_mode: "parallel" as ToolExecutionMode, max_rounds: 15, max_calls_per_round: 4, retry: { max_retries: 2, base_delay_ms: 1000 } },
-    mmproj: null, mmproj_n_threads: 4, no_mmproj_gpu: false, autoload_mmproj: true,
-    verbose: false,
-    gpu_memory_threshold: 0.5, gpu_memory_gen_threshold: 0.3,
+async function saveConfig() {
+  configSaving = true;
+  const ctx = ctxSizeInput.trim() === "" ? null : parseInt(ctxSizeInput, 10) || null;
+  config = { ...config, ctx_size: ctx };
+  try {
+    await invoke("set_llm_config", { config });
+  } finally {
+    configSaving = false;
+  }
+}
+
+// ── Actions ────────────────────────────────────────────────────────────────
+
+async function download(filename: string) {
+  await invoke("download_llm_model", { filename });
+  // Immediately refresh the catalog so the frontend state flips to
+  // "downloading" before the poll timer fires.  Without this the timer
+  // condition `catalog.entries.some(e => e.state === "downloading")` would
+  // be false on the very first tick and the progress bar would never appear.
+  await loadCatalog();
+}
+
+async function cancelDownload(filename: string) {
+  await invoke("cancel_llm_download", { filename });
+}
+
+async function deleteModel(filename: string) {
+  await invoke("delete_llm_model", { filename });
+  await loadCatalog();
+}
+
+async function selectModel(filename: string) {
+  startError = "";
+  // Atomic switch: stop → set model → start in one backend call.
+  invoke("switch_llm_model", { filename }).catch((e: unknown) => {
+    startError = typeof e === "string" ? e : e instanceof Error ? e.message : "Failed to switch model";
   });
+  await loadCatalog();
+}
 
-  let configSaving    = $state(false);
-  let wsPort          = $state(8375);
-  let apiKeyVisible   = $state(false);
-  let ctxSizeInput    = $state("");
-  let serverStatus    = $state<"stopped"|"loading"|"running">("stopped");
-  let startError      = $state("");
-  let showAdvanced    = $state(false);
-  let showAllQuants   = $state(false);
+async function selectMmproj(filename: string) {
+  const next = catalog.active_mmproj === filename ? "" : filename;
+  await invoke("set_llm_active_mmproj", { filename: next });
+  await loadCatalog();
+}
 
-  /** The family currently shown in the detail panel. */
-  let selectedFamilyId = $state<string>("");
-  let previousFamilyId = $state<string>("");
+async function refreshCache() {
+  await invoke("refresh_llm_catalog");
+  await loadCatalog();
+}
 
-  let logs          = $state<LlmLogEntry[]>([]);
-  let logAutoScroll = $state(true);
-  let logEl         = $state<HTMLElement | null>(null);
-  let logFilter     = $state<"all"|"info"|"warn"|"error">("all");
-  let logSearch     = $state("");
-
-  const filteredLogs = $derived.by(() => {
-    let filtered = logs;
-    if (logFilter !== "all") filtered = filtered.filter(e => e.level === logFilter);
-    if (logSearch.trim()) {
-      const q = logSearch.trim().toLowerCase();
-      filtered = filtered.filter(e => e.message.toLowerCase().includes(q));
-    }
-    return filtered;
+async function startServer() {
+  startError = "";
+  // start_llm_server is fire-and-forget on the Rust side — returns immediately
+  // with "starting"; the 2-second poll picks up Loading → Running transitions
+  // and surfaces any start_error from the background task.
+  invoke("start_llm_server").catch((e: unknown) => {
+    startError = typeof e === "string" ? e : e instanceof Error ? e.message : "Unknown error";
   });
+}
 
-  let pollTimer:      ReturnType<typeof setInterval> | undefined;
-  let unlistenLog:    (() => void) | undefined;
-  let unlistenStatus: (() => void) | undefined;
+async function stopServer() {
+  startError = "";
+  // stop_llm_server is also fire-and-forget — actor join runs in background.
+  invoke("stop_llm_server").catch((_e) => {});
+}
 
-  // ── Derived ────────────────────────────────────────────────────────────────
+async function openChat() {
+  try {
+    await invoke("open_chat_window");
+  } catch (e) {}
+}
 
-  const families = $derived.by<ModelFamily[]>(() => buildFamilies(catalog.entries));
+async function openDownloads() {
+  try {
+    await invoke("open_downloads_window");
+  } catch (e) {}
+}
 
-  /** Auto-select a family when the list first loads or active model changes. */
-  $effect(() => {
-    const next = autoSelectFamily(families, catalog, selectedFamilyId);
-    if (next && next !== selectedFamilyId) selectedFamilyId = next;
-  });
+// ── Lifecycle ──────────────────────────────────────────────────────────────
 
-  const selectedFamily = $derived(
-    families.find(f => f.id === selectedFamilyId) ?? families[0] ?? null
-  );
-
-  const selectedFamilyHasMultipleVendors = $derived((selectedFamily?.vendors.length ?? 0) > 1);
-
-  const orderedSelectedEntries = $derived.by<LlmModelEntry[]>(() => {
-    if (!selectedFamily) return [];
-    const active = catalog.active_model;
-    return [...selectedFamily.entries].sort((a, b) => compareModelEntries(a, b, active));
-  });
-
-  const selectedEntryGroups = $derived.by(() =>
-    splitEntryGroups(orderedSelectedEntries, catalog.active_model)
-  );
-
-  const orderedSelectedMmproj = $derived.by<LlmModelEntry[]>(() => {
-    if (!selectedFamily) return [];
-    const active = catalog.active_model;
-    return [...selectedFamily.mmproj].sort((a, b) => compareModelEntries(a, b, active));
-  });
-
-  const hasActive = $derived(
-    catalog.entries.some(e => !e.is_mmproj && e.filename === catalog.active_model && e.state === "downloaded")
-  );
-
-  const activeEntry = $derived(
-    catalog.entries.find(e => !e.is_mmproj && e.filename === catalog.active_model) ?? null
-  );
-
-  $effect(() => {
-    if (selectedFamilyId !== previousFamilyId) {
-      showAllQuants = false;
-      previousFamilyId = selectedFamilyId;
-    }
-  });
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-
-  function fitBadgeClass(level: string): string {
-    switch (level) {
-      case "perfect":   return "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30";
-      case "good":      return "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30";
-      case "marginal":  return "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30";
-      case "too_tight": return "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30";
-      default:          return "bg-slate-500/10 text-slate-500 border-slate-500/20";
-    }
-  }
-
-  function fitBadgeIcon(level: string): string {
-    switch (level) {
-      case "perfect":   return "🟢";
-      case "good":      return "🟡";
-      case "marginal":  return "🟠";
-      case "too_tight": return "🔴";
-      default:          return "⚪";
-    }
-  }
-
-  function fitBadgeLabel(level: string): string {
-    switch (level) {
-      case "perfect":   return t("llm.fit.perfect");
-      case "good":      return t("llm.fit.good");
-      case "marginal":  return t("llm.fit.marginal");
-      case "too_tight": return t("llm.fit.tooTight");
-      default:          return "";
-    }
-  }
-  // ── Data loading ───────────────────────────────────────────────────────────
-
-  async function loadCatalog() {
-    try { catalog = await invoke<LlmCatalog>("get_llm_catalog"); } catch (e) { console.warn("[llm] get_llm_catalog failed:", e); }
-  }
-
-  async function loadHardwareFit() {
-    try {
-      const fits = await invoke<ModelHardwareFit[]>("get_model_hardware_fit");
-      const map = new Map<string, ModelHardwareFit>();
-      for (const f of fits) map.set(f.filename, f);
-      hardwareFits = map;
-    } catch (e) { console.warn("[llm] get_model_hardware_fit failed:", e); }
-  }
-
-  async function loadConfig() {
-    try {
-      config = await invoke<LlmConfig>("get_llm_config");
-      ctxSizeInput = config.ctx_size !== null ? String(config.ctx_size) : "";
-    } catch (e) { console.warn("[llm] get_llm_config failed:", e); }
-    try {
-      const [, port] = await invoke<[string, number]>("get_ws_config");
-      wsPort = port;
-    } catch (e) { console.warn("[llm] get_ws_config failed:", e); }
-  }
-
-  async function saveConfig() {
-    configSaving = true;
-    const ctx = ctxSizeInput.trim() === "" ? null : parseInt(ctxSizeInput, 10) || null;
-    config = { ...config, ctx_size: ctx };
-    try { await invoke("set_llm_config", { config }); }
-    finally { configSaving = false; }
-  }
-
-  // ── Actions ────────────────────────────────────────────────────────────────
-
-  async function download(filename: string) {
-    await invoke("download_llm_model", { filename });
-    // Immediately refresh the catalog so the frontend state flips to
-    // "downloading" before the poll timer fires.  Without this the timer
-    // condition `catalog.entries.some(e => e.state === "downloading")` would
-    // be false on the very first tick and the progress bar would never appear.
-    await loadCatalog();
-  }
-
-  async function cancelDownload(filename: string) {
-    await invoke("cancel_llm_download", { filename });
-  }
-
-  async function deleteModel(filename: string) {
-    await invoke("delete_llm_model", { filename });
-    await loadCatalog();
-  }
-
-  async function selectModel(filename: string) {
-    startError = "";
-    // Atomic switch: stop → set model → start in one backend call.
-    invoke("switch_llm_model", { filename }).catch((e: unknown) => {
-      startError = typeof e === "string" ? e : (e instanceof Error ? e.message : "Failed to switch model");
+onMount(async () => {
+  await Promise.all([loadCatalog(), loadConfig(), loadHardwareFit()]);
+  try {
+    const s = await invoke<{
+      status: "stopped" | "loading" | "running";
+      start_error: string | null;
+    }>("get_llm_server_status");
+    serverStatus = s.status;
+    if (s.start_error) startError = s.start_error;
+  } catch (e) {}
+  try {
+    unlistenStatus = await listen<{ status: string }>("llm:status", (ev) => {
+      const p = ev.payload as Record<string, string>;
+      if (p.status) serverStatus = p.status as typeof serverStatus;
     });
-    await loadCatalog();
-  }
-
-  async function selectMmproj(filename: string) {
-    const next = catalog.active_mmproj === filename ? "" : filename;
-    await invoke("set_llm_active_mmproj", { filename: next });
-    await loadCatalog();
-  }
-
-  async function refreshCache() {
-    await invoke("refresh_llm_catalog");
-    await loadCatalog();
-  }
-
-  async function startServer() {
-    startError = "";
-    // start_llm_server is fire-and-forget on the Rust side — returns immediately
-    // with "starting"; the 2-second poll picks up Loading → Running transitions
-    // and surfaces any start_error from the background task.
-    invoke("start_llm_server").catch((e: unknown) => {
-      startError = typeof e === "string" ? e : (e instanceof Error ? e.message : "Unknown error");
+  } catch (e) {}
+  try {
+    logs = await invoke<LlmLogEntry[]>("get_llm_logs");
+    await scrollToBottom();
+  } catch (e) {}
+  try {
+    unlistenLog = await listen<LlmLogEntry>("llm:log", async (ev) => {
+      logs = [...logs.slice(-499), ev.payload];
+      if (logAutoScroll) await scrollToBottom();
     });
-  }
-
-  async function stopServer() {
-    startError = "";
-    // stop_llm_server is also fire-and-forget — actor join runs in background.
-    invoke("stop_llm_server").catch(e => console.warn("[llm] stop_llm_server failed:", e));
-  }
-
-  async function openChat() {
-    try { await invoke("open_chat_window"); } catch (e) { console.warn("[llm] open_chat_window failed:", e); }
-  }
-
-  async function openDownloads() {
-    try { await invoke("open_downloads_window"); } catch (e) { console.warn("[llm] open_downloads_window failed:", e); }
-  }
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-
-  onMount(async () => {
-    await Promise.all([loadCatalog(), loadConfig(), loadHardwareFit()]);
+  } catch (e) {}
+  // Poll catalog + server status every second.  The catalog call is a cheap
+  // in-memory read on the backend.  Always polling (instead of only when a
+  // download is detected) ensures that re-opening the settings window after
+  // closing it mid-download still picks up in-flight progress immediately.
+  pollTimer = setInterval(async () => {
+    await loadCatalog();
+    // Poll server status so Loading → Running and start_error are reflected
+    // without relying solely on push events.
     try {
       const s = await invoke<{
-        status: "stopped"|"loading"|"running";
+        status: "stopped" | "loading" | "running";
         start_error: string | null;
       }>("get_llm_server_status");
       serverStatus = s.status;
       if (s.start_error) startError = s.start_error;
-    } catch (e) { console.warn("[llm] get_llm_server_status failed:", e); }
-    try {
-      unlistenStatus = await listen<{ status: string }>(
-        "llm:status", ev => { const p = ev.payload as Record<string, string>; if (p.status) serverStatus = p.status as typeof serverStatus; }
-      );
-    } catch (e) { console.warn("[llm] listen llm:status failed:", e); }
-    try {
-      logs = await invoke<LlmLogEntry[]>("get_llm_logs");
-      await scrollToBottom();
-    } catch (e) { console.warn("[llm] get_llm_logs failed:", e); }
-    try {
-      unlistenLog = await listen<LlmLogEntry>("llm:log", async ev => {
-        logs = [...logs.slice(-499), ev.payload];
-        if (logAutoScroll) await scrollToBottom();
-      });
-    } catch (e) { console.warn("[llm] listen llm:log failed:", e); }
-    // Poll catalog + server status every second.  The catalog call is a cheap
-    // in-memory read on the backend.  Always polling (instead of only when a
-    // download is detected) ensures that re-opening the settings window after
-    // closing it mid-download still picks up in-flight progress immediately.
-    pollTimer = setInterval(async () => {
-      await loadCatalog();
-      // Poll server status so Loading → Running and start_error are reflected
-      // without relying solely on push events.
-      try {
-        const s = await invoke<{
-          status: "stopped"|"loading"|"running";
-          start_error: string | null;
-        }>("get_llm_server_status");
-        serverStatus = s.status;
-        if (s.start_error) startError = s.start_error;
-      } catch (e) { console.warn("[llm] poll server status failed:", e); }
-    }, 1000);
-  });
+    } catch (e) {}
+  }, 1000);
+});
 
-  onDestroy(() => {
-    clearInterval(pollTimer);
-    unlistenLog?.();
-    unlistenStatus?.();
-  });
+onDestroy(() => {
+  clearInterval(pollTimer);
+  unlistenLog?.();
+  unlistenStatus?.();
+});
 
-  async function scrollToBottom() {
-    await tick();
-    if (logEl) logEl.scrollTop = logEl.scrollHeight;
-  }
+async function scrollToBottom() {
+  await tick();
+  if (logEl) logEl.scrollTop = logEl.scrollHeight;
+}
 
-  function handleLogScroll() {
-    if (!logEl) return;
-    logAutoScroll = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
-  }
+function handleLogScroll() {
+  if (!logEl) return;
+  logAutoScroll = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+}
 </script>
 
 <!-- ─────────────────────────────────────────────────────────────────────────── -->

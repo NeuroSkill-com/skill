@@ -74,7 +74,7 @@ fn main() {
     // ── Vulkan SDK: setup on Windows and Linux ────────────────────────────────
     #[cfg(target_os = "windows")]
     setup_vulkan_sdk_windows();
-    
+
     #[cfg(target_os = "linux")]
     setup_vulkan_sdk_linux();
 
@@ -116,12 +116,9 @@ fn main() {
     #[cfg(target_os = "windows")]
     {
         let manifest = include_str!("./manifest.xml");
-        let windows = tauri_build::WindowsAttributes::new()
-            .app_manifest(manifest);
-        let attrs = tauri_build::Attributes::new()
-            .windows_attributes(windows);
-        tauri_build::try_build(attrs)
-            .expect("failed to run tauri build script");
+        let windows = tauri_build::WindowsAttributes::new().app_manifest(manifest);
+        let attrs = tauri_build::Attributes::new().windows_attributes(windows);
+        tauri_build::try_build(attrs).expect("failed to run tauri build script");
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -132,9 +129,15 @@ fn main() {
 
 // ── Target environment helpers ────────────────────────────────────────────────
 
-fn target_os()  -> String { std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default() }
-fn target_env() -> String { std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default() }
-fn target_arch() -> String { std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default() }
+fn target_os() -> String {
+    std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default()
+}
+fn target_env() -> String {
+    std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default()
+}
+fn target_arch() -> String {
+    std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default()
+}
 
 // ── Platform library filename ─────────────────────────────────────────────────
 //
@@ -161,10 +164,10 @@ fn static_lib_name() -> &'static str {
 fn enforce_espeak_static() {
     println!("cargo:rerun-if-env-changed=ESPEAK_LIB_DIR");
 
-    let t_os   = target_os();
-    let t_env  = target_env();
+    let t_os = target_os();
+    let t_env = target_env();
     let t_arch = target_arch();
-    let lib    = static_lib_name();
+    let lib = static_lib_name();
 
     // Track whichever lib dir ESPEAK_LIB_DIR resolves to.
     if let Ok(dir) = std::env::var("ESPEAK_LIB_DIR") {
@@ -202,13 +205,9 @@ fn enforce_espeak_static() {
     let local = format!("{local_dir}/{lib}");
     // Rebuild if missing OR if the cached archive was built for a different
     // OS (e.g. a Linux ELF archive committed to the repo and then used on macOS).
-    if !Path::new(&local).exists()
-        || !is_correct_platform_archive(Path::new(&local), &t_os)
-    {
+    if !Path::new(&local).exists() || !is_correct_platform_archive(Path::new(&local), &t_os) {
         if Path::new(&local).exists() {
-            eprintln!(
-                "build.rs: {local} exists but is built for the wrong platform — rebuilding."
-            );
+            eprintln!("build.rs: {local} exists but is built for the wrong platform — rebuilding.");
             // Remove the whole espeak-static dir so the build script starts clean.
             let stale_dir = if t_os == "windows" && t_env == "gnu" {
                 "espeak-static-mingw"
@@ -220,8 +219,7 @@ fn enforce_espeak_static() {
         build_espeak_static(&t_os, &t_env);
     }
     if Path::new(&local).exists() {
-        let abs = std::fs::canonicalize(local_dir)
-            .unwrap_or_else(|_| PathBuf::from(local_dir));
+        let abs = std::fs::canonicalize(local_dir).unwrap_or_else(|_| PathBuf::from(local_dir));
         emit_static_link(abs.to_string_lossy().as_ref(), &t_os, &t_env);
         return;
     }
@@ -259,7 +257,7 @@ fn is_correct_platform_archive(archive: &Path, t_os: &str) -> bool {
                 .args(["-info", &archive.to_string_lossy()])
                 .output()
                 .map(|o| o.status.success())
-                .unwrap_or(true)   // lipo absent → assume OK
+                .unwrap_or(true) // lipo absent → assume OK
         }
         "linux" => {
             // Open the ar archive and peek at the first object's magic bytes.
@@ -276,13 +274,15 @@ fn is_correct_platform_archive(archive: &Path, t_os: &str) -> bool {
                 }
                 let mut pos: usize = 8;
                 loop {
-                    if pos + 60 > data.len() { return None; }
+                    if pos + 60 > data.len() {
+                        return None;
+                    }
                     let hdr = &data[pos..pos + 60];
                     let name = std::str::from_utf8(&hdr[..16]).ok()?.trim();
                     let size_str = std::str::from_utf8(&hdr[48..58]).ok()?.trim();
                     let size: usize = size_str.parse().ok()?;
                     let obj_start = pos + 60;
-                    let obj_end   = obj_start + size;
+                    let obj_end = obj_start + size;
                     // Skip GNU symbol table ("/") and extended name table ("//").
                     if name != "/" && name != "//" {
                         if obj_end > data.len() || obj_start + 4 > data.len() {
@@ -297,8 +297,8 @@ fn is_correct_platform_archive(archive: &Path, t_os: &str) -> bool {
                 }
             }
             match first_obj_magic(archive) {
-                Some(magic) => magic == [0x7f, b'E', b'L', b'F'],  // ELF magic
-                None        => true,  // can't determine → assume OK
+                Some(magic) => magic == [0x7f, b'E', b'L', b'F'], // ELF magic
+                None => true,                                     // can't determine → assume OK
             }
         }
         _ => true,
@@ -321,9 +321,9 @@ fn is_correct_platform_archive(archive: &Path, t_os: &str) -> bool {
 
 fn build_espeak_static(t_os: &str, t_env: &str) {
     match (t_os, t_env) {
-        ("windows", "gnu")  => build_espeak_static_mingw(),
-        ("windows", _)      => build_espeak_static_windows(),
-        _                   => build_espeak_static_unix(),
+        ("windows", "gnu") => build_espeak_static_mingw(),
+        ("windows", _) => build_espeak_static_windows(),
+        _ => build_espeak_static_unix(),
     }
 }
 
@@ -444,9 +444,9 @@ fn emit_static_link(dir: &str, t_os: &str, t_env: &str) {
     // espeak-ng is a C++ project; link the appropriate C++ runtime.
     match (t_os, t_env) {
         ("windows", "msvc") => { /* MSVC links the C++ runtime automatically */ }
-        ("windows", _)      => println!("cargo:rustc-link-lib=dylib=stdc++"),  // MinGW
-        ("macos", _)        => println!("cargo:rustc-link-lib=dylib=c++"),
-        _                   => println!("cargo:rustc-link-lib=dylib=stdc++"),
+        ("windows", _) => println!("cargo:rustc-link-lib=dylib=stdc++"), // MinGW
+        ("macos", _) => println!("cargo:rustc-link-lib=dylib=c++"),
+        _ => println!("cargo:rustc-link-lib=dylib=stdc++"),
     }
 }
 
@@ -484,10 +484,10 @@ fn find_static_in_system(t_os: &str, t_arch: &str, t_env: &str) -> Option<PathBu
         }
         "linux" => {
             let multiarch = match t_arch {
-                "x86_64"  => "x86_64-linux-gnu",
+                "x86_64" => "x86_64-linux-gnu",
                 "aarch64" => "aarch64-linux-gnu",
-                "arm"     => "arm-linux-gnueabihf",
-                _         => "",
+                "arm" => "arm-linux-gnueabihf",
+                _ => "",
             };
             if !multiarch.is_empty() {
                 dirs.push(PathBuf::from(format!("/usr/lib/{multiarch}")));
@@ -497,12 +497,15 @@ fn find_static_in_system(t_os: &str, t_arch: &str, t_env: &str) -> Option<PathBu
         "windows" if t_env == "gnu" => {
             // MinGW / MSYS2 system paths.
             // Native MSYS2 installs to /mingw64; cross-compiler sysroot on Linux.
-            dirs.extend([
-                "/mingw64/lib",
-                "/mingw32/lib",
-                "/usr/x86_64-w64-mingw32/lib",
-                "/usr/i686-w64-mingw32/lib",
-            ].map(PathBuf::from));
+            dirs.extend(
+                [
+                    "/mingw64/lib",
+                    "/mingw32/lib",
+                    "/usr/x86_64-w64-mingw32/lib",
+                    "/usr/i686-w64-mingw32/lib",
+                ]
+                .map(PathBuf::from),
+            );
             if let Ok(prefix) = std::env::var("MINGW_PREFIX") {
                 dirs.push(PathBuf::from(format!("{prefix}/lib")));
             }
@@ -516,11 +519,17 @@ fn find_static_in_system(t_os: &str, t_arch: &str, t_env: &str) -> Option<PathBu
         "windows" => {
             // MSVC — vcpkg and Chocolatey
             if let Ok(r) = std::env::var("VCPKG_ROOT") {
-                dirs.push(PathBuf::from(format!("{r}\\installed\\x64-windows-static\\lib")));
-                dirs.push(PathBuf::from(format!("{r}\\installed\\x64-windows-static-md\\lib")));
+                dirs.push(PathBuf::from(format!(
+                    "{r}\\installed\\x64-windows-static\\lib"
+                )));
+                dirs.push(PathBuf::from(format!(
+                    "{r}\\installed\\x64-windows-static-md\\lib"
+                )));
             }
             if let Ok(r) = std::env::var("VCPKG_INSTALLATION_ROOT") {
-                dirs.push(PathBuf::from(format!("{r}\\installed\\x64-windows-static\\lib")));
+                dirs.push(PathBuf::from(format!(
+                    "{r}\\installed\\x64-windows-static\\lib"
+                )));
             }
             if let Ok(c) = std::env::var("ChocolateyInstall") {
                 dirs.push(PathBuf::from(format!("{c}\\lib\\espeak-ng\\tools\\lib")));
@@ -535,7 +544,10 @@ fn find_static_in_system(t_os: &str, t_arch: &str, t_env: &str) -> Option<PathBu
 }
 
 fn brew_prefix(formula: &str) -> Option<String> {
-    let out = Command::new("brew").args(["--prefix", formula]).output().ok()?;
+    let out = Command::new("brew")
+        .args(["--prefix", formula])
+        .output()
+        .ok()?;
     if out.status.success() {
         Some(String::from_utf8(out.stdout).ok()?.trim().to_owned())
     } else {
@@ -563,7 +575,10 @@ fn emit_espeak_data_path_dev() {
         if data_dir.is_dir() {
             let abs = std::fs::canonicalize(&data_dir).unwrap_or(data_dir);
             println!("cargo:rustc-env=ESPEAK_DATA_PATH_DEV={}", abs.display());
-            println!("cargo:warning=espeak-ng dev data path baked in: {}", abs.display());
+            println!(
+                "cargo:warning=espeak-ng dev data path baked in: {}",
+                abs.display()
+            );
         } else {
             println!(
                 "cargo:warning=espeak-ng data dir not found yet ({}); \
@@ -610,8 +625,16 @@ fn bundle_espeak_data_macos() {
             "espeak-static/share/espeak-ng-data".to_string(),
             "espeak-static-mingw/share/espeak-ng-data".to_string(),
         ])
-        .chain(brew_prefix_val.as_deref().map(|p| format!("{p}/share/espeak-ng-data")))
-        .chain(brew_prefix_val.as_deref().map(|p| format!("{p}/lib/espeak-ng-data")))
+        .chain(
+            brew_prefix_val
+                .as_deref()
+                .map(|p| format!("{p}/share/espeak-ng-data")),
+        )
+        .chain(
+            brew_prefix_val
+                .as_deref()
+                .map(|p| format!("{p}/lib/espeak-ng-data")),
+        )
         .chain([
             "/opt/homebrew/share/espeak-ng-data".to_string(),
             "/usr/local/share/espeak-ng-data".to_string(),
@@ -638,10 +661,10 @@ fn bundle_espeak_data_macos() {
 fn bundle_espeak_data_linux() {
     let multiarch = std::env::var("CARGO_CFG_TARGET_ARCH")
         .map(|a| match a.as_str() {
-            "x86_64"  => "x86_64-linux-gnu",
+            "x86_64" => "x86_64-linux-gnu",
             "aarch64" => "aarch64-linux-gnu",
-            "arm"     => "arm-linux-gnueabihf",
-            _         => "",
+            "arm" => "arm-linux-gnueabihf",
+            _ => "",
         })
         .unwrap_or_default();
 
@@ -734,15 +757,12 @@ fn copy_dir_all(src: &str, dst: &str) {
     for entry in std::fs::read_dir(src_path)
         .unwrap_or_else(|e| panic!("build.rs: read_dir({src}) failed: {e}"))
     {
-        let entry     = entry.unwrap_or_else(|e| panic!("build.rs: dir entry error: {e}"));
-        let target    = dst_path.join(entry.file_name());
+        let entry = entry.unwrap_or_else(|e| panic!("build.rs: dir entry error: {e}"));
+        let target = dst_path.join(entry.file_name());
         let file_type = entry.file_type().unwrap();
 
         if file_type.is_dir() {
-            copy_dir_all(
-                &entry.path().to_string_lossy(),
-                &target.to_string_lossy(),
-            );
+            copy_dir_all(&entry.path().to_string_lossy(), &target.to_string_lossy());
         } else {
             // Resolve symlinks so bundles contain plain files (required for
             // macOS notarisation).  Fall back to the original path on Windows
@@ -798,30 +818,36 @@ fn clear_readonly(path: &Path) {
 #[cfg(target_os = "windows")]
 fn setup_vulkan_sdk_windows() {
     // use std::fs;
-    
+
     let vulkan_sdk_path = "C:\\VulkanSDK";
-    
+
     // Check if Vulkan SDK is already installed
     if Path::new(vulkan_sdk_path).exists() {
-        println!("cargo:warning=Vulkan SDK already installed at {}", vulkan_sdk_path);
+        println!(
+            "cargo:warning=Vulkan SDK already installed at {}",
+            vulkan_sdk_path
+        );
         println!("cargo:rustc-link-search={}\\Lib", vulkan_sdk_path);
         println!("cargo:rustc-link-lib=vulkan-1");
         return;
     }
-    
+
     println!("cargo:warning=Vulkan SDK not found. Installing...");
-    
+
     let vulkan_version = "1.3.280";
     let installer_url = format!(
         "https://sdk.lunarg.com/sdk/download/{}/windows/VulkanSDK-{}-Installer.exe",
         vulkan_version, vulkan_version
     );
-    
+
     let temp_dir = std::env::temp_dir();
     let installer_path = temp_dir.join("VulkanSDK-installer.exe");
-    
+
     // Download Vulkan SDK installer
-    println!("cargo:warning=Downloading Vulkan SDK from {}", installer_url);
+    println!(
+        "cargo:warning=Downloading Vulkan SDK from {}",
+        installer_url
+    );
     let download_status = Command::new("powershell.exe")
         .args([
             "-NoProfile",
@@ -833,7 +859,7 @@ fn setup_vulkan_sdk_windows() {
             ),
         ])
         .status();
-    
+
     match download_status {
         Ok(status) if status.success() => {
             println!("cargo:warning=Download successful");
@@ -843,13 +869,11 @@ fn setup_vulkan_sdk_windows() {
             return;
         }
     }
-    
+
     // Run installer (silent mode)
     println!("cargo:warning=Running Vulkan SDK installer...");
-    let install_status = Command::new(&installer_path)
-        .args(["/S"])
-        .status();
-    
+    let install_status = Command::new(&installer_path).args(["/S"]).status();
+
     match install_status {
         Ok(status) if status.success() => {
             println!("cargo:warning=Vulkan SDK installed successfully");
@@ -860,7 +884,7 @@ fn setup_vulkan_sdk_windows() {
             println!("cargo:warning=Failed to install Vulkan SDK. Please install manually from https://vulkan.lunarg.com/sdk/home");
         }
     }
-    
+
     // Cleanup
     let _ = std::fs::remove_file(&installer_path);
 }
@@ -869,17 +893,17 @@ fn setup_vulkan_sdk_windows() {
 fn setup_vulkan_sdk_linux() {
     // First, try to use system package manager
     println!("cargo:warning=Checking for Vulkan SDK...");
-    
+
     let pkg_config_output = Command::new("pkg-config")
         .args(["--cflags", "--libs", "vulkan"])
         .output();
-    
+
     if let Ok(output) = pkg_config_output {
         if output.status.success() {
             println!("cargo:warning=Vulkan SDK found via pkg-config");
             let libs_output = String::from_utf8_lossy(&output.stdout);
             println!("cargo:rustc-link-lib=vulkan");
-            
+
             // Parse pkg-config output for library paths
             for token in libs_output.split_whitespace() {
                 if let Some(path) = token.strip_prefix("-L") {
@@ -889,14 +913,14 @@ fn setup_vulkan_sdk_linux() {
             return;
         }
     }
-    
+
     // Vulkan SDK not found via pkg-config, try to install it
     println!("cargo:warning=Vulkan SDK not found. Attempting to install via apt...");
-    
+
     let install_status = Command::new("sudo")
         .args(["apt-get", "install", "-y", "libvulkan-dev", "vulkan-tools"])
         .status();
-    
+
     match install_status {
         Ok(status) if status.success() => {
             println!("cargo:warning=Vulkan SDK installed successfully");
@@ -907,9 +931,15 @@ fn setup_vulkan_sdk_linux() {
         _ => {
             println!("cargo:warning=Failed to install Vulkan SDK via apt.");
             println!("cargo:warning=Please install manually:");
-            println!("cargo:warning=  Ubuntu/Debian: sudo apt-get install libvulkan-dev vulkan-tools");
-            println!("cargo:warning=  Fedora/RHEL:   sudo dnf install vulkan-loader-devel vulkan-tools");
-            println!("cargo:warning=  Arch:          sudo pacman -S vulkan-icd-loader vulkan-devel");
+            println!(
+                "cargo:warning=  Ubuntu/Debian: sudo apt-get install libvulkan-dev vulkan-tools"
+            );
+            println!(
+                "cargo:warning=  Fedora/RHEL:   sudo dnf install vulkan-loader-devel vulkan-tools"
+            );
+            println!(
+                "cargo:warning=  Arch:          sudo pacman -S vulkan-icd-loader vulkan-devel"
+            );
             println!("cargo:rustc-link-lib=vulkan");
         }
     }

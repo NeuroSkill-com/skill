@@ -13,8 +13,8 @@
 //! alongside the EEG embeddings in `eeg.sqlite`.
 
 use serde::Serialize;
+use skill_constants::{PPG_IBI_MAX_S, PPG_IBI_MIN_S, PPG_SAMPLE_RATE};
 use std::collections::VecDeque;
-use skill_constants::{PPG_SAMPLE_RATE, PPG_IBI_MIN_S, PPG_IBI_MAX_S};
 
 /// PPG sample rate on Muse 2/S (Hz).
 const PPG_SR: f64 = PPG_SAMPLE_RATE as f64;
@@ -30,25 +30,25 @@ const IBI_MAX: f64 = PPG_IBI_MAX_S;
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct PpgMetrics {
     /// Heart rate (beats per minute).
-    pub hr:               f64,
+    pub hr: f64,
     /// RMSSD — root mean square of successive IBI differences (ms).
-    pub rmssd:            f64,
+    pub rmssd: f64,
     /// SDNN — standard deviation of IBIs (ms).
-    pub sdnn:             f64,
+    pub sdnn: f64,
     /// pNN50 — percentage of successive IBIs differing by >50 ms.
-    pub pnn50:            f64,
+    pub pnn50: f64,
     /// LF/HF ratio from IBI spectrum (0.04–0.15 Hz / 0.15–0.4 Hz).
-    pub lf_hf_ratio:      f64,
+    pub lf_hf_ratio: f64,
     /// Respiratory rate estimate (breaths per minute) from PPG envelope.
     pub respiratory_rate: f64,
     /// SpO₂ estimate (%) from red/IR ratio.  Uncalibrated — relative trends only.
-    pub spo2_estimate:    f64,
+    pub spo2_estimate: f64,
     /// Perfusion Index: AC/DC ratio of the IR channel (%).
-    pub perfusion_index:  f64,
+    pub perfusion_index: f64,
     /// Baevsky Stress Index from IBI histogram.
-    pub stress_index:     f64,
+    pub stress_index: f64,
     /// Number of detected beats in the epoch.
-    pub n_beats:          usize,
+    pub n_beats: usize,
 }
 
 // ── PPG Analyzer (stateful, retains running buffer for cross-epoch peaks) ────
@@ -56,7 +56,7 @@ pub struct PpgMetrics {
 /// Accumulates raw PPG samples and computes metrics per epoch.
 pub struct PpgAnalyzer {
     /// Ring buffer of raw IR samples (channel 1).
-    ir_buf:  VecDeque<f64>,
+    ir_buf: VecDeque<f64>,
     /// Ring buffer of raw red samples (channel 2).
     red_buf: VecDeque<f64>,
     /// Ring buffer of raw ambient samples (channel 0).
@@ -70,7 +70,7 @@ impl PpgAnalyzer {
     pub fn new(window_secs: f64) -> Self {
         let max_buf = (window_secs * PPG_SR) as usize + 64;
         Self {
-            ir_buf:  VecDeque::with_capacity(max_buf),
+            ir_buf: VecDeque::with_capacity(max_buf),
             red_buf: VecDeque::with_capacity(max_buf),
             amb_buf: VecDeque::with_capacity(max_buf),
             max_buf,
@@ -108,7 +108,7 @@ impl PpgAnalyzer {
             return None;
         }
 
-        let ir:  Vec<f64> = self.ir_buf.iter().copied().collect();
+        let ir: Vec<f64> = self.ir_buf.iter().copied().collect();
         let red: Vec<f64> = self.red_buf.iter().copied().collect();
 
         // ── Peak detection on IR channel ─────────────────────────────────
@@ -149,12 +149,18 @@ impl PpgAnalyzer {
         self.amb_buf.drain(..drain);
 
         Some(PpgMetrics {
-            hr, rmssd, sdnn, pnn50, lf_hf_ratio,
-            respiratory_rate, spo2_estimate, perfusion_index,
-            stress_index, n_beats,
+            hr,
+            rmssd,
+            sdnn,
+            pnn50,
+            lf_hf_ratio,
+            respiratory_rate,
+            spo2_estimate,
+            perfusion_index,
+            stress_index,
+            n_beats,
         })
     }
-
 }
 
 // ── Peak detection ────────────────────────────────────────────────────────────
@@ -167,7 +173,9 @@ impl PpgAnalyzer {
 /// 3. Enforce minimum IBI (refractory period)
 fn detect_peaks_and_ibis(ir: &[f64], sr: f64) -> Vec<f64> {
     let n = ir.len();
-    if n < 16 { return vec![]; }
+    if n < 16 {
+        return vec![];
+    }
 
     // ── 1. Bandpass via difference of moving averages ─────────────────
     // Low-pass: window ≈ sr/8 (~8 samples at 64 Hz → ~8 Hz cutoff)
@@ -179,7 +187,9 @@ fn detect_peaks_and_ibis(ir: &[f64], sr: f64) -> Vec<f64> {
     let hp = moving_average(&lp, hp_win.min(lp.len()));
     // Bandpassed = low-passed minus very-low-passed
     let bp: Vec<f64> = lp.iter().zip(hp.iter()).map(|(a, b)| a - b).collect();
-    if bp.is_empty() { return vec![]; }
+    if bp.is_empty() {
+        return vec![];
+    }
 
     // ── 2. Adaptive threshold (running mean + 0.6 × running std) ─────
     let win = (sr * 1.5) as usize; // 1.5s window for threshold adaptation
@@ -188,18 +198,22 @@ fn detect_peaks_and_ibis(ir: &[f64], sr: f64) -> Vec<f64> {
 
     for i in 1..(bp.len() - 1) {
         // Local maximum?
-        if bp[i] <= bp[i - 1] || bp[i] <= bp[i + 1] { continue; }
+        if bp[i] <= bp[i - 1] || bp[i] <= bp[i + 1] {
+            continue;
+        }
         // Refractory period check
         if let Some(&last) = peaks.last() {
-            if i - last < refractory { continue; }
+            if i - last < refractory {
+                continue;
+            }
         }
         // Adaptive threshold: mean + 0.6*std over local window
         let start = i.saturating_sub(win / 2);
         let end = (i + win / 2).min(bp.len());
         let window = &bp[start..end];
         let mean = window.iter().sum::<f64>() / window.len() as f64;
-        let std = (window.iter().map(|&v| (v - mean).powi(2)).sum::<f64>()
-            / window.len() as f64).sqrt();
+        let std =
+            (window.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / window.len() as f64).sqrt();
         if bp[i] > mean + 0.6 * std {
             peaks.push(i);
         }
@@ -219,19 +233,25 @@ fn detect_peaks_and_ibis(ir: &[f64], sr: f64) -> Vec<f64> {
 /// Simple moving average.
 fn moving_average(x: &[f64], win: usize) -> Vec<f64> {
     let n = x.len();
-    if n == 0 || win == 0 { return vec![]; }
+    if n == 0 || win == 0 {
+        return vec![];
+    }
     let w = win.min(n);
     let mut out = Vec::with_capacity(n);
     let mut sum: f64 = x[..w].iter().sum();
     // Centre the first output at position w/2
-    for _ in 0..w / 2 { out.push(sum / w as f64); }
+    for _ in 0..w / 2 {
+        out.push(sum / w as f64);
+    }
     out.push(sum / w as f64);
     for i in w..n {
         sum += x[i] - x[i - w];
         out.push(sum / w as f64);
     }
     // Pad tail
-    while out.len() < n { out.push(*out.last().unwrap_or(&0.0)); }
+    while out.len() < n {
+        out.push(*out.last().unwrap_or(&0.0));
+    }
     out.truncate(n);
     out
 }
@@ -240,17 +260,21 @@ fn moving_average(x: &[f64], win: usize) -> Vec<f64> {
 
 /// Returns (rmssd_ms, sdnn_ms, pnn50_pct).
 fn hrv_time_domain(ibis: &[f64]) -> (f64, f64, f64) {
-    if ibis.is_empty() { return (0.0, 0.0, 0.0); }
+    if ibis.is_empty() {
+        return (0.0, 0.0, 0.0);
+    }
 
     // Convert to milliseconds
     let ibis_ms: Vec<f64> = ibis.iter().map(|&v| v * 1000.0).collect();
 
     // SDNN
     let mean = ibis_ms.iter().sum::<f64>() / ibis_ms.len() as f64;
-    let sdnn = (ibis_ms.iter().map(|&v| (v - mean).powi(2)).sum::<f64>()
-        / ibis_ms.len() as f64).sqrt();
+    let sdnn =
+        (ibis_ms.iter().map(|&v| (v - mean).powi(2)).sum::<f64>() / ibis_ms.len() as f64).sqrt();
 
-    if ibis_ms.len() < 2 { return (0.0, sdnn, 0.0); }
+    if ibis_ms.len() < 2 {
+        return (0.0, sdnn, 0.0);
+    }
 
     // RMSSD
     let mut sum_sq = 0.0f64;
@@ -258,7 +282,9 @@ fn hrv_time_domain(ibis: &[f64]) -> (f64, f64, f64) {
     for w in ibis_ms.windows(2) {
         let diff = (w[1] - w[0]).abs();
         sum_sq += diff * diff;
-        if diff > 50.0 { nn50_count += 1; }
+        if diff > 50.0 {
+            nn50_count += 1;
+        }
     }
     let rmssd = (sum_sq / (ibis_ms.len() - 1) as f64).sqrt();
 
@@ -274,26 +300,42 @@ fn hrv_time_domain(ibis: &[f64]) -> (f64, f64, f64) {
 /// Since IBIs are unevenly spaced (beat-to-beat), we use Goertzel on an
 /// interpolated uniform 4 Hz IBI series.
 fn lf_hf_from_ibis(ibis: &[f64]) -> f64 {
-    if ibis.len() < 4 { return 0.0; }
+    if ibis.len() < 4 {
+        return 0.0;
+    }
 
     // Create cumulative time axis and interpolate to uniform 4 Hz
     let resample_rate = 4.0; // Hz
     let mut t = Vec::with_capacity(ibis.len() + 1);
     t.push(0.0);
-    for ibi in ibis { t.push(t.last().unwrap_or(&0.0) + ibi); }
-    let Some(&total_time) = t.last() else { return 0.0 };
-    if total_time < 5.0 { return 0.0; } // Need at least 5s for meaningful LF
+    for ibi in ibis {
+        t.push(t.last().unwrap_or(&0.0) + ibi);
+    }
+    let Some(&total_time) = t.last() else {
+        return 0.0;
+    };
+    if total_time < 5.0 {
+        return 0.0;
+    } // Need at least 5s for meaningful LF
 
     let n_resamp = (total_time * resample_rate) as usize;
-    if n_resamp < 8 { return 0.0; }
+    if n_resamp < 8 {
+        return 0.0;
+    }
     let mut uniform = Vec::with_capacity(n_resamp);
     let mut j = 0usize;
     for i in 0..n_resamp {
         let ti = i as f64 / resample_rate;
-        while j + 1 < t.len() - 1 && t[j + 1] < ti { j += 1; }
+        while j + 1 < t.len() - 1 && t[j + 1] < ti {
+            j += 1;
+        }
         // Linear interpolation of IBI at time ti
         if j < ibis.len() {
-            let frac = if t[j + 1] > t[j] { (ti - t[j]) / (t[j + 1] - t[j]) } else { 0.0 };
+            let frac = if t[j + 1] > t[j] {
+                (ti - t[j]) / (t[j + 1] - t[j])
+            } else {
+                0.0
+            };
             let ibi_val = if j + 1 < ibis.len() {
                 ibis[j] * (1.0 - frac) + ibis[j + 1] * frac
             } else {
@@ -302,7 +344,9 @@ fn lf_hf_from_ibis(ibis: &[f64]) -> f64 {
             uniform.push(ibi_val);
         }
     }
-    if uniform.len() < 8 { return 0.0; }
+    if uniform.len() < 8 {
+        return 0.0;
+    }
 
     // Remove mean
     let mean = uniform.iter().sum::<f64>() / uniform.len() as f64;
@@ -312,7 +356,11 @@ fn lf_hf_from_ibis(ibis: &[f64]) -> f64 {
     let lf_power = band_power_goertzel(&centered, resample_rate, 0.04, 0.15);
     let hf_power = band_power_goertzel(&centered, resample_rate, 0.15, 0.40);
 
-    if hf_power > 1e-12 { lf_power / hf_power } else { 0.0 }
+    if hf_power > 1e-12 {
+        lf_power / hf_power
+    } else {
+        0.0
+    }
 }
 
 /// Sum of |Goertzel|² for frequencies in [f_lo, f_hi] at 0.01 Hz steps.
@@ -343,12 +391,16 @@ fn band_power_goertzel(x: &[f64], sr: f64, f_lo: f64, f_hi: f64) -> f64 {
 /// frequency (~0.15–0.5 Hz = 9–30 breaths/min).
 fn respiratory_rate_from_ppg(ir: &[f64], sr: f64) -> f64 {
     let n = ir.len();
-    if n < (sr * 4.0) as usize { return 0.0; } // Need at least 4s
+    if n < (sr * 4.0) as usize {
+        return 0.0;
+    } // Need at least 4s
 
     // Extract envelope via moving average of absolute values
     let env_win = (sr / 2.0) as usize; // 0.5s window
     let env = moving_average(ir, env_win);
-    if env.len() < 16 { return 0.0; }
+    if env.len() < 16 {
+        return 0.0;
+    }
 
     // Remove mean from envelope
     let mean = env.iter().sum::<f64>() / env.len() as f64;
@@ -391,21 +443,25 @@ fn respiratory_rate_from_ppg(ir: &[f64], sr: f64) -> f64 {
 /// This is uncalibrated (no per-device calibration curve), so it gives
 /// relative trends rather than absolute clinical accuracy.
 fn spo2_from_red_ir(red: &[f64], ir: &[f64]) -> f64 {
-    if red.len() < 16 || ir.len() < 16 { return 0.0; }
+    if red.len() < 16 || ir.len() < 16 {
+        return 0.0;
+    }
     let n = red.len().min(ir.len());
 
     // DC components (mean)
     let dc_red = red[..n].iter().sum::<f64>() / n as f64;
-    let dc_ir  = ir[..n].iter().sum::<f64>() / n as f64;
-    if dc_red.abs() < 1.0 || dc_ir.abs() < 1.0 { return 0.0; }
+    let dc_ir = ir[..n].iter().sum::<f64>() / n as f64;
+    if dc_red.abs() < 1.0 || dc_ir.abs() < 1.0 {
+        return 0.0;
+    }
 
     // AC components (std dev as proxy for pulsatile amplitude)
-    let ac_red = (red[..n].iter().map(|&v| (v - dc_red).powi(2)).sum::<f64>()
-        / n as f64).sqrt();
-    let ac_ir  = (ir[..n].iter().map(|&v| (v - dc_ir).powi(2)).sum::<f64>()
-        / n as f64).sqrt();
+    let ac_red = (red[..n].iter().map(|&v| (v - dc_red).powi(2)).sum::<f64>() / n as f64).sqrt();
+    let ac_ir = (ir[..n].iter().map(|&v| (v - dc_ir).powi(2)).sum::<f64>() / n as f64).sqrt();
 
-    if ac_ir < 1e-6 { return 0.0; }
+    if ac_ir < 1e-6 {
+        return 0.0;
+    }
 
     let r = (ac_red / dc_red) / (ac_ir / dc_ir);
 
@@ -421,9 +477,13 @@ fn spo2_from_red_ir(red: &[f64], ir: &[f64]) -> f64 {
 /// DC = mean value.
 fn perfusion_index_from_ir(ir: &[f64]) -> f64 {
     let n = ir.len();
-    if n < 8 { return 0.0; }
+    if n < 8 {
+        return 0.0;
+    }
     let dc = ir.iter().sum::<f64>() / n as f64;
-    if dc.abs() < 1.0 { return 0.0; }
+    if dc.abs() < 1.0 {
+        return 0.0;
+    }
     let ac = (ir.iter().map(|&v| (v - dc).powi(2)).sum::<f64>() / n as f64).sqrt() * 2.0;
     (ac / dc.abs()) * 100.0
 }
@@ -441,13 +501,17 @@ fn perfusion_index_from_ir(ir: &[f64]) -> f64 {
 ///
 /// Higher SI = greater sympathetic activation / stress.
 fn baevsky_stress_index(ibis: &[f64]) -> f64 {
-    if ibis.len() < 3 { return 0.0; }
+    if ibis.len() < 3 {
+        return 0.0;
+    }
 
     let ibis_ms: Vec<f64> = ibis.iter().map(|&v| v * 1000.0).collect();
     let min_ibi = ibis_ms.iter().cloned().fold(f64::INFINITY, f64::min);
     let max_ibi = ibis_ms.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let range = max_ibi - min_ibi;
-    if range < 1.0 { return 0.0; }
+    if range < 1.0 {
+        return 0.0;
+    }
 
     // Histogram with 50ms bins
     let bin_width = 50.0;
@@ -459,13 +523,16 @@ fn baevsky_stress_index(ibis: &[f64]) -> f64 {
     }
 
     // Mode: bin with highest count
-    let Some((mode_idx, &mode_count)) = bins.iter().enumerate()
-        .max_by_key(|(_, &c)| c) else { return 0.0 };
+    let Some((mode_idx, &mode_count)) = bins.iter().enumerate().max_by_key(|(_, &c)| c) else {
+        return 0.0;
+    };
     let mo = min_ibi + (mode_idx as f64 + 0.5) * bin_width; // Mode in ms
     let amo = mode_count as f64 / ibis_ms.len() as f64 * 100.0; // AMo in %
     let mxdmn = range / 1000.0; // Convert back to seconds
 
-    if mo < 1.0 || mxdmn < 0.001 { return 0.0; }
+    if mo < 1.0 || mxdmn < 0.001 {
+        return 0.0;
+    }
     amo / (2.0 * (mo / 1000.0) * mxdmn)
 }
 
@@ -495,9 +562,9 @@ mod tests {
     #[test]
     fn test_perfusion_index() {
         // Synthetic IR signal with DC=1000, AC=10
-        let ir: Vec<f64> = (0..128).map(|i| {
-            1000.0 + 10.0 * (2.0 * std::f64::consts::PI * i as f64 / 64.0).sin()
-        }).collect();
+        let ir: Vec<f64> = (0..128)
+            .map(|i| 1000.0 + 10.0 * (2.0 * std::f64::consts::PI * i as f64 / 64.0).sin())
+            .collect();
         let pi = perfusion_index_from_ir(&ir);
         assert!(pi > 0.5 && pi < 5.0, "PI={pi}");
     }
@@ -505,8 +572,12 @@ mod tests {
     #[test]
     fn test_spo2() {
         // Same amplitude ratio → R≈1.0 → SpO₂≈85
-        let ir:  Vec<f64> = (0..128).map(|i| 1000.0 + 10.0 * (i as f64 * 0.1).sin()).collect();
-        let red: Vec<f64> = (0..128).map(|i| 800.0  + 8.0  * (i as f64 * 0.1).sin()).collect();
+        let ir: Vec<f64> = (0..128)
+            .map(|i| 1000.0 + 10.0 * (i as f64 * 0.1).sin())
+            .collect();
+        let red: Vec<f64> = (0..128)
+            .map(|i| 800.0 + 8.0 * (i as f64 * 0.1).sin())
+            .collect();
         let spo2 = spo2_from_red_ir(&red, &ir);
         assert!((70.0..=100.0).contains(&spo2), "SpO2={spo2}");
     }
@@ -518,7 +589,9 @@ mod tests {
         let x = vec![5.0_f64; 64];
         let out = moving_average(&x, 8);
         assert_eq!(out.len(), x.len());
-        for v in &out { assert!((v - 5.0).abs() < 1e-9, "expected 5.0, got {v}"); }
+        for v in &out {
+            assert!((v - 5.0).abs() < 1e-9, "expected 5.0, got {v}");
+        }
     }
 
     #[test]
@@ -547,7 +620,7 @@ mod tests {
     fn hrv_time_domain_empty_ibis_returns_zeros() {
         let (rmssd, sdnn, pnn50) = hrv_time_domain(&[]);
         assert_eq!(rmssd, 0.0);
-        assert_eq!(sdnn,  0.0);
+        assert_eq!(sdnn, 0.0);
         assert_eq!(pnn50, 0.0);
     }
 
@@ -565,8 +638,14 @@ mod tests {
     fn hrv_time_domain_identical_ibis_gives_zero_sdnn_rmssd() {
         let ibis = vec![0.8; 10];
         let (rmssd, sdnn, pnn50) = hrv_time_domain(&ibis);
-        assert!(rmssd < 1e-9, "rmssd should be 0 for identical IBIs, got {rmssd}");
-        assert!(sdnn < 1e-9,  "sdnn should be 0 for identical IBIs, got {sdnn}");
+        assert!(
+            rmssd < 1e-9,
+            "rmssd should be 0 for identical IBIs, got {rmssd}"
+        );
+        assert!(
+            sdnn < 1e-9,
+            "sdnn should be 0 for identical IBIs, got {sdnn}"
+        );
         assert_eq!(pnn50, 0.0);
     }
 
@@ -581,14 +660,14 @@ mod tests {
 
     #[test]
     fn spo2_short_buffers_return_zero() {
-        let ir  = vec![1000.0; 4]; // < 16
-        let red = vec![800.0;  4];
+        let ir = vec![1000.0; 4]; // < 16
+        let red = vec![800.0; 4];
         assert_eq!(spo2_from_red_ir(&red, &ir), 0.0);
     }
 
     #[test]
     fn spo2_zero_dc_returns_zero() {
-        let ir  = vec![0.0; 32];
+        let ir = vec![0.0; 32];
         let red = vec![0.0; 32];
         assert_eq!(spo2_from_red_ir(&red, &ir), 0.0);
     }
@@ -596,10 +675,17 @@ mod tests {
     #[test]
     fn spo2_result_clamped_to_valid_range() {
         // High R ratio would give SpO₂ < 70 → must be clamped to 70.
-        let ir:  Vec<f64> = (0..64).map(|i| 1000.0 + 100.0 * (i as f64 * 0.3).sin()).collect();
-        let red: Vec<f64> = (0..64).map(|i|   50.0 +   1.0 * (i as f64 * 0.3).sin()).collect();
+        let ir: Vec<f64> = (0..64)
+            .map(|i| 1000.0 + 100.0 * (i as f64 * 0.3).sin())
+            .collect();
+        let red: Vec<f64> = (0..64)
+            .map(|i| 50.0 + 1.0 * (i as f64 * 0.3).sin())
+            .collect();
         let spo2 = spo2_from_red_ir(&red, &ir);
-        assert!((70.0..=100.0).contains(&spo2), "SpO₂={spo2} out of clamp range");
+        assert!(
+            (70.0..=100.0).contains(&spo2),
+            "SpO₂={spo2} out of clamp range"
+        );
     }
 
     // ── perfusion_index_from_ir ───────────────────────────────────────────────
@@ -618,7 +704,9 @@ mod tests {
 
     #[test]
     fn perfusion_index_is_non_negative() {
-        let ir: Vec<f64> = (0..128).map(|i| 1000.0 + 10.0 * (i as f64 * 0.1).sin()).collect();
+        let ir: Vec<f64> = (0..128)
+            .map(|i| 1000.0 + 10.0 * (i as f64 * 0.1).sin())
+            .collect();
         assert!(perfusion_index_from_ir(&ir) >= 0.0);
     }
 
@@ -626,8 +714,8 @@ mod tests {
 
     #[test]
     fn baevsky_too_few_ibis_returns_zero() {
-        assert_eq!(baevsky_stress_index(&[]),      0.0);
-        assert_eq!(baevsky_stress_index(&[0.8]),   0.0);
+        assert_eq!(baevsky_stress_index(&[]), 0.0);
+        assert_eq!(baevsky_stress_index(&[0.8]), 0.0);
         assert_eq!(baevsky_stress_index(&[0.8, 0.9]), 0.0);
     }
 

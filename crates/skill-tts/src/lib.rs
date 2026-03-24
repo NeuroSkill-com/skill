@@ -36,15 +36,15 @@ pub mod kitten;
 pub mod neutts;
 
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
-use std::num::NonZero;
-use std::path::PathBuf;
-use std::sync::OnceLock;
-#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 use anyhow::Context;
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
-use std::sync::atomic::Ordering;
+use std::num::NonZero;
+use std::path::PathBuf;
 #[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
 use std::sync::atomic::AtomicBool;
+#[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
+use std::sync::atomic::Ordering;
+use std::sync::OnceLock;
 
 pub use config::NeuttsConfig;
 
@@ -77,15 +77,12 @@ pub fn init_neutts_samples_dir(path: PathBuf) {
 
 /// Return the resolved skill directory.
 pub fn skill_dir() -> PathBuf {
-    SKILL_DIR
-        .get()
-        .cloned()
-        .unwrap_or_else(|| {
-            // Fallback: use platform-appropriate default
-            dirs::data_local_dir()
-                .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
-                .join("NeuroSkill")
-        })
+    SKILL_DIR.get().cloned().unwrap_or_else(|| {
+        // Fallback: use platform-appropriate default
+        dirs::data_local_dir()
+            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
+            .join("NeuroSkill")
+    })
 }
 
 /// Set the skill directory explicitly (alternative to `init_tts_dirs`).
@@ -100,7 +97,9 @@ pub fn set_skill_dir(dir: PathBuf) {
 // `log::set_log_enabled` for backwards compatibility.
 
 /// Enable or disable TTS log output (backwards-compatible wrapper).
-pub fn set_logging(enable: bool) { log::set_log_enabled(enable); }
+pub fn set_logging(enable: bool) {
+    log::set_log_enabled(enable);
+}
 
 // ─── Shared constants ─────────────────────────────────────────────────────────
 
@@ -113,7 +112,7 @@ pub use skill_constants::TTS_TAIL_SILENCE_SECS as TAIL_SILENCE_SECS;
 #[derive(Clone, serde::Serialize)]
 pub struct TtsProgressEvent {
     pub phase: String,
-    pub step:  u32,
+    pub step: u32,
     pub total: u32,
     pub label: String,
 }
@@ -123,16 +122,36 @@ pub use skill_constants::TTS_PROGRESS_EVENT;
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 impl TtsProgressEvent {
     pub fn step(step: u32, total: u32, label: String) -> Self {
-        Self { phase: "step".into(), step, total, label }
+        Self {
+            phase: "step".into(),
+            step,
+            total,
+            label,
+        }
     }
     pub fn ready(total: u32) -> Self {
-        Self { phase: "ready".into(), step: total, total, label: String::new() }
+        Self {
+            phase: "ready".into(),
+            step: total,
+            total,
+            label: String::new(),
+        }
     }
     pub fn unloaded() -> Self {
-        Self { phase: "unloaded".into(), step: 0, total: 0, label: String::new() }
+        Self {
+            phase: "unloaded".into(),
+            step: 0,
+            total: 0,
+            label: String::new(),
+        }
     }
     pub fn error(label: String) -> Self {
-        Self { phase: "error".into(), step: 0, total: 0, label }
+        Self {
+            phase: "error".into(),
+            step: 0,
+            total: 0,
+            label,
+        }
     }
 }
 
@@ -152,8 +171,8 @@ pub fn init_espeak_bundled_data_path(resource_dir: &std::path::Path) {
 /// Resolve espeak-ng data path from environment or build-time baked path.
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
 pub fn init_espeak_data_path() {
-    let explicit   = std::env::var("ESPEAK_DATA_PATH").ok();
-    let dev_baked  = option_env!("ESPEAK_DATA_PATH_DEV");
+    let explicit = std::env::var("ESPEAK_DATA_PATH").ok();
+    let dev_baked = option_env!("ESPEAK_DATA_PATH_DEV");
 
     let resolved = explicit
         .as_deref()
@@ -173,19 +192,15 @@ pub fn init_espeak_data_path() {
 // ─── Shared audio output ──────────────────────────────────────────────────────
 
 #[cfg(any(feature = "tts-kitten", feature = "tts-neutts"))]
-pub fn play_f32_audio(
-    stream:      &rodio::MixerDeviceSink,
-    mut samples: Vec<f32>,
-    sample_rate: u32,
-) {
+pub fn play_f32_audio(stream: &rodio::MixerDeviceSink, mut samples: Vec<f32>, sample_rate: u32) {
     use rodio::buffer::SamplesBuffer;
 
     let silence_samples = (TAIL_SILENCE_SECS * sample_rate as f32) as usize;
     samples.resize(samples.len() + silence_samples, 0.0f32);
 
     let channels = NonZero::<u16>::new(1).expect("1 is non-zero");
-    let rate     = NonZero::<u32>::new(sample_rate.max(1)).expect("max(1) is non-zero");
-    let buf      = SamplesBuffer::new(channels, rate, samples);
+    let rate = NonZero::<u32>::new(sample_rate.max(1)).expect("max(1) is non-zero");
+    let buf = SamplesBuffer::new(channels, rate, samples);
 
     let player = rodio::Player::connect_new(stream.mixer());
     player.append(buf);
@@ -198,16 +213,24 @@ pub fn play_f32_audio(
 pub static NEUTTS_ENABLED: AtomicBool = AtomicBool::new(false);
 
 #[cfg(all(feature = "tts-kitten", feature = "tts-neutts"))]
-pub fn use_neutts() -> bool { NEUTTS_ENABLED.load(Ordering::Relaxed) }
+pub fn use_neutts() -> bool {
+    NEUTTS_ENABLED.load(Ordering::Relaxed)
+}
 
 #[cfg(all(feature = "tts-neutts", not(feature = "tts-kitten")))]
-pub fn use_neutts() -> bool { true }
+pub fn use_neutts() -> bool {
+    true
+}
 
 #[cfg(all(feature = "tts-kitten", not(feature = "tts-neutts")))]
-pub fn use_neutts() -> bool { false }
+pub fn use_neutts() -> bool {
+    false
+}
 
 #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
-pub fn use_neutts() -> bool { false }
+pub fn use_neutts() -> bool {
+    false
+}
 
 // ─── Shutdown ─────────────────────────────────────────────────────────────────
 
@@ -245,9 +268,9 @@ pub fn neutts_apply_config(cfg: &NeuttsConfig) {
 /// Metadata for a single NeuTTS preset voice.
 #[derive(Clone, serde::Serialize)]
 pub struct NeuttsVoiceInfo {
-    pub id:     String,
-    pub lang:   String,
-    pub flag:   String,
+    pub id: String,
+    pub lang: String,
+    pub flag: String,
     pub gender: String,
 }
 
@@ -257,7 +280,9 @@ pub struct NeuttsVoiceInfo {
 pub async fn tts_speak(text: String, voice: Option<String>) {
     let voice_str = voice.unwrap_or_default();
     #[cfg(not(any(feature = "tts-kitten", feature = "tts-neutts")))]
-    { let _ = (&text, &voice_str); }
+    {
+        let _ = (&text, &voice_str);
+    }
 
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
@@ -285,7 +310,9 @@ pub async fn tts_speak(text: String, voice: Option<String>) {
             };
             let (tx, rx) = tokio::sync::oneshot::channel();
             let _ = kitten::get_tx().send(kitten::Cmd::Speak {
-                text, voice: resolved_voice, done: tx,
+                text,
+                voice: resolved_voice,
+                done: tx,
             });
             let _ = rx.await;
         }
@@ -296,7 +323,10 @@ pub async fn tts_speak(text: String, voice: Option<String>) {
 pub fn tts_list_voices() -> Vec<String> {
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
-        return neutts::PRESET_NAMES.iter().map(std::string::ToString::to_string).collect();
+        return neutts::PRESET_NAMES
+            .iter()
+            .map(std::string::ToString::to_string)
+            .collect();
     } else {
         #[cfg(feature = "tts-kitten")]
         return kitten::AVAILABLE_VOICES
@@ -312,11 +342,36 @@ pub fn tts_list_voices() -> Vec<String> {
 pub fn tts_list_neutts_voices() -> Vec<NeuttsVoiceInfo> {
     #[cfg(feature = "tts-neutts")]
     return vec![
-        NeuttsVoiceInfo { id: "jo".into(),       lang: "en-US".into(), flag: "🇺🇸".into(), gender: "F".into() },
-        NeuttsVoiceInfo { id: "dave".into(),     lang: "en-US".into(), flag: "🇺🇸".into(), gender: "M".into() },
-        NeuttsVoiceInfo { id: "greta".into(),    lang: "de-DE".into(), flag: "🇩🇪".into(), gender: "F".into() },
-        NeuttsVoiceInfo { id: "juliette".into(), lang: "fr-FR".into(), flag: "🇫🇷".into(), gender: "F".into() },
-        NeuttsVoiceInfo { id: "mateo".into(),    lang: "es-ES".into(), flag: "🇪🇸".into(), gender: "M".into() },
+        NeuttsVoiceInfo {
+            id: "jo".into(),
+            lang: "en-US".into(),
+            flag: "🇺🇸".into(),
+            gender: "F".into(),
+        },
+        NeuttsVoiceInfo {
+            id: "dave".into(),
+            lang: "en-US".into(),
+            flag: "🇺🇸".into(),
+            gender: "M".into(),
+        },
+        NeuttsVoiceInfo {
+            id: "greta".into(),
+            lang: "de-DE".into(),
+            flag: "🇩🇪".into(),
+            gender: "F".into(),
+        },
+        NeuttsVoiceInfo {
+            id: "juliette".into(),
+            lang: "fr-FR".into(),
+            flag: "🇫🇷".into(),
+            gender: "F".into(),
+        },
+        NeuttsVoiceInfo {
+            id: "mateo".into(),
+            lang: "es-ES".into(),
+            flag: "🇪🇸".into(),
+            gender: "M".into(),
+        },
     ];
     #[allow(unreachable_code)]
     Vec::new()
@@ -353,7 +408,9 @@ pub fn tts_set_voice(voice: String) {
     } else {
         #[cfg(feature = "tts-kitten")]
         {
-            let voices = kitten::AVAILABLE_VOICES.get().cloned()
+            let voices = kitten::AVAILABLE_VOICES
+                .get()
+                .cloned()
                 .unwrap_or_else(|| vec![kitten::VOICE_DEFAULT.to_string()]);
             if voices.iter().any(|v| v == &voice) || voice == kitten::VOICE_DEFAULT {
                 kitten::set_voice(voice);
@@ -380,19 +437,20 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
             let (backbone, gguf, preset, wav, text) = neutts::read_cfg();
             let (tx, rx) = tokio::sync::oneshot::channel();
             let emit_c = emit.clone();
-            neutts::get_tx().send(neutts::Cmd::Init {
-                backbone_repo: backbone,
-                gguf_file:     gguf,
-                voice_preset:  preset,
-                ref_wav_path:  wav,
-                ref_text:      text,
-                cb:   Box::new(move |p| emit_c(neutts::progress_to_event(p))),
-                done: tx,
-            }).map_err(|e| anyhow::anyhow!("neutts init channel send: {e}"))?;
-            let result = rx.await.context("neutts init channel recv")
-                .and_then(|r| r);
+            neutts::get_tx()
+                .send(neutts::Cmd::Init {
+                    backbone_repo: backbone,
+                    gguf_file: gguf,
+                    voice_preset: preset,
+                    ref_wav_path: wav,
+                    ref_text: text,
+                    cb: Box::new(move |p| emit_c(neutts::progress_to_event(p))),
+                    done: tx,
+                })
+                .map_err(|e| anyhow::anyhow!("neutts init channel send: {e}"))?;
+            let result = rx.await.context("neutts init channel recv").and_then(|r| r);
             match &result {
-                Ok(_)    => emit(TtsProgressEvent::ready(3)),
+                Ok(_) => emit(TtsProgressEvent::ready(3)),
                 Err(msg) => emit(TtsProgressEvent::error(msg.to_string())),
             }
             return result;
@@ -406,22 +464,24 @@ pub async fn tts_init_with_callback<F: Fn(TtsProgressEvent) + Clone + Send + 'st
             }
             let (tx, rx) = tokio::sync::oneshot::channel();
             let emit_c = emit.clone();
-            kitten::get_tx().send(kitten::Cmd::Init {
-                cb: Box::new(move |p| {
-                    use kittentts::download::LoadProgress as KP;
-                    let ev = match p {
-                        KP::Fetching { step, total, file } => TtsProgressEvent::step(
-                            step, total, file),
-                        KP::Loading => TtsProgressEvent::step(4, 4, "Loading model…".into()),
-                    };
-                    emit_c(ev);
-                }),
-                done: tx,
-            }).map_err(|e| anyhow::anyhow!("kitten init channel send: {e}"))?;
-            let result = rx.await.context("kitten init channel recv")
-                .and_then(|r| r);
+            kitten::get_tx()
+                .send(kitten::Cmd::Init {
+                    cb: Box::new(move |p| {
+                        use kittentts::download::LoadProgress as KP;
+                        let ev = match p {
+                            KP::Fetching { step, total, file } => {
+                                TtsProgressEvent::step(step, total, file)
+                            }
+                            KP::Loading => TtsProgressEvent::step(4, 4, "Loading model…".into()),
+                        };
+                        emit_c(ev);
+                    }),
+                    done: tx,
+                })
+                .map_err(|e| anyhow::anyhow!("kitten init channel send: {e}"))?;
+            let result = rx.await.context("kitten init channel recv").and_then(|r| r);
             match &result {
-                Ok(_)    => emit(TtsProgressEvent::ready(4)),
+                Ok(_) => emit(TtsProgressEvent::ready(4)),
                 Err(msg) => emit(TtsProgressEvent::error(msg.to_string())),
             }
             return result;
@@ -437,7 +497,8 @@ pub async fn tts_unload() -> anyhow::Result<()> {
         #[cfg(feature = "tts-neutts")]
         {
             let (tx, rx) = tokio::sync::oneshot::channel();
-            neutts::get_tx().send(neutts::Cmd::Unload { done: tx })
+            neutts::get_tx()
+                .send(neutts::Cmd::Unload { done: tx })
                 .map_err(|e| anyhow::anyhow!("neutts unload channel send: {e}"))?;
             rx.await.context("neutts unload channel recv")?;
             return Ok(());
@@ -446,7 +507,8 @@ pub async fn tts_unload() -> anyhow::Result<()> {
         #[cfg(feature = "tts-kitten")]
         {
             let (tx, rx) = tokio::sync::oneshot::channel();
-            kitten::get_tx().send(kitten::Cmd::Unload { done: tx })
+            kitten::get_tx()
+                .send(kitten::Cmd::Unload { done: tx })
                 .map_err(|e| anyhow::anyhow!("kitten unload channel send: {e}"))?;
             rx.await.context("kitten unload channel recv")?;
             return Ok(());

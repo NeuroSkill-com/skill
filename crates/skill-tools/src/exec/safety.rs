@@ -2,8 +2,8 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Safety checks, user-approval dialogs, and bash-edit hook for tool operations.
 
-use std::sync::{Arc, Mutex};
 use serde_json::json;
+use std::sync::{Arc, Mutex};
 
 // ── Pluggable bash-edit callback ──────────────────────────────────────────────
 
@@ -23,13 +23,17 @@ static BASH_EDIT_HOOK: Mutex<Option<BashEditHook>> = Mutex::new(None);
 ///
 /// Call this once at app startup (e.g. from `setup()`).
 pub fn set_bash_edit_hook(hook: BashEditHook) {
-    *BASH_EDIT_HOOK.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(hook);
+    *BASH_EDIT_HOOK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(hook);
 }
 
 /// Clear the bash-edit hook (tests / shutdown).
 #[allow(dead_code)]
 pub fn clear_bash_edit_hook() {
-    *BASH_EDIT_HOOK.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    *BASH_EDIT_HOOK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
 }
 
 /// Present a bash command for user review/editing.
@@ -60,21 +64,40 @@ pub(crate) async fn request_bash_edit(command: &str) -> Option<String> {
 
 /// Patterns that indicate a potentially dangerous bash command.
 const DANGEROUS_BASH_PATTERNS: &[&str] = &[
-    "rm ", "rm\t", "rmdir", "shred",
-    "mkfs", "dd if=", "dd of=",
-    "sudo ", "su -", "su\t",
-    "> /dev/", "chmod", "chown",
-    "kill ", "killall", "pkill",
-    "shutdown", "reboot", "halt", "poweroff",
-    "systemctl stop", "systemctl disable",
+    "rm ",
+    "rm\t",
+    "rmdir",
+    "shred",
+    "mkfs",
+    "dd if=",
+    "dd of=",
+    "sudo ",
+    "su -",
+    "su\t",
+    "> /dev/",
+    "chmod",
+    "chown",
+    "kill ",
+    "killall",
+    "pkill",
+    "shutdown",
+    "reboot",
+    "halt",
+    "poweroff",
+    "systemctl stop",
+    "systemctl disable",
     ":(){ :|:& };:", // fork bomb
-    "/etc/", "/boot/", "/usr/", "/var/", "/sys/", "/proc/",
+    "/etc/",
+    "/boot/",
+    "/usr/",
+    "/var/",
+    "/sys/",
+    "/proc/",
 ];
 
 /// Sensitive path prefixes that require approval for file write/edit.
 const SENSITIVE_PATH_PREFIXES: &[&str] = &[
-    "/etc/", "/boot/", "/usr/", "/var/", "/sys/", "/proc/",
-    "/bin/", "/sbin/", "/lib/", "/opt/",
+    "/etc/", "/boot/", "/usr/", "/var/", "/sys/", "/proc/", "/bin/", "/sbin/", "/lib/", "/opt/",
 ];
 
 /// Characters that act as word boundaries before a dangerous pattern.
@@ -132,8 +155,11 @@ pub async fn request_tool_approval(tool_name: &str, reason: &str, detail: &str) 
             .set_title("NeuroSkill \u{2014} Tool Approval Required")
             .set_description(&message)
             .set_buttons(rfd::MessageButtons::YesNo)
-            .show() == rfd::MessageDialogResult::Yes
-    }).await.unwrap_or_else(|e| {
+            .show()
+            == rfd::MessageDialogResult::Yes
+    })
+    .await
+    .unwrap_or_else(|e| {
         crate::tool_log!("tool", "[safety] approval dialog failed: {}", e);
         false
     })

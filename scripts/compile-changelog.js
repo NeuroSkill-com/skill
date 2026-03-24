@@ -14,15 +14,8 @@
  *
  * Can also be imported and called from bump.js.
  */
-import {
-  readFileSync,
-  writeFileSync,
-  readdirSync,
-  mkdirSync,
-  unlinkSync,
-  existsSync,
-} from "fs";
-import { join } from "path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 const UNRELEASED_DIR = "changes/unreleased";
 const RELEASES_DIR = "changes/releases";
@@ -56,9 +49,7 @@ const CATEGORY_ORDER = [
 ];
 
 function categoryRank(name) {
-  const idx = CATEGORY_ORDER.findIndex(
-    (c) => c.toLowerCase() === name.toLowerCase()
-  );
+  const idx = CATEGORY_ORDER.findIndex((c) => c.toLowerCase() === name.toLowerCase());
   return idx >= 0 ? idx : CATEGORY_ORDER.length;
 }
 
@@ -91,7 +82,7 @@ function loadArchivedReleases() {
  */
 export function rebuildChangelog() {
   const releases = loadArchivedReleases();
-  const content = HEADER + "\n" + releases.join("\n\n") + "\n";
+  const content = `${HEADER}\n${releases.join("\n\n")}\n`;
   writeFileSync(CHANGELOG_PATH, content, "utf8");
   return releases.length;
 }
@@ -142,9 +133,7 @@ export function compileChangelog(version, date) {
   }
 
   // Sort categories by canonical order
-  const sortedCategories = [...categories.entries()].sort(
-    ([a], [b]) => categoryRank(a) - categoryRank(b)
-  );
+  const sortedCategories = [...categories.entries()].sort(([a], [b]) => categoryRank(a) - categoryRank(b));
 
   // Build the release section
   const lines = [`## [${version}] — ${date}`, ""];
@@ -154,7 +143,7 @@ export function compileChangelog(version, date) {
       lines.push(entry, "");
     }
   }
-  const releaseSection = lines.join("\n").trimEnd() + "\n";
+  const releaseSection = `${lines.join("\n").trimEnd()}\n`;
 
   // Write compiled release file
   mkdirSync(RELEASES_DIR, { recursive: true });
@@ -178,8 +167,7 @@ export function compileChangelog(version, date) {
 const scriptName = "compile-changelog.js";
 if (process.argv[1]?.endsWith(scriptName)) {
   if (process.argv[2] === "--rebuild") {
-    const count = rebuildChangelog();
-    console.log(`Rebuilt CHANGELOG.md from ${count} archived releases`);
+    const _count = rebuildChangelog();
     process.exit(0);
   }
 
@@ -187,22 +175,12 @@ if (process.argv[1]?.endsWith(scriptName)) {
   const date = process.argv[3] || new Date().toISOString().slice(0, 10);
 
   if (!version) {
-    console.error(
-      `Usage:\n  node scripts/${scriptName} <version> [date]\n  node scripts/${scriptName} --rebuild`
-    );
     process.exit(1);
   }
 
   const result = compileChangelog(version, date);
 
   if (result.entryCount === 0) {
-    console.log("No changelog fragments found in changes/unreleased/");
   } else {
-    console.log(
-      `Compiled ${result.entryCount} entries across ${result.categories.length} categories`
-    );
-    console.log(`  Categories: ${result.categories.join(", ")}`);
-    console.log(`  Archived to changes/releases/${version}.md`);
-    console.log(`  CHANGELOG.md rebuilt`);
   }
 }

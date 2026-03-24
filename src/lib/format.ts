@@ -21,21 +21,27 @@ export function toUnix(d: Date): number {
 /** Format a unix-second UTC timestamp as local "HH:MM:SS" (24h). */
 export function fmtTime(utc: number): string {
   return new Date(utc * 1000).toLocaleTimeString([], {
-    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
   });
 }
 
 /** Format a unix-second UTC timestamp as local "HH:MM" (24h). */
 export function fmtTimeShort(utc: number): string {
   return new Date(utc * 1000).toLocaleTimeString(undefined, {
-    hour: "2-digit", minute: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
 /** Format a unix-second UTC timestamp as a short local date, e.g. "Mar 12, 2026". */
 export function fmtDate(unix: number): string {
   return new Date(unix * 1000).toLocaleDateString(undefined, {
-    year: "numeric", month: "short", day: "numeric",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
 }
 
@@ -85,8 +91,10 @@ export function fmtSecs(s: number): string {
 /** Format a YYYYMMDD UTC day string as a localised date. */
 export function fmtUtcDay(day: string): string {
   if (day.length === 8)
-    return new Date(Date.UTC(+day.slice(0, 4), +day.slice(4, 6) - 1, +day.slice(6, 8), 12))
-      .toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    return new Date(Date.UTC(+day.slice(0, 4), +day.slice(4, 6) - 1, +day.slice(6, 8), 12)).toLocaleDateString(
+      undefined,
+      { year: "numeric", month: "short", day: "numeric" },
+    );
   return day;
 }
 
@@ -95,15 +103,20 @@ export function fmtDayKey(localKey: string): string {
   if (!localKey) return localKey;
   const [y, m, d] = localKey.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-    year: "numeric", month: "short", day: "numeric",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
   });
 }
 
 /** Format a unix-second UTC timestamp as a short locale date+time, e.g. "Mar 12, 2026, 14:30". */
 export function fmtDateTimeLocale(utc: number): string {
   return new Date(utc * 1000).toLocaleDateString(undefined, {
-    year: "numeric", month: "short", day: "numeric",
-    hour: "2-digit", minute: "2-digit",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -117,11 +130,7 @@ export function fmtDateTimeLocale(utc: number): string {
  *
  * Example: `thresholdColor(score, [[60, "#22c55e"], [30, "#f59e0b"]], "#6b7280")`
  */
-export function thresholdColor(
-  value: number,
-  thresholds: [number, string][],
-  fallback: string,
-): string {
+export function thresholdColor(value: number, thresholds: [number, string][], fallback: string): string {
   for (const [cutoff, color] of thresholds) {
     if (value > cutoff) return color;
   }
@@ -135,7 +144,8 @@ export function fmtMs(ms: number): string {
 
 /** Format elapsed seconds as "Xm YYs" or "Xs". */
 export function fmtElapsed(s: number): string {
-  const m = Math.floor(s / 60), ss = s % 60;
+  const m = Math.floor(s / 60),
+    ss = s % 60;
   return m > 0 ? `${m}m ${String(ss).padStart(2, "0")}s` : `${s}s`;
 }
 
@@ -226,11 +236,7 @@ export function fmtCountdown(totalSecs: number): string {
  * @param cssH    Desired CSS height (defaults to `canvas.clientHeight`).
  * @returns       The 2D rendering context with DPR transform applied.
  */
-export function setupHiDpiCanvas(
-  canvas: HTMLCanvasElement,
-  cssW?: number,
-  cssH?: number,
-): CanvasRenderingContext2D {
+export function setupHiDpiCanvas(canvas: HTMLCanvasElement, cssW?: number, cssH?: number): CanvasRenderingContext2D {
   const dpr = devicePixelRatio || 1;
   const w = cssW ?? canvas.clientWidth;
   const h = cssH ?? canvas.clientHeight;
@@ -252,14 +258,14 @@ export function getDpr(): number {
 
 /** Format a byte count as a human-readable string (e.g. "1.5 MB"). */
 export function fmtBytes(bytes: number): string {
-  if (bytes >= 1e9) return (bytes / 1e9).toFixed(1) + " GB";
-  if (bytes >= 1e6) return (bytes / 1e6).toFixed(1) + " MB";
-  if (bytes >= 1e3) return (bytes / 1e3).toFixed(1) + " KB";
-  return bytes + " B";
+  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
+  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
+  if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(1)} KB`;
+  return `${bytes} B`;
 }
 
 /** Format a size given in gigabytes as a human-readable string (e.g. "3.2 GB"). */
 export function fmtGB(gb: number): string {
-  if (gb >= 1) return gb.toFixed(1) + " GB";
-  return (gb * 1024).toFixed(0) + " MB";
+  if (gb >= 1) return `${gb.toFixed(1)} GB`;
+  return `${(gb * 1024).toFixed(0)} MB`;
 }

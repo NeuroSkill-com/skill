@@ -24,8 +24,8 @@ use serde::{Deserialize, Serialize};
 /// A BLE device that has been paired and persisted to `settings.json`.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PairedDevice {
-    pub id:        String,
-    pub name:      String,
+    pub id: String,
+    pub name: String,
     pub last_seen: u64,
 }
 
@@ -98,16 +98,32 @@ impl DeviceKind {
         let Some(n) = name else { return Self::Unknown };
         let n = n.to_lowercase();
 
-        if n.starts_with("muse")                                        { return Self::Muse;     }
-        if n.starts_with("ganglion") || n.starts_with("simblee")       { return Self::Ganglion; }
-        if n.starts_with("openbci") || n.starts_with("cyton")          { return Self::OpenBci;  }
-        if n.contains("mw75") || n.contains("neurable")                  { return Self::Mw75;     }
-        if n.starts_with("hermes")                                      { return Self::Hermes;   }
-        if n.starts_with("emotiv") || n.starts_with("epoc")
-            || n.starts_with("insight") || n.starts_with("flex")
-            || n.starts_with("mn8")                                     { return Self::Emotiv;   }
-        if n.starts_with("idun") || n.starts_with("ige")
-            || n.starts_with("guardian")                                { return Self::Idun;     }
+        if n.starts_with("muse") {
+            return Self::Muse;
+        }
+        if n.starts_with("ganglion") || n.starts_with("simblee") {
+            return Self::Ganglion;
+        }
+        if n.starts_with("openbci") || n.starts_with("cyton") {
+            return Self::OpenBci;
+        }
+        if n.contains("mw75") || n.contains("neurable") {
+            return Self::Mw75;
+        }
+        if n.starts_with("hermes") {
+            return Self::Hermes;
+        }
+        if n.starts_with("emotiv")
+            || n.starts_with("epoc")
+            || n.starts_with("insight")
+            || n.starts_with("flex")
+            || n.starts_with("mn8")
+        {
+            return Self::Emotiv;
+        }
+        if n.starts_with("idun") || n.starts_with("ige") || n.starts_with("guardian") {
+            return Self::Idun;
+        }
 
         Self::Unknown
     }
@@ -116,109 +132,110 @@ impl DeviceKind {
     pub fn capabilities(self) -> DeviceCapabilities {
         match self {
             Self::Muse => DeviceCapabilities {
-                kind:                   Self::Muse,
-                channel_count:          4,
-                has_ppg:                true,
-                has_imu:                true,
+                kind: Self::Muse,
+                channel_count: 4,
+                has_ppg: true,
+                has_imu: true,
                 has_central_electrodes: false, // TP9 / AF7 / AF8 / TP10 only
-                has_full_montage:       false,
-                sample_rate_hz:         256.0,
-                electrode_names:        sv(&["TP9", "AF7", "AF8", "TP10"]),
+                has_full_montage: false,
+                sample_rate_hz: 256.0,
+                electrode_names: sv(&["TP9", "AF7", "AF8", "TP10"]),
             },
             Self::Ganglion => DeviceCapabilities {
-                kind:                   Self::Ganglion,
-                channel_count:          4,
-                has_ppg:                false,
-                has_imu:                false,
-                has_central_electrodes: true,  // user-configurable 10-20
-                has_full_montage:       false,
-                sample_rate_hz:         200.0,
-                electrode_names:        sv(&["Ch1", "Ch2", "Ch3", "Ch4"]),
+                kind: Self::Ganglion,
+                channel_count: 4,
+                has_ppg: false,
+                has_imu: false,
+                has_central_electrodes: true, // user-configurable 10-20
+                has_full_montage: false,
+                sample_rate_hz: 200.0,
+                electrode_names: sv(&["Ch1", "Ch2", "Ch3", "Ch4"]),
             },
             Self::OpenBci => DeviceCapabilities {
-                kind:                   Self::OpenBci,
-                channel_count:          8, // Cyton; Cyton+Daisy = 16
-                has_ppg:                false,
-                has_imu:                false,
+                kind: Self::OpenBci,
+                channel_count: 8, // Cyton; Cyton+Daisy = 16
+                has_ppg: false,
+                has_imu: false,
                 has_central_electrodes: true, // standard 10-20 includes C3/C4/Cz
-                has_full_montage:       true,
-                sample_rate_hz:         250.0,
-                electrode_names:        sv(&["Fp1", "Fp2", "C3", "C4", "P7", "P8", "O1", "O2"]),
+                has_full_montage: true,
+                sample_rate_hz: 250.0,
+                electrode_names: sv(&["Fp1", "Fp2", "C3", "C4", "P7", "P8", "O1", "O2"]),
             },
             Self::Mw75 => DeviceCapabilities {
-                kind:                   Self::Mw75,
-                channel_count:          12, // 6 per ear cup
-                has_ppg:                false,
-                has_imu:                false,
+                kind: Self::Mw75,
+                channel_count: 12, // 6 per ear cup
+                has_ppg: false,
+                has_imu: false,
                 has_central_electrodes: false, // temporal sites only (FT7/T7/TP7/CP5/P7/C5 + R)
-                has_full_montage:       false,
-                sample_rate_hz:         500.0,
-                electrode_names:        sv(&[
-                    "FT7","T7","TP7","CP5","P7","C5",
-                    "FT8","T8","TP8","CP6","P8","C6",
+                has_full_montage: false,
+                sample_rate_hz: 500.0,
+                electrode_names: sv(&[
+                    "FT7", "T7", "TP7", "CP5", "P7", "C5", "FT8", "T8", "TP8", "CP6", "P8", "C6",
                 ]),
             },
             Self::Hermes => DeviceCapabilities {
-                kind:                   Self::Hermes,
-                channel_count:          8,
-                has_ppg:                false,
-                has_imu:                true,
-                has_central_electrodes: true,  // montage-dependent
-                has_full_montage:       false,
-                sample_rate_hz:         250.0,
-                electrode_names:        sv(&["Fp1","Fp2","AF3","AF4","F3","F4","FC1","FC2"]),
+                kind: Self::Hermes,
+                channel_count: 8,
+                has_ppg: false,
+                has_imu: true,
+                has_central_electrodes: true, // montage-dependent
+                has_full_montage: false,
+                sample_rate_hz: 250.0,
+                electrode_names: sv(&["Fp1", "Fp2", "AF3", "AF4", "F3", "F4", "FC1", "FC2"]),
             },
             Self::Emotiv => DeviceCapabilities {
-                kind:                   Self::Emotiv,
-                channel_count:          14, // EPOC; Insight = 5; Flex = 32
-                has_ppg:                false,
-                has_imu:                true,
+                kind: Self::Emotiv,
+                channel_count: 14, // EPOC; Insight = 5; Flex = 32
+                has_ppg: false,
+                has_imu: true,
                 has_central_electrodes: true, // FC5/FC6 near-central
-                has_full_montage:       false,
-                sample_rate_hz:         128.0,
-                electrode_names:        sv(&[
-                    "AF3","F7","F3","FC5","T7","P7","O1",
-                    "O2","P8","T8","FC6","F4","F8","AF4",
+                has_full_montage: false,
+                sample_rate_hz: 128.0,
+                electrode_names: sv(&[
+                    "AF3", "F7", "F3", "FC5", "T7", "P7", "O1", "O2", "P8", "T8", "FC6", "F4",
+                    "F8", "AF4",
                 ]),
             },
             Self::Idun => DeviceCapabilities {
-                kind:                   Self::Idun,
-                channel_count:          1,   // single bipolar channel
-                has_ppg:                false,
-                has_imu:                true, // 6-DOF IMU (accel + gyro)
+                kind: Self::Idun,
+                channel_count: 1, // single bipolar channel
+                has_ppg: false,
+                has_imu: true,                 // 6-DOF IMU (accel + gyro)
                 has_central_electrodes: false, // in-ear canal placement
-                has_full_montage:       false,
-                sample_rate_hz:         250.0,
-                electrode_names:        sv(&["EEG"]),
+                has_full_montage: false,
+                sample_rate_hz: 250.0,
+                electrode_names: sv(&["EEG"]),
             },
             Self::Unknown => DeviceCapabilities {
-                kind:                   Self::Unknown,
-                channel_count:          0,
-                has_ppg:                false,
-                has_imu:                false,
+                kind: Self::Unknown,
+                channel_count: 0,
+                has_ppg: false,
+                has_imu: false,
                 has_central_electrodes: false,
-                has_full_montage:       false,
-                sample_rate_hz:         0.0,
-                electrode_names:        Vec::new(),
+                has_full_montage: false,
+                sample_rate_hz: 0.0,
+                electrode_names: Vec::new(),
             },
         }
     }
 
     /// Convenience: `true` when this is any Muse variant.
     #[inline]
-    pub fn is_muse(self) -> bool { self == Self::Muse }
+    pub fn is_muse(self) -> bool {
+        self == Self::Muse
+    }
 
     /// Return the `&'static str` tag used in IPC messages (matches serde rename).
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Muse     => "muse",
+            Self::Muse => "muse",
             Self::Ganglion => "ganglion",
-            Self::OpenBci  => "open_bci",
-            Self::Mw75     => "mw75",
-            Self::Hermes   => "hermes",
-            Self::Emotiv   => "emotiv",
-            Self::Idun     => "idun",
-            Self::Unknown  => "unknown",
+            Self::OpenBci => "open_bci",
+            Self::Mw75 => "mw75",
+            Self::Hermes => "hermes",
+            Self::Emotiv => "emotiv",
+            Self::Idun => "idun",
+            Self::Unknown => "unknown",
         }
     }
 
@@ -230,17 +247,19 @@ impl DeviceKind {
     /// any unrecognised string so BLE advertising names still work.
     pub fn from_kind_str(s: &str) -> Self {
         match s {
-            "muse"     => Self::Muse,
+            "muse" => Self::Muse,
             "ganglion" => Self::Ganglion,
             "open_bci" => Self::OpenBci,
-            "mw75"     => Self::Mw75,
-            "hermes"   => Self::Hermes,
-            "emotiv"   => Self::Emotiv,
-            "idun"     => Self::Idun,
-            "unknown"  => Self::Unknown,
+            "mw75" => Self::Mw75,
+            "hermes" => Self::Hermes,
+            "emotiv" => Self::Emotiv,
+            "idun" => Self::Idun,
+            "unknown" => Self::Unknown,
             other => {
                 // Handle runtime kind strings like "openbci_cyton", "openbci_cyton_daisy", etc.
-                if other.starts_with("openbci") { return Self::OpenBci; }
+                if other.starts_with("openbci") {
+                    return Self::OpenBci;
+                }
                 // Fall back to advertising-name detection for anything else.
                 Self::from_name(Some(other))
             }
@@ -316,12 +335,10 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             id: "neurable".into(),
             name_key: "settings.supportedDevices.company.neurable".into(),
             logo: "/logos/neurable.png".into(),
-            devices: vec![
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.mw75Neuro".into(),
-                    image: "/devices/muse-mw75.jpg".into(),
-                },
-            ],
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.mw75Neuro".into(),
+                image: "/devices/muse-mw75.jpg".into(),
+            }],
             instruction_keys: vec![
                 "settings.supportedDevices.instruction.neurable1".into(),
                 "settings.supportedDevices.instruction.neurable2".into(),
@@ -385,12 +402,10 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             id: "idun".into(),
             name_key: "settings.supportedDevices.company.idun".into(),
             logo: "/logos/idun.png".into(),
-            devices: vec![
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.guardian".into(),
-                    image: "/devices/idun-guardian.png".into(),
-                },
-            ],
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.guardian".into(),
+                image: "/devices/idun-guardian.png".into(),
+            }],
             instruction_keys: vec![
                 "settings.supportedDevices.instruction.idun1".into(),
                 "settings.supportedDevices.instruction.idun2".into(),
@@ -400,12 +415,10 @@ pub fn supported_companies() -> Vec<SupportedCompany> {
             id: "reak".into(),
             name_key: "settings.supportedDevices.company.reak".into(),
             logo: "/logos/reak.png".into(),
-            devices: vec![
-                SupportedDevice {
-                    name_key: "settings.supportedDevices.device.nucleusHermes".into(),
-                    image: "/devices/re-ak-nucleus-hermes.png".into(),
-                },
-            ],
+            devices: vec![SupportedDevice {
+                name_key: "settings.supportedDevices.device.nucleusHermes".into(),
+                image: "/devices/re-ak-nucleus-hermes.png".into(),
+            }],
             instruction_keys: vec![
                 "settings.supportedDevices.instruction.reak1".into(),
                 "settings.supportedDevices.instruction.reak2".into(),
@@ -426,47 +439,92 @@ mod tests {
 
     #[test]
     fn from_name_ganglion() {
-        assert_eq!(DeviceKind::from_name(Some("Ganglion-1234")), DeviceKind::Ganglion);
-        assert_eq!(DeviceKind::from_name(Some("Simblee-001")), DeviceKind::Ganglion);
+        assert_eq!(
+            DeviceKind::from_name(Some("Ganglion-1234")),
+            DeviceKind::Ganglion
+        );
+        assert_eq!(
+            DeviceKind::from_name(Some("Simblee-001")),
+            DeviceKind::Ganglion
+        );
     }
 
     #[test]
     fn from_name_openbci() {
-        assert_eq!(DeviceKind::from_name(Some("OpenBCI-Cyton")), DeviceKind::OpenBci);
-        assert_eq!(DeviceKind::from_name(Some("Cyton-ABCD")), DeviceKind::OpenBci);
+        assert_eq!(
+            DeviceKind::from_name(Some("OpenBCI-Cyton")),
+            DeviceKind::OpenBci
+        );
+        assert_eq!(
+            DeviceKind::from_name(Some("Cyton-ABCD")),
+            DeviceKind::OpenBci
+        );
     }
 
     #[test]
     fn from_name_mw75() {
-        assert_eq!(DeviceKind::from_name(Some("Headphones-MW75-v2")), DeviceKind::Mw75);
-        assert_eq!(DeviceKind::from_name(Some("Neurable-XYZ")), DeviceKind::Mw75);
+        assert_eq!(
+            DeviceKind::from_name(Some("Headphones-MW75-v2")),
+            DeviceKind::Mw75
+        );
+        assert_eq!(
+            DeviceKind::from_name(Some("Neurable-XYZ")),
+            DeviceKind::Mw75
+        );
     }
 
     #[test]
     fn from_name_hermes() {
-        assert_eq!(DeviceKind::from_name(Some("Hermes-ABC")), DeviceKind::Hermes);
+        assert_eq!(
+            DeviceKind::from_name(Some("Hermes-ABC")),
+            DeviceKind::Hermes
+        );
     }
 
     #[test]
     fn from_name_emotiv() {
-        assert_eq!(DeviceKind::from_name(Some("Emotiv-EPOC-X")), DeviceKind::Emotiv);
-        assert_eq!(DeviceKind::from_name(Some("EPOC-X-1234")), DeviceKind::Emotiv);
-        assert_eq!(DeviceKind::from_name(Some("Insight-5ch")), DeviceKind::Emotiv);
-        assert_eq!(DeviceKind::from_name(Some("FLEX-Saline")), DeviceKind::Emotiv);
-        assert_eq!(DeviceKind::from_name(Some("MN8-Earbuds")), DeviceKind::Emotiv);
+        assert_eq!(
+            DeviceKind::from_name(Some("Emotiv-EPOC-X")),
+            DeviceKind::Emotiv
+        );
+        assert_eq!(
+            DeviceKind::from_name(Some("EPOC-X-1234")),
+            DeviceKind::Emotiv
+        );
+        assert_eq!(
+            DeviceKind::from_name(Some("Insight-5ch")),
+            DeviceKind::Emotiv
+        );
+        assert_eq!(
+            DeviceKind::from_name(Some("FLEX-Saline")),
+            DeviceKind::Emotiv
+        );
+        assert_eq!(
+            DeviceKind::from_name(Some("MN8-Earbuds")),
+            DeviceKind::Emotiv
+        );
     }
 
     #[test]
     fn from_name_idun() {
-        assert_eq!(DeviceKind::from_name(Some("IDUN-Guardian")), DeviceKind::Idun);
-        assert_eq!(DeviceKind::from_name(Some("Guardian-001")), DeviceKind::Idun);
+        assert_eq!(
+            DeviceKind::from_name(Some("IDUN-Guardian")),
+            DeviceKind::Idun
+        );
+        assert_eq!(
+            DeviceKind::from_name(Some("Guardian-001")),
+            DeviceKind::Idun
+        );
         assert_eq!(DeviceKind::from_name(Some("IGE-1234")), DeviceKind::Idun);
     }
 
     #[test]
     fn from_name_unknown() {
         assert_eq!(DeviceKind::from_name(None), DeviceKind::Unknown);
-        assert_eq!(DeviceKind::from_name(Some("random-device")), DeviceKind::Unknown);
+        assert_eq!(
+            DeviceKind::from_name(Some("random-device")),
+            DeviceKind::Unknown
+        );
     }
 
     #[test]
@@ -483,16 +541,28 @@ mod tests {
 
     #[test]
     fn from_kind_str_runtime_openbci() {
-        assert_eq!(DeviceKind::from_kind_str("openbci_cyton"), DeviceKind::OpenBci);
-        assert_eq!(DeviceKind::from_kind_str("openbci_cyton_daisy"), DeviceKind::OpenBci);
-        assert_eq!(DeviceKind::from_kind_str("openbci_galea"), DeviceKind::OpenBci);
+        assert_eq!(
+            DeviceKind::from_kind_str("openbci_cyton"),
+            DeviceKind::OpenBci
+        );
+        assert_eq!(
+            DeviceKind::from_kind_str("openbci_cyton_daisy"),
+            DeviceKind::OpenBci
+        );
+        assert_eq!(
+            DeviceKind::from_kind_str("openbci_galea"),
+            DeviceKind::OpenBci
+        );
     }
 
     #[test]
     fn from_kind_str_fallback_to_from_name() {
         // An advertising name should still work via fallback.
         assert_eq!(DeviceKind::from_kind_str("Muse-2-ABCD"), DeviceKind::Muse);
-        assert_eq!(DeviceKind::from_kind_str("random-thing"), DeviceKind::Unknown);
+        assert_eq!(
+            DeviceKind::from_kind_str("random-thing"),
+            DeviceKind::Unknown
+        );
     }
 
     #[test]

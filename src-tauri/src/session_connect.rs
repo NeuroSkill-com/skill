@@ -17,13 +17,10 @@ use tauri::{AppHandle, Manager};
 
 use skill_devices::session::*;
 
-use crate::AppStateExt;
-use crate::{
-    AppState, MutexExt, StreamHandle,
-    emit_status,
-};
 use crate::device_scanner::{bluetooth_ok, classify_device_error};
 use crate::session_csv::new_csv_path;
+use crate::AppStateExt;
+use crate::{emit_status, AppState, MutexExt, StreamHandle};
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -39,7 +36,7 @@ pub(crate) enum ConnectError {
 // ── Muse ──────────────────────────────────────────────────────────────────────
 
 pub(crate) async fn connect_muse(
-    app:       &AppHandle,
+    app: &AppHandle,
     cancel: &tokio_util::sync::CancellationToken,
     preferred_id: Option<String>,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
@@ -74,7 +71,11 @@ pub(crate) async fn connect_muse(
     let paired_ids: Vec<String> = {
         let r = app.app_state();
         let s = r.lock_or_recover();
-        s.status.paired_devices.iter().map(|d| d.id.clone()).collect()
+        s.status
+            .paired_devices
+            .iter()
+            .map(|d| d.id.clone())
+            .collect()
     };
     let first_time = paired_ids.is_empty();
 
@@ -83,17 +84,19 @@ pub(crate) async fn connect_muse(
     } else {
         match &preferred_id {
             Some(id) => all_devices.iter().find(|d| &d.id == id).cloned(),
-            None     => all_devices.into_iter().find(|d| paired_ids.contains(&d.id)),
+            None => all_devices.into_iter().find(|d| paired_ids.contains(&d.id)),
         }
     };
-    let Some(device) = device else { return Err(ConnectError::Other("NO_MUSE_NEARBY".into())) };
+    let Some(device) = device else {
+        return Err(ConnectError::Other("NO_MUSE_NEARBY".into()));
+    };
 
     // Pin real BLE ID into status.
     {
         let sr = app.app_state();
         let mut g = sr.lock_or_recover();
         g.status.device_id = Some(device.id.clone());
-        g.retry_attempt    = 0;
+        g.retry_attempt = 0;
     }
 
     // Connect
@@ -129,8 +132,8 @@ pub(crate) async fn connect_muse(
 // ── MW75 ──────────────────────────────────────────────────────────────────────
 
 pub(crate) async fn connect_mw75(
-    app:          &AppHandle,
-    cancel:       &tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+    cancel: &tokio_util::sync::CancellationToken,
     preferred_id: Option<String>,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
     use skill_devices::mw75::prelude::*;
@@ -147,7 +150,11 @@ pub(crate) async fn connect_mw75(
         ..Default::default()
     };
     let client = Mw75Client::new(config);
-    app_log!(app, "bluetooth", "[mw75] connecting (preferred={preferred_id:?})…");
+    app_log!(
+        app,
+        "bluetooth",
+        "[mw75] connecting (preferred={preferred_id:?})…"
+    );
 
     // Scan, then select preferred device (or first found).
     let connect_result = tokio::select! {
@@ -181,7 +188,11 @@ pub(crate) async fn connect_mw75(
         }
     };
 
-    app_log!(app, "bluetooth", "[mw75] BLE connected, starting activation…");
+    app_log!(
+        app,
+        "bluetooth",
+        "[mw75] BLE connected, starting activation…"
+    );
 
     // BLE activation
     tokio::select! {
@@ -202,7 +213,11 @@ pub(crate) async fn connect_mw75(
 
     // Disconnect BLE before RFCOMM (required on macOS).
     let bt_address = handle.peripheral_id();
-    app_log!(app, "bluetooth", "[mw75] disconnecting BLE (addr={bt_address})…");
+    app_log!(
+        app,
+        "bluetooth",
+        "[mw75] disconnecting BLE (addr={bt_address})…"
+    );
     if let Err(e) = handle.disconnect_ble().await {
         app_log!(app, "bluetooth", "[mw75] BLE disconnect warning: {e}");
     }
@@ -228,20 +243,30 @@ pub(crate) async fn connect_mw75(
                 Ok(r) => r,
             }
         };
-        app_log!(app, "bluetooth", "[mw75] RFCOMM connected — streaming EEG at {} Hz",
-            skill_constants::MW75_SAMPLE_RATE);
+        app_log!(
+            app,
+            "bluetooth",
+            "[mw75] RFCOMM connected — streaming EEG at {} Hz",
+            skill_constants::MW75_SAMPLE_RATE
+        );
 
         // Drain stale BLE events.
         let mut drained = 0u32;
-        while rx.try_recv().is_ok() { drained += 1; }
+        while rx.try_recv().is_ok() {
+            drained += 1;
+        }
         if drained > 0 {
-            app_log!(app, "bluetooth", "[mw75] drained {drained} stale BLE events");
+            app_log!(
+                app,
+                "bluetooth",
+                "[mw75] drained {drained} stale BLE events"
+            );
         }
 
         // Inject synthetic Connected + attach RFCOMM guard.
         let info = DeviceInfo {
             name: handle.device_name().to_string(),
-            id:   handle.peripheral_id(),
+            id: handle.peripheral_id(),
             ..Default::default()
         };
         let mut adapter = Mw75Adapter::new(rx, handle.clone(), Some(info));
@@ -251,8 +276,11 @@ pub(crate) async fn connect_mw75(
 
     #[cfg(not(feature = "mw75-rfcomm"))]
     {
-        app_log!(app, "bluetooth",
-            "[mw75] RFCOMM feature disabled — receiving EEG via BLE notifications");
+        app_log!(
+            app,
+            "bluetooth",
+            "[mw75] RFCOMM feature disabled — receiving EEG via BLE notifications"
+        );
         let adapter = Mw75Adapter::new(rx, handle.clone(), None);
         Ok(Box::new(adapter))
     }
@@ -261,8 +289,8 @@ pub(crate) async fn connect_mw75(
 // ── Hermes ────────────────────────────────────────────────────────────────────
 
 pub(crate) async fn connect_hermes(
-    app:          &AppHandle,
-    cancel:       &tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+    cancel: &tokio_util::sync::CancellationToken,
     preferred_id: Option<String>,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
     use skill_devices::hermes_ble::prelude::*;
@@ -278,7 +306,11 @@ pub(crate) async fn connect_hermes(
         ..Default::default()
     };
     let client = HermesClient::new(config);
-    app_log!(app, "bluetooth", "[hermes] connecting (preferred={preferred_id:?})…");
+    app_log!(
+        app,
+        "bluetooth",
+        "[hermes] connecting (preferred={preferred_id:?})…"
+    );
 
     // Scan, then select preferred device (or first found).
     let connect_result = tokio::select! {
@@ -309,7 +341,11 @@ pub(crate) async fn connect_hermes(
         }
     };
 
-    app_log!(app, "bluetooth", "[hermes] BLE connected, starting streaming…");
+    app_log!(
+        app,
+        "bluetooth",
+        "[hermes] BLE connected, starting streaming…"
+    );
 
     // Start streaming
     tokio::select! {
@@ -326,8 +362,12 @@ pub(crate) async fn connect_hermes(
             }
         }
     }
-    app_log!(app, "bluetooth", "[hermes] streaming started — 8ch EEG at {} Hz",
-        skill_constants::HERMES_SAMPLE_RATE);
+    app_log!(
+        app,
+        "bluetooth",
+        "[hermes] streaming started — 8ch EEG at {} Hz",
+        skill_constants::HERMES_SAMPLE_RATE
+    );
 
     Ok(Box::new(HermesAdapter::new(rx, handle)))
 }
@@ -335,12 +375,12 @@ pub(crate) async fn connect_hermes(
 // ── OpenBCI Ganglion BLE ──────────────────────────────────────────────────────
 
 pub(crate) async fn connect_ganglion(
-    app:          &AppHandle,
-    cancel:       &tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+    cancel: &tokio_util::sync::CancellationToken,
     preferred_id: Option<String>,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
-    use skill_devices::openbci::board::Board as _;
     use skill_devices::openbci::board::ganglion::{GanglionBoard, GanglionConfig, GanglionFilter};
+    use skill_devices::openbci::board::Board as _;
     use skill_devices::session::openbci::OpenBciAdapter;
 
     // BT check
@@ -371,7 +411,7 @@ pub(crate) async fn connect_ganglion(
     };
 
     let mut board = match board_result {
-        Ok(Ok(b))  => b,
+        Ok(Ok(b)) => b,
         Ok(Err(e)) => {
             let (m, _) = classify_device_error(&e.to_string());
             return Err(ConnectError::Bluetooth(m));
@@ -380,13 +420,22 @@ pub(crate) async fn connect_ganglion(
     };
 
     // Derive device name/id
-    let dev_name = preferred_id.as_ref()
+    let dev_name = preferred_id
+        .as_ref()
         .and_then(|id| {
             let r = app.app_state();
             let s = r.lock_or_recover();
-            s.status.paired_devices.iter()
-                .find(|d| &d.id == id).map(|d| d.name.clone())
-                .or_else(|| s.discovered.iter().find(|d| &d.id == id).map(|d| d.name.clone()))
+            s.status
+                .paired_devices
+                .iter()
+                .find(|d| &d.id == id)
+                .map(|d| d.name.clone())
+                .or_else(|| {
+                    s.discovered
+                        .iter()
+                        .find(|d| &d.id == id)
+                        .map(|d| d.name.clone())
+                })
         })
         .unwrap_or_else(|| "Ganglion".into());
     let dev_id = preferred_id.clone().unwrap_or_else(|| dev_name.clone());
@@ -396,21 +445,26 @@ pub(crate) async fn connect_ganglion(
         let r = app.app_state();
         let s = r.lock_or_recover();
         let cfg_labels = &s.openbci_config.channel_labels;
-        (0..4).map(|i| {
-            cfg_labels.get(i)
-                .filter(|l| !l.is_empty()).cloned()
-                .unwrap_or_else(|| crate::constants::GANGLION_CHANNEL_NAMES[i].to_string())
-        }).collect()
+        (0..4)
+            .map(|i| {
+                cfg_labels
+                    .get(i)
+                    .filter(|l| !l.is_empty())
+                    .cloned()
+                    .unwrap_or_else(|| crate::constants::GANGLION_CHANNEL_NAMES[i].to_string())
+            })
+            .collect()
     };
 
     // Start stream
     let stream_handle = match board.start_stream() {
-        Ok(h)  => h,
+        Ok(h) => h,
         Err(e) => return Err(ConnectError::Other(format!("Ganglion start_stream: {e}"))),
     };
 
     let desc = OpenBciAdapter::make_descriptor(
-        "ganglion", 4,
+        "ganglion",
+        4,
         skill_constants::GANGLION_SAMPLE_RATE,
         ch_labels,
     );
@@ -426,16 +480,18 @@ pub(crate) async fn connect_ganglion(
 // ── OpenBCI Generic Board (WiFi, Cyton serial, Galea) ─────────────────────────
 
 pub(crate) async fn connect_openbci_board(
-    app:       &AppHandle,
+    app: &AppHandle,
     cancel: &tokio_util::sync::CancellationToken,
 ) -> Result<(Box<dyn DeviceAdapter>, String), ConnectError> {
     use crate::settings::OpenBciBoard as Brd;
     use skill_devices::openbci::board::cyton::CytonBoard;
     use skill_devices::openbci::board::cyton_daisy::CytonDaisyBoard;
+    use skill_devices::openbci::board::cyton_daisy_wifi::{
+        CytonDaisyWifiBoard, CytonDaisyWifiConfig,
+    };
     use skill_devices::openbci::board::cyton_wifi::{CytonWifiBoard, CytonWifiConfig};
-    use skill_devices::openbci::board::cyton_daisy_wifi::{CytonDaisyWifiBoard, CytonDaisyWifiConfig};
-    use skill_devices::openbci::board::ganglion_wifi::{GanglionWifiBoard, GanglionWifiConfig};
     use skill_devices::openbci::board::galea::GaleaBoard;
+    use skill_devices::openbci::board::ganglion_wifi::{GanglionWifiBoard, GanglionWifiConfig};
     use skill_devices::openbci::board::Board as OpenBciBoard;
     use skill_devices::session::openbci::OpenBciAdapter;
 
@@ -446,47 +502,73 @@ pub(crate) async fn connect_openbci_board(
     };
 
     if board_kind.is_ble() {
-        return Err(ConnectError::Other("Use the main Connect button for Ganglion BLE.".into()));
+        return Err(ConnectError::Other(
+            "Use the main Connect button for Ganglion BLE.".into(),
+        ));
     }
 
     let board: Box<dyn OpenBciBoard> = match board_kind.clone() {
         Brd::GanglionWifi => Box::new(GanglionWifiBoard::new(GanglionWifiConfig {
-            shield_ip: cfg.wifi_shield_ip.clone(), local_port: cfg.wifi_local_port, http_timeout: 10,
+            shield_ip: cfg.wifi_shield_ip.clone(),
+            local_port: cfg.wifi_local_port,
+            http_timeout: 10,
         })),
         Brd::Cyton => {
             let port = if cfg.serial_port.is_empty() {
-                serialport::available_ports().unwrap_or_default().into_iter().next()
+                serialport::available_ports()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .next()
                     .map(|p| p.port_name)
-                    .ok_or_else(|| ConnectError::Other(
-                        "No serial ports found. Connect the USB dongle and try again.".into()
-                    ))?
-            } else { cfg.serial_port.clone() };
+                    .ok_or_else(|| {
+                        ConnectError::Other(
+                            "No serial ports found. Connect the USB dongle and try again.".into(),
+                        )
+                    })?
+            } else {
+                cfg.serial_port.clone()
+            };
             Box::new(CytonBoard::new(port))
         }
         Brd::CytonWifi => Box::new(CytonWifiBoard::new(CytonWifiConfig {
-            shield_ip: cfg.wifi_shield_ip.clone(), local_port: cfg.wifi_local_port, http_timeout: 10,
+            shield_ip: cfg.wifi_shield_ip.clone(),
+            local_port: cfg.wifi_local_port,
+            http_timeout: 10,
         })),
         Brd::CytonDaisy => {
             let port = if cfg.serial_port.is_empty() {
-                serialport::available_ports().unwrap_or_default().into_iter().next()
+                serialport::available_ports()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .next()
                     .map(|p| p.port_name)
-                    .ok_or_else(|| ConnectError::Other(
-                        "No serial ports found. Connect the USB dongle and try again.".into()
-                    ))?
-            } else { cfg.serial_port.clone() };
+                    .ok_or_else(|| {
+                        ConnectError::Other(
+                            "No serial ports found. Connect the USB dongle and try again.".into(),
+                        )
+                    })?
+            } else {
+                cfg.serial_port.clone()
+            };
             Box::new(CytonDaisyBoard::new(port))
         }
         Brd::CytonDaisyWifi => Box::new(CytonDaisyWifiBoard::new(CytonDaisyWifiConfig {
-            shield_ip: cfg.wifi_shield_ip.clone(), local_port: cfg.wifi_local_port, http_timeout: 10,
+            shield_ip: cfg.wifi_shield_ip.clone(),
+            local_port: cfg.wifi_local_port,
+            http_timeout: 10,
         })),
         Brd::Galea => Box::new(GaleaBoard::new(cfg.galea_ip.clone())),
         Brd::Ganglion => unreachable!(),
     };
 
-    let ch_count    = board_kind.channel_count();
+    let ch_count = board_kind.channel_count();
     let sample_rate = board_kind.sample_rate();
-    let kind_str    = format!("openbci_{}", serde_json::to_string(&board_kind)
-                              .unwrap_or_default().trim_matches('"'));
+    let kind_str = format!(
+        "openbci_{}",
+        serde_json::to_string(&board_kind)
+            .unwrap_or_default()
+            .trim_matches('"')
+    );
 
     // Connect (blocking)
     let connect_result = tokio::select! {
@@ -498,9 +580,9 @@ pub(crate) async fn connect_openbci_board(
     };
 
     let mut board = match connect_result {
-        Ok(Ok(b))  => b,
+        Ok(Ok(b)) => b,
         Ok(Err(e)) => return Err(ConnectError::Other(format!("OpenBCI connect error: {e}"))),
-        Err(e)     => return Err(ConnectError::Other(format!("OpenBCI thread error: {e}"))),
+        Err(e) => return Err(ConnectError::Other(format!("OpenBCI thread error: {e}"))),
     };
 
     // Build channel labels
@@ -508,10 +590,15 @@ pub(crate) async fn connect_openbci_board(
         let r = app.app_state();
         let s = r.lock_or_recover();
         let cfg_labels = &s.openbci_config.channel_labels;
-        (0..ch_count).map(|i| {
-            cfg_labels.get(i).filter(|l| !l.is_empty()).cloned()
-                .unwrap_or_else(|| format!("Ch{}", i + 1))
-        }).collect()
+        (0..ch_count)
+            .map(|i| {
+                cfg_labels
+                    .get(i)
+                    .filter(|l| !l.is_empty())
+                    .cloned()
+                    .unwrap_or_else(|| format!("Ch{}", i + 1))
+            })
+            .collect()
     };
 
     // Start stream
@@ -523,22 +610,27 @@ pub(crate) async fn connect_openbci_board(
     let desc = OpenBciAdapter::make_descriptor(
         // Leak a &'static str for the kind_str (lives for the process lifetime, one per session).
         Box::leak(kind_str.clone().into_boxed_str()),
-        ch_count, sample_rate, ch_labels,
+        ch_count,
+        sample_rate,
+        ch_labels,
     );
     let info = DeviceInfo {
         name: kind_str.clone(),
-        id:   kind_str.clone(),
+        id: kind_str.clone(),
         ..Default::default()
     };
 
-    Ok((Box::new(OpenBciAdapter::start(stream_handle, desc, info)), kind_str))
+    Ok((
+        Box::new(OpenBciAdapter::start(stream_handle, desc, info)),
+        kind_str,
+    ))
 }
 
 // ── Emotiv (Cortex WebSocket API) ──────────────────────────────────────────────
 
 pub(crate) async fn connect_emotiv(
-    app:          &AppHandle,
-    cancel:       &tokio_util::sync::CancellationToken,
+    app: &AppHandle,
+    cancel: &tokio_util::sync::CancellationToken,
     preferred_id: Option<String>,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
     use skill_devices::emotiv::prelude::*;
@@ -553,9 +645,16 @@ pub(crate) async fn connect_emotiv(
         .unwrap_or("")
         .to_owned();
 
-    app_log!(app, "bluetooth",
+    app_log!(
+        app,
+        "bluetooth",
         "[emotiv] connecting via Cortex API (headset={})…",
-        if headset_id.is_empty() { "auto" } else { &headset_id });
+        if headset_id.is_empty() {
+            "auto"
+        } else {
+            &headset_id
+        }
+    );
 
     let device_api = {
         let r = app.app_state();
@@ -588,7 +687,7 @@ pub(crate) async fn connect_emotiv(
              Set Emotiv credentials in Settings → Devices → Device API, or set\n\
              EMOTIV_CLIENT_ID and EMOTIV_CLIENT_SECRET environment variables\n\
              (from https://www.emotiv.com/my-account/cortex-apps/)."
-            .into(),
+                .into(),
         ));
     }
 
@@ -702,9 +801,13 @@ pub(crate) async fn connect_emotiv(
                 Ok(Some(ev)) => {
                     match &ev {
                         CortexEvent::DataLabels(labels) => {
-                            app_log!(app, "bluetooth",
+                            app_log!(
+                                app,
+                                "bluetooth",
                                 "[emotiv] DataLabels: stream={}, cols={:?}",
-                                labels.stream_name, labels.labels);
+                                labels.stream_name,
+                                labels.labels
+                            );
                             if labels.stream_name == "eeg" {
                                 eeg_confirmed = true;
                             }
@@ -716,7 +819,9 @@ pub(crate) async fn connect_emotiv(
                         _ => {}
                     }
                     replay_events.push(ev);
-                    if eeg_confirmed { break; }
+                    if eeg_confirmed {
+                        break;
+                    }
                 }
                 _ => break,
             }
@@ -740,9 +845,12 @@ pub(crate) async fn connect_emotiv(
                  https://www.emotiv.com/my-account/cortex-apps/"
             )));
         } else if !eeg_confirmed {
-            app_log!(app, "bluetooth",
+            app_log!(
+                app,
+                "bluetooth",
                 "[emotiv] WARNING: EEG DataLabels not received within 3s — \
-                 EEG data may not stream. Check Emotiv license.");
+                 EEG data may not stream. Check Emotiv license."
+            );
         }
     }
 
@@ -750,13 +858,21 @@ pub(crate) async fn connect_emotiv(
     let headset_id = handle.headset_id().await;
     let session_id = handle.session_id().await;
     let sample_rate = skill_constants::emotiv_sample_rate_from_id(&headset_id);
-    app_log!(app, "bluetooth", "[emotiv] connected — {headset_id} streaming EEG at {sample_rate} Hz");
+    app_log!(
+        app,
+        "bluetooth",
+        "[emotiv] connected — {headset_id} streaming EEG at {sample_rate} Hz"
+    );
 
     // Inject a synthetic Connected event — we consumed SessionCreated in the
     // wait loop above, so the adapter's channel won't see it.  Without this
     // the session runner never calls on_connected and status stays "scanning".
     let info = DeviceInfo {
-        name: if headset_id.is_empty() { "Emotiv".into() } else { headset_id.clone() },
+        name: if headset_id.is_empty() {
+            "Emotiv".into()
+        } else {
+            headset_id.clone()
+        },
         id: session_id,
         ..Default::default()
     };
@@ -772,7 +888,7 @@ pub(crate) async fn connect_emotiv(
 // ── IDUN Guardian (BLE) ───────────────────────────────────────────────────────
 
 pub(crate) async fn connect_idun(
-    app:    &AppHandle,
+    app: &AppHandle,
     cancel: &tokio_util::sync::CancellationToken,
 ) -> Result<Box<dyn DeviceAdapter>, ConnectError> {
     use skill_devices::idun::prelude::*;
@@ -793,11 +909,18 @@ pub(crate) async fn connect_idun(
         let r = app.app_state();
         let s = r.lock_or_recover();
         // Match the user's notch filter setting; default to 60 Hz if unset.
-        !matches!(s.status.filter_config.notch, Some(skill_eeg::eeg_filter::PowerlineFreq::Hz50))
+        !matches!(
+            s.status.filter_config.notch,
+            Some(skill_eeg::eeg_filter::PowerlineFreq::Hz50)
+        )
     };
 
     let config = GuardianClientConfig {
-        api_token: if idun_token.trim().is_empty() { None } else { Some(idun_token) },
+        api_token: if idun_token.trim().is_empty() {
+            None
+        } else {
+            Some(idun_token)
+        },
         mains_freq_60hz: use_60hz,
         ..GuardianClientConfig::default()
     };
@@ -819,7 +942,11 @@ pub(crate) async fn connect_idun(
         }
     };
 
-    app_log!(app, "bluetooth", "[idun] BLE connected, starting recording…");
+    app_log!(
+        app,
+        "bluetooth",
+        "[idun] BLE connected, starting recording…"
+    );
 
     // Start EEG + IMU streaming.
     tokio::select! {
@@ -837,8 +964,12 @@ pub(crate) async fn connect_idun(
         }
     }
 
-    app_log!(app, "bluetooth", "[idun] streaming started — 1ch EEG at {} Hz",
-        skill_constants::IDUN_SAMPLE_RATE);
+    app_log!(
+        app,
+        "bluetooth",
+        "[idun] streaming started — 1ch EEG at {} Hz",
+        skill_constants::IDUN_SAMPLE_RATE
+    );
 
     Ok(Box::new(IdunAdapter::new(rx, handle)))
 }
@@ -860,7 +991,7 @@ pub(crate) async fn connect_openbci(app: AppHandle) -> Result<(), String> {
     let csv_path = {
         let r = app.app_state();
         let mut s = r.lock_or_recover();
-        s.stream       = Some(StreamHandle { cancel_tx: tx });
+        s.stream = Some(StreamHandle { cancel_tx: tx });
         s.status.state = "scanning".into();
         new_csv_path(&app)
     };

@@ -37,7 +37,7 @@ export interface ChartScheme {
   delta: string;
   theta: string;
   alpha: string;
-  beta:  string;
+  beta: string;
   gamma: string;
 }
 
@@ -46,11 +46,15 @@ export interface ChartScheme {
  * Green / Blue / Purple / Orange channels with vivid band colors.
  */
 const DEFAULT: ChartScheme = {
-  id:       "default",
+  id: "default",
   labelKey: "chartScheme.default",
-  descKey:  "chartScheme.defaultDesc",
+  descKey: "chartScheme.defaultDesc",
   channels: ["#22c55e", "#60a5fa", "#c084fc", "#fb923c"],
-  delta: "#6366f1", theta: "#22c55e", alpha: "#3b82f6", beta: "#f59e0b", gamma: "#ef4444",
+  delta: "#6366f1",
+  theta: "#22c55e",
+  alpha: "#3b82f6",
+  beta: "#f59e0b",
+  gamma: "#ef4444",
 };
 
 /**
@@ -58,11 +62,15 @@ const DEFAULT: ChartScheme = {
  * Cyan / Magenta / Lime / Gold channels.
  */
 const NEON: ChartScheme = {
-  id:       "neon",
+  id: "neon",
   labelKey: "chartScheme.neon",
-  descKey:  "chartScheme.neonDesc",
+  descKey: "chartScheme.neonDesc",
   channels: ["#00fff7", "#ff00e5", "#b5ff00", "#ffd000"],
-  delta: "#7c3aed", theta: "#00fff7", alpha: "#3b82f6", beta: "#ffd000", gamma: "#ff006a",
+  delta: "#7c3aed",
+  theta: "#00fff7",
+  alpha: "#3b82f6",
+  beta: "#ffd000",
+  gamma: "#ff006a",
 };
 
 /**
@@ -70,11 +78,15 @@ const NEON: ChartScheme = {
  * White-to-gray channel differentiation for minimal distraction.
  */
 const MONO: ChartScheme = {
-  id:       "mono",
+  id: "mono",
   labelKey: "chartScheme.mono",
-  descKey:  "chartScheme.monoDesc",
+  descKey: "chartScheme.monoDesc",
   channels: ["#e2e8f0", "#94a3b8", "#cbd5e1", "#64748b"],
-  delta: "#94a3b8", theta: "#a1a1aa", alpha: "#d4d4d8", beta: "#71717a", gamma: "#52525b",
+  delta: "#94a3b8",
+  theta: "#a1a1aa",
+  alpha: "#d4d4d8",
+  beta: "#71717a",
+  gamma: "#52525b",
 };
 
 /**
@@ -83,11 +95,15 @@ const MONO: ChartScheme = {
  * Based on the Wong (2011) colorblind-safe palette.
  */
 const CB_DEUTAN: ChartScheme = {
-  id:       "cb-deutan",
+  id: "cb-deutan",
   labelKey: "chartScheme.cbDeutan",
-  descKey:  "chartScheme.cbDeutanDesc",
+  descKey: "chartScheme.cbDeutanDesc",
   channels: ["#0072b2", "#e69f00", "#f0e442", "#cc79a7"],
-  delta: "#0072b2", theta: "#e69f00", alpha: "#56b4e9", beta: "#f0e442", gamma: "#cc79a7",
+  delta: "#0072b2",
+  theta: "#e69f00",
+  alpha: "#56b4e9",
+  beta: "#f0e442",
+  gamma: "#cc79a7",
 };
 
 /**
@@ -95,11 +111,15 @@ const CB_DEUTAN: ChartScheme = {
  * Uses blue / yellow / teal / pink.
  */
 const CB_PROTAN: ChartScheme = {
-  id:       "cb-protan",
+  id: "cb-protan",
   labelKey: "chartScheme.cbProtan",
-  descKey:  "chartScheme.cbProtanDesc",
+  descKey: "chartScheme.cbProtanDesc",
   channels: ["#2196f3", "#ffeb3b", "#009688", "#e91e63"],
-  delta: "#2196f3", theta: "#009688", alpha: "#03a9f4", beta: "#ffeb3b", gamma: "#e91e63",
+  delta: "#2196f3",
+  theta: "#009688",
+  alpha: "#03a9f4",
+  beta: "#ffeb3b",
+  gamma: "#e91e63",
 };
 
 /**
@@ -107,23 +127,20 @@ const CB_PROTAN: ChartScheme = {
  * Uses red / green / magenta / cyan.
  */
 const CB_TRITAN: ChartScheme = {
-  id:       "cb-tritan",
+  id: "cb-tritan",
   labelKey: "chartScheme.cbTritan",
-  descKey:  "chartScheme.cbTritanDesc",
+  descKey: "chartScheme.cbTritanDesc",
   channels: ["#d32f2f", "#388e3c", "#e040fb", "#00bcd4"],
-  delta: "#d32f2f", theta: "#388e3c", alpha: "#e040fb", beta: "#00bcd4", gamma: "#ff7043",
+  delta: "#d32f2f",
+  theta: "#388e3c",
+  alpha: "#e040fb",
+  beta: "#00bcd4",
+  gamma: "#ff7043",
 };
 
 // ── All schemes in display order ──────────────────────────────────────────────
 
-export const CHART_SCHEMES: ChartScheme[] = [
-  DEFAULT,
-  NEON,
-  MONO,
-  CB_DEUTAN,
-  CB_PROTAN,
-  CB_TRITAN,
-];
+export const CHART_SCHEMES: ChartScheme[] = [DEFAULT, NEON, MONO, CB_DEUTAN, CB_PROTAN, CB_TRITAN];
 
 // ── Reactive state ────────────────────────────────────────────────────────────
 
@@ -135,7 +152,7 @@ function load(): string {
 }
 
 function findScheme(id: string): ChartScheme {
-  return CHART_SCHEMES.find(s => s.id === id) ?? DEFAULT;
+  return CHART_SCHEMES.find((s) => s.id === id) ?? DEFAULT;
 }
 
 function apply() {
@@ -158,9 +175,13 @@ function apply() {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export function getChartScheme(): string { return current; }
+export function getChartScheme(): string {
+  return current;
+}
 
-export function getActiveScheme(): ChartScheme { return findScheme(current); }
+export function getActiveScheme(): ChartScheme {
+  return findScheme(current);
+}
 
 export function setChartScheme(id: string) {
   current = id;

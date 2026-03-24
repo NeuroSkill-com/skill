@@ -7,74 +7,94 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Voice (TTS) — how it works, requirements, API, logging -->
 
 <script lang="ts">
-  import HelpSection   from "./HelpSection.svelte";
-  import HelpItem      from "./HelpItem.svelte";
-  import TtsTestWidget from "./TtsTestWidget.svelte";
-  import { Separator } from "$lib/components/ui/separator";
-  import { t }         from "$lib/i18n/index.svelte";
+import { Separator } from "$lib/components/ui/separator";
+import { t } from "$lib/i18n/index.svelte";
+import HelpItem from "./HelpItem.svelte";
+import HelpSection from "./HelpSection.svelte";
+import TtsTestWidget from "./TtsTestWidget.svelte";
 
-  const stackBadges: { label: string; url: string; cls: string }[] = [
-    { label: "kittentts-rs",    url: "https://github.com/eugenehp/kittentts-rs",
-      cls: "border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:border-indigo-500/60" },
-    { label: "espeak-ng",       url: "https://github.com/espeak-ng/espeak-ng",
-      cls: "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:border-violet-500/60" },
-    { label: "rodio",           url: "https://github.com/RustAudio/rodio",
-      cls: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:border-sky-500/60" },
-    { label: "HuggingFace Hub", url: "https://huggingface.co/KittenML",
-      cls: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:border-amber-500/60" },
-  ];
+const stackBadges: { label: string; url: string; cls: string }[] = [
+  {
+    label: "kittentts-rs",
+    url: "https://github.com/eugenehp/kittentts-rs",
+    cls: "border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:border-indigo-500/60",
+  },
+  {
+    label: "espeak-ng",
+    url: "https://github.com/espeak-ng/espeak-ng",
+    cls: "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:border-violet-500/60",
+  },
+  {
+    label: "rodio",
+    url: "https://github.com/RustAudio/rodio",
+    cls: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:border-sky-500/60",
+  },
+  {
+    label: "HuggingFace Hub",
+    url: "https://huggingface.co/KittenML",
+    cls: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:border-amber-500/60",
+  },
+];
 
-  const pipelineSteps: { label: string; bg: string }[] = [
-    { label: "Text",          bg: "bg-slate-500/10 text-slate-600 dark:text-slate-300" },
-    { label: "→",             bg: "" },
-    { label: "Preprocess",    bg: "bg-blue-500/10 text-blue-600 dark:text-blue-300" },
-    { label: "→",             bg: "" },
-    { label: "Chunk",         bg: "bg-blue-500/10 text-blue-600 dark:text-blue-300" },
-    { label: "→",             bg: "" },
-    { label: "espeak-ng IPA", bg: "bg-violet-500/10 text-violet-600 dark:text-violet-300" },
-    { label: "→",             bg: "" },
-    { label: "Tokenise",      bg: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300" },
-    { label: "→",             bg: "" },
-    { label: "ONNX Infer",    bg: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300" },
-    { label: "→",             bg: "" },
-    { label: "+1 s pad",      bg: "bg-amber-500/10 text-amber-600 dark:text-amber-300" },
-    { label: "→",             bg: "" },
-    { label: "rodio play",    bg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" },
-  ];
+const pipelineSteps: { label: string; bg: string }[] = [
+  { label: "Text", bg: "bg-slate-500/10 text-slate-600 dark:text-slate-300" },
+  { label: "→", bg: "" },
+  { label: "Preprocess", bg: "bg-blue-500/10 text-blue-600 dark:text-blue-300" },
+  { label: "→", bg: "" },
+  { label: "Chunk", bg: "bg-blue-500/10 text-blue-600 dark:text-blue-300" },
+  { label: "→", bg: "" },
+  { label: "espeak-ng IPA", bg: "bg-violet-500/10 text-violet-600 dark:text-violet-300" },
+  { label: "→", bg: "" },
+  { label: "Tokenise", bg: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300" },
+  { label: "→", bg: "" },
+  { label: "ONNX Infer", bg: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-300" },
+  { label: "→", bg: "" },
+  { label: "+1 s pad", bg: "bg-amber-500/10 text-amber-600 dark:text-amber-300" },
+  { label: "→", bg: "" },
+  { label: "rodio play", bg: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300" },
+];
 
-  const apiExamples: { lang: string; code: string }[] = [
-    { lang: "WebSocket (Python)", code:
-`import asyncio, json, websockets
+const apiExamples: { lang: string; code: string }[] = [
+  {
+    lang: "WebSocket (Python)",
+    code: `import asyncio, json, websockets
 
 async def main():
     async with websockets.connect("ws://localhost:<port>") as ws:
         await ws.send(json.dumps({"command": "say", "text": "Eyes closed. Relax."}))
         print(await ws.recv())
 
-asyncio.run(main())` },
-    { lang: "HTTP (curl)", code:
-`curl -X POST http://localhost:<port>/say \\
+asyncio.run(main())`,
+  },
+  {
+    lang: "HTTP (curl)",
+    code: `curl -X POST http://localhost:<port>/say \\
   -H 'Content-Type: application/json' \\
-  -d '{"text":"Eyes closed. Relax."}'` },
-    { lang: "websocat (CLI)", code:
-`echo '{"command":"say","text":"Eyes closed."}' \\
-  | websocat ws://localhost:<port>` },
-    { lang: "Node.js", code:
-`const ws = new WebSocket("ws://localhost:<port>");
+  -d '{"text":"Eyes closed. Relax."}'`,
+  },
+  {
+    lang: "websocat (CLI)",
+    code: `echo '{"command":"say","text":"Eyes closed."}' \\
+  | websocat ws://localhost:<port>`,
+  },
+  {
+    lang: "Node.js",
+    code: `const ws = new WebSocket("ws://localhost:<port>");
 ws.on("open", () => {
   ws.send(JSON.stringify({ command: "say", text: "Calibration complete." }));
-});` },
-  ];
+});`,
+  },
+];
 
-  const infoKeys: [string, string][] = [
-    ["helpTts.overviewTitle",     "helpTts.overviewBody"],
-    ["helpTts.howItWorksTitle",   "helpTts.howItWorksBody"],
-    ["helpTts.modelTitle",        "helpTts.modelBody"],
-    ["helpTts.requirementsTitle", "helpTts.requirementsBody"],
-    ["helpTts.calibrationTitle",  "helpTts.calibrationBody"],
-    ["helpTts.apiTitle",          "helpTts.apiBody"],
-    ["helpTts.loggingTitle",      "helpTts.loggingBody"],
-  ] as const;
+const infoKeys: [string, string][] = [
+  ["helpTts.overviewTitle", "helpTts.overviewBody"],
+  ["helpTts.howItWorksTitle", "helpTts.howItWorksBody"],
+  ["helpTts.modelTitle", "helpTts.modelBody"],
+  ["helpTts.requirementsTitle", "helpTts.requirementsBody"],
+  ["helpTts.calibrationTitle", "helpTts.calibrationBody"],
+  ["helpTts.apiTitle", "helpTts.apiBody"],
+  ["helpTts.loggingTitle", "helpTts.loggingBody"],
+] as const;
 </script>
 
 <div class="flex flex-col gap-6 pb-6">

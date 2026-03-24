@@ -10,26 +10,33 @@ use crate::MutexExt;
 
 /// `search_screenshots` — search screenshots by OCR text (semantic or substring).
 pub fn search_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let query = msg.get("query")
+    let query = msg
+        .get("query")
         .and_then(|v| v.as_str())
         .ok_or("missing \"query\" field")?
         .to_owned();
-    let k    = msg.get("k").and_then(serde_json::Value::as_u64).unwrap_or(20) as usize;
-    let mode = msg.get("mode")
+    let k = msg
+        .get("k")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(20) as usize;
+    let mode = msg
+        .get("mode")
         .and_then(|v| v.as_str())
         .unwrap_or("semantic")
         .to_owned();
 
     let (skill_dir, store) = {
         let st = app.app_state();
-        let s  = st.lock_or_recover();
+        let s = st.lock_or_recover();
         (s.skill_dir.clone(), s.screenshot_store.clone())
     };
 
     let embedder = std::sync::Arc::clone(&*app.state::<std::sync::Arc<crate::EmbedderState>>());
 
     let store = store
-        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))
+        .or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        })
         .ok_or("screenshot store not available")?;
 
     let results = match mode.as_str() {
@@ -39,9 +46,15 @@ pub fn search_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String>
                 let mut guard = embedder.0.lock().ok()?;
                 let te = guard.as_mut()?;
                 let mut vecs = te.embed(vec![text], None).ok()?;
-                if vecs.is_empty() { None } else { Some(vecs.remove(0)) }
+                if vecs.is_empty() {
+                    None
+                } else {
+                    Some(vecs.remove(0))
+                }
             };
-            crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k, &embed_fn)
+            crate::screenshot::search_by_ocr_text_embedding(
+                &skill_dir, &store, &query, k, &embed_fn,
+            )
         }
     };
 
@@ -56,21 +69,25 @@ pub fn search_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String>
 
 /// `screenshots_around` — find screenshots near a given unix timestamp.
 pub fn screenshots_around(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let timestamp   = msg.get("timestamp")
+    let timestamp = msg
+        .get("timestamp")
         .and_then(serde_json::Value::as_i64)
         .ok_or("missing \"timestamp\" field")?;
-    let window_secs = msg.get("window_secs")
+    let window_secs = msg
+        .get("window_secs")
         .and_then(serde_json::Value::as_i64)
         .unwrap_or(60) as i32;
 
     let (skill_dir, store) = {
         let st = app.app_state();
-        let s  = st.lock_or_recover();
+        let s = st.lock_or_recover();
         (s.skill_dir.clone(), s.screenshot_store.clone())
     };
 
     let store = store
-        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))
+        .or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        })
         .ok_or("screenshot store not available")?;
 
     let results = crate::screenshot::get_around(&store, timestamp, window_secs);
@@ -91,10 +108,14 @@ pub fn screenshots_around(app: &AppHandle, msg: &Value) -> Result<Value, String>
 /// **Required**: `image_b64` (base64-encoded image bytes).
 /// **Optional**: `k` (default 20).
 pub fn search_screenshots_by_image_b64(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let b64 = msg.get("image_b64")
+    let b64 = msg
+        .get("image_b64")
         .and_then(|v| v.as_str())
         .ok_or("missing \"image_b64\" field (base64-encoded image)")?;
-    let k = msg.get("k").and_then(serde_json::Value::as_u64).unwrap_or(20) as usize;
+    let k = msg
+        .get("k")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(20) as usize;
 
     use base64::Engine;
     let image_bytes = base64::engine::general_purpose::STANDARD
@@ -103,25 +124,34 @@ pub fn search_screenshots_by_image_b64(app: &AppHandle, msg: &Value) -> Result<V
 
     let (config, skill_dir, store) = {
         let st = app.app_state();
-        let s  = st.lock_or_recover();
-        (s.screenshot_config.clone(), s.skill_dir.clone(), s.screenshot_store.clone())
+        let s = st.lock_or_recover();
+        (
+            s.screenshot_config.clone(),
+            s.skill_dir.clone(),
+            s.screenshot_store.clone(),
+        )
     };
 
     let store = store
-        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))
+        .or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        })
         .ok_or("screenshot store not available")?;
 
     // Embed the image via CLIP
     let mut encoder = crate::screenshot::load_fastembed_image_pub(&config, &skill_dir);
-    let query_emb = encoder.as_mut()
+    let query_emb = encoder
+        .as_mut()
         .and_then(|fe| crate::screenshot::fastembed_embed_pub(fe, &image_bytes))
         .ok_or("CLIP vision model not available — check Settings → Screenshots")?;
 
     // Search HNSW
     let hnsw_path = skill_dir.join(skill_constants::SCREENSHOTS_HNSW);
     let hnsw = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
-        &hnsw_path, fast_hnsw::distance::Cosine,
-    ).map_err(|e| format!("CLIP HNSW not available: {e}"))?;
+        &hnsw_path,
+        fast_hnsw::distance::Cosine,
+    )
+    .map_err(|e| format!("CLIP HNSW not available: {e}"))?;
 
     let results = crate::screenshot::search_by_vector(&hnsw, &store, &query_emb, k);
 
@@ -142,7 +172,8 @@ pub fn search_screenshots_by_image_b64(app: &AppHandle, msg: &Value) -> Result<V
 /// **Required**: `vector` (array of f32).
 /// **Optional**: `k` (default 20).
 pub fn search_screenshots_vision(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let vector: Vec<f32> = msg.get("vector")
+    let vector: Vec<f32> = msg
+        .get("vector")
         .and_then(|v| v.as_array())
         .ok_or("missing \"vector\" field (array of floats)")?
         .iter()
@@ -151,22 +182,29 @@ pub fn search_screenshots_vision(app: &AppHandle, msg: &Value) -> Result<Value, 
     if vector.is_empty() {
         return Err("\"vector\" must be a non-empty array of floats".into());
     }
-    let k = msg.get("k").and_then(serde_json::Value::as_u64).unwrap_or(20) as usize;
+    let k = msg
+        .get("k")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(20) as usize;
 
     let (skill_dir, store) = {
         let st = app.app_state();
-        let s  = st.lock_or_recover();
+        let s = st.lock_or_recover();
         (s.skill_dir.clone(), s.screenshot_store.clone())
     };
 
     let store = store
-        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))
+        .or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        })
         .ok_or("screenshot store not available")?;
 
     let hnsw_path = skill_dir.join(skill_constants::SCREENSHOTS_HNSW);
     let hnsw = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(
-        &hnsw_path, fast_hnsw::distance::Cosine,
-    ).map_err(|e| format!("CLIP HNSW not available: {e}"))?;
+        &hnsw_path,
+        fast_hnsw::distance::Cosine,
+    )
+    .map_err(|e| format!("CLIP HNSW not available: {e}"))?;
 
     let results = crate::screenshot::search_by_vector(&hnsw, &store, &vector, k);
 
@@ -187,32 +225,46 @@ pub fn search_screenshots_vision(app: &AppHandle, msg: &Value) -> Result<Value, 
 /// **Required**: `start_utc`, `end_utc`.
 /// **Optional**: `window_secs` (default 30), `limit` (max results, default 50).
 pub fn screenshots_for_eeg(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let start_utc = msg.get("start_utc").and_then(serde_json::Value::as_u64)
+    let start_utc = msg
+        .get("start_utc")
+        .and_then(serde_json::Value::as_u64)
         .ok_or("missing \"start_utc\" field")?;
-    let end_utc = msg.get("end_utc").and_then(serde_json::Value::as_u64)
+    let end_utc = msg
+        .get("end_utc")
+        .and_then(serde_json::Value::as_u64)
         .ok_or("missing \"end_utc\" field")?;
-    let window_secs = msg.get("window_secs").and_then(serde_json::Value::as_i64).unwrap_or(30) as i32;
-    let limit = msg.get("limit").and_then(serde_json::Value::as_u64).unwrap_or(50) as usize;
+    let window_secs = msg
+        .get("window_secs")
+        .and_then(serde_json::Value::as_i64)
+        .unwrap_or(30) as i32;
+    let limit = msg
+        .get("limit")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(50) as usize;
 
     let (skill_dir, store) = {
         let st = app.app_state();
-        let s  = st.lock_or_recover();
+        let s = st.lock_or_recover();
         (s.skill_dir.clone(), s.screenshot_store.clone())
     };
 
     let store = store
-        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))
+        .or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        })
         .ok_or("screenshot store not available")?;
 
     // Get EEG embedding timestamps in the range
     let start_ts = skill_commands::unix_to_ts(start_utc);
-    let end_ts   = skill_commands::unix_to_ts(end_utc);
+    let end_ts = skill_commands::unix_to_ts(end_utc);
     let date_dirs = skill_commands::list_date_dirs(&skill_dir);
 
     let mut eeg_timestamps: Vec<u64> = Vec::new();
     for (_date, dir) in &date_dirs {
         let db_path = dir.join(skill_constants::SQLITE_FILE);
-        if !db_path.exists() { continue; }
+        if !db_path.exists() {
+            continue;
+        }
         if let Ok(conn) = skill_data::util::open_readonly(&db_path) {
             if let Ok(mut stmt) = conn.prepare(
                 "SELECT timestamp FROM embeddings WHERE timestamp BETWEEN ?1 AND ?2 ORDER BY timestamp"
@@ -242,10 +294,14 @@ pub fn screenshots_for_eeg(app: &AppHandle, msg: &Value) -> Result<Value, String
                     "eeg_timestamp_utc": eeg_ts,
                     "screenshot":        ss,
                 }));
-                if results.len() >= limit { break; }
+                if results.len() >= limit {
+                    break;
+                }
             }
         }
-        if results.len() >= limit { break; }
+        if results.len() >= limit {
+            break;
+        }
     }
 
     Ok(serde_json::json!({
@@ -269,27 +325,37 @@ pub fn screenshots_for_eeg(app: &AppHandle, msg: &Value) -> Result<Value, String
 /// temporal window around each screenshot, default 60), `mode` (semantic/substring,
 /// default semantic).
 pub fn eeg_for_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let query = msg.get("query")
+    let query = msg
+        .get("query")
         .and_then(|v| v.as_str())
         .ok_or("missing \"query\" field")?
         .to_owned();
-    let k = msg.get("k").and_then(serde_json::Value::as_u64).unwrap_or(10) as usize;
-    let window_secs = msg.get("window_secs").and_then(serde_json::Value::as_u64).unwrap_or(60);
-    let mode = msg.get("mode")
+    let k = msg
+        .get("k")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(10) as usize;
+    let window_secs = msg
+        .get("window_secs")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(60);
+    let mode = msg
+        .get("mode")
         .and_then(|v| v.as_str())
         .unwrap_or("semantic")
         .to_owned();
 
     let (skill_dir, store) = {
         let st = app.app_state();
-        let s  = st.lock_or_recover();
+        let s = st.lock_or_recover();
         (s.skill_dir.clone(), s.screenshot_store.clone())
     };
 
     let embedder = std::sync::Arc::clone(&*app.state::<std::sync::Arc<crate::EmbedderState>>());
 
     let store = store
-        .or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new))
+        .or_else(|| {
+            skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)
+        })
         .ok_or("screenshot store not available")?;
 
     // Step 1: Find screenshots matching the query
@@ -300,9 +366,15 @@ pub fn eeg_for_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String
                 let mut guard = embedder.0.lock().ok()?;
                 let te = guard.as_mut()?;
                 let mut vecs = te.embed(vec![text], None).ok()?;
-                if vecs.is_empty() { None } else { Some(vecs.remove(0)) }
+                if vecs.is_empty() {
+                    None
+                } else {
+                    Some(vecs.remove(0))
+                }
             };
-            crate::screenshot::search_by_ocr_text_embedding(&skill_dir, &store, &query, k, &embed_fn)
+            crate::screenshot::search_by_ocr_text_embedding(
+                &skill_dir, &store, &query, k, &embed_fn,
+            )
         }
     };
 
@@ -327,18 +399,17 @@ pub fn eeg_for_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String
             let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
             let doe = z - era * 146_097;
             let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-            let y   = yoe + era * 400;
+            let y = yoe + era * 400;
             let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-            let mp  = (5 * doy + 2) / 153;
-            let d   = doy - (153 * mp + 2) / 5 + 1;
-            let mo  = if mp < 10 { mp + 3 } else { mp - 9 };
-            let yr  = if mo <= 2 { y + 1 } else { y };
+            let mp = (5 * doy + 2) / 153;
+            let d = doy - (153 * mp + 2) / 5 + 1;
+            let mo = if mp < 10 { mp + 3 } else { mp - 9 };
+            let yr = if mo <= 2 { y + 1 } else { y };
             format!("{yr:04}{mo:02}{d:02}")
         };
 
-        let session_ref = skill_commands::find_session_for_timestamp_in(
-            &skill_dir, ss_unix, &date_str,
-        );
+        let session_ref =
+            skill_commands::find_session_for_timestamp_in(&skill_dir, ss_unix, &date_str);
 
         results.push(serde_json::json!({
             "screenshot": ss,

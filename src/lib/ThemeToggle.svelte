@@ -8,56 +8,54 @@ the Free Software Foundation, version 3 only. -->
      Shows: ◐ system, ☀ light, ● dark.
      Teleports tooltip to body to escape overflow clipping. -->
 <script lang="ts">
-  import { onDestroy } from "svelte";
-  import { getTheme, cycleTheme } from "$lib/stores/theme.svelte";
-  import { t } from "$lib/i18n/index.svelte";
+import { onDestroy } from "svelte";
+import { t } from "$lib/i18n/index.svelte";
+import { cycleTheme, getTheme } from "$lib/stores/theme.svelte";
 
-  const icon = $derived(
-    getTheme() === "light" ? "sun" :
-    getTheme() === "dark"  ? "moon" : "auto"
-  );
+const icon = $derived(getTheme() === "light" ? "sun" : getTheme() === "dark" ? "moon" : "auto");
 
-  const label = $derived(
-    getTheme() === "light" ? t("common.themeLight") :
-    getTheme() === "dark"  ? t("common.themeDark") :
-                             t("common.themeSystem")
-  );
+const label = $derived(
+  getTheme() === "light"
+    ? t("common.themeLight")
+    : getTheme() === "dark"
+      ? t("common.themeDark")
+      : t("common.themeSystem"),
+);
 
-  let btnEl = $state<HTMLButtonElement>();
-  let tipEl: HTMLDivElement | undefined;
-  let tipTimer: ReturnType<typeof setTimeout> | undefined;
+let btnEl = $state<HTMLButtonElement>();
+let tipEl: HTMLDivElement | undefined;
+let tipTimer: ReturnType<typeof setTimeout> | undefined;
 
-  function onEnter() {
-    tipTimer = setTimeout(() => {
-      if (!btnEl) return;
-      const r = btnEl.getBoundingClientRect();
-      const tipW = 120;
-      let left = r.left + r.width / 2 - tipW / 2;
-      if (left < 4) left = 4;
-      if (left + tipW > window.innerWidth - 4) left = window.innerWidth - tipW - 4;
+function onEnter() {
+  tipTimer = setTimeout(() => {
+    if (!btnEl) return;
+    const r = btnEl.getBoundingClientRect();
+    const tipW = 120;
+    let left = r.left + r.width / 2 - tipW / 2;
+    if (left < 4) left = 4;
+    if (left + tipW > window.innerWidth - 4) left = window.innerWidth - tipW - 4;
 
-      tipEl = document.createElement("div");
-      tipEl.className =
-        "pointer-events-none rounded-md border border-neutral-200 dark:border-white/10 " +
-        "bg-white dark:bg-[#1a1a28] text-neutral-700 dark:text-neutral-200 shadow-md " +
-        "px-2.5 py-1.5 text-center font-medium";
-      tipEl.style.cssText =
-        `position:fixed; top:${r.bottom + 6}px; left:${left}px; width:${tipW}px; z-index:2147483647; font-size:0.65rem;`;
-      tipEl.textContent = label;
-      document.body.appendChild(tipEl);
-    }, 500);
-  }
+    tipEl = document.createElement("div");
+    tipEl.className =
+      "pointer-events-none rounded-md border border-neutral-200 dark:border-white/10 " +
+      "bg-white dark:bg-[#1a1a28] text-neutral-700 dark:text-neutral-200 shadow-md " +
+      "px-2.5 py-1.5 text-center font-medium";
+    tipEl.style.cssText = `position:fixed; top:${r.bottom + 6}px; left:${left}px; width:${tipW}px; z-index:2147483647; font-size:0.65rem;`;
+    tipEl.textContent = label;
+    document.body.appendChild(tipEl);
+  }, 500);
+}
 
-  function onLeave() {
-    clearTimeout(tipTimer);
-    tipEl?.remove();
-    tipEl = undefined;
-  }
+function onLeave() {
+  clearTimeout(tipTimer);
+  tipEl?.remove();
+  tipEl = undefined;
+}
 
-  onDestroy(() => {
-    clearTimeout(tipTimer);
-    tipEl?.remove();
-  });
+onDestroy(() => {
+  clearTimeout(tipTimer);
+  tipEl?.remove();
+});
 </script>
 
 <button

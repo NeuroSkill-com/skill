@@ -9,31 +9,31 @@ the Free Software Foundation, version 3 only. -->
   Interactive 3D electrode guide with live signal quality from the device.
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke }             from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import ElectrodeGuide         from "$lib/ElectrodeGuide.svelte";
-  import { t }                  from "$lib/i18n/index.svelte";
-  import type { DeviceStatus }    from "$lib/types";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { onDestroy, onMount } from "svelte";
+import ElectrodeGuide from "$lib/ElectrodeGuide.svelte";
+import { t } from "$lib/i18n/index.svelte";
+import type { DeviceStatus } from "$lib/types";
 
-  let quality = $state<string[]>(["no_signal","no_signal","no_signal","no_signal"]);
-  let connected = $state(false);
+let quality = $state<string[]>(["no_signal", "no_signal", "no_signal", "no_signal"]);
+let connected = $state(false);
 
-  const unsubs: UnlistenFn[] = [];
-  onMount(async () => {
-    try {
-      const s = await invoke<DeviceStatus>("get_status");
-      quality   = s.channel_quality;
-      connected = s.state === "connected";
-    } catch (e) { console.warn("[help-electrodes] get_status failed:", e); }
-    unsubs.push(
-      await listen<DeviceStatus>("status", (ev) => {
-        quality   = ev.payload.channel_quality;
-        connected = ev.payload.state === "connected";
-      })
-    );
-  });
-  onDestroy(() => unsubs.forEach((u) => u()));
+const unsubs: UnlistenFn[] = [];
+onMount(async () => {
+  try {
+    const s = await invoke<DeviceStatus>("get_status");
+    quality = s.channel_quality;
+    connected = s.state === "connected";
+  } catch (e) {}
+  unsubs.push(
+    await listen<DeviceStatus>("status", (ev) => {
+      quality = ev.payload.channel_quality;
+      connected = ev.payload.state === "connected";
+    }),
+  );
+});
+onDestroy(() => unsubs.forEach((u) => u()));
 </script>
 
 <div class="flex flex-col gap-3 py-2">

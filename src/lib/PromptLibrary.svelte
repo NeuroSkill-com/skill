@@ -14,114 +14,123 @@
   outside / presses Escape.
 -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Props ──────────────────────────────────────────────────────────────────
+// ── Props ──────────────────────────────────────────────────────────────────
 
-  let { onSelect }: { onSelect: (text: string) => void } = $props();
+let { onSelect }: { onSelect: (text: string) => void } = $props();
 
-  // ── State ──────────────────────────────────────────────────────────────────
+// ── State ──────────────────────────────────────────────────────────────────
 
-  let open     = $state(false);
-  let panelEl  = $state<HTMLElement | null>(null);
+let open = $state(false);
+let panelEl = $state<HTMLElement | null>(null);
 
-  // ── Exposed API (bind:this) ────────────────────────────────────────────────
+// ── Exposed API (bind:this) ────────────────────────────────────────────────
 
-  export function toggle() { open = !open; }
-  export function close()  { open = false;  }
-  export function isOpen() { return open;   }
+export function toggle() {
+  open = !open;
+}
+export function close() {
+  open = false;
+}
+export function isOpen() {
+  return open;
+}
 
-  // ── Click-outside handling ─────────────────────────────────────────────────
+// ── Click-outside handling ─────────────────────────────────────────────────
 
-  function handleDocumentPointerDown(e: PointerEvent) {
-    if (!open) return;
-    if (panelEl && !panelEl.contains(e.target as Node)) {
-      open = false;
-    }
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (open && e.key === "Escape") { e.stopPropagation(); open = false; }
-  }
-
-  // ── Template data ──────────────────────────────────────────────────────────
-
-  interface Category {
-    key:     string;
-    emoji:   string;
-    prompts: string[];
-  }
-
-  const CATEGORIES: Category[] = [
-    {
-      key:   "session",
-      emoji: "📋",
-      prompts: [
-        "Summarise today's neurofeedback session in plain language",
-        "What were the key highlights of my last recording?",
-        "Create a brief journal entry based on my session data",
-        "How does today's brain activity compare to a yesterday's baseline?",
-        "Give me a one-paragraph overview of what happened in my session",
-      ],
-    },
-    {
-      key:   "relax",
-      emoji: "🧘",
-      prompts: [
-        // "Suggest a relaxation technique to boost my alpha waves",
-        "I feel tense — what breathing exercise can help right now?",
-        "How can I enter a deeper meditative state with neurofeedback?",
-        "My stress index is elevated — what should I do?",
-        "Guide me through a quick coherence-building exercise",
-      ],
-    },
-    {
-      key:   "education",
-      emoji: "📚",
-      prompts: [
-        "Explain what high theta activity means in everyday language",
-        "What does elevated beta tell me about my mental state?",
-        "Why is frontal alpha asymmetry (FAA) important in neurofeedback?",
-        "What is the theta/alpha ratio and why does it matter?",
-        "Explain gamma oscillations and when they appear",
-        "What does a low alpha peak frequency (APF) indicate?",
-        "Describe the difference between delta, theta, alpha, beta, and gamma",
-        "What is EEG coherence and what does high coherence mean?",
-      ],
-    },
-    {
-      key:   "focus",
-      emoji: "🎯",
-      prompts: [
-        "How can I improve my focus score during a session?",
-        "What brain state is best for deep, sustained work?",
-        "My cognitive load is high — how do I reduce it?",
-        "Suggest a neurofeedback protocol to improve attention",
-        "What should I do before a session to maximise engagement?",
-        "How does heart-rate variability relate to focus?",
-      ],
-    },
-    {
-      key:   "analysis",
-      emoji: "🔬",
-      prompts: [
-        "Interpret my current FAA score for me",
-        "What does my drowsiness level suggest about my mental state?",
-        "Analyse my coherence reading and what it means practically",
-        "Is my current brain state typical for this time of day?",
-        "What do my current beta/alpha and theta/alpha ratios tell me?",
-        "Explain what my mood score means in terms of brain activity",
-        "What does a high Lempel-Ziv complexity value indicate?",
-      ],
-    },
-  ];
-
-  // ── Interaction ────────────────────────────────────────────────────────────
-
-  function pick(text: string) {
-    onSelect(text);
+function handleDocumentPointerDown(e: PointerEvent) {
+  if (!open) return;
+  if (panelEl && !panelEl.contains(e.target as Node)) {
     open = false;
   }
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (open && e.key === "Escape") {
+    e.stopPropagation();
+    open = false;
+  }
+}
+
+// ── Template data ──────────────────────────────────────────────────────────
+
+interface Category {
+  key: string;
+  emoji: string;
+  prompts: string[];
+}
+
+const CATEGORIES: Category[] = [
+  {
+    key: "session",
+    emoji: "📋",
+    prompts: [
+      "Summarise today's neurofeedback session in plain language",
+      "What were the key highlights of my last recording?",
+      "Create a brief journal entry based on my session data",
+      "How does today's brain activity compare to a yesterday's baseline?",
+      "Give me a one-paragraph overview of what happened in my session",
+    ],
+  },
+  {
+    key: "relax",
+    emoji: "🧘",
+    prompts: [
+      // "Suggest a relaxation technique to boost my alpha waves",
+      "I feel tense — what breathing exercise can help right now?",
+      "How can I enter a deeper meditative state with neurofeedback?",
+      "My stress index is elevated — what should I do?",
+      "Guide me through a quick coherence-building exercise",
+    ],
+  },
+  {
+    key: "education",
+    emoji: "📚",
+    prompts: [
+      "Explain what high theta activity means in everyday language",
+      "What does elevated beta tell me about my mental state?",
+      "Why is frontal alpha asymmetry (FAA) important in neurofeedback?",
+      "What is the theta/alpha ratio and why does it matter?",
+      "Explain gamma oscillations and when they appear",
+      "What does a low alpha peak frequency (APF) indicate?",
+      "Describe the difference between delta, theta, alpha, beta, and gamma",
+      "What is EEG coherence and what does high coherence mean?",
+    ],
+  },
+  {
+    key: "focus",
+    emoji: "🎯",
+    prompts: [
+      "How can I improve my focus score during a session?",
+      "What brain state is best for deep, sustained work?",
+      "My cognitive load is high — how do I reduce it?",
+      "Suggest a neurofeedback protocol to improve attention",
+      "What should I do before a session to maximise engagement?",
+      "How does heart-rate variability relate to focus?",
+    ],
+  },
+  {
+    key: "analysis",
+    emoji: "🔬",
+    prompts: [
+      "Interpret my current FAA score for me",
+      "What does my drowsiness level suggest about my mental state?",
+      "Analyse my coherence reading and what it means practically",
+      "Is my current brain state typical for this time of day?",
+      "What do my current beta/alpha and theta/alpha ratios tell me?",
+      "Explain what my mood score means in terms of brain activity",
+      "What does a high Lempel-Ziv complexity value indicate?",
+    ],
+  },
+];
+
+// ── Interaction ────────────────────────────────────────────────────────────
+
+function pick(text: string) {
+  onSelect(text);
+  open = false;
+}
 </script>
 
 <!-- Listen for click-outside and Escape anywhere on the document -->

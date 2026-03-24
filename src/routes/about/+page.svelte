@@ -6,37 +6,37 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- About window — app identity, credits, licence. -->
 <script lang="ts">
-  import { onMount }        from "svelte";
-  import { invoke }         from "@tauri-apps/api/core";
-  import { t }              from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import { t } from "$lib/i18n/index.svelte";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
 
-  useWindowTitle("window.title.about");
+useWindowTitle("window.title.about");
 
-  interface AboutInfo {
-    name:             string;
-    version:          string;
-    tagline:          string;
-    website:          string;
-    websiteLabel:     string;
-    repoUrl:          string;
-    discordUrl:       string;
-    license:          string;
-    licenseName:      string;
-    licenseUrl:       string;
-    copyright:        string;
-    /** [name, role] pairs */
-    authors:          [string, string][];
-    acknowledgements: string;
-    /** PNG data URL of the Tauri app icon; null if unavailable. */
-    iconDataUrl:      string | null;
-  }
+interface AboutInfo {
+  name: string;
+  version: string;
+  tagline: string;
+  website: string;
+  websiteLabel: string;
+  repoUrl: string;
+  discordUrl: string;
+  license: string;
+  licenseName: string;
+  licenseUrl: string;
+  copyright: string;
+  /** [name, role] pairs */
+  authors: [string, string][];
+  acknowledgements: string;
+  /** PNG data URL of the Tauri app icon; null if unavailable. */
+  iconDataUrl: string | null;
+}
 
-  let info = $state<AboutInfo | null>(null);
+let info = $state<AboutInfo | null>(null);
 
-  onMount(async () => {
-    info = await invoke<AboutInfo>("get_about_info");
-  });
+onMount(async () => {
+  info = await invoke<AboutInfo>("get_about_info");
+});
 </script>
 
 <main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden select-none">

@@ -10,7 +10,7 @@
 //! embedding (if available), the model that produced it, and active-window
 //! context at capture time.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::Serialize;
 use std::path::Path;
 use std::sync::Mutex;
@@ -62,47 +62,50 @@ CREATE INDEX IF NOT EXISTS idx_ss_model    ON screenshots (model_backend, model_
 
 // ── Migrations ────────────────────────────────────────────────────────────────
 
-const MIGRATE_OCR_TEXT: &str       = "ALTER TABLE screenshots ADD COLUMN ocr_text TEXT NOT NULL DEFAULT ''";
-const MIGRATE_OCR_EMBEDDING: &str  = "ALTER TABLE screenshots ADD COLUMN ocr_embedding BLOB";
-const MIGRATE_OCR_DIM: &str        = "ALTER TABLE screenshots ADD COLUMN ocr_embedding_dim INTEGER NOT NULL DEFAULT 0";
-const MIGRATE_OCR_HNSW: &str       = "ALTER TABLE screenshots ADD COLUMN ocr_hnsw_id INTEGER";
-const MIGRATE_GIF_FILENAME: &str   = "ALTER TABLE screenshots ADD COLUMN gif_filename TEXT NOT NULL DEFAULT ''";
+const MIGRATE_OCR_TEXT: &str =
+    "ALTER TABLE screenshots ADD COLUMN ocr_text TEXT NOT NULL DEFAULT ''";
+const MIGRATE_OCR_EMBEDDING: &str = "ALTER TABLE screenshots ADD COLUMN ocr_embedding BLOB";
+const MIGRATE_OCR_DIM: &str =
+    "ALTER TABLE screenshots ADD COLUMN ocr_embedding_dim INTEGER NOT NULL DEFAULT 0";
+const MIGRATE_OCR_HNSW: &str = "ALTER TABLE screenshots ADD COLUMN ocr_hnsw_id INTEGER";
+const MIGRATE_GIF_FILENAME: &str =
+    "ALTER TABLE screenshots ADD COLUMN gif_filename TEXT NOT NULL DEFAULT ''";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
 /// Row data for inserting a new screenshot.
 pub struct ScreenshotRow {
-    pub timestamp:     i64,
-    pub unix_ts:       u64,
-    pub filename:      String,
-    pub width:         u32,
-    pub height:        u32,
-    pub file_size:     u64,
-    pub hnsw_id:       Option<u64>,
-    pub embedding:     Option<Vec<f32>>,
+    pub timestamp: i64,
+    pub unix_ts: u64,
+    pub filename: String,
+    pub width: u32,
+    pub height: u32,
+    pub file_size: u64,
+    pub hnsw_id: Option<u64>,
+    pub embedding: Option<Vec<f32>>,
     pub embedding_dim: usize,
     pub model_backend: String,
-    pub model_id:      String,
-    pub image_size:    u32,
-    pub quality:       u8,
-    pub app_name:      String,
-    pub window_title:  String,
-    pub ocr_text:      String,
+    pub model_id: String,
+    pub image_size: u32,
+    pub quality: u8,
+    pub app_name: String,
+    pub window_title: String,
+    pub ocr_text: String,
     pub ocr_embedding: Option<Vec<f32>>,
     pub ocr_embedding_dim: usize,
-    pub ocr_hnsw_id:   Option<u64>,
+    pub ocr_hnsw_id: Option<u64>,
 }
 
 /// Lightweight result type for search queries.
 #[derive(Clone, Debug, Serialize)]
 pub struct ScreenshotResult {
-    pub timestamp:    i64,
-    pub unix_ts:      u64,
-    pub filename:     String,
-    pub app_name:     String,
+    pub timestamp: i64,
+    pub unix_ts: u64,
+    pub filename: String,
+    pub app_name: String,
     pub window_title: String,
-    pub ocr_text:     String,
-    pub similarity:   f32,
+    pub ocr_text: String,
+    pub similarity: f32,
     /// Relative path to the animated GIF (empty if no motion was detected).
     #[serde(default)]
     pub gif_filename: String,
@@ -111,18 +114,18 @@ pub struct ScreenshotResult {
 /// Estimate for re-embedding work.
 #[derive(Clone, Debug, Serialize)]
 pub struct ReembedEstimate {
-    pub total:        usize,
-    pub stale:        usize,
-    pub unembedded:   usize,
+    pub total: usize,
+    pub stale: usize,
+    pub unembedded: usize,
     pub per_image_ms: u64,
-    pub eta_secs:     u64,
+    pub eta_secs: u64,
 }
 
 /// Result of a re-embedding run.
 #[derive(Clone, Debug, Serialize)]
 pub struct ReembedResult {
-    pub embedded:     usize,
-    pub skipped:      usize,
+    pub embedded: usize,
+    pub skipped: usize,
     pub elapsed_secs: f64,
 }
 
@@ -130,40 +133,40 @@ pub struct ReembedResult {
 #[derive(Clone, Debug, Serialize)]
 pub struct ConfigChangeResult {
     pub model_changed: bool,
-    pub stale_count:   usize,
+    pub stale_count: usize,
 }
 
 /// Snapshot of embedding + OCR data for a single row (used when copying
 /// results from a duplicate screenshot).
 pub struct EmbeddingAndOcr {
-    pub embedding:     Option<Vec<f32>>,
+    pub embedding: Option<Vec<f32>>,
     pub model_backend: String,
-    pub model_id:      String,
-    pub image_size:    u32,
-    pub ocr_text:      String,
+    pub model_id: String,
+    pub image_size: u32,
+    pub ocr_text: String,
     pub ocr_embedding: Option<Vec<f32>>,
 }
 
 /// Summary counts for the screenshot store.
 #[derive(Clone, Debug, Serialize)]
 pub struct ScreenshotSummary {
-    pub total:              u64,
-    pub with_embedding:     u64,
-    pub with_ocr:           u64,
+    pub total: u64,
+    pub with_embedding: u64,
+    pub with_ocr: u64,
     pub with_ocr_embedding: u64,
 }
 
 /// Frequency row for OCR app grouping.
 #[derive(Clone, Debug, Serialize)]
 pub struct OcrFreqRow {
-    pub app_name:  String,
-    pub count:     u64,
+    pub app_name: String,
+    pub count: u64,
     pub last_seen: u64,
 }
 
 /// A row queried for re-embedding.
 pub struct EmbeddableRow {
-    pub id:       i64,
+    pub id: i64,
     pub filename: String,
 }
 
@@ -191,17 +194,28 @@ impl ScreenshotStore {
         }
         // Run OCR migrations (silently ignore "duplicate column" errors
         // on databases that already have these columns).
-        for sql in [MIGRATE_OCR_TEXT, MIGRATE_OCR_EMBEDDING, MIGRATE_OCR_DIM, MIGRATE_OCR_HNSW, MIGRATE_GIF_FILENAME] {
+        for sql in [
+            MIGRATE_OCR_TEXT,
+            MIGRATE_OCR_EMBEDDING,
+            MIGRATE_OCR_DIM,
+            MIGRATE_OCR_HNSW,
+            MIGRATE_GIF_FILENAME,
+        ] {
             let _ = conn.execute(sql, []);
         }
-        Some(Self { conn: Mutex::new(conn) })
+        Some(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     /// Insert a new screenshot record.
     pub fn insert(&self, row: &ScreenshotRow) -> Option<i64> {
         let conn = self.conn.lock_or_recover();
         let emb_blob: Option<Vec<u8>> = row.embedding.as_ref().map(|v| crate::util::f32_to_blob(v));
-        let ocr_blob: Option<Vec<u8>> = row.ocr_embedding.as_ref().map(|v| crate::util::f32_to_blob(v));
+        let ocr_blob: Option<Vec<u8>> = row
+            .ocr_embedding
+            .as_ref()
+            .map(|v| crate::util::f32_to_blob(v));
         conn.execute(
             "INSERT INTO screenshots (
                 timestamp, unix_ts, filename, width, height, file_size,
@@ -231,7 +245,8 @@ impl ScreenshotStore {
                 row.ocr_embedding_dim as i64,
                 row.ocr_hnsw_id.map(|v| v as i64),
             ],
-        ).ok()?;
+        )
+        .ok()?;
         Some(conn.last_insert_rowid())
     }
 
@@ -242,7 +257,8 @@ impl ScreenshotStore {
             "SELECT COUNT(*) FROM screenshots WHERE embedding IS NOT NULL",
             [],
             |r| r.get::<_, i64>(0),
-        ).unwrap_or(0) as usize
+        )
+        .unwrap_or(0) as usize
     }
 
     /// Count screenshots that have no embedding.
@@ -252,7 +268,8 @@ impl ScreenshotStore {
             "SELECT COUNT(*) FROM screenshots WHERE embedding IS NULL",
             [],
             |r| r.get::<_, i64>(0),
-        ).unwrap_or(0) as usize
+        )
+        .unwrap_or(0) as usize
     }
 
     /// Count screenshots embedded with a model other than the specified one.
@@ -264,7 +281,8 @@ impl ScreenshotStore {
                AND (model_backend != ?1 OR model_id != ?2)",
             params![backend, model_id],
             |r| r.get::<_, i64>(0),
-        ).unwrap_or(0) as usize
+        )
+        .unwrap_or(0) as usize
     }
 
     /// Get all rows that need (re-)embedding — either stale or unembedded.
@@ -274,14 +292,18 @@ impl ScreenshotStore {
             "SELECT id, filename FROM screenshots
              WHERE embedding IS NULL
                 OR (model_backend != ?1 OR model_id != ?2)
-             ORDER BY id"
-        ) else { return vec![] };
+             ORDER BY id",
+        ) else {
+            return vec![];
+        };
         let Ok(rows) = stmt.query_map(params![backend, model_id], |r| {
             Ok(EmbeddableRow {
-                id:       r.get(0)?,
+                id: r.get(0)?,
                 filename: r.get(1)?,
             })
-        }) else { return vec![] };
+        }) else {
+            return vec![];
+        };
         rows.filter_map(std::result::Result::ok).collect()
     }
 
@@ -320,8 +342,10 @@ impl ScreenshotStore {
         let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, embedding, embedding_dim FROM screenshots
              WHERE embedding IS NOT NULL
-             ORDER BY id"
-        ) else { return vec![] };
+             ORDER BY id",
+        ) else {
+            return vec![];
+        };
         let Ok(rows) = stmt.query_map([], |r| {
             let ts: i64 = r.get(0)?;
             let blob: Vec<u8> = r.get(1)?;
@@ -329,7 +353,9 @@ impl ScreenshotStore {
             let floats: Vec<f32> = crate::util::blob_to_f32(&blob);
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
-        }) else { return vec![] };
+        }) else {
+            return vec![];
+        };
         rows.filter_map(std::result::Result::ok).collect()
     }
 
@@ -340,17 +366,20 @@ impl ScreenshotStore {
             "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text, gif_filename
              FROM screenshots WHERE timestamp = ?1",
             params![ts],
-            |r| Ok(ScreenshotResult {
-                timestamp:    r.get(0)?,
-                unix_ts:      r.get::<_, i64>(1)? as u64,
-                filename:     r.get(2)?,
-                app_name:     r.get(3)?,
-                window_title: r.get(4)?,
-                ocr_text:     r.get::<_, String>(5).unwrap_or_default(),
-                similarity:   0.0,
-                gif_filename: r.get::<_, String>(6).unwrap_or_default(),
-            }),
-        ).ok()
+            |r| {
+                Ok(ScreenshotResult {
+                    timestamp: r.get(0)?,
+                    unix_ts: r.get::<_, i64>(1)? as u64,
+                    filename: r.get(2)?,
+                    app_name: r.get(3)?,
+                    window_title: r.get(4)?,
+                    ocr_text: r.get::<_, String>(5).unwrap_or_default(),
+                    similarity: 0.0,
+                    gif_filename: r.get::<_, String>(6).unwrap_or_default(),
+                })
+            },
+        )
+        .ok()
     }
 
     /// Find screenshots by unix timestamp range.
@@ -362,20 +391,24 @@ impl ScreenshotStore {
             "SELECT timestamp, unix_ts, filename, app_name, window_title, ocr_text, gif_filename
              FROM screenshots
              WHERE unix_ts BETWEEN ?1 AND ?2
-             ORDER BY unix_ts"
-        ) else { return vec![] };
+             ORDER BY unix_ts",
+        ) else {
+            return vec![];
+        };
         let Ok(rows) = stmt.query_map(params![lo, hi], |r| {
             Ok(ScreenshotResult {
-                timestamp:    r.get(0)?,
-                unix_ts:      r.get::<_, i64>(1)? as u64,
-                filename:     r.get(2)?,
-                app_name:     r.get(3)?,
+                timestamp: r.get(0)?,
+                unix_ts: r.get::<_, i64>(1)? as u64,
+                filename: r.get(2)?,
+                app_name: r.get(3)?,
                 window_title: r.get(4)?,
-                ocr_text:     r.get::<_, String>(5).unwrap_or_default(),
-                similarity:   0.0,
+                ocr_text: r.get::<_, String>(5).unwrap_or_default(),
+                similarity: 0.0,
                 gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
-        }) else { return vec![] };
+        }) else {
+            return vec![];
+        };
         rows.filter_map(std::result::Result::ok).collect()
     }
 
@@ -385,8 +418,10 @@ impl ScreenshotStore {
         let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, ocr_embedding, ocr_embedding_dim FROM screenshots
              WHERE ocr_embedding IS NOT NULL
-             ORDER BY id"
-        ) else { return vec![] };
+             ORDER BY id",
+        ) else {
+            return vec![];
+        };
         let Ok(rows) = stmt.query_map([], |r| {
             let ts: i64 = r.get(0)?;
             let blob: Vec<u8> = r.get(1)?;
@@ -394,7 +429,9 @@ impl ScreenshotStore {
             let floats: Vec<f32> = crate::util::blob_to_f32(&blob);
             debug_assert_eq!(floats.len(), dim as usize);
             Ok((ts, floats))
-        }) else { return vec![] };
+        }) else {
+            return vec![];
+        };
         rows.filter_map(std::result::Result::ok).collect()
     }
 
@@ -413,13 +450,7 @@ impl ScreenshotStore {
             "UPDATE screenshots SET
                 ocr_text = ?1, ocr_embedding = ?2, ocr_embedding_dim = ?3, ocr_hnsw_id = ?4
              WHERE id = ?5",
-            params![
-                ocr_text,
-                blob,
-                dim,
-                ocr_hnsw_id.map(|v| v as i64),
-                id,
-            ],
+            params![ocr_text, blob, dim, ocr_hnsw_id.map(|v| v as i64), id,],
         );
     }
 
@@ -432,20 +463,24 @@ impl ScreenshotStore {
              FROM screenshots
              WHERE ocr_text LIKE ?1
              ORDER BY unix_ts DESC
-             LIMIT ?2"
-        ) else { return vec![] };
+             LIMIT ?2",
+        ) else {
+            return vec![];
+        };
         let Ok(rows) = stmt.query_map(params![pattern, limit as i64], |r| {
             Ok(ScreenshotResult {
-                timestamp:    r.get(0)?,
-                unix_ts:      r.get::<_, i64>(1)? as u64,
-                filename:     r.get(2)?,
-                app_name:     r.get(3)?,
+                timestamp: r.get(0)?,
+                unix_ts: r.get::<_, i64>(1)? as u64,
+                filename: r.get(2)?,
+                app_name: r.get(3)?,
                 window_title: r.get(4)?,
-                ocr_text:     r.get::<_, String>(5).unwrap_or_default(),
-                similarity:   0.0,
+                ocr_text: r.get::<_, String>(5).unwrap_or_default(),
+                similarity: 0.0,
                 gif_filename: r.get::<_, String>(6).unwrap_or_default(),
             })
-        }) else { return vec![] };
+        }) else {
+            return vec![];
+        };
         rows.filter_map(std::result::Result::ok).collect()
     }
 
@@ -455,14 +490,18 @@ impl ScreenshotStore {
         let Ok(mut stmt) = conn.prepare(
             "SELECT id, filename FROM screenshots
              WHERE embedding IS NULL
-             ORDER BY id"
-        ) else { return vec![] };
+             ORDER BY id",
+        ) else {
+            return vec![];
+        };
         let Ok(rows) = stmt.query_map([], |r| {
             Ok(EmbeddableRow {
-                id:       r.get(0)?,
+                id: r.get(0)?,
                 filename: r.get(1)?,
             })
-        }) else { return vec![] };
+        }) else {
+            return vec![];
+        };
         rows.filter_map(std::result::Result::ok).collect()
     }
 
@@ -472,14 +511,18 @@ impl ScreenshotStore {
         let Ok(mut stmt) = conn.prepare(
             "SELECT id, filename FROM screenshots
              WHERE ocr_text = '' OR ocr_text IS NULL
-             ORDER BY id"
-        ) else { return vec![] };
+             ORDER BY id",
+        ) else {
+            return vec![];
+        };
         let Ok(rows) = stmt.query_map([], |r| {
             Ok(EmbeddableRow {
-                id:       r.get(0)?,
+                id: r.get(0)?,
                 filename: r.get(1)?,
             })
-        }) else { return vec![] };
+        }) else {
+            return vec![];
+        };
         rows.filter_map(std::result::Result::ok).collect()
     }
 
@@ -511,13 +554,14 @@ impl ScreenshotStore {
                 Ok(EmbeddingAndOcr {
                     embedding,
                     model_backend: r.get(2)?,
-                    model_id:      r.get(3)?,
-                    image_size:    r.get::<_, i64>(4)? as u32,
-                    ocr_text:      r.get::<_, String>(5).unwrap_or_default(),
+                    model_id: r.get(3)?,
+                    image_size: r.get::<_, i64>(4)? as u32,
+                    ocr_text: r.get::<_, String>(5).unwrap_or_default(),
                     ocr_embedding,
                 })
             },
-        ).ok()
+        )
+        .ok()
     }
 
     /// Get the timestamp for a row by id.
@@ -527,34 +571,56 @@ impl ScreenshotStore {
             "SELECT timestamp FROM screenshots WHERE id = ?1",
             params![id],
             |r| r.get(0),
-        ).ok()
+        )
+        .ok()
     }
 
     /// Get total screenshot count.
     #[allow(dead_code)]
     pub fn count_all(&self) -> usize {
         let conn = self.conn.lock_or_recover();
-        conn.query_row("SELECT COUNT(*) FROM screenshots", [], |r| r.get::<_, i64>(0))
-            .unwrap_or(0) as usize
+        conn.query_row("SELECT COUNT(*) FROM screenshots", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .unwrap_or(0) as usize
     }
 
     /// Return counts for the screenshot store: total, with embeddings,
     /// with OCR text, and with OCR embeddings.
     pub fn summary_counts(&self) -> ScreenshotSummary {
         let conn = self.conn.lock_or_recover();
-        let total = conn.query_row(
-            "SELECT COUNT(*) FROM screenshots", [], |r| r.get::<_, i64>(0),
-        ).unwrap_or(0) as u64;
-        let with_embedding = conn.query_row(
-            "SELECT COUNT(*) FROM screenshots WHERE embedding IS NOT NULL", [], |r| r.get::<_, i64>(0),
-        ).unwrap_or(0) as u64;
-        let with_ocr = conn.query_row(
-            "SELECT COUNT(*) FROM screenshots WHERE ocr_text != ''", [], |r| r.get::<_, i64>(0),
-        ).unwrap_or(0) as u64;
-        let with_ocr_embedding = conn.query_row(
-            "SELECT COUNT(*) FROM screenshots WHERE ocr_embedding IS NOT NULL", [], |r| r.get::<_, i64>(0),
-        ).unwrap_or(0) as u64;
-        ScreenshotSummary { total, with_embedding, with_ocr, with_ocr_embedding }
+        let total = conn
+            .query_row("SELECT COUNT(*) FROM screenshots", [], |r| {
+                r.get::<_, i64>(0)
+            })
+            .unwrap_or(0) as u64;
+        let with_embedding = conn
+            .query_row(
+                "SELECT COUNT(*) FROM screenshots WHERE embedding IS NOT NULL",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64;
+        let with_ocr = conn
+            .query_row(
+                "SELECT COUNT(*) FROM screenshots WHERE ocr_text != ''",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64;
+        let with_ocr_embedding = conn
+            .query_row(
+                "SELECT COUNT(*) FROM screenshots WHERE ocr_embedding IS NOT NULL",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap_or(0) as u64;
+        ScreenshotSummary {
+            total,
+            with_embedding,
+            with_ocr,
+            with_ocr_embedding,
+        }
     }
 
     /// Return the top `limit` most frequently screenshotted apps,
@@ -568,13 +634,16 @@ impl ScreenshotStore {
                      FROM screenshots WHERE unix_ts >= ?1 AND app_name != ''
                      GROUP BY app_name ORDER BY cnt DESC LIMIT ?2",
                 ) {
-                    Ok(s)  => s,
-                    Err(e) => { eprintln!("[screenshots] top_screenshot_apps: {e}"); return vec![]; }
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[screenshots] top_screenshot_apps: {e}");
+                        return vec![];
+                    }
                 };
                 stmt.query_map(params![ts as i64, limit as i64], |row| {
                     Ok(OcrFreqRow {
-                        app_name:  row.get(0)?,
-                        count:     row.get::<_, i64>(1)? as u64,
+                        app_name: row.get(0)?,
+                        count: row.get::<_, i64>(1)? as u64,
                         last_seen: row.get::<_, i64>(2)? as u64,
                     })
                 })
@@ -587,13 +656,16 @@ impl ScreenshotStore {
                      FROM screenshots WHERE app_name != ''
                      GROUP BY app_name ORDER BY cnt DESC LIMIT ?1",
                 ) {
-                    Ok(s)  => s,
-                    Err(e) => { eprintln!("[screenshots] top_screenshot_apps: {e}"); return vec![]; }
+                    Ok(s) => s,
+                    Err(e) => {
+                        eprintln!("[screenshots] top_screenshot_apps: {e}");
+                        return vec![];
+                    }
                 };
                 stmt.query_map(params![limit as i64], |row| {
                     Ok(OcrFreqRow {
-                        app_name:  row.get(0)?,
-                        count:     row.get::<_, i64>(1)? as u64,
+                        app_name: row.get(0)?,
+                        count: row.get::<_, i64>(1)? as u64,
                         last_seen: row.get::<_, i64>(2)? as u64,
                     })
                 })

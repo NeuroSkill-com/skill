@@ -6,325 +6,352 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Goals tab — daily recording goal configuration + 30-day history chart. -->
 <script lang="ts">
-  import { onMount, onDestroy }  from "svelte";
-  import { invoke }              from "@tauri-apps/api/core";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { Card, CardContent }   from "$lib/components/ui/card";
-  import { t }                   from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { onDestroy, onMount } from "svelte";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Daily Goal ─────────────────────────────────────────────────────────────
-  let dailyGoalMin = $state(60);
-  let saving       = $state(false);
+// ── Daily Goal ─────────────────────────────────────────────────────────────
+let dailyGoalMin = $state(60);
+let saving = $state(false);
 
-  // ── Do Not Disturb Automation ──────────────────────────────────────────────
-  interface DndConfig {
-    enabled:               boolean;
-    focus_threshold:       number;   // 0–100
-    duration_secs:         number;
-    exit_duration_secs:    number;   // seconds below threshold before DND clears (default 300)
-    focus_lookback_secs:   number;   // lookback window — recent focus delays exit (default 60)
-    focus_mode_identifier: string;   // modeIdentifier string, e.g. "com.apple.donotdisturb.mode.default"
-    exit_notification:     boolean;  // whether to send a notification when focus mode exits
-    snr_exit_db:           number;   // SNR threshold (dB) below which DND is forcibly deactivated (default 0)
+// ── Do Not Disturb Automation ──────────────────────────────────────────────
+interface DndConfig {
+  enabled: boolean;
+  focus_threshold: number; // 0–100
+  duration_secs: number;
+  exit_duration_secs: number; // seconds below threshold before DND clears (default 300)
+  focus_lookback_secs: number; // lookback window — recent focus delays exit (default 60)
+  focus_mode_identifier: string; // modeIdentifier string, e.g. "com.apple.donotdisturb.mode.default"
+  exit_notification: boolean; // whether to send a notification when focus mode exits
+  snr_exit_db: number; // SNR threshold (dB) below which DND is forcibly deactivated (default 0)
+}
+
+interface FocusModeOption {
+  identifier: string;
+  name: string;
+}
+
+const DND_DURATION_PRESETS: [string, number][] = [
+  [t("dnd.durationPreset30"), 30],
+  [t("dnd.durationPreset60"), 60],
+  [t("dnd.durationPreset120"), 120],
+  [t("dnd.durationPreset300"), 300],
+];
+
+// Exit delay presets: 1 / 2 / 5 / 10 / 15 / 30 / 60 minutes
+const DND_EXIT_PRESETS: [string, number][] = [
+  [t("dnd.exitDurationValue", { min: "1" }), 60],
+  [t("dnd.exitDurationValue", { min: "2" }), 120],
+  [t("dnd.exitDurationValue", { min: "5" }), 300],
+  [t("dnd.exitDurationValue", { min: "10" }), 600],
+  [t("dnd.exitDurationValue", { min: "15" }), 900],
+  [t("dnd.exitDurationValue", { min: "30" }), 1800],
+  [t("dnd.exitDurationValue", { min: "60" }), 3600],
+];
+
+// Lookback presets: 30s / 1 min / 2 min / 5 min / 10 min
+const DND_LOOKBACK_PRESETS: [string, number][] = [
+  [t("dnd.focusLookbackValue", { secs: "30" }), 30],
+  [t("dnd.focusLookbackValue_min", { min: "1" }), 60],
+  [t("dnd.focusLookbackValue_min", { min: "2" }), 120],
+  [t("dnd.focusLookbackValue_min", { min: "5" }), 300],
+  [t("dnd.focusLookbackValue_min", { min: "10" }), 600],
+];
+
+const DND_DEFAULT_MODE = "com.apple.donotdisturb.mode.default";
+
+let dndConfig = $state<DndConfig>({
+  enabled: false,
+  focus_threshold: 60,
+  duration_secs: 60,
+  exit_duration_secs: 300,
+  focus_lookback_secs: 60,
+  focus_mode_identifier: DND_DEFAULT_MODE,
+  exit_notification: true,
+  snr_exit_db: 0,
+});
+let dndActive = $state(false);
+let dndOsActive = $state<boolean | null>(null); // real system-level state
+let dndExitSecsRemain = $state(0); // >0 while exit countdown is running
+let dndExitHeldByLookback = $state(false); // true when lookback is resetting countdown
+// Activation-progress fields — populated by dnd-eligibility events
+let dndAvgScore = $state(0);
+let dndSampleCount = $state(0);
+let dndWindowSize = $state(0);
+let dndThresholdLive = $state(60); // mirrors dndConfig.focus_threshold
+let dndSaving = $state(false);
+let dndTesting = $state(false);
+let focusModes = $state<FocusModeOption[]>([]);
+let focusModesLoaded = $state(false);
+
+async function testDnd() {
+  dndTesting = true;
+  // Only ever sends enabled=false — activation is data-only.
+  try {
+    await invoke("test_dnd", { enabled: false });
+  } catch (e) {}
+  dndTesting = false;
+}
+
+async function saveDnd() {
+  dndSaving = true;
+  try {
+    await invoke("set_dnd_config", { config: dndConfig });
+  } catch (e) {}
+  dndSaving = false;
+  // Mark "set a DND threshold" onboarding step when the user saves with DND enabled.
+  if (dndConfig.enabled) {
+    try {
+      const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
+      if (!ob.dndConfigured) {
+        ob.dndConfigured = true;
+        localStorage.setItem("onboardDone", JSON.stringify(ob));
+      }
+    } catch (e) {}
   }
+}
 
-  interface FocusModeOption {
-    identifier: string;
-    name:       string;
-  }
+async function toggleDnd() {
+  dndConfig = { ...dndConfig, enabled: !dndConfig.enabled };
+  await saveDnd();
+}
 
-  const DND_DURATION_PRESETS: [string, number][] = [
-    [t("dnd.durationPreset30"),  30],
-    [t("dnd.durationPreset60"),  60],
-    [t("dnd.durationPreset120"), 120],
-    [t("dnd.durationPreset300"), 300],
-  ];
+async function setDndThreshold(v: number) {
+  dndConfig = { ...dndConfig, focus_threshold: v };
+  await saveDnd();
+}
 
-  // Exit delay presets: 1 / 2 / 5 / 10 / 15 / 30 / 60 minutes
-  const DND_EXIT_PRESETS: [string, number][] = [
-    [t("dnd.exitDurationValue", { min: "1"  }),   60],
-    [t("dnd.exitDurationValue", { min: "2"  }),  120],
-    [t("dnd.exitDurationValue", { min: "5"  }),  300],
-    [t("dnd.exitDurationValue", { min: "10" }),  600],
-    [t("dnd.exitDurationValue", { min: "15" }),  900],
-    [t("dnd.exitDurationValue", { min: "30" }), 1800],
-    [t("dnd.exitDurationValue", { min: "60" }), 3600],
-  ];
+async function setDndDuration(secs: number) {
+  dndConfig = { ...dndConfig, duration_secs: secs };
+  await saveDnd();
+}
 
-  // Lookback presets: 30s / 1 min / 2 min / 5 min / 10 min
-  const DND_LOOKBACK_PRESETS: [string, number][] = [
-    [t("dnd.focusLookbackValue",     { secs: "30" }),  30],
-    [t("dnd.focusLookbackValue_min", { min:  "1"  }),  60],
-    [t("dnd.focusLookbackValue_min", { min:  "2"  }), 120],
-    [t("dnd.focusLookbackValue_min", { min:  "5"  }), 300],
-    [t("dnd.focusLookbackValue_min", { min:  "10" }), 600],
-  ];
+async function setDndExitDuration(secs: number) {
+  dndConfig = { ...dndConfig, exit_duration_secs: secs };
+  await saveDnd();
+}
 
-  const DND_DEFAULT_MODE = "com.apple.donotdisturb.mode.default";
+async function setDndLookback(secs: number) {
+  dndConfig = { ...dndConfig, focus_lookback_secs: secs };
+  await saveDnd();
+}
 
-  let dndConfig              = $state<DndConfig>({ enabled: false, focus_threshold: 60, duration_secs: 60, exit_duration_secs: 300, focus_lookback_secs: 60, focus_mode_identifier: DND_DEFAULT_MODE, exit_notification: true, snr_exit_db: 0 });
-  let dndActive              = $state(false);
-  let dndOsActive            = $state<boolean | null>(null); // real system-level state
-  let dndExitSecsRemain      = $state(0);    // >0 while exit countdown is running
-  let dndExitHeldByLookback  = $state(false);// true when lookback is resetting countdown
-  // Activation-progress fields — populated by dnd-eligibility events
-  let dndAvgScore            = $state(0);
-  let dndSampleCount         = $state(0);
-  let dndWindowSize          = $state(0);
-  let dndThresholdLive       = $state(60);   // mirrors dndConfig.focus_threshold
-  let dndSaving              = $state(false);
-  let dndTesting             = $state(false);
-  let focusModes             = $state<FocusModeOption[]>([]);
-  let focusModesLoaded       = $state(false);
+async function setFocusMode(identifier: string) {
+  dndConfig = { ...dndConfig, focus_mode_identifier: identifier };
+  await saveDnd();
+}
 
-  async function testDnd() {
-    dndTesting = true;
-    // Only ever sends enabled=false — activation is data-only.
-    try { await invoke("test_dnd", { enabled: false }); } catch (e) { console.warn("[goals] test_dnd failed:", e); }
-    dndTesting = false;
-  }
+async function toggleExitNotification() {
+  dndConfig = { ...dndConfig, exit_notification: !dndConfig.exit_notification };
+  await saveDnd();
+}
 
-  async function saveDnd() {
-    dndSaving = true;
-    try { await invoke("set_dnd_config", { config: dndConfig }); } catch (e) { console.warn("[goals] set_dnd_config failed:", e); }
-    dndSaving = false;
-    // Mark "set a DND threshold" onboarding step when the user saves with DND enabled.
-    if (dndConfig.enabled) {
-      try {
-        const ob = JSON.parse(localStorage.getItem("onboardDone") ?? "{}");
-        if (!ob.dndConfigured) { ob.dndConfigured = true; localStorage.setItem("onboardDone", JSON.stringify(ob)); }
-      } catch (e) { console.warn("[goals] onboarding localStorage update failed:", e); }
+const DND_SNR_EXIT_PRESETS: [string, number][] = [
+  ["0 dB", 0],
+  ["3 dB", 3],
+  ["5 dB", 5],
+  ["10 dB", 10],
+  ["15 dB", 15],
+];
+
+async function setSnrExitDb(db: number) {
+  dndConfig = { ...dndConfig, snr_exit_db: db };
+  await saveDnd();
+}
+
+let dndUnlisten: UnlistenFn | null = null;
+
+// Re-fetch the authoritative DND state from the backend.  Called on mount
+// and whenever the window regains visibility (e.g. user switches back to the
+// app after changing Focus settings in System Settings).
+async function refreshDndState() {
+  try {
+    // get_dnd_active  → app-controlled flag
+    // get_dnd_status  → full pipeline snapshot (os_active, avg_score, …)
+    const [appActive, status] = await Promise.all([
+      invoke<boolean>("get_dnd_active"),
+      invoke<{
+        dnd_active: boolean;
+        os_active: boolean | null;
+        avg_score: number;
+        sample_count: number;
+        window_size: number;
+        threshold: number;
+      }>("get_dnd_status"),
+    ]);
+    dndActive = appActive;
+    dndOsActive = status.os_active ?? null;
+    dndAvgScore = status.avg_score ?? 0;
+    dndSampleCount = status.sample_count ?? 0;
+    dndWindowSize = status.window_size ?? 0;
+    dndThresholdLive = status.threshold ?? dndConfig.focus_threshold;
+  } catch (e) {}
+}
+
+onMount(async () => {
+  try {
+    const v = await invoke<number>("get_daily_goal");
+    if (v > 0) dailyGoalMin = v;
+  } catch (e) {}
+  await loadChart();
+
+  // Load DND config + current active state
+  try {
+    dndConfig = await invoke<DndConfig>("get_dnd_config");
+  } catch (e) {}
+  await refreshDndState();
+
+  // Load available Focus modes from the OS (macOS full list, Linux/Windows default DND option).
+  try {
+    focusModes = await invoke<FocusModeOption[]>("list_focus_modes");
+  } catch (e) {}
+  focusModesLoaded = true;
+
+  // Re-sync when the user switches back to the app window after making changes
+  // in System Settings or another app that may have toggled Focus mode.
+  const onVisible = () => {
+    if (document.visibilityState === "visible") refreshDndState();
+  };
+  document.addEventListener("visibilitychange", onVisible);
+
+  // Listen for live DND state changes (from the EEG band monitor)
+  const stateUnlisten = await listen<boolean>("dnd-state-changed", (ev) => {
+    dndActive = ev.payload;
+    if (!ev.payload) {
+      dndExitSecsRemain = 0;
+      dndExitHeldByLookback = false;
     }
-  }
-
-  async function toggleDnd() {
-    dndConfig = { ...dndConfig, enabled: !dndConfig.enabled };
-    await saveDnd();
-  }
-
-  async function setDndThreshold(v: number) {
-    dndConfig = { ...dndConfig, focus_threshold: v };
-    await saveDnd();
-  }
-
-  async function setDndDuration(secs: number) {
-    dndConfig = { ...dndConfig, duration_secs: secs };
-    await saveDnd();
-  }
-
-  async function setDndExitDuration(secs: number) {
-    dndConfig = { ...dndConfig, exit_duration_secs: secs };
-    await saveDnd();
-  }
-
-  async function setDndLookback(secs: number) {
-    dndConfig = { ...dndConfig, focus_lookback_secs: secs };
-    await saveDnd();
-  }
-
-  async function setFocusMode(identifier: string) {
-    dndConfig = { ...dndConfig, focus_mode_identifier: identifier };
-    await saveDnd();
-  }
-
-  async function toggleExitNotification() {
-    dndConfig = { ...dndConfig, exit_notification: !dndConfig.exit_notification };
-    await saveDnd();
-  }
-
-  const DND_SNR_EXIT_PRESETS: [string, number][] = [
-    ["0 dB",  0],
-    ["3 dB",  3],
-    ["5 dB",  5],
-    ["10 dB", 10],
-    ["15 dB", 15],
-  ];
-
-  async function setSnrExitDb(db: number) {
-    dndConfig = { ...dndConfig, snr_exit_db: db };
-    await saveDnd();
-  }
-
-  let dndUnlisten: UnlistenFn | null = null;
-
-  // Re-fetch the authoritative DND state from the backend.  Called on mount
-  // and whenever the window regains visibility (e.g. user switches back to the
-  // app after changing Focus settings in System Settings).
-  async function refreshDndState() {
-    try {
-      // get_dnd_active  → app-controlled flag
-      // get_dnd_status  → full pipeline snapshot (os_active, avg_score, …)
-      const [appActive, status] = await Promise.all([
-        invoke<boolean>("get_dnd_active"),
-        invoke<{
-          dnd_active:   boolean;
-          os_active:    boolean | null;
-          avg_score:    number;
-          sample_count: number;
-          window_size:  number;
-          threshold:    number;
-        }>("get_dnd_status"),
-      ]);
-      dndActive        = appActive;
-      dndOsActive      = status.os_active      ?? null;
-      dndAvgScore      = status.avg_score      ?? 0;
-      dndSampleCount   = status.sample_count   ?? 0;
-      dndWindowSize    = status.window_size    ?? 0;
-      dndThresholdLive = status.threshold      ?? dndConfig.focus_threshold;
-    } catch (e) { console.warn("[goals] refreshDndState failed:", e); }
-  }
-
-  onMount(async () => {
-    try {
-      const v = await invoke<number>("get_daily_goal");
-      if (v > 0) dailyGoalMin = v;
-    } catch (e) { console.warn("[goals] get_daily_goal failed:", e); }
-    await loadChart();
-
-    // Load DND config + current active state
-    try {
-      dndConfig = await invoke<DndConfig>("get_dnd_config");
-    } catch (e) { console.warn("[goals] get_dnd_config failed:", e); }
-    await refreshDndState();
-
-    // Load available Focus modes from the OS (macOS full list, Linux/Windows default DND option).
-    try {
-      focusModes = await invoke<FocusModeOption[]>("list_focus_modes");
-    } catch (e) { console.warn("[goals] list_focus_modes failed:", e); }
-    focusModesLoaded = true;
-
-    // Re-sync when the user switches back to the app window after making changes
-    // in System Settings or another app that may have toggled Focus mode.
-    const onVisible = () => { if (document.visibilityState === "visible") refreshDndState(); };
-    document.addEventListener("visibilitychange", onVisible);
-
-    // Listen for live DND state changes (from the EEG band monitor)
-    const stateUnlisten = await listen<boolean>("dnd-state-changed", (ev) => {
-      dndActive = ev.payload;
-      if (!ev.payload) { dndExitSecsRemain = 0; dndExitHeldByLookback = false; }
-    });
-
-    // Keep exit countdown, lookback state, and activation progress fresh from
-    // the ~4 Hz eligibility event.
-    // os_active is read from the 5-second OS-poll cache (not live file).
-    const eligibilityUnlisten = await listen<{
-      dnd_active:            boolean;
-      exit_secs_remaining:   number;
-      exit_held_by_lookback: boolean;
-      os_active:             boolean | null;
-      avg_score:             number;
-      sample_count:          number;
-      window_size:           number;
-      threshold:             number;
-    }>("dnd-eligibility", (ev) => {
-      dndActive             = ev.payload.dnd_active;
-      dndOsActive           = ev.payload.os_active          ?? null;
-      dndExitSecsRemain     = Math.ceil(ev.payload.exit_secs_remaining ?? 0);
-      dndExitHeldByLookback = ev.payload.exit_held_by_lookback ?? false;
-      dndAvgScore           = ev.payload.avg_score           ?? 0;
-      dndSampleCount        = ev.payload.sample_count        ?? 0;
-      dndWindowSize         = ev.payload.window_size         ?? 0;
-      dndThresholdLive      = ev.payload.threshold           ?? dndConfig.focus_threshold;
-    });
-
-    // Background OS poll fires when system DND state changes externally
-    // (user toggled in System Settings, Shortcuts automation, lock screen, etc.)
-    const osChangedUnlisten = await listen<{ os_active: boolean | null }>("dnd-os-changed", (ev) => {
-      dndOsActive = ev.payload.os_active ?? null;
-      // If the OS cleared DND without the app doing it, the backend already
-      // reconciles dnd_active and emits dnd-state-changed — no extra action needed here.
-    });
-
-    dndUnlisten = () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      stateUnlisten();
-      eligibilityUnlisten();
-      osChangedUnlisten();
-    };
   });
 
-  onDestroy(() => {
-    dndUnlisten?.();
+  // Keep exit countdown, lookback state, and activation progress fresh from
+  // the ~4 Hz eligibility event.
+  // os_active is read from the 5-second OS-poll cache (not live file).
+  const eligibilityUnlisten = await listen<{
+    dnd_active: boolean;
+    exit_secs_remaining: number;
+    exit_held_by_lookback: boolean;
+    os_active: boolean | null;
+    avg_score: number;
+    sample_count: number;
+    window_size: number;
+    threshold: number;
+  }>("dnd-eligibility", (ev) => {
+    dndActive = ev.payload.dnd_active;
+    dndOsActive = ev.payload.os_active ?? null;
+    dndExitSecsRemain = Math.ceil(ev.payload.exit_secs_remaining ?? 0);
+    dndExitHeldByLookback = ev.payload.exit_held_by_lookback ?? false;
+    dndAvgScore = ev.payload.avg_score ?? 0;
+    dndSampleCount = ev.payload.sample_count ?? 0;
+    dndWindowSize = ev.payload.window_size ?? 0;
+    dndThresholdLive = ev.payload.threshold ?? dndConfig.focus_threshold;
   });
 
-  async function save() {
-    saving = true;
-    try { await invoke("set_daily_goal", { minutes: dailyGoalMin }); } catch (e) { console.warn("[goals] set_daily_goal failed:", e); }
-    saving = false;
-    await loadChart();          // refresh chart after goal change
-  }
-
-  // Quick presets
-  const PRESETS: [string, number][] = [
-    ["15m",  15],
-    ["30m",  30],
-    ["1h",   60],
-    ["2h",  120],
-    ["4h",  240],
-    ["8h",  480],
-  ];
-
-  const goalHours = $derived(dailyGoalMin / 60);
-
-  // ── 30-day chart ───────────────────────────────────────────────────────────
-  interface DayEntry { date: string; minutes: number; label: string }
-
-  let chartDays   = $state<DayEntry[]>([]);
-  let chartMax    = $state(1);
-  let loading     = $state(false);
-
-  async function loadChart() {
-    loading = true;
-    try {
-      const raw = await invoke<[string, number][]>("get_daily_recording_mins", { days: 30 });
-      const days: DayEntry[] = raw.map(([iso, mins]) => {
-        const d = new Date(iso + "T00:00:00Z");
-        const label = d.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
-        return { date: iso, minutes: mins, label };
-      });
-      chartDays = days;
-      chartMax  = Math.max(dailyGoalMin * 1.25, ...days.map(d => d.minutes), 1);
-    } catch (e) { console.warn("[goals] loadChart failed:", e); }
-    loading = false;
-  }
-
-  // Bar colours
-  function barColor(mins: number): string {
-    if (mins >= dailyGoalMin) return "#22c55e";   // green — goal met
-    if (mins >= dailyGoalMin * 0.5) return "#3b82f6"; // blue — halfway+
-    if (mins === 0) return "transparent";
-    return "#6366f1";                             // indigo — some progress
-  }
-
-  // Format minutes → "1h 23m" or "45m"
-  function fmtMins(m: number): string {
-    if (m === 0) return "—";
-    if (m < 60) return `${m}m`;
-    return `${Math.floor(m / 60)}h ${m % 60 > 0 ? `${m % 60}m` : ""}`.trim();
-  }
-
-  // Goal line Y position (% from top)
-  const goalY = $derived((1 - dailyGoalMin / chartMax) * 100);
-
-  // Format exit-countdown seconds → "5m 12s" style
-  function fmtExitCountdown(secs: number): string {
-    if (secs <= 0) return "";
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    if (m === 0) return t("dnd.exitCountdown", { secs: String(s) });
-    return t("dnd.exitCountdownLong", { min: String(m), secs: String(s) });
-  }
-
-  // Streak: consecutive days (from today backwards) that hit the goal
-  const streak = $derived.by(() => {
-    if (!chartDays.length || dailyGoalMin === 0) return 0;
-    let s = 0;
-    for (let i = chartDays.length - 1; i >= 0; i--) {
-      if (chartDays[i].minutes >= dailyGoalMin) s++;
-      else break;
-    }
-    return s;
+  // Background OS poll fires when system DND state changes externally
+  // (user toggled in System Settings, Shortcuts automation, lock screen, etc.)
+  const osChangedUnlisten = await listen<{ os_active: boolean | null }>("dnd-os-changed", (ev) => {
+    dndOsActive = ev.payload.os_active ?? null;
+    // If the OS cleared DND without the app doing it, the backend already
+    // reconciles dnd_active and emits dnd-state-changed — no extra action needed here.
   });
+
+  dndUnlisten = () => {
+    document.removeEventListener("visibilitychange", onVisible);
+    stateUnlisten();
+    eligibilityUnlisten();
+    osChangedUnlisten();
+  };
+});
+
+onDestroy(() => {
+  dndUnlisten?.();
+});
+
+async function save() {
+  saving = true;
+  try {
+    await invoke("set_daily_goal", { minutes: dailyGoalMin });
+  } catch (e) {}
+  saving = false;
+  await loadChart(); // refresh chart after goal change
+}
+
+// Quick presets
+const PRESETS: [string, number][] = [
+  ["15m", 15],
+  ["30m", 30],
+  ["1h", 60],
+  ["2h", 120],
+  ["4h", 240],
+  ["8h", 480],
+];
+
+const goalHours = $derived(dailyGoalMin / 60);
+
+// ── 30-day chart ───────────────────────────────────────────────────────────
+interface DayEntry {
+  date: string;
+  minutes: number;
+  label: string;
+}
+
+let chartDays = $state<DayEntry[]>([]);
+let chartMax = $state(1);
+let loading = $state(false);
+
+async function loadChart() {
+  loading = true;
+  try {
+    const raw = await invoke<[string, number][]>("get_daily_recording_mins", { days: 30 });
+    const days: DayEntry[] = raw.map(([iso, mins]) => {
+      const d = new Date(`${iso}T00:00:00Z`);
+      const label = d.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+      return { date: iso, minutes: mins, label };
+    });
+    chartDays = days;
+    chartMax = Math.max(dailyGoalMin * 1.25, ...days.map((d) => d.minutes), 1);
+  } catch (e) {}
+  loading = false;
+}
+
+// Bar colours
+function barColor(mins: number): string {
+  if (mins >= dailyGoalMin) return "#22c55e"; // green — goal met
+  if (mins >= dailyGoalMin * 0.5) return "#3b82f6"; // blue — halfway+
+  if (mins === 0) return "transparent";
+  return "#6366f1"; // indigo — some progress
+}
+
+// Format minutes → "1h 23m" or "45m"
+function fmtMins(m: number): string {
+  if (m === 0) return "—";
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60 > 0 ? `${m % 60}m` : ""}`.trim();
+}
+
+// Goal line Y position (% from top)
+const goalY = $derived((1 - dailyGoalMin / chartMax) * 100);
+
+// Format exit-countdown seconds → "5m 12s" style
+function fmtExitCountdown(secs: number): string {
+  if (secs <= 0) return "";
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  if (m === 0) return t("dnd.exitCountdown", { secs: String(s) });
+  return t("dnd.exitCountdownLong", { min: String(m), secs: String(s) });
+}
+
+// Streak: consecutive days (from today backwards) that hit the goal
+const streak = $derived.by(() => {
+  if (!chartDays.length || dailyGoalMin === 0) return 0;
+  let s = 0;
+  for (let i = chartDays.length - 1; i >= 0; i--) {
+    if (chartDays[i].minutes >= dailyGoalMin) s++;
+    else break;
+  }
+  return s;
+});
 </script>
 
 <section class="flex flex-col gap-4">

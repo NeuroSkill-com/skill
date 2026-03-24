@@ -36,12 +36,12 @@ pub fn default_neutts_backbone_repo() -> String {
 impl Default for NeuttsConfig {
     fn default() -> Self {
         Self {
-            enabled:       false,
+            enabled: false,
             backbone_repo: default_neutts_backbone_repo(),
-            gguf_file:     String::new(),
-            voice_preset:  "jo".into(),
-            ref_wav_path:  String::new(),
-            ref_text:      String::new(),
+            gguf_file: String::new(),
+            voice_preset: "jo".into(),
+            ref_wav_path: String::new(),
+            ref_text: String::new(),
         }
     }
 }

@@ -52,7 +52,9 @@ fn find_balanced(content: &str, open: u8, close: u8) -> Vec<(usize, usize)> {
                 depth += 1;
             }
             b if b == close => {
-                if depth == 0 { continue }
+                if depth == 0 {
+                    continue;
+                }
                 depth -= 1;
                 if depth == 0 {
                     if let Some(s) = start.take() {

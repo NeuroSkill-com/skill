@@ -10,15 +10,13 @@
 //! (`~/.skill/settings.json`, `umap_config.json`) as well as the helpers
 //! to load and compute defaults.  It has **no dependency on `AppState`**.
 
-use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 use skill_constants::{
-    SETTINGS_FILE, UMAP_CONFIG_FILE,
-    CALIBRATION_ACTION1_LABEL, CALIBRATION_ACTION2_LABEL,
-    CALIBRATION_ACTION_DURATION_SECS, CALIBRATION_BREAK_DURATION_SECS,
-    CALIBRATION_LOOP_COUNT, CALIBRATION_AUTO_START,
-    EMBEDDING_OVERLAP_SECS,
+    CALIBRATION_ACTION1_LABEL, CALIBRATION_ACTION2_LABEL, CALIBRATION_ACTION_DURATION_SECS,
+    CALIBRATION_AUTO_START, CALIBRATION_BREAK_DURATION_SECS, CALIBRATION_LOOP_COUNT,
+    EMBEDDING_OVERLAP_SECS, SETTINGS_FILE, UMAP_CONFIG_FILE,
 };
 use skill_eeg::eeg_filter::FilterConfig;
 
@@ -27,8 +25,8 @@ use skill_eeg::eeg_filter::FilterConfig;
 pub use skill_data::device::PairedDevice;
 
 // Re-export NeuttsConfig from skill-tts.
-pub use skill_tts::NeuttsConfig;
 pub use skill_tts::config::default_neutts_backbone_repo;
+pub use skill_tts::NeuttsConfig;
 
 // Re-export LLM config types from skill-llm.
 pub use skill_llm::config::{LlmConfig, LlmToolConfig, ToolExecutionMode};
@@ -40,7 +38,7 @@ pub use screenshot_config::ScreenshotConfig;
 
 // System keychain helpers for storing secrets securely.
 pub mod keychain;
-pub use keychain::{Secrets, load_secrets, save_secrets};
+pub use keychain::{load_secrets, save_secrets, Secrets};
 
 // ── OpenBCI board configuration ───────────────────────────────────────────────
 
@@ -70,25 +68,27 @@ impl OpenBciBoard {
     pub fn channel_count(&self) -> usize {
         match self {
             Self::Ganglion | Self::GanglionWifi => 4,
-            Self::Cyton    | Self::CytonWifi    => 8,
+            Self::Cyton | Self::CytonWifi => 8,
             Self::CytonDaisy | Self::CytonDaisyWifi => 16,
-            Self::Galea                          => 24,
+            Self::Galea => 24,
         }
     }
 
     /// Nominal sampling rate in Hz.
     pub fn sample_rate(&self) -> f64 {
         match self {
-            Self::Ganglion | Self::GanglionWifi  => 200.0,
-            Self::Cyton    | Self::CytonDaisy    => 250.0,
-            Self::CytonWifi                      => 1000.0,
-            Self::CytonDaisyWifi                 => 125.0,
-            Self::Galea                          => 250.0,
+            Self::Ganglion | Self::GanglionWifi => 200.0,
+            Self::Cyton | Self::CytonDaisy => 250.0,
+            Self::CytonWifi => 1000.0,
+            Self::CytonDaisyWifi => 125.0,
+            Self::Galea => 250.0,
         }
     }
 
     /// Returns `true` for boards that connect via BLE (Ganglion only).
-    pub fn is_ble(&self) -> bool { matches!(self, Self::Ganglion) }
+    pub fn is_ble(&self) -> bool {
+        matches!(self, Self::Ganglion)
+    }
 
     /// Returns `true` for boards that use a serial USB dongle.
     pub fn is_serial(&self) -> bool {
@@ -97,7 +97,10 @@ impl OpenBciBoard {
 
     /// Returns `true` for boards that use the WiFi Shield.
     pub fn is_wifi(&self) -> bool {
-        matches!(self, Self::GanglionWifi | Self::CytonWifi | Self::CytonDaisyWifi)
+        matches!(
+            self,
+            Self::GanglionWifi | Self::CytonWifi | Self::CytonDaisyWifi
+        )
     }
 }
 
@@ -136,13 +139,13 @@ pub struct OpenBciConfig {
 impl Default for OpenBciConfig {
     fn default() -> Self {
         Self {
-            board:            OpenBciBoard::default(),
+            board: OpenBciBoard::default(),
             scan_timeout_secs: 10,
-            serial_port:      String::new(),
-            wifi_shield_ip:   String::new(),
-            wifi_local_port:  3000,
-            galea_ip:         String::new(),
-            channel_labels:   Vec::new(),
+            serial_port: String::new(),
+            wifi_shield_ip: String::new(),
+            wifi_local_port: 3000,
+            galea_ip: String::new(),
+            channel_labels: Vec::new(),
         }
     }
 }
@@ -165,7 +168,11 @@ pub struct ScannerConfig {
 
 impl Default for ScannerConfig {
     fn default() -> Self {
-        Self { ble: true, usb_serial: true, cortex: true }
+        Self {
+            ble: true,
+            usb_serial: true,
+            cortex: true,
+        }
     }
 }
 
@@ -230,9 +237,9 @@ pub struct SleepConfig {
 impl Default for SleepConfig {
     fn default() -> Self {
         Self {
-            bedtime:   "23:00".into(),
+            bedtime: "23:00".into(),
             wake_time: "07:00".into(),
-            preset:    SleepPreset::Default,
+            preset: SleepPreset::Default,
         }
     }
 }
@@ -242,9 +249,13 @@ impl SleepConfig {
     pub fn duration_minutes(&self) -> u32 {
         let (bh, bm) = parse_hhmm(&self.bedtime);
         let (wh, wm) = parse_hhmm(&self.wake_time);
-        let bed  = bh * 60 + bm;
+        let bed = bh * 60 + bm;
         let wake = wh * 60 + wm;
-        if wake >= bed { wake - bed } else { (24 * 60 - bed) + wake }
+        if wake >= bed {
+            wake - bed
+        } else {
+            (24 * 60 - bed) + wake
+        }
     }
 }
 
@@ -263,23 +274,23 @@ fn parse_hhmm(s: &str) -> (u32, u32) {
 #[serde(default)]
 pub struct UmapUserConfig {
     pub repulsion_strength: f32,
-    pub neg_sample_rate:    usize,
-    pub timeout_secs:       u64,
-    pub n_epochs:           usize,
-    pub n_neighbors:        usize,
+    pub neg_sample_rate: usize,
+    pub timeout_secs: u64,
+    pub n_epochs: usize,
+    pub n_neighbors: usize,
     /// Milliseconds to sleep between training epochs (0 = max throughput).
-    pub cooldown_ms:        u64,
+    pub cooldown_ms: u64,
 }
 
 impl Default for UmapUserConfig {
     fn default() -> Self {
         Self {
             repulsion_strength: 3.0,
-            neg_sample_rate:    15,
-            timeout_secs:       120,
-            n_epochs:           500,
-            n_neighbors:        15,
-            cooldown_ms:        0,
+            neg_sample_rate: 15,
+            timeout_secs: 120,
+            n_epochs: 500,
+            n_neighbors: 15,
+            cooldown_ms: 0,
         }
     }
 }
@@ -298,7 +309,7 @@ pub fn save_umap_config(skill_dir: &Path, cfg: &UmapUserConfig) {
 /// A single action phase within a calibration profile.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CalibrationAction {
-    pub label:         String,
+    pub label: String,
     pub duration_secs: u32,
 }
 
@@ -306,27 +317,33 @@ pub struct CalibrationAction {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CalibrationProfile {
-    pub id:                   String,
-    pub name:                 String,
-    pub actions:              Vec<CalibrationAction>,
-    pub break_duration_secs:  u32,
-    pub loop_count:           u32,
-    pub auto_start:           bool,
+    pub id: String,
+    pub name: String,
+    pub actions: Vec<CalibrationAction>,
+    pub break_duration_secs: u32,
+    pub loop_count: u32,
+    pub auto_start: bool,
     pub last_calibration_utc: Option<u64>,
 }
 
 impl Default for CalibrationProfile {
     fn default() -> Self {
         Self {
-            id:   "default".into(),
+            id: "default".into(),
             name: "Default".into(),
             actions: vec![
-                CalibrationAction { label: CALIBRATION_ACTION1_LABEL.into(), duration_secs: CALIBRATION_ACTION_DURATION_SECS },
-                CalibrationAction { label: CALIBRATION_ACTION2_LABEL.into(), duration_secs: CALIBRATION_ACTION_DURATION_SECS },
+                CalibrationAction {
+                    label: CALIBRATION_ACTION1_LABEL.into(),
+                    duration_secs: CALIBRATION_ACTION_DURATION_SECS,
+                },
+                CalibrationAction {
+                    label: CALIBRATION_ACTION2_LABEL.into(),
+                    duration_secs: CALIBRATION_ACTION_DURATION_SECS,
+                },
             ],
-            break_duration_secs:  CALIBRATION_BREAK_DURATION_SECS,
-            loop_count:           CALIBRATION_LOOP_COUNT,
-            auto_start:           CALIBRATION_AUTO_START,
+            break_duration_secs: CALIBRATION_BREAK_DURATION_SECS,
+            loop_count: CALIBRATION_LOOP_COUNT,
+            auto_start: CALIBRATION_AUTO_START,
             last_calibration_utc: None,
         }
     }
@@ -335,15 +352,21 @@ impl Default for CalibrationProfile {
 impl CalibrationProfile {
     pub fn from_legacy(cfg: &CalibrationConfig) -> Self {
         Self {
-            id:   "default".into(),
+            id: "default".into(),
             name: "Default".into(),
             actions: vec![
-                CalibrationAction { label: cfg.action1_label.clone(),  duration_secs: cfg.action_duration_secs },
-                CalibrationAction { label: cfg.action2_label.clone(), duration_secs: cfg.action_duration_secs },
+                CalibrationAction {
+                    label: cfg.action1_label.clone(),
+                    duration_secs: cfg.action_duration_secs,
+                },
+                CalibrationAction {
+                    label: cfg.action2_label.clone(),
+                    duration_secs: cfg.action_duration_secs,
+                },
             ],
-            break_duration_secs:  cfg.break_duration_secs,
-            loop_count:           cfg.loop_count,
-            auto_start:           cfg.auto_start,
+            break_duration_secs: cfg.break_duration_secs,
+            loop_count: cfg.loop_count,
+            auto_start: cfg.auto_start,
             last_calibration_utc: cfg.last_calibration_utc,
         }
     }
@@ -362,24 +385,24 @@ pub fn new_profile_id() -> String {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CalibrationConfig {
-    pub action1_label:        String,
-    pub action2_label:        String,
+    pub action1_label: String,
+    pub action2_label: String,
     pub action_duration_secs: u32,
-    pub break_duration_secs:  u32,
-    pub loop_count:           u32,
-    pub auto_start:           bool,
+    pub break_duration_secs: u32,
+    pub loop_count: u32,
+    pub auto_start: bool,
     pub last_calibration_utc: Option<u64>,
 }
 
 impl Default for CalibrationConfig {
     fn default() -> Self {
         Self {
-            action1_label:        CALIBRATION_ACTION1_LABEL.into(),
-            action2_label:        CALIBRATION_ACTION2_LABEL.into(),
+            action1_label: CALIBRATION_ACTION1_LABEL.into(),
+            action2_label: CALIBRATION_ACTION2_LABEL.into(),
             action_duration_secs: CALIBRATION_ACTION_DURATION_SECS,
-            break_duration_secs:  CALIBRATION_BREAK_DURATION_SECS,
-            loop_count:           CALIBRATION_LOOP_COUNT,
-            auto_start:           CALIBRATION_AUTO_START,
+            break_duration_secs: CALIBRATION_BREAK_DURATION_SECS,
+            loop_count: CALIBRATION_LOOP_COUNT,
+            auto_start: CALIBRATION_AUTO_START,
             last_calibration_utc: None,
         }
     }
@@ -427,7 +450,9 @@ pub fn tilde_path(p: &Path) -> String {
     if !home_str.is_empty() {
         let h = home_str.trim_end_matches(['/', '\\']);
         let s = p.to_string_lossy();
-        if s == h { return "~".into(); }
+        if s == h {
+            return "~".into();
+        }
         if let Some(rest) = s.strip_prefix(h) {
             if rest.starts_with('/') || rest.starts_with('\\') {
                 return format!("~{rest}");
@@ -439,30 +464,70 @@ pub fn tilde_path(p: &Path) -> String {
 
 // ── Default values ────────────────────────────────────────────────────────────
 
-pub fn default_ws_host() -> String { skill_constants::WS_HOST.into() }
-pub fn default_ws_port() -> u16    { skill_constants::WS_DEFAULT_PORT }
+pub fn default_ws_host() -> String {
+    skill_constants::WS_HOST.into()
+}
+pub fn default_ws_port() -> u16 {
+    skill_constants::WS_DEFAULT_PORT
+}
 pub fn default_update_check_interval() -> u64 {
     skill_constants::UPDATER_CHECK_INTERVAL_SECS
 }
-pub fn default_theme()        -> String { "system".into() }
-pub fn default_accent_color() -> String { "violet".into() }
-pub fn default_daily_goal_min()       -> u32    { 60 }
-pub fn default_embedding_model()      -> String { "Xenova/bge-small-en-v1.5".into() }
-pub fn default_overlap_secs()         -> f32    { EMBEDDING_OVERLAP_SECS }
-pub fn default_label_shortcut()       -> String { "CmdOrCtrl+Shift+L".into() }
-pub fn default_search_shortcut()      -> String { "CmdOrCtrl+Shift+S".into() }
-pub fn default_settings_shortcut()    -> String { "CmdOrCtrl+,".into() }
-pub fn default_calibration_shortcut() -> String { "CmdOrCtrl+Shift+C".into() }
-pub fn default_help_shortcut()        -> String { "CmdOrCtrl+Shift+H".into() }
-pub fn default_history_shortcut()     -> String { "CmdOrCtrl+Shift+J".into() }
-pub fn default_api_shortcut()         -> String { "CmdOrCtrl+Shift+A".into() }
-pub fn default_theme_shortcut()       -> String { "CmdOrCtrl+Shift+T".into() }
-pub fn default_focus_timer_shortcut() -> String { "CmdOrCtrl+Shift+P".into() }
+pub fn default_theme() -> String {
+    "system".into()
+}
+pub fn default_accent_color() -> String {
+    "violet".into()
+}
+pub fn default_daily_goal_min() -> u32 {
+    60
+}
+pub fn default_embedding_model() -> String {
+    "Xenova/bge-small-en-v1.5".into()
+}
+pub fn default_overlap_secs() -> f32 {
+    EMBEDDING_OVERLAP_SECS
+}
+pub fn default_label_shortcut() -> String {
+    "CmdOrCtrl+Shift+L".into()
+}
+pub fn default_search_shortcut() -> String {
+    "CmdOrCtrl+Shift+S".into()
+}
+pub fn default_settings_shortcut() -> String {
+    "CmdOrCtrl+,".into()
+}
+pub fn default_calibration_shortcut() -> String {
+    "CmdOrCtrl+Shift+C".into()
+}
+pub fn default_help_shortcut() -> String {
+    "CmdOrCtrl+Shift+H".into()
+}
+pub fn default_history_shortcut() -> String {
+    "CmdOrCtrl+Shift+J".into()
+}
+pub fn default_api_shortcut() -> String {
+    "CmdOrCtrl+Shift+A".into()
+}
+pub fn default_theme_shortcut() -> String {
+    "CmdOrCtrl+Shift+T".into()
+}
+pub fn default_focus_timer_shortcut() -> String {
+    "CmdOrCtrl+Shift+P".into()
+}
 #[cfg(feature = "llm")]
-pub fn default_chat_shortcut()        -> String { "CmdOrCtrl+Shift+I".into() }
-pub fn default_hook_distance_threshold() -> f32 { 0.1 }
-pub fn default_hook_recent_limit() -> usize { 12 }
-pub fn default_hook_scenario() -> String { "any".into() }
+pub fn default_chat_shortcut() -> String {
+    "CmdOrCtrl+Shift+I".into()
+}
+pub fn default_hook_distance_threshold() -> f32 {
+    0.1
+}
+pub fn default_hook_recent_limit() -> usize {
+    12
+}
+pub fn default_hook_scenario() -> String {
+    "any".into()
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -529,57 +594,57 @@ pub struct HookStatus {
 #[derive(Serialize, Deserialize)]
 #[serde(default)]
 pub struct UserSettings {
-    pub paired:                 Vec<PairedDevice>,
-    pub preferred_id:           Option<String>,
-    pub filter_config:          FilterConfig,
+    pub paired: Vec<PairedDevice>,
+    pub preferred_id: Option<String>,
+    pub filter_config: FilterConfig,
     #[serde(default = "default_overlap_secs")]
     pub embedding_overlap_secs: f32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub data_dir:               Option<String>,
+    pub data_dir: Option<String>,
     #[serde(default = "default_label_shortcut")]
-    pub label_shortcut:         String,
+    pub label_shortcut: String,
     #[serde(default = "default_search_shortcut")]
-    pub search_shortcut:        String,
+    pub search_shortcut: String,
     #[serde(default = "default_settings_shortcut")]
-    pub settings_shortcut:      String,
+    pub settings_shortcut: String,
     #[serde(default = "default_calibration_shortcut")]
-    pub calibration_shortcut:   String,
+    pub calibration_shortcut: String,
     #[serde(default = "default_help_shortcut")]
-    pub help_shortcut:          String,
+    pub help_shortcut: String,
     #[serde(default = "default_history_shortcut")]
-    pub history_shortcut:       String,
+    pub history_shortcut: String,
     #[serde(default = "default_api_shortcut")]
-    pub api_shortcut:           String,
+    pub api_shortcut: String,
     #[serde(default = "default_theme_shortcut")]
-    pub theme_shortcut:         String,
+    pub theme_shortcut: String,
     #[serde(default = "default_focus_timer_shortcut")]
-    pub focus_timer_shortcut:   String,
+    pub focus_timer_shortcut: String,
     #[cfg(feature = "llm")]
     #[serde(default = "default_chat_shortcut")]
-    pub chat_shortcut:          String,
+    pub chat_shortcut: String,
     /// Legacy two-action config — read once to migrate; never written back.
     #[serde(default, skip_serializing)]
-    pub calibration:            CalibrationConfig,
+    pub calibration: CalibrationConfig,
     #[serde(default)]
-    pub calibration_profiles:   Vec<CalibrationProfile>,
+    pub calibration_profiles: Vec<CalibrationProfile>,
     #[serde(default)]
-    pub active_calibration_id:  String,
+    pub active_calibration_id: String,
     #[serde(default)]
-    pub onboarding_complete:    bool,
+    pub onboarding_complete: bool,
     #[serde(default = "default_theme")]
-    pub theme:                  String,
+    pub theme: String,
     #[serde(default)]
-    pub language:               String,
+    pub language: String,
     #[serde(default = "default_accent_color")]
-    pub accent_color:           String,
+    pub accent_color: String,
     #[serde(default = "default_daily_goal_min")]
-    pub daily_goal_min:         u32,
+    pub daily_goal_min: u32,
     #[serde(default)]
-    pub goal_notified_date:     String,
+    pub goal_notified_date: String,
     #[serde(default = "default_embedding_model")]
-    pub text_embedding_model:   String,
+    pub text_embedding_model: String,
     #[serde(default)]
-    pub hooks:                  Vec<HookRule>,
+    pub hooks: Vec<HookRule>,
     /// WebSocket server bind host.
     #[serde(default = "default_ws_host")]
     pub ws_host: String,
@@ -640,23 +705,43 @@ pub struct UserSettings {
     pub scanner: ScannerConfig,
 }
 
-pub fn default_storage_format() -> String { "csv".into() }
+pub fn default_storage_format() -> String {
+    "csv".into()
+}
 
-pub fn default_tts_preload() -> bool { true }
-pub fn default_track_active_window() -> bool { true }
-pub fn default_track_input_activity() -> bool { true }
+pub fn default_tts_preload() -> bool {
+    true
+}
+pub fn default_track_active_window() -> bool {
+    true
+}
+pub fn default_track_input_activity() -> bool {
+    true
+}
 
 // ── Do Not Disturb automation ─────────────────────────────────────────────────
 
-pub fn default_dnd_threshold() -> f32 { 60.0 }
-pub fn default_dnd_duration_secs() -> u32 { 60 }
-pub fn default_dnd_exit_duration_secs() -> u32 { 300 }
-pub fn default_dnd_focus_lookback_secs() -> u32 { 60 }
+pub fn default_dnd_threshold() -> f32 {
+    60.0
+}
+pub fn default_dnd_duration_secs() -> u32 {
+    60
+}
+pub fn default_dnd_exit_duration_secs() -> u32 {
+    300
+}
+pub fn default_dnd_focus_lookback_secs() -> u32 {
+    60
+}
 pub fn default_dnd_mode_identifier() -> String {
     "com.apple.donotdisturb.mode.default".to_owned()
 }
-pub fn default_dnd_exit_notification() -> bool { true }
-pub fn default_dnd_snr_exit_db() -> f32 { 0.0 }
+pub fn default_dnd_exit_notification() -> bool {
+    true
+}
+pub fn default_dnd_snr_exit_db() -> f32 {
+    0.0
+}
 
 /// Configuration for the "auto Do Not Disturb when focus is sustained" feature.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -692,14 +777,14 @@ pub struct DoNotDisturbConfig {
 impl Default for DoNotDisturbConfig {
     fn default() -> Self {
         Self {
-            enabled:               false,
-            focus_threshold:       default_dnd_threshold(),
-            duration_secs:         default_dnd_duration_secs(),
-            exit_duration_secs:    default_dnd_exit_duration_secs(),
-            focus_lookback_secs:   default_dnd_focus_lookback_secs(),
+            enabled: false,
+            focus_threshold: default_dnd_threshold(),
+            duration_secs: default_dnd_duration_secs(),
+            exit_duration_secs: default_dnd_exit_duration_secs(),
+            focus_lookback_secs: default_dnd_focus_lookback_secs(),
             focus_mode_identifier: default_dnd_mode_identifier(),
-            exit_notification:     default_dnd_exit_notification(),
-            snr_exit_db:           default_dnd_snr_exit_db(),
+            exit_notification: default_dnd_exit_notification(),
+            snr_exit_db: default_dnd_snr_exit_db(),
         }
     }
 }
@@ -707,50 +792,50 @@ impl Default for DoNotDisturbConfig {
 impl Default for UserSettings {
     fn default() -> Self {
         Self {
-            paired:                 Vec::new(),
-            preferred_id:           None,
-            filter_config:          FilterConfig::default(),
+            paired: Vec::new(),
+            preferred_id: None,
+            filter_config: FilterConfig::default(),
             embedding_overlap_secs: EMBEDDING_OVERLAP_SECS,
-            data_dir:               None,
-            label_shortcut:         default_label_shortcut(),
-            search_shortcut:        default_search_shortcut(),
-            settings_shortcut:      default_settings_shortcut(),
-            calibration_shortcut:   default_calibration_shortcut(),
-            help_shortcut:          default_help_shortcut(),
-            history_shortcut:       default_history_shortcut(),
-            api_shortcut:           default_api_shortcut(),
-            theme_shortcut:         default_theme_shortcut(),
-            focus_timer_shortcut:   default_focus_timer_shortcut(),
+            data_dir: None,
+            label_shortcut: default_label_shortcut(),
+            search_shortcut: default_search_shortcut(),
+            settings_shortcut: default_settings_shortcut(),
+            calibration_shortcut: default_calibration_shortcut(),
+            help_shortcut: default_help_shortcut(),
+            history_shortcut: default_history_shortcut(),
+            api_shortcut: default_api_shortcut(),
+            theme_shortcut: default_theme_shortcut(),
+            focus_timer_shortcut: default_focus_timer_shortcut(),
             #[cfg(feature = "llm")]
-            chat_shortcut:          default_chat_shortcut(),
-            calibration:            CalibrationConfig::default(),
-            calibration_profiles:   Vec::new(),
-            active_calibration_id:  String::new(),
-            onboarding_complete:    false,
-            theme:                  default_theme(),
-            language:               String::new(),
-            daily_goal_min:         default_daily_goal_min(),
-            goal_notified_date:     String::new(),
-            text_embedding_model:   default_embedding_model(),
-            hooks:                  Vec::new(),
-            ws_host:                default_ws_host(),
-            ws_port:                default_ws_port(),
-            api_token:              String::new(),
+            chat_shortcut: default_chat_shortcut(),
+            calibration: CalibrationConfig::default(),
+            calibration_profiles: Vec::new(),
+            active_calibration_id: String::new(),
+            onboarding_complete: false,
+            theme: default_theme(),
+            language: String::new(),
+            daily_goal_min: default_daily_goal_min(),
+            goal_notified_date: String::new(),
+            text_embedding_model: default_embedding_model(),
+            hooks: Vec::new(),
+            ws_host: default_ws_host(),
+            ws_port: default_ws_port(),
+            api_token: String::new(),
             update_check_interval_secs: default_update_check_interval(),
-            openbci:                OpenBciConfig::default(),
-            device_api:             DeviceApiConfig::default(),
-            neutts:                 NeuttsConfig::default(),
-            tts_preload:            default_tts_preload(),
-            track_active_window:    default_track_active_window(),
-            track_input_activity:          default_track_input_activity(),
-            do_not_disturb:                DoNotDisturbConfig::default(),
-            last_seen_whats_new_version:   String::new(),
-            llm:                           LlmConfig::default(),
-            accent_color:                  default_accent_color(),
-            storage_format:                default_storage_format(),
-            screenshot:                    ScreenshotConfig::default(),
-            sleep:                         SleepConfig::default(),
-            scanner:                       ScannerConfig::default(),
+            openbci: OpenBciConfig::default(),
+            device_api: DeviceApiConfig::default(),
+            neutts: NeuttsConfig::default(),
+            tts_preload: default_tts_preload(),
+            track_active_window: default_track_active_window(),
+            track_input_activity: default_track_input_activity(),
+            do_not_disturb: DoNotDisturbConfig::default(),
+            last_seen_whats_new_version: String::new(),
+            llm: LlmConfig::default(),
+            accent_color: default_accent_color(),
+            storage_format: default_storage_format(),
+            screenshot: ScreenshotConfig::default(),
+            sleep: SleepConfig::default(),
+            scanner: ScannerConfig::default(),
         }
     }
 }
@@ -760,8 +845,12 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
     let mut s: UserSettings = skill_data::util::load_json_or_default(&path);
 
     // ── Shortcut migrations ──────────────────────────────────────────────
-    if s.search_shortcut   == "CmdOrCtrl+Shift+F" { s.search_shortcut   = default_search_shortcut(); }
-    if s.settings_shortcut == "CmdOrCtrl+Shift+S" { s.settings_shortcut = default_settings_shortcut(); }
+    if s.search_shortcut == "CmdOrCtrl+Shift+F" {
+        s.search_shortcut = default_search_shortcut();
+    }
+    if s.settings_shortcut == "CmdOrCtrl+Shift+S" {
+        s.settings_shortcut = default_settings_shortcut();
+    }
 
     // ── Secret migration: plaintext JSON → system keychain ───────────────
     //
@@ -783,10 +872,10 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
 
     // ── Load secrets from keychain ───────────────────────────────────────
     let secrets = keychain::load_secrets();
-    s.api_token                    = secrets.api_token;
-    s.device_api.emotiv_client_id  = secrets.emotiv_client_id;
+    s.api_token = secrets.api_token;
+    s.device_api.emotiv_client_id = secrets.emotiv_client_id;
     s.device_api.emotiv_client_secret = secrets.emotiv_client_secret;
-    s.device_api.idun_api_token    = secrets.idun_api_token;
+    s.device_api.idun_api_token = secrets.idun_api_token;
 
     s
 }
@@ -797,10 +886,10 @@ pub fn load_settings(skill_dir: &Path) -> UserSettings {
 /// relying on the JSON settings file.
 pub fn save_secrets_from_settings(settings: &UserSettings) {
     keychain::save_secrets(&Secrets {
-        api_token:            settings.api_token.clone(),
-        emotiv_client_id:     settings.device_api.emotiv_client_id.clone(),
+        api_token: settings.api_token.clone(),
+        emotiv_client_id: settings.device_api.emotiv_client_id.clone(),
         emotiv_client_secret: settings.device_api.emotiv_client_secret.clone(),
-        idun_api_token:       settings.device_api.idun_api_token.clone(),
+        idun_api_token: settings.device_api.idun_api_token.clone(),
     });
 }
 
@@ -839,15 +928,15 @@ mod tests {
 
     #[test]
     fn ganglion_sample_rate_is_200() {
-        assert!((OpenBciBoard::Ganglion.sample_rate()     - 200.0).abs() < 1e-6);
+        assert!((OpenBciBoard::Ganglion.sample_rate() - 200.0).abs() < 1e-6);
         assert!((OpenBciBoard::GanglionWifi.sample_rate() - 200.0).abs() < 1e-6);
     }
 
     #[test]
     fn cyton_sample_rate_is_250() {
-        assert!((OpenBciBoard::Cyton.sample_rate()     - 250.0).abs() < 1e-6);
+        assert!((OpenBciBoard::Cyton.sample_rate() - 250.0).abs() < 1e-6);
         assert!((OpenBciBoard::CytonDaisy.sample_rate() - 250.0).abs() < 1e-6);
-        assert!((OpenBciBoard::Galea.sample_rate()     - 250.0).abs() < 1e-6);
+        assert!((OpenBciBoard::Galea.sample_rate() - 250.0).abs() < 1e-6);
     }
 
     #[test]
@@ -893,16 +982,22 @@ mod tests {
     #[test]
     fn exactly_one_connection_type_per_board() {
         for board in [
-            OpenBciBoard::Ganglion, OpenBciBoard::GanglionWifi,
-            OpenBciBoard::Cyton,    OpenBciBoard::CytonWifi,
-            OpenBciBoard::CytonDaisy, OpenBciBoard::CytonDaisyWifi,
+            OpenBciBoard::Ganglion,
+            OpenBciBoard::GanglionWifi,
+            OpenBciBoard::Cyton,
+            OpenBciBoard::CytonWifi,
+            OpenBciBoard::CytonDaisy,
+            OpenBciBoard::CytonDaisyWifi,
             OpenBciBoard::Galea,
         ] {
             let kinds = [board.is_ble(), board.is_serial(), board.is_wifi()]
                 .iter()
                 .filter(|&&b| b)
                 .count();
-            assert!(kinds <= 1, "{board:?} reports more than one connection type");
+            assert!(
+                kinds <= 1,
+                "{board:?} reports more than one connection type"
+            );
         }
     }
 
@@ -922,18 +1017,33 @@ mod tests {
     #[test]
     fn default_calibration_profile_action_labels_match_constants() {
         let p = CalibrationProfile::default();
-        assert_eq!(p.actions[0].label, skill_constants::CALIBRATION_ACTION1_LABEL);
-        assert_eq!(p.actions[1].label, skill_constants::CALIBRATION_ACTION2_LABEL);
+        assert_eq!(
+            p.actions[0].label,
+            skill_constants::CALIBRATION_ACTION1_LABEL
+        );
+        assert_eq!(
+            p.actions[1].label,
+            skill_constants::CALIBRATION_ACTION2_LABEL
+        );
     }
 
     #[test]
     fn default_calibration_profile_durations_match_constants() {
         let p = CalibrationProfile::default();
-        assert_eq!(p.actions[0].duration_secs, skill_constants::CALIBRATION_ACTION_DURATION_SECS);
-        assert_eq!(p.actions[1].duration_secs, skill_constants::CALIBRATION_ACTION_DURATION_SECS);
-        assert_eq!(p.break_duration_secs, skill_constants::CALIBRATION_BREAK_DURATION_SECS);
-        assert_eq!(p.loop_count,          skill_constants::CALIBRATION_LOOP_COUNT);
-        assert_eq!(p.auto_start,          skill_constants::CALIBRATION_AUTO_START);
+        assert_eq!(
+            p.actions[0].duration_secs,
+            skill_constants::CALIBRATION_ACTION_DURATION_SECS
+        );
+        assert_eq!(
+            p.actions[1].duration_secs,
+            skill_constants::CALIBRATION_ACTION_DURATION_SECS
+        );
+        assert_eq!(
+            p.break_duration_secs,
+            skill_constants::CALIBRATION_BREAK_DURATION_SECS
+        );
+        assert_eq!(p.loop_count, skill_constants::CALIBRATION_LOOP_COUNT);
+        assert_eq!(p.auto_start, skill_constants::CALIBRATION_AUTO_START);
     }
 
     #[test]
@@ -963,7 +1073,9 @@ mod tests {
     #[test]
     fn tilde_path_contracts_home() {
         if let Ok(home) = std::env::var("HOME") {
-            let p = std::path::Path::new(&home).join(".skill").join("settings.json");
+            let p = std::path::Path::new(&home)
+                .join(".skill")
+                .join("settings.json");
             let result = tilde_path(&p);
             assert!(result.starts_with("~/"), "expected '~/...' got '{result}'");
         }

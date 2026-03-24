@@ -5,10 +5,10 @@
 use serde_json::Value;
 use tauri::AppHandle;
 
+use crate::constants::SQLITE_FILE;
+use crate::skill_dir;
 use crate::AppStateExt;
 use crate::MutexExt;
-use crate::skill_dir;
-use crate::constants::SQLITE_FILE;
 
 /// `hooks_get` — return raw hook rules (no runtime trigger state).
 pub(super) fn hooks_get(app: &AppHandle) -> Result<Value, String> {
@@ -40,7 +40,9 @@ pub(super) fn hooks_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
         s.hooks = clean;
         let keep: std::collections::HashSet<String> =
             s.hooks.iter().map(|h| h.name.clone()).collect();
-        s.hook_runtime.lock_or_recover().retain(|name, _| keep.contains(name));
+        s.hook_runtime
+            .lock_or_recover()
+            .retain(|name, _| keep.contains(name));
     }
     crate::save_settings_handle(app);
 
@@ -55,7 +57,8 @@ pub(super) fn hooks_status(app: &AppHandle) -> Result<Value, String> {
     let st = app.app_state();
     let s = st.lock_or_recover();
     let runtime = s.hook_runtime.lock_or_recover();
-    let statuses: Vec<crate::settings::HookStatus> = s.hooks
+    let statuses: Vec<crate::settings::HookStatus> = s
+        .hooks
         .iter()
         .cloned()
         .map(|hook| crate::settings::HookStatus {
@@ -143,7 +146,9 @@ pub(super) fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, Strin
 
     let refs: Vec<Vec<f32>> = matched
         .iter()
-        .filter_map(|(_, _, eeg_start, eeg_end)| crate::label_index::mean_eeg_for_window(&skill_dir, *eeg_start, *eeg_end))
+        .filter_map(|(_, _, eeg_start, eeg_end)| {
+            crate::label_index::mean_eeg_for_window(&skill_dir, *eeg_start, *eeg_end)
+        })
         .collect();
     let ref_n = refs.len();
     if ref_n == 0 {
@@ -185,14 +190,16 @@ pub(super) fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, Strin
                 continue;
             };
 
-            let Ok(mut stmt) = conn.prepare(
-                "SELECT eeg_embedding FROM embeddings ORDER BY timestamp DESC LIMIT ?1",
-            ) else {
+            let Ok(mut stmt) = conn
+                .prepare("SELECT eeg_embedding FROM embeddings ORDER BY timestamp DESC LIMIT ?1")
+            else {
                 continue;
             };
 
             let blobs: Vec<Vec<f32>> = stmt
-                .query_map(rusqlite::params![per_day as i64], |r| r.get::<_, Vec<u8>>(0))
+                .query_map(rusqlite::params![per_day as i64], |r| {
+                    r.get::<_, Vec<u8>>(0)
+                })
                 .map(|rows| {
                     rows.flatten()
                         .map(|b| {

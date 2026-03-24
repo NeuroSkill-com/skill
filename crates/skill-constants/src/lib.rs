@@ -32,7 +32,8 @@ impl<T> MutexExt<T> for std::sync::Mutex<T> {
         self.lock().unwrap_or_else(|poison| {
             eprintln!(
                 "[mutex] WARNING: recovered from poisoned lock at {}:{}",
-                file!(), line!()
+                file!(),
+                line!()
             );
             poison.into_inner()
         })
@@ -46,45 +47,99 @@ impl<T> MutexExt<T> for std::sync::Mutex<T> {
 /// ```
 pub mod prelude {
     pub use crate::{
+        emotiv_sample_rate_from_id,
+        global_hnsw_file_for,
+        hnsw_index_file_for,
+        ACTIVITY_FILE,
+        BANDS,
+        BAND_COLORS,
+        BAND_HOP,
+        BAND_SYMBOLS,
+        BAND_WINDOW,
+        CHANNEL_NAMES,
+        DEFAULT_HP_HZ,
+        DEFAULT_LP_HZ,
+        DEFAULT_NOTCH_BW_HZ,
         // Hardware
-        EEG_CHANNELS, CHANNEL_NAMES, MUSE_SAMPLE_RATE, PPG_SAMPLE_RATE, PPG_CHANNELS,
-        GANGLION_SAMPLE_RATE, GANGLION_CHANNEL_NAMES,
-        HERMES_EEG_CHANNELS, HERMES_SAMPLE_RATE, HERMES_CHANNEL_NAMES,
-        MW75_EEG_CHANNELS, MW75_SAMPLE_RATE, MW75_CHANNEL_NAMES,
-        EMOTIV_EPOC_EEG_CHANNELS, EMOTIV_INSIGHT_EEG_CHANNELS,
-        EMOTIV_SAMPLE_RATE, EMOTIV_SAMPLE_RATE_256, emotiv_sample_rate_from_id,
-        EMOTIV_EPOC_CHANNEL_NAMES, EMOTIV_INSIGHT_CHANNEL_NAMES,
-        IDUN_EEG_CHANNELS, IDUN_SAMPLE_RATE, IDUN_CHANNEL_NAMES,
-        // Filter
-        FILTER_WINDOW, FILTER_HOP, FILTER_OVERLAP,
-        DEFAULT_LP_HZ, DEFAULT_HP_HZ, DEFAULT_NOTCH_BW_HZ,
-        // Bands
-        NUM_BANDS, BANDS, BAND_COLORS, BAND_SYMBOLS, BAND_WINDOW, BAND_HOP,
+        EEG_CHANNELS,
+        EMBEDDING_EPOCH_SAMPLES,
         // Embedding / ZUNA
-        EMBEDDING_EPOCH_SECS, EMBEDDING_EPOCH_SAMPLES,
-        EMBEDDING_OVERLAP_SECS, EMBEDDING_OVERLAP_SAMPLES, EMBEDDING_HOP_SAMPLES,
-        EMBEDDING_OVERLAP_MIN_SECS, EMBEDDING_OVERLAP_MAX_SECS,
-        ZUNA_DATA_NORM, ZUNA_HF_REPO, ZUNA_WEIGHTS_FILE, ZUNA_CONFIG_FILE,
-        LUNA_HF_REPO, LUNA_CONFIG_FILE, LUNA_VARIANTS, LUNA_DEFAULT_VARIANT,
+        EMBEDDING_EPOCH_SECS,
+        EMBEDDING_HOP_SAMPLES,
+        EMBEDDING_OVERLAP_MAX_SECS,
+        EMBEDDING_OVERLAP_MIN_SECS,
+        EMBEDDING_OVERLAP_SAMPLES,
+        EMBEDDING_OVERLAP_SECS,
+        EMOTIV_EPOC_CHANNEL_NAMES,
+        EMOTIV_EPOC_EEG_CHANNELS,
+        EMOTIV_INSIGHT_CHANNEL_NAMES,
+        EMOTIV_INSIGHT_EEG_CHANNELS,
+        EMOTIV_SAMPLE_RATE,
+        EMOTIV_SAMPLE_RATE_256,
+        FILTER_HOP,
+        FILTER_OVERLAP,
+        // Filter
+        FILTER_WINDOW,
+        GANGLION_CHANNEL_NAMES,
+        GANGLION_SAMPLE_RATE,
+        GLOBAL_HNSW_FILE,
+        GLOBAL_HNSW_SAVE_EVERY,
+        HERMES_CHANNEL_NAMES,
+        HERMES_EEG_CHANNELS,
+        HERMES_SAMPLE_RATE,
+        HNSW_EF_CONSTRUCTION,
+        HNSW_INDEX_FILE,
         // HNSW
-        HNSW_M, HNSW_EF_CONSTRUCTION,
-        HNSW_INDEX_FILE, GLOBAL_HNSW_FILE, GLOBAL_HNSW_SAVE_EVERY,
-        hnsw_index_file_for, global_hnsw_file_for,
-        // Data files
-        SQLITE_FILE, LABELS_FILE, ACTIVITY_FILE, HOOKS_LOG_FILE,
-        SETTINGS_FILE, MODEL_CONFIG_FILE, UMAP_CONFIG_FILE, LOG_CONFIG_FILE,
-        // Screenshots
-        SCREENSHOTS_SQLITE, SCREENSHOTS_DIR, SCREENSHOTS_HNSW,
-        SCREENSHOT_HNSW_SAVE_EVERY, SCREENSHOTS_OCR_HNSW,
-        SCREENSHOT_INTERVAL_MIN_MULT, SCREENSHOT_INTERVAL_MAX_MULT,
+        HNSW_M,
+        HOOKS_LOG_FILE,
+        IDUN_CHANNEL_NAMES,
+        IDUN_EEG_CHANNELS,
+        IDUN_SAMPLE_RATE,
+        LABELS_FILE,
+        LABEL_CONTEXT_INDEX_FILE,
+        LABEL_EEG_INDEX_FILE,
         // Label index
-        LABEL_TEXT_INDEX_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_EEG_INDEX_FILE,
+        LABEL_TEXT_INDEX_FILE,
         // LLM
-        LLM_CATALOG_FILE, LLM_LOG_DIR, LLM_LOG_CAP,
+        LLM_CATALOG_FILE,
+        LLM_LOG_CAP,
+        LLM_LOG_DIR,
+        LOG_CONFIG_FILE,
+        LUNA_CONFIG_FILE,
+        LUNA_DEFAULT_VARIANT,
+        LUNA_HF_REPO,
+        LUNA_VARIANTS,
+        MODEL_CONFIG_FILE,
+        MUSE_SAMPLE_RATE,
+        MW75_CHANNEL_NAMES,
+        MW75_EEG_CHANNELS,
+        MW75_SAMPLE_RATE,
+        // Bands
+        NUM_BANDS,
+        PPG_CHANNELS,
+        PPG_SAMPLE_RATE,
+        SCREENSHOTS_DIR,
+        SCREENSHOTS_HNSW,
+        SCREENSHOTS_OCR_HNSW,
+        // Screenshots
+        SCREENSHOTS_SQLITE,
+        SCREENSHOT_HNSW_SAVE_EVERY,
+        SCREENSHOT_INTERVAL_MAX_MULT,
+        SCREENSHOT_INTERVAL_MIN_MULT,
         // Session
         SESSION_GAP_SECS,
+        SETTINGS_FILE,
+        // Data files
+        SQLITE_FILE,
+        UMAP_CONFIG_FILE,
+        WS_BROADCAST_CAPACITY,
+        WS_DEFAULT_PORT,
         // WebSocket
-        WS_HOST, WS_DEFAULT_PORT, WS_BROADCAST_CAPACITY,
+        WS_HOST,
+        ZUNA_CONFIG_FILE,
+        ZUNA_DATA_NORM,
+        ZUNA_HF_REPO,
+        ZUNA_WEIGHTS_FILE,
     };
 
     pub use crate::SKILL_DIR;
@@ -99,9 +154,7 @@ pub mod prelude {
 // ── Onboarding ───────────────────────────────────────────────────────────────
 
 /// Canonical staged model-download order used by onboarding.
-pub const ONBOARDING_MODEL_DOWNLOAD_ORDER: [&str; 5] = [
-    "zuna", "kitten", "neutts", "llm", "ocr",
-];
+pub const ONBOARDING_MODEL_DOWNLOAD_ORDER: [&str; 5] = ["zuna", "kitten", "neutts", "llm", "ocr"];
 
 // ── Hardware ──────────────────────────────────────────────────────────────────
 
@@ -140,9 +193,8 @@ pub const HERMES_EEG_CHANNELS: usize = 8;
 pub const HERMES_SAMPLE_RATE: f64 = 250.0;
 
 /// Hermes V1 channel labels (generic — exact placement depends on montage).
-pub const HERMES_CHANNEL_NAMES: [&str; HERMES_EEG_CHANNELS] = [
-    "Fp1", "Fp2", "AF3", "AF4", "F3", "F4", "FC1", "FC2",
-];
+pub const HERMES_CHANNEL_NAMES: [&str; HERMES_EEG_CHANNELS] =
+    ["Fp1", "Fp2", "AF3", "AF4", "F3", "F4", "FC1", "FC2"];
 
 /// Neurable MW75 Neuro EEG channel count (12 channels at 500 Hz).
 pub const MW75_EEG_CHANNELS: usize = 12;
@@ -156,8 +208,7 @@ pub const MW75_SAMPLE_RATE: f64 = 500.0;
 ///   Left  (Ch1–Ch6):  FT7, T7, TP7, CP5, P7, C5
 ///   Right (Ch7–Ch12): FT8, T8, TP8, CP6, P8, C6
 pub const MW75_CHANNEL_NAMES: [&str; MW75_EEG_CHANNELS] = [
-    "FT7", "T7", "TP7", "CP5", "P7", "C5",
-    "FT8", "T8", "TP8", "CP6", "P8", "C6",
+    "FT7", "T7", "TP7", "CP5", "P7", "C5", "FT8", "T8", "TP8", "CP6", "P8", "C6",
 ];
 
 /// Emotiv EPOC X / EPOC+ EEG channel count (14 channels).
@@ -199,14 +250,12 @@ pub fn emotiv_sample_rate_from_id(headset_id: &str) -> f64 {
 
 /// Emotiv EPOC X / EPOC+ channel labels (14 electrodes, 10-20 extended).
 pub const EMOTIV_EPOC_CHANNEL_NAMES: [&str; EMOTIV_EPOC_EEG_CHANNELS] = [
-    "AF3", "F7", "F3", "FC5", "T7", "P7", "O1",
-    "O2", "P8", "T8", "FC6", "F4", "F8", "AF4",
+    "AF3", "F7", "F3", "FC5", "T7", "P7", "O1", "O2", "P8", "T8", "FC6", "F4", "F8", "AF4",
 ];
 
 /// Emotiv Insight channel labels (5 electrodes).
-pub const EMOTIV_INSIGHT_CHANNEL_NAMES: [&str; EMOTIV_INSIGHT_EEG_CHANNELS] = [
-    "AF3", "AF4", "T7", "T8", "Pz",
-];
+pub const EMOTIV_INSIGHT_CHANNEL_NAMES: [&str; EMOTIV_INSIGHT_EEG_CHANNELS] =
+    ["AF3", "AF4", "T7", "T8", "Pz"];
 
 /// IDUN Guardian EEG channel count (single bipolar channel at 250 Hz).
 pub const IDUN_EEG_CHANNELS: usize = 1;
@@ -257,11 +306,11 @@ pub const NUM_BANDS: usize = 6;
 
 /// Band table: `(name, lo_hz inclusive, hi_hz exclusive)`.
 pub const BANDS: [(&str, f32, f32); NUM_BANDS] = [
-    ("delta",       0.5,   4.0),
-    ("theta",       4.0,   8.0),
-    ("alpha",       8.0,  13.0),
-    ("beta",       13.0,  30.0),
-    ("gamma",      30.0,  50.0),
+    ("delta", 0.5, 4.0),
+    ("theta", 4.0, 8.0),
+    ("alpha", 8.0, 13.0),
+    ("beta", 13.0, 30.0),
+    ("gamma", 30.0, 50.0),
     ("high_gamma", 50.0, 100.0),
 ];
 
@@ -385,12 +434,10 @@ pub const EMBEDDING_OVERLAP_MIN_SECS: f32 = 0.0;
 pub const EMBEDDING_OVERLAP_MAX_SECS: f32 = EMBEDDING_EPOCH_SECS - 0.5;
 
 /// Default overlap expressed in samples.
-pub const EMBEDDING_OVERLAP_SAMPLES: usize =
-    (EMBEDDING_OVERLAP_SECS * MUSE_SAMPLE_RATE) as usize;
+pub const EMBEDDING_OVERLAP_SAMPLES: usize = (EMBEDDING_OVERLAP_SECS * MUSE_SAMPLE_RATE) as usize;
 
 /// Default hop size (samples between epoch emissions).
-pub const EMBEDDING_HOP_SAMPLES: usize =
-    EMBEDDING_EPOCH_SAMPLES - EMBEDDING_OVERLAP_SAMPLES;
+pub const EMBEDDING_HOP_SAMPLES: usize = EMBEDDING_EPOCH_SAMPLES - EMBEDDING_OVERLAP_SAMPLES;
 
 /// Divisor applied to z-scored EEG before entering the ZUNA model.
 pub const ZUNA_DATA_NORM: f32 = 10.0;
@@ -412,9 +459,9 @@ pub const LUNA_CONFIG_FILE: &str = "config.json";
 
 /// Available LUNA model size variants: `(variant_name, weights_filename)`.
 pub const LUNA_VARIANTS: [(&str, &str); 3] = [
-    ("base",  "LUNA_base.safetensors"),
+    ("base", "LUNA_base.safetensors"),
     ("large", "LUNA_large.safetensors"),
-    ("huge",  "LUNA_huge.safetensors"),
+    ("huge", "LUNA_huge.safetensors"),
 ];
 
 /// Default LUNA model variant.
@@ -426,9 +473,9 @@ pub const LUNA_DEFAULT_VARIANT: &str = "base";
 /// is loaded with the correct architecture.  Derived from weight-tensor shapes.
 pub const LUNA_VARIANT_CONFIGS: [(&str, usize, usize, usize, usize); 3] = [
     // variant, embed_dim, num_queries, depth, num_heads
-    ("base",  64,  4,  8, 2),
-    ("large", 96,  6, 10, 2),
-    ("huge", 128,  8, 24, 2),
+    ("base", 64, 4, 8, 2),
+    ("large", 96, 6, 10, 2),
+    ("huge", 128, 8, 24, 2),
 ];
 
 /// Look up LUNA model hyperparameters for a variant name.
@@ -436,7 +483,8 @@ pub const LUNA_VARIANT_CONFIGS: [(&str, usize, usize, usize, usize); 3] = [
 /// Returns `(embed_dim, num_queries, depth, num_heads)` or `None` if the
 /// variant is unrecognised.
 pub fn luna_variant_config(variant: &str) -> Option<(usize, usize, usize, usize)> {
-    LUNA_VARIANT_CONFIGS.iter()
+    LUNA_VARIANT_CONFIGS
+        .iter()
         .find(|(v, _, _, _, _)| *v == variant)
         .map(|(_, e, q, d, h)| (*e, *q, *d, *h))
 }
@@ -628,7 +676,7 @@ pub const GLOBAL_HNSW_FILE: &str = "eeg_global.hnsw";
 pub fn hnsw_index_file_for(backend: &str) -> String {
     match backend {
         "" | "zuna" => HNSW_INDEX_FILE.to_string(),
-        other       => format!("eeg_embeddings_{other}.hnsw"),
+        other => format!("eeg_embeddings_{other}.hnsw"),
     }
 }
 
@@ -636,7 +684,7 @@ pub fn hnsw_index_file_for(backend: &str) -> String {
 pub fn global_hnsw_file_for(backend: &str) -> String {
     match backend {
         "" | "zuna" => GLOBAL_HNSW_FILE.to_string(),
-        other       => format!("eeg_global_{other}.hnsw"),
+        other => format!("eeg_global_{other}.hnsw"),
     }
 }
 
@@ -686,8 +734,11 @@ pub const APP_COPYRIGHT: &str = "© 2025–2026 NeuroSkill.com";
 
 /// Ordered list of contributors.
 pub const APP_AUTHORS: &[(&str, &str)] = &[
-    ("Eugene Hauptmann",    "Lead developer & EEG signal processing"),
-    ("Nataliya Kosmyna",    "Neuroscience and Brain Computer Interfaces"),
+    ("Eugene Hauptmann", "Lead developer & EEG signal processing"),
+    (
+        "Nataliya Kosmyna",
+        "Neuroscience and Brain Computer Interfaces",
+    ),
 ];
 
 pub const APP_ACKNOWLEDGEMENTS: &str =
@@ -745,7 +796,10 @@ mod tests {
             assert!(
                 (curr_lo - prev_hi).abs() < f32::EPSILON,
                 "band gap between {} and {}: {} vs {}",
-                BANDS[i-1].0, BANDS[i].0, prev_hi, curr_lo
+                BANDS[i - 1].0,
+                BANDS[i].0,
+                prev_hi,
+                curr_lo
             );
             assert!(curr_hi > curr_lo, "band {} has hi <= lo", BANDS[i].0);
         }
@@ -790,7 +844,10 @@ mod tests {
         assert_eq!(HERMES_CHANNEL_NAMES.len(), HERMES_EEG_CHANNELS);
         assert_eq!(MW75_CHANNEL_NAMES.len(), MW75_EEG_CHANNELS);
         assert_eq!(EMOTIV_EPOC_CHANNEL_NAMES.len(), EMOTIV_EPOC_EEG_CHANNELS);
-        assert_eq!(EMOTIV_INSIGHT_CHANNEL_NAMES.len(), EMOTIV_INSIGHT_EEG_CHANNELS);
+        assert_eq!(
+            EMOTIV_INSIGHT_CHANNEL_NAMES.len(),
+            EMOTIV_INSIGHT_EEG_CHANNELS
+        );
         assert_eq!(IDUN_CHANNEL_NAMES.len(), IDUN_EEG_CHANNELS);
     }
 
@@ -845,7 +902,8 @@ mod tests {
         let _ = std::thread::spawn(move || {
             let _g = m2.lock().unwrap();
             panic!("intentional poison");
-        }).join();
+        })
+        .join();
         // Mutex is now poisoned — lock_or_recover should still work
         let g = m.lock_or_recover();
         assert_eq!(*g, 99);

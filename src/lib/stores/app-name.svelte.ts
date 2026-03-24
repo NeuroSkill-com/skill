@@ -18,7 +18,7 @@ import { invoke } from "@tauri-apps/api/core";
 const DEFAULT_APP_BASE_NAME = "NeuroSkill";
 const TRADEMARK_SUFFIX = "™";
 
-let appName = $state(`${DEFAULT_APP_BASE_NAME}${TRADEMARK_SUFFIX}`);   // sensible fallback while we fetch
+let appName = $state(`${DEFAULT_APP_BASE_NAME}${TRADEMARK_SUFFIX}`); // sensible fallback while we fetch
 
 /** Reactive getter — use inside Svelte `$derived` / templates. */
 export function getAppName(): string {

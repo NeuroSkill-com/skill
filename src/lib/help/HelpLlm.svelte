@@ -7,44 +7,44 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: LLM — local inference server, model management, tools, chat -->
 
 <script lang="ts">
-  import HelpSection from "./HelpSection.svelte";
-  import HelpItem    from "./HelpItem.svelte";
-  import { Separator } from "$lib/components/ui/separator";
-  import { t }         from "$lib/i18n/index.svelte";
+import { Separator } from "$lib/components/ui/separator";
+import { t } from "$lib/i18n/index.svelte";
+import HelpItem from "./HelpItem.svelte";
+import HelpSection from "./HelpSection.svelte";
 
-  const overviewKeys = [
-    ["helpLlm.whatIsTitle",          "helpLlm.whatIsBody"],
-    ["helpLlm.privacyTitle",        "helpLlm.privacyBody"],
-    ["helpLlm.compatTitle",         "helpLlm.compatBody"],
-  ] as const;
+const overviewKeys = [
+  ["helpLlm.whatIsTitle", "helpLlm.whatIsBody"],
+  ["helpLlm.privacyTitle", "helpLlm.privacyBody"],
+  ["helpLlm.compatTitle", "helpLlm.compatBody"],
+] as const;
 
-  const modelKeys = [
-    ["helpLlm.catalogTitle",        "helpLlm.catalogBody"],
-    ["helpLlm.quantsTitle",         "helpLlm.quantsBody"],
-    ["helpLlm.hardwareFitTitle",    "helpLlm.hardwareFitBody"],
-    ["helpLlm.visionTitle",         "helpLlm.visionBody"],
-    ["helpLlm.downloadTitle",       "helpLlm.downloadBody"],
-  ] as const;
+const modelKeys = [
+  ["helpLlm.catalogTitle", "helpLlm.catalogBody"],
+  ["helpLlm.quantsTitle", "helpLlm.quantsBody"],
+  ["helpLlm.hardwareFitTitle", "helpLlm.hardwareFitBody"],
+  ["helpLlm.visionTitle", "helpLlm.visionBody"],
+  ["helpLlm.downloadTitle", "helpLlm.downloadBody"],
+] as const;
 
-  const inferenceKeys = [
-    ["helpLlm.gpuLayersTitle",      "helpLlm.gpuLayersBody"],
-    ["helpLlm.ctxSizeTitle",        "helpLlm.ctxSizeBody"],
-    ["helpLlm.parallelTitle",       "helpLlm.parallelBody"],
-    ["helpLlm.apiKeyTitle",         "helpLlm.apiKeyBody"],
-  ] as const;
+const inferenceKeys = [
+  ["helpLlm.gpuLayersTitle", "helpLlm.gpuLayersBody"],
+  ["helpLlm.ctxSizeTitle", "helpLlm.ctxSizeBody"],
+  ["helpLlm.parallelTitle", "helpLlm.parallelBody"],
+  ["helpLlm.apiKeyTitle", "helpLlm.apiKeyBody"],
+] as const;
 
-  const toolKeys = [
-    ["helpLlm.toolsOverviewTitle",  "helpLlm.toolsOverviewBody"],
-    ["helpLlm.toolsSafeTitle",      "helpLlm.toolsSafeBody"],
-    ["helpLlm.toolsDangerTitle",    "helpLlm.toolsDangerBody"],
-    ["helpLlm.toolsExecModeTitle",  "helpLlm.toolsExecModeBody"],
-  ] as const;
+const toolKeys = [
+  ["helpLlm.toolsOverviewTitle", "helpLlm.toolsOverviewBody"],
+  ["helpLlm.toolsSafeTitle", "helpLlm.toolsSafeBody"],
+  ["helpLlm.toolsDangerTitle", "helpLlm.toolsDangerBody"],
+  ["helpLlm.toolsExecModeTitle", "helpLlm.toolsExecModeBody"],
+] as const;
 
-  const chatKeys = [
-    ["helpLlm.chatWindowTitle",     "helpLlm.chatWindowBody"],
-    ["helpLlm.chatApiTitle",        "helpLlm.chatApiBody"],
-    ["helpLlm.serverLogsTitle",     "helpLlm.serverLogsBody"],
-  ] as const;
+const chatKeys = [
+  ["helpLlm.chatWindowTitle", "helpLlm.chatWindowBody"],
+  ["helpLlm.chatApiTitle", "helpLlm.chatApiBody"],
+  ["helpLlm.serverLogsTitle", "helpLlm.serverLogsBody"],
+] as const;
 </script>
 
 <div class="flex flex-col gap-6 pb-6">

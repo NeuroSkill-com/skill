@@ -68,10 +68,25 @@ fn quit_confirmed(lang: &str, _app: &AppHandle) -> bool {
 
 fn quit_dialog_strings(lang: &str) -> (&'static str, &'static str) {
     match lang {
-        "de" => ("NeuroSkill™ beenden", "Möchten Sie NeuroSkill™ wirklich beenden?"),
-        "fr" => ("Quitter NeuroSkill™", "Voulez-vous vraiment quitter NeuroSkill™ ?"),
-        "he" => ("לצאת מ-NeuroSkill™", "האם אתה בטוח שברצונך לצאת מ-NeuroSkill™?"),
-        "uk" => ("Вийти з NeuroSkill™", "Ви впевнені, що хочете вийти з NeuroSkill™?"),
-        _    => ("Quit NeuroSkill™",    "Are you sure you want to quit NeuroSkill™?"),
+        "de" => (
+            "NeuroSkill™ beenden",
+            "Möchten Sie NeuroSkill™ wirklich beenden?",
+        ),
+        "fr" => (
+            "Quitter NeuroSkill™",
+            "Voulez-vous vraiment quitter NeuroSkill™ ?",
+        ),
+        "he" => (
+            "לצאת מ-NeuroSkill™",
+            "האם אתה בטוח שברצונך לצאת מ-NeuroSkill™?",
+        ),
+        "uk" => (
+            "Вийти з NeuroSkill™",
+            "Ви впевнені, що хочете вийти з NeuroSkill™?",
+        ),
+        _ => (
+            "Quit NeuroSkill™",
+            "Are you sure you want to quit NeuroSkill™?",
+        ),
     }
 }

@@ -17,5 +17,8 @@ serde_json = "1"
 gpu-fft    = { version = "1.1.1", features = ["wgpu"], optional = true }
 rustfft    = "6"
 
+[dev-dependencies]
+proptest = "1"
+
 [lints]
 workspace = true

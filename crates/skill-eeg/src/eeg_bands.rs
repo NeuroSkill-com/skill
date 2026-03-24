@@ -66,17 +66,17 @@ use std::collections::VecDeque;
 use std::f32::consts::PI;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(feature = "gpu")]
-use gpu_fft::{fft_batch, psd::psd};
 #[cfg(not(feature = "gpu"))]
 use crate::cpu_fft::{fft_batch, psd};
+#[cfg(feature = "gpu")]
+use gpu_fft::{fft_batch, psd::psd};
 use serde::{Deserialize, Serialize};
 
-use crate::constants::{
-    BAND_COLORS, BAND_HOP, BAND_SYMBOLS, BAND_WINDOW, BANDS,
-    CHANNEL_NAMES, EEG_CHANNELS, MUSE_SAMPLE_RATE, NUM_BANDS,
-};
 use crate::band_metrics::*;
+use crate::constants::{
+    BANDS, BAND_COLORS, BAND_HOP, BAND_SYMBOLS, BAND_WINDOW, CHANNEL_NAMES, EEG_CHANNELS,
+    MUSE_SAMPLE_RATE, NUM_BANDS,
+};
 
 // ── Output types ─────────────────────────────────────────────────────────────
 
@@ -91,28 +91,28 @@ pub struct BandPowers {
 
     // ── Absolute power (µV²) ─────────────────────────────────────────────────
     // Computed from the Hann-corrected one-sided PSD integrated over each band.
-    pub delta:      f32,
-    pub theta:      f32,
-    pub alpha:      f32,
-    pub beta:       f32,
-    pub gamma:      f32,
+    pub delta: f32,
+    pub theta: f32,
+    pub alpha: f32,
+    pub beta: f32,
+    pub gamma: f32,
     pub high_gamma: f32,
 
     // ── Relative power (0.0 – 1.0) ───────────────────────────────────────────
     // Each band divided by the sum of all 6 bands (broadband 0.5–100 Hz).
-    pub rel_delta:      f32,
-    pub rel_theta:      f32,
-    pub rel_alpha:      f32,
-    pub rel_beta:       f32,
-    pub rel_gamma:      f32,
+    pub rel_delta: f32,
+    pub rel_theta: f32,
+    pub rel_alpha: f32,
+    pub rel_beta: f32,
+    pub rel_gamma: f32,
     pub rel_high_gamma: f32,
 
     /// Name of the band with the highest relative power (e.g. `"alpha"`).
-    pub dominant:        String,
+    pub dominant: String,
     /// Greek symbol of the dominant band (e.g. `"α"`).
     pub dominant_symbol: String,
     /// Hex colour of the dominant band (e.g. `"#22c55e"`).
-    pub dominant_color:  String,
+    pub dominant_color: String,
 }
 
 /// Band power snapshot for all 4 Muse channels, emitted as `"eeg-bands"` event.
@@ -128,7 +128,6 @@ pub struct BandSnapshot {
     pub channels: Vec<BandPowers>,
 
     // ── Cross-band ratios (averaged across 4 channels) ───────────────────────
-
     /// Frontal Alpha Asymmetry: ln(AF8 α) − ln(AF7 α).
     /// Positive → left-hemisphere approach bias.  [Coan & Allen 2004]
     pub faa: f32,
@@ -143,7 +142,6 @@ pub struct BandSnapshot {
     pub dtr: f32,
 
     // ── Spectral shape metrics (averaged across channels) ────────────────────
-
     /// Power Spectral Entropy — spectral disorder / complexity.  [Inouye 1991]
     /// Higher = more uniform spectrum; lower = dominated by one band.
     pub pse: f32,
@@ -162,25 +160,21 @@ pub struct BandSnapshot {
     pub snr: f32,
 
     // ── Cross-channel synchrony ──────────────────────────────────────────────
-
     /// Mean inter-channel coherence in the alpha band (8–13 Hz).  [Lachaux 1999]
     /// Simplified as correlation of alpha relative powers across channel pairs.
     pub coherence: f32,
 
     // ── Mu suppression (8–12 Hz) ─────────────────────────────────────────────
-
     /// Mu suppression index: current alpha power / running baseline alpha.
     /// < 1.0 = suppression (motor imagery).  [Pfurtscheller & Lopes da Silva 1999]
     pub mu_suppression: f32,
 
     // ── Composite indices ────────────────────────────────────────────────────
-
     /// Mood index: weighted composite of FAA, TAR, BAR (0–100).
     /// Higher = more positive/approach valence.
     pub mood: f32,
 
     // ── New metrics ──────────────────────────────────────────────────────────
-
     /// Theta/Beta Ratio (absolute power).  Cortical arousal index.
     pub tbr: f32,
 
@@ -218,25 +212,22 @@ pub struct BandSnapshot {
     // ── Headache / Migraine EEG correlate indices (0–100) ───────────────────
     // Research biomarkers derived from published literature.
     // NOT clinical diagnostic tools — for informational/research purposes only.
-
     /// Headache correlate — cortical hyperexcitability: high beta + suppressed alpha + high BAR.
-    pub headache_index:      f32,
+    pub headache_index: f32,
     /// Migraine correlate — cortical spreading depression proxy: elevated delta + alpha
     /// suppression + hemispheric lateralisation.
-    pub migraine_index:      f32,
+    pub migraine_index: f32,
 
     // ── Consciousness metrics (0–100) ─────────────────────────────────────────
-
     /// Lempel-Ziv Complexity proxy — signal information richness.
     /// Approximated via permutation entropy + Higuchi FD.
-    pub consciousness_lzc:         f32,
+    pub consciousness_lzc: f32,
     /// Wakefulness level — inverse drowsiness modulated by BAR and TAR.
     pub consciousness_wakefulness: f32,
     /// Information Integration proxy — global workspace (coherence × PAC × spectral entropy).
     pub consciousness_integration: f32,
 
     // ── PPG-derived metrics (populated from PpgAnalyzer when available) ──────
-
     /// Heart rate (bpm).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hr: Option<f64>,
@@ -266,7 +257,6 @@ pub struct BandSnapshot {
     pub stress_index: Option<f64>,
 
     // ── Artifact / event metrics ─────────────────────────────────────────────
-
     /// Total blink count since connection.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blink_count: Option<u64>,
@@ -274,7 +264,6 @@ pub struct BandSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blink_rate: Option<f64>,
     // ── Head pose metrics ────────────────────────────────────────────────────
-
     /// Head pitch in degrees (positive = up).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub head_pitch: Option<f64>,
@@ -292,7 +281,6 @@ pub struct BandSnapshot {
     pub shake_count: Option<u64>,
 
     // ── Composite scores ─────────────────────────────────────────────────────
-
     /// Meditation score (0–100).  High alpha + low beta + stillness + HRV.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meditation: Option<f64>,
@@ -304,13 +292,11 @@ pub struct BandSnapshot {
     pub drowsiness: Option<f64>,
 
     // ── Device telemetry ─────────────────────────────────────────────────────
-
     /// Raw temperature ADC value from headset (Classic firmware only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature_raw: Option<u16>,
 
     // ── GPU utilisation ──────────────────────────────────────────────────────
-
     /// GPU overall utilisation 0.0–1.0 (from IOKit on macOS).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gpu_overall: Option<f64>,
@@ -362,7 +348,10 @@ impl BandAnalyzer {
     ///
     /// **Deprecated:** defaults to 256 Hz (Muse).  Use [`Self::new_with_rate`]
     /// with the device's actual sample rate for correct spectral analysis.
-    #[deprecated(since = "0.1.0", note = "use BandAnalyzer::new_with_rate(sample_rate) instead")]
+    #[deprecated(
+        since = "0.1.0",
+        note = "use BandAnalyzer::new_with_rate(sample_rate) instead"
+    )]
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self::new_with_rate(MUSE_SAMPLE_RATE)
@@ -376,16 +365,13 @@ impl BandAnalyzer {
         // Hann window: wᵢ = 0.5 × (1 − cos(2π·i / (N−1)))
         // For N = 512: Σ wᵢ² ≈ 512 × 3/8 = 192
         let hann: Vec<f32> = (0..BAND_WINDOW)
-            .map(|i| {
-                0.5 * (1.0
-                    - (2.0 * PI * i as f32 / (BAND_WINDOW as f32 - 1.0)).cos())
-            })
+            .map(|i| 0.5 * (1.0 - (2.0 * PI * i as f32 / (BAND_WINDOW as f32 - 1.0)).cos()))
             .collect();
         let hann_sum_sq = hann.iter().map(|&w| w * w).sum::<f32>();
         Self {
-            window:      std::array::from_fn(|_| VecDeque::new()),
-            queued:      std::array::from_fn(|_| VecDeque::new()),
-            active:      [false; EEG_CHANNELS],
+            window: std::array::from_fn(|_| VecDeque::new()),
+            queued: std::array::from_fn(|_| VecDeque::new()),
+            active: [false; EEG_CHANNELS],
             hann,
             hann_sum_sq,
             latest: None,
@@ -412,11 +398,16 @@ impl BandAnalyzer {
         // Fire one or more hops while every *active* channel has ≥ BAND_HOP
         // queued samples.  Inactive channels (never pushed to) are skipped.
         let mut fired = false;
-        while self.active.iter().enumerate().all(|(ch, &on)| {
-            !on || self.queued[ch].len() >= BAND_HOP
-        }) {
+        while self
+            .active
+            .iter()
+            .enumerate()
+            .all(|(ch, &on)| !on || self.queued[ch].len() >= BAND_HOP)
+        {
             // Need at least one active channel to fire.
-            if !self.active.iter().any(|&on| on) { break; }
+            if !self.active.iter().any(|&on| on) {
+                break;
+            }
             self.compute_snapshot();
             fired = true;
         }
@@ -485,7 +476,7 @@ impl BandAnalyzer {
         // BAND_WINDOW = 512 is a power of two → no zero-padding.
         // The GPU kernel processes a 4 × 512 matrix in a single 2-D workgroup.
         let spectra = fft_batch(&signals);
-        let n       = spectra[0].0.len(); // = BAND_WINDOW = 512
+        let n = spectra[0].0.len(); // = BAND_WINDOW = 512
         debug_assert_eq!(n, BAND_WINDOW);
 
         // ── 4. PSD + band integration ─────────────────────────────────────────
@@ -502,10 +493,10 @@ impl BandAnalyzer {
         //     = Σ_k factor × psd_raw[k] / Σwᵢ²
         //
         // So the per-bin scale is just 1 / hann_sum_sq (independent of fs, n).
-        let n_oneside   = n / 2 + 1; // 257 unique positive-frequency bins
-        let nyq_bin     = n / 2;     // 256
-        let bin_hz      = self.sample_rate / n as f32;
-        let abs_scale   = 1.0 / self.hann_sum_sq;      // PSD normalisation
+        let n_oneside = n / 2 + 1; // 257 unique positive-frequency bins
+        let nyq_bin = n / 2; // 256
+        let bin_hz = self.sample_rate / n as f32;
+        let abs_scale = 1.0 / self.hann_sum_sq; // PSD normalisation
 
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -516,14 +507,16 @@ impl BandAnalyzer {
         let mut ch_powers: Vec<BandPowers> = Vec::with_capacity(active_count);
         // Per-channel alpha peak freq accumulator and PSD-derived data for
         // cross-channel metrics computed after the loop.
-        let mut ch_apf_sum   = 0.0f32;
+        let mut ch_apf_sum = 0.0f32;
         let mut ch_apf_count = 0u32;
-        let mut ch_bps_sum   = 0.0f32;
-        let mut ch_snr_sum   = 0.0f32;
+        let mut ch_bps_sum = 0.0f32;
+        let mut ch_snr_sum = 0.0f32;
         let mut ch_alpha_abs_sum = 0.0f32;
 
         for (ch, (real, imag)) in spectra.iter().enumerate().take(EEG_CHANNELS) {
-            if !self.active[ch] { continue; }
+            if !self.active[ch] {
+                continue;
+            }
 
             // One-sided raw PSD (length n_oneside = 257).
             // psd::psd gives (r² + i²) / n for each bin.
@@ -546,8 +539,8 @@ impl BandAnalyzer {
 
             // Relative powers: normalise by broadband total (all 6 bands).
             let total = abs_pwr.iter().sum::<f32>();
-            let safe  = if total > 1e-12 { total } else { 1.0 };
-            let rel   = abs_pwr.map(|p| p / safe);
+            let safe = if total > 1e-12 { total } else { 1.0 };
+            let rel = abs_pwr.map(|p| p / safe);
 
             // Dominant band: the one with highest relative power.
             let dom = rel
@@ -559,13 +552,21 @@ impl BandAnalyzer {
 
             // ── Alpha Peak Frequency (APF) — max power in 8–13 Hz ───────────
             {
-                let lo_bin = (8.0 / bin_hz).ceil()  as usize;
+                let lo_bin = (8.0 / bin_hz).ceil() as usize;
                 let hi_bin = (13.0 / bin_hz).floor() as usize;
                 let mut best_k = lo_bin;
                 let mut best_p = 0.0f32;
-                for (k, &psd_k) in psd_raw.iter().enumerate().take(hi_bin.min(n_oneside - 1) + 1).skip(lo_bin) {
+                for (k, &psd_k) in psd_raw
+                    .iter()
+                    .enumerate()
+                    .take(hi_bin.min(n_oneside - 1) + 1)
+                    .skip(lo_bin)
+                {
                     let p = psd_k * abs_scale;
-                    if p > best_p { best_p = p; best_k = k; }
+                    if p > best_p {
+                        best_p = p;
+                        best_k = k;
+                    }
                 }
                 if best_p > 1e-12 {
                     ch_apf_sum += best_k as f32 * bin_hz;
@@ -576,20 +577,25 @@ impl BandAnalyzer {
             // ── Band-Power Slope (BPS) — log–log regression 1–50 Hz ─────────
             // Linear regression: log₁₀(P) = slope × log₁₀(f) + intercept
             {
-                let lo_bin = (1.0 / bin_hz).ceil()  as usize;
+                let lo_bin = (1.0 / bin_hz).ceil() as usize;
                 let hi_bin = (50.0 / bin_hz).floor() as usize;
-                let mut sx  = 0.0f64;
-                let mut sy  = 0.0f64;
+                let mut sx = 0.0f64;
+                let mut sy = 0.0f64;
                 let mut sxy = 0.0f64;
                 let mut sx2 = 0.0f64;
                 let mut cnt = 0u32;
-                for (k, &psd_k) in psd_raw.iter().enumerate().take(hi_bin.min(n_oneside - 1) + 1).skip(lo_bin) {
+                for (k, &psd_k) in psd_raw
+                    .iter()
+                    .enumerate()
+                    .take(hi_bin.min(n_oneside - 1) + 1)
+                    .skip(lo_bin)
+                {
                     let p = (psd_k * abs_scale) as f64;
                     if p > 1e-20 {
                         let x = ((k as f64) * bin_hz as f64).log10();
                         let y = p.log10();
-                        sx  += x;
-                        sy  += y;
+                        sx += x;
+                        sy += y;
                         sxy += x * y;
                         sx2 += x * x;
                         cnt += 1;
@@ -604,9 +610,9 @@ impl BandAnalyzer {
 
             // ── SNR — broadband (1–50 Hz) vs line-noise band (50–60 Hz) ─────
             {
-                let mut sig_power  = 0.0f32;
+                let mut sig_power = 0.0f32;
                 let mut noise_power = 0.0f32;
-                let mut sig_count  = 0u32;
+                let mut sig_count = 0u32;
                 let mut noise_count = 0u32;
                 for (k, &psd_k) in psd_raw.iter().enumerate().take(n_oneside) {
                     let freq = k as f32 * bin_hz;
@@ -620,7 +626,7 @@ impl BandAnalyzer {
                     }
                 }
                 if noise_count > 0 && noise_power > 1e-12 {
-                    let sig_avg   = sig_power / sig_count.max(1) as f32;
+                    let sig_avg = sig_power / sig_count.max(1) as f32;
                     let noise_avg = noise_power / noise_count as f32;
                     ch_snr_sum += 10.0 * (sig_avg / noise_avg).log10();
                 }
@@ -629,23 +635,22 @@ impl BandAnalyzer {
             ch_alpha_abs_sum += abs_pwr[2]; // alpha band
 
             ch_powers.push(BandPowers {
-                channel:        CHANNEL_NAMES.get(ch).copied()
-                                    .unwrap_or("Ch?").to_string(),
-                delta:          abs_pwr[0],
-                theta:          abs_pwr[1],
-                alpha:          abs_pwr[2],
-                beta:           abs_pwr[3],
-                gamma:          abs_pwr[4],
-                high_gamma:     abs_pwr[5],
-                rel_delta:      rel[0],
-                rel_theta:      rel[1],
-                rel_alpha:      rel[2],
-                rel_beta:       rel[3],
-                rel_gamma:      rel[4],
+                channel: CHANNEL_NAMES.get(ch).copied().unwrap_or("Ch?").to_string(),
+                delta: abs_pwr[0],
+                theta: abs_pwr[1],
+                alpha: abs_pwr[2],
+                beta: abs_pwr[3],
+                gamma: abs_pwr[4],
+                high_gamma: abs_pwr[5],
+                rel_delta: rel[0],
+                rel_theta: rel[1],
+                rel_alpha: rel[2],
+                rel_beta: rel[3],
+                rel_gamma: rel[4],
                 rel_high_gamma: rel[5],
-                dominant:        BANDS[dom].0.to_string(),
+                dominant: BANDS[dom].0.to_string(),
                 dominant_symbol: BAND_SYMBOLS[dom].to_string(),
-                dominant_color:  BAND_COLORS[dom].to_string(),
+                dominant_color: BAND_COLORS[dom].to_string(),
             });
         }
 
@@ -658,14 +663,22 @@ impl BandAnalyzer {
         // Left-frontal  10-20 labels: AF7, AF3, F7, F3, Fp1, FC5, FC1, FT7
         // Right-frontal 10-20 labels: AF8, AF4, F8, F4, Fp2, FC6, FC2, FT8
         let faa = {
-            const LEFT:  &[&str] = &["AF7","AF3","F7","F3","Fp1","FC5","FC1","FT7"];
-            const RIGHT: &[&str] = &["AF8","AF4","F8","F4","Fp2","FC6","FC2","FT8"];
-            let mut l_sum = 0.0f32; let mut l_n = 0u32;
-            let mut r_sum = 0.0f32; let mut r_n = 0u32;
+            const LEFT: &[&str] = &["AF7", "AF3", "F7", "F3", "Fp1", "FC5", "FC1", "FT7"];
+            const RIGHT: &[&str] = &["AF8", "AF4", "F8", "F4", "Fp2", "FC6", "FC2", "FT8"];
+            let mut l_sum = 0.0f32;
+            let mut l_n = 0u32;
+            let mut r_sum = 0.0f32;
+            let mut r_n = 0u32;
             for ch in &ch_powers {
                 let name = ch.channel.as_str();
-                if LEFT.contains(&name)  { l_sum += ch.alpha; l_n += 1; }
-                if RIGHT.contains(&name) { r_sum += ch.alpha; r_n += 1; }
+                if LEFT.contains(&name) {
+                    l_sum += ch.alpha;
+                    l_n += 1;
+                }
+                if RIGHT.contains(&name) {
+                    r_sum += ch.alpha;
+                    r_n += 1;
+                }
             }
             if l_n > 0 && r_n > 0 {
                 let l_avg = (l_sum / l_n as f32).max(1e-6);
@@ -673,7 +686,7 @@ impl BandAnalyzer {
                 r_avg.ln() - l_avg.ln()
             } else if ch_powers.len() >= 3 {
                 // Fallback for generic labels: use indices [1] vs [2]
-                let left  = ch_powers[1].alpha.max(1e-6);
+                let left = ch_powers[1].alpha.max(1e-6);
                 let right = ch_powers[2].alpha.max(1e-6);
                 right.ln() - left.ln()
             } else {
@@ -687,7 +700,7 @@ impl BandAnalyzer {
             let alpha_safe = ch.rel_alpha.max(1e-8);
             let theta_safe = ch.rel_theta.max(1e-8);
             sum_tar += ch.rel_theta / alpha_safe;
-            sum_bar += ch.rel_beta  / alpha_safe;
+            sum_bar += ch.rel_beta / alpha_safe;
             sum_dtr += ch.rel_delta / theta_safe;
         }
         let tar = sum_tar / safe_nch;
@@ -699,7 +712,13 @@ impl BandAnalyzer {
         // Normalised by log₂(5) to give range [0, 1].
         let mut pse_sum = 0.0f32;
         for ch in &ch_powers {
-            let p = [ch.rel_delta, ch.rel_theta, ch.rel_alpha, ch.rel_beta, ch.rel_gamma];
+            let p = [
+                ch.rel_delta,
+                ch.rel_theta,
+                ch.rel_alpha,
+                ch.rel_beta,
+                ch.rel_gamma,
+            ];
             let total_p: f32 = p.iter().sum();
             let safe_t = if total_p > 1e-12 { total_p } else { 1.0 };
             let mut h = 0.0f32;
@@ -734,7 +753,7 @@ impl BandAnalyzer {
             let alphas: Vec<f32> = ch_powers.iter().map(|c| c.rel_alpha).collect();
             let n_pairs = ch_powers.len() * (ch_powers.len() - 1) / 2;
             let mean = alphas.iter().sum::<f32>() / alphas.len() as f32;
-            let var  = alphas.iter().map(|a| (a - mean).powi(2)).sum::<f32>() / alphas.len() as f32;
+            let var = alphas.iter().map(|a| (a - mean).powi(2)).sum::<f32>() / alphas.len() as f32;
             if var > 1e-12 {
                 let mut r_sum = 0.0f32;
                 for i in 0..alphas.len() {
@@ -759,8 +778,7 @@ impl BandAnalyzer {
             self.alpha_baseline = mean_alpha;
         } else {
             let ema_alpha = 0.02f32; // slow-moving baseline
-            self.alpha_baseline = ema_alpha * mean_alpha
-                + (1.0 - ema_alpha) * self.alpha_baseline;
+            self.alpha_baseline = ema_alpha * mean_alpha + (1.0 - ema_alpha) * self.alpha_baseline;
         }
         let mu_suppression = if self.alpha_baseline > 1e-12 {
             (mean_alpha / self.alpha_baseline).clamp(0.0, 5.0)
@@ -771,9 +789,9 @@ impl BandAnalyzer {
         // ── Mood index ───────────────────────────────────────────────────────
         // Weighted composite: FAA (approach), inverse TAR (alertness), BAR (focus).
         // Rescaled to 0–100.  Centre at 50.
-        let faa_norm = (faa * 5.0).clamp(-1.0, 1.0);       // ±0.2 → ±1
-        let tar_norm = 1.0 - tar.min(3.0) / 3.0;           // 0→1, 3→0
-        let bar_norm = bar.min(3.0) / 3.0;                  // 0→0, 3→1
+        let faa_norm = (faa * 5.0).clamp(-1.0, 1.0); // ±0.2 → ±1
+        let tar_norm = 1.0 - tar.min(3.0) / 3.0; // 0→1, 3→0
+        let bar_norm = bar.min(3.0) / 3.0; // 0→0, 3→1
         let mood = (50.0 + 20.0 * faa_norm + 15.0 * (tar_norm - 0.5) + 15.0 * (bar_norm - 0.5))
             .clamp(0.0, 100.0);
 
@@ -790,10 +808,14 @@ impl BandAnalyzer {
         let mut sc_sum = 0.0f32;
         for (real, imag) in spectra.iter().take(EEG_CHANNELS) {
             let psd_raw = psd(&real[..n_oneside], &imag[..n_oneside]);
-            let psd_scaled: Vec<f32> = psd_raw.iter().enumerate().map(|(k, &p)| {
-                let factor = if k == 0 || k == nyq_bin { 1.0f32 } else { 2.0 };
-                p * factor * abs_scale
-            }).collect();
+            let psd_scaled: Vec<f32> = psd_raw
+                .iter()
+                .enumerate()
+                .map(|(k, &p)| {
+                    let factor = if k == 0 || k == nyq_bin { 1.0f32 } else { 2.0 };
+                    p * factor * abs_scale
+                })
+                .collect();
             sef95_sum += spectral_edge_freq(&psd_scaled, bin_hz, 0.95);
             sc_sum += spectral_centroid_fn(&psd_scaled, bin_hz);
         }
@@ -801,28 +823,34 @@ impl BandAnalyzer {
         let spectral_centroid = sc_sum / safe_nch;
 
         // ── Time-domain metrics (averaged across channels) ───────────────────
-        let mut ha_sum = 0.0f32; let mut hm_sum = 0.0f32; let mut hc_sum = 0.0f32;
-        let mut pe_sum = 0.0f32; let mut hfd_sum = 0.0f32;
-        let mut dfa_sum = 0.0f32; let mut se_sum = 0.0f32;
+        let mut ha_sum = 0.0f32;
+        let mut hm_sum = 0.0f32;
+        let mut hc_sum = 0.0f32;
+        let mut pe_sum = 0.0f32;
+        let mut hfd_sum = 0.0f32;
+        let mut dfa_sum = 0.0f32;
+        let mut se_sum = 0.0f32;
         let mut pac_sum = 0.0f32;
         for ch_idx in 0..EEG_CHANNELS {
             let raw: Vec<f32> = self.window[ch_idx].iter().copied().collect();
             let (ha, hm, hc) = hjorth_params(&raw);
-            ha_sum += ha; hm_sum += hm; hc_sum += hc;
+            ha_sum += ha;
+            hm_sum += hm;
+            hc_sum += hc;
             pe_sum += permutation_entropy(&raw);
             hfd_sum += higuchi_fd(&raw);
             dfa_sum += dfa_exponent(&raw);
             se_sum += sample_entropy_fn(&raw);
             pac_sum += pac_theta_gamma_fn(&raw, self.sample_rate);
         }
-        let hjorth_activity   = ha_sum / safe_nch;
-        let hjorth_mobility   = hm_sum / safe_nch;
+        let hjorth_activity = ha_sum / safe_nch;
+        let hjorth_mobility = hm_sum / safe_nch;
         let hjorth_complexity = hc_sum / safe_nch;
         let permutation_entropy_val = pe_sum / safe_nch;
-        let higuchi_fd_val    = hfd_sum / safe_nch;
-        let dfa_exponent_val  = dfa_sum / safe_nch;
+        let higuchi_fd_val = hfd_sum / safe_nch;
+        let dfa_exponent_val = dfa_sum / safe_nch;
         let sample_entropy_val = se_sum / safe_nch;
-        let pac_theta_gamma   = pac_sum / safe_nch;
+        let pac_theta_gamma = pac_sum / safe_nch;
 
         // ── Laterality Index ─────────────────────────────────────────────────
         let laterality_index = laterality_index_fn(&ch_powers);
@@ -830,7 +858,7 @@ impl BandAnalyzer {
         // ── Consciousness Indices ─────────────────────────────
         // Mean relative band powers across channels (used throughout below)
         let mean_rel_alpha = ch_powers.iter().map(|c| c.rel_alpha).sum::<f32>() / safe_nch;
-        let mean_rel_beta  = ch_powers.iter().map(|c| c.rel_beta ).sum::<f32>() / safe_nch;
+        let mean_rel_beta = ch_powers.iter().map(|c| c.rel_beta).sum::<f32>() / safe_nch;
         let _mean_rel_theta = ch_powers.iter().map(|c| c.rel_theta).sum::<f32>() / safe_nch;
         let mean_rel_delta = ch_powers.iter().map(|c| c.rel_delta).sum::<f32>() / safe_nch;
         let _mean_rel_gamma = ch_powers.iter().map(|c| c.rel_gamma).sum::<f32>() / safe_nch;
@@ -842,10 +870,18 @@ impl BandAnalyzer {
         let drowsiness_proxy = (tar / 3.0 * 80.0 + mean_rel_alpha * 20.0).clamp(0.0, 100.0);
 
         // Mean engagement β/(α+θ) → sigmoid → 0–100
-        let mean_eng_raw = ch_powers.iter().map(|ch| {
-            let d = ch.rel_alpha + ch.rel_theta;
-            if d > 1e-6 { ch.rel_beta / d } else { 0.5 }
-        }).sum::<f32>() / safe_nch;
+        let mean_eng_raw = ch_powers
+            .iter()
+            .map(|ch| {
+                let d = ch.rel_alpha + ch.rel_theta;
+                if d > 1e-6 {
+                    ch.rel_beta / d
+                } else {
+                    0.5
+                }
+            })
+            .sum::<f32>()
+            / safe_nch;
         let _mean_engagement = 100.0_f32 / (1.0 + (-2.0 * (mean_eng_raw - 0.8)).exp());
 
         // ── Headache ──────────────────────────────────────────────────────────
@@ -854,7 +890,8 @@ impl BandAnalyzer {
         //
         let headache_index = (0.35 * c01(mean_rel_beta * 5.0)
             + 0.35 * (1.0 - c01(mean_rel_alpha * 4.0))
-            + 0.30 * c01(bar / 2.5)) * 100.0;
+            + 0.30 * c01(bar / 2.5))
+            * 100.0;
 
         // ── Migraine ──────────────────────────────────────────────────────────
         // Cortical spreading depression proxy: elevated delta + alpha suppression
@@ -864,7 +901,8 @@ impl BandAnalyzer {
         //
         let migraine_index = (0.40 * c01(mean_rel_delta * 6.0)
             + 0.35 * (1.0 - c01(mean_rel_alpha * 4.0))
-            + 0.25 * c01(laterality_index.abs() * 4.0)) * 100.0;
+            + 0.25 * c01(laterality_index.abs() * 4.0))
+            * 100.0;
 
         // ── Consciousness: Lempel-Ziv Complexity proxy ─────────────────────────
         // Signal information richness approximated via permutation entropy
@@ -873,7 +911,8 @@ impl BandAnalyzer {
         // LZC peaks in conscious states and collapses during NREM sleep / anaesthesia.
         //
         let consciousness_lzc = (0.60 * c01(permutation_entropy_val)
-            + 0.40 * c01((higuchi_fd_val - 1.0).max(0.0) / 1.5)) * 100.0;
+            + 0.40 * c01((higuchi_fd_val - 1.0).max(0.0) / 1.5))
+            * 100.0;
 
         // ── Consciousness: Wakefulness level ──────────────────────────────────
         // Inverse drowsiness modulated by BAR (alertness) and TAR (drowsiness).
@@ -882,7 +921,8 @@ impl BandAnalyzer {
         //
         let consciousness_wakefulness = (0.40 * c01(bar / 2.5)
             + 0.35 * (1.0 - c01(tar / 3.0))
-            + 0.25 * (1.0 - c01(drowsiness_proxy / 100.0))) * 100.0;
+            + 0.25 * (1.0 - c01(drowsiness_proxy / 100.0)))
+            * 100.0;
 
         // ── Consciousness: Information Integration proxy ───────────────────────
         // Global workspace proxy: inter-channel coherence × theta–gamma PAC
@@ -891,34 +931,64 @@ impl BandAnalyzer {
         // complex intra-regional dynamics — captured here by three complementary
         // measures.
         //
-        let consciousness_integration = (0.40 * c01(coherence * 2.5)
-            + 0.40 * c01(pac_theta_gamma * 3.0)
-            + 0.20 * c01(pse)) * 100.0;
+        let consciousness_integration =
+            (0.40 * c01(coherence * 2.5) + 0.40 * c01(pac_theta_gamma * 3.0) + 0.20 * c01(pse))
+                * 100.0;
 
         self.latest = Some(BandSnapshot {
             timestamp: now,
             channels: ch_powers,
-            faa, tar, bar, dtr, pse, apf, bps, snr,
-            coherence, mu_suppression, mood,
-            tbr, sef95, spectral_centroid,
-            hjorth_activity, hjorth_mobility, hjorth_complexity,
+            faa,
+            tar,
+            bar,
+            dtr,
+            pse,
+            apf,
+            bps,
+            snr,
+            coherence,
+            mu_suppression,
+            mood,
+            tbr,
+            sef95,
+            spectral_centroid,
+            hjorth_activity,
+            hjorth_mobility,
+            hjorth_complexity,
             permutation_entropy: permutation_entropy_val,
             higuchi_fd: higuchi_fd_val,
             dfa_exponent: dfa_exponent_val,
             sample_entropy: sample_entropy_val,
             pac_theta_gamma,
             laterality_index,
-            headache_index, migraine_index,
-            consciousness_lzc, consciousness_wakefulness, consciousness_integration,
-            hr: None, rmssd: None, sdnn: None, pnn50: None,
-            lf_hf_ratio: None, respiratory_rate: None, spo2_estimate: None,
-            perfusion_index: None, stress_index: None,
-            blink_count: None, blink_rate: None,
-            head_pitch: None, head_roll: None, stillness: None,
-            nod_count: None, shake_count: None,
-            meditation: None, cognitive_load: None, drowsiness: None,
+            headache_index,
+            migraine_index,
+            consciousness_lzc,
+            consciousness_wakefulness,
+            consciousness_integration,
+            hr: None,
+            rmssd: None,
+            sdnn: None,
+            pnn50: None,
+            lf_hf_ratio: None,
+            respiratory_rate: None,
+            spo2_estimate: None,
+            perfusion_index: None,
+            stress_index: None,
+            blink_count: None,
+            blink_rate: None,
+            head_pitch: None,
+            head_roll: None,
+            stillness: None,
+            nod_count: None,
+            shake_count: None,
+            meditation: None,
+            cognitive_load: None,
+            drowsiness: None,
             temperature_raw: None,
-            gpu_overall: None, gpu_render: None, gpu_tiler: None,
+            gpu_overall: None,
+            gpu_render: None,
+            gpu_tiler: None,
         });
     }
 }
@@ -952,17 +1022,21 @@ mod tests {
         // equally and the batch fires with all channels populated.
         for i in 0..signal.len() {
             for ch in 0..n_ch {
-                a.push(ch, &signal[i..i+1]);
+                a.push(ch, &signal[i..i + 1]);
             }
         }
-        a.latest.expect("signal was long enough but snapshot is None")
+        a.latest
+            .expect("signal was long enough but snapshot is None")
     }
 
     // ── Constants sanity ──────────────────────────────────────────────────────
 
     #[test]
     fn band_window_is_power_of_two() {
-        assert!(BAND_WINDOW.is_power_of_two(), "BAND_WINDOW must be a power of two for FFT");
+        assert!(
+            BAND_WINDOW.is_power_of_two(),
+            "BAND_WINDOW must be a power of two for FFT"
+        );
     }
 
     #[test]
@@ -987,7 +1061,10 @@ mod tests {
         for ch in 0..EEG_CHANNELS {
             a.push(ch, &short);
         }
-        assert!(a.latest.is_none(), "snapshot must not be produced before window is full");
+        assert!(
+            a.latest.is_none(),
+            "snapshot must not be produced before window is full"
+        );
     }
 
     #[test]
@@ -1028,11 +1105,16 @@ mod tests {
         let signal = sine(10.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
-            let sum = ch.rel_delta + ch.rel_theta + ch.rel_alpha
-                + ch.rel_beta + ch.rel_gamma + ch.rel_high_gamma;
+            let sum = ch.rel_delta
+                + ch.rel_theta
+                + ch.rel_alpha
+                + ch.rel_beta
+                + ch.rel_gamma
+                + ch.rel_high_gamma;
             assert!(
                 (sum - 1.0).abs() < 1e-4,
-                "{}: relative powers sum to {sum}, expected 1.0", ch.channel
+                "{}: relative powers sum to {sum}, expected 1.0",
+                ch.channel
             );
         }
     }
@@ -1042,11 +1124,11 @@ mod tests {
         let signal = sine(10.0, BAND_WINDOW * 2);
         let s = run(&signal);
         for ch in &s.channels {
-            assert!(ch.rel_delta      >= 0.0);
-            assert!(ch.rel_theta      >= 0.0);
-            assert!(ch.rel_alpha      >= 0.0);
-            assert!(ch.rel_beta       >= 0.0);
-            assert!(ch.rel_gamma      >= 0.0);
+            assert!(ch.rel_delta >= 0.0);
+            assert!(ch.rel_theta >= 0.0);
+            assert!(ch.rel_alpha >= 0.0);
+            assert!(ch.rel_beta >= 0.0);
+            assert!(ch.rel_gamma >= 0.0);
             assert!(ch.rel_high_gamma >= 0.0);
         }
     }
@@ -1062,11 +1144,14 @@ mod tests {
         for ch in &s.channels {
             assert_eq!(
                 ch.dominant, "alpha",
-                "{}: expected alpha dominant, got '{}'", ch.channel, ch.dominant
+                "{}: expected alpha dominant, got '{}'",
+                ch.channel, ch.dominant
             );
             assert!(
                 ch.rel_alpha > 0.8,
-                "{}: rel_alpha = {:.3}, expected > 0.8", ch.channel, ch.rel_alpha
+                "{}: rel_alpha = {:.3}, expected > 0.8",
+                ch.channel,
+                ch.rel_alpha
             );
         }
     }
@@ -1077,10 +1162,16 @@ mod tests {
         let signal = sine(20.0, BAND_WINDOW * 4);
         let s = run(&signal);
         for ch in &s.channels {
-            assert_eq!(ch.dominant, "beta", "{}: dominant = '{}'", ch.channel, ch.dominant);
+            assert_eq!(
+                ch.dominant, "beta",
+                "{}: dominant = '{}'",
+                ch.channel, ch.dominant
+            );
             assert!(
                 ch.rel_beta > 0.8,
-                "{}: rel_beta = {:.3}", ch.channel, ch.rel_beta
+                "{}: rel_beta = {:.3}",
+                ch.channel,
+                ch.rel_beta
             );
         }
     }
@@ -1091,8 +1182,17 @@ mod tests {
         let signal = sine(6.0, BAND_WINDOW * 4);
         let s = run(&signal);
         for ch in &s.channels {
-            assert_eq!(ch.dominant, "theta", "{}: dominant = '{}'", ch.channel, ch.dominant);
-            assert!(ch.rel_theta > 0.7, "{}: rel_theta = {:.3}", ch.channel, ch.rel_theta);
+            assert_eq!(
+                ch.dominant, "theta",
+                "{}: dominant = '{}'",
+                ch.channel, ch.dominant
+            );
+            assert!(
+                ch.rel_theta > 0.7,
+                "{}: rel_theta = {:.3}",
+                ch.channel,
+                ch.rel_theta
+            );
         }
     }
 
@@ -1102,8 +1202,17 @@ mod tests {
         let signal = sine(2.0, BAND_WINDOW * 4);
         let s = run(&signal);
         for ch in &s.channels {
-            assert_eq!(ch.dominant, "delta", "{}: dominant = '{}'", ch.channel, ch.dominant);
-            assert!(ch.rel_delta > 0.7, "{}: rel_delta = {:.3}", ch.channel, ch.rel_delta);
+            assert_eq!(
+                ch.dominant, "delta",
+                "{}: dominant = '{}'",
+                ch.channel, ch.dominant
+            );
+            assert!(
+                ch.rel_delta > 0.7,
+                "{}: rel_delta = {:.3}",
+                ch.channel,
+                ch.rel_delta
+            );
         }
     }
 
@@ -1113,8 +1222,17 @@ mod tests {
         let signal = sine(40.0, BAND_WINDOW * 4);
         let s = run(&signal);
         for ch in &s.channels {
-            assert_eq!(ch.dominant, "gamma", "{}: dominant = '{}'", ch.channel, ch.dominant);
-            assert!(ch.rel_gamma > 0.7, "{}: rel_gamma = {:.3}", ch.channel, ch.rel_gamma);
+            assert_eq!(
+                ch.dominant, "gamma",
+                "{}: dominant = '{}'",
+                ch.channel, ch.dominant
+            );
+            assert!(
+                ch.rel_gamma > 0.7,
+                "{}: rel_gamma = {:.3}",
+                ch.channel,
+                ch.rel_gamma
+            );
         }
     }
 
@@ -1126,11 +1244,14 @@ mod tests {
         for ch in &s.channels {
             assert_eq!(
                 ch.dominant, "high_gamma",
-                "{}: dominant = '{}'", ch.channel, ch.dominant
+                "{}: dominant = '{}'",
+                ch.channel, ch.dominant
             );
             assert!(
                 ch.rel_high_gamma > 0.7,
-                "{}: rel_high_gamma = {:.3}", ch.channel, ch.rel_high_gamma
+                "{}: rel_high_gamma = {:.3}",
+                ch.channel,
+                ch.rel_high_gamma
             );
         }
     }
@@ -1144,19 +1265,14 @@ mod tests {
         let n = BAND_WINDOW * 4;
         // ch0 → alpha (10 Hz), ch1 → beta (20 Hz),
         // ch2 → theta (6 Hz),  ch3 → delta (2 Hz)
-        let signals = [
-            sine(10.0, n),
-            sine(20.0, n),
-            sine(6.0,  n),
-            sine(2.0,  n),
-        ];
+        let signals = [sine(10.0, n), sine(20.0, n), sine(6.0, n), sine(2.0, n)];
         let expected = ["alpha", "beta", "theta", "delta"];
 
         let mut a = BandAnalyzer::new();
         // Push interleaved so all 4 channels accumulate equally.
         for i in 0..n {
             for (ch, sig) in signals.iter().enumerate() {
-                a.push(ch, &sig[i..i+1]);
+                a.push(ch, &sig[i..i + 1]);
             }
         }
         let s = a.latest.expect("snapshot should exist");
@@ -1178,9 +1294,11 @@ mod tests {
         let s = run(&signal);
         for ch in &s.channels {
             // alpha → "α"
-            assert_eq!(ch.dominant_symbol, "α",
+            assert_eq!(
+                ch.dominant_symbol, "α",
                 "{}: symbol '{}' doesn't match dominant '{}'",
-                ch.channel, ch.dominant_symbol, ch.dominant);
+                ch.channel, ch.dominant_symbol, ch.dominant
+            );
         }
     }
 
@@ -1202,8 +1320,12 @@ mod tests {
         let signal = vec![0.0_f64; BAND_WINDOW * 2];
         let s = run(&signal);
         for ch in &s.channels {
-            let sum = ch.rel_delta + ch.rel_theta + ch.rel_alpha
-                + ch.rel_beta + ch.rel_gamma + ch.rel_high_gamma;
+            let sum = ch.rel_delta
+                + ch.rel_theta
+                + ch.rel_alpha
+                + ch.rel_beta
+                + ch.rel_gamma
+                + ch.rel_high_gamma;
             // All zero → sum = 0, not 1 (zero signal has no valid distribution)
             assert!(sum.is_finite(), "{}: sum is not finite", ch.channel);
         }
@@ -1228,7 +1350,9 @@ mod tests {
     fn reset_clears_all_state() {
         let signal = vec![1.0_f64; BAND_WINDOW * 2];
         let mut a = BandAnalyzer::new();
-        for ch in 0..EEG_CHANNELS { a.push(ch, &signal); }
+        for ch in 0..EEG_CHANNELS {
+            a.push(ch, &signal);
+        }
         assert!(a.latest.is_some());
         a.reset();
         assert!(a.latest.is_none());
@@ -1245,7 +1369,9 @@ mod tests {
         let n = BAND_WINDOW * 6;
         let signal = sine(10.0, n);
         let mut a = BandAnalyzer::new();
-        for ch in 0..EEG_CHANNELS { a.push(ch, &signal); }
+        for ch in 0..EEG_CHANNELS {
+            a.push(ch, &signal);
+        }
         // Every hop after the first full window should update `latest`.
         let ts1 = a.latest.as_ref().unwrap().timestamp;
 
@@ -1253,7 +1379,9 @@ mod tests {
         let extra = sine(10.0, BAND_HOP);
         // Short sleep so the wall-clock timestamp can advance.
         std::thread::sleep(std::time::Duration::from_millis(5));
-        for ch in 0..EEG_CHANNELS { a.push(ch, &extra); }
+        for ch in 0..EEG_CHANNELS {
+            a.push(ch, &extra);
+        }
 
         let ts2 = a.latest.as_ref().unwrap().timestamp;
         assert!(ts2 >= ts1, "timestamp should advance with each snapshot");

@@ -24,13 +24,21 @@ use anyhow::Context;
 /// Returns `true` if launch-at-login is currently registered for this app.
 pub fn is_enabled(app_name: &str) -> bool {
     #[cfg(target_os = "macos")]
-    { macos::is_enabled(app_name) }
+    {
+        macos::is_enabled(app_name)
+    }
     #[cfg(target_os = "linux")]
-    { linux::is_enabled(app_name) }
+    {
+        linux::is_enabled(app_name)
+    }
     #[cfg(target_os = "windows")]
-    { windows::is_enabled(app_name) }
+    {
+        windows::is_enabled(app_name)
+    }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { false }
+    {
+        false
+    }
 }
 
 /// Enable or disable launch-at-login.
@@ -58,7 +66,10 @@ fn enable(app_name: &str, exe: &str) -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     return windows::enable(app_name, exe);
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { let _ = (app_name, exe); Err(anyhow::anyhow!("autostart not supported on this platform")) }
+    {
+        let _ = (app_name, exe);
+        Err(anyhow::anyhow!("autostart not supported on this platform"))
+    }
 }
 
 fn disable(app_name: &str) -> anyhow::Result<()> {
@@ -69,22 +80,25 @@ fn disable(app_name: &str) -> anyhow::Result<()> {
     #[cfg(target_os = "windows")]
     return windows::disable(app_name);
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { let _ = app_name; Err(anyhow::anyhow!("autostart not supported on this platform")) }
+    {
+        let _ = app_name;
+        Err(anyhow::anyhow!("autostart not supported on this platform"))
+    }
 }
 
 // ── macOS — LaunchAgent plist ─────────────────────────────────────────────────
 
 #[cfg(target_os = "macos")]
 mod macos {
-    use std::path::PathBuf;
     use anyhow::Context;
     use skill_constants::AUTOSTART_PLIST_LABEL_PREFIX;
+    use std::path::PathBuf;
 
     fn plist_path(app_name: &str) -> Option<PathBuf> {
         std::env::var("HOME").ok().map(|h| {
-            PathBuf::from(h)
-                .join("Library/LaunchAgents")
-                .join(format!("{AUTOSTART_PLIST_LABEL_PREFIX}.{app_name}.loginitem.plist"))
+            PathBuf::from(h).join("Library/LaunchAgents").join(format!(
+                "{AUTOSTART_PLIST_LABEL_PREFIX}.{app_name}.loginitem.plist"
+            ))
         })
     }
 
@@ -94,7 +108,9 @@ mod macos {
 
     pub fn enable(app_name: &str, exe: &str) -> anyhow::Result<()> {
         let path = plist_path(app_name).ok_or_else(|| anyhow::anyhow!("HOME not set"))?;
-        if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         let label = format!("{AUTOSTART_PLIST_LABEL_PREFIX}.{app_name}.loginitem");
         let plist = format!(
             r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -118,15 +134,13 @@ mod macos {
 </plist>
 "#
         );
-        std::fs::write(&path, plist)
-            .context("failed to write LaunchAgent")
+        std::fs::write(&path, plist).context("failed to write LaunchAgent")
     }
 
     pub fn disable(app_name: &str) -> anyhow::Result<()> {
         let path = plist_path(app_name).ok_or_else(|| anyhow::anyhow!("HOME not set"))?;
         if path.exists() {
-            std::fs::remove_file(&path)
-                .context("failed to remove LaunchAgent")?;
+            std::fs::remove_file(&path).context("failed to remove LaunchAgent")?;
         }
         Ok(())
     }
@@ -136,8 +150,8 @@ mod macos {
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use std::path::PathBuf;
     use anyhow::Context;
+    use std::path::PathBuf;
 
     fn desktop_path(app_name: &str) -> PathBuf {
         let base = std::env::var("XDG_CONFIG_HOME")
@@ -146,8 +160,7 @@ mod linux {
                 let h = std::env::var("HOME").unwrap_or_default();
                 PathBuf::from(h).join(".config")
             });
-        base.join("autostart")
-            .join(format!("{app_name}.desktop"))
+        base.join("autostart").join(format!("{app_name}.desktop"))
     }
 
     pub fn is_enabled(app_name: &str) -> bool {
@@ -156,7 +169,9 @@ mod linux {
 
     pub fn enable(app_name: &str, exe: &str) -> anyhow::Result<()> {
         let path = desktop_path(app_name);
-        if let Some(parent) = path.parent() { let _ = std::fs::create_dir_all(parent); }
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         // Capitalise first letter for display name
         let display = {
             let mut c = app_name.chars();
@@ -169,15 +184,13 @@ mod linux {
             "[Desktop Entry]\nType=Application\nName={display}\nExec={exe}\n\
              Hidden=false\nNoDisplay=false\nX-GNOME-Autostart-enabled=true\n"
         );
-        std::fs::write(&path, desktop)
-            .context("failed to write autostart .desktop")
+        std::fs::write(&path, desktop).context("failed to write autostart .desktop")
     }
 
     pub fn disable(app_name: &str) -> anyhow::Result<()> {
         let path = desktop_path(app_name);
         if path.exists() {
-            std::fs::remove_file(&path)
-                .context("failed to remove autostart .desktop")?;
+            std::fs::remove_file(&path).context("failed to remove autostart .desktop")?;
         }
         Ok(())
     }
@@ -241,8 +254,7 @@ mod tests {
 mod windows {
     use anyhow::Context;
 
-    const REG_PATH: &str =
-        r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+    const REG_PATH: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
 
     pub fn is_enabled(app_name: &str) -> bool {
         std::process::Command::new("reg")
@@ -254,8 +266,9 @@ mod windows {
 
     pub fn enable(app_name: &str, exe: &str) -> anyhow::Result<()> {
         let out = std::process::Command::new("reg")
-            .args(["add", REG_PATH, "/v", app_name,
-                   "/t", "REG_SZ", "/d", exe, "/f"])
+            .args([
+                "add", REG_PATH, "/v", app_name, "/t", "REG_SZ", "/d", exe, "/f",
+            ])
             .output()
             .context("reg add failed")?;
         if out.status.success() {

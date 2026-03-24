@@ -6,22 +6,27 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Appearance tab — Font Size · Theme · Chart Color Scheme -->
 <script lang="ts">
-  import { Card, CardContent } from "$lib/components/ui/card";
-  import { t }                 from "$lib/i18n/index.svelte";
-  import { getFontSize, setFontSize, FONT_SIZE_PRESETS } from "$lib/stores/font-size.svelte";
-  import {
-    getTheme, setTheme, getHighContrast, toggleHighContrast,
-    getAccentId, setAccent, ACCENT_PRESETS,
-  } from "$lib/stores/theme.svelte";
-  import type { ThemeMode } from "$lib/stores/theme.svelte";
-  import { getChartScheme, setChartScheme, CHART_SCHEMES, type ChartScheme } from "$lib/stores/chart-colors.svelte";
-  import { EEG_CH } from "$lib/constants";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { EEG_CH } from "$lib/constants";
+import { t } from "$lib/i18n/index.svelte";
+import { CHART_SCHEMES, type ChartScheme, getChartScheme, setChartScheme } from "$lib/stores/chart-colors.svelte";
+import { FONT_SIZE_PRESETS, getFontSize, setFontSize } from "$lib/stores/font-size.svelte";
+import type { ThemeMode } from "$lib/stores/theme.svelte";
+import {
+  ACCENT_PRESETS,
+  getAccentId,
+  getHighContrast,
+  getTheme,
+  setAccent,
+  setTheme,
+  toggleHighContrast,
+} from "$lib/stores/theme.svelte";
 
-  const THEME_OPTIONS: { value: ThemeMode; icon: string; labelKey: string }[] = [
-    { value: "system", icon: "💻", labelKey: "appearance.themeSystem" },
-    { value: "light",  icon: "☀️", labelKey: "appearance.themeLight" },
-    { value: "dark",   icon: "🌙", labelKey: "appearance.themeDark" },
-  ];
+const THEME_OPTIONS: { value: ThemeMode; icon: string; labelKey: string }[] = [
+  { value: "system", icon: "💻", labelKey: "appearance.themeSystem" },
+  { value: "light", icon: "☀️", labelKey: "appearance.themeLight" },
+  { value: "dark", icon: "🌙", labelKey: "appearance.themeDark" },
+];
 </script>
 
 <div class="flex flex-col gap-5">

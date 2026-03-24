@@ -12,7 +12,8 @@ const screenshots: Record<string, string> = {
   "screenshots.sessionOnlyToggle": "Screenshots",
   "screenshots.sessionOnlyDesc": "Screenshots",
   "screenshots.interval": "תדירות צילום",
-  "screenshots.intervalDesc": "מיושר עם תקופות הטמעת EEG (5 שניות כל אחת). 1× = כל תקופה, 2× = כל תקופה שנייה, עד 12× (60 שניות).",
+  "screenshots.intervalDesc":
+    "מיושר עם תקופות הטמעת EEG (5 שניות כל אחת). 1× = כל תקופה, 2× = כל תקופה שנייה, עד 12× (60 שניות).",
   "screenshots.intervalUnit": "ש",
   "screenshots.intervalEpoch": "תקופה",
   "screenshots.imageSize": "Screenshots",
@@ -25,7 +26,7 @@ const screenshots: Record<string, string> = {
   "screenshots.embeddingModelDesc": "Screenshots",
   "screenshots.backendFastembed": "fastembed (ONNX)",
   "screenshots.backendMmproj": "mmproj",
-  "screenshots.backendLlmVlm":                   "LLM VLM (embed + OCR via vision model)",
+  "screenshots.backendLlmVlm": "LLM VLM (embed + OCR via vision model)",
   "screenshots.modelClip": "CLIP ViT-B/32 — 512d",
   "screenshots.modelNomic": "Nomic Embed Vision v1.5 — 768d",
   "screenshots.reembed": "Screenshots",
@@ -46,7 +47,8 @@ const screenshots: Record<string, string> = {
   "screenshots.unembeddedCount": "Screenshots",
   "screenshots.staleCount": "Screenshots",
   "screenshots.permissionRequired": "נדרשת הרשאת הקלטת מסך",
-  "screenshots.permissionDesc": "macOS דורש הרשאת הקלטת מסך ואודיו מערכת כדי ללכוד חלונות יישומים אחרים. ללא הרשאה זו, צילומי מסך עלולים להיות ריקים או להציג רק את היישום שלך.",
+  "screenshots.permissionDesc":
+    "macOS דורש הרשאת הקלטת מסך ואודיו מערכת כדי ללכוד חלונות יישומים אחרים. ללא הרשאה זו, צילומי מסך עלולים להיות ריקים או להציג רק את היישום שלך.",
   "screenshots.permissionGranted": "הרשאת הקלטת מסך אושרה.",
   "screenshots.openPermissionSettings": "פתח הגדרות הקלטת מסך",
   "screenshots.ocrToggle": "חילוץ טקסט OCR",
@@ -61,7 +63,8 @@ const screenshots: Record<string, string> = {
   "screenshots.ocrInference": "הסקה",
   "screenshots.ocrTitle": "חילוץ טקסט OCR",
   "screenshots.ocrEngine": "OCR על המכשיר",
-  "screenshots.ocrDesc": "טקסט מחולץ מכל צילום מסך ברזולוציה מלאה לפני הקטנה באמצעות מנוע ocrs. הטקסט המחולץ מוטמע עם BGE-Small-EN-v1.5 ומאונדקס באינדקס HNSW נפרד לחיפוש טקסט סמנטי. מודלי OCR (~10 MB כל אחד) יורדים אוטומטית בשימוש הראשון.",
+  "screenshots.ocrDesc":
+    "טקסט מחולץ מכל צילום מסך ברזולוציה מלאה לפני הקטנה באמצעות מנוע ocrs. הטקסט המחולץ מוטמע עם BGE-Small-EN-v1.5 ומאונדקס באינדקס HNSW נפרד לחיפוש טקסט סמנטי. מודלי OCR (~10 MB כל אחד) יורדים אוטומטית בשימוש הראשון.",
   "screenshots.ocrDetModel": "מודל זיהוי",
   "screenshots.ocrRecModel": "מודל קריאה",
   "screenshots.ocrTextEmbed": "הטמעת טקסט",

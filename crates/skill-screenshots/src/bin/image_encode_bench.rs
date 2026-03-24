@@ -53,7 +53,8 @@ fn resize_fit_pad(img: &DynamicImage, target: u32) -> DynamicImage {
 
 fn encode_png(img: &DynamicImage) -> Vec<u8> {
     let mut buf = Vec::new();
-    img.write_to(&mut Cursor::new(&mut buf), ImageFormat::Png).unwrap();
+    img.write_to(&mut Cursor::new(&mut buf), ImageFormat::Png)
+        .unwrap();
     buf
 }
 
@@ -67,7 +68,8 @@ fn encode_jpeg(img: &DynamicImage, quality: u8) -> Vec<u8> {
 
 fn encode_webp(img: &DynamicImage) -> Vec<u8> {
     let mut buf = Vec::new();
-    img.write_to(&mut Cursor::new(&mut buf), ImageFormat::WebP).unwrap();
+    img.write_to(&mut Cursor::new(&mut buf), ImageFormat::WebP)
+        .unwrap();
     buf
 }
 
@@ -80,10 +82,10 @@ fn hash_pixels(img: &DynamicImage) -> u64 {
 // ── Benchmark runner ─────────────────────────────────────────────────────────
 
 struct BenchResult {
-    name:       String,
+    name: String,
     iterations: u32,
-    total:      Duration,
-    output_kb:  Option<f64>,
+    total: Duration,
+    output_kb: Option<f64>,
 }
 
 impl BenchResult {
@@ -108,29 +110,39 @@ fn bench<F: FnMut() -> usize>(name: &str, warmup: u32, iters: u32, mut f: F) -> 
         name: name.to_string(),
         iterations: iters,
         total,
-        output_kb: if last_size > 0 { Some(last_size as f64 / 1024.0) } else { None },
+        output_kb: if last_size > 0 {
+            Some(last_size as f64 / 1024.0)
+        } else {
+            None
+        },
     }
 }
 
 fn print_results(results: &[BenchResult]) {
     // Use the old pipeline round-trip as the baseline for comparison.
-    let baseline = results.iter()
+    let baseline = results
+        .iter()
         .find(|r| r.name.starts_with("OLD:"))
         .map(BenchResult::avg_ms)
         .unwrap_or(1.0);
 
     // Find the fastest entry for a marker.
-    let fastest_ms = results.iter()
+    let fastest_ms = results
+        .iter()
         .map(BenchResult::avg_ms)
         .fold(f64::INFINITY, f64::min);
 
     println!();
-    println!("  {:<44}  {:>9}  {:>9}  {:>12}", "Operation", "Avg (ms)", "Size KB", "vs old pipe");
+    println!(
+        "  {:<44}  {:>9}  {:>9}  {:>12}",
+        "Operation", "Avg (ms)", "Size KB", "vs old pipe"
+    );
     println!("  {}", "-".repeat(84));
 
     for r in results {
         let avg = r.avg_ms();
-        let size_str = r.output_kb
+        let size_str = r
+            .output_kb
             .map(|kb| format!("{kb:.1}"))
             .unwrap_or_else(|| "-".to_string());
         let speedup = baseline / avg;
@@ -141,8 +153,15 @@ fn print_results(results: &[BenchResult]) {
         } else {
             format!("{:.1}x slower", 1.0 / speedup)
         };
-        let marker = if (avg - fastest_ms).abs() < 0.001 && avg > 0.01 { " *" } else { "" };
-        println!("  {:<44}  {:>9.2}  {:>9}  {:>12}{}", r.name, avg, size_str, speedup_str, marker);
+        let marker = if (avg - fastest_ms).abs() < 0.001 && avg > 0.01 {
+            " *"
+        } else {
+            ""
+        };
+        println!(
+            "  {:<44}  {:>9.2}  {:>9}  {:>12}{}",
+            r.name, avg, size_str, speedup_str, marker
+        );
     }
     println!();
 }
@@ -157,7 +176,7 @@ fn main() {
     ];
     let target = 768u32; // default image_size in config
     let warmup = 3u32;
-    let iters  = 20u32;
+    let iters = 20u32;
 
     println!("==========================================================");
     println!("  Screenshot Pipeline Image Encoding Benchmark");
@@ -175,67 +194,80 @@ fn main() {
         // ── Resize (capture thread cost) ──
         results.push(bench(
             &format!("Resize {w}x{h} -> {target}x{target}"),
-            warmup, iters,
-            || { let _ = resize_fit_pad(&source, target); 0 },
+            warmup,
+            iters,
+            || {
+                let _ = resize_fit_pad(&source, target);
+                0
+            },
         ));
 
         // ── Pixel hash (duplicate detection) ──
         results.push(bench(
             "Hash pixels (duplicate detect)",
-            warmup, iters,
-            || { hash_pixels(&resized); 0 },
+            warmup,
+            iters,
+            || {
+                hash_pixels(&resized);
+                0
+            },
         ));
 
         // ── DynamicImage clone (channel send cost) ──
         results.push(bench(
             "DynamicImage::clone (new pipeline)",
-            warmup, iters,
-            || { let c = resized.clone(); c.as_bytes().len() },
+            warmup,
+            iters,
+            || {
+                let c = resized.clone();
+                c.as_bytes().len()
+            },
         ));
 
         // ── PNG encode (old pipeline) ──
-        results.push(bench(
-            "PNG encode (old pipeline)",
-            warmup, iters,
-            || { encode_png(&resized).len() },
-        ));
+        results.push(bench("PNG encode (old pipeline)", warmup, iters, || {
+            encode_png(&resized).len()
+        }));
 
         // ── JPEG encode (new pipeline, various quality) ──
         for q in [70u8, 85, 95] {
             results.push(bench(
                 &format!("JPEG encode q={q} (new pipeline)"),
-                warmup, iters,
-                || { encode_jpeg(&resized, q).len() },
+                warmup,
+                iters,
+                || encode_jpeg(&resized, q).len(),
             ));
         }
 
         // ── WebP encode (disk storage) ──
-        results.push(bench(
-            "WebP encode (disk storage)",
-            warmup, iters,
-            || { encode_webp(&resized).len() },
-        ));
+        results.push(bench("WebP encode (disk storage)", warmup, iters, || {
+            encode_webp(&resized).len()
+        }));
 
         // ── PNG decode (fastembed old overhead) ──
         let png_bytes = encode_png(&resized);
         results.push(bench(
             "PNG decode (fastembed overhead)",
-            warmup, iters,
-            || { let img = image::load_from_memory(&png_bytes).unwrap(); img.as_bytes().len() },
+            warmup,
+            iters,
+            || {
+                let img = image::load_from_memory(&png_bytes).unwrap();
+                img.as_bytes().len()
+            },
         ));
 
         // ── JPEG decode ──
         let jpeg_bytes = encode_jpeg(&resized, 85);
-        results.push(bench(
-            "JPEG decode",
-            warmup, iters,
-            || { let img = image::load_from_memory(&jpeg_bytes).unwrap(); img.as_bytes().len() },
-        ));
+        results.push(bench("JPEG decode", warmup, iters, || {
+            let img = image::load_from_memory(&jpeg_bytes).unwrap();
+            img.as_bytes().len()
+        }));
 
         // ── Full old pipeline: PNG encode + decode ──
         results.push(bench(
             "OLD: PNG encode + decode (round-trip)",
-            warmup, iters,
+            warmup,
+            iters,
             || {
                 let png = encode_png(&resized);
                 let _ = image::load_from_memory(&png).unwrap();
@@ -246,8 +278,12 @@ fn main() {
         // ── Full new pipeline: clone only ──
         results.push(bench(
             "NEW: DynamicImage clone (zero encode)",
-            warmup, iters,
-            || { let c = resized.clone(); c.as_bytes().len() },
+            warmup,
+            iters,
+            || {
+                let c = resized.clone();
+                c.as_bytes().len()
+            },
         ));
 
         print_results(&results);

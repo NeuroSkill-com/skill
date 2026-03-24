@@ -29,21 +29,16 @@ let nextId = 0;
 export const toasts = $state<Toast[]>([]);
 
 const DEFAULT_DURATIONS: Record<ToastLevel, number> = {
-  info:    5_000,
+  info: 5_000,
   success: 4_000,
   warning: 6_000,
-  error:   8_000,
+  error: 8_000,
 };
 
 /**
  * Add a toast notification.  Returns the toast id (useful for programmatic dismissal).
  */
-export function addToast(
-  level: ToastLevel,
-  title: string,
-  message: string,
-  duration?: number,
-): number {
+export function addToast(level: ToastLevel, title: string, message: string, duration?: number): number {
   const id = nextId++;
   const dur = duration ?? DEFAULT_DURATIONS[level];
   toasts.push({ id, level, title, message, duration: dur });

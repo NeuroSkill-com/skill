@@ -15,6 +15,6 @@ pub mod svg_3d;
 mod tests;
 
 // Re-export the public API so existing `graph::*` imports keep working.
-pub use dot::{dot_esc, dot_node_label, dot_edge_label, generate_dot};
-pub use svg::{SvgLabels, generate_svg};
+pub use dot::{dot_edge_label, dot_esc, dot_node_label, generate_dot};
+pub use svg::{generate_svg, SvgLabels};
 pub use svg_3d::generate_svg_3d;

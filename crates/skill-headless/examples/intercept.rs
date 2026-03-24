@@ -14,12 +14,18 @@ fn main() {
         ($name:expr, $body:block) => {{
             print!("[TEST] {:<60}", $name);
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| $body)) {
-                Ok(_) => { println!(" PASS"); passed += 1; }
+                Ok(_) => {
+                    println!(" PASS");
+                    passed += 1;
+                }
                 Err(e) => {
-                    let msg = e.downcast_ref::<String>().map(|s| s.as_str())
+                    let msg = e
+                        .downcast_ref::<String>()
+                        .map(|s| s.as_str())
                         .or_else(|| e.downcast_ref::<&str>().copied())
                         .unwrap_or("unknown panic");
-                    println!(" FAIL: {msg}"); failed += 1;
+                    println!(" FAIL: {msg}");
+                    failed += 1;
                 }
             }
         }};
@@ -63,19 +69,27 @@ fn main() {
 
     test!("Intercepts fetch() GET request", {
         // Clear any prior data
-        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
+        browser
+            .send(Command::GetInterceptedRequests { clear: true })
+            .unwrap();
 
         // Make a fetch call (will fail to connect, but we still intercept it)
-        browser.send(Command::EvalJsNoReturn {
-            script: "fetch('https://httpbin.org/get?test=1').catch(function(){});".into(),
-        }).unwrap();
+        browser
+            .send(Command::EvalJsNoReturn {
+                script: "fetch('https://httpbin.org/get?test=1').catch(function(){});".into(),
+            })
+            .unwrap();
         std::thread::sleep(Duration::from_millis(1000));
 
         let resp = browser
             .send(Command::GetInterceptedRequests { clear: false })
             .unwrap();
         let log = resp.as_network().unwrap();
-        println!("  (reqs: {}, resps: {})", log.requests.len(), log.responses.len());
+        println!(
+            "  (reqs: {}, resps: {})",
+            log.requests.len(),
+            log.responses.len()
+        );
         assert!(!log.requests.is_empty(), "expected at least 1 request");
 
         let req = &log.requests[0];
@@ -86,17 +100,22 @@ fn main() {
     });
 
     test!("Intercepts fetch() POST request with body", {
-        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
+        browser
+            .send(Command::GetInterceptedRequests { clear: true })
+            .unwrap();
 
-        browser.send(Command::EvalJsNoReturn {
-            script: r#"
+        browser
+            .send(Command::EvalJsNoReturn {
+                script: r#"
                 fetch('https://httpbin.org/post', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ hello: 'world' })
                 }).catch(function(){});
-            "#.into(),
-        }).unwrap();
+            "#
+                .into(),
+            })
+            .unwrap();
         std::thread::sleep(Duration::from_millis(1000));
 
         let log = browser
@@ -110,7 +129,11 @@ fn main() {
         let req = &log.requests[0];
         assert_eq!(req.method, "POST");
         assert!(req.body.contains("hello"), "body: {}", req.body);
-        assert!(req.headers.contains("application/json"), "headers: {}", req.headers);
+        assert!(
+            req.headers.contains("application/json"),
+            "headers: {}",
+            req.headers
+        );
     });
 
     // ══════════════════════════════════════════════════════════════════════
@@ -119,16 +142,21 @@ fn main() {
     println!("\n── XHR Interception ────────────────────────────────────────\n");
 
     test!("Intercepts XMLHttpRequest", {
-        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
+        browser
+            .send(Command::GetInterceptedRequests { clear: true })
+            .unwrap();
 
-        browser.send(Command::EvalJsNoReturn {
-            script: r#"
+        browser
+            .send(Command::EvalJsNoReturn {
+                script: r#"
                 var xhr = new XMLHttpRequest();
                 xhr.open('GET', 'https://httpbin.org/anything?xhr=1');
                 xhr.setRequestHeader('X-Custom', 'test-value');
                 xhr.send();
-            "#.into(),
-        }).unwrap();
+            "#
+                .into(),
+            })
+            .unwrap();
         std::thread::sleep(Duration::from_millis(1000));
 
         let log = browser
@@ -137,7 +165,11 @@ fn main() {
             .as_network()
             .unwrap()
             .clone();
-        println!("  (reqs: {}, resps: {})", log.requests.len(), log.responses.len());
+        println!(
+            "  (reqs: {}, resps: {})",
+            log.requests.len(),
+            log.responses.len()
+        );
         assert!(!log.requests.is_empty(), "expected XHR request");
 
         let req = &log.requests[0];
@@ -152,13 +184,17 @@ fn main() {
     println!("\n── Navigation Events ───────────────────────────────────────\n");
 
     test!("Navigation events are captured", {
-        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
+        browser
+            .send(Command::GetInterceptedRequests { clear: true })
+            .unwrap();
 
         // The custom protocol load should have generated navigation events.
         // Let's trigger one explicitly.
-        browser.send(Command::Navigate {
-            url: "skill://localhost/test-nav".into(),
-        }).unwrap();
+        browser
+            .send(Command::Navigate {
+                url: "skill://localhost/test-nav".into(),
+            })
+            .unwrap();
         std::thread::sleep(Duration::from_millis(500));
 
         let log = browser
@@ -181,16 +217,22 @@ fn main() {
     println!("\n── URL Blocking ────────────────────────────────────────────\n");
 
     test!("SetBlockedUrls blocks matching navigations", {
-        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
+        browser
+            .send(Command::GetInterceptedRequests { clear: true })
+            .unwrap();
 
-        browser.send(Command::SetBlockedUrls {
-            patterns: vec!["blocked-domain.test".into()],
-        }).unwrap();
+        browser
+            .send(Command::SetBlockedUrls {
+                patterns: vec!["blocked-domain.test".into()],
+            })
+            .unwrap();
 
         // Try to navigate to a blocked URL
-        browser.send(Command::Navigate {
-            url: "https://blocked-domain.test/page".into(),
-        }).unwrap();
+        browser
+            .send(Command::Navigate {
+                url: "https://blocked-domain.test/page".into(),
+            })
+            .unwrap();
         std::thread::sleep(Duration::from_millis(500));
 
         let log = browser
@@ -200,17 +242,27 @@ fn main() {
             .unwrap()
             .clone();
 
-        let blocked_nav = log.navigations.iter().find(|n| n.url.contains("blocked-domain"));
+        let blocked_nav = log
+            .navigations
+            .iter()
+            .find(|n| n.url.contains("blocked-domain"));
         assert!(blocked_nav.is_some(), "expected blocked nav event");
-        assert!(!blocked_nav.unwrap().allowed, "expected navigation to be blocked");
+        assert!(
+            !blocked_nav.unwrap().allowed,
+            "expected navigation to be blocked"
+        );
     });
 
     test!("Non-blocked URLs still pass through", {
-        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
+        browser
+            .send(Command::GetInterceptedRequests { clear: true })
+            .unwrap();
 
-        browser.send(Command::Navigate {
-            url: "skill://localhost/allowed-page".into(),
-        }).unwrap();
+        browser
+            .send(Command::Navigate {
+                url: "skill://localhost/allowed-page".into(),
+            })
+            .unwrap();
         std::thread::sleep(Duration::from_millis(500));
 
         let log = browser
@@ -220,18 +272,25 @@ fn main() {
             .unwrap()
             .clone();
 
-        let nav = log.navigations.iter().find(|n| n.url.contains("allowed-page"));
+        let nav = log
+            .navigations
+            .iter()
+            .find(|n| n.url.contains("allowed-page"));
         assert!(nav.is_some(), "expected allowed nav event");
         assert!(nav.unwrap().allowed, "expected navigation to be allowed");
     });
 
     test!("ClearBlockedUrls unblocks everything", {
         browser.send(Command::ClearBlockedUrls).unwrap();
-        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
+        browser
+            .send(Command::GetInterceptedRequests { clear: true })
+            .unwrap();
 
-        browser.send(Command::Navigate {
-            url: "https://blocked-domain.test/after-clear".into(),
-        }).unwrap();
+        browser
+            .send(Command::Navigate {
+                url: "https://blocked-domain.test/after-clear".into(),
+            })
+            .unwrap();
         std::thread::sleep(Duration::from_millis(500));
 
         let log = browser
@@ -241,9 +300,15 @@ fn main() {
             .unwrap()
             .clone();
 
-        let nav = log.navigations.iter().find(|n| n.url.contains("after-clear"));
+        let nav = log
+            .navigations
+            .iter()
+            .find(|n| n.url.contains("after-clear"));
         assert!(nav.is_some(), "expected nav after clear");
-        assert!(nav.unwrap().allowed, "expected navigation allowed after clear");
+        assert!(
+            nav.unwrap().allowed,
+            "expected navigation allowed after clear"
+        );
     });
 
     // ══════════════════════════════════════════════════════════════════════
@@ -253,9 +318,11 @@ fn main() {
 
     test!("GetInterceptedRequests { clear: true } empties the log", {
         // Ensure there's some data
-        browser.send(Command::Navigate {
-            url: "skill://localhost/clear-test".into(),
-        }).unwrap();
+        browser
+            .send(Command::Navigate {
+                url: "skill://localhost/clear-test".into(),
+            })
+            .unwrap();
         std::thread::sleep(Duration::from_millis(300));
 
         let log1 = browser
@@ -272,9 +339,18 @@ fn main() {
             .as_network()
             .unwrap()
             .clone();
-        assert!(log2.requests.is_empty(), "requests should be empty after clear");
-        assert!(log2.responses.is_empty(), "responses should be empty after clear");
-        assert!(log2.navigations.is_empty(), "navigations should be empty after clear");
+        assert!(
+            log2.requests.is_empty(),
+            "requests should be empty after clear"
+        );
+        assert!(
+            log2.responses.is_empty(),
+            "responses should be empty after clear"
+        );
+        assert!(
+            log2.navigations.is_empty(),
+            "navigations should be empty after clear"
+        );
     });
 
     // ══════════════════════════════════════════════════════════════════════

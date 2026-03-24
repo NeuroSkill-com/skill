@@ -9,19 +9,19 @@ the Free Software Foundation, version 3 only. -->
   This avoids svelte:component issues with Threlte's snippet children.
 -->
 <script lang="ts">
-  import { Canvas } from "@threlte/core";
-  import UmapScene from "./UmapScene.svelte";
-  import type { UmapPoint, UmapResult } from "$lib/types";
+import { Canvas } from "@threlte/core";
+import type { UmapPoint, UmapResult } from "$lib/types";
+import UmapScene from "./UmapScene.svelte";
 
-  let {
-    data,
-    tooltip     = $bindable(null),
-    activeLabel = $bindable(null),
-  }: {
-    data: UmapResult;
-    tooltip?: { x: number; y: number; text: string } | null;
-    activeLabel?: string | null;
-  } = $props();
+let {
+  data,
+  tooltip = $bindable(null),
+  activeLabel = $bindable(null),
+}: {
+  data: UmapResult;
+  tooltip?: { x: number; y: number; text: string } | null;
+  activeLabel?: string | null;
+} = $props();
 </script>
 
 <Canvas renderMode="always">

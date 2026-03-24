@@ -2,12 +2,12 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! In-memory log ring-buffer, per-session file sink, and push helpers.
 
+use serde::Serialize;
+use skill_constants::MutexExt;
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
 };
-use skill_constants::MutexExt;
-use serde::Serialize;
 
 use crate::event::LlmEventEmitter;
 
@@ -25,9 +25,9 @@ pub fn unix_ts_ms() -> u64 {
 #[derive(Debug, Clone, Serialize)]
 pub struct LlmLogEntry {
     /// Unix timestamp in milliseconds.
-    pub ts:      u64,
+    pub ts: u64,
     /// `"info"` | `"warn"` | `"error"`
-    pub level:   String,
+    pub level: String,
     /// Human-readable message.
     pub message: String,
 }
@@ -52,17 +52,27 @@ pub type LlmLogFile = Arc<Mutex<std::io::BufWriter<std::fs::File>>>;
 /// Append a log entry to the in-memory buffer, emit a `llm:log` Tauri event,
 /// and optionally write to the per-session log file.
 pub fn push_log_inner(
-    app:  &dyn LlmEventEmitter,
-    buf:  &LlmLogBuffer,
+    app: &dyn LlmEventEmitter,
+    buf: &LlmLogBuffer,
     file: Option<&LlmLogFile>,
     level: &str,
-    msg:   &str,
+    msg: &str,
 ) {
     llm_log!("llm", "[{level}] {msg}");
-    let ts    = unix_ts_ms();
-    let entry = LlmLogEntry { ts, level: level.to_string(), message: msg.to_string() };
+    let ts = unix_ts_ms();
+    let entry = LlmLogEntry {
+        ts,
+        level: level.to_string(),
+        message: msg.to_string(),
+    };
 
-    { let mut q = buf.lock_or_recover(); if q.len() >= LOG_CAP { q.pop_front(); } q.push_back(entry.clone()); }
+    {
+        let mut q = buf.lock_or_recover();
+        if q.len() >= LOG_CAP {
+            q.pop_front();
+        }
+        q.push_back(entry.clone());
+    }
     app.emit_event("llm:log", serde_json::to_value(&entry).unwrap_or_default());
 
     if let Some(f) = file {
@@ -79,10 +89,10 @@ pub fn push_log(app: &dyn LlmEventEmitter, buf: &LlmLogBuffer, level: &str, msg:
 
 /// Format a Unix-ms timestamp as `HH:MM:SS.mmm` (no libc/chrono dependency).
 fn chrono_iso(ts_ms: u64) -> String {
-    let total_s  = ts_ms / 1000;
-    let ms       = ts_ms % 1000;
-    let secs     = total_s % 60;
-    let mins     = (total_s / 60) % 60;
-    let hours    = (total_s / 3600) % 24;
+    let total_s = ts_ms / 1000;
+    let ms = ts_ms % 1000;
+    let secs = total_s % 60;
+    let mins = (total_s / 60) % 60;
+    let hours = (total_s / 3600) % 24;
     format!("{hours:02}:{mins:02}:{secs:02}.{ms:03}")
 }

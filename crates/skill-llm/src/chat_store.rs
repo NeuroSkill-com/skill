@@ -30,7 +30,7 @@
 //!   created_at   INTEGER NOT NULL   -- unix milliseconds (UTC)
 //! ```
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -68,36 +68,36 @@ const DDL: &str = "
 /// A single persisted tool call returned to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredToolCall {
-    pub id:           i64,
-    pub message_id:   i64,
-    pub tool:         String,
-    pub status:       String,
-    pub detail:       Option<String>,
+    pub id: i64,
+    pub message_id: i64,
+    pub tool: String,
+    pub status: String,
+    pub detail: Option<String>,
     pub tool_call_id: Option<String>,
-    pub args:         Option<serde_json::Value>,
-    pub result:       Option<serde_json::Value>,
-    pub created_at:   i64,
+    pub args: Option<serde_json::Value>,
+    pub result: Option<serde_json::Value>,
+    pub created_at: i64,
 }
 
 /// Input struct for saving a new tool call (no auto-generated fields).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NewToolCall {
-    pub tool:         String,
-    pub status:       String,
-    pub detail:       Option<String>,
+    pub tool: String,
+    pub status: String,
+    pub detail: Option<String>,
     pub tool_call_id: Option<String>,
-    pub args:         Option<serde_json::Value>,
-    pub result:       Option<serde_json::Value>,
+    pub args: Option<serde_json::Value>,
+    pub result: Option<serde_json::Value>,
 }
 
 /// A single persisted chat message returned to the frontend.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredMessage {
-    pub id:         i64,
+    pub id: i64,
     pub session_id: i64,
-    pub role:       String,
-    pub content:    String,
-    pub thinking:   Option<String>,
+    pub role: String,
+    pub content: String,
+    pub thinking: Option<String>,
     pub created_at: i64,
     /// Tool calls associated with this message (populated on load).
     #[serde(default)]
@@ -107,12 +107,12 @@ pub struct StoredMessage {
 /// Summary of one session — used by the sidebar.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionSummary {
-    pub id:            i64,
+    pub id: i64,
     /// User-supplied title, or empty if auto-titled / untitled.
-    pub title:         String,
+    pub title: String,
     /// First 80 chars of the first user message (for sidebar preview).
-    pub preview:       String,
-    pub created_at:    i64,
+    pub preview: String,
+    pub created_at: i64,
     pub message_count: i64,
 }
 
@@ -131,16 +131,21 @@ impl ChatStore {
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let chats_dir = skill_dir.join("chats");
         if let Err(e) = std::fs::create_dir_all(&chats_dir) {
-            llm_log!("chat_store", "failed to create {}: {e}", chats_dir.display());
+            llm_log!(
+                "chat_store",
+                "failed to create {}: {e}",
+                chats_dir.display()
+            );
             return None;
         }
 
         // Migrate legacy DB from skill_dir root into chats/ subdirectory.
         let legacy_path = skill_dir.join("chat_history.sqlite");
-        let db_path     = chats_dir.join("chat_history.sqlite");
+        let db_path = chats_dir.join("chat_history.sqlite");
         if legacy_path.exists() && !db_path.exists() {
             if let Err(e) = std::fs::rename(&legacy_path, &db_path) {
-                llm_log!("chat_store",
+                llm_log!(
+                    "chat_store",
                     "migration rename {} -> {} failed: {e}",
                     legacy_path.display(),
                     db_path.display()
@@ -158,7 +163,7 @@ impl ChatStore {
         }
 
         let conn = match Connection::open(&db_path) {
-            Ok(c)  => c,
+            Ok(c) => c,
             Err(e) => {
                 llm_log!("chat_store", "failed to open {}: {e}", db_path.display());
                 return None;
@@ -170,17 +175,15 @@ impl ChatStore {
         }
         // Migration: add title column if it doesn't exist yet (existing databases).
         // Silently ignored if the column is already present.
-        let _ = conn.execute_batch(
-            "ALTER TABLE chat_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '';",
-        );
+        let _ = conn
+            .execute_batch("ALTER TABLE chat_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '';");
         // Migration: add archived column (0 = active, 1 = archived).
         let _ = conn.execute_batch(
             "ALTER TABLE chat_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;",
         );
         // Migration: add params column (JSON blob for per-session generation params).
-        let _ = conn.execute_batch(
-            "ALTER TABLE chat_sessions ADD COLUMN params TEXT NOT NULL DEFAULT '';",
-        );
+        let _ = conn
+            .execute_batch("ALTER TABLE chat_sessions ADD COLUMN params TEXT NOT NULL DEFAULT '';");
         Some(ChatStore { conn })
     }
 
@@ -207,13 +210,15 @@ impl ChatStore {
              WHERE COALESCE(s.archived, 0) = 0
              ORDER BY s.id DESC
              LIMIT 300",
-        ) else { return Vec::new() };
+        ) else {
+            return Vec::new();
+        };
         stmt.query_map([], |row| {
             Ok(SessionSummary {
-                id:            row.get(0)?,
-                title:         row.get(1)?,
-                preview:       row.get(2)?,
-                created_at:    row.get(3)?,
+                id: row.get(0)?,
+                title: row.get(1)?,
+                preview: row.get(2)?,
+                created_at: row.get(3)?,
                 message_count: row.get(4)?,
             })
         })
@@ -223,11 +228,13 @@ impl ChatStore {
 
     /// Get per-session generation params as a JSON string (empty = use defaults).
     pub fn get_session_params(&self, id: i64) -> String {
-        self.conn.query_row(
-            "SELECT COALESCE(params, '') FROM chat_sessions WHERE id = ?1",
-            params![id],
-            |row| row.get(0),
-        ).unwrap_or_default()
+        self.conn
+            .query_row(
+                "SELECT COALESCE(params, '') FROM chat_sessions WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap_or_default()
     }
 
     /// Save per-session generation params (JSON string).
@@ -249,11 +256,12 @@ impl ChatStore {
     /// Delete a session and all its messages.
     pub fn delete_session(&mut self, id: i64) {
         let _ = self.conn.execute(
-            "DELETE FROM chat_messages WHERE session_id = ?1", params![id],
+            "DELETE FROM chat_messages WHERE session_id = ?1",
+            params![id],
         );
-        let _ = self.conn.execute(
-            "DELETE FROM chat_sessions WHERE id = ?1", params![id],
-        );
+        let _ = self
+            .conn
+            .execute("DELETE FROM chat_sessions WHERE id = ?1", params![id]);
     }
 
     /// Archive a session (soft-delete).
@@ -293,13 +301,15 @@ impl ChatStore {
              WHERE s.archived = 1
              ORDER BY s.id DESC
              LIMIT 300",
-        ) else { return Vec::new() };
+        ) else {
+            return Vec::new();
+        };
         stmt.query_map([], |row| {
             Ok(SessionSummary {
-                id:            row.get(0)?,
-                title:         row.get(1)?,
-                preview:       row.get(2)?,
-                created_at:    row.get(3)?,
+                id: row.get(0)?,
+                title: row.get(1)?,
+                preview: row.get(2)?,
+                created_at: row.get(3)?,
                 message_count: row.get(4)?,
             })
         })
@@ -310,7 +320,8 @@ impl ChatStore {
     /// Return the `id` of the most recent session, creating a fresh one if
     /// none exists yet.
     pub fn get_or_create_last_session(&mut self) -> i64 {
-        let existing: Option<i64> = self.conn
+        let existing: Option<i64> = self
+            .conn
             .query_row(
                 "SELECT id FROM chat_sessions ORDER BY id DESC LIMIT 1",
                 [],
@@ -340,9 +351,9 @@ impl ChatStore {
     pub fn save_message(
         &mut self,
         session_id: i64,
-        role:       &str,
-        content:    &str,
-        thinking:   Option<&str>,
+        role: &str,
+        content: &str,
+        thinking: Option<&str>,
     ) -> i64 {
         self.save_message_with_tools(session_id, role, content, thinking, &[])
     }
@@ -351,11 +362,11 @@ impl ChatStore {
     /// Returns the new message row id.
     pub fn save_message_with_tools(
         &mut self,
-        session_id:  i64,
-        role:        &str,
-        content:     &str,
-        thinking:    Option<&str>,
-        tool_calls:  &[NewToolCall],
+        session_id: i64,
+        role: &str,
+        content: &str,
+        thinking: Option<&str>,
+        tool_calls: &[NewToolCall],
     ) -> i64 {
         let now = unix_ms();
         let msg_id = match self.conn.execute(
@@ -370,23 +381,38 @@ impl ChatStore {
                 id
             }
             Err(e) => {
-                llm_log!("chat_store", "save_message FAILED: session={session_id} role={role} error={e}");
+                llm_log!(
+                    "chat_store",
+                    "save_message FAILED: session={session_id} role={role} error={e}"
+                );
                 return 0;
             }
         };
 
         // Persist associated tool calls.
         for tc in tool_calls {
-            let args_json   = tc.args.as_ref().map(std::string::ToString::to_string);
+            let args_json = tc.args.as_ref().map(std::string::ToString::to_string);
             let result_json = tc.result.as_ref().map(std::string::ToString::to_string);
             if let Err(e) = self.conn.execute(
                 "INSERT INTO chat_tool_calls \
                  (message_id, tool, status, detail, tool_call_id, args, result, created_at) \
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![msg_id, tc.tool, tc.status, tc.detail, tc.tool_call_id,
-                        args_json, result_json, now],
+                params![
+                    msg_id,
+                    tc.tool,
+                    tc.status,
+                    tc.detail,
+                    tc.tool_call_id,
+                    args_json,
+                    result_json,
+                    now
+                ],
             ) {
-                llm_log!("chat_store", "save_tool_call FAILED: msg={msg_id} tool={} error={e}", tc.tool);
+                llm_log!(
+                    "chat_store",
+                    "save_tool_call FAILED: msg={msg_id} tool={} error={e}",
+                    tc.tool
+                );
             }
         }
 
@@ -398,7 +424,7 @@ impl ChatStore {
     pub fn save_tool_calls(&mut self, message_id: i64, tool_calls: &[StoredToolCall]) {
         let now = unix_ms();
         for tc in tool_calls {
-            let args_json   = tc.args.as_ref().map(std::string::ToString::to_string);
+            let args_json = tc.args.as_ref().map(std::string::ToString::to_string);
             let result_json = tc.result.as_ref().map(std::string::ToString::to_string);
             if let Err(e) = self.conn.execute(
                 "INSERT INTO chat_tool_calls \
@@ -415,7 +441,11 @@ impl ChatStore {
                     now,
                 ],
             ) {
-                llm_log!("chat_store", "save_tool_call FAILED: message_id={message_id} tool={} error={e}", tc.tool);
+                llm_log!(
+                    "chat_store",
+                    "save_tool_call FAILED: message_id={message_id} tool={} error={e}",
+                    tc.tool
+                );
             }
         }
     }
@@ -425,20 +455,23 @@ impl ChatStore {
         let Ok(mut stmt) = self.conn.prepare(
             "SELECT id, session_id, role, content, thinking, created_at \
              FROM chat_messages WHERE session_id = ?1 ORDER BY id ASC",
-        ) else { return Vec::new() };
-        let mut messages: Vec<StoredMessage> = stmt.query_map(params![session_id], |row| {
-            Ok(StoredMessage {
-                id:         row.get(0)?,
-                session_id: row.get(1)?,
-                role:       row.get(2)?,
-                content:    row.get(3)?,
-                thinking:   row.get(4)?,
-                created_at: row.get(5)?,
-                tool_calls: Vec::new(),
+        ) else {
+            return Vec::new();
+        };
+        let mut messages: Vec<StoredMessage> = stmt
+            .query_map(params![session_id], |row| {
+                Ok(StoredMessage {
+                    id: row.get(0)?,
+                    session_id: row.get(1)?,
+                    role: row.get(2)?,
+                    content: row.get(3)?,
+                    thinking: row.get(4)?,
+                    created_at: row.get(5)?,
+                    tool_calls: Vec::new(),
+                })
             })
-        })
-        .map(|rows| rows.filter_map(std::result::Result::ok).collect())
-        .unwrap_or_default();
+            .map(|rows| rows.filter_map(std::result::Result::ok).collect())
+            .unwrap_or_default();
 
         // Load tool calls for all messages in this session in one query.
         let msg_ids: Vec<i64> = messages.iter().map(|m| m.id).collect();
@@ -451,21 +484,23 @@ impl ChatStore {
                 placeholders.join(", ")
             );
             if let Ok(mut tc_stmt) = self.conn.prepare(&sql) {
-                let params_vec: Vec<&dyn rusqlite::types::ToSql> =
-                    msg_ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
+                let params_vec: Vec<&dyn rusqlite::types::ToSql> = msg_ids
+                    .iter()
+                    .map(|id| id as &dyn rusqlite::types::ToSql)
+                    .collect();
                 if let Ok(rows) = tc_stmt.query_map(params_vec.as_slice(), |row| {
-                    let args_str: Option<String>   = row.get(6)?;
-                    let result_str: Option<String>  = row.get(7)?;
+                    let args_str: Option<String> = row.get(6)?;
+                    let result_str: Option<String> = row.get(7)?;
                     Ok(StoredToolCall {
-                        id:           row.get(0)?,
-                        message_id:   row.get(1)?,
-                        tool:         row.get(2)?,
-                        status:       row.get(3)?,
-                        detail:       row.get(4)?,
+                        id: row.get(0)?,
+                        message_id: row.get(1)?,
+                        tool: row.get(2)?,
+                        status: row.get(3)?,
+                        detail: row.get(4)?,
                         tool_call_id: row.get(5)?,
-                        args:         args_str.and_then(|s| serde_json::from_str(&s).ok()),
-                        result:       result_str.and_then(|s| serde_json::from_str(&s).ok()),
-                        created_at:   row.get(8)?,
+                        args: args_str.and_then(|s| serde_json::from_str(&s).ok()),
+                        result: result_str.and_then(|s| serde_json::from_str(&s).ok()),
+                        created_at: row.get(8)?,
                     })
                 }) {
                     // Build a map from message_id → Vec<StoredToolCall>
@@ -509,7 +544,11 @@ mod tests {
 
         // Create a session
         let session_id = store.new_session();
-        assert!(session_id > 0, "session id should be positive, got {}", session_id);
+        assert!(
+            session_id > 0,
+            "session id should be positive, got {}",
+            session_id
+        );
 
         // Save a user message
         let msg_id = store.save_message(session_id, "user", "Hello world", None);
@@ -543,8 +582,8 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static CTR: AtomicU64 = AtomicU64::new(0);
         let id = CTR.fetch_add(1, Ordering::Relaxed);
-        let tmp = std::env::temp_dir()
-            .join(format!("skill_chat_test_{}_{}", std::process::id(), id));
+        let tmp =
+            std::env::temp_dir().join(format!("skill_chat_test_{}_{}", std::process::id(), id));
         let _ = std::fs::remove_dir_all(&tmp);
         let _ = std::fs::create_dir_all(&tmp);
         let store = ChatStore::open(&tmp).expect("open store");
@@ -615,15 +654,15 @@ mod tests {
         let mid = store.save_message(sid, "assistant", "Let me search.", None);
 
         let tc = StoredToolCall {
-            id:           0,
-            message_id:   mid,
-            tool:         "web_search".into(),
-            status:       "ok".into(),
-            detail:       Some("Found 5 results".into()),
+            id: 0,
+            message_id: mid,
+            tool: "web_search".into(),
+            status: "ok".into(),
+            detail: Some("Found 5 results".into()),
             tool_call_id: Some("call_123".into()),
-            args:         Some(serde_json::json!({"query": "rust programming"})),
-            result:       Some(serde_json::json!({"count": 5})),
-            created_at:   0,
+            args: Some(serde_json::json!({"query": "rust programming"})),
+            result: Some(serde_json::json!({"count": 5})),
+            created_at: 0,
         };
         store.save_tool_calls(mid, &[tc]);
 
@@ -632,7 +671,10 @@ mod tests {
         assert_eq!(msgs[0].tool_calls.len(), 1);
         assert_eq!(msgs[0].tool_calls[0].tool, "web_search");
         assert_eq!(msgs[0].tool_calls[0].status, "ok");
-        assert_eq!(msgs[0].tool_calls[0].tool_call_id.as_deref(), Some("call_123"));
+        assert_eq!(
+            msgs[0].tool_calls[0].tool_call_id.as_deref(),
+            Some("call_123")
+        );
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

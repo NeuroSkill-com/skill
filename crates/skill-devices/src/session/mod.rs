@@ -22,12 +22,12 @@
 //! * [`hermes::HermesAdapter`] — Hermes V1 (8 ch @ 250 Hz, IMU)
 //! * [`openbci::OpenBciAdapter`] — Ganglion / Cyton / Galea (4–24 ch)
 
+pub mod emotiv;
+pub mod hermes;
+pub mod idun;
 pub mod muse;
 pub mod mw75;
-pub mod hermes;
 pub mod openbci;
-pub mod emotiv;
-pub mod idun;
 
 #[cfg(test)]
 mod tests;
@@ -87,13 +87,13 @@ pub struct DeviceDescriptor {
 #[derive(Debug, Clone, Default)]
 pub struct DeviceInfo {
     pub name: String,
-    pub id:   String,
-    pub serial_number:      Option<String>,
-    pub firmware_version:   Option<String>,
-    pub hardware_version:   Option<String>,
+    pub id: String,
+    pub serial_number: Option<String>,
+    pub firmware_version: Option<String>,
+    pub hardware_version: Option<String>,
     pub bootloader_version: Option<String>,
-    pub mac_address:        Option<String>,
-    pub headset_preset:     Option<String>,
+    pub mac_address: Option<String>,
+    pub headset_preset: Option<String>,
 }
 
 /// A normalised multi-channel EEG data frame.

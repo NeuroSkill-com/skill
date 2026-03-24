@@ -7,10 +7,10 @@ the Free Software Foundation, version 3 only. -->
 <!-- Help tab: Security & Privacy Policy -->
 
 <script lang="ts">
-  import HelpSection from "./HelpSection.svelte";
-  import HelpItem    from "./HelpItem.svelte";
-  import { Separator } from "$lib/components/ui/separator";
-  import { t } from "$lib/i18n/index.svelte";
+import { Separator } from "$lib/components/ui/separator";
+import { t } from "$lib/i18n/index.svelte";
+import HelpItem from "./HelpItem.svelte";
+import HelpSection from "./HelpSection.svelte";
 </script>
 
 <div class="flex flex-col gap-6 pb-6">

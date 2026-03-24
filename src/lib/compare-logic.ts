@@ -8,9 +8,13 @@
 
 import type { EmbeddingSession } from "$lib/compare-types";
 import {
+  dateToLocalKey,
+  fmtDateTime,
+  fmtDateTimeLocalInput,
+  fmtDayKey,
   fmtDuration as fmtDurationSecs,
-  fmtDateTimeLocalInput, parseDateTimeLocalInput,
-  dateToLocalKey, fmtDayKey, fromUnix, fmtDateTime,
+  fromUnix,
+  parseDateTimeLocalInput,
 } from "$lib/format";
 
 // ── Date / time helpers ──────────────────────────────────────────────────────
@@ -57,11 +61,7 @@ export function dateTimeLocalToUtc(dt: string): number {
 // ── Session helpers ──────────────────────────────────────────────────────────
 
 /** Sessions that overlap the half-open interval [startUtc, endUtc). */
-export function sessionsInRange(
-  sessions: EmbeddingSession[],
-  startUtc: number,
-  endUtc: number,
-): EmbeddingSession[] {
+export function sessionsInRange(sessions: EmbeddingSession[], startUtc: number, endUtc: number): EmbeddingSession[] {
   return sessions.filter((s) => s.end_utc > startUtc && s.start_utc < endUtc);
 }
 
@@ -76,7 +76,7 @@ export function sessionLabel(s: EmbeddingSession): string {
 export function sortedSessionDays(sessions: EmbeddingSession[]): string[] {
   const s = new Set<string>();
   for (const sess of sessions) {
-    let d = new Date(
+    const d = new Date(
       fromUnix(sess.start_utc).getFullYear(),
       fromUnix(sess.start_utc).getMonth(),
       fromUnix(sess.start_utc).getDate(),
@@ -94,20 +94,11 @@ export function sortedSessionDays(sessions: EmbeddingSession[]): string[] {
 // ── Range selection helpers ──────────────────────────────────────────────────
 
 /** Auto-select the range covering all sessions within the 48h window starting at anchorUtc. */
-export function autoSelectRange(
-  sessions: EmbeddingSession[],
-  anchorUtc: number,
-): { start: number; end: number } {
-  const windowSess = sessions.filter(
-    (s) => s.end_utc > anchorUtc && s.start_utc < anchorUtc + 172800,
-  );
-  const rangeS = windowSess.length > 0
-    ? Math.min(...windowSess.map((s) => s.start_utc))
-    : anchorUtc;
+export function autoSelectRange(sessions: EmbeddingSession[], anchorUtc: number): { start: number; end: number } {
+  const windowSess = sessions.filter((s) => s.end_utc > anchorUtc && s.start_utc < anchorUtc + 172800);
+  const rangeS = windowSess.length > 0 ? Math.min(...windowSess.map((s) => s.start_utc)) : anchorUtc;
   const rangeE = Math.min(
-    windowSess.length > 0
-      ? Math.max(...windowSess.map((s) => s.end_utc))
-      : anchorUtc + 86400,
+    windowSess.length > 0 ? Math.max(...windowSess.map((s) => s.end_utc)) : anchorUtc + 86400,
     rangeS + 86400,
   );
   return { start: rangeS, end: rangeE };
@@ -119,11 +110,7 @@ export function snapToMinute(utc: number): number {
 }
 
 /** Convert a pointer event's X position within an element to a UTC timestamp in a 48h window. */
-export function pointerToUtc(
-  clientX: number,
-  rect: DOMRect,
-  anchorUtc: number,
-): number {
+export function pointerToUtc(clientX: number, rect: DOMRect, anchorUtc: number): number {
   const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
   return Math.round(anchorUtc + pct * 172800);
 }

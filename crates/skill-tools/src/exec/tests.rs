@@ -2,12 +2,12 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Tests for tool execution sub-modules.
 
-use serde_json::json;
-use super::truncate::*;
 use super::helpers::*;
 use super::safety::*;
+use super::safety::{clear_bash_edit_hook, request_bash_edit, set_bash_edit_hook};
 use super::status::format_status_as_text;
-use super::safety::{request_bash_edit, set_bash_edit_hook, clear_bash_edit_hook};
+use super::truncate::*;
+use serde_json::json;
 
 // ── truncate_text ─────────────────────────────────────────────────────────
 
@@ -34,7 +34,10 @@ fn truncate_text_empty() {
 #[test]
 fn truncate_text_unicode() {
     // Each emoji is one char
-    assert_eq!(truncate_text("\u{1f9e0}\u{1f52c}\u{1f9ec}\u{1f9ea}", 2), "\u{1f9e0}\u{1f52c}");
+    assert_eq!(
+        truncate_text("\u{1f9e0}\u{1f52c}\u{1f9ec}\u{1f9ea}", 2),
+        "\u{1f9e0}\u{1f52c}"
+    );
 }
 
 // ── truncate_tool_output (tail) ───────────────────────────────────────
@@ -50,7 +53,10 @@ fn truncate_output_no_truncation() {
 
 #[test]
 fn truncate_output_by_lines() {
-    let content = (0..100).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
+    let content = (0..100)
+        .map(|i| format!("line{i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     let out = truncate_tool_output(&content, 5, 100_000);
     assert!(out.was_truncated);
     assert_eq!(out.total_lines, 100);
@@ -63,7 +69,10 @@ fn truncate_output_by_lines() {
 
 #[test]
 fn truncate_output_by_bytes() {
-    let content = (0..100).map(|i| format!("line{i:03}")).collect::<Vec<_>>().join("\n");
+    let content = (0..100)
+        .map(|i| format!("line{i:03}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     let out = truncate_tool_output(&content, 1000, 50);
     assert!(out.was_truncated);
     // Should have truncated to fit under 50 bytes
@@ -81,7 +90,10 @@ fn truncate_head_no_truncation() {
 
 #[test]
 fn truncate_head_by_lines() {
-    let content = (0..100).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
+    let content = (0..100)
+        .map(|i| format!("line{i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     let out = truncate_tool_output_head(&content, 5, 100_000);
     assert!(out.was_truncated);
     assert_eq!(out.output_lines, 5);
@@ -93,7 +105,10 @@ fn truncate_head_by_lines() {
 
 #[test]
 fn truncate_head_by_bytes() {
-    let content = (0..100).map(|i| format!("line{i:03}")).collect::<Vec<_>>().join("\n");
+    let content = (0..100)
+        .map(|i| format!("line{i:03}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     let out = truncate_tool_output_head(&content, 1000, 50);
     assert!(out.was_truncated);
     assert!(out.text.len() <= 50);
@@ -305,7 +320,10 @@ fn status_text_connected_with_scores() {
 #[test]
 fn bash_edit_hook_lifecycle() {
     use std::sync::Arc;
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
     // 1. Without a hook set, request_bash_edit returns Some(original)
     clear_bash_edit_hook();
@@ -313,9 +331,7 @@ fn bash_edit_hook_lifecycle() {
     assert_eq!(result, Some("echo hello".to_string()));
 
     // 2. Hook can modify
-    set_bash_edit_hook(Arc::new(|cmd: &str| {
-        Some(format!("{} --safe", cmd))
-    }));
+    set_bash_edit_hook(Arc::new(|cmd: &str| Some(format!("{} --safe", cmd))));
     let result = rt.block_on(request_bash_edit("rm -rf /tmp/test"));
     assert_eq!(result, Some("rm -rf /tmp/test --safe".to_string()));
 
@@ -345,7 +361,11 @@ fn retry_succeeds_on_second_attempt() {
     let mut attempts = 0u32;
     let result = retry_with_backoff(3, std::time::Duration::from_millis(1), || {
         attempts += 1;
-        if attempts < 2 { Err("fail") } else { Ok("ok") }
+        if attempts < 2 {
+            Err("fail")
+        } else {
+            Ok("ok")
+        }
     });
     assert_eq!(result, Ok("ok"));
     assert_eq!(attempts, 2);

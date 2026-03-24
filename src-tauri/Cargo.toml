@@ -209,7 +209,7 @@ chrono     = { version = "0.4", default-features = false, features = ["clock", "
 
 # PNG encoding for the About-window icon data URL
 png    = "0.17"
-base64 = "0.22"
+base64 = { workspace = true }
 
 # Native confirmation dialogs (quit, etc.)
 # xdg-portal is the Linux backend (D-Bus, no GTK3 headers needed); it is

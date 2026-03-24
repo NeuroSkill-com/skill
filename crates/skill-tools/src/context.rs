@@ -2,8 +2,8 @@
 // Copyright (C) 2026 NeuroSkill.com
 //! Context-aware history trimming for LLM tool conversations.
 
-use serde_json::Value;
 use crate::types::ToolContextCompression;
+use serde_json::Value;
 
 /// Rough estimate of token count for a string (~4 chars per token).
 pub fn estimate_tokens(s: &str) -> usize {
@@ -12,11 +12,14 @@ pub fn estimate_tokens(s: &str) -> usize {
 
 /// Estimate total token count across all messages.
 pub fn estimate_messages_tokens(messages: &[Value]) -> usize {
-    messages.iter().map(|m| {
-        let content = m.get("content").and_then(|c| c.as_str()).unwrap_or("");
-        // Add overhead for role tags, separators (~10 tokens per message)
-        estimate_tokens(content) + 10
-    }).sum()
+    messages
+        .iter()
+        .map(|m| {
+            let content = m.get("content").and_then(|c| c.as_str()).unwrap_or("");
+            // Add overhead for role tags, separators (~10 tokens per message)
+            estimate_tokens(content) + 10
+        })
+        .sum()
 }
 
 /// Trim conversation history to fit within the context window.
@@ -28,8 +31,14 @@ pub fn estimate_messages_tokens(messages: &[Value]) -> usize {
 /// 4. Then truncate remaining long tool results to a hard cap.
 /// 5. Then drop oldest non-system messages until the estimated
 ///    token count fits within 75% of `n_ctx` (leaving room for response).
-pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression: &ToolContextCompression) {
-    if n_ctx == 0 { return; }
+pub fn trim_messages_to_fit(
+    messages: &mut Vec<Value>,
+    n_ctx: usize,
+    compression: &ToolContextCompression,
+) {
+    if n_ctx == 0 {
+        return;
+    }
     let budget = n_ctx * 3 / 4; // 75% of context for prompt
 
     if compression.should_compress_old_results() {
@@ -40,9 +49,15 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression
         let msg_count = messages.len();
         for (i, msg) in messages.iter_mut().enumerate() {
             let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
-            if role != "tool" { continue; }
+            if role != "tool" {
+                continue;
+            }
 
-            if let Some(content) = msg.get("content").and_then(|c| c.as_str()).map(std::string::ToString::to_string) {
+            if let Some(content) = msg
+                .get("content")
+                .and_then(|c| c.as_str())
+                .map(std::string::ToString::to_string)
+            {
                 let is_web_search = content.contains("\"tool\":\"web_search\"")
                     || content.contains("\"tool\": \"web_search\"");
                 let is_location = content.contains("\"tool\":\"location\"")
@@ -52,14 +67,20 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression
                 let is_recent = i + 4 >= msg_count;
 
                 if is_web_search {
-                    let limit = if is_recent { max_web_search_chars } else { max_web_search_chars / 2 };
+                    let limit = if is_recent {
+                        max_web_search_chars
+                    } else {
+                        max_web_search_chars / 2
+                    };
                     if content.len() > limit {
                         let summary = compact_web_search_result(&content, limit);
                         msg["content"] = Value::String(summary);
                     }
                 } else if is_location && !is_recent && content.len() > 300 {
-                    let summary = format!("{}…\n[location result — already consumed]",
-                        &content[..content.len().min(200)]);
+                    let summary = format!(
+                        "{}…\n[location result — already consumed]",
+                        &content[..content.len().min(200)]
+                    );
                     msg["content"] = Value::String(summary);
                 }
             }
@@ -86,12 +107,20 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression
 
     // Phase 3: Drop oldest non-system, non-last-user messages if still too long.
     while estimate_messages_tokens(messages) > budget && messages.len() > 2 {
-        let start = if messages.first()
+        let start = if messages
+            .first()
             .and_then(|m| m.get("role"))
-            .and_then(|r| r.as_str()) == Some("system")
-        { 1 } else { 0 };
+            .and_then(|r| r.as_str())
+            == Some("system")
+        {
+            1
+        } else {
+            0
+        };
 
-        if start >= messages.len() - 1 { break; }
+        if start >= messages.len() - 1 {
+            break;
+        }
 
         messages.remove(start);
     }
@@ -102,8 +131,8 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use crate::types::CompressionLevel;
+    use serde_json::json;
 
     fn msg(role: &str, content: &str) -> Value {
         json!({"role": role, "content": content})
@@ -195,9 +224,15 @@ mod tests {
 
     #[test]
     fn effective_defaults_match_levels() {
-        let off = ToolContextCompression { level: CompressionLevel::Off, ..Default::default() };
+        let off = ToolContextCompression {
+            level: CompressionLevel::Off,
+            ..Default::default()
+        };
         let norm = ToolContextCompression::default(); // Normal
-        let agg = ToolContextCompression { level: CompressionLevel::Aggressive, ..Default::default() };
+        let agg = ToolContextCompression {
+            level: CompressionLevel::Aggressive,
+            ..Default::default()
+        };
 
         assert!(off.effective_max_search_results() > norm.effective_max_search_results());
         assert!(norm.effective_max_search_results() > agg.effective_max_search_results());

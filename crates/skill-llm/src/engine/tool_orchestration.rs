@@ -3,34 +3,38 @@
 //! Tool-call orchestration: extraction, validation, sequential/parallel
 //! execution, and the multi-round chat loop.
 
-use std::sync::{Arc, atomic::Ordering};
 use skill_constants::MutexExt;
+use std::sync::{atomic::Ordering, Arc};
 
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
-use crate::tools;
-use crate::config;
-use super::protocol::{InferRequest, InferToken, GenParams};
-use super::state::LlmServerState;
 use super::images::extract_images_from_messages;
+use super::protocol::{GenParams, InferRequest, InferToken};
+use super::state::LlmServerState;
+use crate::config;
+use crate::tools;
 
-use skill_tools::defs::{enabled_builtin_llm_tools, filter_allowed_tool_defs, is_builtin_tool_enabled};
-use skill_tools::exec::execute_builtin_tool_call;
-use skill_tools::context::trim_messages_to_fit;
 use anyhow::Context;
-
+use skill_tools::context::trim_messages_to_fit;
+use skill_tools::defs::{
+    enabled_builtin_llm_tools, filter_allowed_tool_defs, is_builtin_tool_enabled,
+};
+use skill_tools::exec::execute_builtin_tool_call;
 
 // ── Stream sanitizer ──────────────────────────────────────────────────────────
 
 struct ToolCallStreamSanitizer {
-    raw:                 String,
+    raw: String,
     emitted_visible_len: usize,
 }
 
 impl ToolCallStreamSanitizer {
     fn new() -> Self {
-        Self { raw: String::new(), emitted_visible_len: 0 }
+        Self {
+            raw: String::new(),
+            emitted_visible_len: 0,
+        }
     }
 
     fn push(&mut self, piece: &str) -> String {
@@ -58,12 +62,12 @@ async fn collect_infer_output<F>(
 where
     F: FnMut(&str),
 {
-    let mut text              = String::new();
-    let mut finish_reason     = "stop".to_string();
-    let mut prompt_tokens     = 0usize;
+    let mut text = String::new();
+    let mut finish_reason = "stop".to_string();
+    let mut prompt_tokens = 0usize;
     let mut completion_tokens = 0usize;
-    let mut n_ctx             = 0usize;
-    let mut sanitizer         = ToolCallStreamSanitizer::new();
+    let mut n_ctx = 0usize;
+    let mut sanitizer = ToolCallStreamSanitizer::new();
 
     while let Some(tok) = tok_rx.recv().await {
         match tok {
@@ -74,7 +78,12 @@ where
                     on_visible_delta(&visible);
                 }
             }
-            InferToken::Done { finish_reason: fr, prompt_tokens: pt, completion_tokens: ct, n_ctx: nc } => {
+            InferToken::Done {
+                finish_reason: fr,
+                prompt_tokens: pt,
+                completion_tokens: ct,
+                n_ctx: nc,
+            } => {
                 finish_reason = fr;
                 prompt_tokens = pt;
                 completion_tokens = ct;
@@ -101,24 +110,38 @@ where
 #[allow(dead_code)]
 pub type BeforeToolCallFn = Box<dyn Fn(&tools::ToolCall, &Value) -> Option<String> + Send + Sync>;
 #[allow(dead_code)]
-pub type AfterToolCallFn  = Box<dyn Fn(&tools::ToolCall, &Value, bool) -> Option<(Value, bool)> + Send + Sync>;
+pub type AfterToolCallFn =
+    Box<dyn Fn(&tools::ToolCall, &Value, bool) -> Option<(Value, bool)> + Send + Sync>;
 
 /// Extended tool-call event sink (pi-mono style lifecycle events).
 pub enum ToolEvent {
     /// Legacy: simple status string (kept for backwards compat).
-    Status { tool_name: String, status: String, detail: Option<String> },
+    Status {
+        tool_name: String,
+        status: String,
+        detail: Option<String>,
+    },
     /// Tool execution is about to begin (after validation).
-    ExecutionStart { tool_call_id: String, tool_name: String, args: Value },
+    ExecutionStart {
+        tool_call_id: String,
+        tool_name: String,
+        args: Value,
+    },
     /// Tool execution finished.
-    ExecutionEnd { tool_call_id: String, tool_name: String, result: Value, is_error: bool },
+    ExecutionEnd {
+        tool_call_id: String,
+        tool_name: String,
+        result: Value,
+        is_error: bool,
+    },
     /// Emitted after each inference + tool-execution round completes.
     /// Allows consumers to track cumulative token usage across the
     /// multi-round tool-calling loop (inspired by agentic CLI patterns).
     RoundComplete {
-        round:             usize,
-        prompt_tokens:     usize,
+        round: usize,
+        prompt_tokens: usize,
         completion_tokens: usize,
-        tool_calls_count:  usize,
+        tool_calls_count: usize,
     },
 }
 
@@ -138,13 +161,15 @@ where
 {
     let cancelled_set = state.cancelled_tool_calls.clone();
     // Clear cancelled set at the start of a new chat request.
-    { cancelled_set.lock_or_recover().clear(); }
+    {
+        cancelled_set.lock_or_recover().clear();
+    }
     let allowed_tools = state.allowed_tools.lock_or_recover().clone();
 
-    let max_rounds         = allowed_tools.max_rounds;
+    let max_rounds = allowed_tools.max_rounds;
     let max_calls_per_round = allowed_tools.max_calls_per_round;
-    let execution_mode     = allowed_tools.execution_mode.clone();
-    let compression        = allowed_tools.context_compression.clone();
+    let execution_mode = allowed_tools.execution_mode.clone();
+    let compression = allowed_tools.context_compression.clone();
     let tool_thinking_budget = allowed_tools.thinking_budget;
 
     let mut messages = base_messages;
@@ -160,18 +185,27 @@ where
     // which specialised instruction files it can load via read_file.
     // Filter out skills the user has explicitly disabled.
     let disabled = &allowed_tools.disabled_skills;
-    let filtered_skills: Vec<&skill_skills::Skill> = state.skills.iter()
+    let filtered_skills: Vec<&skill_skills::Skill> = state
+        .skills
+        .iter()
         .filter(|s| !disabled.iter().any(|d| d == &s.name))
         .collect();
     let filtered_refs: Vec<skill_skills::Skill> = filtered_skills.into_iter().cloned().collect();
     let skills_block = skill_skills::format_skills_for_prompt(&filtered_refs);
     if !skills_block.is_empty() {
-        let has_system = messages.first()
+        let has_system = messages
+            .first()
             .and_then(|m| m.get("role"))
-            .and_then(|r| r.as_str()) == Some("system");
+            .and_then(|r| r.as_str())
+            == Some("system");
         if has_system {
-            if let Some(content) = messages[0].get("content").and_then(|c| c.as_str()).map(std::string::ToString::to_string) {
-                messages[0]["content"] = serde_json::Value::String(format!("{content}{skills_block}"));
+            if let Some(content) = messages[0]
+                .get("content")
+                .and_then(|c| c.as_str())
+                .map(std::string::ToString::to_string)
+            {
+                messages[0]["content"] =
+                    serde_json::Value::String(format!("{content}{skills_block}"));
             }
         } else {
             messages.insert(0, json!({ "role": "system", "content": skills_block }));
@@ -206,7 +240,8 @@ where
             round_params.thinking_budget = Some(budget);
         }
         let (tok_tx, tok_rx) = mpsc::unbounded_channel();
-        state.req_tx
+        state
+            .req_tx
             .send(InferRequest::Generate {
                 messages: messages.clone(),
                 images,
@@ -215,9 +250,11 @@ where
             })
             .context("LLM actor has exited")?;
 
-        let (assistant_text, finish_reason, prompt_tokens, completion_tokens, n_ctx) = collect_infer_output(tok_rx, |delta| {
-            on_visible_delta(delta);
-        }).await?;
+        let (assistant_text, finish_reason, prompt_tokens, completion_tokens, n_ctx) =
+            collect_infer_output(tok_rx, |delta| {
+                on_visible_delta(delta);
+            })
+            .await?;
         cumulative_prompt_tokens += prompt_tokens;
         cumulative_completion_tokens += completion_tokens;
         let tool_calls = tools::extract_tool_calls(&assistant_text);
@@ -254,10 +291,22 @@ where
                 if let Some(ref result) = last_tool_result {
                     log::warn!("[tool-orchestration] model returned empty after tool call — returning raw result");
                     let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
-                    return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+                    return Ok((
+                        fallback,
+                        finish_reason,
+                        prompt_tokens,
+                        completion_tokens,
+                        n_ctx,
+                    ));
                 }
             }
-            return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+            return Ok((
+                cleaned,
+                finish_reason,
+                prompt_tokens,
+                completion_tokens,
+                n_ctx,
+            ));
         }
 
         let cleaned = tools::strip_tool_call_blocks(&assistant_text);
@@ -270,7 +319,12 @@ where
                 if tc.function.name == "bash" {
                     let args: Value = serde_json::from_str(&tc.function.arguments)
                         .unwrap_or(Value::Object(Default::default()));
-                    if args.get("command").and_then(|c| c.as_str()).unwrap_or("").is_empty() {
+                    if args
+                        .get("command")
+                        .and_then(|c| c.as_str())
+                        .unwrap_or("")
+                        .is_empty()
+                    {
                         return false;
                     }
                 }
@@ -287,7 +341,13 @@ where
             // If there's meaningful text alongside the (deduped) tool calls,
             // return it — the model wrote something useful.
             if !cleaned.trim().is_empty() {
-                return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+                return Ok((
+                    cleaned,
+                    finish_reason,
+                    prompt_tokens,
+                    completion_tokens,
+                    n_ctx,
+                ));
             }
             // All tool calls were duplicates and no visible text was produced.
             // The model is stuck re-emitting the same call.
@@ -297,12 +357,22 @@ where
                 log::warn!("[tool-orchestration] model stuck after {} dedup nudges — returning raw tool result", dedup_nudge_count);
                 if let Some(ref result) = last_tool_result {
                     let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
-                    return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
+                    return Ok((
+                        fallback,
+                        finish_reason,
+                        prompt_tokens,
+                        completion_tokens,
+                        n_ctx,
+                    ));
                 }
             }
             // Inject a nudge telling it the results are already available,
             // then let the loop run one more inference round.
-            log::info!("[tool-orchestration] all {} tool calls deduped (nudge #{}), injecting nudge", n_raw_calls, dedup_nudge_count);
+            log::info!(
+                "[tool-orchestration] all {} tool calls deduped (nudge #{}), injecting nudge",
+                n_raw_calls,
+                dedup_nudge_count
+            );
             messages.push(json!({
                 "role": "user",
                 "content": "The tool has already been called and the results are above. Do NOT call any tools. Answer my original question using the tool results you already have."
@@ -314,7 +384,8 @@ where
         // Include the tool call details so the model knows what it already
         // called and can interpret the following tool-result "user" message
         // as a result (not a new question).
-        let tool_call_summary: String = selected_calls.iter()
+        let tool_call_summary: String = selected_calls
+            .iter()
             .map(|tc| {
                 let args_preview: String = tc.function.arguments.chars().take(120).collect();
                 format!("{}({})", tc.function.name, args_preview)
@@ -342,8 +413,8 @@ where
                     && skill_tools::defs::is_skill_api_command(&tc.function.name)
                 {
                     // Parse whatever args the LLM sent (may be empty).
-                    let orig_args: Value = serde_json::from_str(&tc.function.arguments)
-                        .unwrap_or_else(|_| json!({}));
+                    let orig_args: Value =
+                        serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| json!({}));
                     // Build the redirected payload: { "command": "<name>", "args": { ...orig } }
                     let mut redirected = json!({ "command": tc.function.name });
                     if let Some(obj) = orig_args.as_object() {
@@ -351,7 +422,11 @@ where
                             redirected["args"] = orig_args;
                         }
                     }
-                    log::info!("[tool-redirect] {} → skill({})", tc.function.name, tc.function.name);
+                    log::info!(
+                        "[tool-redirect] {} → skill({})",
+                        tc.function.name,
+                        tc.function.name
+                    );
                     tc.function.name = "skill".to_string();
                     tc.function.arguments = redirected.to_string();
                 }
@@ -370,17 +445,27 @@ where
         match execution_mode {
             config::ToolExecutionMode::Sequential => {
                 execute_tool_calls_sequential(
-                    &mut selected_calls, &tool_defs, &allowed_tools,
-                    &mut messages, &mut on_tool_event,
-                    &cancelled_set, &state.scripts_dir,
-                ).await;
+                    &mut selected_calls,
+                    &tool_defs,
+                    &allowed_tools,
+                    &mut messages,
+                    &mut on_tool_event,
+                    &cancelled_set,
+                    &state.scripts_dir,
+                )
+                .await;
             }
             config::ToolExecutionMode::Parallel => {
                 execute_tool_calls_parallel(
-                    &mut selected_calls, &tool_defs, &allowed_tools,
-                    &mut messages, &mut on_tool_event,
-                    &cancelled_set, &state.scripts_dir,
-                ).await;
+                    &mut selected_calls,
+                    &tool_defs,
+                    &allowed_tools,
+                    &mut messages,
+                    &mut on_tool_event,
+                    &cancelled_set,
+                    &state.scripts_dir,
+                )
+                .await;
             }
         }
 
@@ -405,10 +490,10 @@ where
 
         // Emit per-round usage so consumers can track cumulative costs.
         on_tool_event(ToolEvent::RoundComplete {
-            round:             round_idx + 1,
-            prompt_tokens:     cumulative_prompt_tokens,
+            round: round_idx + 1,
+            prompt_tokens: cumulative_prompt_tokens,
             completion_tokens: cumulative_completion_tokens,
-            tool_calls_count:  selected_calls.len(),
+            tool_calls_count: selected_calls.len(),
         });
     }
 
@@ -435,10 +520,14 @@ where
 /// action, so we only need a brief reminder of what happened.
 fn condense_prior_tool_results(messages: &mut [Value], current_round_start: usize) {
     for (i, msg) in messages.iter_mut().enumerate() {
-        if i >= current_round_start { break; }
+        if i >= current_round_start {
+            break;
+        }
 
         let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
-        if role != "tool" { continue; }
+        if role != "tool" {
+            continue;
+        }
 
         let content = match msg.get("content").and_then(|c| c.as_str()) {
             Some(c) => c.to_string(),
@@ -446,7 +535,9 @@ fn condense_prior_tool_results(messages: &mut [Value], current_round_start: usiz
         };
 
         // Already condensed (< 200 chars) — skip.
-        if content.len() < 200 { continue; }
+        if content.len() < 200 {
+            continue;
+        }
 
         let summary = summarize_tool_result(&content);
         msg["content"] = Value::String(summary);
@@ -470,7 +561,10 @@ fn summarize_tool_result(content: &str) -> String {
     };
 
     let tool = v.get("tool").and_then(|t| t.as_str()).unwrap_or("unknown");
-    let ok = v.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
+    let ok = v
+        .get("ok")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
 
     if !ok {
         let err = v.get("error").and_then(|e| e.as_str()).unwrap_or("failed");
@@ -479,10 +573,10 @@ fn summarize_tool_result(content: &str) -> String {
 
     match tool {
         "location" => {
-            let city    = v.get("city").and_then(|c| c.as_str()).unwrap_or("?");
-            let region  = v.get("region").and_then(|c| c.as_str()).unwrap_or("");
+            let city = v.get("city").and_then(|c| c.as_str()).unwrap_or("?");
+            let region = v.get("region").and_then(|c| c.as_str()).unwrap_or("");
             let country = v.get("country").and_then(|c| c.as_str()).unwrap_or("");
-            let tz      = v.get("timezone").and_then(|c| c.as_str()).unwrap_or("");
+            let tz = v.get("timezone").and_then(|c| c.as_str()).unwrap_or("");
             format!("[location: {city}, {region}, {country} ({tz})]")
         }
         "date" => {
@@ -493,26 +587,43 @@ fn summarize_tool_result(content: &str) -> String {
             let query = v.get("query").and_then(|q| q.as_str()).unwrap_or("?");
             // Handle compact text format.
             if let Some(compact) = v.get("compact").and_then(|c| c.as_str()) {
-                let n = compact.lines().filter(|l| l.starts_with(|c: char| c.is_ascii_digit())).count();
+                let n = compact
+                    .lines()
+                    .filter(|l| l.starts_with(|c: char| c.is_ascii_digit()))
+                    .count();
                 return format!("[web_search: {n} results for \"{query}\"]");
             }
-            let n = v.get("results").and_then(|r| r.as_array()).map(std::vec::Vec::len).unwrap_or(0);
+            let n = v
+                .get("results")
+                .and_then(|r| r.as_array())
+                .map(std::vec::Vec::len)
+                .unwrap_or(0);
             format!("[web_search: {n} results for \"{query}\"]")
         }
         "web_fetch" => {
             let url = v.get("url").and_then(|u| u.as_str()).unwrap_or("?");
-            let chars = v.get("content").and_then(|c| c.as_str()).map(str::len).unwrap_or(0);
+            let chars = v
+                .get("content")
+                .and_then(|c| c.as_str())
+                .map(str::len)
+                .unwrap_or(0);
             let short_url = if url.len() > 60 { &url[..60] } else { url };
             format!("[web_fetch: {short_url}… ({chars} chars)]")
         }
         "bash" => {
             let cmd = v.get("command").and_then(|c| c.as_str()).unwrap_or("?");
-            let exit = v.get("exit_code").and_then(serde_json::Value::as_i64).unwrap_or(-1);
+            let exit = v
+                .get("exit_code")
+                .and_then(serde_json::Value::as_i64)
+                .unwrap_or(-1);
             let short_cmd = if cmd.len() > 60 { &cmd[..60] } else { cmd };
             format!("[bash: `{short_cmd}` exit={exit}]")
         }
         "read_file" => {
-            let lines = v.get("total_lines").and_then(serde_json::Value::as_u64).unwrap_or(0);
+            let lines = v
+                .get("total_lines")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
             format!("[read_file: {lines} lines]")
         }
         "skill" => {
@@ -541,8 +652,8 @@ fn validate_and_prepare(
     // Auto-redirect: Skill API sub-command or neuroskill alias used as tool.
     if !skill_tools::defs::is_known_builtin_tool(&tc.function.name) {
         if let Some(cmd) = skill_tools::defs::resolve_skill_alias(&tc.function.name) {
-            let orig_args: Value = serde_json::from_str(&tc.function.arguments)
-                .unwrap_or_else(|_| json!({}));
+            let orig_args: Value =
+                serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| json!({}));
             let mut redirected = json!({ "command": cmd });
             if let Some(obj) = orig_args.as_object() {
                 if !obj.is_empty() {
@@ -556,19 +667,24 @@ fn validate_and_prepare(
     }
 
     if !skill_tools::defs::is_known_builtin_tool(&tc.function.name) {
-        return Err(json!({ "ok": false, "tool": tc.function.name, "error": format!("unsupported tool \"{}\". Use one of the available tools listed in the system prompt.", tc.function.name) }));
+        return Err(
+            json!({ "ok": false, "tool": tc.function.name, "error": format!("unsupported tool \"{}\". Use one of the available tools listed in the system prompt.", tc.function.name) }),
+        );
     }
     if !is_builtin_tool_enabled(allowed_tools, &tc.function.name) {
-        return Err(json!({ "ok": false, "tool": tc.function.name, "error": "tool disabled in settings" }));
+        return Err(
+            json!({ "ok": false, "tool": tc.function.name, "error": "tool disabled in settings" }),
+        );
     }
 
-    let args: Value = serde_json::from_str(&tc.function.arguments)
-        .unwrap_or_else(|_| json!({}));
+    let args: Value = serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| json!({}));
 
     if let Some(tool_def) = tool_defs.get(&tc.function.name) {
         match tools::validate_tool_arguments(tool_def, &args) {
             Ok(validated) => Ok(validated),
-            Err(err_msg) => Err(json!({ "ok": false, "tool": tc.function.name, "error": err_msg.to_string() })),
+            Err(err_msg) => {
+                Err(json!({ "ok": false, "tool": tc.function.name, "error": err_msg.to_string() }))
+            }
         }
     } else {
         Ok(args)
@@ -585,14 +701,14 @@ async fn execute_tool_calls_sequential<G>(
     on_tool_event: &mut G,
     cancelled_set: &Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     scripts_dir: &std::path::Path,
-)
-where
+) where
     G: FnMut(ToolEvent),
 {
     for tc in calls.iter_mut() {
         // Check if cancelled before execution.
         if cancelled_set.lock_or_recover().contains(&tc.id) {
-            let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
+            let cancel_result =
+                json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
             on_tool_event(ToolEvent::Status {
                 tool_name: tc.function.name.clone(),
                 status: "cancelled".into(),
@@ -629,7 +745,9 @@ where
         // Emit start events.
         let detail_str = if tc.function.arguments.len() > 2 {
             Some(tc.function.arguments.clone())
-        } else { None };
+        } else {
+            None
+        };
         on_tool_event(ToolEvent::Status {
             tool_name: tc.function.name.clone(),
             status: "calling".into(),
@@ -643,13 +761,19 @@ where
 
         // Re-check cancellation after emitting start.
         let (tool_result, is_error) = if cancelled_set.lock_or_recover().contains(&tc.id) {
-            (json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }), true)
+            (
+                json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }),
+                true,
+            )
         } else {
             match args_result {
                 Err(err_val) => (err_val, true),
                 Ok(_) => {
                     let result = execute_builtin_tool_call(tc, allowed_tools, scripts_dir).await;
-                    let ok = result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
+                    let ok = result
+                        .get("ok")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false);
                     (result, !ok)
                 }
             }
@@ -659,7 +783,14 @@ where
         on_tool_event(ToolEvent::Status {
             tool_name: tc.function.name.clone(),
             status: if is_error { "error" } else { "done" }.into(),
-            detail: if is_error { tool_result.get("error").and_then(|v| v.as_str()).map(std::string::ToString::to_string) } else { None },
+            detail: if is_error {
+                tool_result
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .map(std::string::ToString::to_string)
+            } else {
+                None
+            },
         });
         on_tool_event(ToolEvent::ExecutionEnd {
             tool_call_id: tc.id.clone(),
@@ -686,8 +817,7 @@ async fn execute_tool_calls_parallel<G>(
     on_tool_event: &mut G,
     cancelled_set: &Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
     scripts_dir: &std::path::Path,
-)
-where
+) where
     G: FnMut(ToolEvent),
 {
     // Phase 1: Prepare all calls.
@@ -699,7 +829,8 @@ where
     let mut prepared = Vec::with_capacity(calls.len());
     for tc in calls.iter_mut() {
         if cancelled_set.lock_or_recover().contains(&tc.id) {
-            let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
+            let cancel_result =
+                json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
             on_tool_event(ToolEvent::Status {
                 tool_name: tc.function.name.clone(),
                 status: "cancelled".into(),
@@ -735,7 +866,9 @@ where
 
         let detail_str = if tc.function.arguments.len() > 2 {
             Some(tc.function.arguments.clone())
-        } else { None };
+        } else {
+            None
+        };
         on_tool_event(ToolEvent::Status {
             tool_name: tc.function.name.clone(),
             status: "calling".into(),
@@ -747,7 +880,10 @@ where
             args: args_for_event,
         });
 
-        prepared.push(PreparedCall { tc: tc.clone(), validation: args_result });
+        prepared.push(PreparedCall {
+            tc: tc.clone(),
+            validation: args_result,
+        });
     }
 
     // Phase 2: Execute concurrently.
@@ -769,10 +905,12 @@ where
                 (tc, result, !ok)
             }));
         } else {
-            let err_val = p.validation.as_ref().expect_err("guarded by else branch").clone();
-            futures.push(tokio::spawn(async move {
-                (tc, err_val, true)
-            }));
+            let err_val = p
+                .validation
+                .as_ref()
+                .expect_err("guarded by else branch")
+                .clone();
+            futures.push(tokio::spawn(async move { (tc, err_val, true) }));
         }
     }
 
@@ -786,7 +924,14 @@ where
         on_tool_event(ToolEvent::Status {
             tool_name: tc.function.name.clone(),
             status: if is_error { "error" } else { "done" }.into(),
-            detail: if is_error { tool_result.get("error").and_then(|v| v.as_str()).map(std::string::ToString::to_string) } else { None },
+            detail: if is_error {
+                tool_result
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .map(std::string::ToString::to_string)
+            } else {
+                None
+            },
         });
         on_tool_event(ToolEvent::ExecutionEnd {
             tool_call_id: tc.id.clone(),

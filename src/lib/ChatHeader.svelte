@@ -2,60 +2,60 @@
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <!-- Chat top bar — sidebar toggle, tools badge, EEG badge, server controls, settings. -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
-  import type { ServerStatus, BandSnapshot } from "$lib/chat-types";
+import type { BandSnapshot, ServerStatus } from "$lib/chat-types";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface Props {
-    sidebarOpen: boolean;
-    showSettings: boolean;
-    showTools: boolean;
-    status: ServerStatus;
-    loadingDetail?: string;
-    modelName: string;
-    supportsTools: boolean;
-    enabledToolCount: number;
-    nCtx: number;
-    liveUsedTokens: number;
-    realPromptTokens: number | null;
-    eegContext: boolean;
-    latestBands: BandSnapshot | null;
-    canStart: boolean;
-    canStop: boolean;
-    onToggleSidebar: () => void;
-    onToggleSettings: () => void;
-    onToggleTools: () => void;
-    onStartServer: () => void;
-    onStopServer: () => void;
-    onNewChat: () => void;
-    onToggleEeg: () => void;
-    onToggleContextBreakdown: () => void;
-  }
+interface Props {
+  sidebarOpen: boolean;
+  showSettings: boolean;
+  showTools: boolean;
+  status: ServerStatus;
+  loadingDetail?: string;
+  modelName: string;
+  supportsTools: boolean;
+  enabledToolCount: number;
+  nCtx: number;
+  liveUsedTokens: number;
+  realPromptTokens: number | null;
+  eegContext: boolean;
+  latestBands: BandSnapshot | null;
+  canStart: boolean;
+  canStop: boolean;
+  onToggleSidebar: () => void;
+  onToggleSettings: () => void;
+  onToggleTools: () => void;
+  onStartServer: () => void;
+  onStopServer: () => void;
+  onNewChat: () => void;
+  onToggleEeg: () => void;
+  onToggleContextBreakdown: () => void;
+}
 
-  let {
-    sidebarOpen,
-    showSettings,
-    showTools,
-    status,
-    loadingDetail = "",
-    modelName,
-    supportsTools,
-    enabledToolCount,
-    nCtx,
-    liveUsedTokens,
-    realPromptTokens,
-    eegContext,
-    latestBands,
-    canStart,
-    canStop,
-    onToggleSidebar,
-    onToggleSettings,
-    onToggleTools,
-    onStartServer,
-    onStopServer,
-    onNewChat,
-    onToggleEeg,
-    onToggleContextBreakdown,
-  }: Props = $props();
+let {
+  sidebarOpen,
+  showSettings,
+  showTools,
+  status,
+  loadingDetail = "",
+  modelName,
+  supportsTools,
+  enabledToolCount,
+  nCtx,
+  liveUsedTokens,
+  realPromptTokens,
+  eegContext,
+  latestBands,
+  canStart,
+  canStop,
+  onToggleSidebar,
+  onToggleSettings,
+  onToggleTools,
+  onStartServer,
+  onStopServer,
+  onNewChat,
+  onToggleEeg,
+  onToggleContextBreakdown,
+}: Props = $props();
 </script>
 
 <header class="relative flex flex-nowrap items-center gap-2 px-3 py-2 border-b border-border dark:border-white/[0.06]

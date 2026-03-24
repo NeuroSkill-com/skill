@@ -1,90 +1,92 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 <!-- Copyright (C) 2026 NeuroSkill.com -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { Button } from "$lib/components/ui/button";
-  import { t } from "$lib/i18n/index.svelte";
-  import { fmtDateTimeLocale, fmtGB } from "$lib/format";
+import { invoke } from "@tauri-apps/api/core";
+import { onDestroy, onMount } from "svelte";
+import { Button } from "$lib/components/ui/button";
+import { fmtDateTimeLocale, fmtGB } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
 
-  type DownloadState = "not_downloaded" | "downloading" | "paused" | "downloaded" | "failed" | "cancelled";
+type DownloadState = "not_downloaded" | "downloading" | "paused" | "downloaded" | "failed" | "cancelled";
 
-  interface DownloadItem {
-    repo: string;
-    filename: string;
-    quant: string;
-    size_gb: number;
-    description: string;
-    is_mmproj: boolean;
-    state: DownloadState;
-    status_msg: string | null;
-    progress: number;
-    initiated_at_unix: number | null;
-    local_path: string | null;
-    shard_count: number;
-    current_shard: number;
+interface DownloadItem {
+  repo: string;
+  filename: string;
+  quant: string;
+  size_gb: number;
+  description: string;
+  is_mmproj: boolean;
+  state: DownloadState;
+  status_msg: string | null;
+  progress: number;
+  initiated_at_unix: number | null;
+  local_path: string | null;
+  shard_count: number;
+  current_shard: number;
+}
+
+let items = $state<DownloadItem[]>([]);
+let loading = $state(true);
+let timer: ReturnType<typeof setInterval> | undefined;
+
+const totalDownloadsSizeGb = $derived.by(() =>
+  items.reduce((sum, item) => sum + (Number.isFinite(item.size_gb) ? item.size_gb : 0), 0),
+);
+
+async function load() {
+  try {
+    items = await invoke<DownloadItem[]>("get_llm_downloads");
+  } finally {
+    loading = false;
   }
+}
 
-  let items = $state<DownloadItem[]>([]);
-  let loading = $state(true);
-  let timer: ReturnType<typeof setInterval> | undefined;
+async function cancelItem(filename: string) {
+  await invoke("cancel_llm_download", { filename });
+  await load();
+}
 
-  const totalDownloadsSizeGb = $derived.by(() =>
-    items.reduce((sum, item) => sum + (Number.isFinite(item.size_gb) ? item.size_gb : 0), 0)
-  );
+async function pauseItem(filename: string) {
+  await invoke("pause_llm_download", { filename });
+  await load();
+}
 
-  async function load() {
-    try {
-      items = await invoke<DownloadItem[]>("get_llm_downloads");
-    } finally {
-      loading = false;
-    }
-  }
+async function resumeItem(filename: string) {
+  await invoke("resume_llm_download", { filename });
+  await load();
+}
 
-  async function cancelItem(filename: string) {
-    await invoke("cancel_llm_download", { filename });
-    await load();
-  }
+async function deleteItem(filename: string) {
+  await invoke("delete_llm_model", { filename });
+  await load();
+}
 
-  async function pauseItem(filename: string) {
-    await invoke("pause_llm_download", { filename });
-    await load();
-  }
+const fmtSize = fmtGB;
 
-  async function resumeItem(filename: string) {
-    await invoke("resume_llm_download", { filename });
-    await load();
-  }
+function fmtInitiated(unix: number | null): string {
+  if (!unix) return t("downloads.initiatedUnknown");
+  return fmtDateTimeLocale(unix);
+}
 
-  async function deleteItem(filename: string) {
-    await invoke("delete_llm_model", { filename });
-    await load();
-  }
+function statusLabel(s: DownloadState): string {
+  if (s === "downloading") return t("downloads.status.downloading");
+  if (s === "paused") return t("downloads.status.paused");
+  if (s === "downloaded") return t("downloads.status.downloaded");
+  if (s === "failed") return t("downloads.status.failed");
+  if (s === "cancelled") return t("downloads.status.cancelled");
+  return t("downloads.status.notDownloaded");
+}
 
-  const fmtSize = fmtGB;
+onMount(async () => {
+  await load();
+  timer = setInterval(() => {
+    void load();
+  }, 1000);
+});
 
-  function fmtInitiated(unix: number | null): string {
-    if (!unix) return t("downloads.initiatedUnknown");
-    return fmtDateTimeLocale(unix);
-  }
-
-  function statusLabel(s: DownloadState): string {
-    if (s === "downloading") return t("downloads.status.downloading");
-    if (s === "paused") return t("downloads.status.paused");
-    if (s === "downloaded") return t("downloads.status.downloaded");
-    if (s === "failed") return t("downloads.status.failed");
-    if (s === "cancelled") return t("downloads.status.cancelled");
-    return t("downloads.status.notDownloaded");
-  }
-
-  onMount(async () => {
-    await load();
-    timer = setInterval(() => { void load(); }, 1000);
-  });
-
-  onDestroy(() => {
-    clearInterval(timer);
-  });
+onDestroy(() => {
+  clearInterval(timer);
+});
 </script>
 
 <main class="h-full min-h-0 flex flex-col overflow-hidden bg-background">

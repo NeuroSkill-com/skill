@@ -5,167 +5,173 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { t } from "$lib/i18n/index.svelte";
-  import LanguagePicker from "./LanguagePicker.svelte";
-  import ThemeToggle from "./ThemeToggle.svelte";
-  import { hBar, hCbs } from "$lib/stores/titlebar.svelte";
-  import { helpTitlebarState } from "$lib/stores/titlebar.svelte";
-  import { labelTitlebarState } from "$lib/stores/titlebar.svelte";
-  import { chatTitlebarState } from "$lib/stores/titlebar.svelte";
-  import { openLabel, openHistory, openHelp } from "$lib/navigation";
-  import { isBtOff } from "$lib/stores/bt-status.svelte";
-  import type { LlmCatalog, LlmModelEntry } from "$lib/llm-helpers";
+import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { onDestroy, onMount } from "svelte";
+import { t } from "$lib/i18n/index.svelte";
+import type { LlmCatalog, LlmModelEntry } from "$lib/llm-helpers";
+import { openHelp, openHistory, openLabel } from "$lib/navigation";
+import { isBtOff } from "$lib/stores/bt-status.svelte";
+import { chatTitlebarState, hBar, hCbs, helpTitlebarState, labelTitlebarState } from "$lib/stores/titlebar.svelte";
+import LanguagePicker from "./LanguagePicker.svelte";
+import ThemeToggle from "./ThemeToggle.svelte";
 
-  // ── State ───────────────────────────────────────────────────────────────
-  let osType: string | null = $state(null);
-  let windowLabel = $state("main");
-  let windowTitle = $state("");
-  let searchMode = $state<"eeg" | "text" | "interactive" | "images">("interactive");
-  let titleObserver: MutationObserver | null = null;
+// ── State ───────────────────────────────────────────────────────────────
+let osType: string | null = $state(null);
+let windowLabel = $state("main");
+let windowTitle = $state("");
+let searchMode = $state<"eeg" | "text" | "interactive" | "images">("interactive");
+let titleObserver: MutationObserver | null = null;
 
-  // ── Derived ─────────────────────────────────────────────────────────────
-  const isMac             = $derived(osType === "Darwin");
-  const isMainWindow      = $derived(windowLabel === "main");
-  const isSettingsWindow  = $derived(windowLabel === "settings");
-  const isSearchWindow    = $derived(windowLabel === "search");
-  const isApiWindow       = $derived(windowLabel === "api");
-  const isHelpWindow      = $derived(windowLabel === "help");
-  const isDownloadsWindow = $derived(windowLabel === "downloads");
-  const isHistoryWindow   = $derived(windowLabel === "history");
-  const isLabelWindow     = $derived(windowLabel === "label");
-  const isChatWindow      = $derived(windowLabel === "chat");
-  const btUnavailable     = $derived(isMainWindow && isBtOff());
+// ── Derived ─────────────────────────────────────────────────────────────
+const isMac = $derived(osType === "Darwin");
+const isMainWindow = $derived(windowLabel === "main");
+const isSettingsWindow = $derived(windowLabel === "settings");
+const isSearchWindow = $derived(windowLabel === "search");
+const isApiWindow = $derived(windowLabel === "api");
+const isHelpWindow = $derived(windowLabel === "help");
+const isDownloadsWindow = $derived(windowLabel === "downloads");
+const isHistoryWindow = $derived(windowLabel === "history");
+const isLabelWindow = $derived(windowLabel === "label");
+const isChatWindow = $derived(windowLabel === "chat");
+const btUnavailable = $derived(isMainWindow && isBtOff());
 
-  const SEARCH_MODE_EVENT     = "skill:search-mode";
-  const SEARCH_SET_MODE_EVENT = "skill:search-set-mode";
-  const API_REFRESH_EVENT     = "skill:api-refresh";
-  const HISTORY_VIEW_MODES    = ["year", "month", "week", "day"] as const;
+const SEARCH_MODE_EVENT = "skill:search-mode";
+const SEARCH_SET_MODE_EVENT = "skill:search-set-mode";
+const API_REFRESH_EVENT = "skill:api-refresh";
+const HISTORY_VIEW_MODES = ["year", "month", "week", "day"] as const;
 
-  // ── Helpers ─────────────────────────────────────────────────────────────
-  function emitApiRefresh() { window.dispatchEvent(new CustomEvent(API_REFRESH_EVENT)); }
-  function emitSearchModeSwitch(mode: "eeg" | "text" | "interactive" | "images") {
-    window.dispatchEvent(new CustomEvent(SEARCH_SET_MODE_EVENT, { detail: { mode } }));
+// ── Helpers ─────────────────────────────────────────────────────────────
+function emitApiRefresh() {
+  window.dispatchEvent(new CustomEvent(API_REFRESH_EVENT));
+}
+function emitSearchModeSwitch(mode: "eeg" | "text" | "interactive" | "images") {
+  window.dispatchEvent(new CustomEvent(SEARCH_SET_MODE_EVENT, { detail: { mode } }));
+}
+function normalizeSearchMode(v: unknown): "eeg" | "text" | "interactive" | "images" {
+  return v === "eeg" || v === "text" || v === "interactive" || v === "images" ? v : "interactive";
+}
+async function minimizeWindow() {
+  await getCurrentWindow().minimize();
+}
+async function toggleMaximizeWindow() {
+  await getCurrentWindow().toggleMaximize();
+}
+async function closeWindow() {
+  await getCurrentWindow().close();
+}
+
+// ── Model picker (chat window) ──────────────────────────────────────────
+let modelPickerOpen = $state(false);
+let downloadedModels = $state<LlmModelEntry[]>([]);
+let activeFilename = $state("");
+let modelSwitching = $state(false);
+let pickerBtnEl = $state<HTMLButtonElement | null>(null);
+let dropdownX = $state(0);
+let dropdownY = $state(0);
+/** Set of repos that have at least one downloaded mmproj. */
+let visionRepos = $state(new Set<string>());
+
+function prettyModelName(filename: string): string {
+  return filename.replace(/\.gguf$/i, "").replace(/-(\d{5})-of-\d{5}$/, "");
+}
+function modelDisplayLabel(entry: LlmModelEntry): string {
+  if (entry.family_name) return `${entry.family_name} (${entry.quant})`;
+  return prettyModelName(entry.filename);
+}
+
+async function openModelPicker() {
+  if (modelSwitching) return;
+  try {
+    const catalog = await invoke<LlmCatalog>("get_llm_catalog");
+    downloadedModels = catalog.entries.filter((e) => e.state === "downloaded" && !e.is_mmproj);
+    activeFilename = catalog.active_model;
+    // Collect repos that have a downloaded vision projector
+    visionRepos = new Set(catalog.entries.filter((e) => e.is_mmproj && e.state === "downloaded").map((e) => e.repo));
+  } catch (e) {
+    downloadedModels = [];
+    visionRepos = new Set();
   }
-  function normalizeSearchMode(v: unknown): "eeg" | "text" | "interactive" | "images" {
-    return v === "eeg" || v === "text" || v === "interactive" || v === "images" ? v : "interactive";
+  if (downloadedModels.length === 0) return;
+  // Position dropdown below the button
+  if (pickerBtnEl) {
+    const rect = pickerBtnEl.getBoundingClientRect();
+    dropdownX = rect.left + rect.width / 2;
+    dropdownY = rect.bottom + 4;
   }
-  async function minimizeWindow()       { await getCurrentWindow().minimize(); }
-  async function toggleMaximizeWindow() { await getCurrentWindow().toggleMaximize(); }
-  async function closeWindow()          { await getCurrentWindow().close(); }
+  modelPickerOpen = true;
+}
 
-  // ── Model picker (chat window) ──────────────────────────────────────────
-  let modelPickerOpen = $state(false);
-  let downloadedModels = $state<LlmModelEntry[]>([]);
-  let activeFilename = $state("");
-  let modelSwitching = $state(false);
-  let pickerBtnEl = $state<HTMLButtonElement | null>(null);
-  let dropdownX = $state(0);
-  let dropdownY = $state(0);
-  /** Set of repos that have at least one downloaded mmproj. */
-  let visionRepos = $state(new Set<string>());
+function closeModelPicker() {
+  modelPickerOpen = false;
+}
 
-  function prettyModelName(filename: string): string {
-    return filename.replace(/\.gguf$/i, "").replace(/-(\d{5})-of-\d{5}$/, "");
+async function switchToModel(filename: string) {
+  if (filename === activeFilename || modelSwitching) return;
+  modelSwitching = true;
+  modelPickerOpen = false;
+  try {
+    await invoke("switch_llm_model", { filename });
+  } catch (e) {
+  } finally {
+    modelSwitching = false;
   }
-  function modelDisplayLabel(entry: LlmModelEntry): string {
-    if (entry.family_name) return `${entry.family_name} (${entry.quant})`;
-    return prettyModelName(entry.filename);
+}
+
+let dropdownEl = $state<HTMLDivElement | null>(null);
+
+function onPickerOutsideClick(e: MouseEvent) {
+  if (!modelPickerOpen) return;
+  const target = e.target as Node;
+  if (pickerBtnEl?.contains(target)) return;
+  if (dropdownEl?.contains(target)) return;
+  closeModelPicker();
+}
+
+const pickerGroups = $derived.by(() => {
+  const map = new Map<string, LlmModelEntry[]>();
+  for (const e of downloadedModels) {
+    const key = e.family_name || e.family_id || "Other";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)?.push(e);
   }
+  return [...map.entries()].map(([family, entries]) => ({ family, entries }));
+});
 
-  async function openModelPicker() {
-    if (modelSwitching) return;
-    try {
-      const catalog = await invoke<LlmCatalog>("get_llm_catalog");
-      downloadedModels = catalog.entries.filter(e => e.state === "downloaded" && !e.is_mmproj);
-      activeFilename = catalog.active_model;
-      // Collect repos that have a downloaded vision projector
-      visionRepos = new Set(
-        catalog.entries
-          .filter(e => e.is_mmproj && e.state === "downloaded")
-          .map(e => e.repo),
-      );
-    } catch (e) {
-      console.warn("[titlebar] get_llm_catalog failed:", e);
-      downloadedModels = [];
-      visionRepos = new Set();
-    }
-    if (downloadedModels.length === 0) return;
-    // Position dropdown below the button
-    if (pickerBtnEl) {
-      const rect = pickerBtnEl.getBoundingClientRect();
-      dropdownX = rect.left + rect.width / 2;
-      dropdownY = rect.bottom + 4;
-    }
-    modelPickerOpen = true;
+// ── Lifecycle ───────────────────────────────────────────────────────────
+$effect(() => {
+  const ua = navigator.userAgent;
+  if (ua.includes("Mac OS")) osType = "Darwin";
+  else if (ua.includes("Windows")) osType = "Windows";
+  else if (ua.includes("Linux")) osType = "Linux";
+});
+
+onMount(() => {
+  const win = getCurrentWindow();
+  windowLabel = win.label;
+  windowTitle = document.title || "NeuroSkill™";
+  if (win.label === "search") searchMode = normalizeSearchMode(new URLSearchParams(window.location.search).get("mode"));
+
+  const onSearchMode = (e: Event) => {
+    searchMode = normalizeSearchMode((e as CustomEvent<{ mode?: unknown }>).detail?.mode);
+  };
+  window.addEventListener(SEARCH_MODE_EVENT, onSearchMode as EventListener);
+
+  const titleEl = document.querySelector("title");
+  if (titleEl) {
+    titleObserver = new MutationObserver(() => {
+      const next = document.title || "NeuroSkill™";
+      if (next !== windowTitle) windowTitle = next;
+    });
+    titleObserver.observe(titleEl, { childList: true, subtree: true, characterData: true });
   }
+  return () => window.removeEventListener(SEARCH_MODE_EVENT, onSearchMode as EventListener);
+});
 
-  function closeModelPicker() { modelPickerOpen = false; }
-
-  async function switchToModel(filename: string) {
-    if (filename === activeFilename || modelSwitching) return;
-    modelSwitching = true;
-    modelPickerOpen = false;
-    try { await invoke("switch_llm_model", { filename }); }
-    catch (e) { console.warn("[titlebar] switch_llm_model failed:", e); }
-    finally { modelSwitching = false; }
-  }
-
-  let dropdownEl = $state<HTMLDivElement | null>(null);
-
-  function onPickerOutsideClick(e: MouseEvent) {
-    if (!modelPickerOpen) return;
-    const target = e.target as Node;
-    if (pickerBtnEl?.contains(target)) return;
-    if (dropdownEl?.contains(target)) return;
-    closeModelPicker();
-  }
-
-  const pickerGroups = $derived.by(() => {
-    const map = new Map<string, LlmModelEntry[]>();
-    for (const e of downloadedModels) {
-      const key = e.family_name || e.family_id || "Other";
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(e);
-    }
-    return [...map.entries()].map(([family, entries]) => ({ family, entries }));
-  });
-
-
-  // ── Lifecycle ───────────────────────────────────────────────────────────
-  $effect(() => {
-    const ua = navigator.userAgent;
-    if      (ua.includes("Mac OS"))  osType = "Darwin";
-    else if (ua.includes("Windows")) osType = "Windows";
-    else if (ua.includes("Linux"))   osType = "Linux";
-  });
-
-  onMount(() => {
-    const win = getCurrentWindow();
-    windowLabel = win.label;
-    windowTitle = document.title || "NeuroSkill™";
-    if (win.label === "search")
-      searchMode = normalizeSearchMode(new URLSearchParams(window.location.search).get("mode"));
-
-    const onSearchMode = (e: Event) => {
-      searchMode = normalizeSearchMode((e as CustomEvent<{ mode?: unknown }>).detail?.mode);
-    };
-    window.addEventListener(SEARCH_MODE_EVENT, onSearchMode as EventListener);
-
-    const titleEl = document.querySelector("title");
-    if (titleEl) {
-      titleObserver = new MutationObserver(() => {
-        const next = document.title || "NeuroSkill™";
-        if (next !== windowTitle) windowTitle = next;
-      });
-      titleObserver.observe(titleEl, { childList: true, subtree: true, characterData: true });
-    }
-    return () => window.removeEventListener(SEARCH_MODE_EVENT, onSearchMode as EventListener);
-  });
-
-  onDestroy(() => { titleObserver?.disconnect(); titleObserver = null; });
+onDestroy(() => {
+  titleObserver?.disconnect();
+  titleObserver = null;
+});
 </script>
 
 <svelte:window onclick={onPickerOutsideClick} />

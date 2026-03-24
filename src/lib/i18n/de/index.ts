@@ -5,20 +5,21 @@
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, version 3 only.
 /** DE — barrel export merging all namespace files. */
+
+import calibration from "./calibration";
 import common from "./common";
 import dashboard from "./dashboard";
-import settings from "./settings";
-import search from "./search";
-import calibration from "./calibration";
+import help from "./help";
+import helpRef from "./help-ref";
 import history from "./history";
 import hooks from "./hooks";
 import llm from "./llm";
 import onboarding from "./onboarding";
-import screenshots from "./screenshots";
-import tts from "./tts";
 import perm from "./perm";
-import help from "./help";
-import helpRef from "./help-ref";
+import screenshots from "./screenshots";
+import search from "./search";
+import settings from "./settings";
+import tts from "./tts";
 import ui from "./ui";
 
 const all: Record<string, string> = {

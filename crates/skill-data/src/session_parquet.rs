@@ -22,9 +22,9 @@ use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
 
 use crate::ppg_analysis::PpgMetrics;
-use crate::session_csv::{ppg_csv_path, metrics_csv_path, PPG_SAMPLE_RATE, build_metrics_header};
-use skill_eeg::eeg_bands::BandSnapshot;
+use crate::session_csv::{build_metrics_header, metrics_csv_path, ppg_csv_path, PPG_SAMPLE_RATE};
 use anyhow::Context;
+use skill_eeg::eeg_bands::BandSnapshot;
 
 // ── Row-group flush threshold ─────────────────────────────────────────────────
 
@@ -76,36 +76,36 @@ fn writer_props() -> WriterProperties {
 /// and `flush` in the same way.
 pub struct ParquetState {
     // ── EEG ──────────────────────────────────────────────────────────────────
-    eeg_wtr:    ArrowWriter<std::fs::File>,
+    eeg_wtr: ArrowWriter<std::fs::File>,
     eeg_schema: Arc<Schema>,
-    n_eeg:      usize,
-    eeg_ts:     Vec<VecDeque<f64>>,
-    eeg_bufs:   Vec<VecDeque<f64>>,
-    eeg_rows:   usize,
+    n_eeg: usize,
+    eeg_ts: Vec<VecDeque<f64>>,
+    eeg_bufs: Vec<VecDeque<f64>>,
+    eeg_rows: usize,
 
     // ── PPG (lazy) ───────────────────────────────────────────────────────────
-    ppg_wtr:    Option<ArrowWriter<std::fs::File>>,
+    ppg_wtr: Option<ArrowWriter<std::fs::File>>,
     ppg_schema: Arc<Schema>,
-    ppg_bufs:   [VecDeque<f64>; 3],
-    ppg_ts:     [VecDeque<f64>; 3],
-    ppg_rows:   usize,
-    ppg_path:   PathBuf,
+    ppg_bufs: [VecDeque<f64>; 3],
+    ppg_ts: [VecDeque<f64>; 3],
+    ppg_rows: usize,
+    ppg_path: PathBuf,
 
     // ── Metrics (lazy) ───────────────────────────────────────────────────────
-    metrics_wtr:    Option<ArrowWriter<std::fs::File>>,
+    metrics_wtr: Option<ArrowWriter<std::fs::File>>,
     metrics_schema: Arc<Schema>,
     metrics_n_cols: usize,
-    metrics_rows:   usize,
-    metrics_path:   PathBuf,
+    metrics_rows: usize,
+    metrics_path: PathBuf,
 
     /// Accumulated metrics rows before flush.
     metrics_pending: Vec<Vec<f64>>,
 
     // ── IMU (lazy) ───────────────────────────────────────────────────────────
-    imu_wtr:    Option<ArrowWriter<std::fs::File>>,
+    imu_wtr: Option<ArrowWriter<std::fs::File>>,
     imu_schema: Arc<Schema>,
-    imu_rows:   usize,
-    imu_path:   PathBuf,
+    imu_rows: usize,
+    imu_path: PathBuf,
     imu_pending: Vec<[f64; 10]>,
 }
 
@@ -147,7 +147,8 @@ impl ParquetState {
 
         // Metrics schema: dynamic columns from channel labels + cross-channel indices
         let metrics_header = build_metrics_header(labels);
-        let metrics_fields: Vec<Field> = metrics_header.iter()
+        let metrics_fields: Vec<Field> = metrics_header
+            .iter()
             .map(|name| Field::new(name, DataType::Float64, true))
             .collect();
         let n_metrics_cols = metrics_fields.len();
@@ -172,14 +173,14 @@ impl ParquetState {
             eeg_wtr,
             eeg_schema,
             n_eeg: n,
-            eeg_ts:   (0..n).map(|_| VecDeque::new()).collect(),
+            eeg_ts: (0..n).map(|_| VecDeque::new()).collect(),
             eeg_bufs: (0..n).map(|_| VecDeque::new()).collect(),
             eeg_rows: 0,
 
             ppg_wtr: None,
             ppg_schema,
             ppg_bufs: std::array::from_fn(|_| VecDeque::new()),
-            ppg_ts:   std::array::from_fn(|_| VecDeque::new()),
+            ppg_ts: std::array::from_fn(|_| VecDeque::new()),
             ppg_rows: 0,
             ppg_path: ppg_parquet_path(csv_path),
 
@@ -200,26 +201,49 @@ impl ParquetState {
 
     // ── EEG ──────────────────────────────────────────────────────────────────
 
-    pub fn push_eeg(&mut self, electrode: usize, samples: &[f64], packet_ts: f64, sample_rate: f64) {
-        if electrode >= self.n_eeg { return; }
+    pub fn push_eeg(
+        &mut self,
+        electrode: usize,
+        samples: &[f64],
+        packet_ts: f64,
+        sample_rate: f64,
+    ) {
+        if electrode >= self.n_eeg {
+            return;
+        }
         for (i, &v) in samples.iter().enumerate() {
             self.eeg_bufs[electrode].push_back(v);
             self.eeg_ts[electrode].push_back(packet_ts + i as f64 / sample_rate);
         }
 
         // Drain complete rows (all channels have data).
-        let ready = self.eeg_bufs.iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
-        if ready == 0 { return; }
+        let ready = self
+            .eeg_bufs
+            .iter()
+            .map(std::collections::VecDeque::len)
+            .min()
+            .unwrap_or(0);
+        if ready == 0 {
+            return;
+        }
 
         // Build column arrays.
         let n = self.n_eeg;
-        let ts_col: Vec<f64> = (0..ready).filter_map(|_| self.eeg_ts[0].pop_front()).collect();
-        for k in 1..n { for _ in 0..ready { self.eeg_ts[k].pop_front(); } }
+        let ts_col: Vec<f64> = (0..ready)
+            .filter_map(|_| self.eeg_ts[0].pop_front())
+            .collect();
+        for k in 1..n {
+            for _ in 0..ready {
+                self.eeg_ts[k].pop_front();
+            }
+        }
 
         let mut columns: Vec<Arc<dyn arrow_array::Array>> = Vec::with_capacity(n + 1);
         columns.push(Arc::new(Float64Array::from(ts_col)));
         for k in 0..n {
-            let col: Vec<f64> = (0..ready).filter_map(|_| self.eeg_bufs[k].pop_front()).collect();
+            let col: Vec<f64> = (0..ready)
+                .filter_map(|_| self.eeg_bufs[k].pop_front())
+                .collect();
             columns.push(Arc::new(Float64Array::from(col)));
         }
 
@@ -244,35 +268,68 @@ impl ParquetState {
         packet_ts: f64,
         ppg_vitals: Option<&PpgMetrics>,
     ) {
-        if channel >= 3 { return; }
+        if channel >= 3 {
+            return;
+        }
         for (i, &v) in samples.iter().enumerate() {
             self.ppg_bufs[channel].push_back(v);
             self.ppg_ts[channel].push_back(packet_ts + i as f64 / PPG_SAMPLE_RATE);
         }
 
-        let ready = self.ppg_bufs.iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
-        if ready == 0 { return; }
+        let ready = self
+            .ppg_bufs
+            .iter()
+            .map(std::collections::VecDeque::len)
+            .min()
+            .unwrap_or(0);
+        if ready == 0 {
+            return;
+        }
 
         // Lazy-open PPG writer.
         if self.ppg_wtr.is_none() {
             match std::fs::File::create(&self.ppg_path) {
-                Ok(f) => match ArrowWriter::try_new(f, self.ppg_schema.clone(), Some(writer_props())) {
-                    Ok(w) => { self.ppg_wtr = Some(w); }
-                    Err(e) => { eprintln!("[parquet] PPG writer error: {e}"); return; }
-                },
-                Err(e) => { eprintln!("[parquet] PPG create error: {e}"); return; }
+                Ok(f) => {
+                    match ArrowWriter::try_new(f, self.ppg_schema.clone(), Some(writer_props())) {
+                        Ok(w) => {
+                            self.ppg_wtr = Some(w);
+                        }
+                        Err(e) => {
+                            eprintln!("[parquet] PPG writer error: {e}");
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[parquet] PPG create error: {e}");
+                    return;
+                }
             }
         }
 
-        let ts_col: Vec<f64> = (0..ready).filter_map(|_| self.ppg_ts[0].pop_front()).collect();
-        for k in 1..3 { for _ in 0..ready { self.ppg_ts[k].pop_front(); } }
+        let ts_col: Vec<f64> = (0..ready)
+            .filter_map(|_| self.ppg_ts[0].pop_front())
+            .collect();
+        for k in 1..3 {
+            for _ in 0..ready {
+                self.ppg_ts[k].pop_front();
+            }
+        }
 
-        let ambient:  Vec<f64> = (0..ready).filter_map(|_| self.ppg_bufs[0].pop_front()).collect();
-        let infrared: Vec<f64> = (0..ready).filter_map(|_| self.ppg_bufs[1].pop_front()).collect();
-        let red:      Vec<f64> = (0..ready).filter_map(|_| self.ppg_bufs[2].pop_front()).collect();
+        let ambient: Vec<f64> = (0..ready)
+            .filter_map(|_| self.ppg_bufs[0].pop_front())
+            .collect();
+        let infrared: Vec<f64> = (0..ready)
+            .filter_map(|_| self.ppg_bufs[1].pop_front())
+            .collect();
+        let red: Vec<f64> = (0..ready)
+            .filter_map(|_| self.ppg_bufs[2].pop_front())
+            .collect();
 
         let vitals_row = |field: fn(&PpgMetrics) -> f64| -> Vec<f64> {
-            (0..ready).map(|_| ppg_vitals.map_or(f64::NAN, field)).collect()
+            (0..ready)
+                .map(|_| ppg_vitals.map_or(f64::NAN, field))
+                .collect()
         };
 
         let columns: Vec<Arc<dyn arrow_array::Array>> = vec![
@@ -309,11 +366,22 @@ impl ParquetState {
         // Lazy-open metrics writer.
         if self.metrics_wtr.is_none() {
             match std::fs::File::create(&self.metrics_path) {
-                Ok(f) => match ArrowWriter::try_new(f, self.metrics_schema.clone(), Some(writer_props())) {
-                    Ok(w) => { self.metrics_wtr = Some(w); }
-                    Err(e) => { eprintln!("[parquet] metrics writer error: {e}"); return; }
-                },
-                Err(e) => { eprintln!("[parquet] metrics create error: {e}"); return; }
+                Ok(f) => {
+                    match ArrowWriter::try_new(f, self.metrics_schema.clone(), Some(writer_props()))
+                    {
+                        Ok(w) => {
+                            self.metrics_wtr = Some(w);
+                        }
+                        Err(e) => {
+                            eprintln!("[parquet] metrics writer error: {e}");
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[parquet] metrics create error: {e}");
+                    return;
+                }
             }
         }
 
@@ -327,42 +395,79 @@ impl ParquetState {
 
         for ch in &snap.channels {
             row.extend_from_slice(&[
-                ch.delta as f64, ch.theta as f64, ch.alpha as f64,
-                ch.beta as f64, ch.gamma as f64, ch.high_gamma as f64,
-                ch.rel_delta as f64, ch.rel_theta as f64, ch.rel_alpha as f64,
-                ch.rel_beta as f64, ch.rel_gamma as f64, ch.rel_high_gamma as f64,
+                ch.delta as f64,
+                ch.theta as f64,
+                ch.alpha as f64,
+                ch.beta as f64,
+                ch.gamma as f64,
+                ch.high_gamma as f64,
+                ch.rel_delta as f64,
+                ch.rel_theta as f64,
+                ch.rel_alpha as f64,
+                ch.rel_beta as f64,
+                ch.rel_gamma as f64,
+                ch.rel_high_gamma as f64,
             ]);
         }
         // Pad to 48 band-power columns (4 channels × 12) if fewer channels.
-        while row.len() < 1 + 48 { row.push(f64::NAN); }
+        while row.len() < 1 + 48 {
+            row.push(f64::NAN);
+        }
 
         row.extend_from_slice(&[
-            snap.faa as f64, snap.tar as f64, snap.bar as f64, snap.dtr as f64,
-            snap.pse as f64, snap.apf as f64, snap.bps as f64, snap.snr as f64,
-            snap.coherence as f64, snap.mu_suppression as f64, snap.mood as f64,
-            snap.tbr as f64, snap.sef95 as f64, snap.spectral_centroid as f64,
-            snap.hjorth_activity as f64, snap.hjorth_mobility as f64, snap.hjorth_complexity as f64,
-            snap.permutation_entropy as f64, snap.higuchi_fd as f64, snap.dfa_exponent as f64,
-            snap.sample_entropy as f64, snap.pac_theta_gamma as f64, snap.laterality_index as f64,
+            snap.faa as f64,
+            snap.tar as f64,
+            snap.bar as f64,
+            snap.dtr as f64,
+            snap.pse as f64,
+            snap.apf as f64,
+            snap.bps as f64,
+            snap.snr as f64,
+            snap.coherence as f64,
+            snap.mu_suppression as f64,
+            snap.mood as f64,
+            snap.tbr as f64,
+            snap.sef95 as f64,
+            snap.spectral_centroid as f64,
+            snap.hjorth_activity as f64,
+            snap.hjorth_mobility as f64,
+            snap.hjorth_complexity as f64,
+            snap.permutation_entropy as f64,
+            snap.higuchi_fd as f64,
+            snap.dfa_exponent as f64,
+            snap.sample_entropy as f64,
+            snap.pac_theta_gamma as f64,
+            snap.laterality_index as f64,
         ]);
         row.extend_from_slice(&[
-            opt(snap.hr), opt(snap.rmssd), opt(snap.sdnn), opt(snap.pnn50),
-            opt(snap.lf_hf_ratio), opt(snap.respiratory_rate),
-            opt(snap.spo2_estimate), opt(snap.perfusion_index), opt(snap.stress_index),
+            opt(snap.hr),
+            opt(snap.rmssd),
+            opt(snap.sdnn),
+            opt(snap.pnn50),
+            opt(snap.lf_hf_ratio),
+            opt(snap.respiratory_rate),
+            opt(snap.spo2_estimate),
+            opt(snap.perfusion_index),
+            opt(snap.stress_index),
+        ]);
+        row.extend_from_slice(&[opt_u64(snap.blink_count), opt(snap.blink_rate)]);
+        row.extend_from_slice(&[
+            opt(snap.head_pitch),
+            opt(snap.head_roll),
+            opt(snap.stillness),
+            opt_u64(snap.nod_count),
+            opt_u64(snap.shake_count),
         ]);
         row.extend_from_slice(&[
-            opt_u64(snap.blink_count), opt(snap.blink_rate),
-        ]);
-        row.extend_from_slice(&[
-            opt(snap.head_pitch), opt(snap.head_roll), opt(snap.stillness),
-            opt_u64(snap.nod_count), opt_u64(snap.shake_count),
-        ]);
-        row.extend_from_slice(&[
-            opt(snap.meditation), opt(snap.cognitive_load), opt(snap.drowsiness),
+            opt(snap.meditation),
+            opt(snap.cognitive_load),
+            opt(snap.drowsiness),
         ]);
         row.push(opt_u16(snap.temperature_raw));
         row.extend_from_slice(&[
-            opt(snap.gpu_overall), opt(snap.gpu_render), opt(snap.gpu_tiler),
+            opt(snap.gpu_overall),
+            opt(snap.gpu_render),
+            opt(snap.gpu_tiler),
         ]);
 
         self.metrics_pending.push(row);
@@ -374,8 +479,12 @@ impl ParquetState {
     }
 
     fn flush_metrics(&mut self) {
-        if self.metrics_pending.is_empty() { return; }
-        let Some(ref mut wtr) = self.metrics_wtr else { return; };
+        if self.metrics_pending.is_empty() {
+            return;
+        }
+        let Some(ref mut wtr) = self.metrics_wtr else {
+            return;
+        };
 
         let n_cols = self.metrics_n_cols;
         let n_rows = self.metrics_pending.len();
@@ -387,7 +496,8 @@ impl ParquetState {
             }
         }
 
-        let columns: Vec<Arc<dyn arrow_array::Array>> = col_data.into_iter()
+        let columns: Vec<Arc<dyn arrow_array::Array>> = col_data
+            .into_iter()
             .map(|c| Arc::new(Float64Array::from(c)) as Arc<dyn arrow_array::Array>)
             .collect();
 
@@ -404,19 +514,29 @@ impl ParquetState {
     pub fn push_imu(
         &mut self,
         _eeg_csv_path: &Path,
-        timestamp_s:   f64,
-        accel:         [f32; 3],
-        gyro:          Option<[f32; 3]>,
-        mag:           Option<[f32; 3]>,
+        timestamp_s: f64,
+        accel: [f32; 3],
+        gyro: Option<[f32; 3]>,
+        mag: Option<[f32; 3]>,
     ) {
         // Lazy-open IMU writer.
         if self.imu_wtr.is_none() {
             match std::fs::File::create(&self.imu_path) {
-                Ok(f) => match ArrowWriter::try_new(f, self.imu_schema.clone(), Some(writer_props())) {
-                    Ok(w) => { self.imu_wtr = Some(w); }
-                    Err(e) => { eprintln!("[parquet] IMU writer error: {e}"); return; }
-                },
-                Err(e) => { eprintln!("[parquet] IMU create error: {e}"); return; }
+                Ok(f) => {
+                    match ArrowWriter::try_new(f, self.imu_schema.clone(), Some(writer_props())) {
+                        Ok(w) => {
+                            self.imu_wtr = Some(w);
+                        }
+                        Err(e) => {
+                            eprintln!("[parquet] IMU writer error: {e}");
+                            return;
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[parquet] IMU create error: {e}");
+                    return;
+                }
             }
         }
 
@@ -424,9 +544,15 @@ impl ParquetState {
         let m = mag.unwrap_or([0.0; 3]);
         self.imu_pending.push([
             timestamp_s,
-            accel[0] as f64, accel[1] as f64, accel[2] as f64,
-            g[0] as f64, g[1] as f64, g[2] as f64,
-            m[0] as f64, m[1] as f64, m[2] as f64,
+            accel[0] as f64,
+            accel[1] as f64,
+            accel[2] as f64,
+            g[0] as f64,
+            g[1] as f64,
+            g[2] as f64,
+            m[0] as f64,
+            m[1] as f64,
+            m[2] as f64,
         ]);
         self.imu_rows += 1;
 
@@ -436,8 +562,12 @@ impl ParquetState {
     }
 
     fn flush_imu(&mut self) {
-        if self.imu_pending.is_empty() { return; }
-        let Some(ref mut wtr) = self.imu_wtr else { return; };
+        if self.imu_pending.is_empty() {
+            return;
+        }
+        let Some(ref mut wtr) = self.imu_wtr else {
+            return;
+        };
 
         let n_rows = self.imu_pending.len();
         let mut col_data: Vec<Vec<f64>> = (0..10).map(|_| Vec::with_capacity(n_rows)).collect();
@@ -448,7 +578,8 @@ impl ParquetState {
             }
         }
 
-        let columns: Vec<Arc<dyn arrow_array::Array>> = col_data.into_iter()
+        let columns: Vec<Arc<dyn arrow_array::Array>> = col_data
+            .into_iter()
             .map(|c| Arc::new(Float64Array::from(c)) as Arc<dyn arrow_array::Array>)
             .collect();
 
@@ -464,7 +595,9 @@ impl ParquetState {
 
     pub fn flush(&mut self) {
         let _ = self.eeg_wtr.flush();
-        if let Some(ref mut w) = self.ppg_wtr { let _ = w.flush(); }
+        if let Some(ref mut w) = self.ppg_wtr {
+            let _ = w.flush();
+        }
         self.flush_metrics();
         self.flush_imu();
     }
@@ -474,8 +607,14 @@ impl ParquetState {
         self.flush_metrics();
         self.flush_imu();
         let _ = self.eeg_wtr.close();
-        if let Some(w) = self.ppg_wtr { let _ = w.close(); }
-        if let Some(w) = self.metrics_wtr { let _ = w.close(); }
-        if let Some(w) = self.imu_wtr { let _ = w.close(); }
+        if let Some(w) = self.ppg_wtr {
+            let _ = w.close();
+        }
+        if let Some(w) = self.metrics_wtr {
+            let _ = w.close();
+        }
+        if let Some(w) = self.imu_wtr {
+            let _ = w.close();
+        }
     }
 }

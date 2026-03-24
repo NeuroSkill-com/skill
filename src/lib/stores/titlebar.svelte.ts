@@ -26,7 +26,7 @@
  * ```
  */
 export function createTitlebarState<T extends Record<string, unknown>>(initial: T): T {
-  let s: T = $state(initial) as T;
+  const s: T = $state(initial) as T;
   return s;
 }
 
@@ -39,9 +39,7 @@ export function createTitlebarState<T extends Record<string, unknown>>(initial: 
  * // titlebar calls: hCbs.prev();
  * ```
  */
-export function createTitlebarCallbacks<T extends Record<string, (...args: any[]) => void>>(
-  defaults: T,
-): T {
+export function createTitlebarCallbacks<T extends Record<string, (...args: any[]) => void>>(defaults: T): T {
   // Plain object — intentionally not reactive.  The titlebar calls these
   // synchronously; Svelte reactivity is not needed on the callback bag itself.
   return { ...defaults };
@@ -64,38 +62,38 @@ export type HistoryViewMode = "year" | "month" | "week" | "day";
 /** Display data written by the history page, read by CustomTitleBar. */
 export const hBar = createTitlebarState({
   /** True once the history page has mounted and set up callbacks. */
-  active:          false,
+  active: false,
   /** Mirrors history page `daysLoading`. */
-  daysLoading:     true,
+  daysLoading: true,
   /** Total number of local calendar days with recordings. */
-  dayCount:        0,
+  dayCount: 0,
   /** Index of the currently displayed day (0 = newest). */
-  currentDayIdx:   0,
+  currentDayIdx: 0,
   /** Pre-formatted label for the current day (e.g. "Mar 12, 2026"). */
   currentDayLabel: "",
   /** Whether compare mode is active. */
-  compareMode:     false,
+  compareMode: false,
   /** Number of sessions selected for comparison. */
-  compareCount:    0,
+  compareCount: 0,
   /** Whether the labels panel is open. */
-  showLabels:      false,
+  showLabels: false,
   /** Current history view mode (calendar granularity). */
-  viewMode:        "month" as HistoryViewMode,
+  viewMode: "month" as HistoryViewMode,
   /** Navigation label for calendar views (e.g. "March 2026"). */
-  calendarLabel:   "",
+  calendarLabel: "",
 });
 
 /** Callbacks set by the history page on mount. */
 export const hCbs = createTitlebarCallbacks({
-  prev:          () => {},
-  next:          () => {},
+  prev: () => {},
+  next: () => {},
   toggleCompare: () => {},
-  openCompare:   () => {},
-  toggleLabels:  () => {},
-  reload:        () => {},
-  setViewMode:   (_m: HistoryViewMode) => {},
-  calendarPrev:  () => {},
-  calendarNext:  () => {},
+  openCompare: () => {},
+  toggleLabels: () => {},
+  reload: () => {},
+  setViewMode: (_m: HistoryViewMode) => {},
+  calendarPrev: () => {},
+  calendarNext: () => {},
 });
 
 // ── Label titlebar ────────────────────────────────────────────────────────────

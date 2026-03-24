@@ -16,17 +16,18 @@
 //! - **device** — BLE device types
 //! - **util** — shared utilities (MutexExt, date_dirs, UTC formatters, open_readonly)
 
-pub mod util;
 pub mod active_window;
 pub mod activity_store;
+pub mod device;
+pub mod dnd;
+pub mod error;
+pub mod gpu_stats;
+pub mod health_store;
+pub mod hooks_log;
+pub mod label_store;
+pub mod ppg_analysis;
+pub mod screenshot_store;
 pub mod session_csv;
 pub mod session_parquet;
 pub mod session_writer;
-pub mod label_store;
-pub mod screenshot_store;
-pub mod hooks_log;
-pub mod gpu_stats;
-pub mod ppg_analysis;
-pub mod dnd;
-pub mod device;
-pub mod health_store;
+pub mod util;

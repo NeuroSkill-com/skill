@@ -6,16 +6,14 @@
 //! we inject a system prompt block that lists available tools, their JSON
 //! Schema parameters, and the exact format the model should use to call them.
 
-use serde_json::Value;
 use super::types::Tool;
+use serde_json::Value;
 
 /// Inject tool definitions and calling instructions into the system prompt.
-pub fn inject_tools_into_system_prompt(
-    messages: &mut Vec<Value>,
-    tools:    &[Tool],
-    n_ctx:    usize,
-) {
-    if tools.is_empty() { return; }
+pub fn inject_tools_into_system_prompt(messages: &mut Vec<Value>, tools: &[Tool], n_ctx: usize) {
+    if tools.is_empty() {
+        return;
+    }
 
     let compact = n_ctx > 0 && n_ctx <= 2048;
 
@@ -27,9 +25,11 @@ pub fn inject_tools_into_system_prompt(
 
     tool_block.push_str(&build_os_context(tools));
 
-    let has_system = messages.first()
+    let has_system = messages
+        .first()
         .and_then(|m| m.get("role"))
-        .and_then(|r| r.as_str()) == Some("system");
+        .and_then(|r| r.as_str())
+        == Some("system");
 
     if has_system {
         if let Some(content) = messages[0].get_mut("content").and_then(|c| c.as_str()) {
@@ -37,10 +37,13 @@ pub fn inject_tools_into_system_prompt(
             messages[0]["content"] = Value::String(merged);
         }
     } else {
-        messages.insert(0, serde_json::json!({
-            "role":    "system",
-            "content": tool_block,
-        }));
+        messages.insert(
+            0,
+            serde_json::json!({
+                "role":    "system",
+                "content": tool_block,
+            }),
+        );
     }
 }
 
@@ -51,7 +54,10 @@ fn build_compact_tool_block(tools: &[Tool]) -> String {
     let mut names = Vec::new();
     for t in tools {
         let name = &t.function.name;
-        let params: Vec<String> = t.function.parameters.as_ref()
+        let params: Vec<String> = t
+            .function
+            .parameters
+            .as_ref()
             .and_then(|p| p.get("properties"))
             .and_then(|p| p.as_object())
             .map(|props| props.keys().cloned().collect())
@@ -63,7 +69,7 @@ fn build_compact_tool_block(tools: &[Tool]) -> String {
         }
     }
     format!(
-r#"Tools: {}
+        r#"Tools: {}
 ALWAYS use tools when applicable. Do NOT show commands in code blocks — call them.
 Format: [TOOL_CALL]{{"name":"<tool>","arguments":{{...}}}}[/TOOL_CALL]
 Examples:
@@ -86,14 +92,22 @@ fn build_full_tool_block(tools: &[Tool]) -> String {
 
         if let Some(ref params) = t.function.parameters {
             if let Some(props) = params.get("properties").and_then(|p| p.as_object()) {
-                let required: Vec<&str> = params.get("required")
+                let required: Vec<&str> = params
+                    .get("required")
                     .and_then(|r| r.as_array())
                     .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
                     .unwrap_or_default();
                 for (pname, pval) in props {
                     let ptype = pval.get("type").and_then(|t| t.as_str()).unwrap_or("any");
-                    let pdesc = pval.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                    let req_marker = if required.contains(&pname.as_str()) { " (required)" } else { " (optional)" };
+                    let pdesc = pval
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("");
+                    let req_marker = if required.contains(&pname.as_str()) {
+                        " (required)"
+                    } else {
+                        " (optional)"
+                    };
                     tool_lines.push_str(&format!("  - `{pname}` ({ptype}{req_marker}): {pdesc}\n"));
                 }
             }
@@ -101,7 +115,7 @@ fn build_full_tool_block(tools: &[Tool]) -> String {
     }
 
     format!(
-r#"# Tools
+        r#"# Tools
 
 You have access to the following tools:
 
@@ -156,23 +170,30 @@ Assistant: [TOOL_CALL]{{"name":"skill","arguments":{{"command":"status"}}}}[/TOO
 /// Build a short OS/environment context line for the tool prompt.
 fn build_os_context(tools: &[Tool]) -> String {
     let has_shell_or_fs = tools.iter().any(|t| {
-        matches!(t.function.name.as_str(), "bash" | "read_file" | "write_file" | "edit_file" | "search_output")
+        matches!(
+            t.function.name.as_str(),
+            "bash" | "read_file" | "write_file" | "edit_file" | "search_output"
+        )
     });
     if !has_shell_or_fs {
         return String::new();
     }
 
     let os = match std::env::consts::OS {
-        "macos"   => "macOS",
-        "linux"   => "Linux",
+        "macos" => "macOS",
+        "linux" => "Linux",
         "windows" => "Windows",
-        other     => other,
+        other => other,
     };
     let arch = std::env::consts::ARCH;
     let home = dirs::home_dir()
         .map(|p| p.display().to_string())
         .unwrap_or_else(|| "~".into());
-    let shell = if cfg!(target_os = "windows") { "PowerShell" } else { "bash" };
+    let shell = if cfg!(target_os = "windows") {
+        "PowerShell"
+    } else {
+        "bash"
+    };
 
     format!("\n\nSystem: {os} ({arch}), shell: {shell}, home: {home}")
 }

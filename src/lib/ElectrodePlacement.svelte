@@ -15,134 +15,143 @@ the Free Software Foundation, version 3 only. -->
     device   – "muse" | "ganglion" | "mw75" | "hermes" | "emotiv" | "idun" | "unknown"
 -->
 <script lang="ts">
-  import { t } from "$lib/i18n/index.svelte";
+import { t } from "$lib/i18n/index.svelte";
 
-  interface ElectrodePos {
-    id: string;
-    label: string;
-    cx: number;
-    cy: number;
-    side: "left" | "right" | "center";
-  }
+interface ElectrodePos {
+  id: string;
+  label: string;
+  cx: number;
+  cy: number;
+  side: "left" | "right" | "center";
+}
 
-  interface Props {
-    quality?: string[];
-    compact?: boolean;
-    device?: string;
-  }
-  let { quality = [], compact = false, device = "muse" }: Props = $props();
+interface Props {
+  quality?: string[];
+  compact?: boolean;
+  device?: string;
+}
+let { quality = [], compact = false, device = "muse" }: Props = $props();
 
-  // ── Device presets (SVG coords, viewBox 0 0 200 220) ───────────────────
-  const MUSE_ELECTRODES: ElectrodePos[] = [
-    { id: "TP9",  label: "TP9",  cx: 38,  cy: 148, side: "left"  },
-    { id: "AF7",  label: "AF7",  cx: 62,  cy: 62,  side: "left"  },
-    { id: "AF8",  label: "AF8",  cx: 138, cy: 62,  side: "right" },
-    { id: "TP10", label: "TP10", cx: 162, cy: 148, side: "right" },
-  ];
+// ── Device presets (SVG coords, viewBox 0 0 200 220) ───────────────────
+const MUSE_ELECTRODES: ElectrodePos[] = [
+  { id: "TP9", label: "TP9", cx: 38, cy: 148, side: "left" },
+  { id: "AF7", label: "AF7", cx: 62, cy: 62, side: "left" },
+  { id: "AF8", label: "AF8", cx: 138, cy: 62, side: "right" },
+  { id: "TP10", label: "TP10", cx: 162, cy: 148, side: "right" },
+];
 
-  const GANGLION_ELECTRODES: ElectrodePos[] = [
-    { id: "Ch1", label: "Ch1", cx: 62,  cy: 80,  side: "left"   },
-    { id: "Ch2", label: "Ch2", cx: 138, cy: 80,  side: "right"  },
-    { id: "Ch3", label: "Ch3", cx: 62,  cy: 140, side: "left"   },
-    { id: "Ch4", label: "Ch4", cx: 138, cy: 140, side: "right"  },
-  ];
+const GANGLION_ELECTRODES: ElectrodePos[] = [
+  { id: "Ch1", label: "Ch1", cx: 62, cy: 80, side: "left" },
+  { id: "Ch2", label: "Ch2", cx: 138, cy: 80, side: "right" },
+  { id: "Ch3", label: "Ch3", cx: 62, cy: 140, side: "left" },
+  { id: "Ch4", label: "Ch4", cx: 138, cy: 140, side: "right" },
+];
 
-  // MW75: 6 electrodes equidistantly around each ear cup.
-  // Left ear (cx ≈ 30–38): FT7 (front-top), T7 (front), TP7 (front-bottom),
-  //   CP5 (back-bottom), P7 (back), C5 (back-top)
-  // Right ear (cx ≈ 162–170): FT8, T8, TP8, CP6, P8, C6
-  const MW75_ELECTRODES: ElectrodePos[] = [
-    // Left ear cup — clockwise from front-top
-    { id: "FT7", label: "FT7", cx: 42,  cy: 92,  side: "left"  },
-    { id: "T7",  label: "T7",  cx: 30,  cy: 112, side: "left"  },
-    { id: "TP7", label: "TP7", cx: 32,  cy: 136, side: "left"  },
-    { id: "CP5", label: "CP5", cx: 48,  cy: 154, side: "left"  },
-    { id: "P7",  label: "P7",  cx: 58,  cy: 138, side: "left"  },
-    { id: "C5",  label: "C5",  cx: 54,  cy: 110, side: "left"  },
-    // Right ear cup — clockwise from front-top
-    { id: "FT8", label: "FT8", cx: 158, cy: 92,  side: "right" },
-    { id: "T8",  label: "T8",  cx: 170, cy: 112, side: "right" },
-    { id: "TP8", label: "TP8", cx: 168, cy: 136, side: "right" },
-    { id: "CP6", label: "CP6", cx: 152, cy: 154, side: "right" },
-    { id: "P8",  label: "P8",  cx: 142, cy: 138, side: "right" },
-    { id: "C6",  label: "C6",  cx: 146, cy: 110, side: "right" },
-  ];
+// MW75: 6 electrodes equidistantly around each ear cup.
+// Left ear (cx ≈ 30–38): FT7 (front-top), T7 (front), TP7 (front-bottom),
+//   CP5 (back-bottom), P7 (back), C5 (back-top)
+// Right ear (cx ≈ 162–170): FT8, T8, TP8, CP6, P8, C6
+const MW75_ELECTRODES: ElectrodePos[] = [
+  // Left ear cup — clockwise from front-top
+  { id: "FT7", label: "FT7", cx: 42, cy: 92, side: "left" },
+  { id: "T7", label: "T7", cx: 30, cy: 112, side: "left" },
+  { id: "TP7", label: "TP7", cx: 32, cy: 136, side: "left" },
+  { id: "CP5", label: "CP5", cx: 48, cy: 154, side: "left" },
+  { id: "P7", label: "P7", cx: 58, cy: 138, side: "left" },
+  { id: "C5", label: "C5", cx: 54, cy: 110, side: "left" },
+  // Right ear cup — clockwise from front-top
+  { id: "FT8", label: "FT8", cx: 158, cy: 92, side: "right" },
+  { id: "T8", label: "T8", cx: 170, cy: 112, side: "right" },
+  { id: "TP8", label: "TP8", cx: 168, cy: 136, side: "right" },
+  { id: "CP6", label: "CP6", cx: 152, cy: 154, side: "right" },
+  { id: "P8", label: "P8", cx: 142, cy: 138, side: "right" },
+  { id: "C6", label: "C6", cx: 146, cy: 110, side: "right" },
+];
 
-  // Hermes V1: 8 channels, positions depend on user's montage.
-  // Default placement assumes a standard research headband layout.
-  const HERMES_ELECTRODES: ElectrodePos[] = [
-    { id: "Fp1", label: "Fp1", cx: 62,  cy: 62,  side: "left"   },
-    { id: "Fp2", label: "Fp2", cx: 138, cy: 62,  side: "right"  },
-    { id: "AF3", label: "AF3", cx: 50,  cy: 90,  side: "left"   },
-    { id: "AF4", label: "AF4", cx: 150, cy: 90,  side: "right"  },
-    { id: "F3",  label: "F3",  cx: 50,  cy: 120, side: "left"   },
-    { id: "F4",  label: "F4",  cx: 150, cy: 120, side: "right"  },
-    { id: "FC1", label: "FC1", cx: 62,  cy: 148, side: "left"   },
-    { id: "FC2", label: "FC2", cx: 138, cy: 148, side: "right"  },
-  ];
+// Hermes V1: 8 channels, positions depend on user's montage.
+// Default placement assumes a standard research headband layout.
+const HERMES_ELECTRODES: ElectrodePos[] = [
+  { id: "Fp1", label: "Fp1", cx: 62, cy: 62, side: "left" },
+  { id: "Fp2", label: "Fp2", cx: 138, cy: 62, side: "right" },
+  { id: "AF3", label: "AF3", cx: 50, cy: 90, side: "left" },
+  { id: "AF4", label: "AF4", cx: 150, cy: 90, side: "right" },
+  { id: "F3", label: "F3", cx: 50, cy: 120, side: "left" },
+  { id: "F4", label: "F4", cx: 150, cy: 120, side: "right" },
+  { id: "FC1", label: "FC1", cx: 62, cy: 148, side: "left" },
+  { id: "FC2", label: "FC2", cx: 138, cy: 148, side: "right" },
+];
 
-  // Emotiv EPOC X / EPOC+: first 12 of 14 electrodes (pipeline-capped at EEG_CHANNELS).
-  const EMOTIV_ELECTRODES: ElectrodePos[] = [
-    { id: "AF3", label: "AF3", cx: 68,  cy: 58,  side: "left"   },
-    { id: "F7",  label: "F7",  cx: 36,  cy: 80,  side: "left"   },
-    { id: "F3",  label: "F3",  cx: 62,  cy: 86,  side: "left"   },
-    { id: "FC5", label: "FC5", cx: 38,  cy: 108, side: "left"   },
-    { id: "T7",  label: "T7",  cx: 24,  cy: 130, side: "left"   },
-    { id: "P7",  label: "P7",  cx: 44,  cy: 162, side: "left"   },
-    { id: "O1",  label: "O1",  cx: 76,  cy: 190, side: "left"   },
-    { id: "O2",  label: "O2",  cx: 124, cy: 190, side: "right"  },
-    { id: "P8",  label: "P8",  cx: 156, cy: 162, side: "right"  },
-    { id: "T8",  label: "T8",  cx: 176, cy: 130, side: "right"  },
-    { id: "FC6", label: "FC6", cx: 162, cy: 108, side: "right"  },
-    { id: "F4",  label: "F4",  cx: 138, cy: 86,  side: "right"  },
-  ];
+// Emotiv EPOC X / EPOC+: first 12 of 14 electrodes (pipeline-capped at EEG_CHANNELS).
+const EMOTIV_ELECTRODES: ElectrodePos[] = [
+  { id: "AF3", label: "AF3", cx: 68, cy: 58, side: "left" },
+  { id: "F7", label: "F7", cx: 36, cy: 80, side: "left" },
+  { id: "F3", label: "F3", cx: 62, cy: 86, side: "left" },
+  { id: "FC5", label: "FC5", cx: 38, cy: 108, side: "left" },
+  { id: "T7", label: "T7", cx: 24, cy: 130, side: "left" },
+  { id: "P7", label: "P7", cx: 44, cy: 162, side: "left" },
+  { id: "O1", label: "O1", cx: 76, cy: 190, side: "left" },
+  { id: "O2", label: "O2", cx: 124, cy: 190, side: "right" },
+  { id: "P8", label: "P8", cx: 156, cy: 162, side: "right" },
+  { id: "T8", label: "T8", cx: 176, cy: 130, side: "right" },
+  { id: "FC6", label: "FC6", cx: 162, cy: 108, side: "right" },
+  { id: "F4", label: "F4", cx: 138, cy: 86, side: "right" },
+];
 
-  // IDUN Guardian: single in-ear bipolar channel.
-  const IDUN_ELECTRODES: ElectrodePos[] = [
-    { id: "EEG", label: "EEG", cx: 100, cy: 130, side: "center" },
-  ];
+// IDUN Guardian: single in-ear bipolar channel.
+const IDUN_ELECTRODES: ElectrodePos[] = [{ id: "EEG", label: "EEG", cx: 100, cy: 130, side: "center" }];
 
-  const ELECTRODES = $derived(
-    device === "mw75" ? MW75_ELECTRODES
-    : device === "hermes" ? HERMES_ELECTRODES
-    : device === "emotiv" ? EMOTIV_ELECTRODES
-    : device === "idun" ? IDUN_ELECTRODES
-    : device === "ganglion" ? GANGLION_ELECTRODES
-    : MUSE_ELECTRODES
-  );
+const ELECTRODES = $derived(
+  device === "mw75"
+    ? MW75_ELECTRODES
+    : device === "hermes"
+      ? HERMES_ELECTRODES
+      : device === "emotiv"
+        ? EMOTIV_ELECTRODES
+        : device === "idun"
+          ? IDUN_ELECTRODES
+          : device === "ganglion"
+            ? GANGLION_ELECTRODES
+            : MUSE_ELECTRODES,
+);
 
-  // Ensure quality array matches electrode count
-  const safeQuality = $derived(
-    Array.from({ length: ELECTRODES.length }, (_, i) => quality[i] ?? "no_signal")
-  );
+// Ensure quality array matches electrode count
+const safeQuality = $derived(Array.from({ length: ELECTRODES.length }, (_, i) => quality[i] ?? "no_signal"));
 
-  const QC_COLOR: Record<string, string> = {
-    good:      "#22c55e",
-    fair:      "#eab308",
-    poor:      "#f97316",
-    no_signal: "#94a3b8",
-  };
+const QC_COLOR: Record<string, string> = {
+  good: "#22c55e",
+  fair: "#eab308",
+  poor: "#f97316",
+  no_signal: "#94a3b8",
+};
 
-  const qualityOf = (i: number) => safeQuality[i] ?? "no_signal";
-  const colorOf   = (i: number) => QC_COLOR[qualityOf(i)] ?? "#94a3b8";
-  const isPulse   = (i: number) => qualityOf(i) === "poor" || qualityOf(i) === "no_signal";
+const qualityOf = (i: number) => safeQuality[i] ?? "no_signal";
+const colorOf = (i: number) => QC_COLOR[qualityOf(i)] ?? "#94a3b8";
+const isPulse = (i: number) => qualityOf(i) === "poor" || qualityOf(i) === "no_signal";
 
-  // Reference landmarks (dimmed)
-  const REFS = [
-    { label: "Cz",  cx: 100, cy: 110 },
-    { label: "Fz",  cx: 100, cy: 72  },
-    { label: "Pz",  cx: 100, cy: 150 },
-    { label: "Fpz", cx: 100, cy: 42  },
-  ];
+// Reference landmarks (dimmed)
+const REFS = [
+  { label: "Cz", cx: 100, cy: 110 },
+  { label: "Fz", cx: 100, cy: 72 },
+  { label: "Pz", cx: 100, cy: 150 },
+  { label: "Fpz", cx: 100, cy: 42 },
+];
 
-  // MW75: show ear cup outlines instead of individual reference markers
-  const isMw75 = $derived(device === "mw75");
+// MW75: show ear cup outlines instead of individual reference markers
+const isMw75 = $derived(device === "mw75");
 
-  const deviceLabel = $derived(
-    device === "mw75" ? "MW75 Neuro" : device === "hermes" ? "Hermes V1"
-    : device === "emotiv" ? "Emotiv EPOC" : device === "idun" ? "IDUN Guardian"
-    : device === "ganglion" ? "Ganglion" : "Muse"
-  );
+const deviceLabel = $derived(
+  device === "mw75"
+    ? "MW75 Neuro"
+    : device === "hermes"
+      ? "Hermes V1"
+      : device === "emotiv"
+        ? "Emotiv EPOC"
+        : device === "idun"
+          ? "IDUN Guardian"
+          : device === "ganglion"
+            ? "Ganglion"
+            : "Muse",
+);
 </script>
 
 <div class="electrode-placement flex flex-col items-center gap-2 {compact ? '' : 'py-2'}"

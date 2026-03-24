@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Unit tests for the screenshot context and config types.
 
-use skill_screenshots::context::{ActiveWindowInfo, ScreenshotContext};
-use skill_screenshots::config::{ScreenshotConfig, fastembed_model_enum};
 use serde_json::Value;
+use skill_screenshots::config::{fastembed_model_enum, ScreenshotConfig};
+use skill_screenshots::context::{ActiveWindowInfo, ScreenshotContext};
 
 /// Minimal mock context for testing.
 struct MockCtx {
@@ -12,11 +12,19 @@ struct MockCtx {
 }
 
 impl ScreenshotContext for MockCtx {
-    fn config(&self) -> ScreenshotConfig { self.config.clone() }
-    fn is_session_active(&self) -> bool { self.session_active }
-    fn active_window(&self) -> ActiveWindowInfo { ActiveWindowInfo::default() }
+    fn config(&self) -> ScreenshotConfig {
+        self.config.clone()
+    }
+    fn is_session_active(&self) -> bool {
+        self.session_active
+    }
+    fn active_window(&self) -> ActiveWindowInfo {
+        ActiveWindowInfo::default()
+    }
     fn emit_event(&self, _event: &str, _payload: Value) {}
-    fn embed_image_via_llm(&self, _png: &[u8]) -> Option<Vec<f32>> { None }
+    fn embed_image_via_llm(&self, _png: &[u8]) -> Option<Vec<f32>> {
+        None
+    }
 }
 
 #[test]

@@ -6,112 +6,112 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- UMAP projection settings — repulsion, epochs, timeout -->
 <script lang="ts">
-  import { onMount }     from "svelte";
-  import { invoke }      from "@tauri-apps/api/core";
-  import { Badge }       from "$lib/components/ui/badge";
-  import { Button }      from "$lib/components/ui/button";
-  import { Card, CardContent } from "$lib/components/ui/card";
-  import { t }           from "$lib/i18n/index.svelte";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { Card, CardContent } from "$lib/components/ui/card";
+import { t } from "$lib/i18n/index.svelte";
 
-  // ── Types ──────────────────────────────────────────────────────────────────
-  interface UmapConfig {
-    repulsion_strength: number;
-    neg_sample_rate:    number;
-    timeout_secs:       number;
-    n_epochs:           number;
-    n_neighbors:        number;
-    cooldown_ms:        number;
+// ── Types ──────────────────────────────────────────────────────────────────
+interface UmapConfig {
+  repulsion_strength: number;
+  neg_sample_rate: number;
+  timeout_secs: number;
+  n_epochs: number;
+  n_neighbors: number;
+  cooldown_ms: number;
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let cfg = $state<UmapConfig>({
+  repulsion_strength: 3.0,
+  neg_sample_rate: 15,
+  timeout_secs: 120,
+  n_epochs: 500,
+  n_neighbors: 15,
+  cooldown_ms: 0,
+});
+let saving = $state(false);
+let dirty = $state(false);
+let loaded = $state(false);
+
+// ── Persistence ────────────────────────────────────────────────────────────
+async function save() {
+  saving = true;
+  try {
+    await invoke("set_umap_config", { config: cfg });
+    dirty = false;
+  } finally {
+    saving = false;
   }
+}
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let cfg      = $state<UmapConfig>({
+function markDirty() {
+  dirty = true;
+}
+
+async function resetDefaults() {
+  cfg = {
     repulsion_strength: 3.0,
-    neg_sample_rate:    15,
-    timeout_secs:       120,
-    n_epochs:           500,
-    n_neighbors:        15,
-    cooldown_ms:        0,
-  });
-  let saving   = $state(false);
-  let dirty    = $state(false);
-  let loaded   = $state(false);
+    neg_sample_rate: 15,
+    timeout_secs: 120,
+    n_epochs: 500,
+    n_neighbors: 15,
+    cooldown_ms: 0,
+  };
+  dirty = true;
+  await save();
+}
 
-  // ── Persistence ────────────────────────────────────────────────────────────
-  async function save() {
-    saving = true;
-    try {
-      await invoke("set_umap_config", { config: cfg });
-      dirty = false;
-    } finally {
-      saving = false;
-    }
-  }
+// ── Lifecycle ──────────────────────────────────────────────────────────────
+onMount(async () => {
+  cfg = await invoke<UmapConfig>("get_umap_config");
+  loaded = true;
+});
 
-  function markDirty() { dirty = true; }
+// ── Presets ────────────────────────────────────────────────────────────────
+const REPULSION_PRESETS: [string, number][] = [
+  ["0.5 — subtle", 0.5],
+  ["1.0 — standard", 1.0],
+  ["2.0 — strong", 2.0],
+  ["3.0 — aggressive", 3.0],
+  ["5.0 — extreme", 5.0],
+  ["8.0 — maximum", 8.0],
+];
 
-  async function resetDefaults() {
-    cfg = {
-      repulsion_strength: 3.0,
-      neg_sample_rate:    15,
-      timeout_secs:       120,
-      n_epochs:           500,
-      n_neighbors:        15,
-      cooldown_ms:        0,
-    };
-    dirty = true;
-    await save();
-  }
+const NEG_SAMPLE_PRESETS: [string, number][] = [
+  ["3", 3],
+  ["5", 5],
+  ["10", 10],
+  ["15", 15],
+  ["25", 25],
+  ["30", 30],
+];
 
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
-  onMount(async () => {
-    cfg = await invoke<UmapConfig>("get_umap_config");
-    loaded = true;
-  });
+const EPOCH_PRESETS: [string, number][] = [
+  ["100", 100],
+  ["200", 200],
+  ["500", 500],
+  ["800", 800],
+  ["1500", 1500],
+];
 
-  // ── Presets ────────────────────────────────────────────────────────────────
-  const REPULSION_PRESETS: [string, number][] = [
-    ["0.5 — subtle",     0.5],
-    ["1.0 — standard",   1.0],
-    ["2.0 — strong",     2.0],
-    ["3.0 — aggressive", 3.0],
-    ["5.0 — extreme",    5.0],
-    ["8.0 — maximum",    8.0],
-  ];
+const NEIGHBOR_PRESETS: [string, number][] = [
+  ["5", 5],
+  ["10", 10],
+  ["15", 15],
+  ["25", 25],
+  ["50", 50],
+];
 
-  const NEG_SAMPLE_PRESETS: [string, number][] = [
-    ["3",   3],
-    ["5",   5],
-    ["10",  10],
-    ["15",  15],
-    ["25",  25],
-    ["30",  30],
-  ];
-
-  const EPOCH_PRESETS: [string, number][] = [
-    ["100",   100],
-    ["200",   200],
-    ["500",   500],
-    ["800",   800],
-    ["1500",  1500],
-  ];
-
-  const NEIGHBOR_PRESETS: [string, number][] = [
-    ["5",   5],
-    ["10",  10],
-    ["15",  15],
-    ["25",  25],
-    ["50",  50],
-  ];
-
-  const TIMEOUT_PRESETS: [string, number][] = [
-    ["30 s",  30],
-    ["60 s",  60],
-    ["120 s", 120],
-    ["300 s", 300],
-    ["600 s", 600],
-  ];
-
-
+const TIMEOUT_PRESETS: [string, number][] = [
+  ["30 s", 30],
+  ["60 s", 60],
+  ["120 s", 120],
+  ["300 s", 300],
+  ["600 s", 600],
+];
 </script>
 
 {#if !loaded}

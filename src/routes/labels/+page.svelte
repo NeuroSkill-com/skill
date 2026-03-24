@@ -6,237 +6,232 @@ it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <!-- Labels List — browse, search, edit, and delete all EEG annotations. -->
 <script lang="ts">
-  import { onMount }    from "svelte";
-  import { invoke }     from "@tauri-apps/api/core";
-  import { Button }     from "$lib/components/ui/button";
-  import { Badge }      from "$lib/components/ui/badge";
-  import { Separator }  from "$lib/components/ui/separator";
-  import { Spinner }    from "$lib/components/ui/spinner";
-  import { t }          from "$lib/i18n/index.svelte";
-  import { useWindowTitle } from "$lib/stores/window-title.svelte";
-  import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
-  import { openHistory } from "$lib/navigation";
-  import { ConfirmAction } from "$lib/components/ui/confirm-action";
-  import type { LabelRow } from "$lib/types";
-  import { fmtDateTimeLocale as formatDate, fmtElapsed } from "$lib/format";
+import { invoke } from "@tauri-apps/api/core";
+import { onMount } from "svelte";
+import { Badge } from "$lib/components/ui/badge";
+import { Button } from "$lib/components/ui/button";
+import { ConfirmAction } from "$lib/components/ui/confirm-action";
+import { Separator } from "$lib/components/ui/separator";
+import { Spinner } from "$lib/components/ui/spinner";
+import DisclaimerFooter from "$lib/DisclaimerFooter.svelte";
+import { fmtElapsed, fmtDateTimeLocale as formatDate } from "$lib/format";
+import { t } from "$lib/i18n/index.svelte";
+import { openHistory } from "$lib/navigation";
+import { useWindowTitle } from "$lib/stores/window-title.svelte";
+import type { LabelRow } from "$lib/types";
 
-  // ── Actions ───────────────────────────────────────────────────────────────
-  function focusOnMount(node: HTMLElement) { node.focus(); }
+// ── Actions ───────────────────────────────────────────────────────────────
+function focusOnMount(node: HTMLElement) {
+  node.focus();
+}
 
-  // ── Types ──────────────────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────
 
-  /** Result shape returned by the `search_labels_by_text` Tauri command. */
-  interface LabelNeighbor {
-    label_id:         number;
-    text:             string;
-    context:          string;
-    eeg_start:        number;
-    eeg_end:          number;
-    created_at:       number;
-    embedding_model?: string;
-    /** Cosine distance in [0, 2]: 0 = identical, 2 = opposite. */
-    distance:         number;
+/** Result shape returned by the `search_labels_by_text` Tauri command. */
+interface LabelNeighbor {
+  label_id: number;
+  text: string;
+  context: string;
+  eeg_start: number;
+  eeg_end: number;
+  created_at: number;
+  embedding_model?: string;
+  /** Cosine distance in [0, 2]: 0 = identical, 2 = opposite. */
+  distance: number;
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+let labels = $state<LabelRow[]>([]);
+let loading = $state(true);
+let search = $state("");
+let editingId = $state<number | null>(null);
+let editText = $state("");
+let editContext = $state("");
+let savingId = $state<number | null>(null);
+let deletingId = $state<number | null>(null);
+let confirmDel = $state<number | null>(null);
+
+// ── Search mode ────────────────────────────────────────────────────────────
+
+type SearchMode = "exact" | "semantic";
+let searchMode = $state<SearchMode>("exact");
+let semanticResults = $state<LabelNeighbor[]>([]);
+let semanticSearching = $state(false);
+let semanticError = $state("");
+
+/** Debounce handle so we don't fire on every keystroke in semantic mode. */
+let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Invoke the HNSW semantic search command (runs in a Tauri worker thread). */
+async function searchSemantic() {
+  const q = search.trim();
+  if (!q || searchMode !== "semantic") return;
+  semanticSearching = true;
+  semanticError = "";
+  try {
+    semanticResults = await invoke<LabelNeighbor[]>("search_labels_by_text", { query: q, k: 50 });
+  } catch (e) {
+    semanticError = String(e);
+    semanticResults = [];
+  } finally {
+    semanticSearching = false;
   }
+}
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let labels   = $state<LabelRow[]>([]);
-  let loading  = $state(true);
-  let search   = $state("");
-  let editingId      = $state<number | null>(null);
-  let editText       = $state("");
-  let editContext    = $state("");
-  let savingId       = $state<number | null>(null);
-  let deletingId  = $state<number | null>(null);
-  let confirmDel  = $state<number | null>(null);
+// ── Filtered + paginated ───────────────────────────────────────────────────
 
-  // ── Search mode ────────────────────────────────────────────────────────────
+const PAGE_SIZE = 50;
+let page = $state(0);
 
-  type SearchMode = "exact" | "semantic";
-  let searchMode        = $state<SearchMode>("exact");
-  let semanticResults   = $state<LabelNeighbor[]>([]);
-  let semanticSearching = $state(false);
-  let semanticError     = $state("");
-
-  /** Debounce handle so we don't fire on every keystroke in semantic mode. */
-  let debounceTimer: ReturnType<typeof setTimeout> | undefined;
-
-  /** Invoke the HNSW semantic search command (runs in a Tauri worker thread). */
-  async function searchSemantic() {
-    const q = search.trim();
-    if (!q || searchMode !== "semantic") return;
-    semanticSearching = true;
-    semanticError     = "";
-    try {
-      semanticResults = await invoke<LabelNeighbor[]>(
-        "search_labels_by_text", { query: q, k: 50 }
-      );
-    } catch (e) {
-      semanticError   = String(e);
+/** When the user switches to semantic mode or changes the query, (re-)run
+ *  the semantic search with a short debounce.  In exact mode just reset the
+ *  page so the substring filter re-applies immediately. */
+$effect(() => {
+  const q = search;
+  const m = searchMode;
+  clearTimeout(debounceTimer);
+  page = 0;
+  if (m === "semantic") {
+    if (q.trim()) {
+      debounceTimer = setTimeout(searchSemantic, 420);
+    } else {
       semanticResults = [];
-    } finally {
+      semanticError = "";
       semanticSearching = false;
     }
   }
+});
 
-  // ── Filtered + paginated ───────────────────────────────────────────────────
-
-  const PAGE_SIZE = 50;
-  let page = $state(0);
-
-  /** When the user switches to semantic mode or changes the query, (re-)run
-   *  the semantic search with a short debounce.  In exact mode just reset the
-   *  page so the substring filter re-applies immediately. */
-  $effect(() => {
-    const q = search;
-    const m = searchMode;
-    clearTimeout(debounceTimer);
-    page = 0;
-    if (m === "semantic") {
-      if (q.trim()) {
-        debounceTimer = setTimeout(searchSemantic, 420);
-      } else {
-        semanticResults   = [];
-        semanticError     = "";
-        semanticSearching = false;
-      }
-    }
-  });
-
-  /**
-   * Exact-mode: instant client-side substring filter.
-   * Semantic-mode: ordered by HNSW distance, joined back to the full LabelRow
-   * so edit/delete actions work unchanged.
-   */
-  const activeLabels = $derived.by((): LabelRow[] => {
-    if (searchMode === "exact") {
-      const q = search.trim().toLowerCase();
-      return q
-        ? labels.filter(l =>
-            l.text.toLowerCase().includes(q) ||
-            l.context.toLowerCase().includes(q))
-        : labels;
-    }
-    // Semantic mode ──────────────────────────────────────────────────────
-    if (!search.trim()) return labels;                   // empty query → show all
-    // Re-order labels to match the HNSW ranking.  Labels absent from the
-    // index (never embedded) are silently omitted.
-    return semanticResults
-      .map(r => labels.find(l => l.id === r.label_id))
-      .filter((l): l is LabelRow => l !== undefined);
-  });
-
-  /**
-   * label_id → cosine distance for the current semantic result set.
-   * Empty in exact mode.
-   */
-  const distanceMap = $derived.by((): Map<number, number> => {
-    if (searchMode !== "semantic" || !search.trim()) return new Map();
-    const m = new Map<number, number>();
-    for (const r of semanticResults) m.set(r.label_id, r.distance);
-    return m;
-  });
-
-  /**
-   * Similarity percentage from cosine distance (0 = identical, 2 = opposite).
-   * We clamp to [0, 100] and display as an integer.
-   */
-  function simPct(distance: number): number {
-    return Math.round(Math.max(0, Math.min(100, (1 - distance / 2) * 100)));
+/**
+ * Exact-mode: instant client-side substring filter.
+ * Semantic-mode: ordered by HNSW distance, joined back to the full LabelRow
+ * so edit/delete actions work unchanged.
+ */
+const activeLabels = $derived.by((): LabelRow[] => {
+  if (searchMode === "exact") {
+    const q = search.trim().toLowerCase();
+    return q ? labels.filter((l) => l.text.toLowerCase().includes(q) || l.context.toLowerCase().includes(q)) : labels;
   }
+  // Semantic mode ──────────────────────────────────────────────────────
+  if (!search.trim()) return labels; // empty query → show all
+  // Re-order labels to match the HNSW ranking.  Labels absent from the
+  // index (never embedded) are silently omitted.
+  return semanticResults
+    .map((r) => labels.find((l) => l.id === r.label_id))
+    .filter((l): l is LabelRow => l !== undefined);
+});
 
-  /** Colour class for the similarity badge based on cosine distance. */
-  function simColor(distance: number): string {
-    if (distance < 0.10) return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
-    if (distance < 0.25) return "bg-blue-500/15 text-blue-600 dark:text-blue-400";
-    if (distance < 0.45) return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
-    return "bg-muted text-muted-foreground/60";
+/**
+ * label_id → cosine distance for the current semantic result set.
+ * Empty in exact mode.
+ */
+const distanceMap = $derived.by((): Map<number, number> => {
+  if (searchMode !== "semantic" || !search.trim()) return new Map();
+  const m = new Map<number, number>();
+  for (const r of semanticResults) m.set(r.label_id, r.distance);
+  return m;
+});
+
+/**
+ * Similarity percentage from cosine distance (0 = identical, 2 = opposite).
+ * We clamp to [0, 100] and display as an integer.
+ */
+function simPct(distance: number): number {
+  return Math.round(Math.max(0, Math.min(100, (1 - distance / 2) * 100)));
+}
+
+/** Colour class for the similarity badge based on cosine distance. */
+function simColor(distance: number): string {
+  if (distance < 0.1) return "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
+  if (distance < 0.25) return "bg-blue-500/15 text-blue-600 dark:text-blue-400";
+  if (distance < 0.45) return "bg-amber-500/15 text-amber-600 dark:text-amber-400";
+  return "bg-muted text-muted-foreground/60";
+}
+
+let totalPages = $derived(Math.max(1, Math.ceil(activeLabels.length / PAGE_SIZE)));
+let paginatedLabels = $derived(activeLabels.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE));
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function formatDuration(start: number, end: number): string {
+  return fmtElapsed(Math.max(0, end - start));
+}
+
+// ── Data loading ────────────────────────────────────────────────────────────
+async function loadLabels() {
+  loading = true;
+  try {
+    labels = await invoke<LabelRow[]>("query_annotations", {
+      startUtc: undefined,
+      endUtc: undefined,
+    });
+  } catch (e) {
+  } finally {
+    loading = false;
   }
+}
 
-  let totalPages      = $derived(Math.max(1, Math.ceil(activeLabels.length / PAGE_SIZE)));
-  let paginatedLabels = $derived(activeLabels.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE));
+// ── Edit ────────────────────────────────────────────────────────────────────
+function startEdit(label: LabelRow) {
+  editingId = label.id;
+  editText = label.text;
+  editContext = label.context;
+}
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  function formatDuration(start: number, end: number): string {
-    return fmtElapsed(Math.max(0, end - start));
+function cancelEdit() {
+  editingId = null;
+  editText = "";
+  editContext = "";
+}
+
+async function saveEdit(labelId: number) {
+  if (!editText.trim() || savingId !== null) return;
+  savingId = labelId;
+  try {
+    await invoke("update_label", { labelId, text: editText.trim(), context: editContext.trim() });
+    // Update in-place
+    const idx = labels.findIndex((l) => l.id === labelId);
+    if (idx !== -1) labels[idx] = { ...labels[idx], text: editText.trim(), context: editContext.trim() };
+    cancelEdit();
+  } catch (e) {
+  } finally {
+    savingId = null;
   }
+}
 
-  // ── Data loading ────────────────────────────────────────────────────────────
-  async function loadLabels() {
-    loading = true;
-    try {
-      labels = await invoke<LabelRow[]>("query_annotations", {
-        startUtc: undefined,
-        endUtc:   undefined,
-      });
-    } catch (e) {
-      console.error("Failed to load labels:", e);
-    } finally {
-      loading = false;
-    }
-  }
+// ── Delete ──────────────────────────────────────────────────────────────────
+function askDelete(labelId: number) {
+  confirmDel = labelId;
+}
 
-  // ── Edit ────────────────────────────────────────────────────────────────────
-  function startEdit(label: LabelRow) {
-    editingId   = label.id;
-    editText    = label.text;
-    editContext = label.context;
-  }
+function cancelDelete() {
+  confirmDel = null;
+}
 
-  function cancelEdit() {
-    editingId   = null;
-    editText    = "";
-    editContext = "";
-  }
-
-  async function saveEdit(labelId: number) {
-    if (!editText.trim() || savingId !== null) return;
-    savingId = labelId;
-    try {
-      await invoke("update_label", { labelId, text: editText.trim(), context: editContext.trim() });
-      // Update in-place
-      const idx = labels.findIndex(l => l.id === labelId);
-      if (idx !== -1) labels[idx] = { ...labels[idx], text: editText.trim(), context: editContext.trim() };
-      cancelEdit();
-    } catch (e) {
-      console.error("Failed to update label:", e);
-    } finally {
-      savingId = null;
-    }
-  }
-
-  // ── Delete ──────────────────────────────────────────────────────────────────
-  function askDelete(labelId: number) {
-    confirmDel = labelId;
-  }
-
-  function cancelDelete() {
+async function doDelete(labelId: number) {
+  deletingId = labelId;
+  try {
+    await invoke("delete_label", { labelId });
+    labels = labels.filter((l) => l.id !== labelId);
+  } catch (e) {
+  } finally {
+    deletingId = null;
     confirmDel = null;
   }
+}
 
-  async function doDelete(labelId: number) {
-    deletingId = labelId;
-    try {
-      await invoke("delete_label", { labelId });
-      labels = labels.filter(l => l.id !== labelId);
-    } catch (e) {
-      console.error("Failed to delete label:", e);
-    } finally {
-      deletingId = null;
-      confirmDel = null;
-    }
-  }
+// ── View session ────────────────────────────────────────────────────────────
+// Open history window (labels don't carry the CSV path, so navigate to history).
+async function viewSession(_label: LabelRow) {
+  try {
+    await openHistory();
+  } catch (e) {}
+}
 
-  // ── View session ────────────────────────────────────────────────────────────
-  // Open history window (labels don't carry the CSV path, so navigate to history).
-  async function viewSession(_label: LabelRow) {
-    try {
-      await openHistory();
-    } catch (e) { console.warn("[labels] openHistory failed:", e); }
-  }
+onMount(() => {
+  loadLabels();
+});
 
-  onMount(() => { loadLabels(); });
-
-  useWindowTitle("window.title.labels");
+useWindowTitle("window.title.labels");
 </script>
 
 <main class="h-full min-h-0 bg-background text-foreground flex flex-col overflow-hidden">

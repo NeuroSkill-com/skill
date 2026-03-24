@@ -16,45 +16,121 @@ the Free Software Foundation, version 3 only. -->
     compact:    boolean               (hide charts, show only summary numbers)
 -->
 <script lang="ts" module>
-  export interface SessionMetrics {
-    n_epochs: number;
-    rel_delta: number; rel_theta: number; rel_alpha: number; rel_beta: number; rel_gamma: number;
-    relaxation: number; engagement: number; faa: number;
-    tar: number; bar: number; dtr: number; tbr: number;
-    pse: number; apf: number; sef95: number; spectral_centroid: number; bps: number; snr: number;
-    coherence: number; mu_suppression: number; mood: number;
-    hjorth_activity: number; hjorth_mobility: number; hjorth_complexity: number;
-    permutation_entropy: number; higuchi_fd: number; dfa_exponent: number;
-    sample_entropy: number; pac_theta_gamma: number; laterality_index: number;
-    hr: number; rmssd: number; sdnn: number; pnn50: number; lf_hf_ratio: number;
-    respiratory_rate: number; spo2_estimate: number; perfusion_index: number; stress_index: number;
-    meditation: number; cognitive_load: number; drowsiness: number;
-    blink_count: number; blink_rate: number;
-    head_pitch: number; head_roll: number; stillness: number; nod_count: number; shake_count: number;
-  }
+export interface SessionMetrics {
+  n_epochs: number;
+  rel_delta: number;
+  rel_theta: number;
+  rel_alpha: number;
+  rel_beta: number;
+  rel_gamma: number;
+  relaxation: number;
+  engagement: number;
+  faa: number;
+  tar: number;
+  bar: number;
+  dtr: number;
+  tbr: number;
+  pse: number;
+  apf: number;
+  sef95: number;
+  spectral_centroid: number;
+  bps: number;
+  snr: number;
+  coherence: number;
+  mu_suppression: number;
+  mood: number;
+  hjorth_activity: number;
+  hjorth_mobility: number;
+  hjorth_complexity: number;
+  permutation_entropy: number;
+  higuchi_fd: number;
+  dfa_exponent: number;
+  sample_entropy: number;
+  pac_theta_gamma: number;
+  laterality_index: number;
+  hr: number;
+  rmssd: number;
+  sdnn: number;
+  pnn50: number;
+  lf_hf_ratio: number;
+  respiratory_rate: number;
+  spo2_estimate: number;
+  perfusion_index: number;
+  stress_index: number;
+  meditation: number;
+  cognitive_load: number;
+  drowsiness: number;
+  blink_count: number;
+  blink_rate: number;
+  head_pitch: number;
+  head_roll: number;
+  stillness: number;
+  nod_count: number;
+  shake_count: number;
+}
 
-  export interface EpochRow {
-    t: number;
-    rd: number; rt: number; ra: number; rb: number; rg: number;
-    focus: number; relaxation: number; engagement: number; faa: number; // focus kept for compat
-    tar: number; bar: number; dtr: number; tbr: number;
-    pse: number; apf: number; sef95: number; sc: number; bps: number; snr: number;
-    coherence: number; mu: number; mood: number;
-    ha: number; hm: number; hc: number;
-    pe: number; hfd: number; dfa: number; se: number; pac: number; lat: number;
-    hr: number; rmssd: number; sdnn: number; pnn50: number; lf_hf: number;
-    resp: number; spo2: number; perf: number; stress: number;
-    blinks: number; blink_r: number;
-    pitch: number; roll: number; still: number; nods: number; shakes: number;
-    med: number; cog: number; drow: number;
-    gpu: number; gpu_render: number; gpu_tiler: number;
-  }
+export interface EpochRow {
+  t: number;
+  rd: number;
+  rt: number;
+  ra: number;
+  rb: number;
+  rg: number;
+  focus: number;
+  relaxation: number;
+  engagement: number;
+  faa: number; // focus kept for compat
+  tar: number;
+  bar: number;
+  dtr: number;
+  tbr: number;
+  pse: number;
+  apf: number;
+  sef95: number;
+  sc: number;
+  bps: number;
+  snr: number;
+  coherence: number;
+  mu: number;
+  mood: number;
+  ha: number;
+  hm: number;
+  hc: number;
+  pe: number;
+  hfd: number;
+  dfa: number;
+  se: number;
+  pac: number;
+  lat: number;
+  hr: number;
+  rmssd: number;
+  sdnn: number;
+  pnn50: number;
+  lf_hf: number;
+  resp: number;
+  spo2: number;
+  perf: number;
+  stress: number;
+  blinks: number;
+  blink_r: number;
+  pitch: number;
+  roll: number;
+  still: number;
+  nods: number;
+  shakes: number;
+  med: number;
+  cog: number;
+  drow: number;
+  gpu: number;
+  gpu_render: number;
+  gpu_tiler: number;
+}
 
-  export interface CsvMetricsResult {
-    n_rows: number;
-    summary: SessionMetrics;
-    timeseries: EpochRow[];
-  }
+export interface CsvMetricsResult {
+  n_rows: number;
+  summary: SessionMetrics;
+  timeseries: EpochRow[];
+}
 </script>
 
 <script lang="ts">

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, openSync, readSync, closeSync } from "fs";
-import { execSync, spawn } from "child_process";
+import { execSync, spawn } from "node:child_process";
+import { closeSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
 import { compileChangelog } from "./compile-changelog.js";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ function writeText(path, content) {
 
 function bumpPatch(version) {
   const parts = version.split(".").map(Number);
-  if (parts.length !== 3 || parts.some(isNaN)) {
+  if (parts.length !== 3 || parts.some(Number.isNaN)) {
     throw new Error(`Invalid version "${version}"`);
   }
   parts[2] += 1;
@@ -53,7 +53,7 @@ function ensureLinuxTauriDeps() {
       "Install required packages before running npm run bump:",
       "  sudo apt install -y libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libpipewire-0.3-dev",
       "If those are unavailable on your distro image, see LINUX.md for legacy alternatives.",
-    ].join("\n")
+    ].join("\n"),
   );
 }
 
@@ -102,21 +102,15 @@ const TEST_CRATES = [
 
 function checkForCompetingCargo() {
   try {
-    const out = execSync(
-      `ps -eo pid,command | grep -E '[c]argo (build|clippy|check|test|install|publish)' || true`,
-      { encoding: "utf8" }
-    ).trim();
+    const out = execSync(`ps -eo pid,command | grep -E '[c]argo (build|clippy|check|test|install|publish)' || true`, {
+      encoding: "utf8",
+    }).trim();
     if (!out) return;
     const lines = out.split("\n").filter(Boolean);
     if (lines.length === 0) return;
-    console.warn("\n[preflight] Warning: Other cargo processes detected:");
-    for (const l of lines) console.warn(`  ${l.trim()}`);
-    console.warn(
-      "\n  Cargo uses a global package-cache lock (~/.cargo/.package-cache)."
-    );
-    console.warn(
-      "  The bump clippy steps will block until these finish.\n"
-    );
+    for (const l of lines) {
+      console.log(`    ${l}`);
+    }
     const fd = openSync("/dev/tty", "r");
     const buf = Buffer.alloc(1);
     process.stdout.write("  Continue anyway? [y/N] ");
@@ -162,7 +156,7 @@ function extractWarnings(output) {
         !/0 warnings/i.test(line) &&
         !/warnings?\s*=|deny\(warnings\)/i.test(line) &&
         !/^warning: \S+@\S+:/i.test(line.trim()) &&
-        !/^warning: build failed/i.test(line.trim())
+        !/^warning: build failed/i.test(line.trim()),
     );
 }
 
@@ -227,9 +221,9 @@ class BumpTUI {
   log(text) {
     const scrollEnd = Math.max(1, this.rows - 2);
     // Save cursor, move to end of scroll region, print, restore cursor
-    process.stdout.write(`${CSI}s`);                      // save
-    process.stdout.write(`${CSI}${scrollEnd};1H`);        // move to bottom of scroll area
-    process.stdout.write("\n");                            // scroll up if needed
+    process.stdout.write(`${CSI}s`); // save
+    process.stdout.write(`${CSI}${scrollEnd};1H`); // move to bottom of scroll area
+    process.stdout.write("\n"); // scroll up if needed
     // Write each line — handle multi-line text
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
@@ -238,8 +232,8 @@ class BumpTUI {
       }
       process.stdout.write(lines[i]);
     }
-    process.stdout.write(`${CSI}u`);                      // restore
-    this._renderBar();                                     // redraw bar in case scroll corrupted it
+    process.stdout.write(`${CSI}u`); // restore
+    this._renderBar(); // redraw bar in case scroll corrupted it
   }
 
   /** Update current step info and redraw bar. */
@@ -276,16 +270,14 @@ class BumpTUI {
     const total = this.totalSteps;
 
     const elapsedMs = Date.now() - this.startTime;
-    const avgMs = this.stepTimes.length > 0
-      ? this.stepTimes.reduce((a, b) => a + b, 0) / this.stepTimes.length
-      : 0;
+    const avgMs = this.stepTimes.length > 0 ? this.stepTimes.reduce((a, b) => a + b, 0) / this.stepTimes.length : 0;
     const remaining = total - current;
     const etaMs = this.stepTimes.length > 0 ? avgMs * remaining : 0;
 
     const pct = total > 0 ? Math.round((current / total) * 100) : 0;
     const barWidth = Math.max(10, Math.min(30, cols - 60));
     const filled = Math.round((current / total) * barWidth);
-    const bar = "\x1b[32m" + "█".repeat(filled) + "\x1b[0m" + "\x1b[2m" + "░".repeat(barWidth - filled) + "\x1b[0m";
+    const bar = `\x1b[32m${"█".repeat(filled)}\x1b[0m\x1b[2m${"░".repeat(barWidth - filled)}\x1b[0m`;
 
     const elapsed = formatDuration(elapsedMs);
     const eta = etaMs > 0 ? formatDuration(etaMs) : "--";
@@ -294,14 +286,11 @@ class BumpTUI {
     const barRow = rows;
 
     // Separator line
-    const sep = "\x1b[2m" + "─".repeat(cols) + "\x1b[0m";
+    const sep = `\x1b[2m${"─".repeat(cols)}\x1b[0m`;
 
     // Progress line
-    const stepText = this.stepLabel.length > 30
-      ? this.stepLabel.slice(0, 29) + "…"
-      : this.stepLabel;
-    const progressLine =
-      `  [${bar}] ${current}/${total} (${pct}%) | ${elapsed} elapsed | ETA ${eta} | ${stepText}`;
+    const stepText = this.stepLabel.length > 30 ? `${this.stepLabel.slice(0, 29)}…` : this.stepLabel;
+    const progressLine = `  [${bar}] ${current}/${total} (${pct}%) | ${elapsed} elapsed | ETA ${eta} | ${stepText}`;
 
     // Draw separator and progress bar (outside scroll region)
     process.stdout.write(`${CSI}${sepRow};1H${CSI}K${sep}`);
@@ -313,7 +302,7 @@ class BumpTUI {
 
 function runCommandStreaming(label, command, tui) {
   return new Promise((resolve, reject) => {
-    const parts = command.split(" ");
+    const _parts = command.split(" ");
     // Use shell to handle pipes, redirects, 2>&1
     const child = spawn("bash", ["-c", `${command} 2>&1`], {
       stdio: ["ignore", "pipe", "pipe"],
@@ -374,8 +363,6 @@ function runCommandStreaming(label, command, tui) {
 // ── preflight checks (async with TUI) ───────────────────────────────────────
 
 async function runPreflightChecks() {
-  console.log("Running preflight checks before bump...\n");
-
   // ── Competing cargo processes ─────────────────────────────────────────────
   checkForCompetingCargo();
 
@@ -442,7 +429,6 @@ async function runPreflightChecks() {
         } catch (err) {
           tui.stepFailed(label);
           tui.stop();
-          console.error(`\n[preflight] ✗ ${label} — failed`);
           throw err;
         }
       }
@@ -471,7 +457,7 @@ function bumpChangelogUnreleased(changelogPath, version, date) {
   const unreleasedHeader = /^## \[Unreleased\]\s*$/m;
 
   if (!unreleasedHeader.test(changelog)) {
-    throw new Error(`Could not find \"## [Unreleased]\" in ${changelogPath}`);
+    throw new Error(`Could not find "## [Unreleased]" in ${changelogPath}`);
   }
 
   const replacement = `## [Unreleased]\n\n## [${version}] — ${date}`;
@@ -493,18 +479,6 @@ function parseArgs() {
     } else if (a === "--clean") {
       clean = true;
     } else if (a === "--help" || a === "-h") {
-      console.log(
-        [
-          "Usage: npm run bump [-- [options] [version]]",
-          "",
-          "Options:",
-          "  --dry-run   Run all preflight checks but skip version bumping",
-          "  --clean     Delete src-tauri/target after bumping to free disk space",
-          "  --help, -h  Show this help message",
-          "",
-          "If version is omitted the patch component is incremented automatically.",
-        ].join("\n")
-      );
       process.exit(0);
     } else if (!a.startsWith("-")) {
       versionArg = a;
@@ -529,9 +503,7 @@ async function main() {
   const newVersion = versionArg ? validateVersion(versionArg) : bumpPatch(currentVersion);
 
   if (dryRun) {
-    console.log(`[dry-run] Would bump  ${currentVersion}  ->  ${newVersion}\n`);
   } else {
-    console.log(`Bumping  ${currentVersion}  ->  ${newVersion}\n`);
   }
 
   // ── preflight checks (must pass before any file is modified) ──────────────
@@ -541,7 +513,6 @@ async function main() {
   // ── In dry-run mode stop here — no files are modified ─────────────────────
 
   if (dryRun) {
-    console.log(`\n[dry-run] All preflight checks passed. No files were modified.`);
     return;
   }
 
@@ -550,16 +521,14 @@ async function main() {
   // Re-read in case something changed
   const pkgFresh = JSON.parse(readText("package.json"));
   pkgFresh.version = newVersion;
-  writeText("package.json", JSON.stringify(pkgFresh, null, 2) + "\n");
-  console.log("  ✓  package.json");
+  writeText("package.json", `${JSON.stringify(pkgFresh, null, 2)}\n`);
 
   // ── src-tauri/tauri.conf.json ───────────────────────────────────────────────
 
   const tauriConfPath = "src-tauri/tauri.conf.json";
   const tauriConf = JSON.parse(readText(tauriConfPath));
   tauriConf.version = newVersion;
-  writeText(tauriConfPath, JSON.stringify(tauriConf, null, 2) + "\n");
-  console.log("  ✓  src-tauri/tauri.conf.json");
+  writeText(tauriConfPath, `${JSON.stringify(tauriConf, null, 2)}\n`);
 
   // ── src-tauri/Cargo.toml ────────────────────────────────────────────────────
 
@@ -572,7 +541,6 @@ async function main() {
   }
   cargo = cargo.replace(versionLine, `version = "${newVersion}"`);
   writeText(cargoPath, cargo);
-  console.log("  ✓  src-tauri/Cargo.toml");
 
   // ── CHANGELOG.md — compile fragments ───────────────────────────────────────
 
@@ -580,35 +548,18 @@ async function main() {
   const result = compileChangelog(newVersion, date);
 
   if (result.entryCount > 0) {
-    console.log(
-      `  ✓  CHANGELOG.md — compiled ${result.entryCount} entries (${result.categories.join(", ")})`
-    );
-    console.log(
-      `  ✓  changes/releases/${newVersion}/ — archived ${result.categories.length} fragments`
-    );
   } else {
     bumpChangelogUnreleased("CHANGELOG.md", newVersion, date);
-    console.log("  ✓  CHANGELOG.md (Unreleased -> versioned section, no fragments)");
   }
-
-  // ── regenerate Cargo.lock ───────────────────────────────────────────────────
-
-  console.log("\nRegenerating Cargo.lock...");
   execSync("cargo generate-lockfile", { stdio: "inherit" });
-  console.log("  ✓  Cargo.lock");
 
   // ── optionally clean Rust build artifacts to free disk space ────────────────
 
   if (clean) {
-    console.log("\nCleaning Rust build artifacts (--clean)...");
     execSync("npm run clean:rust", { stdio: "inherit" });
-    console.log("  ✓  clean:rust");
   }
-
-  console.log(`\nDone! Version is now ${newVersion}`);
 }
 
-main().catch((err) => {
-  console.error(err.message || err);
+main().catch((_err) => {
   process.exit(1);
 });

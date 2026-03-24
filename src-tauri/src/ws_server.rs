@@ -225,9 +225,8 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::sync::{Arc, Mutex as StdMutex};
 
-
-use tower_http::cors::{CorsLayer, AllowOrigin, AllowHeaders, AllowMethods};
-use axum::http::{Method, HeaderName};
+use axum::http::{HeaderName, Method};
+use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
 
 #[cfg(feature = "llm")]
 use crate::llm::LlmStateCell;
@@ -239,8 +238,8 @@ use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
 use crate::constants::{
-    WS_HOST, WS_DEFAULT_PORT,
-    MDNS_HOST_SUFFIX, MDNS_SERVICE_SUFFIX, MDNS_TXT_FORMAT, MDNS_TXT_VERSION, WS_BROADCAST_CAPACITY
+    MDNS_HOST_SUFFIX, MDNS_SERVICE_SUFFIX, MDNS_TXT_FORMAT, MDNS_TXT_VERSION,
+    WS_BROADCAST_CAPACITY, WS_DEFAULT_PORT, WS_HOST,
 };
 
 // ── Client & request tracking ─────────────────────────────────────────────────
@@ -251,36 +250,43 @@ const MAX_REQUEST_LOG: usize = skill_constants::WS_MAX_REQUEST_LOG;
 /// A connected WebSocket client tracked for the API status panel.
 #[derive(Clone, Serialize)]
 pub struct WsClient {
-    pub peer:         String,
-    pub connected_at: u64,     // unix seconds
+    pub peer: String,
+    pub connected_at: u64, // unix seconds
 }
 
 /// A single request log entry.
 #[derive(Clone, Serialize)]
 pub struct WsRequestLog {
-    pub timestamp: u64,        // unix seconds
-    pub peer:      String,
-    pub command:   String,
-    pub ok:        bool,
+    pub timestamp: u64, // unix seconds
+    pub peer: String,
+    pub command: String,
+    pub ok: bool,
 }
 
 /// Shared tracking state for connected WS clients and the request log.
 /// Wrapped in `Arc<StdMutex<…>>` so both the accept loop and Tauri commands
 /// can access it.
 pub struct WsTracker {
-    pub clients:  Vec<WsClient>,
+    pub clients: Vec<WsClient>,
     pub requests: Vec<WsRequestLog>,
-    pub port:     u16,
+    pub port: u16,
 }
 
 impl WsTracker {
     fn new(port: u16) -> Self {
-        Self { clients: Vec::new(), requests: Vec::new(), port }
+        Self {
+            clients: Vec::new(),
+            requests: Vec::new(),
+            port,
+        }
     }
 
     pub fn add_client(&mut self, peer: &str) {
         let now = crate::unix_secs();
-        self.clients.push(WsClient { peer: peer.to_owned(), connected_at: now });
+        self.clients.push(WsClient {
+            peer: peer.to_owned(),
+            connected_at: now,
+        });
     }
 
     pub fn remove_client(&mut self, peer: &str) {
@@ -290,10 +296,14 @@ impl WsTracker {
     pub fn log_request(&mut self, peer: &str, command: &str, ok: bool) {
         let now = crate::unix_secs();
         self.requests.push(WsRequestLog {
-            timestamp: now, peer: peer.to_owned(), command: command.to_owned(), ok,
+            timestamp: now,
+            peer: peer.to_owned(),
+            command: command.to_owned(),
+            ok,
         });
         if self.requests.len() > MAX_REQUEST_LOG {
-            self.requests.drain(0..(self.requests.len() - MAX_REQUEST_LOG));
+            self.requests
+                .drain(0..(self.requests.len() - MAX_REQUEST_LOG));
         }
     }
 }
@@ -308,7 +318,7 @@ pub type SharedTracker = Arc<StdMutex<WsTracker>>;
 /// (just clones the inner `broadcast::Sender`).
 #[derive(Clone)]
 pub struct WsBroadcaster {
-    tx:      broadcast::Sender<String>,
+    tx: broadcast::Sender<String>,
     pub tracker: SharedTracker,
 }
 
@@ -321,8 +331,11 @@ impl WsBroadcaster {
             "event":   event,
             "payload": payload,
         })) {
-            Ok(s)  => s,
-            Err(e) => { eprintln!("[ws] serialize error for '{event}': {e}"); return; }
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[ws] serialize error for '{event}': {e}");
+                return;
+            }
         };
         // Err(SendError) just means no receivers are subscribed — not a problem.
         let _ = self.tx.send(json);
@@ -334,8 +347,8 @@ impl WsBroadcaster {
 /// Returned by [`bind`]; contains everything needed to start the accept loop.
 pub struct ServeHandle {
     listener: std::net::TcpListener,
-    tx:       broadcast::Sender<String>,
-    tracker:  SharedTracker,
+    tx: broadcast::Sender<String>,
+    tracker: SharedTracker,
     /// The OS-assigned TCP port the server is bound to.
     pub port: u16,
     /// Dynamic LLM state cell — routes are always mounted, content swapped at runtime.
@@ -355,11 +368,11 @@ impl ServeHandle {
     /// Start the combined HTTP + WebSocket + (optional) LLM server.
     /// Spawn this with `tauri::async_runtime::spawn`.  Never returns.
     pub async fn serve(self, app: AppHandle) {
-        let listener = TcpListener::from_std(self.listener)
-            .expect("[ws] TcpListener::from_std failed");
+        let listener =
+            TcpListener::from_std(self.listener).expect("[ws] TcpListener::from_std failed");
         let state = crate::api::SharedState {
             app,
-            tx:      self.tx,
+            tx: self.tx,
             tracker: self.tracker,
         };
 
@@ -384,11 +397,15 @@ impl ServeHandle {
                 s == b"null"                                     // Tauri WebView
                     || s.starts_with(b"tauri://")               // tauri:// scheme
                     || s.starts_with(b"http://localhost")        // Vite dev server
-                    || s.starts_with(b"http://127.0.0.1")        // loopback
+                    || s.starts_with(b"http://127.0.0.1") // loopback
             }))
             .allow_methods(AllowMethods::list([
-                Method::GET, Method::POST, Method::PUT,
-                Method::DELETE, Method::OPTIONS, Method::HEAD,
+                Method::GET,
+                Method::POST,
+                Method::PUT,
+                Method::DELETE,
+                Method::OPTIONS,
+                Method::HEAD,
             ]))
             .allow_headers(AllowHeaders::list([
                 HeaderName::from_static("content-type"),
@@ -399,7 +416,10 @@ impl ServeHandle {
 
         let router = router.layer(cors);
 
-        eprintln!("[http/ws] listening on :{}", listener.local_addr().map_or(0, |a| a.port()));
+        eprintln!(
+            "[http/ws] listening on :{}",
+            listener.local_addr().map_or(0, |a| a.port())
+        );
         axum::serve(
             listener,
             router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
@@ -434,7 +454,10 @@ pub fn bind_with(host: impl AsRef<str>, port: u16) -> (WsBroadcaster, ServeHandl
     let (tx, _) = broadcast::channel::<String>(WS_BROADCAST_CAPACITY);
 
     let tracker = Arc::new(StdMutex::new(WsTracker::new(port)));
-    let broadcaster  = WsBroadcaster { tx: tx.clone(), tracker: tracker.clone() };
+    let broadcaster = WsBroadcaster {
+        tx: tx.clone(),
+        tracker: tracker.clone(),
+    };
     let serve_handle = ServeHandle {
         listener: std_listener,
         tx,
@@ -468,8 +491,11 @@ pub fn register_mdns(_app_name: &str, port: u16) {
     let app_name = "skill"; // set skill instead of NeuroSkill for Bonjour discovery
 
     let daemon = match ServiceDaemon::new() {
-        Ok(d)  => d,
-        Err(e) => { eprintln!("[mdns] daemon start failed: {e}"); return; }
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("[mdns] daemon start failed: {e}");
+            return;
+        }
     };
 
     // "_skill._tcp.local." — type changes with the app name automatically.
@@ -479,15 +505,18 @@ pub fn register_mdns(_app_name: &str, port: u16) {
 
     let mut props = std::collections::HashMap::new();
     props.insert("version".to_owned(), MDNS_TXT_VERSION.to_owned());
-    props.insert("format".to_owned(),  MDNS_TXT_FORMAT.to_owned());
+    props.insert("format".to_owned(), MDNS_TXT_FORMAT.to_owned());
 
     let info = match ServiceInfo::new(&service_type, app_name, &host, ip, port, props) {
-        Ok(i)  => i,
-        Err(e) => { eprintln!("[mdns] ServiceInfo error: {e}"); return; }
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("[mdns] ServiceInfo error: {e}");
+            return;
+        }
     };
 
     match daemon.register(info) {
-        Ok(_)  => eprintln!("[mdns] {app_name}{MDNS_SERVICE_SUFFIX} → {ip}:{port}"),
+        Ok(_) => eprintln!("[mdns] {app_name}{MDNS_SERVICE_SUFFIX} → {ip}:{port}"),
         Err(e) => eprintln!("[mdns] register failed: {e}"),
     }
 
@@ -512,6 +541,6 @@ fn local_ip() -> IpAddr {
     let _ = sock.connect("8.8.8.8:80");
     match sock.local_addr() {
         Ok(addr) => addr.ip(),
-        _        => IpAddr::V4(Ipv4Addr::LOCALHOST),
+        _ => IpAddr::V4(Ipv4Addr::LOCALHOST),
     }
 }

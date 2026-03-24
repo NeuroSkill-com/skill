@@ -9,13 +9,13 @@ use serde_json::Value;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolFunction {
     /// The tool function's name.
-    pub name:        String,
+    pub name: String,
     /// Optional human-readable description.
     #[serde(default)]
     pub description: Option<String>,
     /// Optional JSON Schema for the function's parameters.
     #[serde(default)]
-    pub parameters:  Option<Value>,
+    pub parameters: Option<Value>,
 }
 
 /// Wrapper around [`ToolFunction`] with a type discriminator.
@@ -25,14 +25,14 @@ pub struct Tool {
     #[serde(rename = "type")]
     pub tool_type: String,
     /// The tool's function definition.
-    pub function:  ToolFunction,
+    pub function: ToolFunction,
 }
 
 /// The function half of a tool call (name + serialized arguments).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCallFunction {
     /// Tool function name.
-    pub name:      String,
+    pub name: String,
     /// JSON-encoded arguments string (as per OpenAI spec).
     pub arguments: String,
 }
@@ -41,12 +41,12 @@ pub struct ToolCallFunction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolCall {
     /// Unique call ID (e.g. `"call_0"`).
-    pub id:       String,
+    pub id: String,
     /// Always `"function"`.
     #[serde(rename = "type")]
     pub call_type: String,
     /// The function being called.
-    pub function:  ToolCallFunction,
+    pub function: ToolCallFunction,
 }
 
 /// A chat message in the OpenAI-compatible format.
@@ -54,20 +54,20 @@ pub struct ToolCall {
 #[serde(tag = "role", rename_all = "lowercase")]
 pub enum ChatMessage {
     /// System prompt.
-    System    { content: MessageContent },
+    System { content: MessageContent },
     /// User message.
-    User      { content: MessageContent },
+    User { content: MessageContent },
     /// Assistant response (may include tool calls).
     Assistant {
         #[serde(default)]
-        content:    Option<MessageContent>,
+        content: Option<MessageContent>,
         #[serde(default)]
         tool_calls: Vec<ToolCall>,
     },
     /// Tool result.
     Tool {
         tool_call_id: String,
-        content:      MessageContent,
+        content: MessageContent,
     },
 }
 
@@ -88,7 +88,13 @@ impl MessageContent {
             Self::Text(s) => s.clone(),
             Self::Parts(ps) => ps
                 .iter()
-                .filter_map(|p| if let ContentPart::Text { text } = p { Some(text.as_str()) } else { None })
+                .filter_map(|p| {
+                    if let ContentPart::Text { text } = p {
+                        Some(text.as_str())
+                    } else {
+                        None
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join("\n"),
         }
@@ -100,7 +106,7 @@ impl MessageContent {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {
     /// Text content part.
-    Text  { text: String },
+    Text { text: String },
     /// Image content part.
     Image { image_url: ImageUrl },
 }

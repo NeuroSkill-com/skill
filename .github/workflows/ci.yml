@@ -135,6 +135,8 @@ jobs:
           -p skill-devices -p skill-settings -p skill-history
           -p skill-health -p skill-router -p skill-llm
           -p skill-autostart -p skill-tts -p skill-gpu
+          -p skill-headless -p skill-screenshots -p skill-label-index
+          -p skill-skills -p skill-jobs -p skill-commands -p skill-exg
           --lib
 
   # ── Frontend ─────────────────────────────────────────────────────────────────
@@ -160,6 +162,14 @@ jobs:
       # before the slower svelte-check.
       - name: i18n sync check
         run: npm run sync:i18n:check
+
+      # Biome — format check (fast, ~100ms; lint is advisory via warnings)
+      - name: Biome format check
+        run: npx biome format src/ scripts/
+
+      - name: Biome lint (advisory)
+        run: npx biome lint src/ scripts/
+        continue-on-error: true
 
       - name: svelte-check
         run: npm run check
@@ -509,16 +519,24 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo-audit binary
+      - name: Cache cargo-audit + cargo-deny binaries
         uses: actions/cache@v5
         with:
-          path: ~/.cargo/bin/cargo-audit
-          key: cargo-audit-bin-v1
+          path: |
+            ~/.cargo/bin/cargo-audit
+            ~/.cargo/bin/cargo-deny
+          key: cargo-audit-deny-bin-v1
 
       - name: cargo audit
         run: |
           cargo install cargo-audit --locked 2>/dev/null || true
           cargo audit
+        continue-on-error: true
+
+      - name: cargo deny
+        run: |
+          cargo install cargo-deny --locked 2>/dev/null || true
+          cargo deny check
         continue-on-error: true
 
   # ── Discord notification ──────────────────────────────────────────────────

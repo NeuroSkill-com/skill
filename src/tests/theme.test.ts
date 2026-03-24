@@ -14,11 +14,17 @@
  *   QUALITY_COLORS — signal-quality label map
  *   STATE_COLORS   — BLE connection state map
  */
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  C_GOOD, C_WARN, C_BAD, C_NEUTRAL,
-  colorForLevel, colorForLoad, colorForRssi,
-  QUALITY_COLORS, STATE_COLORS,
+  C_BAD,
+  C_GOOD,
+  C_NEUTRAL,
+  C_WARN,
+  colorForLevel,
+  colorForLoad,
+  colorForRssi,
+  QUALITY_COLORS,
+  STATE_COLORS,
 } from "../../src/lib/theme";
 
 // ── Base palette sanity ───────────────────────────────────────────────────────
@@ -103,7 +109,7 @@ describe("colorForLoad (lower is better, default thresholds 0.50/0.80)", () => {
   });
 
   it("0.50 → C_WARN (at warnAt boundary)", () => {
-    expect(colorForLoad(0.50)).toBe(C_WARN);
+    expect(colorForLoad(0.5)).toBe(C_WARN);
   });
 
   it("0.79 → C_WARN (below badAt)", () => {
@@ -111,7 +117,7 @@ describe("colorForLoad (lower is better, default thresholds 0.50/0.80)", () => {
   });
 
   it("0.80 → C_BAD (at badAt boundary)", () => {
-    expect(colorForLoad(0.80)).toBe(C_BAD);
+    expect(colorForLoad(0.8)).toBe(C_BAD);
   });
 
   it("1.0 → C_BAD (fully loaded)", () => {
@@ -179,24 +185,24 @@ describe("QUALITY_COLORS", () => {
   });
 
   it("'good' maps to C_GOOD", () => {
-    expect(QUALITY_COLORS["good"]).toBe(C_GOOD);
+    expect(QUALITY_COLORS.good).toBe(C_GOOD);
   });
 
   it("'fair' maps to C_WARN", () => {
-    expect(QUALITY_COLORS["fair"]).toBe(C_WARN);
+    expect(QUALITY_COLORS.fair).toBe(C_WARN);
   });
 
   it("'poor' maps to C_BAD", () => {
-    expect(QUALITY_COLORS["poor"]).toBe(C_BAD);
+    expect(QUALITY_COLORS.poor).toBe(C_BAD);
   });
 
   it("'no_signal' maps to C_NEUTRAL", () => {
-    expect(QUALITY_COLORS["no_signal"]).toBe(C_NEUTRAL);
+    expect(QUALITY_COLORS.no_signal).toBe(C_NEUTRAL);
   });
 
   it("all values are valid hex or rgba strings", () => {
     for (const val of Object.values(QUALITY_COLORS)) {
-      const isHex  = /^#[0-9a-fA-F]{6}$/.test(val);
+      const isHex = /^#[0-9a-fA-F]{6}$/.test(val);
       const isRgba = /^rgba\(/.test(val);
       expect(isHex || isRgba, `unexpected colour value: ${val}`).toBe(true);
     }

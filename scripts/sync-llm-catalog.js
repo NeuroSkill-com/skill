@@ -1,77 +1,97 @@
 #!/usr/bin/env node
 
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import fs from "node:fs/promises";
+import path from "node:path";
 
 const ROOT = process.cwd();
-const CATALOG_PATH = path.join(ROOT, 'src-tauri', 'llm_catalog.json');
-const HUGGING_FACE_API = 'https://huggingface.co/api/models/';
+const CATALOG_PATH = path.join(ROOT, "src-tauri", "llm_catalog.json");
+const HUGGING_FACE_API = "https://huggingface.co/api/models/";
 
 const args = new Set(process.argv.slice(2));
-const writeMode = args.has('--write');
-const checkMode = args.has('--check') || !writeMode;
-const verbose = args.has('--verbose');
+const writeMode = args.has("--write");
+const checkMode = args.has("--check") || !writeMode;
+const verbose = args.has("--verbose");
 
-function log(...msg) {
-  console.log('[sync-llm-catalog]', ...msg);
-}
+function log(..._msg) {}
 
 function normalizeQuant(value) {
-  return value ? value.toUpperCase() : 'UNKNOWN';
+  return value ? value.toUpperCase() : "UNKNOWN";
 }
 
 function inferQuant(filename, isMmproj) {
-  const stem = filename.replace(/\.gguf$/i, '');
+  const stem = filename.replace(/\.gguf$/i, "");
 
   if (isMmproj) {
     const mmprojMatch = stem.match(/-(bf16|f16|f32)$/i);
-    return mmprojMatch ? normalizeQuant(mmprojMatch[1]) : 'MMPROJ';
+    return mmprojMatch ? normalizeQuant(mmprojMatch[1]) : "MMPROJ";
   }
 
   const quantMatch = stem.match(/-((?:IQ|Q)[A-Za-z0-9_]+|BF16|F16|F32)$/i);
-  return quantMatch ? normalizeQuant(quantMatch[1]) : 'UNKNOWN';
+  return quantMatch ? normalizeQuant(quantMatch[1]) : "UNKNOWN";
 }
 
 function inferDescription({ quant, isMmproj }) {
   if (isMmproj) {
-    if (quant === 'BF16') return 'Vision projector — BF16 (recommended)';
-    if (quant === 'F16') return 'Vision projector — FP16';
-    if (quant === 'F32') return 'Vision projector — FP32';
-    return 'Vision projector';
+    if (quant === "BF16") return "Vision projector — BF16 (recommended)";
+    if (quant === "F16") return "Vision projector — FP16";
+    if (quant === "F32") return "Vision projector — FP32";
+    return "Vision projector";
   }
 
-  if (quant === 'Q4_K_M') return 'Recommended — best quality/size tradeoff';
-  if (quant === 'Q4_0') return 'Legacy 4-bit quant';
-  if (quant === 'Q2_K') return 'Ultra-compressed; lowest quality';
-  if (quant === 'Q6_K') return 'Near-lossless quality';
-  if (quant === 'Q8_0') return 'Effectively lossless 8-bit';
-  if (quant === 'F16' || quant === 'BF16') return 'Full precision weights';
+  if (quant === "Q4_K_M") return "Recommended — best quality/size tradeoff";
+  if (quant === "Q4_0") return "Legacy 4-bit quant";
+  if (quant === "Q2_K") return "Ultra-compressed; lowest quality";
+  if (quant === "Q6_K") return "Near-lossless quality";
+  if (quant === "Q8_0") return "Effectively lossless 8-bit";
+  if (quant === "F16" || quant === "BF16") return "Full precision weights";
   return `${quant} quant`;
 }
 
 function inferAdvanced({ quant, isMmproj, recommended }) {
-  if (isMmproj) return quant === 'F32';
+  if (isMmproj) return quant === "F32";
   if (recommended) return false;
-  return !['Q4_0', 'Q4_1', 'Q4_K_M', 'Q4_K_S', 'Q4_K_L'].includes(quant);
+  return !["Q4_0", "Q4_1", "Q4_K_M", "Q4_K_S", "Q4_K_L"].includes(quant);
 }
 
 function inferRecommended({ quant, isMmproj }) {
-  if (isMmproj) return quant === 'BF16';
-  return quant === 'Q4_K_M';
+  if (isMmproj) return quant === "BF16";
+  return quant === "Q4_K_M";
 }
 
 function quantSortKey(quant, isMmproj) {
-  const mmprojOrder = ['BF16', 'F16', 'F32'];
+  const mmprojOrder = ["BF16", "F16", "F32"];
   const quantOrder = [
-    'IQ1_S', 'IQ1_M',
-    'IQ2_XXS', 'IQ2_XS', 'IQ2_S', 'IQ2_M',
-    'Q2_K', 'Q2_K_L',
-    'IQ3_XXS', 'IQ3_XS', 'Q3_K_S', 'IQ3_M', 'Q3_K_M', 'Q3_K_L', 'Q3_K_XL',
-    'IQ4_XS', 'IQ4_NL', 'Q4_0', 'Q4_1', 'Q4_K_S', 'Q4_K_M', 'Q4_K_L',
-    'Q5_K_S', 'Q5_K_M', 'Q5_K_L',
-    'Q6_K', 'Q6_K_L',
-    'Q8_0',
-    'F16', 'BF16', 'F32'
+    "IQ1_S",
+    "IQ1_M",
+    "IQ2_XXS",
+    "IQ2_XS",
+    "IQ2_S",
+    "IQ2_M",
+    "Q2_K",
+    "Q2_K_L",
+    "IQ3_XXS",
+    "IQ3_XS",
+    "Q3_K_S",
+    "IQ3_M",
+    "Q3_K_M",
+    "Q3_K_L",
+    "Q3_K_XL",
+    "IQ4_XS",
+    "IQ4_NL",
+    "Q4_0",
+    "Q4_1",
+    "Q4_K_S",
+    "Q4_K_M",
+    "Q4_K_L",
+    "Q5_K_S",
+    "Q5_K_M",
+    "Q5_K_L",
+    "Q6_K",
+    "Q6_K_L",
+    "Q8_0",
+    "F16",
+    "BF16",
+    "F32",
   ];
 
   const order = isMmproj ? mmprojOrder : quantOrder;
@@ -81,13 +101,13 @@ function quantSortKey(quant, isMmproj) {
 
 async function fetchRepoSiblings(repo) {
   const url = new URL(`${HUGGING_FACE_API}${repo}`);
-  url.searchParams.append('expand[]', 'siblings');
+  url.searchParams.append("expand[]", "siblings");
 
   const response = await fetch(url, {
     headers: {
-      accept: 'application/json',
-      'user-agent': 'skill-sync-llm-catalog/1.0'
-    }
+      accept: "application/json",
+      "user-agent": "skill-sync-llm-catalog/1.0",
+    },
   });
 
   if (!response.ok) {
@@ -99,7 +119,7 @@ async function fetchRepoSiblings(repo) {
 }
 
 async function loadCatalog() {
-  const raw = await fs.readFile(CATALOG_PATH, 'utf8');
+  const raw = await fs.readFile(CATALOG_PATH, "utf8");
   return JSON.parse(raw);
 }
 
@@ -107,8 +127,8 @@ function createAddedEntry(filename, siblingMap, template) {
   const isMmproj = /mmproj/i.test(filename);
   const quant = inferQuant(filename, isMmproj);
   const sibling = siblingMap.get(filename);
-  const sizeBytes = typeof sibling?.size === 'number' ? sibling.size : undefined;
-  const sizeGb = sizeBytes ? Number((sizeBytes / (1024 ** 3)).toFixed(2)) : template.size_gb;
+  const sizeBytes = typeof sibling?.size === "number" ? sibling.size : undefined;
+  const sizeGb = sizeBytes ? Number((sizeBytes / 1024 ** 3).toFixed(2)) : template.size_gb;
   const recommended = inferRecommended({ quant, isMmproj });
 
   return {
@@ -118,12 +138,12 @@ function createAddedEntry(filename, siblingMap, template) {
     size_gb: sizeGb,
     description: inferDescription({ quant, isMmproj }),
     family_id: template.family_id,
-    family_name: isMmproj ? '' : template.family_name,
-    family_desc: isMmproj ? '' : template.family_desc,
-    tags: isMmproj ? ['vision', 'multimodal'] : template.tags,
+    family_name: isMmproj ? "" : template.family_name,
+    family_desc: isMmproj ? "" : template.family_desc,
+    tags: isMmproj ? ["vision", "multimodal"] : template.tags,
     is_mmproj: isMmproj,
     recommended,
-    advanced: inferAdvanced({ quant, isMmproj, recommended })
+    advanced: inferAdvanced({ quant, isMmproj, recommended }),
   };
 }
 
@@ -140,11 +160,7 @@ function uniqueRepoOrder(entries) {
 }
 
 function pruneMmprojOnlyFamilies(entries) {
-  const textFamilies = new Set(
-    entries
-      .filter((entry) => !entry.is_mmproj)
-      .map((entry) => entry.family_id)
-  );
+  const textFamilies = new Set(entries.filter((entry) => !entry.is_mmproj).map((entry) => entry.family_id));
 
   return entries.filter((entry) => !entry.is_mmproj || textFamilies.has(entry.family_id));
 }
@@ -156,7 +172,10 @@ async function syncCatalog() {
   const repos = uniqueRepoOrder(originalEntries);
   const repoEntryMap = new Map();
   for (const repo of repos) {
-    repoEntryMap.set(repo, originalEntries.filter((entry) => entry.repo === repo));
+    repoEntryMap.set(
+      repo,
+      originalEntries.filter((entry) => entry.repo === repo),
+    );
   }
 
   const removedKeys = new Set();
@@ -165,7 +184,7 @@ async function syncCatalog() {
     checkedRepos: 0,
     removed: 0,
     added: 0,
-    failedRepos: []
+    failedRepos: [],
   };
 
   for (const repo of repos) {
@@ -187,10 +206,10 @@ async function syncCatalog() {
     const remoteGguf = new Set(
       siblings
         .map((s) => s.rfilename)
-        .filter((name) => typeof name === 'string')
-        .filter((name) => name.toLowerCase().endsWith('.gguf'))
-        .filter((name) => !name.includes('/'))
-        .filter((name) => !name.toLowerCase().includes('imatrix'))
+        .filter((name) => typeof name === "string")
+        .filter((name) => name.toLowerCase().endsWith(".gguf"))
+        .filter((name) => !name.includes("/"))
+        .filter((name) => !name.toLowerCase().includes("imatrix")),
     );
 
     const existingFilenames = new Set(existing.map((entry) => entry.filename));
@@ -264,20 +283,19 @@ async function main() {
   }
 
   if (!changed) {
-    log('catalog is up to date');
+    log("catalog is up to date");
     process.exit(0);
   }
 
   if (checkMode && !writeMode) {
-    log('catalog needs updates (run with --write to apply changes)');
+    log("catalog needs updates (run with --write to apply changes)");
     process.exit(1);
   }
 
-  await fs.writeFile(CATALOG_PATH, `${JSON.stringify(nextCatalog, null, 2)}\n`, 'utf8');
-  log('catalog updated');
+  await fs.writeFile(CATALOG_PATH, `${JSON.stringify(nextCatalog, null, 2)}\n`, "utf8");
+  log("catalog updated");
 }
 
-main().catch((error) => {
-  console.error('[sync-llm-catalog] fatal:', error);
+main().catch((_error) => {
   process.exit(1);
 });
