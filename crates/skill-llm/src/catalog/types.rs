@@ -745,4 +745,575 @@ mod tests {
             assert_eq!(a.family_name, b.family_name);
         }
     }
+
+    // ── Edge cases ───────────────────────────────────────────────────────
+
+    #[test]
+    fn empty_catalog_roundtrips() {
+        let cat = LlmCatalog {
+            entries: vec![],
+            active_model: String::new(),
+            active_mmproj: String::new(),
+        };
+        let norm = cat.deflate();
+        assert!(norm.families.is_empty());
+        assert!(norm.models.is_empty());
+
+        let json = serde_json::to_string(&norm).unwrap();
+        let restored = parse_catalog_json(&json).unwrap();
+        assert!(restored.entries.is_empty());
+        assert!(restored.active_model.is_empty());
+    }
+
+    #[test]
+    fn runtime_injected_model_synthesizes_family() {
+        // Simulate a user adding a custom model at runtime via the file picker.
+        let mut cat = LlmCatalog {
+            entries: vec![],
+            active_model: String::new(),
+            active_mmproj: String::new(),
+        };
+        cat.entries.push(LlmModelEntry {
+            repo: "user/Custom-GGUF".into(),
+            filename: "Custom-Q4_K_M.gguf".into(),
+            quant: "Q4_K_M".into(),
+            size_gb: 5.0,
+            description: "Custom model".into(),
+            family_id: "custom-13b".into(),
+            family_name: "Custom 13B".into(),
+            family_desc: "User's custom model.".into(),
+            tags: vec!["chat".into()],
+            is_mmproj: false,
+            recommended: false,
+            advanced: false,
+            params_b: 13.0,
+            max_context_length: 16384,
+            shard_files: vec![],
+            local_path: Some(PathBuf::from("/models/custom.gguf")),
+            state: DownloadState::Downloaded,
+            status_msg: None,
+            progress: 1.0,
+            initiated_at_unix: None,
+        });
+
+        let norm = cat.deflate();
+        assert_eq!(norm.families.len(), 1);
+        assert!(norm.families.contains_key("custom-13b"));
+        let fam = &norm.families["custom-13b"];
+        assert_eq!(fam.name, "Custom 13B");
+        assert_eq!(fam.repo, "user/Custom-GGUF");
+        assert_eq!(fam.params_b, 13.0);
+
+        // Round-trip preserves everything including local_path.
+        let restored = norm.inflate();
+        assert_eq!(restored.entries.len(), 1);
+        assert_eq!(restored.entries[0].family_name, "Custom 13B");
+        assert_eq!(
+            restored.entries[0].local_path,
+            Some(PathBuf::from("/models/custom.gguf"))
+        );
+    }
+
+    #[test]
+    fn inflate_skips_models_with_unknown_family() {
+        let norm = LlmCatalogNormalized {
+            active_model: String::new(),
+            active_mmproj: String::new(),
+            families: HashMap::new(), // no families at all
+            models: vec![LlmModelSlim {
+                family: "nonexistent".into(),
+                filename: "ghost.gguf".into(),
+                quant: "Q4_K_M".into(),
+                size_gb: 1.0,
+                description: "orphan".into(),
+                repo: None,
+                recommended: false,
+                advanced: false,
+                shard_files: vec![],
+                local_path: None,
+                state: DownloadState::NotDownloaded,
+                status_msg: None,
+                progress: 0.0,
+                initiated_at_unix: None,
+            }],
+        };
+
+        let cat = norm.inflate();
+        assert!(cat.entries.is_empty(), "orphaned model should be skipped");
+    }
+
+    #[test]
+    fn shard_files_survive_roundtrip() {
+        let mut cat = mk_catalog();
+        cat.entries.push(LlmModelEntry {
+            repo: "acme/BigModel-GGUF".into(),
+            filename: "BigModel-Q4_K_M-00001-of-00003.gguf".into(),
+            quant: "Q4_K_M".into(),
+            size_gb: 30.0,
+            description: "Sharded model".into(),
+            family_id: "big-70b".into(),
+            family_name: "Big 70B".into(),
+            family_desc: "A big model.".into(),
+            tags: vec!["chat".into(), "large".into()],
+            is_mmproj: false,
+            recommended: true,
+            advanced: false,
+            params_b: 70.0,
+            max_context_length: 131072,
+            shard_files: vec![
+                "BigModel-Q4_K_M-00001-of-00003.gguf".into(),
+                "BigModel-Q4_K_M-00002-of-00003.gguf".into(),
+                "BigModel-Q4_K_M-00003-of-00003.gguf".into(),
+            ],
+            local_path: None,
+            state: DownloadState::NotDownloaded,
+            status_msg: None,
+            progress: 0.0,
+            initiated_at_unix: None,
+        });
+
+        let norm = cat.deflate();
+        let sharded_slim = norm.models.iter().find(|m| m.filename.contains("BigModel")).unwrap();
+        assert_eq!(sharded_slim.shard_files.len(), 3);
+
+        let restored = norm.inflate();
+        let sharded = restored
+            .entries
+            .iter()
+            .find(|e| e.filename.contains("BigModel"))
+            .unwrap();
+        assert_eq!(sharded.shard_files.len(), 3);
+        assert!(sharded.is_split());
+        assert_eq!(sharded.shard_count(), 3);
+        assert_eq!(sharded.shard_files[2], "BigModel-Q4_K_M-00003-of-00003.gguf");
+    }
+
+    #[test]
+    fn initiated_at_unix_survives_roundtrip() {
+        let mut cat = mk_catalog();
+        cat.entries[0].initiated_at_unix = Some(1719000000);
+
+        let norm = cat.deflate();
+        let m = norm.models.iter().find(|m| m.filename == "Model-Q4_K_M.gguf").unwrap();
+        assert_eq!(m.initiated_at_unix, Some(1719000000));
+
+        let restored = norm.inflate();
+        assert_eq!(restored.entries[0].initiated_at_unix, Some(1719000000));
+    }
+
+    #[test]
+    fn status_msg_survives_roundtrip() {
+        let mut cat = mk_catalog();
+        cat.entries[1].state = DownloadState::Failed;
+        cat.entries[1].status_msg = Some("Connection reset".into());
+
+        let norm = cat.deflate();
+        let restored = norm.inflate();
+        assert_eq!(restored.entries[1].state, DownloadState::Failed);
+        assert_eq!(restored.entries[1].status_msg.as_deref(), Some("Connection reset"));
+    }
+
+    #[test]
+    fn all_download_states_survive_roundtrip() {
+        let states = vec![
+            DownloadState::NotDownloaded,
+            DownloadState::Downloading,
+            DownloadState::Paused,
+            DownloadState::Downloaded,
+            DownloadState::Failed,
+            DownloadState::Cancelled,
+        ];
+        for state in states {
+            let cat = LlmCatalog {
+                entries: vec![LlmModelEntry {
+                    repo: "r/m".into(),
+                    filename: format!("m-{:?}.gguf", state),
+                    quant: "Q4_0".into(),
+                    size_gb: 1.0,
+                    description: String::new(),
+                    family_id: "fam".into(),
+                    family_name: "Fam".into(),
+                    family_desc: String::new(),
+                    tags: vec![],
+                    is_mmproj: false,
+                    recommended: false,
+                    advanced: false,
+                    params_b: 1.0,
+                    max_context_length: 4096,
+                    shard_files: vec![],
+                    local_path: None,
+                    state: state.clone(),
+                    status_msg: None,
+                    progress: 0.0,
+                    initiated_at_unix: None,
+                }],
+                active_model: String::new(),
+                active_mmproj: String::new(),
+            };
+            let json = serde_json::to_string(&cat.deflate()).unwrap();
+            let restored = parse_catalog_json(&json).unwrap();
+            assert_eq!(restored.entries[0].state, state, "state {:?} did not survive", state);
+        }
+    }
+
+    #[test]
+    fn unicode_in_descriptions_survives_roundtrip() {
+        let mut cat = mk_catalog();
+        cat.entries[0].description = "Recommended \u{2014} best quality/size tradeoff".into();
+        cat.entries[0].family_desc =
+            "Alibaba\u{2019}s fast model. Fits in 4\u{00a0}GB VRAM \u{2014} ideal for laptops.".into();
+
+        let norm = cat.deflate();
+        let json = serde_json::to_string_pretty(&norm).unwrap();
+
+        // Verify the unicode is preserved as literal characters, not escaped.
+        assert!(json.contains("\u{2014}"));
+        assert!(json.contains("\u{2019}"));
+
+        let restored = parse_catalog_json(&json).unwrap();
+        assert!(restored.entries[0].description.contains('\u{2014}'));
+        assert!(restored.entries[0].family_desc.contains('\u{2019}'));
+    }
+
+    #[test]
+    fn deflate_first_entry_wins_for_family_metadata() {
+        // Two entries in the same family with different family_desc — first wins.
+        let cat = LlmCatalog {
+            entries: vec![
+                LlmModelEntry {
+                    repo: "r/m".into(),
+                    filename: "a.gguf".into(),
+                    quant: "Q4_K_M".into(),
+                    size_gb: 4.0,
+                    description: "A".into(),
+                    family_id: "fam".into(),
+                    family_name: "First Name".into(),
+                    family_desc: "First description.".into(),
+                    tags: vec!["chat".into()],
+                    is_mmproj: false,
+                    recommended: true,
+                    advanced: false,
+                    params_b: 7.0,
+                    max_context_length: 32768,
+                    shard_files: vec![],
+                    local_path: None,
+                    state: DownloadState::NotDownloaded,
+                    status_msg: None,
+                    progress: 0.0,
+                    initiated_at_unix: None,
+                },
+                LlmModelEntry {
+                    repo: "r/m".into(),
+                    filename: "b.gguf".into(),
+                    quant: "Q2_K".into(),
+                    size_gb: 2.0,
+                    description: "B".into(),
+                    family_id: "fam".into(),
+                    family_name: "Second Name".into(),
+                    family_desc: "Second description.".into(),
+                    tags: vec!["reasoning".into()],
+                    is_mmproj: false,
+                    recommended: false,
+                    advanced: true,
+                    params_b: 7.0,
+                    max_context_length: 32768,
+                    shard_files: vec![],
+                    local_path: None,
+                    state: DownloadState::NotDownloaded,
+                    status_msg: None,
+                    progress: 0.0,
+                    initiated_at_unix: None,
+                },
+            ],
+            active_model: String::new(),
+            active_mmproj: String::new(),
+        };
+
+        let norm = cat.deflate();
+        let fam = &norm.families["fam"];
+        assert_eq!(fam.name, "First Name");
+        assert_eq!(fam.description, "First description.");
+        assert_eq!(fam.tags, vec!["chat"]);
+
+        // After inflate, both entries get the first entry's family metadata.
+        let restored = norm.inflate();
+        assert_eq!(restored.entries[0].family_name, "First Name");
+        assert_eq!(restored.entries[1].family_name, "First Name");
+        assert_eq!(restored.entries[1].family_desc, "First description.");
+    }
+
+    #[test]
+    fn parse_catalog_json_rejects_garbage() {
+        assert!(parse_catalog_json("not json at all").is_err());
+        assert!(parse_catalog_json("{}").is_err());
+        assert!(parse_catalog_json("{\"unrelated\": true}").is_err());
+    }
+
+    #[test]
+    fn normalized_json_ignores_unknown_fields() {
+        // Simulate a future catalog version with extra fields.
+        let json = r#"{
+            "active_model": "",
+            "active_mmproj": "",
+            "catalog_version": 2,
+            "families": {
+                "test": {
+                    "name": "Test",
+                    "description": "A test model.",
+                    "repo": "t/t",
+                    "tags": ["chat"],
+                    "is_mmproj": false,
+                    "params_b": 1.0,
+                    "max_context_length": 4096,
+                    "future_field": "should be ignored"
+                }
+            },
+            "models": [
+                {
+                    "family": "test",
+                    "filename": "test.gguf",
+                    "quant": "Q4_0",
+                    "size_gb": 1.0,
+                    "description": "ok",
+                    "new_flag": true
+                }
+            ]
+        }"#;
+
+        let cat = parse_catalog_json(json).unwrap();
+        assert_eq!(cat.entries.len(), 1);
+        assert_eq!(cat.entries[0].family_name, "Test");
+    }
+
+    #[test]
+    fn legacy_json_with_missing_optional_fields() {
+        // Minimal legacy entry — only required fields, no params_b/max_context_length/shard_files.
+        let json = r#"{
+            "active_model": "",
+            "active_mmproj": "",
+            "entries": [
+                {
+                    "repo": "r/m",
+                    "filename": "m.gguf",
+                    "quant": "Q4_0",
+                    "size_gb": 1.0,
+                    "description": "legacy",
+                    "family_id": "f",
+                    "family_name": "F",
+                    "family_desc": "",
+                    "tags": [],
+                    "is_mmproj": false,
+                    "recommended": false,
+                    "advanced": false
+                }
+            ]
+        }"#;
+
+        let cat = parse_catalog_json(json).unwrap();
+        assert_eq!(cat.entries.len(), 1);
+        assert_eq!(cat.entries[0].params_b, 0.0);
+        assert_eq!(cat.entries[0].max_context_length, 0);
+        assert!(cat.entries[0].shard_files.is_empty());
+        assert_eq!(cat.entries[0].state, DownloadState::NotDownloaded);
+    }
+
+    #[test]
+    fn bundled_catalog_parses_successfully() {
+        let json = include_str!("../../../../src-tauri/llm_catalog.json");
+        let cat = parse_catalog_json(json).unwrap();
+        assert!(
+            cat.entries.len() > 100,
+            "bundled catalog should have many entries, got {}",
+            cat.entries.len()
+        );
+        // Verify every entry has a non-empty family_name (inflation worked).
+        for e in &cat.entries {
+            assert!(!e.family_name.is_empty(), "entry {} has empty family_name", e.filename);
+            assert!(!e.repo.is_empty(), "entry {} has empty repo", e.filename);
+        }
+    }
+
+    #[test]
+    fn deflated_json_is_smaller_than_flat() {
+        let json = include_str!("../../../../src-tauri/llm_catalog.json");
+        let cat = parse_catalog_json(json).unwrap();
+
+        let flat_json = serde_json::to_string(&LlmCatalogLegacy {
+            entries: cat.entries.clone(),
+            active_model: cat.active_model.clone(),
+            active_mmproj: cat.active_mmproj.clone(),
+        })
+        .unwrap();
+
+        let norm_json = serde_json::to_string(&cat.deflate()).unwrap();
+
+        assert!(
+            norm_json.len() < flat_json.len(),
+            "normalized ({} bytes) should be smaller than flat ({} bytes)",
+            norm_json.len(),
+            flat_json.len()
+        );
+
+        // Should be at least 30% smaller.
+        let ratio = norm_json.len() as f64 / flat_json.len() as f64;
+        assert!(
+            ratio < 0.70,
+            "expected at least 30% reduction, got {:.0}% (ratio {:.2})",
+            (1.0 - ratio) * 100.0,
+            ratio
+        );
+    }
+
+    #[test]
+    fn multiple_families_with_mixed_mmproj() {
+        let cat = LlmCatalog {
+            entries: vec![
+                LlmModelEntry {
+                    repo: "org/VL-GGUF".into(),
+                    filename: "VL-Q4_K_M.gguf".into(),
+                    quant: "Q4_K_M".into(),
+                    size_gb: 10.0,
+                    description: "Main".into(),
+                    family_id: "vl-30b".into(),
+                    family_name: "VL 30B".into(),
+                    family_desc: "Vision-language.".into(),
+                    tags: vec!["vision".into()],
+                    is_mmproj: false,
+                    recommended: true,
+                    advanced: false,
+                    params_b: 30.0,
+                    max_context_length: 32768,
+                    shard_files: vec![],
+                    local_path: None,
+                    state: DownloadState::NotDownloaded,
+                    status_msg: None,
+                    progress: 0.0,
+                    initiated_at_unix: None,
+                },
+                LlmModelEntry {
+                    repo: "org/VL-GGUF".into(),
+                    filename: "VL-mmproj-F16.gguf".into(),
+                    quant: "F16".into(),
+                    size_gb: 1.5,
+                    description: "Vision projector".into(),
+                    family_id: "vl-30b-mmproj".into(),
+                    family_name: "VL 30B mmproj".into(),
+                    family_desc: "Multimodal projector.".into(),
+                    tags: vec!["vision".into()],
+                    is_mmproj: true,
+                    recommended: true,
+                    advanced: false,
+                    params_b: 0.6,
+                    max_context_length: 32768,
+                    shard_files: vec![],
+                    local_path: None,
+                    state: DownloadState::NotDownloaded,
+                    status_msg: None,
+                    progress: 0.0,
+                    initiated_at_unix: None,
+                },
+            ],
+            active_model: String::new(),
+            active_mmproj: String::new(),
+        };
+
+        let norm = cat.deflate();
+        assert_eq!(norm.families.len(), 2);
+        assert!(!norm.families["vl-30b"].is_mmproj);
+        assert!(norm.families["vl-30b-mmproj"].is_mmproj);
+
+        let restored = norm.inflate();
+        assert!(!restored.entries[0].is_mmproj);
+        assert!(restored.entries[1].is_mmproj);
+    }
+
+    #[test]
+    fn deflate_inflate_preserves_entry_order() {
+        let mut cat = mk_catalog();
+        // Add more entries so order matters.
+        for i in 0..5 {
+            cat.entries.push(LlmModelEntry {
+                repo: "r/m".into(),
+                filename: format!("model-{i}.gguf"),
+                quant: "Q4_0".into(),
+                size_gb: i as f32,
+                description: format!("entry {i}"),
+                family_id: format!("fam-{}", i % 2),
+                family_name: format!("Family {}", i % 2),
+                family_desc: String::new(),
+                tags: vec![],
+                is_mmproj: false,
+                recommended: false,
+                advanced: false,
+                params_b: 1.0,
+                max_context_length: 4096,
+                shard_files: vec![],
+                local_path: None,
+                state: DownloadState::NotDownloaded,
+                status_msg: None,
+                progress: 0.0,
+                initiated_at_unix: None,
+            });
+        }
+
+        let norm = cat.deflate();
+        let restored = norm.inflate();
+
+        let orig_names: Vec<&str> = cat.entries.iter().map(|e| e.filename.as_str()).collect();
+        let rest_names: Vec<&str> = restored.entries.iter().map(|e| e.filename.as_str()).collect();
+        assert_eq!(orig_names, rest_names, "entry order must be preserved");
+    }
+
+    #[test]
+    fn normalized_serde_json_roundtrip() {
+        // Verify that LlmCatalogNormalized itself survives serde round-trip
+        // (important because HashMap key order may differ).
+        let cat = mk_catalog();
+        let norm = cat.deflate();
+        let json = serde_json::to_string(&norm).unwrap();
+        let norm2: LlmCatalogNormalized = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(norm.families.len(), norm2.families.len());
+        assert_eq!(norm.models.len(), norm2.models.len());
+        for (key, fam) in &norm.families {
+            let fam2 = &norm2.families[key];
+            assert_eq!(fam.name, fam2.name);
+            assert_eq!(fam.repo, fam2.repo);
+        }
+    }
+
+    #[test]
+    fn parse_catalog_json_with_only_active_fields() {
+        // Normalized catalog with no models — just active_model set.
+        let json = r#"{
+            "active_model": "some-model.gguf",
+            "active_mmproj": "some-mmproj.gguf",
+            "families": {},
+            "models": []
+        }"#;
+
+        let cat = parse_catalog_json(json).unwrap();
+        assert!(cat.entries.is_empty());
+        assert_eq!(cat.active_model, "some-model.gguf");
+        assert_eq!(cat.active_mmproj, "some-mmproj.gguf");
+    }
+
+    #[test]
+    fn slim_model_recommended_serializes_only_when_true() {
+        let cat = mk_catalog();
+        let norm = cat.deflate();
+
+        // The recommended entry should have "recommended" in JSON.
+        let rec = norm.models.iter().find(|m| m.recommended).unwrap();
+        let json = serde_json::to_string(rec).unwrap();
+        assert!(json.contains("\"recommended\":true") || json.contains("\"recommended\": true"));
+
+        // The non-recommended advanced entry should NOT have "recommended" in JSON.
+        let non_rec = norm.models.iter().find(|m| !m.recommended && m.advanced).unwrap();
+        let json = serde_json::to_string(non_rec).unwrap();
+        assert!(
+            !json.contains("recommended"),
+            "recommended:false should be skipped: {json}"
+        );
+    }
 }
