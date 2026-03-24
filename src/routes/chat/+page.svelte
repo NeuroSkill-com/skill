@@ -381,10 +381,31 @@
 
   // ── Server control ─────────────────────────────────────────────────────────
 
+  /** (Re)start the status poll timer.  Called on mount and after startServer(). */
+  function startStatusPoll() {
+    clearInterval(pollTimer!);
+    let ranAfterRunning = false;
+    pollTimer = setInterval(async () => {
+      if (status !== "loading" && (status !== "running" || ranAfterRunning)) { clearInterval(pollTimer!); return; }
+      if (status === "running") ranAfterRunning = true;
+      try {
+        const s = await invoke<{ status: ServerStatus; model_name: string; n_ctx: number; supports_vision: boolean; supports_tools: boolean; start_error: string | null }>("get_llm_server_status");
+        status = s.status; modelName = s.model_name; nCtx = s.n_ctx ?? 0;
+        supportsVision = s.supports_vision ?? false; supportsTools = s.supports_tools ?? false;
+        if (s.start_error && s.status === "stopped") {
+          console.error("[chat] LLM start error:", s.start_error);
+        }
+      } catch (e) { console.warn("[chat] poll status failed:", e); }
+    }, 1500);
+  }
+
   async function startServer() {
     status = "loading";
     try { await invoke("start_llm_server"); }
-    catch (e) { console.error("start_llm_server failed:", e); status = "stopped"; }
+    catch (e) { console.error("start_llm_server failed:", e); status = "stopped"; return; }
+    // Restart the poll timer so we pick up status transitions even if the
+    // event listener missed them (e.g. init returning None).
+    startStatusPoll();
   }
 
   async function stopServer() {
@@ -855,16 +876,7 @@
     } catch (e) { console.warn("[chat] listen llm:status failed:", e); }
 
     // Poll while loading
-    let ranAfterRunning = false;
-    pollTimer = setInterval(async () => {
-      if (status !== "loading" && (status !== "running" || ranAfterRunning)) { clearInterval(pollTimer!); return; }
-      if (status === "running") ranAfterRunning = true;
-      try {
-        const s = await invoke<{ status: ServerStatus; model_name: string; n_ctx: number; supports_vision: boolean; supports_tools: boolean }>("get_llm_server_status");
-        status = s.status; modelName = s.model_name; nCtx = s.n_ctx ?? 0;
-        supportsVision = s.supports_vision ?? false; supportsTools = s.supports_tools ?? false;
-      } catch (e) { console.warn("[chat] poll status failed:", e); }
-    }, 1500);
+    startStatusPoll();
 
     // EEG bands
     try { const b = await invoke<BandSnapshot | null>("get_latest_bands"); if (b) latestBands = b; } catch (e) { console.warn("[chat] get_latest_bands failed:", e); }

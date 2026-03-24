@@ -70,6 +70,29 @@ pub fn init_tool_logger(app: &tauri::AppHandle) {
             logger.write(tag, msg);
         }
     });
+
+    // Register the bash-edit hook — shows the command in a dialog and lets
+    // the user approve or cancel before execution.
+    skill_tools::set_bash_edit_hook(std::sync::Arc::new(|command: &str| {
+        // Truncate very long commands for the dialog display.
+        let display = if command.len() > 2000 {
+            format!("{}...\n\n({} chars total)", &command[..2000], command.len())
+        } else {
+            command.to_string()
+        };
+        let message = format!(
+            "The LLM wants to run this bash command:\n\n{}\n\nAllow execution?",
+            display
+        );
+        let approved = rfd::MessageDialog::new()
+            .set_level(rfd::MessageLevel::Info)
+            .set_title("NeuroSkill \u{2014} Review Bash Command")
+            .set_description(&message)
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .show() == rfd::MessageDialogResult::Yes;
+
+        if approved { Some(command.to_string()) } else { None }
+    }));
 }
 
 /// Enable or disable tool-call log output.
