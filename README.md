@@ -338,6 +338,20 @@ node test.js           # auto-discover via mDNS
 node test.js 62853     # explicit port
 ```
 
+### Smoke test (E2E)
+
+Launches the app via `npm run tauri dev` and runs `test.ts` once the mDNS
+service is detected — all inside a tmux session so both run in parallel:
+
+```bash
+npm run test:smoke              # auto-discover port via mDNS
+npm run test:smoke -- 62853     # explicit port
+npm run test:smoke -- --http    # force HTTP transport
+```
+
+Requires `tmux` to be installed. Use `Ctrl-b ←/→` to switch panes,
+`Ctrl-b d` to detach, and `tmux kill-session -t smoke` to tear down.
+
 ---
 
 ## Keyboard shortcuts
