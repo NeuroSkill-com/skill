@@ -30,18 +30,18 @@ function validateVersion(v) {
 }
 
 function runCheckStep(label, command) {
-  console.log(`\n[preflight] ${label}`);
   let output = "";
   try {
     // Merge stderr into stdout so we capture warnings from both streams
     output = execSync(`${command} 2>&1`, { encoding: "utf8" }) || "";
   } catch (err) {
-    // execSync throws on non-zero exit — show captured output, then re-throw
+    // execSync throws on non-zero exit — clear progress line, show output, re-throw
+    process.stdout.write("\r\x1b[K");
     output = (err.stdout || "").toString();
     if (output) process.stdout.write(output);
+    console.error(`\n[preflight] ✗ ${label} — command failed`);
     throw err;
   }
-  if (output) process.stdout.write(output);
 
   // Detect warning lines in combined output — treat any warning as fatal.
   // Exclude:
@@ -61,13 +61,14 @@ function runCheckStep(label, command) {
     );
 
   if (warningLines.length > 0) {
-    console.error(`\n[preflight] ✗ ${label} — ${warningLines.length} warning(s) detected:`);
+    process.stdout.write("\r\x1b[K");
+    console.error(`[preflight] ✗ ${label} — ${warningLines.length} warning(s) detected:`);
     for (const w of warningLines.slice(0, 10)) {
       console.error(`  ${w.trim()}`);
     }
+    if (output) process.stdout.write(output);
     throw new Error(`Bump aborted: warnings found during "${label}"`);
   }
-  console.log(`[preflight] ✓ ${label}`);
 }
 
 function hasPkgConfig(packageName) {
@@ -185,41 +186,101 @@ function checkForCompetingCargo() {
   }
 }
 
+// ── progress bar helpers ─────────────────────────────────────────────────────
+
+function formatDuration(ms) {
+  const totalSec = Math.round(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+}
+
+function printProgress(current, total, stepLabel, elapsedMs, etaMs) {
+  const cols = process.stdout.columns || 80;
+  const pct = Math.round((current / total) * 100);
+  const barTotal = Math.max(10, Math.min(30, cols - 60));
+  const filled = Math.round((current / total) * barTotal);
+  const bar = "█".repeat(filled) + "░".repeat(barTotal - filled);
+
+  const elapsed = formatDuration(elapsedMs);
+  const eta = etaMs > 0 ? formatDuration(etaMs) : "--";
+  const line = `  [${bar}] ${current}/${total} (${pct}%) | elapsed ${elapsed} | ETA ${eta} | ${stepLabel}`;
+
+  // Overwrite current line
+  process.stdout.write(`\r\x1b[K${line}`);
+}
+
 function runPreflightChecks() {
-  console.log("Running preflight checks before bump...");
+  console.log("Running preflight checks before bump...\n");
 
   // ── Competing cargo processes ─────────────────────────────────────────────
   checkForCompetingCargo();
 
-  // ── Frontend checks ───────────────────────────────────────────────────────
-  runCheckStep("npm run check", "npm run check");
-  runCheckStep("npm run sync:i18n:check", "npm run sync:i18n:check");
-  runCheckStep("npm test", "npm test");
+  // ── Build the ordered step list ───────────────────────────────────────────
+  const steps = [];
 
-  // ── System deps ───────────────────────────────────────────────────────────
-  console.log("\n[preflight] linux tauri deps (pkg-config)");
-  ensureLinuxTauriDeps();
-  console.log("[preflight] ✓ linux tauri deps (pkg-config)");
+  // Frontend checks
+  steps.push({ label: "npm run check", command: "npm run check" });
+  steps.push({ label: "npm run sync:i18n:check", command: "npm run sync:i18n:check" });
+  steps.push({ label: "npm test", command: "npm test" });
 
-  // ── Rust clippy (workspace crates) ────────────────────────────────────────
-  const clippyCrates = WORKSPACE_CRATES.map((c) => `-p ${c}`).join(" ");
-  runCheckStep(
-    "cargo clippy (workspace crates)",
-    `cargo clippy ${clippyCrates} -- -D warnings`
-  );
+  // Linux tauri deps (no command — handled inline)
+  steps.push({ label: "linux tauri deps", command: null });
 
-  // ── Rust clippy (app crate) ───────────────────────────────────────────────
-  runCheckStep(
-    "cargo clippy (src-tauri)",
-    "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings"
-  );
+  // Clippy per workspace crate
+  for (const crate of WORKSPACE_CRATES) {
+    steps.push({
+      label: `clippy ${crate}`,
+      command: `cargo clippy -p ${crate} -- -D warnings`,
+    });
+  }
 
-  // ── Rust tests (workspace crates) ────────────────────────────────────────
-  const testCrates = TEST_CRATES.map((c) => `-p ${c}`).join(" ");
-  runCheckStep(
-    "cargo test (workspace crates)",
-    `cargo test ${testCrates} --lib`
-  );
+  // Clippy app crate
+  steps.push({
+    label: "clippy src-tauri",
+    command: "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
+  });
+
+  // Tests per crate
+  for (const crate of TEST_CRATES) {
+    steps.push({
+      label: `test ${crate}`,
+      command: `cargo test -p ${crate} --lib`,
+    });
+  }
+
+  const total = steps.length;
+  const startAll = Date.now();
+  const stepTimes = []; // elapsed ms per completed step
+
+  for (let i = 0; i < total; i++) {
+    const { label, command } = steps[i];
+
+    // Calculate ETA from average step duration so far
+    const avgMs = stepTimes.length > 0
+      ? stepTimes.reduce((a, b) => a + b, 0) / stepTimes.length
+      : 0;
+    const remaining = total - i;
+    const etaMs = stepTimes.length > 0 ? avgMs * remaining : 0;
+
+    printProgress(i, total, label, Date.now() - startAll, etaMs);
+
+    const stepStart = Date.now();
+
+    if (command === null) {
+      // Special: linux tauri deps check (no shell command)
+      ensureLinuxTauriDeps();
+    } else {
+      runCheckStep(label, command);
+    }
+
+    stepTimes.push(Date.now() - stepStart);
+  }
+
+  // Final 100% progress
+  const totalElapsed = Date.now() - startAll;
+  printProgress(total, total, "done", totalElapsed, 0);
+  console.log(`\n\n[preflight] All ${total} checks passed in ${formatDuration(totalElapsed)}`);
 }
 
 function todayIsoDate() {
