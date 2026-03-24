@@ -120,7 +120,7 @@ export interface SleepStages {
 export interface UmapPoint {
   x: number;
   y: number;
-  z: number;
+  z?: number;
   session: number;
   utc: number;
   label?: string;

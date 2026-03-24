@@ -27,10 +27,8 @@ pub fn validate_tool_arguments(tool: &Tool, args: &Value) -> Result<Value, Valid
     // Coerce arguments to match schema-declared types.
     let coerced = coerce_value(args, schema);
 
-    let compiled = jsonschema::validator_for(schema).map_err(|e| {
-        ValidationError::SchemaViolation {
-            message: format!("Invalid tool schema for \"{}\": {e}", tool.function.name),
-        }
+    let compiled = jsonschema::validator_for(schema).map_err(|e| ValidationError::SchemaViolation {
+        message: format!("Invalid tool schema for \"{}\": {e}", tool.function.name),
     })?;
 
     let errors: Vec<String> = compiled

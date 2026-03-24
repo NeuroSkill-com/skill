@@ -28,11 +28,7 @@ fn project_3d(x: f32, y: f32, z: f32, w: f64, h: f64) -> (f64, f64, f64) {
 /// All nodes that have `proj_x` / `proj_y` / `proj_z` are placed in 3-D
 /// space via PCA and perspective-projected.  Nodes without projections are
 /// arranged in a header row.
-pub fn generate_svg_3d(
-    nodes: &[InteractiveGraphNode],
-    edges: &[InteractiveGraphEdge],
-    labels: &SvgLabels,
-) -> String {
+pub fn generate_svg_3d(nodes: &[InteractiveGraphNode], edges: &[InteractiveGraphEdge], labels: &SvgLabels) -> String {
     const W: f64 = 900.0;
     const H: f64 = 700.0;
     const MARGIN: f64 = 60.0;
@@ -144,8 +140,7 @@ pub fn generate_svg_3d(
     };
 
     for e in edges {
-        let (Some(&(x1, y1, s1)), Some(&(x2, y2, s2))) = (pos.get(&e.from_id), pos.get(&e.to_id))
-        else {
+        let (Some(&(x1, y1, s1)), Some(&(x2, y2, s2))) = (pos.get(&e.from_id), pos.get(&e.to_id)) else {
             continue;
         };
         let avg_scale = (s1 + s2) / 2.0;
@@ -194,7 +189,9 @@ pub fn generate_svg_3d(
                 o.push_str(&format!(
                     "  <circle cx=\"{cx:.1}\" cy=\"{cy:.1}\" r=\"{:.1}\" fill=\"{fill}\" \
                      fill-opacity=\"0.15\" stroke=\"{fill}\" stroke-width=\"{:.1}\" opacity=\"{opacity:.2}\"/>\n",
-                    r + 6.0 * scale, 2.0 * scale));
+                    r + 6.0 * scale,
+                    2.0 * scale
+                ));
                 o.push_str(&format!(
                     "  <circle cx=\"{cx:.1}\" cy=\"{cy:.1}\" r=\"{r:.1}\" fill=\"{fill}\" \
                      fill-opacity=\"{opacity:.2}\"/>\n"
@@ -212,7 +209,11 @@ pub fn generate_svg_3d(
                 o.push_str(&format!(
                     "  <polygon points=\"{cx:.1},{:.1} {:.1},{cy:.1} {cx:.1},{:.1} {:.1},{cy:.1}\" \
                      fill=\"{fill}\" fill-opacity=\"{opacity:.2}\"/>\n",
-                    cy - s, cx + s * 1.35, cy + s, cx - s * 1.35));
+                    cy - s,
+                    cx + s * 1.35,
+                    cy + s,
+                    cx - s * 1.35
+                ));
                 let time_str = nd
                     .timestamp_unix
                     .map(|ts| {
@@ -236,13 +237,20 @@ pub fn generate_svg_3d(
                 o.push_str(&format!(
                     "  <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{rw:.1}\" height=\"{rh:.1}\" rx=\"{:.1}\" \
                      fill=\"black\" fill-opacity=\"{shadow_opa:.2}\" filter=\"blur({shadow_blur:.1}px)\"/>\n",
-                    cx - rw / 2.0 + 2.0, cy - rh / 2.0 + 2.0, 6.0 * scale));
+                    cx - rw / 2.0 + 2.0,
+                    cy - rh / 2.0 + 2.0,
+                    6.0 * scale
+                ));
                 // Main rect
                 o.push_str(&format!(
                     "  <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{rw:.1}\" height=\"{rh:.1}\" rx=\"{:.1}\" \
                      fill=\"{fill}\" fill-opacity=\"{opacity:.2}\" stroke=\"{fill}\" \
                      stroke-width=\"{:.1}\" stroke-opacity=\"0.3\"/>\n",
-                    cx - rw / 2.0, cy - rh / 2.0, 6.0 * scale, 1.2 * scale));
+                    cx - rw / 2.0,
+                    cy - rh / 2.0,
+                    6.0 * scale,
+                    1.2 * scale
+                ));
                 let title = nd
                     .window_title
                     .as_deref()
@@ -285,14 +293,17 @@ pub fn generate_svg_3d(
                 o.push_str(&format!(
                     "  <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{rw:.1}\" height=\"{rh:.1}\" rx=\"{rx:.1}\" \
                      fill=\"black\" fill-opacity=\"{shadow_opa:.2}\" filter=\"blur({shadow_blur:.1}px)\"/>\n",
-                    cx - rw / 2.0 + 2.0, cy - rh / 2.0 + 2.0));
+                    cx - rw / 2.0 + 2.0,
+                    cy - rh / 2.0 + 2.0
+                ));
                 o.push_str(&format!(
                     "  <rect x=\"{:.1}\" y=\"{:.1}\" width=\"{rw:.1}\" height=\"{rh:.1}\" rx=\"{rx:.1}\" \
                      fill=\"{fill}\" fill-opacity=\"{opacity:.2}\"/>\n",
-                    cx - rw / 2.0, cy - rh / 2.0));
+                    cx - rw / 2.0,
+                    cy - rh / 2.0
+                ));
                 let primary = trunc(nd.text.as_deref().unwrap_or(""), 18);
-                let has_sub = nd.timestamp_unix.is_some()
-                    && matches!(nd.kind.as_str(), "text_label" | "found_label");
+                let has_sub = nd.timestamp_unix.is_some() && matches!(nd.kind.as_str(), "text_label" | "found_label");
                 let ty = if has_sub { cy - 5.0 * scale } else { cy };
                 o.push_str(&format!(
                     "  <text x=\"{cx:.1}\" y=\"{ty:.1}\" text-anchor=\"middle\" \
@@ -339,7 +350,10 @@ pub fn generate_svg_3d(
             "  <circle cx=\"{:.1}\" cy=\"{legend_y:.1}\" r=\"4\" fill=\"{col}\" opacity=\"0.8\"/>\n\
              <text x=\"{:.1}\" y=\"{legend_y:.1}\" dominant-baseline=\"middle\" \
              font-size=\"8\" fill=\"#999\">{}</text>\n",
-            x + 4.0, x + 12.0, svg_esc(lbl)));
+            x + 4.0,
+            x + 12.0,
+            svg_esc(lbl)
+        ));
     }
 
     // Title

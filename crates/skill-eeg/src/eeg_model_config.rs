@@ -17,8 +17,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 use crate::constants::{
-    HNSW_EF_CONSTRUCTION, HNSW_M, LUNA_DEFAULT_VARIANT, LUNA_HF_REPO, MODEL_CONFIG_FILE,
-    ZUNA_DATA_NORM, ZUNA_HF_REPO,
+    HNSW_EF_CONSTRUCTION, HNSW_M, LUNA_DEFAULT_VARIANT, LUNA_HF_REPO, MODEL_CONFIG_FILE, ZUNA_DATA_NORM, ZUNA_HF_REPO,
 };
 
 // ── EXG embedding model backend ──────────────────────────────────────────────
@@ -457,10 +456,7 @@ mod tests {
         let parsed: EegModelStatus = serde_json::from_str(&json).unwrap();
         assert!(parsed.encoder_loaded);
         assert_eq!(parsed.embeddings_today, 42);
-        assert_eq!(
-            parsed.weights_path.as_deref(),
-            Some("/path/to/weights.safetensors")
-        );
+        assert_eq!(parsed.weights_path.as_deref(), Some("/path/to/weights.safetensors"));
     }
 
     // ── LatestEpochMetrics ────────────────────────────────────────────────

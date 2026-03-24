@@ -23,10 +23,7 @@ pub mod validate;
 
 // ── Re-exports (preserve backward-compatible public API) ─────────────────────
 
-pub use types::{
-    ChatMessage, ContentPart, ImageUrl, MessageContent, Tool, ToolCall, ToolCallFunction,
-    ToolFunction,
-};
+pub use types::{ChatMessage, ContentPart, ImageUrl, MessageContent, Tool, ToolCall, ToolCallFunction, ToolFunction};
 
 pub use coerce::coerce_tool_call_arguments;
 pub use extract::{build_self_healing_message, detect_garbled_tool_call, extract_tool_calls};
@@ -48,8 +45,7 @@ mod tests {
 
     #[test]
     fn extract_single() {
-        let msg =
-            r#"Sure! [TOOL_CALL]{"name":"get_weather","arguments":{"city":"London"}}[/TOOL_CALL]"#;
+        let msg = r#"Sure! [TOOL_CALL]{"name":"get_weather","arguments":{"city":"London"}}[/TOOL_CALL]"#;
         let calls = extract_tool_calls(msg);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].function.name, "get_weather");
@@ -153,14 +149,8 @@ Then answer naturally."#;
     fn strip_dict_style_multi_tool_fence() {
         let msg = "I'll get that.\n```json\n{\n  \"date\": {},\n  \"location\": {}\n}\n```\nDone.";
         let stripped = strip_tool_call_blocks(msg);
-        assert!(
-            !stripped.contains("\"date\""),
-            "date key should be stripped"
-        );
-        assert!(
-            !stripped.contains("\"location\""),
-            "location key should be stripped"
-        );
+        assert!(!stripped.contains("\"date\""), "date key should be stripped");
+        assert!(!stripped.contains("\"location\""), "location key should be stripped");
         assert!(stripped.contains("Done."), "prose should survive");
     }
 
@@ -196,10 +186,7 @@ Then answer naturally."#;
 ```
 Done."#;
         let stripped = strip_tool_call_blocks(msg);
-        assert!(
-            !stripped.contains("\"name\""),
-            "tool call JSON should be stripped"
-        );
+        assert!(!stripped.contains("\"name\""), "tool call JSON should be stripped");
         assert!(stripped.contains("Done."));
     }
 
@@ -315,10 +302,7 @@ Done."#;
         assert_eq!(calls.len(), 1, "should extract one bash tool call");
         assert_eq!(calls[0].function.name, "bash");
         let args: Value = serde_json::from_str(&calls[0].function.arguments).expect("valid json");
-        assert_eq!(
-            args["command"].as_str().expect("has command"),
-            "ls ~/Desktop/"
-        );
+        assert_eq!(args["command"].as_str().expect("has command"), "ls ~/Desktop/");
     }
 
     #[test]
@@ -352,10 +336,7 @@ ls ~/Desktop/
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].function.name, "bash");
         let args: Value = serde_json::from_str(&calls[0].function.arguments).expect("valid json");
-        assert_eq!(
-            args["command"].as_str().expect("has command"),
-            "ls ~/Desktop/"
-        );
+        assert_eq!(args["command"].as_str().expect("has command"), "ls ~/Desktop/");
     }
 
     #[test]
@@ -389,20 +370,13 @@ df -h
         assert_eq!(strip_tool_call_blocks_preserve("[TOOL_CALL"), "");
         assert_eq!(strip_tool_call_blocks_preserve("[TOOL_CALL]"), "");
         assert_eq!(strip_tool_call_blocks_preserve("Hello [TOOL_CA"), "Hello ");
+        assert_eq!(strip_tool_call_blocks_preserve("Hello [TOOL_CALL"), "Hello ");
         assert_eq!(
-            strip_tool_call_blocks_preserve("Hello [TOOL_CALL"),
-            "Hello "
-        );
-        assert_eq!(
-            strip_tool_call_blocks_preserve(
-                r#"[TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_CALL]"#
-            ),
+            strip_tool_call_blocks_preserve(r#"[TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_CALL]"#),
             ""
         );
         assert_eq!(
-            strip_tool_call_blocks_preserve(
-                r#"Hi [TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_CALL] done"#
-            ),
+            strip_tool_call_blocks_preserve(r#"Hi [TOOL_CALL]{"name":"date","arguments":{}}[/TOOL_CALL] done"#),
             "Hi  done"
         );
     }
@@ -498,28 +472,18 @@ df -h
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].function.name, "skill");
         let args: Value = serde_json::from_str(&calls[0].function.arguments).expect("valid json");
-        assert_eq!(
-            args["command"].as_str().expect("has command"),
-            "hooks_status"
-        );
+        assert_eq!(args["command"].as_str().expect("has command"), "hooks_status");
     }
 
     #[test]
     fn redirect_search_images_with_args() {
-        let msg =
-            r#"[TOOL_CALL]{"name":"search-images","arguments":{"query":"browser"}}[/TOOL_CALL]"#;
+        let msg = r#"[TOOL_CALL]{"name":"search-images","arguments":{"query":"browser"}}[/TOOL_CALL]"#;
         let calls = extract_tool_calls(msg);
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].function.name, "skill");
         let args: Value = serde_json::from_str(&calls[0].function.arguments).expect("valid json");
-        assert_eq!(
-            args["command"].as_str().expect("has command"),
-            "search_screenshots"
-        );
-        assert_eq!(
-            args["args"]["query"].as_str().expect("has query"),
-            "browser"
-        );
+        assert_eq!(args["command"].as_str().expect("has command"), "search_screenshots");
+        assert_eq!(args["args"]["query"].as_str().expect("has query"), "browser");
     }
 
     #[test]
@@ -643,7 +607,8 @@ Your device is connected with 89% battery."#;
 
     #[test]
     fn extract_llama_xml_numeric_param() {
-        let msg = r#"<function=read_file><parameter=path>/etc/hosts</parameter><parameter=offset>10</parameter></function>"#;
+        let msg =
+            r#"<function=read_file><parameter=path>/etc/hosts</parameter><parameter=offset>10</parameter></function>"#;
         let calls = extract_tool_calls(msg);
         assert_eq!(calls.len(), 1);
         let args: Value = serde_json::from_str(&calls[0].function.arguments).expect("valid json");
@@ -860,10 +825,7 @@ Your device is connected with 89% battery."#;
         let tool = make_skill_tool();
         let args = serde_json::json!({"command": "search_screenshots", "query": "today"});
         let result = validate_tool_arguments(&tool, &args).expect("valid");
-        assert_eq!(
-            result["command"],
-            Value::String("search_screenshots".into())
-        );
+        assert_eq!(result["command"], Value::String("search_screenshots".into()));
         let inner = result.get("args").expect("args must be present");
         assert_eq!(inner["query"], Value::String("today".into()));
     }
@@ -871,7 +833,8 @@ Your device is connected with 89% battery."#;
     #[test]
     fn coerce_skill_flattened_args_multiple_keys() {
         let tool = make_skill_tool();
-        let args = serde_json::json!({"command": "search_screenshots", "query": "browser", "k": 10, "mode": "substring"});
+        let args =
+            serde_json::json!({"command": "search_screenshots", "query": "browser", "k": 10, "mode": "substring"});
         let result = validate_tool_arguments(&tool, &args).expect("valid");
         let inner = result.get("args").expect("has args");
         assert_eq!(inner["query"], Value::String("browser".into()));
@@ -907,8 +870,7 @@ Your device is connected with 89% battery."#;
     #[test]
     fn coerce_skill_arguments_alias_for_args() {
         let tool = make_skill_tool();
-        let args =
-            serde_json::json!({"command": "search_screenshots", "arguments": {"query": "browser"}});
+        let args = serde_json::json!({"command": "search_screenshots", "arguments": {"query": "browser"}});
         let result = validate_tool_arguments(&tool, &args).expect("valid");
         let inner = result.get("args").expect("should have args");
         assert_eq!(inner["query"], Value::String("browser".into()));

@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 //! Unit tests for the InterceptStore and network log types.
 
-use skill_headless::{
-    InterceptStore, InterceptedRequest, InterceptedResponse, NavigationEvent, NetworkLog,
-};
+use skill_headless::{InterceptStore, InterceptedRequest, InterceptedResponse, NavigationEvent, NetworkLog};
 
 #[test]
 fn store_push_and_snapshot() {

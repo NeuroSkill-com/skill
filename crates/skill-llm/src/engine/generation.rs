@@ -28,9 +28,7 @@ pub(super) fn gpu_memory_check(min_free_gb: f64) -> (bool, Option<f64>) {
     let Some(gpu) = skill_data::gpu_stats::read() else {
         return (true, None);
     };
-    let free_gb = gpu
-        .free_memory_bytes
-        .map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0));
+    let free_gb = gpu.free_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0));
     let ok = free_gb.is_none_or(|f| f >= min_free_gb);
     (ok, free_gb)
 }
@@ -59,9 +57,7 @@ pub(super) fn run_generation(
     };
 
     let Ok(tokens) = model.str_to_token(&prompt, AddBos::Always) else {
-        token_tx
-            .send(InferToken::Error("tokenization failed".into()))
-            .ok();
+        token_tx.send(InferToken::Error("tokenization failed".into())).ok();
         return;
     };
     let n_prompt = tokens.len();
@@ -90,7 +86,8 @@ pub(super) fn run_generation(
         let msg = format!(
             "Insufficient GPU memory for decode ({:.2} GB free, {:.2} GB required). \
              Reduce context size, close other GPU apps, or adjust the GPU memory threshold in Settings → LLM.",
-            free_gb.unwrap_or(0.0), gpu_guard.decode_threshold,
+            free_gb.unwrap_or(0.0),
+            gpu_guard.decode_threshold,
         );
         llm_error!(app, log_buf, log_file, "{msg}");
         token_tx.send(InferToken::Error(msg)).ok();
@@ -253,7 +250,8 @@ pub(super) fn run_generation_multimodal(
         let msg = format!(
             "Insufficient GPU memory for multimodal decode ({:.2} GB free, {:.2} GB required). \
              Reduce context size, close other GPU apps, or adjust the GPU memory threshold in Settings → LLM.",
-            free_gb.unwrap_or(0.0), gpu_guard.decode_threshold,
+            free_gb.unwrap_or(0.0),
+            gpu_guard.decode_threshold,
         );
         llm_error!(app, log_buf, log_file, "{msg}");
         token_tx.send(InferToken::Error(msg)).ok();
@@ -273,9 +271,7 @@ pub(super) fn run_generation_multimodal(
         std::thread::sleep(std::time::Duration::from_millis(100));
         ctx.clear_kv_cache();
         n_past = 0;
-        if let Err(e2) =
-            mtmd_ctx.eval_chunks(ctx.as_ptr(), &chunks, 0, 0, n_batch, true, &mut n_past)
-        {
+        if let Err(e2) = mtmd_ctx.eval_chunks(ctx.as_ptr(), &chunks, 0, 0, n_batch, true, &mut n_past) {
             let msg = format!("mtmd eval error: {e2} (retry also failed, original: {e})");
             llm_error!(app, log_buf, log_file, "{msg}");
             token_tx.send(InferToken::Error(msg)).ok();

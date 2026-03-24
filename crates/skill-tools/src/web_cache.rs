@@ -433,11 +433,7 @@ mod tests {
 
     fn tmp_cache(config: WebCacheConfig) -> WebCache {
         let id = TEST_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "skill_web_cache_test_{}_{}",
-            std::process::id(),
-            id
-        ));
+        let dir = std::env::temp_dir().join(format!("skill_web_cache_test_{}_{}", std::process::id(), id));
         let _ = std::fs::remove_dir_all(&dir);
         WebCache::new(dir, config)
     }
@@ -521,11 +517,7 @@ mod tests {
             fetch_ttl_secs: 3600,
             ..default_config()
         });
-        c.put_fetch(
-            "https://news.example.com/article",
-            false,
-            &json!({"ok": true}),
-        );
+        c.put_fetch("https://news.example.com/article", false, &json!({"ok": true}));
         // Backdate.
         let key = cache_key_fetch("https://news.example.com/article", false);
         let path = c.entry_path(&key);
@@ -534,9 +526,7 @@ mod tests {
             entry.created_at = unix_secs().saturating_sub(2);
             let _ = std::fs::write(&path, serde_json::to_string(&entry).unwrap());
         }
-        assert!(c
-            .get_fetch("https://news.example.com/article", false)
-            .is_none());
+        assert!(c.get_fetch("https://news.example.com/article", false).is_none());
         c.clear();
     }
 
@@ -578,10 +568,7 @@ mod tests {
     #[test]
     fn extract_domain_works() {
         assert_eq!(extract_domain("https://example.com/path"), "example.com");
-        assert_eq!(
-            extract_domain("http://sub.example.com:8080/x"),
-            "sub.example.com"
-        );
+        assert_eq!(extract_domain("http://sub.example.com:8080/x"), "sub.example.com");
         assert_eq!(extract_domain("https://Example.COM"), "example.com");
     }
 

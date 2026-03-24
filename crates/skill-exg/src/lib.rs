@@ -225,9 +225,7 @@ pub fn download_hf_weights_files(
 
     const ENDPOINT: &str = "https://huggingface.co";
 
-    eprintln!(
-        "[embedder] weights not in cache — downloading from HuggingFace: {hf_repo}/{weights_file}"
-    );
+    eprintln!("[embedder] weights not in cache — downloading from HuggingFace: {hf_repo}/{weights_file}");
 
     {
         let mut st = status.lock_or_recover();
@@ -316,10 +314,7 @@ pub fn download_hf_weights_files(
     };
 
     let api_url = format!("{ENDPOINT}/api/models/{hf_repo}?blobs=1");
-    let api_resp = match auth(meta_agent.get(&api_url))
-        .set("User-Agent", "skill-app/1.0")
-        .call()
-    {
+    let api_resp = match auth(meta_agent.get(&api_url)).set("User-Agent", "skill-app/1.0").call() {
         Ok(r) => r,
         Err(e) => {
             eprintln!("[embedder] HF metadata API error: {e}");
@@ -345,10 +340,9 @@ pub fn download_hf_weights_files(
 
     let commit_sha = info["sha"].as_str().unwrap_or("main").to_string();
 
-    let file_meta = info["siblings"].as_array().and_then(|s| {
-        s.iter()
-            .find(|e| e["rfilename"].as_str() == Some(weights_file))
-    });
+    let file_meta = info["siblings"]
+        .as_array()
+        .and_then(|s| s.iter().find(|e| e["rfilename"].as_str() == Some(weights_file)));
 
     let (blob_sha, remote_size) = match file_meta {
         Some(m) => {
@@ -370,8 +364,7 @@ pub fn download_hf_weights_files(
                             let mut st = status.lock_or_recover();
                             st.downloading_weights = false;
                             st.download_progress = 0.0;
-                            st.download_status_msg =
-                                Some(format!("Download failed ({weights_file}): {e}"));
+                            st.download_status_msg = Some(format!("Download failed ({weights_file}): {e}"));
                             return None;
                         }
                     };
@@ -390,8 +383,7 @@ pub fn download_hf_weights_files(
             let mut st = status.lock_or_recover();
             st.downloading_weights = false;
             st.download_progress = 0.0;
-            st.download_status_msg =
-                Some(format!("{weights_file}: not listed in {hf_repo} manifest"));
+            st.download_status_msg = Some(format!("{weights_file}: not listed in {hf_repo} manifest"));
             return None;
         }
     };
@@ -401,13 +393,7 @@ pub fn download_hf_weights_files(
 
     if blob_path.exists() && blob_path.metadata().map(|m| m.len()).unwrap_or(0) >= remote_size {
         eprintln!("[embedder] ✓ {weights_file} already in blob cache");
-        let weights_path = match register_hf_snapshot(
-            &model_dir,
-            &refs_dir,
-            &commit_sha,
-            weights_file,
-            &blob_path,
-        ) {
+        let weights_path = match register_hf_snapshot(&model_dir, &refs_dir, &commit_sha, weights_file, &blob_path) {
             Ok(p) => p,
             Err(e) => {
                 let mut st = status.lock_or_recover();
@@ -555,18 +541,17 @@ pub fn download_hf_weights_files(
         return None;
     }
 
-    let weights_path =
-        match register_hf_snapshot(&model_dir, &refs_dir, &commit_sha, weights_file, &blob_path) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("[embedder] snapshot registration failed: {e}");
-                let mut st = status.lock_or_recover();
-                st.downloading_weights = false;
-                st.download_progress = 0.0;
-                st.download_status_msg = Some(format!("Snapshot registration failed: {e}"));
-                return None;
-            }
-        };
+    let weights_path = match register_hf_snapshot(&model_dir, &refs_dir, &commit_sha, weights_file, &blob_path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("[embedder] snapshot registration failed: {e}");
+            let mut st = status.lock_or_recover();
+            st.downloading_weights = false;
+            st.download_progress = 0.0;
+            st.download_status_msg = Some(format!("Snapshot registration failed: {e}"));
+            return None;
+        }
+    };
 
     {
         let mut st = status.lock_or_recover();
@@ -599,10 +584,7 @@ pub fn configure_cubecl_cache(skill_dir: &Path) {
     let cache_dir = skill_dir.join("cubecl_cache");
     match std::fs::create_dir_all(&cache_dir) {
         Ok(_) => eprintln!("[embedder] cubecl cache dir: {}", cache_dir.display()),
-        Err(e) => eprintln!(
-            "[embedder] warn: cubecl cache mkdir {}: {e}",
-            cache_dir.display()
-        ),
+        Err(e) => eprintln!("[embedder] warn: cubecl cache mkdir {}: {e}", cache_dir.display()),
     }
 
     if CUBECL_CONFIGURED

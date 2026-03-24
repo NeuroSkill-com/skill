@@ -21,9 +21,7 @@ pub(crate) fn strip_html_tags(s: &str) -> String {
     // Order matters: strip <head> first (contains most scripts/styles),
     // then individual script/style tags that might be in the body.
     let mut cleaned = s.to_string();
-    for tag in &[
-        "head", "script", "style", "noscript", "svg", "nav", "footer",
-    ] {
+    for tag in &["head", "script", "style", "noscript", "svg", "nav", "footer"] {
         loop {
             let open = format!("<{}", tag);
             let close = format!("</{}>", tag);
@@ -131,9 +129,7 @@ fn strip_json_ld_blocks(s: &str) -> String {
                 let is_json_ld = block.contains("@context")
                     || block.contains("@type")
                     || block.contains("schema.org")
-                    || block.contains("\"url\":")
-                        && block.contains("\"name\":")
-                        && block.len() > 200;
+                    || block.contains("\"url\":") && block.contains("\"name\":") && block.len() > 200;
 
                 if is_json_ld {
                     result.push(' ');
@@ -339,16 +335,8 @@ pub(crate) fn brave_search(agent: &ureq::Agent, api_key: &str, query: &str) -> V
 
     let mut results = Vec::new();
     for item in items.iter().take(10) {
-        let title = item
-            .get("title")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let url = item
-            .get("url")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let title = item.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let url = item.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
         let snippet = item
             .get("description")
             .and_then(|v| v.as_str())
@@ -390,21 +378,9 @@ pub(crate) fn searxng_search(agent: &ureq::Agent, base_url: &str, query: &str) -
 
     let mut results = Vec::new();
     for item in items.iter().take(10) {
-        let title = item
-            .get("title")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let url = item
-            .get("url")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let snippet = item
-            .get("content")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
+        let title = item.get("title").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let url = item.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let snippet = item.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
         if url.is_empty() {
             continue;
@@ -433,10 +409,7 @@ pub(crate) fn fetch_urls_parallel(urls: &[String]) -> Vec<String> {
             .map(|url| scope.spawn(move || fetch_page_content(url, 2_000)))
             .collect();
 
-        handles
-            .into_iter()
-            .map(|h| h.join().unwrap_or_default())
-            .collect()
+        handles.into_iter().map(|h| h.join().unwrap_or_default()).collect()
     })
 }
 
@@ -459,11 +432,7 @@ pub(crate) fn fetch_page_content(url: &str, max_chars: usize) -> String {
                     return truncate_text(&t, max_chars);
                 }
                 Some(Ok(_)) => {
-                    tool_log!(
-                        "tool",
-                        "[fetch] external renderer empty for {}, trying HTTP",
-                        url
-                    );
+                    tool_log!("tool", "[fetch] external renderer empty for {}, trying HTTP", url);
                 }
                 Some(Err(e)) => {
                     tool_log!(
@@ -579,12 +548,7 @@ pub(crate) fn score_rendered_text(text: &str) -> u32 {
 /// On macOS inside a Tauri app, the headless browser may fail because tao
 /// requires the event loop on the main thread.  In that case, this function
 /// returns an error JSON so the caller can fall back to plain HTTP fetch.
-pub(crate) fn headless_fetch_url(
-    url: &str,
-    wait_ms: u64,
-    selector: Option<&str>,
-    eval_js: Option<&str>,
-) -> Value {
+pub(crate) fn headless_fetch_url(url: &str, wait_ms: u64, selector: Option<&str>, eval_js: Option<&str>) -> Value {
     #[cfg(not(feature = "headless"))]
     {
         let _ = (wait_ms, selector, eval_js);
@@ -636,9 +600,7 @@ pub(crate) fn headless_fetch_url(
         };
 
         // Navigate to the URL.
-        if let Err(e) = browser.send(Command::Navigate {
-            url: url.to_string(),
-        }) {
+        if let Err(e) = browser.send(Command::Navigate { url: url.to_string() }) {
             let _ = browser.send(Command::Close);
             return json!({ "ok": false, "tool": "web_fetch", "url": url, "error": format!("navigate failed: {e}") });
         }
@@ -667,9 +629,7 @@ pub(crate) fn headless_fetch_url(
 
         // If custom JS evaluation is requested, run it and return its result.
         if let Some(js) = eval_js {
-            let js_result = match browser.send(Command::EvalJs {
-                script: js.to_string(),
-            }) {
+            let js_result = match browser.send(Command::EvalJs { script: js.to_string() }) {
                 Ok(r) => r.as_text().unwrap_or("null").to_string(),
                 Err(e) => format!("eval error: {e}"),
             };
@@ -882,8 +842,10 @@ mod web_search_tests {
                 let body = r.into_string().unwrap_or_default();
                 let result_count = body.matches("result__body").count();
                 let has_captcha = body.contains("bot") || body.contains("anomaly");
-                println!("[POST /html/] status={status} len={} results={result_count} captcha={has_captcha}",
-                    body.len());
+                println!(
+                    "[POST /html/] status={status} len={} results={result_count} captcha={has_captcha}",
+                    body.len()
+                );
 
                 // Show result-related CSS classes
                 let mut classes: Vec<&str> = Vec::new();
@@ -1069,14 +1031,8 @@ mod web_search_tests {
         let clean: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
 
         // Must contain actual weather data.
-        assert!(
-            clean.contains("45\u{00B0}F"),
-            "missing temperature, got: {clean}"
-        );
-        assert!(
-            clean.contains("Partly cloudy"),
-            "missing conditions, got: {clean}"
-        );
+        assert!(clean.contains("45\u{00B0}F"), "missing temperature, got: {clean}");
+        assert!(clean.contains("Partly cloudy"), "missing conditions, got: {clean}");
         assert!(clean.contains("10 mph"), "missing wind, got: {clean}");
 
         // Must NOT contain JSON-LD, CSS, JS, nav, or footer.

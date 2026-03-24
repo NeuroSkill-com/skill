@@ -81,5 +81,12 @@ fn bench_filter(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_fft, bench_ifft, bench_psd, bench_band_analyzer, bench_filter);
+criterion_group!(
+    benches,
+    bench_fft,
+    bench_ifft,
+    bench_psd,
+    bench_band_analyzer,
+    bench_filter
+);
 criterion_main!(benches);

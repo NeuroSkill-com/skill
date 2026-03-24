@@ -96,9 +96,9 @@ mod macos {
 
     fn plist_path(app_name: &str) -> Option<PathBuf> {
         std::env::var("HOME").ok().map(|h| {
-            PathBuf::from(h).join("Library/LaunchAgents").join(format!(
-                "{AUTOSTART_PLIST_LABEL_PREFIX}.{app_name}.loginitem.plist"
-            ))
+            PathBuf::from(h)
+                .join("Library/LaunchAgents")
+                .join(format!("{AUTOSTART_PLIST_LABEL_PREFIX}.{app_name}.loginitem.plist"))
         })
     }
 
@@ -154,12 +154,10 @@ mod linux {
     use std::path::PathBuf;
 
     fn desktop_path(app_name: &str) -> PathBuf {
-        let base = std::env::var("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                let h = std::env::var("HOME").unwrap_or_default();
-                PathBuf::from(h).join(".config")
-            });
+        let base = std::env::var("XDG_CONFIG_HOME").map(PathBuf::from).unwrap_or_else(|_| {
+            let h = std::env::var("HOME").unwrap_or_default();
+            PathBuf::from(h).join(".config")
+        });
         base.join("autostart").join(format!("{app_name}.desktop"))
     }
 
@@ -266,9 +264,7 @@ mod windows {
 
     pub fn enable(app_name: &str, exe: &str) -> anyhow::Result<()> {
         let out = std::process::Command::new("reg")
-            .args([
-                "add", REG_PATH, "/v", app_name, "/t", "REG_SZ", "/d", exe, "/f",
-            ])
+            .args(["add", REG_PATH, "/v", app_name, "/t", "REG_SZ", "/d", exe, "/f"])
             .output()
             .context("reg add failed")?;
         if out.status.success() {

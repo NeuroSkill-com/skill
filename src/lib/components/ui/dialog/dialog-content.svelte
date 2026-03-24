@@ -5,10 +5,10 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-import type { Dialog as DialogPrimitive } from "bits-ui";
+import { Dialog as DialogPrimitive } from "bits-ui";
 import type { ComponentProps, Snippet } from "svelte";
 import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
-import type DialogPortal from "./dialog-portal.svelte";
+import DialogPortal from "./dialog-portal.svelte";
 import * as Dialog from "./index.js";
 
 let {

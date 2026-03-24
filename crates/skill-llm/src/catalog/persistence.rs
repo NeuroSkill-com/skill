@@ -56,11 +56,8 @@ impl LlmCatalog {
             None => bundle, // first run — use bundled directly
             Some(mut p) => {
                 // Build a map from the persisted entries for fast lookup.
-                let mut pmap: std::collections::HashMap<String, LlmModelEntry> = p
-                    .entries
-                    .drain(..)
-                    .map(|e| (e.filename.clone(), e))
-                    .collect();
+                let mut pmap: std::collections::HashMap<String, LlmModelEntry> =
+                    p.entries.drain(..).map(|e| (e.filename.clone(), e)).collect();
 
                 // Start from the bundle; apply persisted runtime state where available.
                 let mut merged: Vec<LlmModelEntry> = bundle
@@ -155,11 +152,7 @@ impl LlmCatalog {
     pub fn active_model_path(&self) -> Option<PathBuf> {
         self.entries
             .iter()
-            .find(|e| {
-                !e.is_mmproj
-                    && e.filename == self.active_model
-                    && e.state == DownloadState::Downloaded
-            })
+            .find(|e| !e.is_mmproj && e.filename == self.active_model && e.state == DownloadState::Downloaded)
             .and_then(|e| e.local_path.clone())
     }
 
@@ -170,11 +163,7 @@ impl LlmCatalog {
         }
         self.entries
             .iter()
-            .find(|e| {
-                e.is_mmproj
-                    && e.filename == self.active_mmproj
-                    && e.state == DownloadState::Downloaded
-            })
+            .find(|e| e.is_mmproj && e.filename == self.active_mmproj && e.state == DownloadState::Downloaded)
             .and_then(|e| e.local_path.clone())
     }
 
@@ -190,10 +179,9 @@ impl LlmCatalog {
     pub fn best_downloaded_model_for_repo(&self, repo: &str) -> Option<&LlmModelEntry> {
         fn quant_rank(quant: &str) -> usize {
             let order = [
-                "Q4_K_M", "Q4_0", "Q4_K_S", "Q4_K_L", "Q4_1", "Q5_K_M", "Q5_K_S", "Q5_K_L", "Q6_K",
-                "Q6_K_L", "Q8_0", "IQ4_XS", "IQ4_NL", "Q3_K_M", "Q3_K_L", "Q3_K_XL", "Q3_K_S",
-                "IQ3_M", "IQ3_XS", "IQ3_XXS", "Q2_K", "Q2_K_L", "IQ2_M", "IQ2_S", "IQ2_XS",
-                "IQ2_XXS", "BF16", "F16", "F32",
+                "Q4_K_M", "Q4_0", "Q4_K_S", "Q4_K_L", "Q4_1", "Q5_K_M", "Q5_K_S", "Q5_K_L", "Q6_K", "Q6_K_L", "Q8_0",
+                "IQ4_XS", "IQ4_NL", "Q3_K_M", "Q3_K_L", "Q3_K_XL", "Q3_K_S", "IQ3_M", "IQ3_XS", "IQ3_XXS", "Q2_K",
+                "Q2_K_L", "IQ2_M", "IQ2_S", "IQ2_XS", "IQ2_XXS", "BF16", "F16", "F32",
             ];
             order
                 .iter()
@@ -239,9 +227,7 @@ impl LlmCatalog {
 
         self.entries
             .iter()
-            .filter(|e| {
-                e.is_mmproj && e.repo == active_repo && e.state == DownloadState::Downloaded
-            })
+            .filter(|e| e.is_mmproj && e.repo == active_repo && e.state == DownloadState::Downloaded)
             .min_by_key(|e| (!e.recommended as u8, quant_rank(&e.quant)))
     }
 
@@ -253,8 +239,7 @@ impl LlmCatalog {
             return path;
         }
         if autoload {
-            self.best_mmproj_for_active_model()
-                .and_then(|e| e.local_path.clone())
+            self.best_mmproj_for_active_model().and_then(|e| e.local_path.clone())
         } else {
             None
         }

@@ -287,12 +287,7 @@ impl JobQueue {
         }
 
         if let Some(pos) = inner.queue.iter().position(|j| j.id == job_id) {
-            let ahead_ms: u64 = inner
-                .queue
-                .iter()
-                .take(pos + 1)
-                .map(|j| j.estimated_ms)
-                .sum();
+            let ahead_ms: u64 = inner.queue.iter().take(pos + 1).map(|j| j.estimated_ms).sum();
             return JobPollResult::Pending {
                 job_id,
                 queue_position: pos,

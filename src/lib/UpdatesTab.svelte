@@ -81,6 +81,9 @@ function stopSessionPoll() {
   }
 }
 
+/** No-op stub — countdown-to-restart was removed; kept for call-site compat. */
+function stopCountdown() {}
+
 /** Attempt restart — blocked when a session is live. */
 async function tryRestart() {
   try {

@@ -120,8 +120,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         done.send(Ok(())).ok();
                     }
                     Err(e) => {
-                        done.send(Err(anyhow::anyhow!("kittentts load failed: {e}")))
-                            .ok();
+                        done.send(Err(anyhow::anyhow!("kittentts load failed: {e}"))).ok();
                     }
                 }
             }
@@ -185,12 +184,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 
 // ─── Synthesis ────────────────────────────────────────────────────────────────
 
-fn speak_inner(
-    model: &KittenTTS,
-    stream: &MixerDeviceSink,
-    text: &str,
-    voice: &str,
-) -> anyhow::Result<()> {
+fn speak_inner(model: &KittenTTS, stream: &MixerDeviceSink, text: &str, voice: &str) -> anyhow::Result<()> {
     let t0 = std::time::Instant::now();
     let samples = model
         .generate(text, voice, SPEED, true)

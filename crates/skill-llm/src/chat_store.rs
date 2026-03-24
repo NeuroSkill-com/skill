@@ -131,11 +131,7 @@ impl ChatStore {
     pub fn open(skill_dir: &Path) -> Option<Self> {
         let chats_dir = skill_dir.join("chats");
         if let Err(e) = std::fs::create_dir_all(&chats_dir) {
-            llm_log!(
-                "chat_store",
-                "failed to create {}: {e}",
-                chats_dir.display()
-            );
+            llm_log!("chat_store", "failed to create {}: {e}", chats_dir.display());
             return None;
         }
 
@@ -175,15 +171,11 @@ impl ChatStore {
         }
         // Migration: add title column if it doesn't exist yet (existing databases).
         // Silently ignored if the column is already present.
-        let _ = conn
-            .execute_batch("ALTER TABLE chat_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '';");
+        let _ = conn.execute_batch("ALTER TABLE chat_sessions ADD COLUMN title TEXT NOT NULL DEFAULT '';");
         // Migration: add archived column (0 = active, 1 = archived).
-        let _ = conn.execute_batch(
-            "ALTER TABLE chat_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;",
-        );
+        let _ = conn.execute_batch("ALTER TABLE chat_sessions ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;");
         // Migration: add params column (JSON blob for per-session generation params).
-        let _ = conn
-            .execute_batch("ALTER TABLE chat_sessions ADD COLUMN params TEXT NOT NULL DEFAULT '';");
+        let _ = conn.execute_batch("ALTER TABLE chat_sessions ADD COLUMN params TEXT NOT NULL DEFAULT '';");
         Some(ChatStore { conn })
     }
 
@@ -247,18 +239,16 @@ impl ChatStore {
 
     /// Set a custom title for a session.
     pub fn rename_session(&mut self, id: i64, title: &str) {
-        let _ = self.conn.execute(
-            "UPDATE chat_sessions SET title = ?1 WHERE id = ?2",
-            params![title, id],
-        );
+        let _ = self
+            .conn
+            .execute("UPDATE chat_sessions SET title = ?1 WHERE id = ?2", params![title, id]);
     }
 
     /// Delete a session and all its messages.
     pub fn delete_session(&mut self, id: i64) {
-        let _ = self.conn.execute(
-            "DELETE FROM chat_messages WHERE session_id = ?1",
-            params![id],
-        );
+        let _ = self
+            .conn
+            .execute("DELETE FROM chat_messages WHERE session_id = ?1", params![id]);
         let _ = self
             .conn
             .execute("DELETE FROM chat_sessions WHERE id = ?1", params![id]);
@@ -266,18 +256,16 @@ impl ChatStore {
 
     /// Archive a session (soft-delete).
     pub fn archive_session(&mut self, id: i64) {
-        let _ = self.conn.execute(
-            "UPDATE chat_sessions SET archived = 1 WHERE id = ?1",
-            params![id],
-        );
+        let _ = self
+            .conn
+            .execute("UPDATE chat_sessions SET archived = 1 WHERE id = ?1", params![id]);
     }
 
     /// Unarchive (restore) a session.
     pub fn unarchive_session(&mut self, id: i64) {
-        let _ = self.conn.execute(
-            "UPDATE chat_sessions SET archived = 0 WHERE id = ?1",
-            params![id],
-        );
+        let _ = self
+            .conn
+            .execute("UPDATE chat_sessions SET archived = 0 WHERE id = ?1", params![id]);
     }
 
     /// Return all archived sessions newest-first.
@@ -322,11 +310,9 @@ impl ChatStore {
     pub fn get_or_create_last_session(&mut self) -> i64 {
         let existing: Option<i64> = self
             .conn
-            .query_row(
-                "SELECT id FROM chat_sessions ORDER BY id DESC LIMIT 1",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT id FROM chat_sessions ORDER BY id DESC LIMIT 1", [], |row| {
+                row.get(0)
+            })
             .ok();
         existing.unwrap_or_else(|| self.new_session_inner(""))
     }
@@ -348,13 +334,7 @@ impl ChatStore {
     }
 
     /// Append a message to the given session.  Returns the new row id.
-    pub fn save_message(
-        &mut self,
-        session_id: i64,
-        role: &str,
-        content: &str,
-        thinking: Option<&str>,
-    ) -> i64 {
+    pub fn save_message(&mut self, session_id: i64, role: &str, content: &str, thinking: Option<&str>) -> i64 {
         self.save_message_with_tools(session_id, role, content, thinking, &[])
     }
 
@@ -377,7 +357,11 @@ impl ChatStore {
         ) {
             Ok(rows) => {
                 let id = self.conn.last_insert_rowid();
-                llm_log!("chat_store", "save_message OK: session={session_id} role={role} rows={rows} id={id} content_len={}", content.len());
+                llm_log!(
+                    "chat_store",
+                    "save_message OK: session={session_id} role={role} rows={rows} id={id} content_len={}",
+                    content.len()
+                );
                 id
             }
             Err(e) => {
@@ -484,10 +468,8 @@ impl ChatStore {
                 placeholders.join(", ")
             );
             if let Ok(mut tc_stmt) = self.conn.prepare(&sql) {
-                let params_vec: Vec<&dyn rusqlite::types::ToSql> = msg_ids
-                    .iter()
-                    .map(|id| id as &dyn rusqlite::types::ToSql)
-                    .collect();
+                let params_vec: Vec<&dyn rusqlite::types::ToSql> =
+                    msg_ids.iter().map(|id| id as &dyn rusqlite::types::ToSql).collect();
                 if let Ok(rows) = tc_stmt.query_map(params_vec.as_slice(), |row| {
                     let args_str: Option<String> = row.get(6)?;
                     let result_str: Option<String> = row.get(7)?;
@@ -544,11 +526,7 @@ mod tests {
 
         // Create a session
         let session_id = store.new_session();
-        assert!(
-            session_id > 0,
-            "session id should be positive, got {}",
-            session_id
-        );
+        assert!(session_id > 0, "session id should be positive, got {}", session_id);
 
         // Save a user message
         let msg_id = store.save_message(session_id, "user", "Hello world", None);
@@ -582,8 +560,7 @@ mod tests {
         use std::sync::atomic::{AtomicU64, Ordering};
         static CTR: AtomicU64 = AtomicU64::new(0);
         let id = CTR.fetch_add(1, Ordering::Relaxed);
-        let tmp =
-            std::env::temp_dir().join(format!("skill_chat_test_{}_{}", std::process::id(), id));
+        let tmp = std::env::temp_dir().join(format!("skill_chat_test_{}_{}", std::process::id(), id));
         let _ = std::fs::remove_dir_all(&tmp);
         let _ = std::fs::create_dir_all(&tmp);
         let store = ChatStore::open(&tmp).expect("open store");
@@ -671,10 +648,7 @@ mod tests {
         assert_eq!(msgs[0].tool_calls.len(), 1);
         assert_eq!(msgs[0].tool_calls[0].tool, "web_search");
         assert_eq!(msgs[0].tool_calls[0].status, "ok");
-        assert_eq!(
-            msgs[0].tool_calls[0].tool_call_id.as_deref(),
-            Some("call_123")
-        );
+        assert_eq!(msgs[0].tool_calls[0].tool_call_id.as_deref(), Some("call_123"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 

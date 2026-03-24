@@ -730,7 +730,7 @@ async function copySummary() {
     `Scores (A → B):`,
     ...scoreKeys.map(
       (sk) =>
-        `  ${sk.key}: ${metricsA?.[sk.key].toFixed(1)} → ${metricsB?.[sk.key].toFixed(1)} (${scoreDiff(metricsA?.[sk.key], metricsB?.[sk.key])})`,
+        `  ${sk.key}: ${metricsA?.[sk.key].toFixed(1)} → ${metricsB?.[sk.key].toFixed(1)} (${scoreDiff(metricsA?.[sk.key] ?? 0, metricsB?.[sk.key] ?? 0)})`,
     ),
     `  FAA: ${metricsA?.faa.toFixed(3)} → ${metricsB?.faa.toFixed(3)}`,
   ];

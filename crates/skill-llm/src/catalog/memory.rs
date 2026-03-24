@@ -57,12 +57,10 @@ pub fn recommend_ctx_size(entry: &LlmModelEntry) -> u32 {
         .as_ref()
         .and_then(|g| {
             if g.is_unified_memory {
-                g.free_memory_bytes
-                    .map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+                g.free_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
             } else {
                 // Discrete GPU: prefer total VRAM (free VRAM may be None).
-                g.total_memory_bytes
-                    .map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
+                g.total_memory_bytes.map(|b| b as f64 / (1024.0 * 1024.0 * 1024.0))
             }
         })
         .unwrap_or(8.0); // conservative fallback when GPU info is unavailable
@@ -102,20 +100,14 @@ mod tests {
     fn estimate_memory_f16_is_larger() {
         let q4 = estimate_memory_gb(7.0, "Q4_K_M", 8192);
         let f16 = estimate_memory_gb(7.0, "F16", 8192);
-        assert!(
-            f16 > q4,
-            "F16 ({f16}) should need more memory than Q4_K_M ({q4})"
-        );
+        assert!(f16 > q4, "F16 ({f16}) should need more memory than Q4_K_M ({q4})");
     }
 
     #[test]
     fn estimate_memory_larger_ctx_needs_more() {
         let small = estimate_memory_gb(7.0, "Q4_K_M", 4096);
         let large = estimate_memory_gb(7.0, "Q4_K_M", 32768);
-        assert!(
-            large > small,
-            "32K ctx ({large}) should need more than 4K ({small})"
-        );
+        assert!(large > small, "32K ctx ({large}) should need more than 4K ({small})");
     }
 
     #[test]
@@ -178,10 +170,7 @@ mod tests {
             initiated_at_unix: None,
         };
         let ctx = recommend_ctx_size(&entry);
-        assert!(
-            ctx <= 8192,
-            "ctx {ctx} should not exceed max_context_length 8192"
-        );
+        assert!(ctx <= 8192, "ctx {ctx} should not exceed max_context_length 8192");
         assert!(ctx >= 4096, "ctx {ctx} should be at least 4096");
     }
 }

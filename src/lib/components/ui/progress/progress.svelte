@@ -5,7 +5,7 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, version 3 only. -->
 <script lang="ts">
-import type { Progress as ProgressPrimitive } from "bits-ui";
+import { Progress as ProgressPrimitive } from "bits-ui";
 import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 
 let {

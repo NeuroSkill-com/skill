@@ -17,9 +17,7 @@ use crate::tools;
 
 use anyhow::Context;
 use skill_tools::context::trim_messages_to_fit;
-use skill_tools::defs::{
-    enabled_builtin_llm_tools, filter_allowed_tool_defs, is_builtin_tool_enabled,
-};
+use skill_tools::defs::{enabled_builtin_llm_tools, filter_allowed_tool_defs, is_builtin_tool_enabled};
 use skill_tools::exec::execute_builtin_tool_call;
 
 // ── Stream sanitizer ──────────────────────────────────────────────────────────
@@ -110,8 +108,7 @@ where
 #[allow(dead_code)]
 pub type BeforeToolCallFn = Box<dyn Fn(&tools::ToolCall, &Value) -> Option<String> + Send + Sync>;
 #[allow(dead_code)]
-pub type AfterToolCallFn =
-    Box<dyn Fn(&tools::ToolCall, &Value, bool) -> Option<(Value, bool)> + Send + Sync>;
+pub type AfterToolCallFn = Box<dyn Fn(&tools::ToolCall, &Value, bool) -> Option<(Value, bool)> + Send + Sync>;
 
 /// Extended tool-call event sink (pi-mono style lifecycle events).
 pub enum ToolEvent {
@@ -193,19 +190,14 @@ where
     let filtered_refs: Vec<skill_skills::Skill> = filtered_skills.into_iter().cloned().collect();
     let skills_block = skill_skills::format_skills_for_prompt(&filtered_refs);
     if !skills_block.is_empty() {
-        let has_system = messages
-            .first()
-            .and_then(|m| m.get("role"))
-            .and_then(|r| r.as_str())
-            == Some("system");
+        let has_system = messages.first().and_then(|m| m.get("role")).and_then(|r| r.as_str()) == Some("system");
         if has_system {
             if let Some(content) = messages[0]
                 .get("content")
                 .and_then(|c| c.as_str())
                 .map(std::string::ToString::to_string)
             {
-                messages[0]["content"] =
-                    serde_json::Value::String(format!("{content}{skills_block}"));
+                messages[0]["content"] = serde_json::Value::String(format!("{content}{skills_block}"));
             }
         } else {
             messages.insert(0, json!({ "role": "system", "content": skills_block }));
@@ -267,7 +259,8 @@ where
                     self_heal_count += 1;
                     log::info!(
                         "[tool-orchestration] garbled tool call detected (attempt {}/{}), requesting re-emit",
-                        self_heal_count, MAX_SELF_HEAL_ATTEMPTS
+                        self_heal_count,
+                        MAX_SELF_HEAL_ATTEMPTS
                     );
 
                     // Push the failed assistant message so the model sees what it emitted.
@@ -291,22 +284,10 @@ where
                 if let Some(ref result) = last_tool_result {
                     log::warn!("[tool-orchestration] model returned empty after tool call — returning raw result");
                     let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
-                    return Ok((
-                        fallback,
-                        finish_reason,
-                        prompt_tokens,
-                        completion_tokens,
-                        n_ctx,
-                    ));
+                    return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
                 }
             }
-            return Ok((
-                cleaned,
-                finish_reason,
-                prompt_tokens,
-                completion_tokens,
-                n_ctx,
-            ));
+            return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
         }
 
         let cleaned = tools::strip_tool_call_blocks(&assistant_text);
@@ -317,14 +298,9 @@ where
             .into_iter()
             .filter(|tc| {
                 if tc.function.name == "bash" {
-                    let args: Value = serde_json::from_str(&tc.function.arguments)
-                        .unwrap_or(Value::Object(Default::default()));
-                    if args
-                        .get("command")
-                        .and_then(|c| c.as_str())
-                        .unwrap_or("")
-                        .is_empty()
-                    {
+                    let args: Value =
+                        serde_json::from_str(&tc.function.arguments).unwrap_or(Value::Object(Default::default()));
+                    if args.get("command").and_then(|c| c.as_str()).unwrap_or("").is_empty() {
                         return false;
                     }
                 }
@@ -341,29 +317,20 @@ where
             // If there's meaningful text alongside the (deduped) tool calls,
             // return it — the model wrote something useful.
             if !cleaned.trim().is_empty() {
-                return Ok((
-                    cleaned,
-                    finish_reason,
-                    prompt_tokens,
-                    completion_tokens,
-                    n_ctx,
-                ));
+                return Ok((cleaned, finish_reason, prompt_tokens, completion_tokens, n_ctx));
             }
             // All tool calls were duplicates and no visible text was produced.
             // The model is stuck re-emitting the same call.
             dedup_nudge_count += 1;
             if dedup_nudge_count > 2 {
                 // Model is hopelessly stuck — return the raw tool result.
-                log::warn!("[tool-orchestration] model stuck after {} dedup nudges — returning raw tool result", dedup_nudge_count);
+                log::warn!(
+                    "[tool-orchestration] model stuck after {} dedup nudges — returning raw tool result",
+                    dedup_nudge_count
+                );
                 if let Some(ref result) = last_tool_result {
                     let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
-                    return Ok((
-                        fallback,
-                        finish_reason,
-                        prompt_tokens,
-                        completion_tokens,
-                        n_ctx,
-                    ));
+                    return Ok((fallback, finish_reason, prompt_tokens, completion_tokens, n_ctx));
                 }
             }
             // Inject a nudge telling it the results are already available,
@@ -413,8 +380,7 @@ where
                     && skill_tools::defs::is_skill_api_command(&tc.function.name)
                 {
                     // Parse whatever args the LLM sent (may be empty).
-                    let orig_args: Value =
-                        serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| json!({}));
+                    let orig_args: Value = serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| json!({}));
                     // Build the redirected payload: { "command": "<name>", "args": { ...orig } }
                     let mut redirected = json!({ "command": tc.function.name });
                     if let Some(obj) = orig_args.as_object() {
@@ -422,11 +388,7 @@ where
                             redirected["args"] = orig_args;
                         }
                     }
-                    log::info!(
-                        "[tool-redirect] {} → skill({})",
-                        tc.function.name,
-                        tc.function.name
-                    );
+                    log::info!("[tool-redirect] {} → skill({})", tc.function.name, tc.function.name);
                     tc.function.name = "skill".to_string();
                     tc.function.arguments = redirected.to_string();
                 }
@@ -501,7 +463,10 @@ where
     // fallback so the user at least sees the raw data.
     if let Some(result) = last_tool_result {
         log::warn!("[tool-orchestration] round limit reached but have tool result — returning raw");
-        let fallback = format!("*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```", result);
+        let fallback = format!(
+            "*(The model could not summarize the tool output. Here is the raw result:)*\n\n```json\n{}\n```",
+            result
+        );
         return Ok((fallback, "stop".into(), 0, 0, n_ctx));
     }
 
@@ -561,10 +526,7 @@ fn summarize_tool_result(content: &str) -> String {
     };
 
     let tool = v.get("tool").and_then(|t| t.as_str()).unwrap_or("unknown");
-    let ok = v
-        .get("ok")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
+    let ok = v.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
 
     if !ok {
         let err = v.get("error").and_then(|e| e.as_str()).unwrap_or("failed");
@@ -602,28 +564,18 @@ fn summarize_tool_result(content: &str) -> String {
         }
         "web_fetch" => {
             let url = v.get("url").and_then(|u| u.as_str()).unwrap_or("?");
-            let chars = v
-                .get("content")
-                .and_then(|c| c.as_str())
-                .map(str::len)
-                .unwrap_or(0);
+            let chars = v.get("content").and_then(|c| c.as_str()).map(str::len).unwrap_or(0);
             let short_url = if url.len() > 60 { &url[..60] } else { url };
             format!("[web_fetch: {short_url}… ({chars} chars)]")
         }
         "bash" => {
             let cmd = v.get("command").and_then(|c| c.as_str()).unwrap_or("?");
-            let exit = v
-                .get("exit_code")
-                .and_then(serde_json::Value::as_i64)
-                .unwrap_or(-1);
+            let exit = v.get("exit_code").and_then(serde_json::Value::as_i64).unwrap_or(-1);
             let short_cmd = if cmd.len() > 60 { &cmd[..60] } else { cmd };
             format!("[bash: `{short_cmd}` exit={exit}]")
         }
         "read_file" => {
-            let lines = v
-                .get("total_lines")
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(0);
+            let lines = v.get("total_lines").and_then(serde_json::Value::as_u64).unwrap_or(0);
             format!("[read_file: {lines} lines]")
         }
         "skill" => {
@@ -652,8 +604,7 @@ fn validate_and_prepare(
     // Auto-redirect: Skill API sub-command or neuroskill alias used as tool.
     if !skill_tools::defs::is_known_builtin_tool(&tc.function.name) {
         if let Some(cmd) = skill_tools::defs::resolve_skill_alias(&tc.function.name) {
-            let orig_args: Value =
-                serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| json!({}));
+            let orig_args: Value = serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| json!({}));
             let mut redirected = json!({ "command": cmd });
             if let Some(obj) = orig_args.as_object() {
                 if !obj.is_empty() {
@@ -672,9 +623,7 @@ fn validate_and_prepare(
         );
     }
     if !is_builtin_tool_enabled(allowed_tools, &tc.function.name) {
-        return Err(
-            json!({ "ok": false, "tool": tc.function.name, "error": "tool disabled in settings" }),
-        );
+        return Err(json!({ "ok": false, "tool": tc.function.name, "error": "tool disabled in settings" }));
     }
 
     let args: Value = serde_json::from_str(&tc.function.arguments).unwrap_or_else(|_| json!({}));
@@ -682,9 +631,7 @@ fn validate_and_prepare(
     if let Some(tool_def) = tool_defs.get(&tc.function.name) {
         match tools::validate_tool_arguments(tool_def, &args) {
             Ok(validated) => Ok(validated),
-            Err(err_msg) => {
-                Err(json!({ "ok": false, "tool": tc.function.name, "error": err_msg.to_string() }))
-            }
+            Err(err_msg) => Err(json!({ "ok": false, "tool": tc.function.name, "error": err_msg.to_string() })),
         }
     } else {
         Ok(args)
@@ -707,8 +654,7 @@ async fn execute_tool_calls_sequential<G>(
     for tc in calls.iter_mut() {
         // Check if cancelled before execution.
         if cancelled_set.lock_or_recover().contains(&tc.id) {
-            let cancel_result =
-                json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
+            let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
             on_tool_event(ToolEvent::Status {
                 tool_name: tc.function.name.clone(),
                 status: "cancelled".into(),
@@ -770,10 +716,7 @@ async fn execute_tool_calls_sequential<G>(
                 Err(err_val) => (err_val, true),
                 Ok(_) => {
                     let result = execute_builtin_tool_call(tc, allowed_tools, scripts_dir).await;
-                    let ok = result
-                        .get("ok")
-                        .and_then(serde_json::Value::as_bool)
-                        .unwrap_or(false);
+                    let ok = result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
                     (result, !ok)
                 }
             }
@@ -829,8 +772,7 @@ async fn execute_tool_calls_parallel<G>(
     let mut prepared = Vec::with_capacity(calls.len());
     for tc in calls.iter_mut() {
         if cancelled_set.lock_or_recover().contains(&tc.id) {
-            let cancel_result =
-                json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
+            let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
             on_tool_event(ToolEvent::Status {
                 tool_name: tc.function.name.clone(),
                 status: "cancelled".into(),
@@ -898,18 +840,18 @@ async fn execute_tool_calls_parallel<G>(
         if is_valid {
             futures.push(tokio::spawn(async move {
                 if cancel_check.lock_or_recover().contains(&tc.id) {
-                    return (tc.clone(), json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }), true);
+                    return (
+                        tc.clone(),
+                        json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }),
+                        true,
+                    );
                 }
                 let result = execute_builtin_tool_call(&tc, &allowed, &sdir).await;
                 let ok = result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
                 (tc, result, !ok)
             }));
         } else {
-            let err_val = p
-                .validation
-                .as_ref()
-                .expect_err("guarded by else branch")
-                .clone();
+            let err_val = p.validation.as_ref().expect_err("guarded by else branch").clone();
             futures.push(tokio::spawn(async move { (tc, err_val, true) }));
         }
     }

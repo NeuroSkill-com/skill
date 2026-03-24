@@ -14,9 +14,7 @@
 //! baseline multiplied by a gain factor, with a refractory period to
 //! prevent double-counting.
 
-use skill_constants::{
-    BLINK_RATE_WINDOW_S, BLINK_REFRACTORY_S, BLINK_THRESHOLD_UV, MUSE_SAMPLE_RATE,
-};
+use skill_constants::{BLINK_RATE_WINDOW_S, BLINK_REFRACTORY_S, BLINK_THRESHOLD_UV, MUSE_SAMPLE_RATE};
 use std::collections::VecDeque;
 
 // ── Public metrics ────────────────────────────────────────────────────────────
@@ -75,9 +73,7 @@ impl ArtifactDetector {
     /// then any AF/F-prefixed pair) for blink detection.
     pub fn with_channels(sample_rate: f64, channel_names: &[&str]) -> Self {
         // Preferred frontal electrodes for blink detection, in priority order.
-        const PREFERRED: &[&str] = &[
-            "AF7", "AF8", "Fp1", "Fp2", "AF3", "AF4", "F7", "F8", "F3", "F4",
-        ];
+        const PREFERRED: &[&str] = &["AF7", "AF8", "Fp1", "Fp2", "AF3", "AF4", "F7", "F8", "F3", "F4"];
 
         let mut frontal_indices = Vec::new();
         for &pref in PREFERRED {
@@ -106,11 +102,7 @@ impl ArtifactDetector {
     /// Blink detection is only performed on channels identified as frontal
     /// during construction.
     pub fn push(&mut self, electrode: usize, samples: &[f64]) {
-        if let Some(slot) = self
-            .frontal_indices
-            .iter()
-            .position(|&idx| idx == electrode)
-        {
+        if let Some(slot) = self.frontal_indices.iter().position(|&idx| idx == electrode) {
             if slot < 2 {
                 self.push_frontal(slot, samples);
             }

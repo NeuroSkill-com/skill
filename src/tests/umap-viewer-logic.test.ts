@@ -38,8 +38,8 @@ describe("rgbToHex", () => {
 describe("normalisePoints", () => {
   it("normalises to [-1, 1] range", () => {
     const pts = [
-      { x: 0, y: 0, z: 0, utc: 0, label: null, set: "a" },
-      { x: 10, y: 10, z: 10, utc: 1, label: null, set: "a" },
+      { x: 0, y: 0, z: 0, utc: 0, label: undefined, set: "a", session: 0 },
+      { x: 10, y: 10, z: 10, utc: 1, label: undefined, set: "a", session: 0 },
     ];
     const arr = normalisePoints(pts);
     expect(arr.length).toBe(6);
@@ -49,7 +49,7 @@ describe("normalisePoints", () => {
   });
 
   it("handles single point", () => {
-    const pts = [{ x: 5, y: 5, z: 5, utc: 0, label: null, set: "a" }];
+    const pts = [{ x: 5, y: 5, z: 5, utc: 0, label: undefined, set: "a", session: 0 }];
     const arr = normalisePoints(pts);
     expect(arr.length).toBe(3);
     // With a single point, range is 0 → scale defaults to 1
@@ -58,8 +58,8 @@ describe("normalisePoints", () => {
 
   it("handles 2D points (z=undefined)", () => {
     const pts = [
-      { x: 0, y: 0, z: undefined as number | undefined, utc: 0, label: null, set: "a" },
-      { x: 1, y: 1, z: undefined as number | undefined, utc: 1, label: null, set: "a" },
+      { x: 0, y: 0, z: undefined as number | undefined, utc: 0, label: undefined, set: "a", session: 0 },
+      { x: 1, y: 1, z: undefined as number | undefined, utc: 1, label: undefined, set: "a", session: 0 },
     ];
     const arr = normalisePoints(pts);
     expect(arr.length).toBe(6);

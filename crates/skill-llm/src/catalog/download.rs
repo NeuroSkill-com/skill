@@ -61,9 +61,7 @@ pub fn download_file(
 
     // ── 0. Initial state ──────────────────────────────────────────────────────
     {
-        let mut p = progress
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         // Check for pre-existing cancellation (e.g. forwarded from multi-shard
         // monitor) before resetting state.
         if p.cancelled {
@@ -100,8 +98,7 @@ pub fn download_file(
     //     snapshots/
     //       {commit}/
     //         {filename}  ← symlink (Unix) / hardlink (Windows) → ../../blobs/{sha256}
-    let (model_dir, blobs_dir, refs_dir) =
-        skill_data::util::hf_ensure_dirs(repo_id).context("create HF cache dirs")?;
+    let (model_dir, blobs_dir, refs_dir) = skill_data::util::hf_ensure_dirs(repo_id).context("create HF cache dirs")?;
 
     // ── 3. Build HTTP agents ──────────────────────────────────────────────────
     // Separate agents for metadata (short timeout) and download (long timeout).
@@ -138,9 +135,7 @@ pub fn download_file(
     // disk, so it gives us a stable, deterministic path for the .incomplete
     // file across resume attempts.
     {
-        let mut p = progress
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         p.status_msg = Some(format!("Fetching metadata for {filename}…"));
     }
 
@@ -157,11 +152,7 @@ pub fn download_file(
     // Find this specific file in the siblings list.
     let file_meta = info["siblings"]
         .as_array()
-        .and_then(|siblings| {
-            siblings
-                .iter()
-                .find(|e| e["rfilename"].as_str() == Some(filename))
-        })
+        .and_then(|siblings| siblings.iter().find(|e| e["rfilename"].as_str() == Some(filename)))
         .ok_or_else(|| anyhow::anyhow!("{filename}: not listed in {repo_id} manifest"))?;
 
     // LFS sha256 → the blob's content hash, used as the blob filename on disk.
@@ -170,9 +161,7 @@ pub fn download_file(
     let blob_sha: String = file_meta["lfs"]["sha256"]
         .as_str()
         .map(|s| s.trim_start_matches("sha256:").to_string())
-        .ok_or_else(|| {
-            anyhow::anyhow!("{filename}: LFS sha256 absent in manifest — is this a non-LFS file?")
-        })?;
+        .ok_or_else(|| anyhow::anyhow!("{filename}: LFS sha256 absent in manifest — is this a non-LFS file?"))?;
 
     let remote_size: u64 = file_meta["lfs"]["size"]
         .as_u64()
@@ -187,11 +176,8 @@ pub fn download_file(
         let on_disk = blob_path.metadata().map(|m| m.len()).unwrap_or(0);
         if on_disk >= remote_size {
             // Already fully downloaded — repair snapshot links if needed and return.
-            let final_path =
-                register_snapshot(&model_dir, &refs_dir, &commit_sha, filename, &blob_path)?;
-            let mut p = progress
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let final_path = register_snapshot(&model_dir, &refs_dir, &commit_sha, filename, &blob_path)?;
+            let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             p.state = DownloadState::Downloaded;
             p.status_msg = None;
             p.progress = 1.0;
@@ -206,9 +192,7 @@ pub fn download_file(
     let resume_from: u64 = incomplete_path.metadata().map(|m| m.len()).unwrap_or(0);
 
     {
-        let mut p = progress
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if resume_from > 0 {
             p.progress = (resume_from as f32 / remote_size as f32).min(0.99);
             p.status_msg = Some(format!(
@@ -275,9 +259,7 @@ pub fn download_file(
 
         // Update progress and honour cancellation inside the same lock acquisition
         // to avoid a TOCTOU race between reading and writing the flag.
-        let mut p = progress
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         p.progress = (written as f32 / total as f32).min(0.99);
         p.status_msg = Some(format!(
             "{:.0} / {:.0} MB",
@@ -317,9 +299,7 @@ pub fn download_file(
     let final_path = register_snapshot(&model_dir, &refs_dir, &commit_sha, filename, &blob_path)?;
 
     {
-        let mut p = progress
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         p.state = DownloadState::Downloaded;
         p.status_msg = None;
         p.progress = 1.0;
@@ -337,10 +317,7 @@ pub fn download_file(
 /// mapping overall progress across the entire set.
 ///
 /// Returns the path to the **first shard** — the one llama.cpp needs.
-pub fn download_model(
-    entry: &LlmModelEntry,
-    progress: &Arc<Mutex<DownloadProgress>>,
-) -> anyhow::Result<PathBuf> {
+pub fn download_model(entry: &LlmModelEntry, progress: &Arc<Mutex<DownloadProgress>>) -> anyhow::Result<PathBuf> {
     let filenames: Vec<&str> = entry.all_filenames().collect();
     let total_shards = filenames.len();
 
@@ -356,9 +333,7 @@ pub fn download_model(
     let per_shard_bytes = total_bytes / total_shards as u64;
 
     {
-        let mut p = progress
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         p.total_shards = total_shards as u16;
         p.current_shard = 1;
     }
@@ -368,9 +343,7 @@ pub fn download_model(
     for (i, shard_name) in filenames.iter().enumerate() {
         // Check cancellation between shards.
         {
-            let p = progress
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             if p.cancelled {
                 if p.pause_requested {
                     anyhow::bail!("paused")
@@ -404,21 +377,14 @@ pub fn download_model(
                     let sp = shard_prog_clone
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    (
-                        sp.state.clone(),
-                        sp.progress,
-                        sp.status_msg.clone(),
-                        sp.cancelled,
-                    )
+                    (sp.state.clone(), sp.progress, sp.status_msg.clone(), sp.cancelled)
                 };
 
                 // Map shard progress into overall range.
                 let overall_pct = (shard_idx as f32 + shard_pct) / n_shards as f32;
 
                 {
-                    let mut op = overall
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let mut op = overall.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                     op.progress = overall_pct.min(0.99);
                     op.current_shard = (shard_idx + 1) as u16;
                     op.total_shards = n_shards as u16;
@@ -460,9 +426,7 @@ pub fn download_model(
             }
             Err(e) => {
                 // Propagate the error state to the overall progress.
-                let mut op = progress
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let mut op = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 let msg = e.to_string();
                 if msg == "paused" {
                     op.state = DownloadState::Paused;
@@ -472,8 +436,7 @@ pub fn download_model(
                     op.status_msg = Some("Cancelled.".into());
                 } else {
                     op.state = DownloadState::Failed;
-                    op.status_msg =
-                        Some(format!("Shard {}/{} failed: {}", i + 1, total_shards, msg));
+                    op.status_msg = Some(format!("Shard {}/{} failed: {}", i + 1, total_shards, msg));
                 }
                 return Err(e);
             }
@@ -482,9 +445,7 @@ pub fn download_model(
 
     // All shards complete.
     {
-        let mut p = progress
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut p = progress.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         p.state = DownloadState::Downloaded;
         p.status_msg = None;
         p.progress = 1.0;
@@ -518,8 +479,7 @@ fn register_snapshot(
     let snapshot_dir = model_dir.join("snapshots").join(commit_sha);
     let snapshot_link = snapshot_dir.join(filename);
 
-    std::fs::create_dir_all(snapshot_link.parent().unwrap_or(&snapshot_dir))
-        .context("create snapshot dir")?;
+    std::fs::create_dir_all(snapshot_link.parent().unwrap_or(&snapshot_dir)).context("create snapshot dir")?;
 
     // Remove a stale link left by a previous (possibly failed) registration.
     if snapshot_link.exists() || snapshot_link.symlink_metadata().is_ok() {

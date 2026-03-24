@@ -18,8 +18,7 @@ use idun::prelude::*;
 use skill_constants::{EEG_CHANNELS, IDUN_CHANNEL_NAMES, IDUN_EEG_CHANNELS, IDUN_SAMPLE_RATE};
 
 use super::{
-    now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo,
-    EegFrame, ImuFrame,
+    now_secs, BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame,
 };
 
 // ── IdunAdapter ───────────────────────────────────────────────────────────────
@@ -36,8 +35,7 @@ pub struct IdunAdapter {
 
 impl IdunAdapter {
     pub fn new(rx: mpsc::Receiver<GuardianEvent>, handle: GuardianHandle) -> Self {
-        let channel_names: Vec<String> =
-            IDUN_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+        let channel_names: Vec<String> = IDUN_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
 
         Self {
             rx,
@@ -59,8 +57,7 @@ impl IdunAdapter {
     #[cfg(test)]
     #[allow(dead_code)]
     pub(crate) fn new_for_test(rx: mpsc::Receiver<GuardianEvent>) -> Self {
-        let channel_names: Vec<String> =
-            IDUN_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+        let channel_names: Vec<String> = IDUN_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
 
         Self {
             rx,

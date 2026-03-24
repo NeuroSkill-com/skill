@@ -31,12 +31,7 @@ pub fn init(
     skill_dir: &std::path::Path,
 ) -> Option<Arc<LlmServerState>> {
     if !config.enabled {
-        push_log(
-            &app,
-            &log_buf,
-            "info",
-            "LLM server disabled — skipping init",
-        );
+        push_log(&app, &log_buf, "info", "LLM server disabled — skipping init");
         return None;
     }
 
@@ -44,12 +39,7 @@ pub fn init(
         .active_model_path()
         .or_else(|| config.model_path.clone())
         .or_else(|| {
-            push_log(
-                &app,
-                &log_buf,
-                "warn",
-                "no model selected — LLM server disabled",
-            );
+            push_log(&app, &log_buf, "warn", "no model selected — LLM server disabled");
             None
         })?;
 
@@ -58,10 +48,7 @@ pub fn init(
             &app,
             &log_buf,
             "error",
-            &format!(
-                "model file not found: {} — LLM server disabled",
-                model_path.display()
-            ),
+            &format!("model file not found: {} — LLM server disabled", model_path.display()),
         );
         return None;
     }
@@ -81,11 +68,7 @@ pub fn init(
             let mmproj_repo = catalog
                 .entries
                 .iter()
-                .find(|e| {
-                    e.is_mmproj
-                        && (e.local_path.as_ref().is_some_and(|lp| lp == p)
-                            || e.filename == file_name)
-                })
+                .find(|e| e.is_mmproj && (e.local_path.as_ref().is_some_and(|lp| lp == p) || e.filename == file_name))
                 .map(|e| e.repo.as_str());
 
             if let Some(mm_repo) = mmproj_repo {
@@ -115,10 +98,7 @@ pub fn init(
                 &app,
                 &log_buf,
                 "warn",
-                &format!(
-                    "mmproj file not found (deleted?): {} — skipping vision",
-                    p.display()
-                ),
+                &format!("mmproj file not found (deleted?): {} — skipping vision", p.display()),
             );
             false
         });
@@ -188,12 +168,7 @@ pub fn init(
     let log_dir = skill_dir.join(LLM_LOG_DIR);
     let _ = std::fs::create_dir_all(&log_dir);
     let log_path = log_dir.join(format!("llm_{ts_secs}.txt"));
-    push_log(
-        &app,
-        &log_buf,
-        "info",
-        &format!("session log → {}", log_path.display()),
-    );
+    push_log(&app, &log_buf, "info", &format!("session log → {}", log_path.display()));
 
     let (req_tx, req_rx) = mpsc::unbounded_channel::<InferRequest>();
     let ready_flag = Arc::new(AtomicBool::new(false));
@@ -226,7 +201,7 @@ pub fn init(
                 ready2,
                 n_ctx2,
                 vision2,
-            )
+            );
         })
         .expect("failed to spawn llm-actor thread");
 
@@ -281,11 +256,7 @@ pub fn init(
         );
     }
     if n_skills > 0 {
-        let names: Vec<&str> = skills_result
-            .skills
-            .iter()
-            .map(|s| s.name.as_str())
-            .collect();
+        let names: Vec<&str> = skills_result.skills.iter().map(|s| s.name.as_str()).collect();
         push_log(
             &app,
             &log_buf,

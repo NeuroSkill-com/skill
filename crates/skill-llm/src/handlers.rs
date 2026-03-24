@@ -18,8 +18,8 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use super::engine::{
-    cell_status, run_chat_with_builtin_tools, ChatRequest, CompletionRequest, EmbeddingsRequest,
-    InferRequest, InferToken, LlmServerState, LlmStateCell, ToolEvent,
+    cell_status, run_chat_with_builtin_tools, ChatRequest, CompletionRequest, EmbeddingsRequest, InferRequest,
+    InferToken, LlmServerState, LlmStateCell, ToolEvent,
 };
 
 // ── Auth + cell-extraction helpers ────────────────────────────────────────────
@@ -65,11 +65,7 @@ macro_rules! require_auth {
 
 async fn health(State(cell): State<LlmStateCell>) -> Response {
     match &*cell.lock_or_recover() {
-        None => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"status":"stopped"})),
-        )
-            .into_response(),
+        None => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"status":"stopped"}))).into_response(),
         Some(s) => {
             let status = if s.is_ready() { "ok" } else { "loading" };
             Json(json!({"status": status, "model": s.model_name})).into_response()
@@ -183,11 +179,7 @@ async fn chat_completions(
                 .into_response()
             }
         }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
     }
 }
 
@@ -211,11 +203,7 @@ async fn completions(
 
     let prompt = match &req.prompt {
         Value::String(s) => s.clone(),
-        Value::Array(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect::<Vec<_>>()
-            .join("\n"),
+        Value::Array(arr) => arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join("\n"),
         _ => String::new(),
     };
     let (tok_tx, tok_rx) = mpsc::unbounded_channel();
@@ -244,17 +232,8 @@ async fn embeddings(
 
     let inputs: Vec<String> = match &req.input {
         Value::String(s) => vec![s.clone()],
-        Value::Array(arr) => arr
-            .iter()
-            .filter_map(|v| v.as_str().map(String::from))
-            .collect(),
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error":"invalid input"})),
-            )
-                .into_response()
-        }
+        Value::Array(arr) => arr.iter().filter_map(|v| v.as_str().map(String::from)).collect(),
+        _ => return (StatusCode::BAD_REQUEST, Json(json!({"error":"invalid input"}))).into_response(),
     };
 
     if !state.is_ready() {
@@ -281,26 +260,15 @@ async fn embeddings(
                 .collect();
             Json(json!({"object":"list","data":data,"model":state.model_name})).into_response()
         }
-        Ok(Err(e)) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": e.to_string()})),
-        )
-            .into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error":"actor died"})),
-        )
-            .into_response(),
+        Ok(Err(e)) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":"actor died"}))).into_response(),
     }
 }
 
 // ── Streaming helpers ─────────────────────────────────────────────────────────
 
 #[allow(dead_code)]
-async fn stream_chat_response(
-    mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
-    model_name: &str,
-) -> Response {
+async fn stream_chat_response(mut tok_rx: mpsc::UnboundedReceiver<InferToken>, model_name: &str) -> Response {
     let model_name = model_name.to_owned();
     let id = format!("chatcmpl-{}", short_id());
     let ts = unix_ts();
@@ -347,10 +315,7 @@ async fn stream_chat_response(
 }
 
 #[allow(dead_code)]
-async fn collect_chat_response(
-    mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
-    model_name: &str,
-) -> Response {
+async fn collect_chat_response(mut tok_rx: mpsc::UnboundedReceiver<InferToken>, model_name: &str) -> Response {
     let id = format!("chatcmpl-{}", short_id());
     let ts = unix_ts();
     let mut text = String::new();
@@ -375,11 +340,7 @@ async fn collect_chat_response(
                 break;
             }
             InferToken::Error(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": e.to_string()})),
-                )
-                    .into_response();
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response();
             }
         }
     }
@@ -401,10 +362,7 @@ async fn collect_chat_response(
     .into_response()
 }
 
-async fn stream_completion_response(
-    mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
-    model_name: &str,
-) -> Response {
+async fn stream_completion_response(mut tok_rx: mpsc::UnboundedReceiver<InferToken>, model_name: &str) -> Response {
     let model_name = model_name.to_owned();
     let id = format!("cmpl-{}", short_id());
     let ts = unix_ts();
@@ -445,10 +403,7 @@ async fn stream_completion_response(
         .into_response()
 }
 
-async fn collect_completion_response(
-    mut tok_rx: mpsc::UnboundedReceiver<InferToken>,
-    model_name: &str,
-) -> Response {
+async fn collect_completion_response(mut tok_rx: mpsc::UnboundedReceiver<InferToken>, model_name: &str) -> Response {
     let id = format!("cmpl-{}", short_id());
     let ts = unix_ts();
     let mut text = String::new();
@@ -457,18 +412,12 @@ async fn collect_completion_response(
     while let Some(tok) = tok_rx.recv().await {
         match tok {
             InferToken::Delta(t) => text.push_str(&t),
-            InferToken::Done {
-                finish_reason: fr, ..
-            } => {
+            InferToken::Done { finish_reason: fr, .. } => {
                 finish_reason = fr;
                 break;
             }
             InferToken::Error(e) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": e.to_string()})),
-                )
-                    .into_response();
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()}))).into_response();
             }
         }
     }

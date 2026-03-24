@@ -21,11 +21,7 @@ export interface LlmModelEntry {
  *
  * Priority: Q4_K_M > Q8_0 > Q4_0 > any Q4* > recommended > downloaded > first.
  */
-export function pickFamilyTarget(
-  entries: LlmModelEntry[],
-  familyId: string,
-  familyRe: RegExp,
-): LlmModelEntry | null {
+export function pickFamilyTarget(entries: LlmModelEntry[], familyId: string, familyRe: RegExp): LlmModelEntry | null {
   const family = entries.filter((e) => !e.is_mmproj && (e.family_id === familyId || familyRe.test(e.family_name)));
   if (!family.length) return null;
   const byQuant = (q: string) => family.find((e) => e.quant.toUpperCase() === q);
@@ -56,9 +52,7 @@ export function pickLlmTarget(entries: LlmModelEntry[]): LlmModelEntry | null {
   return (
     pickFamilyTarget(entries, "qwen35-4b", /qwen3\.5\s*4b/i) ??
     pickFamilyTarget(entries, "lfm25-vl-1.6b", /lfm2\.5.*1\.6b/i) ??
-    entries
-      .filter((e) => !e.is_mmproj && e.recommended)
-      .sort((a, b) => a.size_gb - b.size_gb)[0] ??
+    entries.filter((e) => !e.is_mmproj && e.recommended).sort((a, b) => a.size_gb - b.size_gb)[0] ??
     null
   );
 }

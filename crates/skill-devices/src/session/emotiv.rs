@@ -24,14 +24,9 @@ use emotiv::prelude::*;
 use emotiv::protocol::{
     CORTEX_CLOSE_SESSION, CORTEX_STOP_ALL_STREAMS, HEADSET_CONNECTION_FAILED, HEADSET_DISCONNECTED,
 };
-use skill_constants::{
-    emotiv_sample_rate_from_id, EEG_CHANNELS, EMOTIV_EPOC_CHANNEL_NAMES, EMOTIV_EPOC_EEG_CHANNELS,
-};
+use skill_constants::{emotiv_sample_rate_from_id, EEG_CHANNELS, EMOTIV_EPOC_CHANNEL_NAMES, EMOTIV_EPOC_EEG_CHANNELS};
 
-use super::{
-    BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame,
-    ImuFrame,
-};
+use super::{BatteryFrame, DeviceAdapter, DeviceCaps, DeviceDescriptor, DeviceEvent, DeviceInfo, EegFrame, ImuFrame};
 
 // ── EmotivAdapter ─────────────────────────────────────────────────────────────
 
@@ -112,17 +107,8 @@ impl EmotivAdapter {
         headset_id: String,
         initial_info: Option<DeviceInfo>,
     ) -> Self {
-        let channel_names: Vec<String> = EMOTIV_EPOC_CHANNEL_NAMES
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect();
-        let mut adapter = Self::new(
-            rx,
-            handle,
-            EMOTIV_EPOC_EEG_CHANNELS,
-            channel_names,
-            headset_id,
-        );
+        let channel_names: Vec<String> = EMOTIV_EPOC_CHANNEL_NAMES.iter().map(|s| (*s).to_owned()).collect();
+        let mut adapter = Self::new(rx, handle, EMOTIV_EPOC_EEG_CHANNELS, channel_names, headset_id);
         if let Some(info) = initial_info {
             adapter.pending.push_back(DeviceEvent::Connected(info));
         }
@@ -209,20 +195,12 @@ impl EmotivAdapter {
             CortexEvent::Motion(data) => {
                 // Cortex motion stream: [COUNTER, INTERP, Q0, Q1, Q2, Q3, ACCX, ACCY, ACCZ, MAGX, MAGY, MAGZ]
                 let accel = if data.samples.len() >= 9 {
-                    [
-                        data.samples[6] as f32,
-                        data.samples[7] as f32,
-                        data.samples[8] as f32,
-                    ]
+                    [data.samples[6] as f32, data.samples[7] as f32, data.samples[8] as f32]
                 } else {
                     [0.0; 3]
                 };
                 let mag = if data.samples.len() >= 12 {
-                    Some([
-                        data.samples[9] as f32,
-                        data.samples[10] as f32,
-                        data.samples[11] as f32,
-                    ])
+                    Some([data.samples[9] as f32, data.samples[10] as f32, data.samples[11] as f32])
                 } else {
                     None
                 };

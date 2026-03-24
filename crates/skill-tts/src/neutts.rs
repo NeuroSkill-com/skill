@@ -90,9 +90,7 @@ fn cfg_lock() -> &'static RwLock<RuntimeConfig> {
 }
 
 pub fn read_cfg() -> (String, Option<String>, String, String, String) {
-    let g = cfg_lock()
-        .read()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let g = cfg_lock().read().unwrap_or_else(std::sync::PoisonError::into_inner);
     (
         g.backbone_repo.clone(),
         g.gguf_file.clone(),
@@ -133,10 +131,7 @@ pub fn apply_config(cfg: &crate::config::NeuttsConfig) {
 
     if cfg.enabled && was_ready {
         READY.store(false, Ordering::Relaxed);
-        tts_log!(
-            "neutts",
-            "config updated \u{2014} will reinitialise on next tts_init"
-        );
+        tts_log!("neutts", "config updated \u{2014} will reinitialise on next tts_init");
     }
 }
 
@@ -232,8 +227,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                         }
                         Err(e) => {
                             LOADING.store(false, Ordering::Relaxed);
-                            done.send(Err(anyhow::anyhow!("neutts backbone load failed: {e}")))
-                                .ok();
+                            done.send(Err(anyhow::anyhow!("neutts backbone load failed: {e}"))).ok();
                             continue;
                         }
                     }
@@ -241,12 +235,10 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 
                 let Some(model_ref) = model.as_ref() else {
                     LOADING.store(false, Ordering::Relaxed);
-                    done.send(Err(anyhow::anyhow!("NeuTTS model not loaded")))
-                        .ok();
+                    done.send(Err(anyhow::anyhow!("NeuTTS model not loaded"))).ok();
                     continue;
                 };
-                let (codes, txt, vkey) =
-                    load_ref_codes(model_ref, &voice_preset, &ref_wav_path, &ref_text);
+                let (codes, txt, vkey) = load_ref_codes(model_ref, &voice_preset, &ref_wav_path, &ref_text);
                 ref_codes = codes;
                 ref_text_cached = txt;
                 loaded_voice_key = vkey;
@@ -324,15 +316,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 };
 
                 if let (Some(m), Some(s)) = (&model, &stream) {
-                    speak_cached(
-                        m,
-                        s,
-                        &text,
-                        &eff_codes,
-                        &eff_text,
-                        &loaded_backbone,
-                        &eff_vkey,
-                    );
+                    speak_cached(m, s, &text, &eff_codes, &eff_text, &loaded_backbone, &eff_vkey);
                 } else {
                     tts_log!("neutts", "speak skipped: no audio device");
                 }
@@ -363,10 +347,7 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
                 loaded_backbone.clear();
                 READY.store(false, Ordering::Relaxed);
                 LOADING.store(false, Ordering::Relaxed);
-                tts_log!(
-                    "neutts",
-                    "shutdown complete \u{2014} Metal context released"
-                );
+                tts_log!("neutts", "shutdown complete \u{2014} Metal context released");
                 done.send(()).ok();
                 // Exit the worker loop so the thread ends cleanly.
                 return;
@@ -381,23 +362,17 @@ fn worker(rx: std::sync::mpsc::Receiver<Cmd>) {
 // HuggingFace cache (~/.cache/huggingface/hub).
 // The *converted* neucodec_decoder.safetensors is written to skill_dir once.
 
-fn load<F>(
-    backbone_repo: &str,
-    gguf_file: Option<&str>,
-    mut on_progress: F,
-) -> anyhow::Result<neutts::NeuTTS>
+fn load<F>(backbone_repo: &str, gguf_file: Option<&str>, mut on_progress: F) -> anyhow::Result<neutts::NeuTTS>
 where
     F: FnMut(neutts::download::LoadProgress),
 {
     use neutts::download::{
-        convert_neucodec_checkpoint, find_model, LoadProgress, CODEC_DECODER_FILE,
-        CODEC_DECODER_REPO, CODEC_DECODER_SIZE_MB, CODEC_SOURCE_FILE,
+        convert_neucodec_checkpoint, find_model, LoadProgress, CODEC_DECODER_FILE, CODEC_DECODER_REPO,
+        CODEC_DECODER_SIZE_MB, CODEC_SOURCE_FILE,
     };
 
     let hf_cache = Cache::from_env();
-    let api = HfApiBuilder::new()
-        .build()
-        .context("Failed to init HF client")?;
+    let api = HfApiBuilder::new().build().context("Failed to init HF client")?;
 
     // ── Step 1/3: backbone GGUF → standard HF cache ───────────────────────────
     on_progress(LoadProgress::Fetching {
@@ -429,7 +404,7 @@ where
             total: 3,
             downloaded: dl,
             total_bytes: tot,
-        })
+        });
     })?;
 
     // ── Step 2/3: NeuCodec decoder → skill_dir (converted once) ──────────────
@@ -452,20 +427,14 @@ where
             repo: CODEC_DECODER_REPO.into(),
             size_mb: Some(CODEC_DECODER_SIZE_MB),
         });
-        let bin_path = hf_dl(
-            &api,
-            &hf_cache,
-            CODEC_DECODER_REPO,
-            CODEC_SOURCE_FILE,
-            |dl, tot| {
-                on_progress(LoadProgress::Downloading {
-                    step: 2,
-                    total: 3,
-                    downloaded: dl,
-                    total_bytes: tot,
-                })
-            },
-        )?;
+        let bin_path = hf_dl(&api, &hf_cache, CODEC_DECODER_REPO, CODEC_SOURCE_FILE, |dl, tot| {
+            on_progress(LoadProgress::Downloading {
+                step: 2,
+                total: 3,
+                downloaded: dl,
+                total_bytes: tot,
+            });
+        })?;
         on_progress(LoadProgress::Loading {
             step: 2,
             total: 3,
@@ -486,8 +455,7 @@ where
         .map(|m| m.language)
         .unwrap_or("en-us")
         .to_string();
-    neutts::NeuTTS::load_with_decoder(&backbone_path, &decoder_path, &language)
-        .context("failed to load NeuTTS")
+    neutts::NeuTTS::load_with_decoder(&backbone_path, &decoder_path, &language).context("failed to load NeuTTS")
 }
 
 /// HuggingFace download with byte-level progress, checking `cache` first.
@@ -544,12 +512,7 @@ fn hf_dl<F: FnMut(u64, u64)>(
 //   custom  → `"custom-{sha256_of_wav_file}"`
 //   default → `"default"`
 
-fn load_ref_codes(
-    model: &neutts::NeuTTS,
-    preset: &str,
-    wav_path: &str,
-    ref_text: &str,
-) -> (Vec<i32>, String, String) {
+fn load_ref_codes(model: &neutts::NeuTTS, preset: &str, wav_path: &str, ref_text: &str) -> (Vec<i32>, String, String) {
     // ── Preset voice ──────────────────────────────────────────────────────────
     if !preset.is_empty() {
         let base = samples_dir();
@@ -560,18 +523,10 @@ fn load_ref_codes(
                 let text = std::fs::read_to_string(&txt)
                     .map(|s| s.trim().to_string())
                     .unwrap_or_default();
-                tts_log!(
-                    "neutts",
-                    "preset voice '{preset}' loaded ({} tokens)",
-                    codes.len()
-                );
+                tts_log!("neutts", "preset voice '{preset}' loaded ({} tokens)", codes.len());
                 return (codes, text, preset.to_string());
             }
-            Err(e) => tts_log!(
-                "neutts",
-                "preset '{preset}' not found at {}: {e}",
-                npy.display()
-            ),
+            Err(e) => tts_log!("neutts", "preset '{preset}' not found at {}: {e}", npy.display()),
         }
     }
 
@@ -586,8 +541,7 @@ fn load_ref_codes(
             .map_err(|e| tts_log!("neutts", "ref-code cache open failed: {e}"))
             .ok();
 
-        if let Some((codes, outcome)) = cache.as_ref().and_then(|c| c.try_load(path).ok().flatten())
-        {
+        if let Some((codes, outcome)) = cache.as_ref().and_then(|c| c.try_load(path).ok().flatten()) {
             tts_log!("neutts", "custom voice ref-code cache hit: {outcome}");
             return (codes, ref_text.to_string(), voice_key);
         }
@@ -618,12 +572,7 @@ fn load_ref_codes(
 
 // ─── Synthesis ────────────────────────────────────────────────────────────────
 
-fn synthesize(
-    model: &neutts::NeuTTS,
-    text: &str,
-    ref_codes: &[i32],
-    ref_text: &str,
-) -> anyhow::Result<Vec<f32>> {
+fn synthesize(model: &neutts::NeuTTS, text: &str, ref_codes: &[i32], ref_text: &str) -> anyhow::Result<Vec<f32>> {
     let t0 = std::time::Instant::now();
     let audio = model
         .infer(text, ref_codes, ref_text)
@@ -672,11 +621,7 @@ fn speak_cached(
     let cache_path = wav_cache_path(backbone, voice_key, text);
 
     if cache_path.exists() {
-        tts_log!(
-            "neutts",
-            "WAV cache hit \u{2014} playing {}",
-            cache_path.display()
-        );
+        tts_log!("neutts", "WAV cache hit \u{2014} playing {}", cache_path.display());
         play_wav(stream, &cache_path);
         return;
     }
@@ -753,16 +698,8 @@ pub fn progress_to_event(p: neutts::download::LoadProgress) -> crate::TtsProgres
         } => crate::TtsProgressEvent::step(
             step,
             total,
-            format!(
-                "Downloading… {}/{} MB",
-                downloaded / 1_048_576,
-                total_bytes / 1_048_576
-            ),
+            format!("Downloading… {}/{} MB", downloaded / 1_048_576, total_bytes / 1_048_576),
         ),
-        NP::Loading {
-            step,
-            total,
-            component,
-        } => crate::TtsProgressEvent::step(step, total, component),
+        NP::Loading { step, total, component } => crate::TtsProgressEvent::step(step, total, component),
     }
 }

@@ -110,11 +110,7 @@ pub struct RoundedScores {
 // ── Embedding / label loaders ─────────────────────────────────────────────────
 
 /// Load all embedding vectors from daily SQLite DBs in [start, end] UTC range.
-pub fn load_embeddings_range(
-    skill_dir: &Path,
-    start_utc: u64,
-    end_utc: u64,
-) -> Vec<(u64, Vec<f32>)> {
+pub fn load_embeddings_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<(u64, Vec<f32>)> {
     let ts_start = unix_to_ts(start_utc);
     let ts_end = unix_to_ts(end_utc);
 
@@ -160,11 +156,7 @@ pub fn load_embeddings_range(
 
 /// Load all labels from `labels.sqlite` whose EEG window overlaps [start, end].
 /// Returns Vec<(eeg_start_unix, eeg_end_unix, text)>.
-pub fn load_labels_range(
-    skill_dir: &Path,
-    start_utc: u64,
-    end_utc: u64,
-) -> Vec<(u64, u64, String)> {
+pub fn load_labels_range(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Vec<(u64, u64, String)> {
     let labels_db = skill_dir.join(LABELS_FILE);
     if !labels_db.exists() {
         return vec![];
@@ -217,16 +209,8 @@ pub fn analyze_umap_points(
     let (mut ca, mut cb) = ([0.0f64; 3], [0.0f64; 3]);
     let (mut na, mut nb) = (0usize, 0usize);
     for i in 0..n {
-        let c = if session_ids[i] == 0 {
-            &mut ca
-        } else {
-            &mut cb
-        };
-        let cnt = if session_ids[i] == 0 {
-            &mut na
-        } else {
-            &mut nb
-        };
+        let c = if session_ids[i] == 0 { &mut ca } else { &mut cb };
+        let cnt = if session_ids[i] == 0 { &mut na } else { &mut nb };
         for d in 0..3 {
             c[d] += embedding[i][d];
         }
@@ -243,8 +227,7 @@ pub fn analyze_umap_points(
         }
     }
 
-    let inter_dist =
-        ((ca[0] - cb[0]).powi(2) + (ca[1] - cb[1]).powi(2) + (ca[2] - cb[2]).powi(2)).sqrt();
+    let inter_dist = ((ca[0] - cb[0]).powi(2) + (ca[1] - cb[1]).powi(2) + (ca[2] - cb[2]).powi(2)).sqrt();
 
     let dist_to = |pt: &[f64], c: &[f64; 3]| -> f64 {
         ((pt[0] - c[0]).powi(2) + (pt[1] - c[1]).powi(2) + (pt[2] - c[2]).powi(2)).sqrt()
@@ -265,11 +248,7 @@ pub fn analyze_umap_points(
     }
 
     let avg_intra = (spread_a + spread_b) / 2.0;
-    let separation = if avg_intra > 1e-9 {
-        inter_dist / avg_intra
-    } else {
-        0.0
-    };
+    let separation = if avg_intra > 1e-9 { inter_dist / avg_intra } else { 0.0 };
 
     let mut all_dists_a: Vec<f64> = Vec::new();
     let mut all_dists_b: Vec<f64> = Vec::new();
@@ -343,13 +322,7 @@ pub fn umap_cache_dir(skill_dir: &Path) -> PathBuf {
 }
 
 /// Build a deterministic cache filename for a session-pair UMAP result.
-pub fn umap_cache_path(
-    skill_dir: &Path,
-    a_start: u64,
-    a_end: u64,
-    b_start: u64,
-    b_end: u64,
-) -> PathBuf {
+pub fn umap_cache_path(skill_dir: &Path, a_start: u64, a_end: u64, b_start: u64, b_end: u64) -> PathBuf {
     umap_cache_dir(skill_dir).join(format!("umap_{a_start}_{a_end}_{b_start}_{b_end}.json"))
 }
 
@@ -382,8 +355,7 @@ pub fn umap_cache_store(path: &Path, value: &serde_json::Value) {
 // ── UMAP compute ──────────────────────────────────────────────────────────────
 
 /// Backend type alias used by fast-umap (GPU-accelerated via wgpu / CubeCL).
-type FastUmapBackend =
-    burn::backend::Autodiff<burn_cubecl::CubeBackend<cubecl::wgpu::WgpuRuntime, f32, i32, u32>>;
+type FastUmapBackend = burn::backend::Autodiff<burn_cubecl::CubeBackend<cubecl::wgpu::WgpuRuntime, f32, i32, u32>>;
 
 /// Inner UMAP compute — shared by both WS and Tauri IPC paths.
 ///
@@ -425,11 +397,7 @@ pub fn umap_compute_inner(
         return Ok(serde_json::json!({ "points": [], "n_a": n_a, "n_b": n_b, "dim": 0 }));
     }
 
-    let dim = embs_a
-        .first()
-        .or(embs_b.first())
-        .map(|e| e.1.len())
-        .unwrap_or(0);
+    let dim = embs_a.first().or(embs_b.first()).map(|e| e.1.len()).unwrap_or(0);
     if dim == 0 {
         return Ok(serde_json::json!({ "points": [], "n_a": n_a, "n_b": n_b, "dim": 0 }));
     }
@@ -449,12 +417,7 @@ pub fn umap_compute_inner(
         labels.push(if timestamps.len() <= n_a { 0 } else { 1 });
     }
 
-    let k = ucfg
-        .n_neighbors
-        .clamp(2, 50)
-        .min(n_use - 1)
-        .min(n_use / 2)
-        .max(2);
+    let k = ucfg.n_neighbors.clamp(2, 50).min(n_use - 1).min(n_use / 2).max(2);
     let n_epochs = ucfg.n_epochs.clamp(50, 2000);
 
     let config = fast_umap::UmapConfig {

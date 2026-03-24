@@ -32,8 +32,8 @@ use serde::Serialize;
 
 use skill_commands::{unix_to_ts, NeighborMetrics};
 use skill_constants::{
-    HNSW_EF_CONSTRUCTION, HNSW_M, LABELS_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_EEG_INDEX_FILE,
-    LABEL_TEXT_INDEX_FILE, SQLITE_FILE,
+    HNSW_EF_CONSTRUCTION, HNSW_M, LABELS_FILE, LABEL_CONTEXT_INDEX_FILE, LABEL_EEG_INDEX_FILE, LABEL_TEXT_INDEX_FILE,
+    SQLITE_FILE,
 };
 use skill_data::util::MutexExt;
 
@@ -44,21 +44,14 @@ const EEG_INDEX_FILE: &str = LABEL_EEG_INDEX_FILE;
 const HNSW_EF: usize = HNSW_EF_CONSTRUCTION;
 
 fn fresh_index() -> LabeledIndex<Cosine, i64> {
-    Builder::new()
-        .m(HNSW_M)
-        .ef_construction(HNSW_EF)
-        .build_labeled(Cosine)
+    Builder::new().m(HNSW_M).ef_construction(HNSW_EF).build_labeled(Cosine)
 }
 
 fn load_or_fresh(path: &Path) -> LabeledIndex<Cosine, i64> {
     if path.exists() {
         match LabeledIndex::load(path, Cosine) {
             Ok(idx) => {
-                eprintln!(
-                    "[label_idx] loaded {} ({} nodes)",
-                    path.display(),
-                    idx.len()
-                );
+                eprintln!("[label_idx] loaded {} ({} nodes)", path.display(), idx.len());
                 idx
             }
             Err(e) => {
@@ -198,11 +191,7 @@ pub fn mean_eeg_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Op
 }
 
 /// Fetch EEG metrics averaged over `[eeg_start, eeg_end]` for label hydration.
-fn mean_metrics_for_window(
-    skill_dir: &Path,
-    eeg_start: u64,
-    eeg_end: u64,
-) -> Option<NeighborMetrics> {
+fn mean_metrics_for_window(skill_dir: &Path, eeg_start: u64, eeg_end: u64) -> Option<NeighborMetrics> {
     let ts_start = unix_to_ts(eeg_start);
     let ts_end = unix_to_ts(eeg_end);
 
@@ -457,7 +446,9 @@ pub fn rebuild(skill_dir: &Path, state: &LabelIndexState) -> RebuildStats {
     *state.context.lock_or_recover() = Some(context_idx);
     *state.eeg.lock_or_recover() = Some(eeg_idx);
 
-    eprintln!("[label_idx] rebuilt: {text_nodes} text, {context_nodes} context, {eeg_nodes} eeg ({eeg_skipped} skipped)");
+    eprintln!(
+        "[label_idx] rebuilt: {text_nodes} text, {context_nodes} context, {eeg_nodes} eeg ({eeg_skipped} skipped)"
+    );
     RebuildStats {
         text_nodes,
         eeg_nodes,
@@ -663,7 +654,8 @@ mod tests {
             "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at)
              VALUES (42, 100, 200, 100, 200, 'test label', '', 1000)",
             [],
-        ).unwrap();
+        )
+        .unwrap();
 
         let dim = 8;
         let embedding = vec![1.0f32; dim];
@@ -707,8 +699,9 @@ mod tests {
             "INSERT INTO labels (id, eeg_start, eeg_end, wall_start, wall_end, text, context, created_at) VALUES
              (1, 100, 200, 100, 200, 'alpha', '', 1000),
              (2, 200, 300, 200, 300, 'beta', '', 2000),
-             (3, 300, 400, 300, 400, 'gamma', '', 3000);"
-        ).unwrap();
+             (3, 300, 400, 300, 400, 'gamma', '', 3000);",
+        )
+        .unwrap();
 
         // Insert 3 labels with different embeddings
         insert_label(dir.path(), 1, &[1.0, 0.0, 0.0, 0.0], &[], 100, 200, &state);

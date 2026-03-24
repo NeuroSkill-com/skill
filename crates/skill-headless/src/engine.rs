@@ -34,9 +34,7 @@ use wry::WebViewBuilderExtUnix;
 
 use crate::command::Command;
 use crate::error::HeadlessError;
-use crate::intercept::{
-    self, InterceptStore, InterceptedRequest, InterceptedResponse, NavigationEvent,
-};
+use crate::intercept::{self, InterceptStore, InterceptedRequest, InterceptedResponse, NavigationEvent};
 use crate::response::Response;
 use crate::session::Cookie;
 
@@ -189,9 +187,7 @@ impl Browser {
     /// headless browser is unavailable (macOS inside Tauri).
     ///
     /// The function signature is `(url: &str, wait_ms: u64) -> Result<String, String>`.
-    pub fn set_external_renderer(
-        f: impl Fn(&str, u64) -> Result<String, String> + Send + Sync + 'static,
-    ) {
+    pub fn set_external_renderer(f: impl Fn(&str, u64) -> Result<String, String> + Send + Sync + 'static) {
         let _ = EXTERNAL_RENDERER.set(Box::new(f));
     }
 
@@ -206,8 +202,7 @@ impl Browser {
         // `Browser::set_unavailable()` at startup to prevent this.
         if HEADLESS_UNAVAILABLE.load(Ordering::Relaxed) {
             return Err(HeadlessError::InitFailed(
-                "headless browser unavailable: main event loop is owned by the host application"
-                    .into(),
+                "headless browser unavailable: main event loop is owned by the host application".into(),
             ));
         }
 
@@ -232,11 +227,7 @@ impl Browser {
             .map_err(|_| HeadlessError::InitFailed("event loop did not start in time".into()))?
             .map_err(HeadlessError::InitFailed)?;
 
-        Ok(Self {
-            proxy,
-            timeout,
-            closed,
-        })
+        Ok(Self { proxy, timeout, closed })
     }
 
     /// Send a command and wait for the response (blocking).
@@ -324,10 +315,7 @@ fn run_event_loop(
         .map_err(|e| HeadlessError::InitFailed(e.to_string()))?;
 
     // Optional persistent web context for data directory / cache.
-    let mut web_context = config
-        .data_dir
-        .as_ref()
-        .map(|dir| WebContext::new(Some(dir.clone())));
+    let mut web_context = config.data_dir.as_ref().map(|dir| WebContext::new(Some(dir.clone())));
 
     // IPC handler: used by async JS operations that need to return results
     // after Promises resolve.  The JS side calls `window.ipc.postMessage(id:result)`.
@@ -487,9 +475,7 @@ fn run_event_loop(
             Event::UserEvent(UserEvent::Command(envelope)) => {
                 let Envelope { command, reply } = envelope;
 
-                let wv_guard = webview
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let wv_guard = webview.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 if let Some(ref wv) = *wv_guard {
                     execute_command(
                         wv,
@@ -686,9 +672,7 @@ fn execute_command(
         }
 
         Command::PrintToPdf => {
-            let _ = reply.send(Response::Error(
-                "PDF printing not supported by wry backend".into(),
-            ));
+            let _ = reply.send(Response::Error("PDF printing not supported by wry backend".into()));
         }
 
         // ── Runtime ──────────────────────────────────────────────────────
@@ -729,9 +713,8 @@ fn execute_command(
 
         Command::QuerySelector { selector } => {
             let sel = js_escape(selector);
-            let script = format!(
-                r#"JSON.stringify(Array.from(document.querySelectorAll('{sel}')).map(e => e.outerHTML))"#
-            );
+            let script =
+                format!(r#"JSON.stringify(Array.from(document.querySelectorAll('{sel}')).map(e => e.outerHTML))"#);
             eval_with_cb(wv, &script, reply);
         }
 
@@ -743,10 +726,7 @@ fn execute_command(
             eval_with_cb(wv, &script, reply);
         }
 
-        Command::GetAttribute {
-            selector,
-            attribute,
-        } => {
+        Command::GetAttribute { selector, attribute } => {
             let sel = js_escape(selector);
             let attr = js_escape(attribute);
             let script = format!(
@@ -846,9 +826,7 @@ fn execute_command(
             };
             eval_fire(
                 wv,
-                &format!(
-                    "document.cookie = '{n}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/{domain_part}'"
-                ),
+                &format!("document.cookie = '{n}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/{domain_part}'"),
                 &reply,
             );
         }
@@ -914,9 +892,7 @@ fn execute_command(
         }
 
         Command::SetJsEnabled { enabled: _ } => {
-            let _ = reply.send(Response::Error(
-                "toggling JS at runtime is not supported by wry".into(),
-            ));
+            let _ = reply.send(Response::Error("toggling JS at runtime is not supported by wry".into()));
         }
 
         // ── Cache ────────────────────────────────────────────────────────
@@ -961,10 +937,7 @@ fn execute_command(
         }
 
         // ── Waiting ──────────────────────────────────────────────────────
-        Command::WaitForSelector {
-            selector,
-            timeout_ms,
-        } => {
+        Command::WaitForSelector { selector, timeout_ms } => {
             let sel = js_escape(selector);
             eval_async_ipc(
                 wv,
@@ -1028,9 +1001,7 @@ fn execute_command(
         }
 
         Command::SetBlockedUrls { patterns } => {
-            *blocked_urls
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = patterns.clone();
+            *blocked_urls.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = patterns.clone();
             let _ = reply.send(Response::Ok);
         }
 

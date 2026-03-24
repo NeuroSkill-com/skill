@@ -211,9 +211,7 @@ mod mw75_tests {
             counter: 1,
             ref_value: 0.0,
             drl: 0.0,
-            channels: vec![
-                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
-            ],
+            channels: vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0],
             checksum_valid: true,
             feature_status: 0,
         }))
@@ -263,9 +261,7 @@ mod mw75_tests {
     async fn mw75_connected_event() {
         let (tx, rx) = mpsc::channel(16);
 
-        tx.send(Mw75Event::Connected("MW75 Neuro".to_string()))
-            .await
-            .unwrap();
+        tx.send(Mw75Event::Connected("MW75 Neuro".to_string())).await.unwrap();
         drop(tx);
 
         let mut adapter = Mw75Adapter::new_for_test(rx, None);
@@ -365,14 +361,12 @@ mod hermes_tests {
     async fn hermes_translates_eeg_event() {
         let (tx, rx) = mpsc::channel(16);
 
-        tx.send(hermes_ble::prelude::HermesEvent::Eeg(
-            hermes_ble::types::EegSample {
-                packet_index: 0,
-                sample_index: 0,
-                timestamp: 5000.0, // ms
-                channels: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
-            },
-        ))
+        tx.send(hermes_ble::prelude::HermesEvent::Eeg(hermes_ble::types::EegSample {
+            packet_index: 0,
+            sample_index: 0,
+            timestamp: 5000.0, // ms
+            channels: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+        }))
         .await
         .unwrap();
         drop(tx);
@@ -398,21 +392,9 @@ mod hermes_tests {
         tx.send(hermes_ble::prelude::HermesEvent::Motion(
             hermes_ble::types::MotionData {
                 timestamp: 1000.0,
-                accel: hermes_ble::types::XyzSample {
-                    x: 0.1,
-                    y: 0.2,
-                    z: 9.8,
-                },
-                gyro: hermes_ble::types::XyzSample {
-                    x: 1.0,
-                    y: 2.0,
-                    z: 3.0,
-                },
-                mag: hermes_ble::types::XyzSample {
-                    x: 0.5,
-                    y: 0.5,
-                    z: 0.5,
-                },
+                accel: hermes_ble::types::XyzSample { x: 0.1, y: 0.2, z: 9.8 },
+                gyro: hermes_ble::types::XyzSample { x: 1.0, y: 2.0, z: 3.0 },
+                mag: hermes_ble::types::XyzSample { x: 0.5, y: 0.5, z: 0.5 },
             },
         ))
         .await
@@ -440,9 +422,7 @@ mod hermes_tests {
         tx.send(hermes_ble::prelude::HermesEvent::PacketsDropped(5))
             .await
             .unwrap();
-        tx.send(hermes_ble::prelude::HermesEvent::Disconnected)
-            .await
-            .unwrap();
+        tx.send(hermes_ble::prelude::HermesEvent::Disconnected).await.unwrap();
         drop(tx);
 
         let mut adapter = HermesAdapter::new_for_test(rx);
@@ -480,9 +460,7 @@ mod emotiv_tests {
     async fn emotiv_translates_eeg_event() {
         let (tx, rx) = mpsc::channel(16);
 
-        tx.send(CortexEvent::SessionCreated("ses-1".into()))
-            .await
-            .unwrap();
+        tx.send(CortexEvent::SessionCreated("ses-1".into())).await.unwrap();
         tx.send(CortexEvent::Eeg(EegData {
             samples: vec![1.0, 2.0, 3.0, 4.0, 5.0],
             time: 1700000000.0,
@@ -551,9 +529,7 @@ mod emotiv_tests {
     async fn emotiv_error_triggers_disconnect() {
         let (tx, rx) = mpsc::channel(16);
 
-        tx.send(CortexEvent::Error("connection lost".into()))
-            .await
-            .unwrap();
+        tx.send(CortexEvent::Error("connection lost".into())).await.unwrap();
         drop(tx);
 
         let names: Vec<String> = (0..5).map(|i| format!("Ch{i}")).collect();
@@ -627,12 +603,7 @@ mod openbci_tests {
 
     #[test]
     fn make_descriptor_large_channel_count_capped() {
-        let desc = OpenBciAdapter::make_descriptor(
-            "galea",
-            24,
-            250.0,
-            (0..24).map(|i| format!("Ch{i}")).collect(),
-        );
+        let desc = OpenBciAdapter::make_descriptor("galea", 24, 250.0, (0..24).map(|i| format!("Ch{i}")).collect());
         assert_eq!(desc.eeg_channels, 24);
         assert_eq!(desc.pipeline_channels, skill_constants::EEG_CHANNELS);
     }

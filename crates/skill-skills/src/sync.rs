@@ -17,8 +17,7 @@ use serde::{Deserialize, Serialize};
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /// Default GitHub tarball URL (public, no auth required).
-const SKILLS_TARBALL_URL: &str =
-    "https://github.com/NeuroSkill-com/skills/archive/refs/heads/main.tar.gz";
+const SKILLS_TARBALL_URL: &str = "https://github.com/NeuroSkill-com/skills/archive/refs/heads/main.tar.gz";
 
 /// Sidecar written next to the extracted skills directory.
 const LAST_SYNC_FILE: &str = ".skills_last_sync";
@@ -42,10 +41,7 @@ struct SyncMeta {
 #[derive(Debug, Clone)]
 pub enum SyncOutcome {
     /// Skills were downloaded and extracted successfully.
-    Updated {
-        skills_dir: PathBuf,
-        elapsed_ms: u64,
-    },
+    Updated { skills_dir: PathBuf, elapsed_ms: u64 },
     /// Skipped because the last sync is still fresh.
     Fresh { next_sync_in_secs: u64 },
     /// An error occurred.

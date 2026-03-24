@@ -54,9 +54,7 @@ fn main() {
     });
 
     test!("GetInterceptedRequests returns empty log initially", {
-        let resp = browser
-            .send(Command::GetInterceptedRequests { clear: false })
-            .unwrap();
+        let resp = browser.send(Command::GetInterceptedRequests { clear: false }).unwrap();
         let log = resp.as_network().expect("expected Network response");
         assert!(log.requests.is_empty(), "expected no requests");
         assert!(log.responses.is_empty(), "expected no responses");
@@ -69,9 +67,7 @@ fn main() {
 
     test!("Intercepts fetch() GET request", {
         // Clear any prior data
-        browser
-            .send(Command::GetInterceptedRequests { clear: true })
-            .unwrap();
+        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
 
         // Make a fetch call (will fail to connect, but we still intercept it)
         browser
@@ -81,15 +77,9 @@ fn main() {
             .unwrap();
         std::thread::sleep(Duration::from_millis(1000));
 
-        let resp = browser
-            .send(Command::GetInterceptedRequests { clear: false })
-            .unwrap();
+        let resp = browser.send(Command::GetInterceptedRequests { clear: false }).unwrap();
         let log = resp.as_network().unwrap();
-        println!(
-            "  (reqs: {}, resps: {})",
-            log.requests.len(),
-            log.responses.len()
-        );
+        println!("  (reqs: {}, resps: {})", log.requests.len(), log.responses.len());
         assert!(!log.requests.is_empty(), "expected at least 1 request");
 
         let req = &log.requests[0];
@@ -100,9 +90,7 @@ fn main() {
     });
 
     test!("Intercepts fetch() POST request with body", {
-        browser
-            .send(Command::GetInterceptedRequests { clear: true })
-            .unwrap();
+        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
 
         browser
             .send(Command::EvalJsNoReturn {
@@ -129,11 +117,7 @@ fn main() {
         let req = &log.requests[0];
         assert_eq!(req.method, "POST");
         assert!(req.body.contains("hello"), "body: {}", req.body);
-        assert!(
-            req.headers.contains("application/json"),
-            "headers: {}",
-            req.headers
-        );
+        assert!(req.headers.contains("application/json"), "headers: {}", req.headers);
     });
 
     // ══════════════════════════════════════════════════════════════════════
@@ -142,9 +126,7 @@ fn main() {
     println!("\n── XHR Interception ────────────────────────────────────────\n");
 
     test!("Intercepts XMLHttpRequest", {
-        browser
-            .send(Command::GetInterceptedRequests { clear: true })
-            .unwrap();
+        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
 
         browser
             .send(Command::EvalJsNoReturn {
@@ -165,11 +147,7 @@ fn main() {
             .as_network()
             .unwrap()
             .clone();
-        println!(
-            "  (reqs: {}, resps: {})",
-            log.requests.len(),
-            log.responses.len()
-        );
+        println!("  (reqs: {}, resps: {})", log.requests.len(), log.responses.len());
         assert!(!log.requests.is_empty(), "expected XHR request");
 
         let req = &log.requests[0];
@@ -184,9 +162,7 @@ fn main() {
     println!("\n── Navigation Events ───────────────────────────────────────\n");
 
     test!("Navigation events are captured", {
-        browser
-            .send(Command::GetInterceptedRequests { clear: true })
-            .unwrap();
+        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
 
         // The custom protocol load should have generated navigation events.
         // Let's trigger one explicitly.
@@ -217,9 +193,7 @@ fn main() {
     println!("\n── URL Blocking ────────────────────────────────────────────\n");
 
     test!("SetBlockedUrls blocks matching navigations", {
-        browser
-            .send(Command::GetInterceptedRequests { clear: true })
-            .unwrap();
+        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
 
         browser
             .send(Command::SetBlockedUrls {
@@ -242,21 +216,13 @@ fn main() {
             .unwrap()
             .clone();
 
-        let blocked_nav = log
-            .navigations
-            .iter()
-            .find(|n| n.url.contains("blocked-domain"));
+        let blocked_nav = log.navigations.iter().find(|n| n.url.contains("blocked-domain"));
         assert!(blocked_nav.is_some(), "expected blocked nav event");
-        assert!(
-            !blocked_nav.unwrap().allowed,
-            "expected navigation to be blocked"
-        );
+        assert!(!blocked_nav.unwrap().allowed, "expected navigation to be blocked");
     });
 
     test!("Non-blocked URLs still pass through", {
-        browser
-            .send(Command::GetInterceptedRequests { clear: true })
-            .unwrap();
+        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
 
         browser
             .send(Command::Navigate {
@@ -272,19 +238,14 @@ fn main() {
             .unwrap()
             .clone();
 
-        let nav = log
-            .navigations
-            .iter()
-            .find(|n| n.url.contains("allowed-page"));
+        let nav = log.navigations.iter().find(|n| n.url.contains("allowed-page"));
         assert!(nav.is_some(), "expected allowed nav event");
         assert!(nav.unwrap().allowed, "expected navigation to be allowed");
     });
 
     test!("ClearBlockedUrls unblocks everything", {
         browser.send(Command::ClearBlockedUrls).unwrap();
-        browser
-            .send(Command::GetInterceptedRequests { clear: true })
-            .unwrap();
+        browser.send(Command::GetInterceptedRequests { clear: true }).unwrap();
 
         browser
             .send(Command::Navigate {
@@ -300,15 +261,9 @@ fn main() {
             .unwrap()
             .clone();
 
-        let nav = log
-            .navigations
-            .iter()
-            .find(|n| n.url.contains("after-clear"));
+        let nav = log.navigations.iter().find(|n| n.url.contains("after-clear"));
         assert!(nav.is_some(), "expected nav after clear");
-        assert!(
-            nav.unwrap().allowed,
-            "expected navigation allowed after clear"
-        );
+        assert!(nav.unwrap().allowed, "expected navigation allowed after clear");
     });
 
     // ══════════════════════════════════════════════════════════════════════
@@ -339,18 +294,9 @@ fn main() {
             .as_network()
             .unwrap()
             .clone();
-        assert!(
-            log2.requests.is_empty(),
-            "requests should be empty after clear"
-        );
-        assert!(
-            log2.responses.is_empty(),
-            "responses should be empty after clear"
-        );
-        assert!(
-            log2.navigations.is_empty(),
-            "navigations should be empty after clear"
-        );
+        assert!(log2.requests.is_empty(), "requests should be empty after clear");
+        assert!(log2.responses.is_empty(), "responses should be empty after clear");
+        assert!(log2.navigations.is_empty(), "navigations should be empty after clear");
     });
 
     // ══════════════════════════════════════════════════════════════════════

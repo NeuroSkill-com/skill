@@ -235,5 +235,6 @@ pub fn interception_init_script() -> String {
             return __origXHRSend.apply(this, arguments);
         };
     })();
-    "#.to_string()
+    "#
+    .to_string()
 }

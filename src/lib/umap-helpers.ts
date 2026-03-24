@@ -126,7 +126,7 @@ export function normalise(pts: UmapPoint[]): Float32Array {
   for (const p of pts) {
     mx += p.x;
     my += p.y;
-    mz += p.z;
+    mz += p.z ?? 0;
   }
   mx /= n;
   my /= n;
@@ -135,14 +135,14 @@ export function normalise(pts: UmapPoint[]): Float32Array {
   for (const p of pts) {
     const dx = p.x - mx,
       dy = p.y - my,
-      dz = p.z - mz;
+      dz = (p.z ?? 0) - mz;
     maxR = Math.max(maxR, Math.sqrt(dx * dx + dy * dy + dz * dz));
   }
   if (maxR < 1e-8) maxR = 1;
   for (let i = 0; i < n; i++) {
     pos[i * 3] = (pts[i].x - mx) / maxR;
     pos[i * 3 + 1] = (pts[i].y - my) / maxR;
-    pos[i * 3 + 2] = (pts[i].z - mz) / maxR;
+    pos[i * 3 + 2] = ((pts[i].z ?? 0) - mz) / maxR;
   }
   return pos;
 }

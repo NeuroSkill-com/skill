@@ -31,9 +31,7 @@ use crate::types::LlmToolConfig;
 
 // Re-export public API items that were previously accessible from `exec`.
 pub use helpers::{resolve_tool_path, retry_with_backoff};
-pub use safety::{
-    check_bash_safety, check_path_safety, request_tool_approval, set_bash_edit_hook, BashEditHook,
-};
+pub use safety::{check_bash_safety, check_path_safety, request_tool_approval, set_bash_edit_hook, BashEditHook};
 pub use truncate::truncate_text;
 
 // ── Public execution entry point ──────────────────────────────────────────────
@@ -68,19 +66,11 @@ pub async fn execute_builtin_tool_call(
                 )
             });
         }
-        tool_log!(
-            "tool",
-            "[blocked] tool={} reason=unsupported tool",
-            tool_name
-        );
+        tool_log!("tool", "[blocked] tool={} reason=unsupported tool", tool_name);
         return json!({ "ok": false, "tool": call.function.name, "error": format!("unsupported tool \"{}\". Use one of the available tools listed in the system prompt.", tool_name) });
     }
     if !is_builtin_tool_enabled(allowed_tools, tool_name) {
-        tool_log!(
-            "tool",
-            "[blocked] tool={} reason=disabled in settings",
-            tool_name
-        );
+        tool_log!("tool", "[blocked] tool={} reason=disabled in settings", tool_name);
         return json!({ "ok": false, "tool": call.function.name, "error": "tool disabled in settings" });
     }
 
@@ -90,9 +80,7 @@ pub async fn execute_builtin_tool_call(
     let result = match call.function.name.as_str() {
         "date" => tools_system::exec_date(),
         "location" => tools_system::exec_location(&allowed_tools.retry).await,
-        "bash" => {
-            tools_system::exec_bash(&args, scripts_dir, allowed_tools.require_bash_edit).await
-        }
+        "bash" => tools_system::exec_bash(&args, scripts_dir, allowed_tools.require_bash_edit).await,
         "skill" => tools_system::exec_skill(&args, allowed_tools).await,
         "web_search" => tools_web::exec_web_search(&args, allowed_tools).await,
         "web_fetch" => tools_web::exec_web_fetch(&args, allowed_tools).await,
@@ -107,17 +95,11 @@ pub async fn execute_builtin_tool_call(
     };
 
     let elapsed = start.elapsed();
-    let ok = result
-        .get("ok")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
+    let ok = result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
     if ok {
         tool_log!("tool", "[done] tool={} elapsed={:.1?}", tool_name, elapsed);
     } else {
-        let err = result
-            .get("error")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
+        let err = result.get("error").and_then(|v| v.as_str()).unwrap_or("unknown");
         tool_log!(
             "tool",
             "[fail] tool={} elapsed={:.1?} error={}",

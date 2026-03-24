@@ -53,10 +53,7 @@ fn truncate_output_no_truncation() {
 
 #[test]
 fn truncate_output_by_lines() {
-    let content = (0..100)
-        .map(|i| format!("line{i}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let content = (0..100).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
     let out = truncate_tool_output(&content, 5, 100_000);
     assert!(out.was_truncated);
     assert_eq!(out.total_lines, 100);
@@ -69,10 +66,7 @@ fn truncate_output_by_lines() {
 
 #[test]
 fn truncate_output_by_bytes() {
-    let content = (0..100)
-        .map(|i| format!("line{i:03}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let content = (0..100).map(|i| format!("line{i:03}")).collect::<Vec<_>>().join("\n");
     let out = truncate_tool_output(&content, 1000, 50);
     assert!(out.was_truncated);
     // Should have truncated to fit under 50 bytes
@@ -90,10 +84,7 @@ fn truncate_head_no_truncation() {
 
 #[test]
 fn truncate_head_by_lines() {
-    let content = (0..100)
-        .map(|i| format!("line{i}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let content = (0..100).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
     let out = truncate_tool_output_head(&content, 5, 100_000);
     assert!(out.was_truncated);
     assert_eq!(out.output_lines, 5);
@@ -105,10 +96,7 @@ fn truncate_head_by_lines() {
 
 #[test]
 fn truncate_head_by_bytes() {
-    let content = (0..100)
-        .map(|i| format!("line{i:03}"))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let content = (0..100).map(|i| format!("line{i:03}")).collect::<Vec<_>>().join("\n");
     let out = truncate_tool_output_head(&content, 1000, 50);
     assert!(out.was_truncated);
     assert!(out.text.len() <= 50);
@@ -350,9 +338,7 @@ fn bash_edit_hook_lifecycle() {
 
 #[test]
 fn retry_succeeds_immediately() {
-    let result = retry_with_backoff(3, std::time::Duration::from_millis(1), || {
-        Ok::<&str, &str>("ok")
-    });
+    let result = retry_with_backoff(3, std::time::Duration::from_millis(1), || Ok::<&str, &str>("ok"));
     assert_eq!(result, Ok("ok"));
 }
 

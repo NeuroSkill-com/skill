@@ -15,9 +15,7 @@ use crate::types::LlmToolConfig;
 // ── date ──────────────────────────────────────────────────────────────────────
 
 pub(crate) fn exec_date() -> Value {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
     let now_utc = Utc::now();
     let now_local = now_utc.with_timezone(&Local);
     let offset_seconds = now_local.offset().local_minus_utc();
@@ -46,57 +44,47 @@ pub(crate) async fn exec_location(retry: &crate::types::ToolRetryConfig) -> Valu
     tokio::task::spawn_blocking(move || {
         use super::helpers::retry_with_backoff;
 
-        let result = retry_with_backoff(
-            max_retries,
-            base_delay,
-            || {
-                let agent = ureq::AgentBuilder::new()
-                    .timeout_connect(std::time::Duration::from_secs(2))
-                    .timeout_read(std::time::Duration::from_secs(3))
-                    .build();
-                let resp = agent.get("https://ipwho.is/").call();
-                match resp {
-                    Ok(r) => {
-                        let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
-                        Ok(json!({
-                            "ok": v.get("success").and_then(serde_json::Value::as_bool).unwrap_or(true),
-                            "tool": "location",
-                            "country": v.get("country").cloned().unwrap_or(Value::Null),
-                            "region": v.get("region").cloned().unwrap_or(Value::Null),
-                            "city": v.get("city").cloned().unwrap_or(Value::Null),
-                            "timezone": v.get("timezone").and_then(|z| z.get("id")).cloned().unwrap_or(Value::Null),
-                            "lat": v.get("latitude").cloned().unwrap_or(Value::Null),
-                            "lon": v.get("longitude").cloned().unwrap_or(Value::Null),
-                            "ip": v.get("ip").cloned().unwrap_or(Value::Null),
-                        }))
-                    }
-                    Err(ureq::Error::Status(code, _)) if code == 429 || (500..600).contains(&code) => {
-                        Err(format!("HTTP {}", code))
-                    }
-                    Err(e) => Err(e.to_string()),
+        let result = retry_with_backoff(max_retries, base_delay, || {
+            let agent = ureq::AgentBuilder::new()
+                .timeout_connect(std::time::Duration::from_secs(2))
+                .timeout_read(std::time::Duration::from_secs(3))
+                .build();
+            let resp = agent.get("https://ipwho.is/").call();
+            match resp {
+                Ok(r) => {
+                    let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
+                    Ok(json!({
+                        "ok": v.get("success").and_then(serde_json::Value::as_bool).unwrap_or(true),
+                        "tool": "location",
+                        "country": v.get("country").cloned().unwrap_or(Value::Null),
+                        "region": v.get("region").cloned().unwrap_or(Value::Null),
+                        "city": v.get("city").cloned().unwrap_or(Value::Null),
+                        "timezone": v.get("timezone").and_then(|z| z.get("id")).cloned().unwrap_or(Value::Null),
+                        "lat": v.get("latitude").cloned().unwrap_or(Value::Null),
+                        "lon": v.get("longitude").cloned().unwrap_or(Value::Null),
+                        "ip": v.get("ip").cloned().unwrap_or(Value::Null),
+                    }))
                 }
-            },
-        );
+                Err(ureq::Error::Status(code, _)) if code == 429 || (500..600).contains(&code) => {
+                    Err(format!("HTTP {}", code))
+                }
+                Err(e) => Err(e.to_string()),
+            }
+        });
 
         match result {
             Ok(val) => val,
             Err(e) => json!({ "ok": false, "tool": "location", "error": e }),
         }
-    }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "location", "error": e.to_string() }))
+    })
+    .await
+    .unwrap_or_else(|e| json!({ "ok": false, "tool": "location", "error": e.to_string() }))
 }
 
 // ── bash ──────────────────────────────────────────────────────────────────────
 
-pub(crate) async fn exec_bash(
-    args: &Value,
-    scripts_dir: &std::path::Path,
-    require_edit: bool,
-) -> Value {
-    let mut command = args
-        .get("command")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+pub(crate) async fn exec_bash(args: &Value, scripts_dir: &std::path::Path, require_edit: bool) -> Value {
+    let mut command = args.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
     if command.is_empty() {
         return json!({ "ok": false, "tool": "bash", "error": "missing command" });
     }
@@ -346,8 +334,7 @@ pub(crate) async fn exec_skill(args: &Value, allowed_tools: &LlmToolConfig) -> V
                         // Ensure the response always has "tool" so the
                         // model can identify where the data came from.
                         if let Some(obj) = v.as_object_mut() {
-                            obj.entry("tool".to_string())
-                                .or_insert(json!("skill"));
+                            obj.entry("tool".to_string()).or_insert(json!("skill"));
                         }
                         // For status command, convert to readable text
                         // so the LLM and chat UI see a human-friendly
@@ -379,10 +366,14 @@ pub(crate) async fn exec_skill(args: &Value, allowed_tools: &LlmToolConfig) -> V
                             v
                         }
                     }
-                    Err(e) => json!({ "ok": false, "tool": "skill", "error": format!("invalid JSON from server: {}", e) }),
+                    Err(e) => {
+                        json!({ "ok": false, "tool": "skill", "error": format!("invalid JSON from server: {}", e) })
+                    }
                 }
             }
             Err(e) => json!({ "ok": false, "tool": "skill", "error": format!("HTTP request failed: {}", e) }),
         }
-    }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "skill", "error": e.to_string() }))
+    })
+    .await
+    .unwrap_or_else(|e| json!({ "ok": false, "tool": "skill", "error": e.to_string() }))
 }

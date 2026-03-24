@@ -18,12 +18,14 @@ import path from "node:path";
 export function extractKeys(filePath: string): Map<string, string> {
   const src = fs.readFileSync(filePath, "utf8");
   const map = new Map<string, string>();
-  const re = /^\s*"([^"]+)"\s*:\s*(?:"((?:[^"\\]|\\.)*)"|`((?:[^`\\]|\\.)*)`)/gm;
+  // Matches: "key": "value"  or  "key": 'value'  or  "key": `value`
+  // The key and value may be on separate lines (multi-line format).
+  const re = /^\s*"([^"]+)"\s*:\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|`((?:[^`\\]|\\.)*)`)/gms;
   let m: RegExpExecArray | null;
   while ((m = re.exec(src)) !== null) {
     const key = m[1];
-    const val = m[2] !== undefined ? m[2] : m[3];
-    map.set(key, val);
+    const val = m[2] !== undefined ? m[2] : m[3] !== undefined ? m[3] : m[4];
+    map.set(key, val ?? "");
   }
   return map;
 }

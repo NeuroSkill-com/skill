@@ -25,11 +25,7 @@ pub fn inject_tools_into_system_prompt(messages: &mut Vec<Value>, tools: &[Tool]
 
     tool_block.push_str(&build_os_context(tools));
 
-    let has_system = messages
-        .first()
-        .and_then(|m| m.get("role"))
-        .and_then(|r| r.as_str())
-        == Some("system");
+    let has_system = messages.first().and_then(|m| m.get("role")).and_then(|r| r.as_str()) == Some("system");
 
     if has_system {
         if let Some(content) = messages[0].get_mut("content").and_then(|c| c.as_str()) {
@@ -99,10 +95,7 @@ fn build_full_tool_block(tools: &[Tool]) -> String {
                     .unwrap_or_default();
                 for (pname, pval) in props {
                     let ptype = pval.get("type").and_then(|t| t.as_str()).unwrap_or("any");
-                    let pdesc = pval
-                        .get("description")
-                        .and_then(|d| d.as_str())
-                        .unwrap_or("");
+                    let pdesc = pval.get("description").and_then(|d| d.as_str()).unwrap_or("");
                     let req_marker = if required.contains(&pname.as_str()) {
                         " (required)"
                     } else {

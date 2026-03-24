@@ -62,11 +62,7 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
             continue;
         } // need at least through laterality_index
 
-        let f = |i: usize| -> f64 {
-            rec.get(i)
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0)
-        };
+        let f = |i: usize| -> f64 { rec.get(i).and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0) };
 
         let timestamp = f(0);
         if timestamp <= 0.0 {
@@ -317,11 +313,7 @@ pub fn load_metrics_csv(csv_path: &Path) -> Option<CsvMetricsResult> {
     sum.cognitive_load /= n;
     sum.drowsiness /= n;
 
-    eprintln!(
-        "[csv-metrics] loaded {} rows from {}",
-        count,
-        metrics_path.display()
-    );
+    eprintln!("[csv-metrics] loaded {} rows from {}", count, metrics_path.display());
     Some(CsvMetricsResult {
         n_rows: count,
         summary: sum,
@@ -342,11 +334,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
     let reader = builder.build().ok()?;
 
     // Detect cross-channel offset from schema (find "faa" column).
-    let x = schema
-        .fields()
-        .iter()
-        .position(|f| f.name() == "faa")
-        .unwrap_or(49);
+    let x = schema.fields().iter().position(|f| f.name() == "faa").unwrap_or(49);
     let n_band_cols = x - 1;
     let n_ch = n_band_cols / 12;
     let ch_bases: Vec<usize> = (0..n_ch).map(|c| 1 + c * 12).collect();
@@ -361,12 +349,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
         let n_rows = batch.num_rows();
 
         let cols: Vec<Option<&arrow_array::Float64Array>> = (0..n_cols)
-            .map(|i| {
-                batch
-                    .column(i)
-                    .as_any()
-                    .downcast_ref::<arrow_array::Float64Array>()
-            })
+            .map(|i| batch.column(i).as_any().downcast_ref::<arrow_array::Float64Array>())
             .collect();
 
         for row_idx in 0..n_rows {
@@ -374,13 +357,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
                 if i >= cols.len() {
                     return 0.0;
                 }
-                cols[i].map_or(0.0, |c| {
-                    if c.is_null(row_idx) {
-                        0.0
-                    } else {
-                        c.value(row_idx)
-                    }
-                })
+                cols[i].map_or(0.0, |c| if c.is_null(row_idx) { 0.0 } else { c.value(row_idx) })
             };
 
             if n_cols < x + 23 {
@@ -635,11 +612,7 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
     sum.cognitive_load /= n;
     sum.drowsiness /= n;
 
-    eprintln!(
-        "[parquet-metrics] loaded {} rows from {}",
-        count,
-        path.display()
-    );
+    eprintln!("[parquet-metrics] loaded {} rows from {}", count, path.display());
     Some(CsvMetricsResult {
         n_rows: count,
         summary: sum,
@@ -649,7 +622,6 @@ fn load_metrics_from_parquet(path: &Path) -> Option<CsvMetricsResult> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::{parse_first_ts_from_bytes, parse_last_ts_from_bytes, SessionJsonMeta};
 
     #[test]

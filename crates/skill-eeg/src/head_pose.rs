@@ -19,9 +19,9 @@
 //!   IEEE Trans. Automatic Control, 53(5), 1203–1218.
 
 use skill_constants::{
-    HEAD_POSE_ALPHA, HEAD_POSE_GESTURE_REFRACTORY_S, HEAD_POSE_GESTURE_WINDOW_S,
-    HEAD_POSE_NOD_THRESHOLD_DEG, HEAD_POSE_SHAKE_THRESHOLD_DEG, HEAD_POSE_STILL_ACTIVE_DPS,
-    HEAD_POSE_STILL_QUIET_DPS, HEAD_POSE_STILL_TAU_S, IMU_SAMPLE_RATE,
+    HEAD_POSE_ALPHA, HEAD_POSE_GESTURE_REFRACTORY_S, HEAD_POSE_GESTURE_WINDOW_S, HEAD_POSE_NOD_THRESHOLD_DEG,
+    HEAD_POSE_SHAKE_THRESHOLD_DEG, HEAD_POSE_STILL_ACTIVE_DPS, HEAD_POSE_STILL_QUIET_DPS, HEAD_POSE_STILL_TAU_S,
+    IMU_SAMPLE_RATE,
 };
 
 // Local aliases for readability.
@@ -169,16 +169,8 @@ impl HeadPoseTracker {
 
         // Nod: pitch oscillation (look down then up, or up then down).
         if self.nod_refractory == 0 && self.pitch_history.len() >= 3 {
-            let mn = self
-                .pitch_history
-                .iter()
-                .cloned()
-                .fold(f64::INFINITY, f64::min);
-            let mx = self
-                .pitch_history
-                .iter()
-                .cloned()
-                .fold(f64::NEG_INFINITY, f64::max);
+            let mn = self.pitch_history.iter().cloned().fold(f64::INFINITY, f64::min);
+            let mx = self.pitch_history.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
             if mx - mn > NOD_THRESHOLD_DEG {
                 self.nod_count += 1;
                 self.nod_refractory = refractory_samples;
@@ -188,16 +180,8 @@ impl HeadPoseTracker {
 
         // Shake: yaw oscillation (look left then right, or right then left).
         if self.shake_refractory == 0 && self.yaw_history.len() >= 3 {
-            let mn = self
-                .yaw_history
-                .iter()
-                .cloned()
-                .fold(f64::INFINITY, f64::min);
-            let mx = self
-                .yaw_history
-                .iter()
-                .cloned()
-                .fold(f64::NEG_INFINITY, f64::max);
+            let mn = self.yaw_history.iter().cloned().fold(f64::INFINITY, f64::min);
+            let mx = self.yaw_history.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
             if mx - mn > SHAKE_THRESHOLD_DEG {
                 self.shake_count += 1;
                 self.shake_refractory = refractory_samples;
@@ -214,9 +198,7 @@ impl HeadPoseTracker {
         } else if self.ang_vel_ema >= STILL_ACTIVE_DPS {
             0.0
         } else {
-            100.0
-                * (1.0
-                    - (self.ang_vel_ema - STILL_QUIET_DPS) / (STILL_ACTIVE_DPS - STILL_QUIET_DPS))
+            100.0 * (1.0 - (self.ang_vel_ema - STILL_QUIET_DPS) / (STILL_ACTIVE_DPS - STILL_QUIET_DPS))
         };
 
         HeadPoseMetrics {
@@ -241,21 +223,9 @@ mod tests {
             t.update([0.0, 0.0, 1.0], [0.0, 0.0, 0.0]);
         }
         let m = t.metrics();
-        assert!(
-            m.pitch.abs() < 5.0,
-            "pitch should be near 0 at rest, got {}",
-            m.pitch
-        );
-        assert!(
-            m.roll.abs() < 5.0,
-            "roll should be near 0 at rest, got {}",
-            m.roll
-        );
-        assert!(
-            m.stillness > 90.0,
-            "should be very still, got {}",
-            m.stillness
-        );
+        assert!(m.pitch.abs() < 5.0, "pitch should be near 0 at rest, got {}", m.pitch);
+        assert!(m.roll.abs() < 5.0, "roll should be near 0 at rest, got {}", m.roll);
+        assert!(m.stillness > 90.0, "should be very still, got {}", m.stillness);
     }
 
     #[test]
@@ -285,11 +255,7 @@ mod tests {
             t.update([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]);
         }
         let m = t.metrics();
-        assert!(
-            m.pitch > 50.0,
-            "tilted forward: expected pitch > 50°, got {}",
-            m.pitch
-        );
+        assert!(m.pitch > 50.0, "tilted forward: expected pitch > 50°, got {}", m.pitch);
     }
 
     #[test]
@@ -300,11 +266,7 @@ mod tests {
             t.update([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]);
         }
         let m = t.metrics();
-        assert!(
-            m.roll > 50.0,
-            "tilted right: expected roll > 50°, got {}",
-            m.roll
-        );
+        assert!(m.roll > 50.0, "tilted right: expected roll > 50°, got {}", m.roll);
     }
 
     #[test]

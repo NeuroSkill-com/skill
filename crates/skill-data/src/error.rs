@@ -10,10 +10,7 @@ use std::path::PathBuf;
 pub enum SessionError {
     /// Failed to create or open a CSV file.
     #[error("failed to open CSV file {path}: {source}")]
-    CsvOpen {
-        path: PathBuf,
-        source: std::io::Error,
-    },
+    CsvOpen { path: PathBuf, source: std::io::Error },
 
     /// Failed to create or open a Parquet file.
     #[error("failed to open Parquet file {path}: {source}")]

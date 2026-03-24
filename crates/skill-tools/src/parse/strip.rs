@@ -252,10 +252,7 @@ fn find_unclosed_brace(content: &str, open: u8, close: u8) -> Option<(usize, usi
     if let Some(s) = start {
         let tail = &content[s..];
         if looks_like_tool_call_json_prefix(tail) {
-            let end = content[s..]
-                .find("<think>")
-                .map(|idx| s + idx)
-                .unwrap_or(content.len());
+            let end = content[s..].find("<think>").map(|idx| s + idx).unwrap_or(content.len());
             return Some((s, end));
         }
     }

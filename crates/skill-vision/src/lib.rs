@@ -47,12 +47,7 @@ fn recognize_text_macos(rgba_pixels: &[u8], width: u32, height: u32) -> Option<S
     }
 
     extern "C" {
-        fn apple_vision_ocr(
-            rgba_pixels: *const u8,
-            width: u32,
-            height: u32,
-            out_len: *mut u32,
-        ) -> *mut u8;
+        fn apple_vision_ocr(rgba_pixels: *const u8, width: u32, height: u32, out_len: *mut u32) -> *mut u8;
     }
 
     // SAFETY: `apple_vision_ocr` is our compiled Objective-C FFI that:

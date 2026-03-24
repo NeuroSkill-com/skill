@@ -18,12 +18,7 @@ use image::{DynamicImage, GenericImageView, ImageReader};
 /// - `out_path`: destination `.gif` file
 ///
 /// Returns the file size in bytes, or `None` on failure.
-pub(crate) fn encode_gif(
-    frames: &[Vec<u8>],
-    target_size: u32,
-    frame_delay_cs: u16,
-    out_path: &Path,
-) -> Option<u64> {
+pub(crate) fn encode_gif(frames: &[Vec<u8>], target_size: u32, frame_delay_cs: u16, out_path: &Path) -> Option<u64> {
     if frames.is_empty() {
         return None;
     }

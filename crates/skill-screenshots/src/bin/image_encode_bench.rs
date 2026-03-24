@@ -53,8 +53,7 @@ fn resize_fit_pad(img: &DynamicImage, target: u32) -> DynamicImage {
 
 fn encode_png(img: &DynamicImage) -> Vec<u8> {
     let mut buf = Vec::new();
-    img.write_to(&mut Cursor::new(&mut buf), ImageFormat::Png)
-        .unwrap();
+    img.write_to(&mut Cursor::new(&mut buf), ImageFormat::Png).unwrap();
     buf
 }
 
@@ -68,8 +67,7 @@ fn encode_jpeg(img: &DynamicImage, quality: u8) -> Vec<u8> {
 
 fn encode_webp(img: &DynamicImage) -> Vec<u8> {
     let mut buf = Vec::new();
-    img.write_to(&mut Cursor::new(&mut buf), ImageFormat::WebP)
-        .unwrap();
+    img.write_to(&mut Cursor::new(&mut buf), ImageFormat::WebP).unwrap();
     buf
 }
 
@@ -127,10 +125,7 @@ fn print_results(results: &[BenchResult]) {
         .unwrap_or(1.0);
 
     // Find the fastest entry for a marker.
-    let fastest_ms = results
-        .iter()
-        .map(BenchResult::avg_ms)
-        .fold(f64::INFINITY, f64::min);
+    let fastest_ms = results.iter().map(BenchResult::avg_ms).fold(f64::INFINITY, f64::min);
 
     println!();
     println!(
@@ -203,26 +198,16 @@ fn main() {
         ));
 
         // ── Pixel hash (duplicate detection) ──
-        results.push(bench(
-            "Hash pixels (duplicate detect)",
-            warmup,
-            iters,
-            || {
-                hash_pixels(&resized);
-                0
-            },
-        ));
+        results.push(bench("Hash pixels (duplicate detect)", warmup, iters, || {
+            hash_pixels(&resized);
+            0
+        }));
 
         // ── DynamicImage clone (channel send cost) ──
-        results.push(bench(
-            "DynamicImage::clone (new pipeline)",
-            warmup,
-            iters,
-            || {
-                let c = resized.clone();
-                c.as_bytes().len()
-            },
-        ));
+        results.push(bench("DynamicImage::clone (new pipeline)", warmup, iters, || {
+            let c = resized.clone();
+            c.as_bytes().len()
+        }));
 
         // ── PNG encode (old pipeline) ──
         results.push(bench("PNG encode (old pipeline)", warmup, iters, || {
@@ -246,15 +231,10 @@ fn main() {
 
         // ── PNG decode (fastembed old overhead) ──
         let png_bytes = encode_png(&resized);
-        results.push(bench(
-            "PNG decode (fastembed overhead)",
-            warmup,
-            iters,
-            || {
-                let img = image::load_from_memory(&png_bytes).unwrap();
-                img.as_bytes().len()
-            },
-        ));
+        results.push(bench("PNG decode (fastembed overhead)", warmup, iters, || {
+            let img = image::load_from_memory(&png_bytes).unwrap();
+            img.as_bytes().len()
+        }));
 
         // ── JPEG decode ──
         let jpeg_bytes = encode_jpeg(&resized, 85);
@@ -264,27 +244,17 @@ fn main() {
         }));
 
         // ── Full old pipeline: PNG encode + decode ──
-        results.push(bench(
-            "OLD: PNG encode + decode (round-trip)",
-            warmup,
-            iters,
-            || {
-                let png = encode_png(&resized);
-                let _ = image::load_from_memory(&png).unwrap();
-                png.len()
-            },
-        ));
+        results.push(bench("OLD: PNG encode + decode (round-trip)", warmup, iters, || {
+            let png = encode_png(&resized);
+            let _ = image::load_from_memory(&png).unwrap();
+            png.len()
+        }));
 
         // ── Full new pipeline: clone only ──
-        results.push(bench(
-            "NEW: DynamicImage clone (zero encode)",
-            warmup,
-            iters,
-            || {
-                let c = resized.clone();
-                c.as_bytes().len()
-            },
-        ));
+        results.push(bench("NEW: DynamicImage clone (zero encode)", warmup, iters, || {
+            let c = resized.clone();
+            c.as_bytes().len()
+        }));
 
         print_results(&results);
     }
