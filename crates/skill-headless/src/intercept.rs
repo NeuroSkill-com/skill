@@ -88,20 +88,28 @@ impl InterceptStore {
     }
 
     pub fn push_request(&self, req: InterceptedRequest) {
-        self.inner.lock().expect("lock poisoned").requests.push(req);
+        if let Ok(mut guard) = self.inner.lock() {
+            guard.requests.push(req);
+        }
     }
 
     pub fn push_response(&self, resp: InterceptedResponse) {
-        self.inner.lock().expect("lock poisoned").responses.push(resp);
+        if let Ok(mut guard) = self.inner.lock() {
+            guard.responses.push(resp);
+        }
     }
 
     pub fn push_navigation(&self, nav: NavigationEvent) {
-        self.inner.lock().expect("lock poisoned").navigations.push(nav);
+        if let Ok(mut guard) = self.inner.lock() {
+            guard.navigations.push(nav);
+        }
     }
 
     /// Take a snapshot of all collected traffic and optionally clear it.
     pub fn snapshot(&self, clear: bool) -> NetworkLog {
-        let mut guard = self.inner.lock().expect("lock poisoned");
+        let Ok(mut guard) = self.inner.lock() else {
+            return NetworkLog::default();
+        };
         if clear {
             std::mem::take(&mut *guard)
         } else {
@@ -111,8 +119,9 @@ impl InterceptStore {
 
     /// Clear all collected traffic.
     pub fn clear(&self) {
-        let mut guard = self.inner.lock().expect("lock poisoned");
-        *guard = NetworkLog::default();
+        if let Ok(mut guard) = self.inner.lock() {
+            *guard = NetworkLog::default();
+        }
     }
 }
 

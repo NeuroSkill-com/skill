@@ -80,7 +80,10 @@ pub(super) fn run_actor(
         }
         Err(_) => {
             llm_info!(&app, &log_buf, log_file, "llama backend already initialised (shared with neutts)");
-            // SAFETY: ZST — no data, no pointers.
+            // SAFETY: `LlamaBackend` is effectively a ZST handle (no heap
+            // pointers, no Drop). When we don't own the backend (neutts already
+            // initialised it), we create a zero-filled placeholder that is never
+            // dropped (ManuallyDrop) and never used for initialization.
             (std::mem::ManuallyDrop::new(unsafe { std::mem::zeroed::<LlamaBackend>() }), false)
         }
     };
@@ -172,6 +175,9 @@ pub(super) fn run_actor(
             }
 
             if !config.verbose {
+                // SAFETY: `noop` is a valid C-calling-convention function that
+                // ignores all arguments. `mtmd_log_set` stores the callback
+                // globally — `noop` has 'static lifetime (it's a function item).
                 unsafe extern "C" fn noop(
                     _level: u32,
                     _text:  *const std::os::raw::c_char,
@@ -624,6 +630,9 @@ pub(super) fn run_actor(
     drop(ctx);
     drop(model);
     if we_own_backend {
+        // SAFETY: `backend_md` was created by `LlamaBackend::init()` (not
+        // zeroed). `ctx` and `model` have already been dropped above, so no
+        // live references to the backend remain. We drop exactly once.
         unsafe { std::mem::ManuallyDrop::drop(&mut backend_md); }
     }
 

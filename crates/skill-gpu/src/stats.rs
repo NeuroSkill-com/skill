@@ -229,6 +229,8 @@ mod macos {
         let c_name = CString::new(name).ok()?;
         let mut val: u64 = 0;
         let mut size = std::mem::size_of::<u64>();
+        // SAFETY: `c_name` is a valid NUL-terminated C string, `val` and `size`
+        // are properly aligned and sized for the sysctl call.
         let ret = unsafe {
             libc::sysctlbyname(
                 c_name.as_ptr(),
@@ -246,6 +248,7 @@ mod macos {
         let c_name = CString::new(name).ok()?;
         let mut val: i32 = 0;
         let mut size = std::mem::size_of::<i32>();
+        // SAFETY: Same as `sysctl_u64` — valid C string, correctly sized buffer.
         let ret = unsafe {
             libc::sysctlbyname(
                 c_name.as_ptr(),
@@ -274,6 +277,9 @@ mod macos {
         let page_size = sysctl_u64("hw.pagesize").unwrap_or(16_384);
         let mut stats = std::mem::MaybeUninit::<VmStatistics64>::zeroed();
         let mut count: MachMsgTypeNumberT = HOST_VM_INFO64_COUNT;
+        // SAFETY: `host_statistics64` fills the MaybeUninit buffer with VM
+        // stats. We pass the correct HOST_VM_INFO64 flavour and count.
+        // `assume_init` is safe only after a successful (kr == 0) return.
         let kr = unsafe {
             host_statistics64(
                 mach_host_self(),
@@ -292,10 +298,13 @@ mod macos {
 
     fn with_cf_str<T>(s: &str, f: impl FnOnce(CFStringRef) -> T) -> T {
         let c = CString::new(s).unwrap_or_default();
+        // SAFETY: `CString::as_ptr` returns a valid NUL-terminated pointer.
+        // The returned CFStringRef is released below if non-null.
         let cf = unsafe {
             CFStringCreateWithCString(std::ptr::null(), c.as_ptr(), K_CF_STRING_ENCODING_UTF8)
         };
         let result = f(cf);
+        // SAFETY: `cf` was created by CFStringCreateWithCString; we own it.
         if !cf.is_null() { unsafe { CFRelease(cf as _) }; }
         result
     }

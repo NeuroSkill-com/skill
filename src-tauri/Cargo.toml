@@ -336,3 +336,6 @@ tempfile = "3"
 # These sections now live in the workspace root Cargo.toml (project root).
 # Cargo requires [patch] and [profile] to be defined at the workspace level;
 # they are ignored if placed in a member crate's Cargo.toml.
+
+[lints]
+workspace = true

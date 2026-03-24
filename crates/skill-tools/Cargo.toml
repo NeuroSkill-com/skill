@@ -22,3 +22,6 @@ urlencoding = "2"
 dirs        = "6"
 rfd         = { version = "0.17", default-features = false, features = ["file-handle-inner", "xdg-portal"] }
 tokio       = { version = "1", features = ["full"] }
+
+[lints]
+workspace = true

@@ -10,3 +10,6 @@ image = { version = "0.25", default-features = false, features = ["png", "webp",
 
 [build-dependencies]
 cc = "1"
+
+[lints]
+workspace = true

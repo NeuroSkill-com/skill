@@ -4,3 +4,6 @@ version = "0.0.1"
 edition = "2021"
 license = "GPL-3.0-only"
 description = "Single source of truth for all NeuroSkill constants"
+
+[lints]
+workspace = true

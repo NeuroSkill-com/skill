@@ -27,3 +27,6 @@ neutts     = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgp
 
 [target.'cfg(target_os = "macos")'.dependencies]
 neutts     = { version = "0.0.7", features = ["backbone", "espeak", "fast", "wgpu", "metal"], optional = true }
+
+[lints]
+workspace = true

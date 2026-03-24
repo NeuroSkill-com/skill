@@ -55,6 +55,12 @@ fn recognize_text_macos(rgba_pixels: &[u8], width: u32, height: u32) -> Option<S
         ) -> *mut u8;
     }
 
+    // SAFETY: `apple_vision_ocr` is our compiled Objective-C FFI that:
+    //   1. Takes a valid RGBA pixel pointer (we verified length above).
+    //   2. Returns a malloc'd UTF-8 buffer (or null) with length in `out_len`.
+    //   3. The returned pointer must be freed with `free()` after use.
+    // `from_raw_parts` is safe because `ptr` is non-null and `len` bytes
+    // were allocated by the FFI. `libc_free` releases the malloc'd buffer.
     unsafe {
         let mut len: u32 = 0;
         let ptr = apple_vision_ocr(rgba_pixels.as_ptr(), width, height, &mut len);
@@ -62,7 +68,6 @@ fn recognize_text_macos(rgba_pixels: &[u8], width: u32, height: u32) -> Option<S
             return None;
         }
 
-        // Build a String from the malloc'd C buffer, then free it.
         let slice = std::slice::from_raw_parts(ptr, len as usize);
         let text = String::from_utf8_lossy(slice).into_owned();
         libc_free(ptr as *mut std::ffi::c_void);
@@ -78,8 +83,11 @@ extern "C" {
 }
 
 #[cfg(target_os = "macos")]
+/// SAFETY: Caller must pass a pointer originally returned by `malloc` / the
+/// Apple Vision OCR FFI.  The pointer is invalidated after this call.
 unsafe fn libc_free(ptr: *mut std::ffi::c_void) {
-    free(ptr);
+    // SAFETY: `ptr` was allocated by the C side via `malloc`.
+    unsafe { free(ptr) };
 }
 
 #[cfg(test)]

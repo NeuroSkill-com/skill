@@ -103,6 +103,22 @@ jobs:
           -p skill-autostart -p skill-tts -p skill-gpu
           --lib
 
+  # ── Dependency audit ──────────────────────────────────────────────────────────
+  cargo-audit:
+    name: Rust — cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run cargo audit
+        run: cargo audit
+
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:
     name: Frontend — check + i18n + tests

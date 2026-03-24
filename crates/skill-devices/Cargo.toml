@@ -42,3 +42,6 @@ default = []
 # bluer on Linux).  Enabling this adds ~2 s to app startup on macOS because
 # dyld loads IOBluetooth.framework at process launch.
 mw75-rfcomm = ["mw75/rfcomm"]
+
+[lints]
+workspace = true

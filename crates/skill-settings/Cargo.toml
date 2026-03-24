@@ -29,3 +29,6 @@ keyring            = { version = "3.6", features = ["windows-native"] }
 [features]
 default = []
 llm     = []
+
+[lints]
+workspace = true

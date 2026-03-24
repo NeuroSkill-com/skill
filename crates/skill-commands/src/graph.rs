@@ -1067,9 +1067,11 @@ pub fn generate_svg_3d(
 
     // Place projected nodes
     for nd in &has_proj {
-        let (sx, sy, scale) = project_3d(
-            nd.proj_x.unwrap(), nd.proj_y.unwrap(), nd.proj_z.unwrap(), W, H,
-        );
+        // All three projections are guaranteed `Some` by the filter above.
+        let (Some(px), Some(py), Some(pz)) = (nd.proj_x, nd.proj_y, nd.proj_z) else {
+            continue;
+        };
+        let (sx, sy, scale) = project_3d(px, py, pz, W, H);
         pos.insert(nd.id.clone(), (sx, sy, scale));
     }
 

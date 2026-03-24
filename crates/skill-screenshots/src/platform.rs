@@ -227,28 +227,38 @@ fn macos_frontmost_window_id() -> Option<u64> {
     const K_CF_STRING_ENCODING_UTF8: u32 = 0x0800_0100;
 
     /// Helper: create a CFString from a `&[u8]` C-string literal.
+    ///
+    /// SAFETY: `s` must be a NUL-terminated byte slice. The returned CFString
+    /// must be released by the caller via `CFRelease`.
     unsafe fn cfstr(s: &[u8]) -> CFStringRef {
-        CFStringCreateWithCString(std::ptr::null(), s.as_ptr() as *const c_char, K_CF_STRING_ENCODING_UTF8)
+        // SAFETY: `s` points to a static NUL-terminated literal.
+        unsafe { CFStringCreateWithCString(std::ptr::null(), s.as_ptr() as *const c_char, K_CF_STRING_ENCODING_UTF8) }
     }
 
     /// Helper: get an i32 from a CFNumber.
+    ///
+    /// SAFETY: `n` must be a valid CFNumber (or null, which is handled).
     unsafe fn cfnum_i32(n: CFTypeRef) -> Option<i32> {
         if n.is_null() { return None; }
         let mut v: i64 = 0;
-        if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) {
+        // SAFETY: `n` is a non-null CFNumber; `v` is properly sized.
+        if unsafe { CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) } {
             Some(v as i32)
         } else { None }
     }
 
     /// Helper: get an i64 from a CFNumber (some fields may be i64).
+    ///
+    /// SAFETY: `n` must be a valid CFNumber (or null, which is handled).
     unsafe fn cfnum_i64(n: CFTypeRef) -> Option<i64> {
         if n.is_null() { return None; }
         let mut v: i64 = 0;
-        if CFNumberGetValue(n, K_CF_NUMBER_SINT64_TYPE, &mut v) {
+        // SAFETY: `n` is a non-null CFNumber; `v` is properly sized for both
+        // the 64-bit and 32-bit read attempts.
+        if unsafe { CFNumberGetValue(n, K_CF_NUMBER_SINT64_TYPE, &mut v) } {
             Some(v)
         } else {
-            // Fall back to i32
-            if CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) {
+            if unsafe { CFNumberGetValue(n, K_CF_NUMBER_SINT32_TYPE, &mut v) } {
                 Some(v)
             } else { None }
         }
@@ -263,6 +273,9 @@ fn macos_frontmost_window_id() -> Option<u64> {
         use objc2_app_kit::NSWorkspace;
 
         let workspace = NSWorkspace::sharedWorkspace();
+        // SAFETY: NSWorkspace and NSRunningApplication are stable AppKit APIs.
+        // `frontmostApplication` returns a nullable NSRunningApplication.
+        // `processIdentifier` returns a pid_t (i32).
         let front_app: Option<&AnyObject> = unsafe {
             msg_send![&workspace, frontmostApplication]
         };

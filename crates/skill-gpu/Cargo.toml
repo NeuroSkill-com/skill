@@ -11,3 +11,6 @@ serde_json = { workspace = true }
 llmfit-core = "0.6.6"
 sysinfo    = "0.38"
 libc       = "0.2"
+
+[lints]
+workspace = true

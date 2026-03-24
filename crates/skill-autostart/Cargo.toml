@@ -7,3 +7,6 @@ description = "Platform-specific launch-at-login (autostart) registration — ex
 
 [dependencies]
 skill-constants = { path = "../skill-constants" }
+
+[lints]
+workspace = true

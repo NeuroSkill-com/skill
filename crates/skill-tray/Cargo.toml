@@ -7,3 +7,6 @@ description = "System tray icon helpers — progress-ring overlay, shortcut form
 
 [dependencies]
 skill-constants = { path = "../skill-constants" }
+
+[lints]
+workspace = true

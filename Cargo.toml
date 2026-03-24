@@ -69,6 +69,27 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# ── Workspace lints ────────────────────────────────────────────────────────────
+#
+# Consistent lint policy across every crate.  Individual crates inherit these
+# via `[lints] workspace = true` in their own Cargo.toml.
+#
+# We warn (not deny) so CI stays green while we migrate, but clippy will flag
+# every new `unwrap()` / missing safety doc / needless pass-by-value.
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+unwrap_used            = "warn"
+expect_used            = "warn"
+panic                  = "warn"
+undocumented_unsafe_blocks = "warn"
+needless_pass_by_value = "warn"
+redundant_closure_for_method_calls = "warn"
+manual_let_else        = "warn"
+semicolon_if_nothing_returned = "warn"
+
 # ── Build profiles ────────────────────────────────────────────────────────────
 #
 # incremental = false (dev only)

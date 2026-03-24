@@ -20,3 +20,6 @@ tar         = { version = "0.4", optional = true }
 [features]
 default = []
 sync    = ["ureq", "flate2", "tar"]
+
+[lints]
+workspace = true

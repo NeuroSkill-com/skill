@@ -15,3 +15,6 @@ rusqlite = { workspace = true }
 csv        = "1"
 parquet      = { version = "54", default-features = false, features = ["arrow"] }
 arrow-array  = "54"
+
+[lints]
+workspace = true

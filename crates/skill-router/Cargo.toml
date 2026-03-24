@@ -18,3 +18,6 @@ burn            = { version = "0.20.1", default-features = false, features = ["w
 burn-cubecl     = "0.20.1"
 cubecl          = { version = "0.9.0", features = ["wgpu"] }
 crossbeam-channel = "0.5.15"
+
+[lints]
+workspace = true

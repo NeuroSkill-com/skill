@@ -37,3 +37,6 @@ llama-cpp-4 = { version = "0.2.12", optional = true, features = ["metal"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 llama-cpp-4 = { version = "0.2.10", optional = true, features = ["vulkan"] }
+
+[lints]
+workspace = true
