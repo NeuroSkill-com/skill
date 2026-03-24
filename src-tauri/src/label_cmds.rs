@@ -32,8 +32,7 @@ pub async fn query_annotations(
     tokio::task::spawn_blocking(move || {
         let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
         if !labels_db.exists() { return vec![]; }
-        let conn = match skill_data::util::open_readonly(&labels_db)
-        { Ok(c) => c, Err(_) => return vec![] };
+        let Ok(conn) = skill_data::util::open_readonly(&labels_db) else { return vec![] };
         let query = if start_utc.is_some() && end_utc.is_some() {
             "SELECT id, eeg_start, eeg_end, label_start, label_end, text, context, created_at \
              FROM labels WHERE eeg_end >= ?1 AND eeg_start <= ?2 ORDER BY created_at DESC"
@@ -41,7 +40,7 @@ pub async fn query_annotations(
             "SELECT id, eeg_start, eeg_end, label_start, label_end, text, context, created_at \
              FROM labels ORDER BY created_at DESC"
         };
-        let mut stmt = match conn.prepare(query) { Ok(s) => s, Err(_) => return vec![] };
+        let Ok(mut stmt) = conn.prepare(query) else { return vec![] };
         let params: Vec<Box<dyn rusqlite::types::ToSql>> = if let (Some(s), Some(e)) = (start_utc, end_utc) {
             vec![Box::new(s as i64), Box::new(e as i64)]
         } else { vec![] };
@@ -81,21 +80,15 @@ pub async fn get_recent_labels(
         let labels_db = skill_dir.join(crate::constants::LABELS_FILE);
         if !labels_db.exists() { return vec![]; }
 
-        let conn = match skill_data::util::open_readonly(&labels_db) {
-            Ok(c) => c,
-            Err(_) => return vec![],
-        };
+        let Ok(conn) = skill_data::util::open_readonly(&labels_db) else { return vec![] };
 
-        let mut stmt = match conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT text FROM labels
              WHERE length(trim(text)) > 0
              GROUP BY text
              ORDER BY MAX(created_at) DESC
              LIMIT ?1",
-        ) {
-            Ok(s) => s,
-            Err(_) => return vec![],
-        };
+        ) else { return vec![] };
 
         stmt.query_map(rusqlite::params![max_rows], |row| row.get::<_, String>(0))
             .map(|rows| {

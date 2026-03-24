@@ -141,10 +141,7 @@ impl HookMatcher {
                 }
 
                 let query_refs: Vec<&str> = queries.iter().map(String::as_str).collect();
-                let embeddings = match te.embed(query_refs, None) {
-                    Ok(v) => v,
-                    Err(_) => continue,
-                };
+                let Ok(embeddings) = te.embed(query_refs, None) else { continue };
                 hook_queries.push(HookQueries { hook_idx: idx, embeddings });
             }
         } // ── lock released here ──────────────────────────────────────────────
@@ -1336,10 +1333,7 @@ pub(crate) fn download_hf_weights(
 pub(crate) fn luna_variant_config_path(base_config: &Path, variant: &str) -> PathBuf {
     use skill_constants::luna_variant_config;
 
-    let (embed_dim, num_queries, depth, num_heads) = match luna_variant_config(variant) {
-        Some(cfg) => cfg,
-        None => return base_config.to_path_buf(),
-    };
+    let Some((embed_dim, num_queries, depth, num_heads)) = luna_variant_config(variant) else { return base_config.to_path_buf() };
 
     // Read the base config, inject model params.
     let base_json = std::fs::read_to_string(base_config).unwrap_or_else(|_| "{}".to_string());

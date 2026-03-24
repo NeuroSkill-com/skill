@@ -294,7 +294,7 @@ pub async fn tts_speak(text: String, voice: Option<String>) {
 pub fn tts_list_voices() -> Vec<String> {
     if use_neutts() {
         #[cfg(feature = "tts-neutts")]
-        return neutts::PRESET_NAMES.iter().map(|s| s.to_string()).collect();
+        return neutts::PRESET_NAMES.iter().map(std::string::ToString::to_string).collect();
     } else {
         #[cfg(feature = "tts-kitten")]
         return kitten::AVAILABLE_VOICES

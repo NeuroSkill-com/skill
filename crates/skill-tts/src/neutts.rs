@@ -72,7 +72,7 @@ fn cfg_lock() -> &'static RwLock<RuntimeConfig> {
 }
 
 pub fn read_cfg() -> (String, Option<String>, String, String, String) {
-    let g = cfg_lock().read().unwrap_or_else(|e| e.into_inner());
+    let g = cfg_lock().read().unwrap_or_else(std::sync::PoisonError::into_inner);
     (g.backbone_repo.clone(), g.gguf_file.clone(),
      g.voice_preset.clone(), g.ref_wav_path.clone(), g.ref_text.clone())
 }
@@ -149,7 +149,7 @@ pub fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
         std::thread::Builder::new()
             .name("skill-neutts".into())
             .spawn(|| worker(rx))
-            .expect("failed to spawn NeuTTS worker thread");
+            .expect("failed to spawn NeuTTS worker thread"); // thread spawn — unrecoverable
         tx
     })
 }
@@ -584,7 +584,7 @@ fn play_wav(stream: &MixerDeviceSink, path: &Path) {
     let sample_rate = reader.spec().sample_rate;
     let samples: Vec<f32> = reader
         .into_samples::<i16>()
-        .filter_map(|s| s.ok())
+        .filter_map(std::result::Result::ok)
         .map(|s| s as f32 / i16::MAX as f32)
         .collect();
 

@@ -818,10 +818,7 @@ fn process_meta(app: &AppHandle, csv_path: &Path, val: &serde_json::Value) {
     // Extract device identity fields from Meta events.
     // Supports both Muse Control short keys (sn, ma, fw, hw, bl, tp) and
     // long-form keys used by other adapters (serial_number, mac_address, …).
-    let obj = match val.as_object() {
-        Some(o) => o,
-        None => return,
-    };
+    let Some(obj) = val.as_object() else { return };
 
     let str_key = |short: &str, long: &str| -> Option<String> {
         obj.get(short).and_then(|v| v.as_str()).map(str::to_owned)

@@ -5,6 +5,7 @@
 //! Mounted by [`super::engine::router`] under `/v1/*` paths.
 
 use std::time::{SystemTime, UNIX_EPOCH};
+use skill_constants::MutexExt;
 
 use axum::{
     extract::State,
@@ -36,7 +37,7 @@ fn check_auth(state: &LlmServerState, headers: &axum::http::HeaderMap) -> bool {
 
 macro_rules! get_state {
     ($cell:expr) => {{
-        match $cell.lock().expect("lock poisoned").clone() {
+        match $cell.lock_or_recover().clone() {
             Some(s) => s,
             None => return (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -62,7 +63,7 @@ macro_rules! require_auth {
 // ── Handlers ───────────────────────────────────────────────────────────────────
 
 async fn health(State(cell): State<LlmStateCell>) -> Response {
-    match &*cell.lock().expect("lock poisoned") {
+    match &*cell.lock_or_recover() {
         None    => (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"status":"stopped"}))).into_response(),
         Some(s) => {
             let status = if s.is_ready() { "ok" } else { "loading" };

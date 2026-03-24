@@ -442,10 +442,7 @@ pub fn sessions(app: &AppHandle) -> Result<Value, String> {
 
     let mut all_ts: Vec<(u64, String)> = Vec::new();
 
-    let entries = match std::fs::read_dir(&skill_dir) {
-        Ok(e) => e,
-        Err(_) => return Ok(serde_json::json!({ "sessions": [] })),
-    };
+    let Ok(entries) = std::fs::read_dir(&skill_dir) else { return Ok(serde_json::json!({ "sessions": [] })) };
     for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
         if !path.is_dir() { continue; }
@@ -456,12 +453,9 @@ pub fn sessions(app: &AppHandle) -> Result<Value, String> {
         if day_name.len() != 8 || !day_name.bytes().all(|b| b.is_ascii_digit()) { continue; }
         let db_path = path.join(crate::constants::SQLITE_FILE);
         if !db_path.exists() { continue; }
-        let conn = match skill_data::util::open_readonly(&db_path)
-        { Ok(c) => c, Err(_) => continue };
+        let Ok(conn) = skill_data::util::open_readonly(&db_path) else { continue };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        let mut stmt = match conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp") {
-            Ok(s) => s, Err(_) => continue,
-        };
+        let Ok(mut stmt) = conn.prepare("SELECT timestamp FROM embeddings ORDER BY timestamp") else { continue };
         let rows = stmt.query_map([], |row| row.get::<_, i64>(0));
         if let Ok(rows) = rows {
             for row in rows.filter_map(std::result::Result::ok) {

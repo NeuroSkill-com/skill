@@ -63,7 +63,7 @@ pub fn get_tx() -> &'static std::sync::mpsc::SyncSender<Cmd> {
         std::thread::Builder::new()
             .name("skill-tts".into())
             .spawn(|| worker(rx))
-            .expect("failed to spawn KittenTTS worker thread");
+            .expect("failed to spawn KittenTTS worker thread"); // thread spawn — unrecoverable
         tx
     })
 }

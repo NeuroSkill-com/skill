@@ -100,14 +100,11 @@ pub fn sync_skills(skill_dir: &Path, interval_secs: u64, url: Option<&str>) -> S
 
     // The tarball contains a single top-level directory like `skills-main/`.
     // Move its contents into the target.
-    let inner = match find_single_child_dir(&tmp_dir) {
-        Some(d) => d,
-        None => {
-            let _ = fs::remove_dir_all(&tmp_dir);
-            return SyncOutcome::Failed(
-                "tarball does not contain a single top-level directory".into(),
-            );
-        }
+    let Some(inner) = find_single_child_dir(&tmp_dir) else {
+        let _ = fs::remove_dir_all(&tmp_dir);
+        return SyncOutcome::Failed(
+            "tarball does not contain a single top-level directory".into(),
+        );
     };
 
     // Atomic-ish swap: remove old, rename new.

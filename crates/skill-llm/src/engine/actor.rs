@@ -402,10 +402,7 @@ pub(super) fn run_actor(
                             }
                         };
 
-                        let tokens = match model.str_to_token(&p, llama_cpp_4::model::AddBos::Always) {
-                            Ok(t) => t,
-                            Err(_) => break 'build_prompt Some(p), // let downstream handle
-                        };
+                        let Ok(tokens) = model.str_to_token(&p, llama_cpp_4::model::AddBos::Always) else { break 'build_prompt Some(p) };
 
                         let n_ctx_cur = ctx.n_ctx() as usize;
                         let reserve = n_ctx_cur / 4;

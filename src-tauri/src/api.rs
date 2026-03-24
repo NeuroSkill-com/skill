@@ -738,7 +738,7 @@ async fn llm_chat_post(
     // ── Get server ────────────────────────────────────────────────────────────
     let app_state = state.app.app_state();
     let cell = { let __a = app_state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r };
-    let server = { cell.lock().expect("lock poisoned").as_ref().cloned() };
+    let server = { cell.lock_or_recover().as_ref().cloned() };
 
     let Some(server) = server else {
         let body = json!({ "command": "llm_chat", "ok": false,
@@ -981,7 +981,7 @@ async fn handle_llm_chat_ws(
     }));
 
     let cell = { let __a = app_state.lock_or_recover().llm.clone(); let __r = __a.lock_or_recover().state_cell.clone(); __r };
-    let server = { cell.lock().expect("lock poisoned").as_ref().cloned() };
+    let server = { cell.lock_or_recover().as_ref().cloned() };
 
     let Some(server) = server else {
         ws_send!(sink, json!({
@@ -1031,7 +1031,7 @@ async fn handle_llm_chat_ws(
                 let msg = match &event {
                     ToolEvent::ExecutionStart { tool_call_id, tool_name, args } => {
                         // Record tool call start (we'll update with result on End).
-                        tool_calls_for_cb.lock().expect("lock poisoned").push(
+                        tool_calls_for_cb.lock_or_recover().push(
                             crate::llm::chat_store::NewToolCall {
                                 tool:         tool_name.clone(),
                                 status:       "running".to_string(),
@@ -1048,7 +1048,7 @@ async fn handle_llm_chat_ws(
                     }
                     ToolEvent::ExecutionEnd { tool_call_id, tool_name, result, is_error } => {
                         // Update the matching tool call with the result.
-                        let mut tcs = tool_calls_for_cb.lock().expect("lock poisoned");
+                        let mut tcs = tool_calls_for_cb.lock_or_recover();
                         if let Some(tc) = tcs.iter_mut().rev().find(|tc|
                             tc.tool_call_id.as_deref() == Some(tool_call_id)
                         ) {
@@ -1087,7 +1087,7 @@ async fn handle_llm_chat_ws(
         Ok(Ok((text, finish_reason, prompt_tokens, completion_tokens, n_ctx))) => {
             // ── Persist the assistant response ────────────────────────────
             if session_id > 0 && !text.is_empty() {
-                let tool_calls = tool_calls_collected.lock().expect("lock poisoned").clone();
+                let tool_calls = tool_calls_collected.lock_or_recover().clone();
                 let s = app_state.lock_or_recover();
                 let __llm_arc = s.llm.clone(); let mut llm = __llm_arc.lock_or_recover();
         if let Some(store) = llm.chat_store.as_mut() {
@@ -1299,22 +1299,13 @@ async fn screenshot_file_get(
 
     // Security: ensure the resolved path is still under the screenshots dir
     let screenshots_dir = skill_dir.join(crate::constants::SCREENSHOTS_DIR);
-    let canonical = match file_path.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
-    };
-    let canonical_base = match screenshots_dir.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
-    };
+    let Ok(canonical) = file_path.canonicalize() else { return StatusCode::NOT_FOUND.into_response() };
+    let Ok(canonical_base) = screenshots_dir.canonicalize() else { return StatusCode::NOT_FOUND.into_response() };
     if !canonical.starts_with(&canonical_base) {
         return StatusCode::FORBIDDEN.into_response();
     }
 
-    let bytes = match tokio::fs::read(&canonical).await {
-        Ok(b) => b,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
-    };
+    let Ok(bytes) = tokio::fs::read(&canonical).await else { return StatusCode::NOT_FOUND.into_response() };
 
     let content_type = if path.ends_with(".webp") {
         "image/webp"

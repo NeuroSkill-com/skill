@@ -3,6 +3,7 @@
 //! Shared server state, state cell, and status types.
 
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
+use skill_constants::MutexExt;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -58,7 +59,7 @@ impl LlmServerState {
     pub fn is_ready(&self) -> bool { self.ready.load(Ordering::Relaxed) }
 
     pub fn set_allowed_tools(&self, tools: LlmToolConfig) {
-        *self.allowed_tools.lock().expect("lock poisoned") = tools;
+        *self.allowed_tools.lock_or_recover() = tools;
     }
 
     /// Stop the actor and **block until the thread has fully exited**.
@@ -72,7 +73,7 @@ impl LlmServerState {
     pub fn shutdown(self) {
         // Taking the join handle *before* `req_tx` is dropped prevents a race
         // where the thread exits and the handle becomes invalid.
-        let handle = self.join_handle.lock().expect("lock poisoned").take();
+        let handle = self.join_handle.lock_or_recover().take();
         // Dropping `self` here also drops `req_tx`, closing the channel.
         drop(self);
         if let Some(h) = handle {
@@ -119,7 +120,7 @@ pub fn new_state_cell() -> LlmStateCell {
 /// thread has fully exited.  Safe to call from any thread, including the Tauri
 /// `RunEvent::Exit` handler.  No-op if the server is not running.
 pub fn shutdown_cell(cell: &LlmStateCell) {
-    if let Some(server_state) = cell.lock().expect("lock poisoned").take() {
+    if let Some(server_state) = cell.lock_or_recover().take() {
         match Arc::try_unwrap(server_state) {
             Ok(owned) => owned.shutdown(),
             Err(arc)  => drop(arc),   // in-flight axum handler; actor exits when arc drops
@@ -135,7 +136,7 @@ pub enum LlmStatus { Stopped, Loading, Running }
 
 /// Query the current server status from the cell.
 pub fn cell_status(cell: &LlmStateCell) -> (LlmStatus, String) {
-    match &*cell.lock().expect("lock poisoned") {
+    match &*cell.lock_or_recover() {
         None    => (LlmStatus::Stopped, String::new()),
         Some(s) => (
             if s.is_ready() { LlmStatus::Running } else { LlmStatus::Loading },

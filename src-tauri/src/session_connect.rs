@@ -86,10 +86,7 @@ pub(crate) async fn connect_muse(
             None     => all_devices.into_iter().find(|d| paired_ids.contains(&d.id)),
         }
     };
-    let device = match device {
-        Some(d) => d,
-        None => return Err(ConnectError::Other("NO_MUSE_NEARBY".into())),
-    };
+    let Some(device) = device else { return Err(ConnectError::Other("NO_MUSE_NEARBY".into())) };
 
     // Pin real BLE ID into status.
     {

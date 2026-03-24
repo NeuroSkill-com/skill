@@ -105,10 +105,7 @@ pub async fn get_screenshots_around(
         (g.skill_dir.clone(), g.screenshot_store.clone())
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let store = match store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
-            Some(s) => s,
-            None => return vec![],
-        };
+        let Some(store) = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) else { return vec![] };
         crate::screenshot::get_around(&store, timestamp, window_secs)
     }).await.unwrap_or_default())
 }
@@ -133,19 +130,10 @@ pub async fn search_screenshots_by_image(
         } else {
             None
         };
-        let query = match query_emb {
-            Some(v) => v,
-            None => return vec![],
-        };
-        let store = match store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
-            Some(s) => s,
-            None => return vec![],
-        };
+        let Some(query) = query_emb else { return vec![] };
+        let Some(store) = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) else { return vec![] };
         let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
-        let hnsw = match fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) {
-            Ok(idx) => idx,
-            Err(_) => return vec![],
-        };
+        let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) else { return vec![] };
         crate::screenshot::search_by_vector(&hnsw, &store, &query, k)
     }).await.unwrap_or_default())
 }
@@ -213,10 +201,7 @@ pub async fn search_screenshots_by_text(
     };
     let embedder = std::sync::Arc::clone(&embedder);
     Ok(tokio::task::spawn_blocking(move || {
-        let store = match store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
-            Some(s) => s,
-            None => return vec![],
-        };
+        let Some(store) = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) else { return vec![] };
         let k = k.unwrap_or(20);
         let mode = mode.unwrap_or_else(|| "semantic".into());
         match mode.as_str() {
@@ -263,15 +248,9 @@ pub async fn search_screenshots_by_vector(
         (g.skill_dir.clone(), g.screenshot_store.clone())
     };
     Ok(tokio::task::spawn_blocking(move || {
-        let store = match store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) {
-            Some(s) => s,
-            None => return vec![],
-        };
+        let Some(store) = store.or_else(|| skill_data::screenshot_store::ScreenshotStore::open(&skill_dir).map(std::sync::Arc::new)) else { return vec![] };
         let hnsw_path = skill_dir.join(crate::constants::SCREENSHOTS_HNSW);
-        let hnsw = match fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) {
-            Ok(idx) => idx,
-            Err(_) => return vec![],
-        };
+        let Ok(hnsw) = fast_hnsw::labeled::LabeledIndex::<fast_hnsw::distance::Cosine, i64>::load(&hnsw_path, fast_hnsw::distance::Cosine) else { return vec![] };
         crate::screenshot::search_by_vector(&hnsw, &store, &vector, k)
     }).await.unwrap_or_default())
 }

@@ -6,6 +6,7 @@ use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
 };
+use skill_constants::MutexExt;
 use serde::Serialize;
 
 use crate::event::LlmEventEmitter;
@@ -61,13 +62,13 @@ pub fn push_log_inner(
     let ts    = unix_ts_ms();
     let entry = LlmLogEntry { ts, level: level.to_string(), message: msg.to_string() };
 
-    { let mut q = buf.lock().expect("lock poisoned"); if q.len() >= LOG_CAP { q.pop_front(); } q.push_back(entry.clone()); }
+    { let mut q = buf.lock_or_recover(); if q.len() >= LOG_CAP { q.pop_front(); } q.push_back(entry.clone()); }
     app.emit_event("llm:log", serde_json::to_value(&entry).unwrap_or_default());
 
     if let Some(f) = file {
         use std::io::Write;
         let dt = chrono_iso(ts);
-        let _ = writeln!(f.lock().expect("lock poisoned"), "[{dt}] [{level:5}] {msg}");
+        let _ = writeln!(f.lock_or_recover(), "[{dt}] [{level:5}] {msg}");
     }
 }
 

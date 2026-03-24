@@ -4,6 +4,7 @@
 //! execution, and the multi-round chat loop.
 
 use std::sync::{Arc, atomic::Ordering};
+use skill_constants::MutexExt;
 
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -127,8 +128,8 @@ where
 {
     let cancelled_set = state.cancelled_tool_calls.clone();
     // Clear cancelled set at the start of a new chat request.
-    { cancelled_set.lock().expect("lock poisoned").clear(); }
-    let allowed_tools = state.allowed_tools.lock().expect("lock poisoned").clone();
+    { cancelled_set.lock_or_recover().clear(); }
+    let allowed_tools = state.allowed_tools.lock_or_recover().clone();
 
     let max_rounds         = allowed_tools.max_rounds;
     let max_calls_per_round = allowed_tools.max_calls_per_round;
@@ -568,7 +569,7 @@ where
 {
     for tc in calls.iter_mut() {
         // Check if cancelled before execution.
-        if cancelled_set.lock().expect("lock poisoned").contains(&tc.id) {
+        if cancelled_set.lock_or_recover().contains(&tc.id) {
             let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
             on_tool_event(ToolEvent::Status {
                 tool_name: tc.function.name.clone(),
@@ -619,7 +620,7 @@ where
         });
 
         // Re-check cancellation after emitting start.
-        let (tool_result, is_error) = if cancelled_set.lock().expect("lock poisoned").contains(&tc.id) {
+        let (tool_result, is_error) = if cancelled_set.lock_or_recover().contains(&tc.id) {
             (json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }), true)
         } else {
             match args_result {
@@ -675,7 +676,7 @@ where
 
     let mut prepared = Vec::with_capacity(calls.len());
     for tc in calls.iter_mut() {
-        if cancelled_set.lock().expect("lock poisoned").contains(&tc.id) {
+        if cancelled_set.lock_or_recover().contains(&tc.id) {
             let cancel_result = json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" });
             on_tool_event(ToolEvent::Status {
                 tool_name: tc.function.name.clone(),
@@ -738,7 +739,7 @@ where
 
         if is_valid {
             futures.push(tokio::spawn(async move {
-                if cancel_check.lock().expect("lock poisoned").contains(&tc.id) {
+                if cancel_check.lock_or_recover().contains(&tc.id) {
                     return (tc.clone(), json!({ "ok": false, "tool": tc.function.name, "error": "cancelled by user" }), true);
                 }
                 let result = execute_builtin_tool_call(&tc, &allowed, &sdir).await;

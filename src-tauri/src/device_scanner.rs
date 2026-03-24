@@ -452,10 +452,7 @@ async fn run_ble_scanner(app: AppHandle, cancel: CancellationToken) {
 /// contains `usbserial` / `ttyUSB` in the path.  We accept any serial port
 /// whose product string or path matches known OpenBCI identifiers.
 fn detect_openbci_serial_ports() -> Vec<(String, String)> {
-    let ports = match serialport::available_ports() {
-        Ok(p) => p,
-        Err(_) => return Vec::new(),
-    };
+    let Ok(ports) = serialport::available_ports() else { return Vec::new() };
 
     let mut results = Vec::new();
     for port in ports {
@@ -626,12 +623,9 @@ async fn run_cortex_scanner(app: AppHandle, cancel: CancellationToken) {
                     cortex_probe_headsets(&client),
                 ).await;
 
-                let headsets = match result {
-                    Ok(Ok(list)) => list,
-                    _ => {
-                        set_cortex_ws_state(&app, "disconnected");
-                        continue; // Launcher not running or auth/query failed.
-                    }
+                let Ok(Ok(headsets)) = result else {
+                    set_cortex_ws_state(&app, "disconnected");
+                    continue; // Launcher not running or auth/query failed.
                 };
 
                 set_cortex_ws_state(&app, "connected");
