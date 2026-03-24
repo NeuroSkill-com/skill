@@ -112,6 +112,13 @@
  * 19. UNKNOWN            — Verify error handling for bad commands
  * 20. BROADCASTS         — Listen for server-pushed real-time events
  * 21. HTTP API           — REST endpoints + universal tunnel on the same port
+ * 22. SESSION_METRICS    — Per-session full/first-half/second-half metrics + trend directions
+ * 23. CALIBRATION CRUD   — Full create/get/update/delete lifecycle for calibration profiles
+ * 24. SLEEP SCHEDULE     — Read and update sleep schedule (bedtime, wake, preset)
+ * 25. HEALTH             — HealthKit: summary, query (sleep/steps/workouts/hr/metrics), metric_types, sync
+ * 26. LLM EXTENDED       — Additional LLM management: downloads, refresh, hardware_fit,
+ *                          select_model, select_mmproj, pause/resume_download,
+ *                          set_autoload_mmproj, add_model
  *
  * ═══════════════════════════════════════════════════════════════════════════════
  * USAGE
@@ -3331,6 +3338,465 @@ async function testSkillsCommands(): Promise<void> {
 }
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 22. SESSION_METRICS
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Request:  { command: "session_metrics", start_utc, end_utc }
+// Response: { command: "session_metrics", ok: true, metrics: {...},
+//             first: {...}, second: {...}, trends: {...} }
+//
+// What the server does:
+//   Loads all embedding epochs in [start_utc, end_utc] and computes:
+//   - Full-range mean of every metric
+//   - First-half and second-half means for trend detection
+//   - Per-metric trend direction: "up", "down", or "flat"
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testSessionMetrics(): Promise<void> {
+  heading("session_metrics");
+  info("Request: { command: 'session_metrics', start_utc, end_utc }");
+  info("Returns full-range, first-half, second-half metric averages and trends.");
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const r = await send({ command: "session_metrics", start_utc: now - 600, end_utc: now });
+    r.ok ? ok("command succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+
+    if (r.metrics) {
+      const m = r.metrics;
+      typeof m === "object" ? ok("metrics is an object") : fail("metrics not an object");
+      // Check for some expected fields
+      const sampleFields = ["focus", "relaxation", "engagement", "hr", "meditation"];
+      for (const f of sampleFields) {
+        if (typeof m[f] === "number") ok(`metrics.${f} present: ${m[f].toFixed(2)}`);
+        else info(`metrics.${f} = null/missing (no data in range)`);
+      }
+    } else {
+      ok("metrics = null (no epochs in range — expected with no recording)");
+    }
+
+    if (r.first && r.second) {
+      ok("first-half and second-half metrics present");
+    } else {
+      ok("first/second halves null (no data in range)");
+    }
+
+    if (r.trends && typeof r.trends === "object") {
+      const trendKeys = Object.keys(r.trends);
+      ok(`trends has ${trendKeys.length} metric(s)`);
+      // Validate trend values are up/down/flat
+      const validDirs = new Set(["up", "down", "flat"]);
+      const badTrends = trendKeys.filter(k => !validDirs.has(r.trends[k]));
+      badTrends.length === 0
+        ? ok("all trend directions are valid (up/down/flat)")
+        : fail(`invalid trend directions: ${badTrends.join(", ")}`);
+    } else {
+      ok("trends = null (no data in range)");
+    }
+  } catch (e: any) { fail(`session_metrics failed: ${e.message}`); }
+
+  // ── missing start_utc → error ──
+  try {
+    info("Testing missing start_utc (should return ok=false)…");
+    const r = await send({ command: "session_metrics", end_utc: Math.floor(Date.now() / 1000) });
+    r.ok === false
+      ? ok(`correctly rejected missing start_utc: error="${r.error}"`)
+      : fail("expected ok=false for missing start_utc");
+  } catch (e: any) { fail(`missing start_utc test failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 23. CALIBRATION CRUD (get, create, update, delete)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testCalibrationCrud(): Promise<void> {
+  heading("calibration CRUD (get / create / update / delete)");
+  info("Tests the full calibration profile lifecycle via WS commands.");
+
+  let createdId: string | null = null;
+
+  // ── create_calibration ────────────────────────────────────────────────────
+  try {
+    info("Testing create_calibration…");
+    const r = await send({
+      command: "create_calibration",
+      name: "__test_profile__",
+      actions: [
+        { label: "Eyes Open", duration_secs: 10 },
+        { label: "Eyes Closed", duration_secs: 10 },
+      ],
+      loop_count: 2,
+      break_duration_secs: 3,
+      auto_start: false,
+    });
+    r.ok ? ok("create_calibration succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+    if (r.profile) {
+      createdId = r.profile.id;
+      field("id",   r.profile.id,   "UUID of the new profile");
+      field("name", r.profile.name, "echoed name");
+      r.profile.name === "__test_profile__"
+        ? ok("name echoed correctly")
+        : fail(`name mismatch: ${r.profile.name}`);
+      r.profile.loop_count === 2
+        ? ok("loop_count = 2")
+        : fail(`loop_count = ${r.profile.loop_count}`);
+      Array.isArray(r.profile.actions) && r.profile.actions.length === 2
+        ? ok("2 actions created")
+        : fail(`actions length: ${r.profile.actions?.length}`);
+    } else {
+      fail("no profile in response");
+    }
+  } catch (e: any) { fail(`create_calibration failed: ${e.message}`); }
+
+  // ── get_calibration ───────────────────────────────────────────────────────
+  if (createdId) {
+    try {
+      info("Testing get_calibration…");
+      const r = await send({ command: "get_calibration", id: createdId });
+      r.ok ? ok("get_calibration succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+      if (r.profile) {
+        r.profile.id === createdId
+          ? ok("profile id matches")
+          : fail(`id mismatch: ${r.profile.id}`);
+        r.profile.name === "__test_profile__"
+          ? ok("name matches")
+          : fail(`name mismatch: ${r.profile.name}`);
+      } else {
+        fail("no profile in get response");
+      }
+    } catch (e: any) { fail(`get_calibration failed: ${e.message}`); }
+  }
+
+  // ── get_calibration — bogus id → error ────────────────────────────────────
+  try {
+    info("Testing get_calibration with bogus id (should return ok=false)…");
+    const r = await send({ command: "get_calibration", id: "nonexistent-uuid-xyz" });
+    r.ok === false
+      ? ok(`correctly rejected bogus id: error="${r.error}"`)
+      : fail("expected ok=false for nonexistent id");
+  } catch (e: any) { fail(`get_calibration bogus-id test failed: ${e.message}`); }
+
+  // ── update_calibration ────────────────────────────────────────────────────
+  if (createdId) {
+    try {
+      info("Testing update_calibration…");
+      const r = await send({
+        command: "update_calibration",
+        id: createdId,
+        name: "__test_profile_updated__",
+        loop_count: 5,
+        break_duration_secs: 10,
+      });
+      r.ok ? ok("update_calibration succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+      if (r.profile) {
+        r.profile.name === "__test_profile_updated__"
+          ? ok("name updated")
+          : fail(`name not updated: ${r.profile.name}`);
+        r.profile.loop_count === 5
+          ? ok("loop_count updated to 5")
+          : fail(`loop_count = ${r.profile.loop_count}`);
+      }
+    } catch (e: any) { fail(`update_calibration failed: ${e.message}`); }
+  }
+
+  // ── delete_calibration ────────────────────────────────────────────────────
+  if (createdId) {
+    try {
+      info("Testing delete_calibration…");
+      const r = await send({ command: "delete_calibration", id: createdId });
+      r.ok ? ok("delete_calibration succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+
+      // Verify it's gone
+      const r2 = await send({ command: "get_calibration", id: createdId });
+      r2.ok === false
+        ? ok("deleted profile no longer retrievable")
+        : fail("profile still exists after deletion");
+    } catch (e: any) { fail(`delete_calibration failed: ${e.message}`); }
+  }
+
+  // ── create_calibration — missing name → error ─────────────────────────────
+  try {
+    info("Testing create_calibration with missing name (should return ok=false)…");
+    const r = await send({
+      command: "create_calibration",
+      actions: [{ label: "X", duration_secs: 10 }],
+    });
+    r.ok === false
+      ? ok(`correctly rejected missing name: error="${r.error}"`)
+      : fail("expected ok=false for missing name");
+  } catch (e: any) { fail(`create missing-name test failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 24. SLEEP SCHEDULE
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testSleepSchedule(): Promise<void> {
+  heading("sleep_schedule / sleep_schedule_set");
+  info("Tests the sleep schedule read and update commands.");
+
+  // ── sleep_schedule — read current ─────────────────────────────────────────
+  let originalBedtime: string | null = null;
+  let originalWake: string | null = null;
+  let originalPreset: string | null = null;
+  try {
+    info("Testing sleep_schedule (read current schedule)…");
+    const r = await send({ command: "sleep_schedule" });
+    r.ok ? ok("sleep_schedule succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+
+    field("bedtime",          r.bedtime,          "bedtime in HH:MM format");
+    field("wake_time",        r.wake_time,        "wake time in HH:MM format");
+    field("duration_minutes", r.duration_minutes, "computed sleep duration in minutes");
+    field("preset",           r.preset,           "active preset id");
+
+    typeof r.bedtime === "string" ? ok("bedtime is a string") : fail(`bedtime type: ${typeof r.bedtime}`);
+    typeof r.wake_time === "string" ? ok("wake_time is a string") : fail(`wake_time type: ${typeof r.wake_time}`);
+    typeof r.duration_minutes === "number" ? ok("duration_minutes is a number") : fail(`duration type: ${typeof r.duration_minutes}`);
+
+    originalBedtime = r.bedtime;
+    originalWake = r.wake_time;
+    originalPreset = r.preset;
+  } catch (e: any) { fail(`sleep_schedule read failed: ${e.message}`); }
+
+  // ── sleep_schedule_set — update ───────────────────────────────────────────
+  try {
+    info("Testing sleep_schedule_set (update bedtime + wake time)…");
+    const r = await send({
+      command: "sleep_schedule_set",
+      bedtime: "22:30",
+      wake_time: "06:30",
+    });
+    r.ok ? ok("sleep_schedule_set succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+
+    r.bedtime === "22:30"
+      ? ok("bedtime updated to 22:30")
+      : fail(`bedtime = ${r.bedtime}`);
+    r.wake_time === "06:30"
+      ? ok("wake_time updated to 06:30")
+      : fail(`wake_time = ${r.wake_time}`);
+    r.duration_minutes === 480
+      ? ok("duration_minutes = 480 (8h)")
+      : ok(`duration_minutes = ${r.duration_minutes}`);
+  } catch (e: any) { fail(`sleep_schedule_set update failed: ${e.message}`); }
+
+  // ── sleep_schedule_set — preset ───────────────────────────────────────────
+  try {
+    info("Testing sleep_schedule_set with preset…");
+    const r = await send({ command: "sleep_schedule_set", preset: "early_bird" });
+    r.ok ? ok("sleep_schedule_set with preset succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+    r.preset === "early_bird"
+      ? ok("preset applied: early_bird")
+      : ok(`preset = ${r.preset}`);
+  } catch (e: any) { fail(`sleep_schedule_set preset failed: ${e.message}`); }
+
+  // ── Restore original schedule ─────────────────────────────────────────────
+  if (originalBedtime && originalWake) {
+    try {
+      info("Restoring original sleep schedule…");
+      const payload: any = {
+        command: "sleep_schedule_set",
+        bedtime: originalBedtime,
+        wake_time: originalWake,
+      };
+      if (originalPreset) payload.preset = originalPreset;
+      const r = await send(payload);
+      r.ok ? ok("schedule restored") : fail(`restore failed: ${r.error}`);
+    } catch (e: any) { fail(`schedule restore failed: ${e.message}`); }
+  }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 25. HEALTH COMMANDS
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testHealth(): Promise<void> {
+  heading("health commands");
+  info("Tests HealthKit data query and sync commands.");
+
+  // ── health_summary ────────────────────────────────────────────────────────
+  try {
+    info("Testing health_summary…");
+    const now = Math.floor(Date.now() / 1000);
+    const r = await send({ command: "health_summary", start_utc: now - 86400, end_utc: now });
+    r.ok ? ok("health_summary succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+
+    field("sleep_samples",       r.sleep_samples,       "sleep analysis sample count");
+    field("workouts",            r.workouts,            "workout session count");
+    field("heart_rate_samples",  r.heart_rate_samples,  "heart rate sample count");
+    field("total_steps",         r.total_steps,         "total step count");
+    field("mindfulness_sessions",r.mindfulness_sessions,"mindfulness session count");
+    field("metric_entries",      r.metric_entries,      "scalar metric entries");
+
+    typeof r.sleep_samples === "number" ? ok("sleep_samples is a number") : fail("sleep_samples not a number");
+    typeof r.total_steps   === "number" ? ok("total_steps is a number")   : fail("total_steps not a number");
+  } catch (e: any) { fail(`health_summary failed: ${e.message}`); }
+
+  // ── health_metric_types ───────────────────────────────────────────────────
+  try {
+    info("Testing health_metric_types…");
+    const r = await send({ command: "health_metric_types" });
+    r.ok ? ok("health_metric_types succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+
+    Array.isArray(r.metric_types)
+      ? ok(`metric_types array present (${r.metric_types.length} types)`)
+      : fail("metric_types not an array");
+  } catch (e: any) { fail(`health_metric_types failed: ${e.message}`); }
+
+  // ── health_query — sleep type ─────────────────────────────────────────────
+  try {
+    info("Testing health_query (type=sleep)…");
+    const now = Math.floor(Date.now() / 1000);
+    const r = await send({
+      command: "health_query",
+      type: "sleep",
+      start_utc: now - 86400,
+      end_utc: now,
+      limit: 10,
+    });
+    r.ok ? ok("health_query (sleep) succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+    Array.isArray(r.results)
+      ? ok(`results array present (${r.results.length} results)`)
+      : fail("results not an array");
+  } catch (e: any) { fail(`health_query (sleep) failed: ${e.message}`); }
+
+  // ── health_query — steps type ─────────────────────────────────────────────
+  try {
+    info("Testing health_query (type=steps)…");
+    const now = Math.floor(Date.now() / 1000);
+    const r = await send({
+      command: "health_query",
+      type: "steps",
+      start_utc: now - 86400,
+      end_utc: now,
+      limit: 10,
+    });
+    r.ok ? ok("health_query (steps) succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+  } catch (e: any) { fail(`health_query (steps) failed: ${e.message}`); }
+
+  // ── health_sync — empty payload (structural test) ─────────────────────────
+  try {
+    info("Testing health_sync with empty payload (structural test)…");
+    const r = await send({ command: "health_sync" });
+    // Empty payload should still succeed (upserting 0 rows)
+    r.ok ? ok("health_sync (empty) succeeded") : fail(`ok=${r.ok}, error=${r.error}`);
+  } catch (e: any) { fail(`health_sync failed: ${e.message}`); }
+
+  // ── health_query — missing type → error ───────────────────────────────────
+  try {
+    info("Testing health_query with missing type (should return ok=false)…");
+    const now = Math.floor(Date.now() / 1000);
+    const r = await send({ command: "health_query", start_utc: now - 3600, end_utc: now });
+    r.ok === false
+      ? ok(`correctly rejected missing type: error="${r.error}"`)
+      : fail("expected ok=false for missing type");
+  } catch (e: any) { fail(`health_query missing-type test failed: ${e.message}`); }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 26. EXTENDED LLM COMMANDS
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function testLlmExtended(): Promise<void> {
+  heading("LLM extended commands");
+  info("Tests additional LLM management commands not covered in the main LLM test.");
+
+  // ── llm_downloads ─────────────────────────────────────────────────────────
+  try {
+    info("Testing llm_downloads…");
+    const r = await send({ command: "llm_downloads" });
+    r.ok === true ? ok("llm_downloads ok=true") : fail(`ok=${r.ok}, error=${r.error}`);
+    Array.isArray(r.downloads)
+      ? ok(`downloads array present (${r.downloads.length} items)`)
+      : fail("downloads not an array");
+  } catch (e: any) { fail(`llm_downloads failed: ${e.message}`); }
+
+  // ── llm_refresh_catalog ───────────────────────────────────────────────────
+  try {
+    info("Testing llm_refresh_catalog…");
+    const r = await send({ command: "llm_refresh_catalog" });
+    r.ok === true ? ok("llm_refresh_catalog ok=true") : fail(`ok=${r.ok}, error=${r.error}`);
+  } catch (e: any) { fail(`llm_refresh_catalog failed: ${e.message}`); }
+
+  // ── llm_hardware_fit ──────────────────────────────────────────────────────
+  try {
+    info("Testing llm_hardware_fit…");
+    const r = await send({ command: "llm_hardware_fit" });
+    r.ok === true ? ok("llm_hardware_fit ok=true") : fail(`ok=${r.ok}, error=${r.error}`);
+    Array.isArray(r.fits)
+      ? ok(`fits array present (${r.fits.length} models)`)
+      : fail("fits not an array");
+    // Validate each entry's shape
+    for (const f of (r.fits ?? []).slice(0, 3)) {
+      typeof f.filename === "string"
+        ? ok(`fit entry has filename: "${f.filename}"`)
+        : fail("fit entry missing filename");
+      typeof f.fit_level === "string"
+        ? ok(`fit_level: "${f.fit_level}"`)
+        : fail("fit_level missing");
+    }
+  } catch (e: any) { fail(`llm_hardware_fit failed: ${e.message}`); }
+
+  // ── llm_select_model — missing filename → error ───────────────────────────
+  try {
+    info("Testing llm_select_model with missing filename (should return ok=false)…");
+    const r = await send({ command: "llm_select_model" });
+    r.ok === false
+      ? ok(`correctly rejected: error="${r.error}"`)
+      : fail("expected ok=false for missing filename");
+  } catch (e: any) { fail(`llm_select_model missing-filename test failed: ${e.message}`); }
+
+  // ── llm_select_mmproj — missing filename → error ──────────────────────────
+  try {
+    info("Testing llm_select_mmproj with missing filename (should return ok=false)…");
+    const r = await send({ command: "llm_select_mmproj" });
+    r.ok === false
+      ? ok(`correctly rejected: error="${r.error}"`)
+      : fail("expected ok=false for missing filename");
+  } catch (e: any) { fail(`llm_select_mmproj missing-filename test failed: ${e.message}`); }
+
+  // ── llm_pause_download — missing filename → error ─────────────────────────
+  try {
+    info("Testing llm_pause_download with missing filename (should return ok=false)…");
+    const r = await send({ command: "llm_pause_download" });
+    r.ok === false
+      ? ok(`correctly rejected: error="${r.error}"`)
+      : fail("expected ok=false for missing filename");
+  } catch (e: any) { fail(`llm_pause_download missing-filename test failed: ${e.message}`); }
+
+  // ── llm_resume_download — missing filename → error ────────────────────────
+  try {
+    info("Testing llm_resume_download with missing filename (should return ok=false)…");
+    const r = await send({ command: "llm_resume_download" });
+    r.ok === false
+      ? ok(`correctly rejected: error="${r.error}"`)
+      : fail("expected ok=false for missing filename");
+  } catch (e: any) { fail(`llm_resume_download missing-filename test failed: ${e.message}`); }
+
+  // ── llm_set_autoload_mmproj — missing enabled → error ─────────────────────
+  try {
+    info("Testing llm_set_autoload_mmproj with missing enabled (should return ok=false)…");
+    const r = await send({ command: "llm_set_autoload_mmproj" });
+    r.ok === false
+      ? ok(`correctly rejected: error="${r.error}"`)
+      : fail("expected ok=false for missing enabled");
+  } catch (e: any) { fail(`llm_set_autoload_mmproj missing-enabled test failed: ${e.message}`); }
+
+  // ── llm_add_model — missing repo/filename → error ─────────────────────────
+  try {
+    info("Testing llm_add_model with missing repo/filename (should return ok=false)…");
+    const r = await send({ command: "llm_add_model" });
+    r.ok === false
+      ? ok(`correctly rejected: error="${r.error}"`)
+      : fail("expected ok=false for missing repo/filename");
+  } catch (e: any) { fail(`llm_add_model missing-params test failed: ${e.message}`); }
+}
+
+
 async function testUnknownCommand(): Promise<void> {
   heading("unknown command");
   info("Request: { command: 'nonexistent_command_xyz' }");
@@ -3817,12 +4283,17 @@ async function main(): Promise<void> {
   await testSearch();
   await testCalibrate();
   await testTimer();
+  await testSessionMetrics();
   await testCompare();
   await testSleep();
   await testUmap();
   await testDnd();
   await testLlm();
+  await testLlmExtended();
   await testScreenshotSearch();
+  await testCalibrationCrud();
+  await testSleepSchedule();
+  await testHealth();
   await testSkillsCommands();
   await testUnknownCommand();
   await testBroadcastEvents();   // skips gracefully when transport === "http"

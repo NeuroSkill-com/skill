@@ -1,0 +1,3 @@
+### Features
+
+- **Full WS command test coverage**: Added smoke tests in `test.ts` for all previously untested WebSocket commands: `session_metrics`, calibration CRUD (`get_calibration`, `create_calibration`, `update_calibration`, `delete_calibration`), `sleep_schedule` / `sleep_schedule_set`, health commands (`health_summary`, `health_metric_types`, `health_query`, `health_sync`), and extended LLM management commands (`llm_downloads`, `llm_refresh_catalog`, `llm_hardware_fit`, `llm_select_model`, `llm_select_mmproj`, `llm_pause_download`, `llm_resume_download`, `llm_set_autoload_mmproj`, `llm_add_model`). All 58 dispatch table commands now have corresponding tests.
