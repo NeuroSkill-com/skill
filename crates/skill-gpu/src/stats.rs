@@ -289,6 +289,8 @@ mod macos {
             )
         };
         if kr != 0 { return None; }
+        // SAFETY: `host_statistics64` returned success (kr == 0), so the
+        // MaybeUninit buffer has been fully initialised with vm_statistics64.
         let s = unsafe { stats.assume_init() };
         let available_pages = s.free_count as u64 + s.inactive_count as u64;
         Some(available_pages.saturating_mul(page_size))
@@ -311,14 +313,19 @@ mod macos {
 
     fn dict_i64(dict: CFDictionaryRef, key: &str) -> Option<i64> {
         with_cf_str(key, |k| {
+            // SAFETY: `dict` is a valid CFDictionaryRef obtained from
+            // IORegistryEntryCreateCFProperties; `k` is a valid CFStringRef.
             let v = unsafe { CFDictionaryGetValue(dict, k) };
             if v.is_null() { return None; }
             let mut out: i64 = 0;
+            // SAFETY: `v` is a non-null CFNumberRef from the dictionary.
+            // CFNumberGetValue writes into `out` only on success.
             if unsafe { CFNumberGetValue(v, CF_NUMBER_SI64_TYPE, &mut out) } {
                 Some(out)
             } else {
                 // Fall back to 32-bit read
                 let mut out32: i64 = 0;
+                // SAFETY: same as above — fallback to 32-bit numeric type.
                 if unsafe { CFNumberGetValue(v, CF_NUMBER_SI32_TYPE, &mut out32) } {
                     Some(out32)
                 } else {
@@ -335,10 +342,14 @@ mod macos {
     /// safe because we immediately re-interpret through the float pointer).
     fn dict_f64(dict: CFDictionaryRef, key: &str) -> Option<f64> {
         with_cf_str(key, |k| {
+            // SAFETY: `dict` is a valid CFDictionaryRef; `k` is a valid CFStringRef.
             let v = unsafe { CFDictionaryGetValue(dict, k) };
             if v.is_null() { return None; }
             let mut out: f64 = 0.0;
-            // kCFNumberFloat64Type converts from any stored numeric type.
+            // SAFETY: `v` is a non-null CFNumberRef. kCFNumberFloat64Type
+            // converts from any stored numeric type. The pointer cast is safe
+            // because both f64 and i64 are 8 bytes and CFNumberGetValue
+            // writes exactly that many bytes on success.
             if unsafe {
                 CFNumberGetValue(
                     v,
@@ -389,14 +400,15 @@ mod macos {
         // C string immediately, but the pointer must remain valid until the
         // function returns.  Using a match-arm temporary drops it before the
         // outer call, causing a use-after-free and an empty service list.
-        let name = match CString::new("IOAccelerator") {
-            Ok(s)  => s,
-            Err(_) => return vec![],
-        };
+        let Ok(name) = CString::new("IOAccelerator") else { return vec![] };
+        // SAFETY: `name.as_ptr()` is a valid NUL-terminated C string.
+        // IOServiceMatching copies the string internally.
         let matching = unsafe { IOServiceMatching(name.as_ptr()) };
         if matching.is_null() { return vec![]; }
 
         let mut iter: IOIteratorT = 0;
+        // SAFETY: `matching` is a valid CFMutableDictionaryRef from
+        // IOServiceMatching. IOServiceGetMatchingServices consumes it.
         if unsafe { IOServiceGetMatchingServices(K_IO_MASTER_PORT_DEFAULT, matching, &mut iter) }
             != KERN_SUCCESS
         {
@@ -406,15 +418,18 @@ mod macos {
         let mut results = Vec::new();
 
         loop {
+            // SAFETY: `iter` is a valid IO iterator from IOServiceGetMatchingServices.
             let entry = unsafe { IOIteratorNext(iter) };
             if entry == 0 { break; }
 
             let mut props: CFMutableDictRef = std::ptr::null_mut();
+            // SAFETY: `entry` is a valid IO object from IOIteratorNext.
             let kr = unsafe {
                 IORegistryEntryCreateCFProperties(entry, &mut props, std::ptr::null(), 0)
             };
 
             if kr == KERN_SUCCESS && !props.is_null() {
+                // SAFETY: `props` is a valid CFDictionaryRef; `k` is a valid CFStringRef.
                 let perf = with_cf_str("PerformanceStatistics", |k| unsafe {
                     CFDictionaryGetValue(props as CFDictionaryRef, k)
                 });
@@ -444,12 +459,15 @@ mod macos {
                     });
                 }
 
+                // SAFETY: `props` was created by IORegistryEntryCreateCFProperties; we own it.
                 unsafe { CFRelease(props as CFTypeRef) };
             }
 
+            // SAFETY: `entry` was obtained from IOIteratorNext; release our reference.
             unsafe { IOObjectRelease(entry) };
         }
 
+        // SAFETY: `iter` was obtained from IOServiceGetMatchingServices; release our reference.
         unsafe { IOObjectRelease(iter) };
         results
     }
@@ -474,6 +492,7 @@ mod macos {
         1.0 - x + x * x / 2.0 - x * x * x / 6.0
     };
 
+    #[allow(clippy::expect_used)] // thread spawn only fails under extreme resource exhaustion
     fn ensure_poller() -> Arc<Mutex<Option<super::GpuStats>>> {
         GPU_CACHE.get_or_init(|| {
             let cache: Arc<Mutex<Option<super::GpuStats>>> = Arc::new(Mutex::new(None));
@@ -505,7 +524,7 @@ mod macos {
                                 overall: ewma_overall.unwrap_or(raw.overall),
                                 ..raw
                             };
-                            *shared.lock().unwrap_or_else(|e| e.into_inner()) = Some(smoothed);
+                            *shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(smoothed);
                         }
 
                         std::thread::sleep(std::time::Duration::from_millis(POLL_MS));
@@ -521,7 +540,7 @@ mod macos {
     pub fn cached_read() -> Option<super::GpuStats> {
         ensure_poller()
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 

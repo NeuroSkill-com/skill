@@ -25,7 +25,7 @@ use std::sync::Mutex;
 
 /// Acquire a Mutex lock, recovering from poison.
 fn lock_or_recover<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|poison| poison.into_inner())
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
