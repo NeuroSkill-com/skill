@@ -25,7 +25,7 @@ tmux new-session -d -s "$SESSION" -c "$DIR" \
     echo '═══ Waiting for _skill._tcp mDNS (up to ${MDNS_TIMEOUT}s) ═══'
     FOUND=0
     for i in \$(seq 1 $((MDNS_TIMEOUT / 3))); do
-      if dns-sd -B _skill._tcp local 2>&1 | timeout 3 grep -q 'skill'; then
+      if dns-sd -B _skill._tcp local 2>&1 | perl -e 'alarm 3; while(<STDIN>){exit 0 if /skill/}; exit 1'; then
         FOUND=1
         break
       fi
