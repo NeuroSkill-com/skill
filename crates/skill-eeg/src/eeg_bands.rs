@@ -43,7 +43,7 @@
 //! ```
 //!
 //! where `psd_raw[k] = (r[k]² + i[k]²) / n` is the output of
-//! [`gpu_fft::psd::psd`].
+//! `gpu_fft::psd::psd`.
 //!
 //! ## Batch GPU execution
 //!

@@ -30,7 +30,7 @@ pub struct LlmToolConfig {
 
     /// When `true`, every LLM-generated bash command is presented for user
     /// review/editing before execution.  The user can modify the command or
-    /// cancel it entirely.  Requires a UI callback via [`set_bash_edit_hook`].
+    /// cancel it entirely.  Requires a UI callback via [`crate::set_bash_edit_hook`].
     /// Default: `false`.
     #[serde(default)]
     pub require_bash_edit: bool,
