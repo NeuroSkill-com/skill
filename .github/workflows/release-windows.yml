@@ -105,7 +105,7 @@ jobs:
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
-          shared-key: windows-release-x86_64-msvc
+          shared-key: windows-release-x86_64-msvc-v2
 
       # ── Build cache (sccache) ─────────────────────────────────────────────────
       - name: Setup sccache
@@ -118,7 +118,7 @@ jobs:
           echo "SCCACHE_CACHE_SIZE=10G" >> "$GITHUB_ENV"
           # Version the sccache GHA cache so it can be busted manually by
           # incrementing this value (e.g. after a toolchain or LLVM upgrade).
-          echo "SCCACHE_GHA_VERSION=1" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_VERSION=2" >> "$GITHUB_ENV"
 
       # ── Node.js + frontend build ─────────────────────────────────────────────
       # Moved before SDK installs so the frontend compiles while heavy SDKs
