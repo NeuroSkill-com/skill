@@ -87,6 +87,8 @@ const ui: Record<string, string> = {
   "updates.readyToRestart":            "Ready to restart",
   "updates.restartToApply":            "Restart the app to apply the update.",
   "updates.restartNow":                "Restart Now",
+  "updates.restartWhenReady":          "Update ready — restart when you're ready.",
+  "updates.sessionLiveBlocked":        "An EEG session is being recorded. Please stop the session before restarting, or dismiss and restart later.",
   "updates.restartingIn":              "Restarting in {secs}s…",
   "updates.downloadFailed":            "Download failed — click Retry to try again.",
   "updates.autoUpdateFailedOnline":    "Automatic update failed. Please download the latest version online.",
@@ -107,7 +109,7 @@ const ui: Record<string, string> = {
   "updates.intervalOffWarning":        "Automatic update checks are disabled. Use the button above to check manually.",
   "updates.autostart":                 "Launch at Login",
   "updates.autostartDesc":             "Start automatically when you log in to your computer.",
-  "updates.footer":                    "Updates are downloaded and installed automatically. You just need to restart.",
+  "updates.footer":                    "Updates are downloaded automatically. Restart when you're ready to apply.",
 
   "whatsNew.title":   "What's New",
   "whatsNew.version": "Version {version}",

@@ -426,6 +426,9 @@ pub struct AppState {
     pub ws_port: u16,
     pub api_token: String,
     pub update_check_interval_secs: u64,
+    /// Set by the frontend when an update has been downloaded and is ready
+    /// to install on next restart / relaunch.
+    pub update_ready_to_install: bool,
 
     // ── Device configs ────────────────────────────────────────────────────
     pub openbci_config:    crate::settings::OpenBciConfig,

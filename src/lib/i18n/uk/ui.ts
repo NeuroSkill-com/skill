@@ -167,6 +167,8 @@ const ui: Record<string, string> = {
   "updates.readyToRestart":            "Готовий до перезапуску",
   "updates.restartToApply":            "Перезапустіть застосунок, щоб застосувати оновлення.",
   "updates.restartNow":                "Перезапустити зараз",
+  "updates.restartWhenReady":          "Оновлення готове — перезапустіть, коли будете готові.",
+  "updates.sessionLiveBlocked":        "Виконується запис сеансу EEG. Будь ласка, зупиніть сеанс перед перезапуском або закрийте і перезапустіть пізніше.",
   "updates.restartingIn":              "Перезапуск через {secs} с…",
   "updates.downloadFailed":            "Завантаження не вдалося — натисніть «Повторити».",
   "updates.autoUpdateFailedOnline":    "Автоматичне оновлення не вдалося. Будь ласка, завантажте найновішу версію онлайн.",
@@ -187,7 +189,7 @@ const ui: Record<string, string> = {
   "updates.autostart":                 "Запуск під час входу",
   "updates.autostartDesc":             "Запускається автоматично при вході в систему.",
   "updates.autoCheckDesc":             "Перевіряти оновлення раз на день під час запуску застосунку.",
-  "updates.footer":                    "Оновлення завантажуються і встановлюються автоматично. Вам просто потрібно перезапустити.",
+  "updates.footer":                    "Оновлення завантажуються автоматично. Перезапустіть, коли будете готові.",
 
   "whatsNew.title":   "Що нового",
   "whatsNew.version": "Версія {version}",

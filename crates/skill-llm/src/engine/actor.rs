@@ -94,13 +94,19 @@ pub(super) fn run_actor(
     let backend: &LlamaBackend = &backend_md;
 
     // ── load model ──
+    let model_file_name = model_path.file_name().and_then(|n| n.to_str()).unwrap_or("model");
+    app.emit_event("llm:status", json!({"status":"loading","detail":"loading_model","model":model_file_name}));
     llm_info!(&app, &log_buf, log_file, "loading model: {}", model_path.display());
     let model_params = LlamaModelParams::default()
         .with_n_gpu_layers(config.n_gpu_layers);
 
     let model = match LlamaModel::load_from_file(backend, &model_path, &model_params) {
         Ok(m)  => { llm_info!(&app, &log_buf, log_file, "model loaded ✓"); m }
-        Err(e) => { llm_error!(&app, &log_buf, log_file, "failed to load model: {e}"); return; }
+        Err(e) => {
+            llm_error!(&app, &log_buf, log_file, "failed to load model: {e}");
+            app.emit_event("llm:status", json!({"status":"stopped","error":format!("failed to load model: {e}")}));
+            return;
+        }
     };
 
     // ── create generation context ──
@@ -108,6 +114,7 @@ pub(super) fn run_actor(
     // The 4096 fallback here is only reached if the actor is called directly
     // without going through init (e.g. tests).
     let ctx_size = NonZeroU32::new(config.ctx_size.unwrap_or(4096));
+    app.emit_event("llm:status", json!({"status":"loading","detail":"creating_context","model":model_file_name}));
     llm_info!(&app, &log_buf, log_file,
         "creating context (n_ctx={}, n_gpu_layers={}, flash_attn={}, offload_kqv={})",
         ctx_size.map_or(0, std::num::NonZero::get), config.n_gpu_layers,
@@ -121,7 +128,11 @@ pub(super) fn run_actor(
 
     let mut ctx = match model.new_context(backend, ctx_params) {
         Ok(c)  => c,
-        Err(e) => { llm_error!(&app, &log_buf, log_file, "failed to create context: {e}"); return; }
+        Err(e) => {
+            llm_error!(&app, &log_buf, log_file, "failed to create context: {e}");
+            app.emit_event("llm:status", json!({"status":"stopped","error":format!("failed to create context: {e}")}));
+            return;
+        }
     };
 
     n_ctx_flag.store(ctx.n_ctx() as usize, Ordering::Relaxed);
@@ -144,7 +155,7 @@ pub(super) fn run_actor(
         // Non-Windows systems — Metal (macOS) and CUDA handle device detection differently
     }
 
-    app.emit_event("llm:status", json!({"status":"loading","detail":"warming_up"}));
+    app.emit_event("llm:status", json!({"status":"loading","detail":"warming_up","model":model_file_name}));
 
     // ── Multimodal projector (llm-mtmd feature) ───────────────────────────────
     #[cfg(feature = "llm-mtmd")]
@@ -168,6 +179,7 @@ pub(super) fn run_actor(
         }
         mmproj_path.as_ref().and_then(|p| {
             use llama_cpp_4::mtmd::{MtmdContext, MtmdContextParams};
+            app.emit_event("llm:status", json!({"status":"loading","detail":"loading_vision","model":model_file_name}));
 
             if !p.exists() {
                 llm_error!(&app, &log_buf, log_file,

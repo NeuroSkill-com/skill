@@ -33,6 +33,10 @@ the Free Software Foundation, version 3 only. -->
   let countdown   = $state(0);        // seconds until auto-relaunch
   let available   = $state<{ version: string; date?: string; body?: string } | null>(null);
   let lastCheckedUtc = $state(0);
+  /** True while an EEG session is being recorded — blocks restart. */
+  let sessionLive = $state(false);
+  /** User attempted restart while session was live — show warning. */
+  let sessionBlockWarning = $state(false);
 
   // Autostart
   let autostartEnabled  = $state(false);
@@ -55,23 +59,33 @@ the Free Software Foundation, version 3 only. -->
 
   const RELEASES_DOWNLOAD_URL = "https://github.com/NeuroSkill-com/skill/releases/latest";
 
-  // ── Countdown timer ───────────────────────────────────────────────────────
-  let countdownTimer: ReturnType<typeof setInterval> | null = null;
+  // ── Session-live polling ────────────────────────────────────────────────
+  let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
 
-  function startCountdown(secs = 5) {
-    countdown = secs;
-    countdownTimer = setInterval(() => {
-      countdown -= 1;
-      if (countdown <= 0) {
-        stopCountdown();
-        relaunch();
-      }
-    }, 1000);
+  /** Poll session state so the restart button reacts when session ends. */
+  function startSessionPoll() {
+    stopSessionPoll();
+    sessionPollTimer = setInterval(async () => {
+      try { sessionLive = await invoke<boolean>("is_session_live"); }
+      catch { /* ignore */ }
+      if (!sessionLive) sessionBlockWarning = false;
+    }, 2000);
   }
 
-  function stopCountdown() {
-    if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-    countdown = 0;
+  function stopSessionPoll() {
+    if (sessionPollTimer) { clearInterval(sessionPollTimer); sessionPollTimer = null; }
+  }
+
+  /** Attempt restart — blocked when a session is live. */
+  async function tryRestart() {
+    try { sessionLive = await invoke<boolean>("is_session_live"); }
+    catch { /* allow restart if check fails */ sessionLive = false; }
+    if (sessionLive) {
+      sessionBlockWarning = true;
+      return;
+    }
+    sessionBlockWarning = false;
+    relaunch();
   }
 
   // ── Last-checked persistence ──────────────────────────────────────────────
@@ -128,9 +142,9 @@ the Free Software Foundation, version 3 only. -->
         }
       });
 
-      // Install complete — begin countdown to auto-relaunch.
+      // Install complete — wait for user to confirm restart.
       phase = "ready";
-      startCountdown(5);
+      startSessionPoll();
 
     } catch (e) {
       phase = "error";
@@ -259,7 +273,7 @@ the Free Software Foundation, version 3 only. -->
 
   onDestroy(() => {
     unlisteners.forEach(u => u());
-    stopCountdown();
+    stopSessionPoll();
   });
 </script>
 
@@ -303,7 +317,7 @@ the Free Software Foundation, version 3 only. -->
       <div class="flex flex-col gap-3 px-4 py-4">
 
         {#if phase === "ready"}
-          <!-- ── Installed, counting down to restart ── -->
+          <!-- ── Installed, waiting for user to restart ── -->
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center text-xl shrink-0">
               ✅
@@ -313,27 +327,30 @@ the Free Software Foundation, version 3 only. -->
                 {t("updates.installed", { version: available?.version ?? "" })}
               </span>
               <span class="text-[0.65rem] text-muted-foreground">
-                {t("updates.restartingIn", { secs: countdown })}
+                {t("updates.restartWhenReady")}
               </span>
             </div>
             <div class="flex items-center gap-2 shrink-0">
               <Button size="sm" variant="outline"
                       class="text-[0.72rem] h-8 px-3"
-                      onclick={() => { stopCountdown(); phase = "idle"; available = null; }}>
+                      onclick={() => { stopSessionPoll(); phase = "idle"; available = null; sessionBlockWarning = false; }}>
                 {t("common.cancel")}
               </Button>
               <Button size="sm" class="text-[0.72rem] h-8 px-4"
-                      onclick={() => { stopCountdown(); relaunch(); }}>
+                      onclick={tryRestart}>
                 {t("updates.restartNow")}
               </Button>
             </div>
           </div>
 
-          <!-- Countdown progress bar -->
-          <div class="h-1.5 rounded-full bg-black/8 dark:bg-white/10 overflow-hidden">
-            <div class="h-full rounded-full bg-emerald-500 transition-all duration-1000"
-                 style="width:{Math.round(((5 - countdown) / 5) * 100)}%"></div>
-          </div>
+          {#if sessionBlockWarning}
+            <div class="rounded-lg border border-amber-400/30 bg-amber-50 dark:bg-[#1a1508] px-3 py-2 flex items-start gap-2">
+              <span class="text-base shrink-0">⚠</span>
+              <span class="text-[0.65rem] text-amber-700 dark:text-amber-400 leading-relaxed">
+                {t("updates.sessionLiveBlocked")}
+              </span>
+            </div>
+          {/if}
 
         {:else if phase === "downloading"}
           <!-- ── Downloading ── -->

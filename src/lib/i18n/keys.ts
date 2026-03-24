@@ -2849,6 +2849,8 @@ export type TranslationKey =
   | "updates.readyToRestart"
   | "updates.restartNow"
   | "updates.restartToApply"
+  | "updates.restartWhenReady"
+  | "updates.sessionLiveBlocked"
   | "updates.restartingIn"
   | "updates.retry"
   | "updates.title"

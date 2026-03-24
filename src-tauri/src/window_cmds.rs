@@ -665,6 +665,14 @@ pub fn get_app_version(app: AppHandle) -> String {
     app.config().version.clone().unwrap_or_else(|| "unknown".into())
 }
 
+/// Returns `true` when an EEG session is currently being recorded.
+#[tauri::command]
+pub fn is_session_live(app: AppHandle) -> bool {
+    let r = app.state::<Mutex<Box<AppState>>>();
+    let g = r.lock_or_recover();
+    g.session_start_utc.is_some()
+}
+
 #[tauri::command]
 pub fn get_app_name(app: AppHandle) -> String {
     app.config().product_name.clone()
