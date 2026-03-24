@@ -135,7 +135,7 @@ fn strip_json_ld_blocks(s: &str) -> String {
             i += 1;
         } else {
             result.push(s[i..].chars().next().unwrap_or(' '));
-            i += s[i..].chars().next().map(|c| c.len_utf8()).unwrap_or(1);
+            i += s[i..].chars().next().map(char::len_utf8).unwrap_or(1);
         }
     }
 
@@ -213,10 +213,7 @@ pub(crate) fn ddg_html_search(agent: &ureq::Agent, query: &str) -> Vec<Value> {
         .send_string(&format!("q={}&b=", urlencoding::encode(query)));
 
     let Ok(r) = resp else { return Vec::new(); };
-    let body = match r.into_string() {
-        Ok(s) => s,
-        Err(_) => return Vec::new(),
-    };
+    let Ok(body) = r.into_string() else { return Vec::new() };
 
     parse_ddg_html(&body)
 }
@@ -465,7 +462,7 @@ pub(crate) fn score_rendered_text(text: &str) -> u32 {
     score += (word_count.min(200)) as u32;
 
     // Bonus for numbers (temperatures, percentages, times, dates).
-    let digit_count = text.chars().filter(|c| c.is_ascii_digit()).count();
+    let digit_count = text.chars().filter(char::is_ascii_digit).count();
     score += (digit_count.min(50) * 3) as u32;
 
     // Bonus for degree symbols, % signs (weather/data/measurement indicators).
@@ -617,13 +614,13 @@ pub(crate) fn headless_fetch_url(
     // Get the page title.
     let title = browser.send(Command::GetTitle)
         .ok()
-        .and_then(|r| r.as_text().map(|s| s.to_string()))
+        .and_then(|r| r.as_text().map(std::string::ToString::to_string))
         .unwrap_or_default();
 
     // Get the current URL (may differ after redirects).
     let final_url = browser.send(Command::GetUrl)
         .ok()
-        .and_then(|r| r.as_text().map(|s| s.to_string()))
+        .and_then(|r| r.as_text().map(std::string::ToString::to_string))
         .unwrap_or_else(|| url.to_string());
 
     // Extract visible text content via JS.

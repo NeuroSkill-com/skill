@@ -435,7 +435,7 @@ fn get_daily_recording_mins_sync(
         let dir = skill_dir.join(dir_date.as_str());
         if !dir.is_dir() { continue; }
         let Ok(entries) = std::fs::read_dir(&dir) else { continue };
-        for entry in entries.filter_map(|e| e.ok()) {
+        for entry in entries.filter_map(std::result::Result::ok) {
             let p = entry.path();
             let fname = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if !((fname.starts_with("exg_") || fname.starts_with("muse_")) && fname.ends_with(".json")) { continue; }
@@ -1178,7 +1178,7 @@ fn reembed_worker(
             }
         }
 
-        let total_samples = ch_bufs.first().map(|b| b.len()).unwrap_or(0);
+        let total_samples = ch_bufs.first().map(std::vec::Vec::len).unwrap_or(0);
         if total_samples < native_epoch || n_ch == 0 {
             skill_log!(logger, "reembed", "{}: skipping {} — only {} samples (need {})",
                 date, csv_path.file_name().unwrap_or_default().to_string_lossy(),
@@ -1268,7 +1268,7 @@ fn reembed_worker(
                         while pad_names.len() < crate::constants::EEG_CHANNELS {
                             pad_names.push(format!("_pad{}", pad_names.len()));
                         }
-                        let ch_refs: Vec<&str> = pad_names.iter().map(|s| s.as_str()).collect();
+                        let ch_refs: Vec<&str> = pad_names.iter().map(std::string::String::as_str).collect();
 
                         let mut batches = zuna_rs::load_from_named_tensor::<Wgpu>(
                             array, &ch_refs, sample_rate as f32, config.data_norm,
@@ -1293,7 +1293,7 @@ fn reembed_worker(
                     }
                     Enc::Luna(luna_enc) => {
                         let flat: Vec<f32> = epoch_resampled.iter().flatten().copied().collect();
-                        let ch_refs: Vec<&str> = channel_names.iter().map(|s| s.as_str()).collect();
+                        let ch_refs: Vec<&str> = channel_names.iter().map(std::string::String::as_str).collect();
                         let batch = luna_rs::build_batch_named::<Wgpu>(
                             flat, &ch_refs, epoch_samples, &device,
                         );

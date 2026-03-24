@@ -14,7 +14,7 @@ pub fn search_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String>
         .and_then(|v| v.as_str())
         .ok_or("missing \"query\" field")?
         .to_owned();
-    let k    = msg.get("k").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+    let k    = msg.get("k").and_then(serde_json::Value::as_u64).unwrap_or(20) as usize;
     let mode = msg.get("mode")
         .and_then(|v| v.as_str())
         .unwrap_or("semantic")
@@ -57,10 +57,10 @@ pub fn search_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String>
 /// `screenshots_around` — find screenshots near a given unix timestamp.
 pub fn screenshots_around(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let timestamp   = msg.get("timestamp")
-        .and_then(|v| v.as_i64())
+        .and_then(serde_json::Value::as_i64)
         .ok_or("missing \"timestamp\" field")?;
     let window_secs = msg.get("window_secs")
-        .and_then(|v| v.as_i64())
+        .and_then(serde_json::Value::as_i64)
         .unwrap_or(60) as i32;
 
     let (skill_dir, store) = {
@@ -94,7 +94,7 @@ pub fn search_screenshots_by_image_b64(app: &AppHandle, msg: &Value) -> Result<V
     let b64 = msg.get("image_b64")
         .and_then(|v| v.as_str())
         .ok_or("missing \"image_b64\" field (base64-encoded image)")?;
-    let k = msg.get("k").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+    let k = msg.get("k").and_then(serde_json::Value::as_u64).unwrap_or(20) as usize;
 
     use base64::Engine;
     let image_bytes = base64::engine::general_purpose::STANDARD
@@ -151,7 +151,7 @@ pub fn search_screenshots_vision(app: &AppHandle, msg: &Value) -> Result<Value, 
     if vector.is_empty() {
         return Err("\"vector\" must be a non-empty array of floats".into());
     }
-    let k = msg.get("k").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+    let k = msg.get("k").and_then(serde_json::Value::as_u64).unwrap_or(20) as usize;
 
     let (skill_dir, store) = {
         let st = app.app_state();
@@ -187,12 +187,12 @@ pub fn search_screenshots_vision(app: &AppHandle, msg: &Value) -> Result<Value, 
 /// **Required**: `start_utc`, `end_utc`.
 /// **Optional**: `window_secs` (default 30), `limit` (max results, default 50).
 pub fn screenshots_for_eeg(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let start_utc = msg.get("start_utc").and_then(|v| v.as_u64())
+    let start_utc = msg.get("start_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing \"start_utc\" field")?;
-    let end_utc = msg.get("end_utc").and_then(|v| v.as_u64())
+    let end_utc = msg.get("end_utc").and_then(serde_json::Value::as_u64)
         .ok_or("missing \"end_utc\" field")?;
-    let window_secs = msg.get("window_secs").and_then(|v| v.as_i64()).unwrap_or(30) as i32;
-    let limit = msg.get("limit").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+    let window_secs = msg.get("window_secs").and_then(serde_json::Value::as_i64).unwrap_or(30) as i32;
+    let limit = msg.get("limit").and_then(serde_json::Value::as_u64).unwrap_or(50) as usize;
 
     let (skill_dir, store) = {
         let st = app.app_state();
@@ -273,8 +273,8 @@ pub fn eeg_for_screenshots(app: &AppHandle, msg: &Value) -> Result<Value, String
         .and_then(|v| v.as_str())
         .ok_or("missing \"query\" field")?
         .to_owned();
-    let k = msg.get("k").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
-    let window_secs = msg.get("window_secs").and_then(|v| v.as_u64()).unwrap_or(60);
+    let k = msg.get("k").and_then(serde_json::Value::as_u64).unwrap_or(10) as usize;
+    let window_secs = msg.get("window_secs").and_then(serde_json::Value::as_u64).unwrap_or(60);
     let mode = msg.get("mode")
         .and_then(|v| v.as_str())
         .unwrap_or("semantic")

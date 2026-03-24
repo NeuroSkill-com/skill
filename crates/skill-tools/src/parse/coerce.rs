@@ -128,7 +128,7 @@ fn coerce_object(value: &Value, schema_obj: &serde_json::Map<String, Value>) -> 
 
     let props = schema_obj.get("properties").and_then(|p| p.as_object());
     let no_additional = schema_obj.get("additionalProperties")
-        .and_then(|v| v.as_bool()) == Some(false);
+        .and_then(serde_json::Value::as_bool) == Some(false);
 
     // When the schema forbids additional properties and has an `args`
     // property of type object, collect any unknown top-level keys
@@ -233,7 +233,7 @@ fn coerce_array(value: &Value, schema_obj: &serde_json::Map<String, Value>) -> V
 
 /// Extract the set of type names from a schema object.
 /// Handles `"type": "string"` and `"type": ["string", "null"]`.
-fn schema_type_set<'a>(schema: &'a serde_json::Map<String, Value>) -> Vec<&'a str> {
+fn schema_type_set(schema: &serde_json::Map<String, Value>) -> Vec<&str> {
     match schema.get("type") {
         Some(Value::String(s)) => vec![s.as_str()],
         Some(Value::Array(arr)) => arr.iter().filter_map(|v| v.as_str()).collect(),

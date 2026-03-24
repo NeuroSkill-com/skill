@@ -85,7 +85,9 @@ unwrap_used            = "warn"
 expect_used            = "warn"
 panic                  = "warn"
 undocumented_unsafe_blocks = "warn"
-needless_pass_by_value = "warn"
+# needless_pass_by_value — disabled: Tauri #[command] handlers and actor-thread
+# spawn sites require owned types; the lint produces ~280 false positives.
+# needless_pass_by_value = "warn"
 redundant_closure_for_method_calls = "warn"
 manual_let_else        = "warn"
 semicolon_if_nothing_returned = "warn"

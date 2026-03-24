@@ -393,8 +393,8 @@ pub(super) fn llm_add_model(app: &AppHandle, msg: &Value) -> Result<Value, Strin
         .ok_or_else(|| "llm_add_model: 'filename' field required (string, e.g. \"Phi-4-Q4_K_M.gguf\")".to_string())?
         .to_string();
     let size_gb = msg["size_gb"].as_f64().map(|v| v as f32);
-    let mmproj = msg["mmproj"].as_str().map(|s| s.to_string());
-    let download = msg.get("download").and_then(|v| v.as_bool());
+    let mmproj = msg["mmproj"].as_str().map(std::string::ToString::to_string);
+    let download = msg.get("download").and_then(serde_json::Value::as_bool);
 
     let result = crate::llm::cmds::add_llm_model(
         repo.clone(),

@@ -268,6 +268,8 @@ fn poll_input_activity() -> (bool, bool) {
         ) -> f64;
     }
 
+    // SAFETY: CGEventSourceSecondsSinceLastEventType is a thread-safe
+    // CoreGraphics query that only reads system event timestamps.
     unsafe {
         let kbd_idle = CGEventSourceSecondsSinceLastEventType(STATE, KEY_DOWN);
         // Take the minimum idle time across the mouse event types we care about.

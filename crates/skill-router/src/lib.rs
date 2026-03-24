@@ -107,21 +107,18 @@ pub fn load_embeddings_range(
     let ts_end   = unix_to_ts(end_utc);
 
     let mut out: Vec<(u64, Vec<f32>)> = Vec::new();
-    let entries = match std::fs::read_dir(skill_dir) {
-        Ok(e) => e, Err(_) => return out,
-    };
-    for entry in entries.filter_map(|e| e.ok()) {
+    let Ok(entries) = std::fs::read_dir(skill_dir) else { return out };
+    for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
         if !path.is_dir() { continue; }
         let db_path = path.join(SQLITE_FILE);
         if !db_path.exists() { continue; }
-        let conn = match skill_data::util::open_readonly(&db_path)
-        { Ok(c) => c, Err(_) => continue };
+        let Ok(conn) = skill_data::util::open_readonly(&db_path) else { continue };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        let mut stmt = match conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp, eeg_embedding FROM embeddings
              WHERE timestamp >= ?1 AND timestamp <= ?2 ORDER BY timestamp"
-        ) { Ok(s) => s, Err(_) => continue };
+        ) else { continue };
 
         let rows = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
             let ts: i64 = row.get(0)?;
@@ -146,14 +143,13 @@ pub fn load_labels_range(
 ) -> Vec<(u64, u64, String)> {
     let labels_db = skill_dir.join(LABELS_FILE);
     if !labels_db.exists() { return vec![]; }
-    let conn = match skill_data::util::open_readonly(&labels_db)
-    { Ok(c) => c, Err(_) => return vec![] };
+    let Ok(conn) = skill_data::util::open_readonly(&labels_db) else { return vec![] };
     let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-    let mut stmt = match conn.prepare(
+    let Ok(mut stmt) = conn.prepare(
         "SELECT eeg_start, eeg_end, text FROM labels
          WHERE eeg_end >= ?1 AND eeg_start <= ?2
          ORDER BY eeg_start"
-    ) { Ok(s) => s, Err(_) => return vec![] };
+    ) else { return vec![] };
     stmt.query_map(
         rusqlite::params![start_utc as i64, end_utc as i64],
         |row| Ok((row.get::<_, i64>(0)? as u64, row.get::<_, i64>(1)? as u64, row.get::<_, String>(2)?))

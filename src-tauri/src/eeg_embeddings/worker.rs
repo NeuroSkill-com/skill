@@ -665,7 +665,7 @@ pub(super) fn embed_worker(
     });
 
     // Default channel names — overridden per-epoch from the message.
-    let mut ch_names: Vec<String>               = CHANNEL_NAMES.iter().map(|s| s.to_string()).collect();
+    let mut ch_names: Vec<String>               = CHANNEL_NAMES.iter().map(std::string::ToString::to_string).collect();
     let mut epoch_sample_rate: f32              = MUSE_SAMPLE_RATE;
     let data_cfg                                 = DataConfig::default();
     let pos_overrides: HashMap<String, [f32; 3]> = HashMap::new();
@@ -768,7 +768,7 @@ pub(super) fn embed_worker(
                         while padded_names.len() < EEG_CHANNELS {
                             padded_names.push(format!("_pad{}", padded_names.len()));
                         }
-                        let ch_refs: Vec<&str> = padded_names.iter().map(|s| s.as_str()).collect();
+                        let ch_refs: Vec<&str> = padded_names.iter().map(std::string::String::as_str).collect();
                         let mut batches = load_from_named_tensor::<Wgpu>(
                             array, &ch_refs, epoch_sample_rate, config.data_norm,
                             &pos_overrides, &data_cfg, &device,
@@ -827,7 +827,7 @@ pub(super) fn embed_worker(
                             })
                             .collect();
 
-                        let ch_refs: Vec<&str> = luna_ch_names.iter().map(|s| s.as_str()).collect();
+                        let ch_refs: Vec<&str> = luna_ch_names.iter().map(std::string::String::as_str).collect();
                         let batch = luna_rs::build_batch_named::<Wgpu>(
                             flat,
                             &ch_refs,
@@ -970,7 +970,7 @@ pub(super) fn embed_worker(
         // ── Store ─────────────────────────────────────────────────────────────
         let has_metrics  = metrics.is_some();
         let has_channels = channels_json.is_some();
-        let channels_len = channels_json.as_ref().map(|s| s.len()).unwrap_or(0);
+        let channels_len = channels_json.as_ref().map(std::string::String::len).unwrap_or(0);
 
         // When the GPU pipeline produced an embedding, store it in both HNSW
         // and SQLite.  When it didn't (encoder unavailable / device poisoned),
@@ -1153,7 +1153,7 @@ pub(super) fn embed_worker(
             });
         }
 
-        let dim = mean_emb.as_ref().map(|e| e.len()).unwrap_or(0);
+        let dim = mean_emb.as_ref().map(std::vec::Vec::len).unwrap_or(0);
         let speed_str = current_speed_ms.map(|ms| format!(" {ms:.1}ms (avg {embed_speed_ema:.1}ms)")).unwrap_or_default();
         if let Some(ref m) = metrics {
             eprintln!(

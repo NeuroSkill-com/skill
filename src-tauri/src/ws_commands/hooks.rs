@@ -279,13 +279,13 @@ pub(super) fn hooks_suggest(app: &AppHandle, msg: &Value) -> Result<Value, Strin
 pub(super) fn hooks_log(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let limit = msg
         .get("limit")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .map(|v| v as i64)
         .unwrap_or(50)
         .clamp(1, 500);
     let offset = msg
         .get("offset")
-        .and_then(|v| v.as_u64())
+        .and_then(serde_json::Value::as_u64)
         .map(|v| v as i64)
         .unwrap_or(0)
         .max(0);

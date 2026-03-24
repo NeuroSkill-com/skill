@@ -42,7 +42,7 @@ pub fn trim_messages_to_fit(messages: &mut Vec<Value>, n_ctx: usize, compression
             let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("");
             if role != "tool" { continue; }
 
-            if let Some(content) = msg.get("content").and_then(|c| c.as_str()).map(|s| s.to_string()) {
+            if let Some(content) = msg.get("content").and_then(|c| c.as_str()).map(std::string::ToString::to_string) {
                 let is_web_search = content.contains("\"tool\":\"web_search\"")
                     || content.contains("\"tool\": \"web_search\"");
                 let is_location = content.contains("\"tool\":\"location\"")

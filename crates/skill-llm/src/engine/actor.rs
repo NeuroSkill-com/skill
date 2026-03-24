@@ -109,7 +109,7 @@ pub(super) fn run_actor(
     let ctx_size = NonZeroU32::new(config.ctx_size.unwrap_or(4096));
     llm_info!(&app, &log_buf, log_file,
         "creating context (n_ctx={}, n_gpu_layers={}, flash_attn={}, offload_kqv={})",
-        ctx_size.map_or(0, |n| n.get()), config.n_gpu_layers,
+        ctx_size.map_or(0, std::num::NonZero::get), config.n_gpu_layers,
         config.flash_attention, config.offload_kqv);
     let ctx_params = LlamaContextParams::default()
         .with_n_ctx(ctx_size)
@@ -183,6 +183,8 @@ pub(super) fn run_actor(
                     _text:  *const std::os::raw::c_char,
                     _ud:    *mut   std::os::raw::c_void,
                 ) {}
+                // SAFETY: `noop` has a 'static lifetime (function item) and
+                // matches the expected C callback signature. null user-data is valid.
                 unsafe { mtmd_log_set(Some(noop), std::ptr::null_mut()) };
             }
 

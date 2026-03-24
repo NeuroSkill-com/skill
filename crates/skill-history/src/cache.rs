@@ -106,18 +106,18 @@ pub fn get_session_timeseries(
     let ts_end   = unix_to_ts(end_utc);
     let mut rows: Vec<EpochRow> = Vec::new();
 
-    let entries = match std::fs::read_dir(skill_dir) { Ok(e) => e, Err(_) => return rows };
-    for entry in entries.filter_map(|e| e.ok()) {
+    let Ok(entries) = std::fs::read_dir(skill_dir) else { return rows };
+    for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
         if !path.is_dir() { continue; }
         let db_path = path.join(skill_constants::SQLITE_FILE);
         if !db_path.exists() { continue; }
 
-        let conn = match rusqlite::Connection::open(&db_path) { Ok(c) => c, Err(_) => continue };
+        let Ok(conn) = rusqlite::Connection::open(&db_path) else { continue };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
         migrate_embeddings_schema(&conn);
 
-        let mut stmt = match conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp,
                     json_extract(metrics_json, '$.rel_delta'),
                     json_extract(metrics_json, '$.rel_theta'),
@@ -171,7 +171,7 @@ pub fn get_session_timeseries(
              FROM embeddings
              WHERE timestamp >= ?1 AND timestamp <= ?2
              ORDER BY timestamp ASC"
-        ) { Ok(s) => s, Err(_) => continue };
+        ) else { continue };
 
         let iter = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
             let ts_val: i64 = row.get(0)?;
@@ -196,7 +196,7 @@ pub fn get_session_timeseries(
         });
 
         if let Ok(iter) = iter {
-            for row in iter.filter_map(|r| r.ok()) { rows.push(row); }
+            for row in iter.filter_map(std::result::Result::ok) { rows.push(row); }
         }
     }
     rows.sort_by(|a, b| a.t.partial_cmp(&b.t).unwrap_or(std::cmp::Ordering::Equal));
@@ -215,18 +215,18 @@ pub fn get_session_metrics(
     let mut total = SessionMetrics::default();
     let mut count = 0u64;
 
-    let entries = match std::fs::read_dir(skill_dir) { Ok(e) => e, Err(_) => return total };
-    for entry in entries.filter_map(|e| e.ok()) {
+    let Ok(entries) = std::fs::read_dir(skill_dir) else { return total };
+    for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
         if !path.is_dir() { continue; }
         let db_path = path.join(skill_constants::SQLITE_FILE);
         if !db_path.exists() { continue; }
 
-        let conn = match rusqlite::Connection::open(&db_path) { Ok(c) => c, Err(_) => continue };
+        let Ok(conn) = rusqlite::Connection::open(&db_path) else { continue };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
         migrate_embeddings_schema(&conn);
 
-        let mut stmt = match conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT json_extract(metrics_json, '$.rel_delta'),
                     json_extract(metrics_json, '$.rel_theta'),
                     json_extract(metrics_json, '$.rel_alpha'),
@@ -279,7 +279,7 @@ pub fn get_session_metrics(
                     json_extract(metrics_json, '$.drowsiness')
              FROM embeddings
              WHERE timestamp >= ?1 AND timestamp <= ?2"
-        ) { Ok(s) => s, Err(_) => continue };
+        ) else { continue };
 
         let rows = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
             let mut v = Vec::with_capacity(50);
@@ -288,7 +288,7 @@ pub fn get_session_metrics(
         });
 
         if let Ok(rows) = rows {
-            for row in rows.filter_map(|r| r.ok()) {
+            for row in rows.filter_map(std::result::Result::ok) {
                 let v = row;
                 if v[0].is_none() && v[1].is_none() { continue; }
                 total.rel_delta      += v[0].unwrap_or(0.0);
@@ -382,20 +382,19 @@ pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Sleep
     struct RawEpoch { utc: u64, rd: f64, rt: f64, ra: f64, rb: f64 }
     let mut raw: Vec<RawEpoch> = Vec::new();
 
-    let entries = match std::fs::read_dir(skill_dir) {
-        Ok(e) => e,
-        Err(_) => return SleepStages { epochs: vec![], summary: SleepSummary::default() },
+    let Ok(entries) = std::fs::read_dir(skill_dir) else {
+        return SleepStages { epochs: vec![], summary: SleepSummary::default() };
     };
-    for entry in entries.filter_map(|e| e.ok()) {
+    for entry in entries.filter_map(std::result::Result::ok) {
         let path = entry.path();
         if !path.is_dir() { continue; }
         let db_path = path.join(skill_constants::SQLITE_FILE);
         if !db_path.exists() { continue; }
-        let conn = match rusqlite::Connection::open_with_flags(
+        let Ok(conn) = rusqlite::Connection::open_with_flags(
             &db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        ) { Ok(c) => c, Err(_) => continue };
+        ) else { continue };
         let _ = conn.execute_batch("PRAGMA busy_timeout=2000;");
-        let mut stmt = match conn.prepare(
+        let Ok(mut stmt) = conn.prepare(
             "SELECT timestamp,
                     json_extract(metrics_json, '$.rel_delta'),
                     json_extract(metrics_json, '$.rel_theta'),
@@ -403,14 +402,14 @@ pub fn get_sleep_stages(skill_dir: &Path, start_utc: u64, end_utc: u64) -> Sleep
                     json_extract(metrics_json, '$.rel_beta')
              FROM embeddings WHERE timestamp >= ?1 AND timestamp <= ?2
              ORDER BY timestamp"
-        ) { Ok(s) => s, Err(_) => continue };
+        ) else { continue };
         let rows = stmt.query_map(rusqlite::params![ts_start, ts_end], |row| {
             Ok((row.get::<_, i64>(0)?, row.get::<_, Option<f64>>(1)?,
                 row.get::<_, Option<f64>>(2)?, row.get::<_, Option<f64>>(3)?,
                 row.get::<_, Option<f64>>(4)?))
         });
         if let Ok(rows) = rows {
-            for row in rows.filter_map(|r| r.ok()) {
+            for row in rows.filter_map(std::result::Result::ok) {
                 let (ts, rd, rt, ra, rb) = row;
                 if rd.is_none() && rt.is_none() { continue; }
                 raw.push(RawEpoch {

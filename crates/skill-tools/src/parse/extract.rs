@@ -328,6 +328,7 @@ pub(crate) fn is_dict_style_multi_tool(v: &Value) -> bool {
     has_known_key && all_obj_vals
 }
 
+#[allow(clippy::needless_pass_by_value)] // name/arguments are immediately consumed via .trim().to_string()
 pub(crate) fn push_tool_call(
     calls: &mut Vec<ToolCall>,
     dedup: &mut HashSet<(String, String)>,

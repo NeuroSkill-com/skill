@@ -46,6 +46,7 @@ fn quit_confirmed(lang: &str, _app: &AppHandle) -> bool {
     let (title, description) = quit_dialog_strings(lang);
     let mut confirmed = false;
     DispatchQueue::main().exec_sync(|| {
+        // SAFETY: This closure runs on the main thread via DispatchQueue::main().exec_sync.
         let mtm = unsafe { MainThreadMarker::new_unchecked() };
         let alert = NSAlert::new(mtm);
         alert.setMessageText(&NSString::from_str(title));

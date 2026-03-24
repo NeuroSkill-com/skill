@@ -405,7 +405,7 @@ impl EegAccumulator {
 
         // Only check active device channels (0..n_ch) — inactive channels
         // (n_ch..EEG_CHANNELS) are never pushed and would block forever.
-        let min_buf        = self.bufs[..n_ch].iter().map(|b| b.len()).min().unwrap_or(0);
+        let min_buf        = self.bufs[..n_ch].iter().map(std::collections::VecDeque::len).min().unwrap_or(0);
         let min_since_last = self.since_last[..n_ch].iter().copied().min().unwrap_or(0);
 
         if min_buf < native_epoch || min_since_last < self.hop_samples {

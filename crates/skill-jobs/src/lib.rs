@@ -124,6 +124,7 @@ pub struct JobQueue {
 }
 
 impl JobQueue {
+    #[allow(clippy::expect_used)] // thread spawn only fails under extreme resource exhaustion
     pub fn new() -> Arc<Self> {
         let q = Arc::new(Self {
             inner: Mutex::new(Inner {
@@ -307,7 +308,7 @@ impl JobQueue {
             let job = {
                 let mut inner = self.inner.lock_or_recover();
                 while inner.queue.is_empty() {
-                    inner = self.condvar.wait(inner).unwrap_or_else(|e| e.into_inner());
+                    inner = self.condvar.wait(inner).unwrap_or_else(std::sync::PoisonError::into_inner);
                 }
                 let Some(job) = inner.queue.pop_front() else { continue };
                 inner.running_id = Some(job.id);

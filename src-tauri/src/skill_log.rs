@@ -99,7 +99,7 @@ impl SkillLogger {
 
     /// Whether `tag` is currently enabled.
     pub fn enabled(&self, tag: &str) -> bool {
-        let cfg = self.config.read().unwrap_or_else(|e| e.into_inner());
+        let cfg = self.config.read().unwrap_or_else(std::sync::PoisonError::into_inner);
         match tag {
             "embedder"  => cfg.embedder,
             "bluetooth" => cfg.bluetooth,
@@ -128,11 +128,11 @@ impl SkillLogger {
         if let Ok(json) = serde_json::to_string_pretty(&cfg) {
             let _ = std::fs::write(config_path, json);
         }
-        *self.config.write().unwrap_or_else(|e| e.into_inner()) = cfg;
+        *self.config.write().unwrap_or_else(std::sync::PoisonError::into_inner) = cfg;
     }
 
     pub fn get_config(&self) -> LogConfig {
-        self.config.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.config.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
     }
 }
 
@@ -181,6 +181,9 @@ pub fn tee_stderr_to_file(log_path: &Path) {
         }
     };
 
+    // SAFETY: All libc calls below (pipe, dup2, read, write) operate on
+    // valid file descriptors created/duplicated in this block.  The reader
+    // thread owns read_fd and the duplicated stderr owns write_fd.
     unsafe {
         // Create pipe: read_fd ← write_fd
         let mut fds: [libc::c_int; 2] = [-1; 2];

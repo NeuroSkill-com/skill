@@ -79,7 +79,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     Ok(r) => {
                         let v: Value = r.into_json::<Value>().unwrap_or_else(|_| json!({}));
                         json!({
-                            "ok": v.get("success").and_then(|x| x.as_bool()).unwrap_or(true),
+                            "ok": v.get("success").and_then(serde_json::Value::as_bool).unwrap_or(true),
                             "tool": "location",
                             "country": v.get("country").cloned().unwrap_or(Value::Null),
                             "region": v.get("region").cloned().unwrap_or(Value::Null),
@@ -101,8 +101,8 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 return json!({ "ok": false, "tool": "web_search", "error": "missing query" });
             }
 
-            let render = args.get("render").and_then(|v| v.as_bool()).unwrap_or(false);
-            let render_count = args.get("render_count").and_then(|v| v.as_u64()).unwrap_or(3).min(5) as usize;
+            let render = args.get("render").and_then(serde_json::Value::as_bool).unwrap_or(false);
+            let render_count = args.get("render_count").and_then(serde_json::Value::as_u64).unwrap_or(3).min(5) as usize;
 
             let provider = allowed_tools.web_search_provider.clone();
             let compression = allowed_tools.context_compression.clone();
@@ -134,7 +134,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                     let max_url_len = skill_constants::TOOL_WEB_SEARCH_MAX_URL_LEN;
                     for r in results.iter_mut() {
                         if let Some(obj) = r.as_object_mut() {
-                            if let Some(url_val) = obj.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()) {
+                            if let Some(url_val) = obj.get("url").and_then(|v| v.as_str()).map(std::string::ToString::to_string) {
                                 if url_val.len() > max_url_len {
                                     let truncated_url = format!("{}...", &url_val[..max_url_len]);
                                     obj.insert("url".to_string(), json!(truncated_url));
@@ -162,7 +162,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 if render && !results.is_empty() {
                     let urls: Vec<String> = results.iter()
                         .take(render_count)
-                        .filter_map(|r| r.get("url").and_then(|v| v.as_str()).map(|s| s.to_string()))
+                        .filter_map(|r| r.get("url").and_then(|v| v.as_str()).map(std::string::ToString::to_string))
                         .collect();
 
                     let rendered = search::headless_render_urls(&urls)
@@ -291,14 +291,14 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 return json!({ "ok": false, "tool": "web_fetch", "error": "url must start with http:// or https://" });
             }
 
-            let render = args.get("render").and_then(|v| v.as_bool()).unwrap_or(false);
+            let render = args.get("render").and_then(serde_json::Value::as_bool).unwrap_or(false);
             let max_content = allowed_tools.context_compression.effective_max_result_chars().max(1000);
 
             if render {
                 // ── Headless browser rendering path ──────────────────
-                let wait_ms = args.get("wait_ms").and_then(|v| v.as_u64()).unwrap_or(2000);
-                let selector = args.get("selector").and_then(|v| v.as_str()).map(|s| s.to_string());
-                let eval_js = args.get("eval_js").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let wait_ms = args.get("wait_ms").and_then(serde_json::Value::as_u64).unwrap_or(2000);
+                let selector = args.get("selector").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
+                let eval_js = args.get("eval_js").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
                 let url_for_fetch = url.clone();
 
                 let mut result = tokio::task::spawn_blocking(move || {
@@ -306,7 +306,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_fetch", "url": url, "error": e.to_string() }));
 
                 // If headless browser is unavailable, fall back to plain HTTP fetch.
-                let should_fallback = result.get("fallback").and_then(|f| f.as_bool()).unwrap_or(false);
+                let should_fallback = result.get("fallback").and_then(serde_json::Value::as_bool).unwrap_or(false);
                 if should_fallback {
                     tool_log!("tool:web_fetch", "[render] headless unavailable, falling back to HTTP fetch");
                     let url_fallback = url.clone();
@@ -334,7 +334,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
                 }
 
                 // Cap rendered content to the configured limit.
-                if let Some(content) = result.get("content").and_then(|c| c.as_str()).map(|s| s.to_string()) {
+                if let Some(content) = result.get("content").and_then(|c| c.as_str()).map(std::string::ToString::to_string) {
                     if content.len() > max_content {
                         result["content"] = json!(truncate_text(&content, max_content));
                         result["truncated"] = json!(true);
@@ -374,7 +374,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             if command.is_empty() {
                 return json!({ "ok": false, "tool": "bash", "error": "missing command" });
             }
-            let timeout_secs = args.get("timeout").and_then(|v| v.as_f64()).map(|t| t as u64);
+            let timeout_secs = args.get("timeout").and_then(serde_json::Value::as_f64).map(|t| t as u64);
 
             // Safety check: require user approval for dangerous commands
             if let Some(reason) = check_bash_safety(&command) {
@@ -532,8 +532,8 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             if path.is_empty() {
                 return json!({ "ok": false, "tool": "read_file", "error": "missing path" });
             }
-            let offset = args.get("offset").and_then(|v| v.as_u64()).map(|v| v as usize);
-            let limit = args.get("limit").and_then(|v| v.as_u64()).map(|v| v as usize);
+            let offset = args.get("offset").and_then(serde_json::Value::as_u64).map(|v| v as usize);
+            let limit = args.get("limit").and_then(serde_json::Value::as_u64).map(|v| v as usize);
 
             tokio::task::spawn_blocking(move || {
                 let resolved = resolve_tool_path(&path);
@@ -721,13 +721,13 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
             if path.is_empty() {
                 return json!({ "ok": false, "tool": "search_output", "error": "missing path" });
             }
-            let pattern = args.get("pattern").and_then(|v| v.as_str()).map(|s| s.to_string());
-            let context_lines = args.get("context_lines").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
-            let head_n = args.get("head").and_then(|v| v.as_u64()).map(|v| v as usize);
-            let tail_n = args.get("tail").and_then(|v| v.as_u64()).map(|v| v as usize);
-            let line_start = args.get("line_start").and_then(|v| v.as_u64()).map(|v| v as usize);
-            let line_end = args.get("line_end").and_then(|v| v.as_u64()).map(|v| v as usize);
-            let max_matches = args.get("max_matches").and_then(|v| v.as_u64()).unwrap_or(50) as usize;
+            let pattern = args.get("pattern").and_then(|v| v.as_str()).map(std::string::ToString::to_string);
+            let context_lines = args.get("context_lines").and_then(serde_json::Value::as_u64).unwrap_or(2) as usize;
+            let head_n = args.get("head").and_then(serde_json::Value::as_u64).map(|v| v as usize);
+            let tail_n = args.get("tail").and_then(serde_json::Value::as_u64).map(|v| v as usize);
+            let line_start = args.get("line_start").and_then(serde_json::Value::as_u64).map(|v| v as usize);
+            let line_end = args.get("line_end").and_then(serde_json::Value::as_u64).map(|v| v as usize);
+            let max_matches = args.get("max_matches").and_then(serde_json::Value::as_u64).unwrap_or(50) as usize;
 
             tokio::task::spawn_blocking(move || {
                 let resolved = resolve_tool_path(&path);
@@ -945,7 +945,7 @@ pub async fn execute_builtin_tool_call(call: &ToolCall, allowed_tools: &LlmToolC
     };
 
     let elapsed = start.elapsed();
-    let ok = result.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+    let ok = result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false);
     if ok {
         tool_log!("tool", "[done] tool={} elapsed={:.1?}", tool_name, elapsed);
     } else {

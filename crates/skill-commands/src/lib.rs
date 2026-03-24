@@ -398,6 +398,7 @@ pub fn get_labels_for(labels_db: &Path, ts_unix: u64) -> Vec<LabelEntry> {
 /// against the persistent global index (better recall, lower latency).  When
 /// `None`, all available per-day HNSW files are loaded and searched (fallback
 /// used while the global index is still being built on startup).
+#[allow(clippy::needless_pass_by_value)] // GlobalIndexHandle is Option<Arc<…>> — cheap clone, shared with callers
 pub fn search_embeddings_in_range(
     skill_dir:    &Path,
     start_utc:    u64,
@@ -410,6 +411,7 @@ pub fn search_embeddings_in_range(
 }
 
 /// Model-aware variant of [`search_embeddings_in_range`].
+#[allow(clippy::needless_pass_by_value)]
 pub fn search_embeddings_in_range_for(
     skill_dir:     &Path,
     start_utc:     u64,
@@ -564,6 +566,7 @@ pub fn search_embeddings_in_range_for(
 /// This is the pure-logic core that both the Tauri command and the WebSocket
 /// handler delegate to.  The caller is responsible for running this on a
 /// blocking thread if needed.
+#[allow(clippy::needless_pass_by_value)]
 pub fn stream_search_inner(
     skill_dir:    &Path,
     start_utc:    u64,
@@ -573,11 +576,11 @@ pub fn stream_search_inner(
     global_index: GlobalIndexHandle,
     emit:         &dyn Fn(SearchProgress),
 ) {
-    stream_search_inner_for(skill_dir, start_utc, end_utc, k, ef, global_index, emit, "zuna")
+    stream_search_inner_for(skill_dir, start_utc, end_utc, k, ef, global_index, emit, "zuna");
 }
 
 /// Model-aware variant of [`stream_search_inner`].
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 pub fn stream_search_inner_for(
     skill_dir:     &Path,
     start_utc:     u64,
@@ -736,8 +739,8 @@ pub fn find_session_for_timestamp_in(
         let Ok(text) = std::fs::read_to_string(&json_path) else { continue };
         let Ok(meta) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
 
-        let start = meta.get("session_start_utc").and_then(|v| v.as_u64());
-        let end   = meta.get("session_end_utc").and_then(|v| v.as_u64());
+        let start = meta.get("session_start_utc").and_then(serde_json::Value::as_u64);
+        let end   = meta.get("session_end_utc").and_then(serde_json::Value::as_u64);
 
         if let (Some(s), Some(e)) = (start, end) {
             // Resolve data file: try .parquet first, fall back to .csv.
@@ -752,7 +755,7 @@ pub fn find_session_for_timestamp_in(
                     csv_path: data_path.to_string_lossy().to_string(),
                     session_start_utc: start,
                     session_end_utc: end,
-                    device_name: meta.get("device_name").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    device_name: meta.get("device_name").and_then(|v| v.as_str()).map(std::string::ToString::to_string),
                 });
             }
             let dist = if timestamp_unix < s { s - timestamp_unix } else { timestamp_unix - e };
@@ -763,7 +766,7 @@ pub fn find_session_for_timestamp_in(
                     csv_path: data_path.to_string_lossy().to_string(),
                     session_start_utc: start,
                     session_end_utc: end,
-                    device_name: meta.get("device_name").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    device_name: meta.get("device_name").and_then(|v| v.as_str()).map(std::string::ToString::to_string),
                 });
             }
         }

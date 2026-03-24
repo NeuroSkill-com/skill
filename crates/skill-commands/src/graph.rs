@@ -353,7 +353,7 @@ pub fn generate_svg(
         layers[3].iter()
             .filter_map(|nd| nd.parent_id.as_deref())
             .filter(|p| seen.insert(*p))
-            .map(|p| p.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     };
     fl_parents.sort_by_key(|p| {
@@ -368,7 +368,7 @@ pub fn generate_svg(
     }
     let n_fl_cols    = fl_parents.len().max(1);
     let max_fl_stack = fl_parents.iter()
-        .map(|p| fl_by_parent.get(p).map_or(0, |v| v.len()))
+        .map(|p| fl_by_parent.get(p).map_or(0, std::vec::Vec::len))
         .max().unwrap_or(1);
     let fl_col_w  = NW + FL_COL_GAP;
     let fl_row_h  = NH + FL_ROW_GAP;
@@ -399,7 +399,7 @@ pub fn generate_svg(
         layers[4].iter()
             .filter_map(|nd| nd.parent_id.as_deref())
             .filter(|p| seen.insert(*p))
-            .map(|p| p.to_string())
+            .map(std::string::ToString::to_string)
             .collect()
     };
     ss_parents.sort_by_key(|p| {
@@ -414,7 +414,7 @@ pub fn generate_svg(
     }
     let n_ss_cols    = ss_parents.len().max(1);
     let max_ss_stack = ss_parents.iter()
-        .map(|p| ss_by_parent.get(p).map_or(0, |v| v.len()))
+        .map(|p| ss_by_parent.get(p).map_or(0, std::vec::Vec::len))
         .max().unwrap_or(1);
     let ss_grid_w = n_ss_cols as f64 * ss_col_w - FL_COL_GAP;
     let ss_grid_h = FL_HDR_H + max_ss_stack as f64 * ss_row_h - FL_ROW_GAP;

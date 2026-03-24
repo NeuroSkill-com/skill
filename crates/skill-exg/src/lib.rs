@@ -99,7 +99,7 @@ pub use skill_data::util::{yyyymmdd_utc, yyyymmddhhmmss_utc};
 pub fn resolve_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
     let snaps = skill_data::util::hf_model_dir(hf_repo).join("snapshots");
     let mut dirs: Vec<_> = std::fs::read_dir(&snaps).ok()?
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
         .collect();
     dirs.sort_by_key(|e| e.metadata().and_then(|m| m.modified())
@@ -122,7 +122,7 @@ pub fn probe_hf_weights(hf_repo: &str) -> Option<(PathBuf, PathBuf)> {
 pub fn resolve_luna_weights(hf_repo: &str, weights_file: &str) -> Option<(PathBuf, PathBuf)> {
     let snaps = skill_data::util::hf_model_dir(hf_repo).join("snapshots");
     let mut dirs: Vec<_> = std::fs::read_dir(&snaps).ok()?
-        .filter_map(|e| e.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
         .collect();
     dirs.sort_by_key(|e| e.metadata().and_then(|m| m.modified())
@@ -576,7 +576,7 @@ pub static GPU_DEVICE_POISONED: AtomicBool = AtomicBool::new(false);
 /// Extract a human-readable message from a caught panic payload.
 pub fn panic_msg(payload: &Box<dyn std::any::Any + Send>) -> &str {
     payload.downcast_ref::<String>()
-        .map(|s| s.as_str())
+        .map(std::string::String::as_str)
         .or_else(|| payload.downcast_ref::<&str>().copied())
         .unwrap_or("(non-string panic payload)")
 }

@@ -32,11 +32,11 @@ pub fn health_sync(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 pub fn health_query(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let data_type = msg.get("type").and_then(|v| v.as_str())
         .ok_or_else(|| "missing required field: \"type\" (sleep|workouts|heart_rate|steps|metrics)".to_string())?;
-    let start_utc = msg.get("start_utc").and_then(|v| v.as_i64()).unwrap_or(0);
-    let end_utc   = msg.get("end_utc").and_then(|v| v.as_i64())
+    let start_utc = msg.get("start_utc").and_then(serde_json::Value::as_i64).unwrap_or(0);
+    let end_utc   = msg.get("end_utc").and_then(serde_json::Value::as_i64)
         .unwrap_or_else(|| std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
-    let limit     = msg.get("limit").and_then(|v| v.as_i64()).unwrap_or(500).clamp(1, 10_000);
+    let limit     = msg.get("limit").and_then(serde_json::Value::as_i64).unwrap_or(500).clamp(1, 10_000);
 
     let st = app.app_state();
     let store = {
@@ -74,8 +74,8 @@ pub fn health_query(app: &AppHandle, msg: &Value) -> Result<Value, String> {
 
 /// `health_summary` — aggregate counts for a time range.
 pub fn health_summary(app: &AppHandle, msg: &Value) -> Result<Value, String> {
-    let start_utc = msg.get("start_utc").and_then(|v| v.as_i64()).unwrap_or(0);
-    let end_utc   = msg.get("end_utc").and_then(|v| v.as_i64())
+    let start_utc = msg.get("start_utc").and_then(serde_json::Value::as_i64).unwrap_or(0);
+    let end_utc   = msg.get("end_utc").and_then(serde_json::Value::as_i64)
         .unwrap_or_else(|| std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs() as i64);
 

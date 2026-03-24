@@ -420,7 +420,7 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
         None => icon_state.to_string(),
     };
     {
-        let mut last = LAST_ICON_STATE.lock().unwrap_or_else(|p| p.into_inner());
+        let mut last = LAST_ICON_STATE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if *last != icon_key {
             let base_tip = match icon_state {
                 "connected"    => "NeuroSkill™ – Connected",
@@ -448,7 +448,7 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
 
     let full_key = menu_key(&st, app);
     {
-        let last = LAST_MENU_KEY.lock().unwrap_or_else(|p| p.into_inner());
+        let last = LAST_MENU_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         if *last == full_key {
             return; // nothing changed at all
         }
@@ -456,7 +456,7 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
 
     let s_key = structure_key(&st, app);
     let structure_changed = {
-        let last = LAST_STRUCTURE_KEY.lock().unwrap_or_else(|p| p.into_inner());
+        let last = LAST_STRUCTURE_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         *last != s_key
     };
 
@@ -464,7 +464,7 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
         // Full rebuild — menu item count or identity changed.
         // First do a fast in-place status patch so the user sees the new
         // status text instantly, then rebuild the full menu asynchronously.
-        if let Some(ref menu) = *CURRENT_MENU.lock().unwrap_or_else(|p| p.into_inner()) {
+        if let Some(ref menu) = *CURRENT_MENU.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
             update_status_items(menu, &st);
         }
         // Debounce rapid structural rebuilds.
@@ -483,19 +483,19 @@ pub(crate) fn refresh_tray(app: &AppHandle) {
         }
         if let Ok(m) = build_menu(app, &st) {
             let _ = tray.set_menu(Some(m.clone()));
-            *CURRENT_MENU.lock().unwrap_or_else(|p| p.into_inner()) = Some(m);
-            *LAST_STRUCTURE_KEY.lock().unwrap_or_else(|p| p.into_inner()) = s_key;
-            *LAST_MENU_KEY.lock().unwrap_or_else(|p| p.into_inner()) = full_key;
+            *CURRENT_MENU.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(m);
+            *LAST_STRUCTURE_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = s_key;
+            *LAST_MENU_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = full_key;
             LAST_MENU_REBUILD_MS.store(now_ms, std::sync::atomic::Ordering::Relaxed);
         } else {
             eprintln!("[tray] menu rebuild failed; preserving previous native menu");
         }
     } else {
         // Status-only update — patch existing items in-place (no set_menu).
-        if let Some(ref menu) = *CURRENT_MENU.lock().unwrap_or_else(|p| p.into_inner()) {
+        if let Some(ref menu) = *CURRENT_MENU.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
             update_status_items(menu, &st);
         }
-        *LAST_MENU_KEY.lock().unwrap_or_else(|p| p.into_inner()) = full_key;
+        *LAST_MENU_KEY.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = full_key;
     }
 }
 

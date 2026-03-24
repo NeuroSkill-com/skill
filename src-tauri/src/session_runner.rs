@@ -93,7 +93,7 @@ pub(crate) async fn run_device_session(
     }
 
     // ── Session-local DSP (lock-free during sample processing) ───────────────
-    let ch_name_refs: Vec<&str> = desc.channel_names.iter().map(|s| s.as_str()).collect();
+    let ch_name_refs: Vec<&str> = desc.channel_names.iter().map(std::string::String::as_str).collect();
     let mut dsp = SessionDsp::new(&app, &ch_name_refs);
     dsp.accumulator.set_device_channels(desc.channel_names.clone(), sample_rate as f32);
 
@@ -170,7 +170,7 @@ pub(crate) async fn run_device_session(
                                 // singleton that panics on second init).  Instead
                                 // we just reset the filter's internal buffers.
                                 let ch_refs: Vec<&str> = fresh.channel_names
-                                    .iter().map(|s| s.as_str()).collect();
+                                    .iter().map(std::string::String::as_str).collect();
                                 dsp.filter.reset();
                                 dsp.quality = QualityMonitor::with_window(
                                     fresh.channel_names.len(),
@@ -208,7 +208,7 @@ pub(crate) async fn run_device_session(
                         if csv.is_none() {
                             let fresh = adapter.descriptor();
                             let labels: Vec<&str> = fresh.channel_names.iter()
-                                .map(|s| s.as_str()).collect();
+                                .map(std::string::String::as_str).collect();
                             match SessionWriter::open(&csv_path, &labels, storage_format) {
                                 Ok(c)  => { csv = Some(c); }
                                 Err(e) => {

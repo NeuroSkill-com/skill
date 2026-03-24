@@ -45,7 +45,7 @@ pub fn dnd_status(app: &AppHandle) -> Result<Value, String> {
 /// `dnd_set { "enabled": bool }` — force-enable or disable DND immediately.
 pub fn dnd_set(app: &AppHandle, msg: &Value) -> Result<Value, String> {
     let enabled = msg.get("enabled")
-        .and_then(|v| v.as_bool())
+        .and_then(serde_json::Value::as_bool)
         .ok_or_else(|| "missing required field: \"enabled\" (boolean)".to_string())?;
 
     let mode_id = {

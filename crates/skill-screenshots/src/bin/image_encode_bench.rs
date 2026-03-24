@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
+#![allow(clippy::unwrap_used)]
 //! Quick benchmark comparing image encoding strategies used in the screenshot
 //! pipeline.  Run via `npm run bench:screenshot` or directly with
 //! `cargo run --release -p skill-screenshots --bin image_encode_bench`.
@@ -115,12 +116,12 @@ fn print_results(results: &[BenchResult]) {
     // Use the old pipeline round-trip as the baseline for comparison.
     let baseline = results.iter()
         .find(|r| r.name.starts_with("OLD:"))
-        .map(|r| r.avg_ms())
+        .map(BenchResult::avg_ms)
         .unwrap_or(1.0);
 
     // Find the fastest entry for a marker.
     let fastest_ms = results.iter()
-        .map(|r| r.avg_ms())
+        .map(BenchResult::avg_ms)
         .fold(f64::INFINITY, f64::min);
 
     println!();
