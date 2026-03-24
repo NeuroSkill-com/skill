@@ -23,20 +23,19 @@ static BASH_EDIT_HOOK: Mutex<Option<BashEditHook>> = Mutex::new(None);
 ///
 /// Call this once at app startup (e.g. from `setup()`).
 pub fn set_bash_edit_hook(hook: BashEditHook) {
-    *hook_cell().lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(hook);
+    *BASH_EDIT_HOOK.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(hook);
 }
 
 /// Clear the bash-edit hook (tests / shutdown).
-#[allow(dead_code)]
 pub fn clear_bash_edit_hook() {
-    *hook_cell().lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    *BASH_EDIT_HOOK.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
 }
 
 /// Present a bash command for user review/editing.
 ///
 /// Returns `Some(command)` (possibly edited) or `None` if cancelled.
 pub(crate) async fn request_bash_edit(command: &str) -> Option<String> {
-    let hook = hook_cell()
+    let hook = BASH_EDIT_HOOK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone();
