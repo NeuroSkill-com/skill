@@ -669,7 +669,7 @@ mod non_macos {
                     .spawn(move || loop {
                         std::thread::sleep(FREE_RAM_INTERVAL);
                         let bytes = sample_free_ram();
-                        let mut guard = shared.lock().unwrap_or_else(|e| e.into_inner());
+                        let mut guard = shared.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                         guard.bytes     = bytes;
                         guard.refreshed = Instant::now();
                     })
@@ -706,7 +706,7 @@ mod non_macos {
         // the current available-RAM figure.
         let free_bytes = if static_info.unified_memory {
             let cache = ensure_free_ram_poller(true);
-            let guard = cache.lock().unwrap_or_else(|e| e.into_inner());
+            let guard = cache.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             guard.bytes
         } else {
             // Discrete GPU: we have no live free-VRAM source without NVML/ADL.
