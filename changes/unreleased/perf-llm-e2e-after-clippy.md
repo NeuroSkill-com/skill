@@ -1,0 +1,3 @@
+### Performance
+
+- **LLM E2E reuses clippy build cache**: The `llm-e2e` CI job now runs after `rust-check` (`needs: rust-check`) and shares its Cargo build cache via `Swatinem/rust-cache` (`save-if: false`). This turns the E2E compilation into a cheap incremental build instead of a full rebuild (~3–5 min saved). The linker (mold + clang), target triple, and `CMAKE_*_COMPILER_LAUNCHER: sccache` env vars are aligned with `rust-check` to maximise cache hits. The Vulkan SDK (~200 MB) now uses the same `actions/cache` key as `rust-check`, skipping download on cache hit. System deps (including mold + clang) are merged into one cached `awalsh128/cache-apt-pkgs-action` step, eliminating a separate `apt-get update` round-trip.

@@ -357,6 +357,11 @@ jobs:
   llm-e2e:
     name: LLM — E2E integration test
     runs-on: ubuntu-latest
+    # Run after rust-check so we reuse its cached build artifacts (clippy
+    # already compiled the full workspace including skill-llm).  This
+    # turns the E2E compilation into a cheap incremental build (~30 s)
+    # instead of a full rebuild (~3-5 min).
+    needs: rust-check
     # Only run on main pushes and manual triggers — too slow for every PR.
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
@@ -370,22 +375,41 @@ jobs:
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
 
+      # Reuse the same cache bucket as rust-check (default shared-key)
+      # so the E2E job picks up clippy's already-compiled artifacts.
+      # save-if: false — only rust-check writes to this cache.
       - name: Cache Cargo registry + build artifacts
         uses: Swatinem/rust-cache@v2.9.0
         with:
           workspaces: ". -> src-tauri/target"
-          shared-key: linux-llm-e2e
+          save-if: false
 
+      # Install all system deps in one cached step (includes mold + clang
+      # to match rust-check's linker and reuse its build artifacts).
       - name: Cache + install system deps
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
           packages: >-
             libssl-dev pkg-config cmake binutils
             libespeak-ng-dev libasound2-dev
-            libpipewire-0.3-dev
-          version: llm-e2e-v1
+            libpipewire-0.3-dev mold clang
+          version: llm-e2e-v2
+
+      # Reuse the same Vulkan SDK cache as rust-check — avoids a ~200 MB
+      # re-download on every run.
+      - name: Cache Vulkan SDK
+        id: cache-vulkan
+        uses: actions/cache@v5
+        with:
+          path: |
+            /etc/apt/sources.list.d/lunarg-vulkan-*
+            /usr/lib/x86_64-linux-gnu/libvulkan*
+            /usr/include/vulkan
+            /usr/share/vulkan
+          key: linux-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.sh') }}
 
       - name: Install Vulkan SDK
+        if: steps.cache-vulkan.outputs.cache-hit != 'true'
         run: bash scripts/install-vulkan-sdk.sh
 
       - name: Cache HuggingFace model
@@ -397,8 +421,14 @@ jobs:
       - name: Run LLM E2E test
         env:
           RUSTC_WRAPPER: sccache
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
+          # Cache cmake-based -sys crate builds (llama-cpp-sys, etc.)
+          CMAKE_C_COMPILER_LAUNCHER:   sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
-          cargo test -p skill-llm --features llm \
+          cargo test -p skill-llm --locked --target x86_64-unknown-linux-gnu \
+            --features llm \
             --test llm_e2e -- --nocapture 2>&1 | tee llm-e2e-report.txt
           # Propagate the test exit code (tee masks it).
           exit ${PIPESTATUS[0]}
