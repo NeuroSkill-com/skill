@@ -17,6 +17,10 @@ on:
 permissions:
   contents: write   # create/update GitHub Releases and upload assets
 
+# Opt into Node.js 24 now — same rationale as ci.yml.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release-windows:
     name: Build & Release — x86_64-pc-windows-msvc
@@ -396,7 +400,7 @@ jobs:
       # below guarantees bindgen finds standalone LLVM's libclang.dll even
       # when ilammy/msvc-dev-cmd has already put VS's clang-cl on PATH.
       - name: Install LLVM 19
-        uses: KyleMayes/install-llvm-action@v2
+        uses: KyleMayes/install-llvm-action@v2.0.9
         with:
           version: "19"
           directory: C:\LLVM
