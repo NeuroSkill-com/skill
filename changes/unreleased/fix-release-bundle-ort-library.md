@@ -1,3 +1,0 @@
-### Bugfixes
-
-- **Release: bundle ONNX Runtime library on Linux and Windows**: `ort-sys` downloads `libonnxruntime.so` / `onnxruntime.dll` into Cargo's `OUT_DIR` at build time. The binary links against it dynamically, but the packaging scripts did not include it — deployed binaries would fail to start on users' machines. Fixed by finding the library in the build tree and bundling it with every release format: portable tarball, `.deb`, `.rpm` (Linux) and NSIS installer (Windows). On Linux, `patchelf --add-rpath '$ORIGIN'` is also applied so the dynamic linker finds the bundled `.so` relative to the binary regardless of system paths.
