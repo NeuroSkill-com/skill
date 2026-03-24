@@ -90,6 +90,28 @@ mkdir -p "$package_root/resources"
 cp "$binary_path" "$package_root/skill"
 chmod +x "$package_root/skill"
 
+# ── Bundle ONNX Runtime shared library ───────────────────────────────────────
+# ort-sys downloads libonnxruntime.so into Cargo's OUT_DIR at build time.
+# The binary links against it dynamically (DT_NEEDED: libonnxruntime.so.1).
+# Without bundling it the binary will fail to start on users' machines.
+# We place it next to the binary and patch the rpath to $ORIGIN so the
+# dynamic linker finds it regardless of system-installed ORT.
+ORT_SO="$(find "$ROOT_DIR/src-tauri/target/$target/release/build" \
+  -name "libonnxruntime.so.*" ! -name "*.sig" 2>/dev/null | head -1)"
+if [[ -n "$ORT_SO" ]]; then
+  ORT_SONAME="$(basename "$ORT_SO")"
+  cp "$ORT_SO" "$package_root/$ORT_SONAME"
+  # Create the soname symlink (libonnxruntime.so.1 → libonnxruntime.so.1.x.y)
+  SONAME_SHORT="$(echo "$ORT_SONAME" | grep -oE 'libonnxruntime\.so\.[0-9]+')"
+  if [[ -n "$SONAME_SHORT" && "$SONAME_SHORT" != "$ORT_SONAME" ]]; then
+    ln -sf "$ORT_SONAME" "$package_root/$SONAME_SHORT"
+  fi
+  patchelf --add-rpath '$ORIGIN' "$package_root/skill"
+  echo "✓ Bundled ONNX Runtime: $ORT_SONAME"
+else
+  echo "⚠ ONNX Runtime shared library not found in build output — binary may fail to start" >&2
+fi
+
 cp -R "$resources_dir/espeak-ng-data" "$package_root/resources/"
 cp -R "$resources_dir/neutts-samples" "$package_root/resources/"
 

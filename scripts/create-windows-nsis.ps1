@@ -156,6 +156,30 @@ try {
         Write-Host "  [ok] icon.ico"
     }
 
+    # ── Bundle ONNX Runtime DLL ──────────────────────────────────────────────
+    # ort-sys downloads onnxruntime.dll into Cargo's OUT_DIR at build time.
+    # The binary links against it dynamically; without bundling it the
+    # installer will deploy a broken binary that fails to start on users'
+    # machines.  Windows finds DLLs in the same directory as the .exe, so
+    # placing it in $INSTDIR alongside skill.exe is sufficient — no PATH
+    # change or rpath patch needed.
+    $OrtDll = Get-ChildItem -Path $ReleaseDir -Recurse -Filter "onnxruntime.dll" `
+                -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -like "*\build\*" -or $_.FullName -like "*ort-sys*" } |
+                Select-Object -First 1
+    if (-not $OrtDll) {
+        # Broader fallback: any onnxruntime.dll anywhere under the release target
+        $OrtDll = Get-ChildItem -Path $ReleaseDir -Recurse -Filter "onnxruntime.dll" `
+                    -ErrorAction SilentlyContinue |
+                    Select-Object -First 1
+    }
+    if ($OrtDll) {
+        Copy-Item $OrtDll.FullName (Join-Path $Staging "onnxruntime.dll") -Force
+        Write-Host "  [ok] onnxruntime.dll (from $($OrtDll.FullName))"
+    } else {
+        Write-Warning "  onnxruntime.dll not found in build output — binary may fail to start"
+    }
+
     # Resources (espeak-ng-data, neutts-samples)
     $resources = $Conf.bundle.resources
     if ($resources) {
@@ -285,10 +309,15 @@ print('  [ok] installer images generated')
             $installFiles += "  File `"$doc`""
         }
     }
+    # Bundle ONNX Runtime DLL if present (downloaded by ort-sys at build time)
+    if (Test-Path (Join-Path $Staging "onnxruntime.dll")) {
+        $installFiles += '  File "onnxruntime.dll"'
+    }
 
     $uninstallFiles = @()
     $uninstallFiles += '  Delete "$INSTDIR\skill.exe"'
     $uninstallFiles += '  Delete "$INSTDIR\icon.ico"'
+    $uninstallFiles += '  Delete "$INSTDIR\onnxruntime.dll"'
     foreach ($doc in @("README.md", "CHANGELOG.md", "LICENSE")) {
         $uninstallFiles += "  Delete `"`$INSTDIR\$doc`""
     }

@@ -113,6 +113,27 @@ mkdir -p \
 cp "$binary_path" "$stage_root/opt/neuroskill/skill"
 chmod +x "$stage_root/opt/neuroskill/skill"
 
+# ── Bundle ONNX Runtime shared library ───────────────────────────────────────
+# ort-sys downloads libonnxruntime.so into Cargo's OUT_DIR at build time.
+# The binary links against it dynamically (DT_NEEDED: libonnxruntime.so.1).
+# Without bundling it the binary will fail to start on users' machines.
+# The library goes next to the skill binary in /opt/neuroskill/; patchelf
+# adds $ORIGIN to the rpath so the dynamic linker finds it at runtime.
+ORT_SO="$(find "$ROOT_DIR/src-tauri/target/$target/release/build" \
+  -name "libonnxruntime.so.*" ! -name "*.sig" 2>/dev/null | head -1)"
+if [[ -n "$ORT_SO" ]]; then
+  ORT_SONAME="$(basename "$ORT_SO")"
+  cp "$ORT_SO" "$stage_root/opt/neuroskill/$ORT_SONAME"
+  SONAME_SHORT="$(echo "$ORT_SONAME" | grep -oE 'libonnxruntime\.so\.[0-9]+')"
+  if [[ -n "$SONAME_SHORT" && "$SONAME_SHORT" != "$ORT_SONAME" ]]; then
+    ln -sf "$ORT_SONAME" "$stage_root/opt/neuroskill/$SONAME_SHORT"
+  fi
+  patchelf --add-rpath '$ORIGIN' "$stage_root/opt/neuroskill/skill"
+  echo "✓ Bundled ONNX Runtime: $ORT_SONAME"
+else
+  echo "⚠ ONNX Runtime shared library not found in build output — binary may fail to start" >&2
+fi
+
 cp -R "$resources_dir/espeak-ng-data" "$stage_root/opt/neuroskill/resources/"
 cp -R "$resources_dir/neutts-samples" "$stage_root/opt/neuroskill/resources/"
 cp "$ROOT_DIR/LICENSE" "$stage_root/opt/neuroskill/LICENSE"
