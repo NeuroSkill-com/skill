@@ -58,3 +58,4 @@ pub use engine::{
 };
 #[cfg(feature = "llm")]
 pub use handlers::router;
+pub use error::{ChatStoreError, DownloadError, EngineError};

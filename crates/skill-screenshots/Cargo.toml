@@ -6,7 +6,6 @@ license = "GPL-3.0-only"
 description = "Screenshot capture + vision embedding for NeuroSkill"
 
 [dependencies]
-anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 skill-data      = { path = "../skill-data" }
 skill-settings  = { path = "../skill-settings" }

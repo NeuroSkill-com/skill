@@ -177,9 +177,8 @@ impl WebCache {
     /// Remove all expired entries from the cache directory.
     /// Called lazily (e.g. on startup or periodically).
     pub fn evict_expired(&self) {
-        let entries = match std::fs::read_dir(&self.dir) {
-            Ok(e) => e,
-            Err(_) => return,
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return;
         };
         for entry in entries.flatten() {
             let path = entry.path();
@@ -230,9 +229,8 @@ impl WebCache {
     /// List all non-expired cache entries as lightweight summaries.
     pub fn list_entries(&self) -> Vec<CacheEntrySummary> {
         let mut out = Vec::new();
-        let entries = match std::fs::read_dir(&self.dir) {
-            Ok(e) => e,
-            Err(_) => return out,
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return out;
         };
         for entry in entries.flatten() {
             let path = entry.path();
@@ -327,7 +325,7 @@ impl WebCache {
     }
 
     fn config_read(&self) -> std::sync::RwLockReadGuard<'_, WebCacheConfig> {
-        self.config.read().unwrap_or_else(|e| e.into_inner())
+        self.config.read().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn entry_path(&self, key: &str) -> PathBuf {

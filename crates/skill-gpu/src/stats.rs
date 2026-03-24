@@ -317,8 +317,8 @@ mod macos {
             CFStringCreateWithCString(std::ptr::null(), c.as_ptr(), K_CF_STRING_ENCODING_UTF8)
         };
         let result = f(cf);
-        // SAFETY: `cf` was created by CFStringCreateWithCString; we own it.
         if !cf.is_null() {
+            // SAFETY: `cf` was created by CFStringCreateWithCString; we own it.
             unsafe { CFRelease(cf as _) };
         }
         result

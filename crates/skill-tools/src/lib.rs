@@ -56,3 +56,4 @@ pub use parse::{
 pub use types::{
     CompressionLevel, LlmToolConfig, ToolContextCompression, ToolExecutionMode, WebCacheConfig,
 };
+pub use error::{ExecError, ParseError, ValidationError};

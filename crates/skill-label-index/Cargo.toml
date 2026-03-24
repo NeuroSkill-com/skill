@@ -6,7 +6,6 @@ license = "GPL-3.0-only"
 description = "Cross-modal label HNSW indices (text, context, EEG) — extracted workspace crate"
 
 [dependencies]
-anyhow = { workspace = true }
 skill-constants = { path = "../skill-constants" }
 skill-commands  = { path = "../skill-commands" }
 skill-data      = { path = "../skill-data" }
