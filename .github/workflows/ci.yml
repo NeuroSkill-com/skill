@@ -143,7 +143,7 @@ jobs:
           -p skill-devices -p skill-settings -p skill-history
           -p skill-health -p skill-router -p skill-llm
           -p skill-autostart -p skill-tts -p skill-gpu
-          -p skill-headless -p skill-screenshots -p skill-label-index
+          -p skill-headless -p skill-label-index
           -p skill-skills -p skill-jobs -p skill-commands -p skill-exg
           --lib
 
