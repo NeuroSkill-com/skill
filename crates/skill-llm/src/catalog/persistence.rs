@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Copyright (C) 2026 NeuroSkill.com
 //! Catalog persistence — load / save / merge / cache refresh.
+//!
+//! ## Format migration
+//!
+//! The persisted `llm_catalog.json` in `skill_dir` may be either:
+//!
+//! * **Legacy** — flat `"entries"` array (pre-refactor installs).
+//! * **Normalized** — `"families"` map + slim `"models"` array (current).
+//!
+//! [`parse_catalog_json`] handles both transparently.  [`LlmCatalog::save`]
+//! always writes the normalized form, so legacy files are auto-migrated on
+//! the next save.
 
 use super::types::*;
 use std::path::{Path, PathBuf};
@@ -12,7 +23,7 @@ const BUNDLED_CATALOG_JSON: &str = include_str!("../../../../src-tauri/llm_catal
 /// guarantee) if `llm_catalog.json` contains invalid JSON.
 fn bundled() -> LlmCatalog {
     #[allow(clippy::expect_used)]
-    serde_json::from_str(BUNDLED_CATALOG_JSON)
+    parse_catalog_json(BUNDLED_CATALOG_JSON)
         .expect("src-tauri/llm_catalog.json is not valid JSON — fix it and recompile")
 }
 
@@ -39,6 +50,8 @@ impl LlmCatalog {
     ///
     /// 1. Parse the bundled JSON as the authoritative list of known entries.
     /// 2. Try to read `skill_dir/llm_catalog.json` (persisted user state).
+    ///    Accepts **both** the legacy flat format and the new normalized
+    ///    format — old installs are migrated transparently.
     /// 3. Forward-merge:
     ///    - Copy download state / local_path / progress from persisted -> bundled.
     ///    - Append persisted entries that have no match in the bundle (custom
@@ -50,7 +63,7 @@ impl LlmCatalog {
         let persisted: Option<LlmCatalog> = skill_dir
             .join(CATALOG_FILE)
             .pipe(|p| std::fs::read_to_string(p).ok())
-            .and_then(|s| serde_json::from_str(&s).ok());
+            .and_then(|s| parse_catalog_json(&s).ok());
 
         let mut cat = match persisted {
             None => bundle, // first run — use bundled directly
@@ -91,9 +104,13 @@ impl LlmCatalog {
     }
 
     /// Save the catalog (runtime state) to `skill_dir/llm_catalog.json`.
+    ///
+    /// Always writes the **normalized** format.  Any legacy flat file is
+    /// replaced, completing the migration.
     pub fn save(&self, skill_dir: &Path) {
         let path = skill_dir.join(CATALOG_FILE);
-        if let Ok(json) = serde_json::to_string_pretty(self) {
+        let norm = self.deflate();
+        if let Ok(json) = serde_json::to_string_pretty(&norm) {
             let _ = std::fs::write(path, json);
         }
     }

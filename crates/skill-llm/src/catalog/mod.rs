@@ -37,4 +37,7 @@ pub mod types;
 // Re-export the public API so existing `catalog::*` imports keep working.
 pub use download::{download_file, download_model};
 pub use memory::{estimate_memory_gb, recommend_ctx_size};
-pub use types::{DownloadProgress, DownloadState, LlmCatalog, LlmModelEntry, CATALOG_FILE};
+pub use types::{
+    parse_catalog_json, DownloadProgress, DownloadState, LlmCatalog, LlmCatalogLegacy, LlmCatalogNormalized, LlmFamily,
+    LlmModelEntry, LlmModelSlim, CATALOG_FILE,
+};

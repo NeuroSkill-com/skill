@@ -1,0 +1,3 @@
+### Refactor
+
+- **Normalized LLM catalog format**: Refactored `llm_catalog.json` from a flat array of 389 entries to a normalized `families` + `models` structure. Family metadata (name, description, repo, tags, params_b, max_context_length) is stored once per family instead of duplicated across every quant. File size reduced from 264 KB to 136 KB (48% smaller). The persisted user catalog in `skill_dir` auto-migrates from the old flat format on first load — no user action required. Runtime in-memory representation (`LlmCatalog` with flat `Vec<LlmModelEntry>`) is unchanged, so all downstream Rust and frontend code continues to work without modification.
