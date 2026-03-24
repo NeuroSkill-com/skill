@@ -436,7 +436,7 @@ jobs:
         run: |
           set -euo pipefail
           sccache --show-stats || true
-          cargo build -p skill --release --features custom-protocol,llm-vulkan,screenshots --timings
+          cargo build -p skill --release --locked --features custom-protocol,llm-vulkan,screenshots --timings
           sccache --show-stats || true
 
       # ── Upload cargo build timings ───────────────────────────────────────────

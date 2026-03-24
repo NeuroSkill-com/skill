@@ -22,7 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # full history for git tag --format and changelog generation
 
       # ── Verify tag matches tauri.conf.json version ────────────────────────────
       - name: Verify version matches tag
@@ -176,7 +176,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo build -p skill --release --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan,screenshots
+          cargo build -p skill --release --locked --target x86_64-unknown-linux-gnu --features custom-protocol,llm-vulkan,screenshots --timings
+
+      # ── Upload cargo build timings ─────────────────────────────────────────
+      # The --timings flag produces an HTML report showing per-crate compile
+      # durations.  Upload it so slow crates can be identified and targeted.
+      - name: Upload cargo build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings-linux
+          path: src-tauri/target/cargo-timings/
+          retention-days: 30
 
       - name: Build Linux deb/rpm via system tools
         env:

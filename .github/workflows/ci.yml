@@ -8,13 +8,32 @@ on:
   # Allow manual re-runs from the Actions tab on any branch.
   workflow_dispatch:
 
+# Cancel superseded runs on the same branch / PR — avoids wasting runner
+# minutes when multiple commits are pushed in quick succession.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # ── Rust backend ─────────────────────────────────────────────────────────────
+  #
+  # clippy is a strict superset of `cargo check` — it performs the same
+  # compilation AND runs lint passes.  Running both wastes a full compile
+  # cycle (~3-5 min).  We therefore run clippy only.
+  #
+  # `--workspace --exclude skill` covers all library crates without the
+  # espeak/Vulkan deps; a second clippy pass covers the app crate with
+  # those features enabled.
+  #
+  # mold (fast linker) is installed to match the release-linux workflow and
+  # shave 30-60 s off every link-heavy operation.
   rust-check:
-    name: Rust — cargo check + clippy
+    name: Rust — clippy + test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -23,15 +42,12 @@ jobs:
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
 
-      - name: Cache Cargo
-        uses: actions/cache@v5
+      # Swatinem/rust-cache gives smarter per-crate invalidation and automatic
+      # pruning vs manual actions/cache — matches the release workflows.
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2.9.0
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: linux-cargo-${{ hashFiles('Cargo.lock') }}
-          restore-keys: linux-cargo-
+          workspaces: ". -> src-tauri/target"
 
       - name: Cache + install Tauri system deps
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -45,10 +61,26 @@ jobs:
             cmake binutils
           version: tauri-rust-check-v3
 
+      # ── Fast linker (mold + clang) ──────────────────────────────────────────
+      # Matches release-linux.yml — saves 30-60 s on link-heavy operations.
+      - name: Install mold + clang
+        run: sudo apt-get update -qq && sudo apt-get install -y mold clang
+
       # Vulkan SDK — required by the llm-vulkan feature (llama.cpp Vulkan backend).
-      # We install directly from the LunarG apt repo (noble) so cargo check/clippy
-      # run against the same feature set used in the release build.
+      # Cache the install so the ~200 MB download only happens on script changes.
+      - name: Cache Vulkan SDK
+        id: cache-vulkan
+        uses: actions/cache@v5
+        with:
+          path: |
+            /etc/apt/sources.list.d/lunarg-vulkan-*
+            /usr/lib/x86_64-linux-gnu/libvulkan*
+            /usr/include/vulkan
+            /usr/share/vulkan
+          key: linux-vulkan-sdk-${{ hashFiles('scripts/install-vulkan-sdk.sh') }}
+
       - name: Install Vulkan SDK
+        if: steps.cache-vulkan.outputs.cache-hit != 'true'
         run: bash scripts/install-vulkan-sdk.sh
 
       - name: Cache espeak-ng static lib
@@ -64,37 +96,31 @@ jobs:
         if: steps.cache-espeak.outputs.cache-hit != 'true'
         run: ESPEAK_ARCHS=x86_64 bash scripts/build-espeak-static.sh
 
-      - name: Update Cargo.lock for Linux
-        run: cargo fetch --target x86_64-unknown-linux-gnu
-
-      - name: cargo check
-        env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
-          RUSTC_WRAPPER: sccache
-        run: cargo check -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan,screenshots
-
+      # clippy (workspace crates — no espeak/Vulkan deps needed)
       - name: cargo clippy (workspace crates)
         env:
           RUSTC_WRAPPER: sccache
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         run: >
           cargo clippy --locked --target x86_64-unknown-linux-gnu
-          -p skill-eeg -p skill-data -p skill-constants -p skill-jobs
-          -p skill-tray -p skill-autostart -p skill-exg -p skill-commands
-          -p skill-tools -p skill-skills -p skill-devices -p skill-settings
-          -p skill-history -p skill-label-index -p skill-router
-          -p skill-tts -p skill-headless -p skill-vision
-          -p skill-health -p skill-gpu -p skill-screenshots -p skill-llm
+          --workspace --exclude skill
           -- -D warnings
 
+      # clippy (app crate — needs espeak + Vulkan)
       - name: cargo clippy (app)
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         run: cargo clippy -p skill --locked --target x86_64-unknown-linux-gnu --features llm-vulkan,screenshots -- -D warnings
 
       - name: cargo test (workspace crates)
         env:
           RUSTC_WRAPPER: sccache
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
         run: >
           cargo test --locked --target x86_64-unknown-linux-gnu
           -p skill-eeg -p skill-data -p skill-constants -p skill-tools
@@ -103,28 +129,14 @@ jobs:
           -p skill-autostart -p skill-tts -p skill-gpu
           --lib
 
-  # ── Dependency audit ──────────────────────────────────────────────────────────
-  cargo-audit:
-    name: Rust — cargo audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-audit
-        run: cargo install cargo-audit --locked
-
-      - name: Run cargo audit
-        run: cargo audit
-
   # ── Frontend ─────────────────────────────────────────────────────────────────
   frontend-check:
     name: Frontend — check + i18n + tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -147,11 +159,16 @@ jobs:
         run: npm test
 
   # ── Windows Rust backend ─────────────────────────────────────────────────────
+  #
+  # Same optimisation as Linux: clippy replaces check (superset), removing
+  # a redundant full compilation pass.
   windows-check:
-    name: Windows — cargo check + clippy
+    name: Windows — cargo clippy
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
 
       # Puts cl.exe, link.exe, lib.exe, and signtool.exe in PATH.
       # Required for the espeak-ng static library build (lib.exe) and for
@@ -315,25 +332,8 @@ jobs:
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           Write-Host "[ok] CXX=C:\LLVM\bin\clang++.exe"
 
-      # llm-vulkan is always injected on Windows (see scripts/tauri-build.js).
-      # Check with the same feature set the actual build uses so compilation
-      # errors aren't silently skipped.
-      # VULKAN_SDK is forwarded explicitly: the step-level `env:` block merges
-      # with the inherited environment in most shells, but Git Bash on Windows
-      # can drop GITHUB_ENV vars that aren't re-declared, so we list it here
-      # to be safe.
-      - name: cargo check
-        shell: bash
-        env:
-          ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
-          LIBCLANG_PATH: ${{ env.LIBCLANG_PATH }}
-          VULKAN_SDK:    ${{ env.VULKAN_SDK }}
-          LLVM_CONFIG:   ${{ env.LLVM_CONFIG }}
-          CC:            ${{ env.CC }}
-          CXX:           ${{ env.CXX }}
-          RUSTC_WRAPPER: sccache
-        run: cargo check -p skill --target x86_64-pc-windows-msvc --features llm-vulkan,screenshots
-
+      # clippy replaces check — clippy performs the same compilation plus lint
+      # passes, so running both wastes a full compile cycle.
       - name: cargo clippy
         shell: bash
         env:
@@ -358,6 +358,8 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -365,15 +367,11 @@ jobs:
       - name: Setup sccache
         uses: Mozilla-Actions/sccache-action@v0.0.9
 
-      - name: Cache Cargo
-        uses: actions/cache@v5
+      - name: Cache Cargo registry + build artifacts
+        uses: Swatinem/rust-cache@v2.9.0
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            src-tauri/target
-          key: linux-cargo-llm-e2e-${{ hashFiles('Cargo.lock') }}
-          restore-keys: linux-cargo-llm-e2e-
+          workspaces: ". -> src-tauri/target"
+          shared-key: linux-llm-e2e
 
       - name: Cache + install system deps
         uses: awalsh128/cache-apt-pkgs-action@latest
@@ -445,11 +443,18 @@ jobs:
           retention-days: 30
 
   # ── Security audit ────────────────────────────────────────────────────────────
+  #
+  # Merged the previous separate cargo-audit + audit jobs into one.
+  # Runs only on main/develop pushes and manual triggers — advisory only,
+  # not worth blocking every PR.
   audit:
     name: Security audit
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -464,16 +469,11 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo (audit)
+      - name: Cache cargo-audit binary
         uses: actions/cache@v5
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin/cargo-audit
-          # cargo-audit's own deps change with Cargo.lock; bin is also covered.
-          key: linux-cargo-audit-${{ hashFiles('Cargo.lock') }}
-          restore-keys: linux-cargo-audit-
+          path: ~/.cargo/bin/cargo-audit
+          key: cargo-audit-bin-v1
 
       - name: cargo audit
         run: |
@@ -515,7 +515,7 @@ jobs:
           EMOJI_RUST=$([ "$RUST" = "success" ] && echo "✅" || echo "❌")
           EMOJI_WINDOWS=$([ "$WINDOWS" = "success" ] && echo "✅" || echo "❌")
           EMOJI_FRONTEND=$([ "$FRONTEND" = "success" ] && echo "✅" || echo "❌")
-          EMOJI_AUDIT=$([ "$AUDIT" = "success" ] && echo "✅" || echo "⚠️")
+          EMOJI_AUDIT=$([ "$AUDIT" = "success" ] && echo "✅" || ([ "$AUDIT" = "skipped" ] && echo "⏭️" || echo "⚠️"))
           EMOJI_LLM=$([ "$LLM_E2E" = "success" ] && echo "✅" || ([ "$LLM_E2E" = "skipped" ] && echo "⏭️" || echo "⚠️"))
 
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
