@@ -941,6 +941,7 @@
       {showSettings}
       {showTools}
       {status}
+      {loadingDetail}
       {modelName}
       {supportsTools}
       {enabledToolCount}

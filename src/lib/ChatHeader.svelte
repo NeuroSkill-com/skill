@@ -10,6 +10,7 @@
     showSettings: boolean;
     showTools: boolean;
     status: ServerStatus;
+    loadingDetail?: string;
     modelName: string;
     supportsTools: boolean;
     enabledToolCount: number;
@@ -35,6 +36,7 @@
     showSettings,
     showTools,
     status,
+    loadingDetail = "",
     modelName,
     supportsTools,
     enabledToolCount,
@@ -150,6 +152,23 @@
         <span class="font-mono opacity-70">{String(Math.round(latestBands.snr ?? 0)).padStart(2, "\u2007")}dB</span>
       {/if}
     </button>
+  {/if}
+
+  <!-- Loading phase indicator -->
+  {#if status === "loading" && loadingDetail}
+    <div class="flex items-center gap-1.5 shrink-0 text-[0.6rem] text-violet-600 dark:text-violet-400 font-medium">
+      <svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"/>
+        <path d="M12 2a10 10 0 019.95 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <span class="truncate max-w-[10rem]">{
+        loadingDetail === "loading_model"    ? t("chat.loading.model") :
+        loadingDetail === "creating_context" ? t("chat.loading.context") :
+        loadingDetail === "loading_vision"   ? t("chat.loading.vision") :
+        loadingDetail === "warming_up"       ? t("chat.loading.warmup") :
+        t("chat.status.loading")
+      }</span>
+    </div>
   {/if}
 
   <!-- Control buttons -->
