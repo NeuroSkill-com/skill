@@ -19,11 +19,21 @@ pub(crate) async fn exec_web_search(args: &Value, allowed_tools: &LlmToolConfig)
     let render = args.get("render").and_then(serde_json::Value::as_bool).unwrap_or(false);
     let render_count = args.get("render_count").and_then(serde_json::Value::as_u64).unwrap_or(3).min(5) as usize;
 
+    // Check persistent web cache first.
+    let backend = allowed_tools.web_search_provider.backend.clone();
+    if let Some(cache) = crate::web_cache::global() {
+        if let Some(cached) = cache.get_search(&query, &backend, render) {
+            crate::tool_log!("tool:web_search", "[cache] hit for query={}", query);
+            return cached;
+        }
+    }
+
+    let query_for_cache = query.clone();
     let provider = allowed_tools.web_search_provider.clone();
     let compression = allowed_tools.context_compression.clone();
     let max_retries = allowed_tools.retry.max_retries;
     let base_delay = std::time::Duration::from_millis(allowed_tools.retry.base_delay_ms);
-    tokio::task::spawn_blocking(move || {
+    let result = tokio::task::spawn_blocking(move || {
         use super::helpers::retry_with_backoff;
 
         // Retry the search backend call on transient failures (empty results
@@ -113,7 +123,16 @@ pub(crate) async fn exec_web_search(args: &Value, allowed_tools: &LlmToolConfig)
             }
             result
         }
-    }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_search", "error": e.to_string() }))
+    }).await.unwrap_or_else(|e| json!({ "ok": false, "tool": "web_search", "error": e.to_string() }));
+
+    // Cache successful results.
+    if result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false) {
+        if let Some(cache) = crate::web_cache::global() {
+            cache.put_search(&query_for_cache, &backend, render, &result);
+        }
+    }
+
+    result
 }
 
 /// Build a compact text representation of search results for context compression.
@@ -217,13 +236,31 @@ pub(crate) async fn exec_web_fetch(args: &Value, allowed_tools: &LlmToolConfig) 
     }
 
     let render = args.get("render").and_then(serde_json::Value::as_bool).unwrap_or(false);
+
+    // Check persistent web cache first.
+    if let Some(cache) = crate::web_cache::global() {
+        if let Some(cached) = cache.get_fetch(&url, render) {
+            crate::tool_log!("tool:web_fetch", "[cache] hit for url={}", url);
+            return cached;
+        }
+    }
+
     let max_content = allowed_tools.context_compression.effective_max_result_chars().max(1000);
 
-    if render {
+    let result = if render {
         exec_web_fetch_render(args, &url, max_content, &allowed_tools.retry).await
     } else {
         exec_web_fetch_plain(&url, max_content, &allowed_tools.retry).await
+    };
+
+    // Cache successful results.
+    if result.get("ok").and_then(serde_json::Value::as_bool).unwrap_or(false) {
+        if let Some(cache) = crate::web_cache::global() {
+            cache.put_fetch(&url, render, &result);
+        }
     }
+
+    result
 }
 
 /// Headless browser rendering path for web_fetch.

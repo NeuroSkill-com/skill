@@ -109,6 +109,12 @@ pub struct LlmToolConfig {
     /// 429/5xx and connection failures).
     #[serde(default)]
     pub retry: ToolRetryConfig,
+
+    /// Persistent disk cache for web tool results (web_search, web_fetch).
+    /// Avoids redundant network calls when the model re-fetches the same URL
+    /// or repeats the same search query within/across conversations.
+    #[serde(default)]
+    pub web_cache: WebCacheConfig,
 }
 
 /// Retry settings for network-dependent tool calls.
@@ -124,6 +130,43 @@ pub struct ToolRetryConfig {
     /// subsequent attempt (exponential backoff).  Default: 1000 ms.
     #[serde(default = "default_retry_base_delay_ms")]
     pub base_delay_ms: u64,
+}
+
+/// Persistent disk cache settings for web tool results.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebCacheConfig {
+    /// Master switch.  Default: `true`.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// TTL in seconds for cached `web_search` results.  Default: 1800 (30 min).
+    #[serde(default = "default_search_ttl")]
+    pub search_ttl_secs: u64,
+
+    /// TTL in seconds for cached `web_fetch` results.  Default: 7200 (2 hours).
+    #[serde(default = "default_fetch_ttl")]
+    pub fetch_ttl_secs: u64,
+
+    /// Per-domain TTL overrides (domain -> seconds).
+    /// Useful for news/social sites that change frequently.
+    /// Example: `{ "news.ycombinator.com": 300 }`.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub domain_ttl_overrides: std::collections::HashMap<String, u64>,
+}
+
+fn default_search_ttl() -> u64 { 1_800 }
+fn default_fetch_ttl()  -> u64 { 7_200 }
+
+impl Default for WebCacheConfig {
+    fn default() -> Self {
+        Self {
+            enabled:              true,
+            search_ttl_secs:      default_search_ttl(),
+            fetch_ttl_secs:       default_fetch_ttl(),
+            domain_ttl_overrides: std::collections::HashMap::new(),
+        }
+    }
 }
 
 /// Web search provider configuration.
@@ -296,6 +339,7 @@ impl Default for LlmToolConfig {
             skills_sync_on_launch: false,
             disabled_skills: Vec::new(),
             retry: ToolRetryConfig::default(),
+            web_cache: WebCacheConfig::default(),
         }
     }
 }
