@@ -19,6 +19,10 @@ fn main() {
     {
         const DESIRED_STACK: libc::rlim_t = 64 * 1024 * 1024;
 
+        // SAFETY: `getrlimit` and `setrlimit` are POSIX-specified syscall
+        // wrappers that read/write a plain `rlimit` struct.  We pass a valid
+        // mutable pointer to a stack-local struct and check the return value
+        // before using the result.  No aliasing or lifetime issues.
         unsafe {
             let mut limit = libc::rlimit {
                 rlim_cur: 0,
