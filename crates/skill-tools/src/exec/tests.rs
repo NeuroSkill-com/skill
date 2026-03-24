@@ -301,32 +301,31 @@ fn status_text_connected_with_scores() {
 
 // ── bash edit hook ────────────────────────────────────────────────────
 
+/// Tests for the bash-edit hook. Run serially since they share global state.
 #[test]
-fn bash_edit_hook_default_is_none() {
-    // Without a hook set, request_bash_edit returns Some(original)
+fn bash_edit_hook_lifecycle() {
+    use std::sync::Arc;
     let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+
+    // 1. Without a hook set, request_bash_edit returns Some(original)
+    clear_bash_edit_hook();
     let result = rt.block_on(request_bash_edit("echo hello"));
     assert_eq!(result, Some("echo hello".to_string()));
-}
 
-#[test]
-fn bash_edit_hook_can_modify() {
-    use std::sync::Arc;
+    // 2. Hook can modify
     set_bash_edit_hook(Arc::new(|cmd: &str| {
         Some(format!("{} --safe", cmd))
     }));
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
     let result = rt.block_on(request_bash_edit("rm -rf /tmp/test"));
     assert_eq!(result, Some("rm -rf /tmp/test --safe".to_string()));
-    clear_bash_edit_hook();
-}
 
-#[test]
-fn bash_edit_hook_can_cancel() {
-    use std::sync::Arc;
+    // 3. Hook can cancel
     set_bash_edit_hook(Arc::new(|_cmd: &str| None));
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
     let result = rt.block_on(request_bash_edit("dangerous command"));
     assert_eq!(result, None);
+
+    // 4. Clearing hook restores passthrough
     clear_bash_edit_hook();
+    let result = rt.block_on(request_bash_edit("safe command"));
+    assert_eq!(result, Some("safe command".to_string()));
 }
