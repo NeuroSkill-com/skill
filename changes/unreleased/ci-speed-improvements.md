@@ -14,3 +14,4 @@
   - Added `--timings` flag and cargo-timings artifact upload to macOS and Linux release workflows (previously Windows only) for build profiling.
   - Removed redundant `cargo check` on Windows CI — `clippy` already covers it.
   - Fixed Discord notification to show "skipped" emoji for audit when it doesn't run on PRs.
+  - Added `CMAKE_C_COMPILER_LAUNCHER` / `CMAKE_CXX_COMPILER_LAUNCHER` sccache integration to macOS, Linux CI, and preview builds (previously Windows release only) so cmake-based -sys crate compilations (llama-cpp-sys, espeak-ng) are cached across runs.

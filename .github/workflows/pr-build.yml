@@ -306,6 +306,8 @@ jobs:
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
+          CMAKE_C_COMPILER_LAUNCHER:   sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           npm run build
           cargo build -p skill --release --locked --target aarch64-apple-darwin --features custom-protocol

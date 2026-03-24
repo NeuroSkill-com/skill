@@ -217,6 +217,12 @@ jobs:
         env:
           ESPEAK_LIB_DIR: ${{ github.workspace }}/src-tauri/espeak-static/lib
           RUSTC_WRAPPER: sccache
+          # Let sccache cache C/C++ compilations from cmake-based -sys crates
+          # (llama-cpp-sys, espeak-ng, etc.).  Without these, only rustc
+          # invocations go through sccache — the heavy cmake builds are
+          # re-done from scratch every time.
+          CMAKE_C_COMPILER_LAUNCHER:   sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         run: |
           npm run build
           npm run -s verify:tauri:frontend

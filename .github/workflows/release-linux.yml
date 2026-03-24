@@ -173,6 +173,12 @@ jobs:
           RUSTC_WRAPPER: sccache
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: clang
           CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C link-arg=-fuse-ld=mold
+          # Let sccache cache C/C++ compilations from cmake-based -sys crates
+          # (llama-cpp-sys, espeak-ng, etc.).  Without these, only rustc
+          # invocations go through sccache — the heavy cmake builds are
+          # re-done from scratch every time.
+          CMAKE_C_COMPILER_LAUNCHER:   sccache
+          CMAKE_CXX_COMPILER_LAUNCHER: sccache
         shell: bash
         run: |
           set -euo pipefail
